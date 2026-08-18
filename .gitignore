@@ -1,0 +1,12 @@
+node_modules
+dist
+.vercel
+.tanstack
+.DS_Store
+*.log
+.env
+.env.local
+.env.*.local
+.env*
+!.env.example
+apps/web/tsconfig.tsbuildinfo

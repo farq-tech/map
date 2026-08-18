@@ -1,0 +1,552 @@
+/**
+ * Fareeq design tokens — primitives, semantics, roles, glass, motion.
+ *
+ * Intent buckets (do not swap interchangeably):
+ * - brand-* — identity + primary CTA fill (sticky «شف الفرق» / login / main actions).
+ * - mint-* — success emphasis, focus rings, decorative brand moments — NOT primary CTAs.
+ * - coral-* — destructive UI, errors, irreversible actions.
+ * - amber-* — warnings, caution, non-blocking alerts.
+ * - primary-* (teal scale) — dark surfaces / emphasis paired with brand story (not generic gray).
+ */
+
+:root {
+	/* ─── Primitive scales (RGB triplets) ─── */
+	/* Soft mint fills / brand moments — never long-form text */
+	--mint-50: 221 248 234; /* #DDF8EA */
+	--mint-100: 200 247 220;
+	--mint-200: 165 239 200;
+	--mint-300: 148 245 189;
+	--mint-400: 120 228 160;
+	--mint-500: 131 241 177; /* #83F1B1 accent-400 — buttons, indicators only */
+	--mint-600: 79 212 148; /* #4FD494 accent-600 — pressed accent */
+	--mint-700: 24 166 106; /* #18A66A — high-contrast green */
+	--mint-800: 20 140 88;
+
+	--primary-50: 230 243 243;
+	--primary-100: 179 212 212;
+	--primary-200: 128 181 181;
+	--primary-500: 4 52 52;
+	--primary-600: 3 42 42;
+	--primary-700: 2 35 35;
+	--primary-900: 2 26 26;
+
+	--coral-500: 239 131 84;
+	--coral-600: 220 110 65;
+	--coral-700: 190 85 50;
+
+	--amber-500: 255 202 58;
+	--amber-600: 230 175 40;
+	--amber-700: 199 145 30;
+
+	/* Neutrals aligned to Farq green-ink family (not cool gray) */
+	--neutral-50: 255 255 255;
+	--neutral-100: 243 248 245;
+	--neutral-200: 210 226 220;
+	--neutral-300: 170 194 186;
+	--neutral-400: 60 84 78;
+	--neutral-500: 36 56 50;
+	--neutral-600: 11 34 28;
+	--neutral-700: 6 22 18;
+
+	--fareeq-primary: var(--primary-500);
+	--fareeq-mint: var(--mint-500);
+
+	/*
+	 * Farq identity — hybrid chrome:
+	 * brand bar #043434 · tinted sector zone · white page body.
+	 * accent = mint-500/600 only (never large backgrounds).
+	 */
+	--brand-900: 4 52 52; /* #043434 */
+	--brand-800: 6 86 86;
+	--brand-700: 10 74 70; /* #0A4A46 — banner gradient end / pressed */
+	--brand-500: 42 110 98; /* #2A6E62 — secondary icons / dark borders */
+	--brand-200: 221 248 234;
+	--brand-100: 117 240 168;
+	--fareeq-ink: 11 34 28;
+	--fareeq-ice: 255 255 255;
+	--fareeq-purple: 34 22 43;
+	--fareeq-black: 4 4 3;
+	--fareeq-blue: 34 87 122;
+	--fareeq-glass-base: 40 57 57;
+	--fareeq-icon: 11 34 28;
+
+	/* Light surfaces — pure white page body under the tinted sector zone */
+	--surface: 255 255 255; /* card + page body */
+	--surface-2: 255 255 255; /* page canvas */
+	--surface-3: 243 248 245; /* elevated / inset */
+
+	/*
+	 * Hybrid sector chrome (Dynamic Sector Color System):
+	 *   One brand base per sector → soft / light / deep lightness levels.
+	 *   --sector-surface / --sector-accent drive Layer 2 (set via [data-sector]
+	 *   and overridden live by Header atmosphere CSS vars).
+	 *   Page body stays white.
+	 */
+	--sector-header-fixed: 247 251 250; /* cream fallback for non-sector routes */
+	/* Defaults = restaurants atmosphere (soft / base / light / deep). */
+	--sector-surface: 240 253 246; /* #F0FDF6 soft */
+	--sector-accent: 131 241 177; /* #83F1B1 base */
+	--sector-soft: 240 253 246; /* #F0FDF6 */
+	--sector-light: 199 249 220; /* #C7F9DC */
+	--sector-deep: 68 125 92; /* #447D5C */
+	--sector-base: 131 241 177; /* #83F1B1 */
+	--sector-ink: 14 38 34; /* #0E2622 */
+	--sector-restaurants-page: 240 253 246; /* soft */
+	--sector-restaurants-tab: 131 241 177; /* #83F1B1 base */
+	--sector-restaurants-border: 199 249 220; /* #C7F9DC light */
+	--sector-restaurants-primary: 68 125 92; /* #447D5C deep */
+	--sector-restaurants-cta: 68 125 92;
+	--sector-grocery-page: 252 246 239; /* #FCF6EF soft */
+	--sector-grocery-tab: 232 178 122; /* #E8B27A base */
+	--sector-grocery-border: 245 220 195; /* #F5DCC3 light */
+	--sector-grocery-primary: 121 93 63; /* #795D3F deep */
+	--sector-grocery-cta: 121 93 63;
+	--sector-flights-page: 244 243 251; /* #F4F3FB soft */
+	--sector-flights-tab: 167 155 220; /* #A79BDC base */
+	--sector-flights-border: 215 210 239; /* #D7D2EF light */
+	--sector-flights-primary: 87 81 114; /* #575172 deep */
+	--sector-flights-cta: 87 81 114;
+	--sector-hotels-page: 242 246 251; /* #F2F6FB soft */
+	--sector-hotels-tab: 143 180 220; /* #8FB4DC base */
+	--sector-hotels-border: 205 221 239; /* #CDDDEF light */
+	--sector-hotels-primary: 74 94 114; /* #4A5E72 deep */
+	--sector-hotels-cta: 74 94 114;
+
+	/* Active sector accent bridge — overridden on [data-sector] / [data-sector-page]. */
+	--sector-primary: var(--sector-restaurants-primary);
+	--sector-cta: var(--sector-restaurants-cta);
+	--sector-border: var(--sector-restaurants-border);
+
+	/*
+	 * Text — green-ink family from the Farq color system.
+	 * primary #0E2622 · secondary #4A5F5A · tertiary #829691
+	 */
+	--ink: 14 38 34; /* #0E2622 */
+	--ink-subtle: 74 95 90; /* #4A5F5A */
+	--ink-muted: 130 150 145; /* #829691 */
+
+	--line: 227 237 230; /* default to grocery border; sector pages override */
+	--line-strong: 170 194 186;
+
+	/* Comparison semantics — muted, never neon red panic. */
+	--price-best: 15 138 77; /* #0F8A4D */
+	--price-high: 180 70 47; /* #B4462F muted terracotta */
+	--price-neutral: 74 95 90; /* #4A5F5A */
+	--savings-bg: 230 251 239; /* #E6FBEF */
+	--warning-quiet: 176 122 40; /* #B07A28 */
+
+	--success: 15 138 77; /* #0F8A4D */
+	--success-bg: 230 251 239; /* #E6FBEF */
+	--whatsapp: 37 211 102;
+
+	/* Brand-tinted elevation (not pure black). */
+	--shadow-brand: 4 52 52;
+
+	--focus: var(--mint-700);
+
+	/* ─── Semantic backgrounds / text / borders (foundation) ─── */
+	--sem-bg-canvas: var(--surface-2);
+	--sem-bg-primary: var(--surface);
+	--sem-bg-secondary: var(--fareeq-ice);
+	--sem-bg-elevated: var(--surface-3);
+	--sem-bg-muted: var(--neutral-100);
+	--sem-bg-glass: var(--fareeq-glass-base);
+
+	--sem-fg-primary: var(--ink);
+	--sem-fg-secondary: var(--ink-subtle); /* secondary readable copy */
+	--sem-fg-muted: var(--ink-muted); /* captions / meta only */
+	--sem-fg-inverse: var(--fareeq-ice);
+	--sem-fg-on-accent: var(--primary-700);
+	--sem-fg-danger: var(--coral-600);
+
+	--sem-border-default: var(--line);
+	--sem-border-strong: var(--line-strong);
+	--sem-border-subtle: var(--neutral-200);
+
+	/*
+	 * Role layer — product contract: prefer roles in new UI over raw palette.
+	 * Maps 1:1 to semantics for predictable shadcn / component usage.
+	 */
+	--role-bg-canvas: var(--sem-bg-canvas);
+	--role-bg-surface: var(--sem-bg-primary);
+	--role-bg-elevated: var(--sem-bg-elevated);
+	--role-bg-muted: var(--sem-bg-muted);
+	--role-bg-secondary: var(--sem-bg-secondary);
+	--role-text-default: var(--sem-fg-primary);
+	/* Subtle UI chrome uses secondary (dark), not muted — muted is meta-only */
+	--role-text-subtle: var(--sem-fg-secondary);
+	--role-text-inverse: var(--sem-fg-inverse);
+	--role-border-default: var(--sem-border-default);
+	--role-border-strong: var(--sem-border-strong);
+
+	/* ─── Feedback (pair bg + fg; never use raw coral/amber for text without bg) ─── */
+	--sem-feedback-success-fg: var(--success);
+	--sem-feedback-success-bg: var(--success-bg);
+	--sem-feedback-warning-fg: var(--amber-700);
+	--sem-feedback-warning-bg: 255 251 235;
+	--sem-feedback-danger-fg: var(--coral-600);
+	--sem-feedback-danger-bg: 254 242 242;
+	--sem-feedback-info-fg: var(--fareeq-blue);
+	--sem-feedback-info-bg: 238 246 252;
+
+	/* ─── Action: primary (= sticky «شف الفرق» — brand-900 + white) ─── */
+	--sem-action-primary-default: var(--brand-900);
+	--sem-action-primary-hover: var(--brand-800);
+	--sem-action-primary-active: var(--brand-700);
+	--sem-action-primary-pressed: var(--brand-700);
+	--sem-action-primary-disabled: var(--neutral-300);
+	--sem-action-primary-focus: var(--mint-600);
+	--sem-action-primary-focus-visible: var(--mint-600);
+	--sem-action-primary-fg: 255 255 255;
+
+	/* ─── Action: secondary (neutral chips / secondary buttons) ─── */
+	--sem-action-secondary-default: var(--neutral-200);
+	--sem-action-secondary-hover: var(--neutral-300);
+	--sem-action-secondary-active: var(--neutral-400);
+	--sem-action-secondary-pressed: var(--neutral-400);
+	--sem-action-secondary-disabled: var(--neutral-100);
+	--sem-action-secondary-focus: var(--neutral-600);
+	--sem-action-secondary-focus-visible: var(--mint-600);
+
+	/* ─── Action: danger / warning (destructive & caution) ─── */
+	--sem-action-danger-default: var(--coral-500);
+	--sem-action-danger-hover: var(--coral-600);
+	--sem-action-danger-active: var(--coral-700);
+	--sem-action-danger-pressed: var(--coral-700);
+	--sem-action-danger-disabled: var(--neutral-300);
+	--sem-action-danger-focus: var(--coral-700);
+	--sem-action-danger-focus-visible: var(--coral-600);
+
+	--sem-action-warning-default: var(--amber-500);
+	--sem-action-warning-hover: var(--amber-600);
+	--sem-action-warning-active: var(--amber-700);
+	--sem-action-warning-pressed: var(--amber-700);
+	--sem-action-warning-disabled: var(--neutral-300);
+	--sem-action-warning-focus: var(--amber-700);
+	--sem-action-warning-focus-visible: var(--amber-600);
+
+	/*
+	 * Glass — premium, selective. Fixed blur/border/opacities; do not override per screen.
+	 * Avoid: dense checkout, long forms, data tables, low-contrast photography.
+	 * Text on glass: prefer sem-fg-inverse or white @ ≥4.5:1 vs blurred layer (validate per BG).
+	 */
+	--glass-light-bg: 255 255 255;
+	--glass-light-border: 255 255 255;
+	--glass-light-bg-opacity: 0.46;
+	--glass-light-border-opacity: 0.24;
+	--glass-light-blur: 12px;
+
+	--glass-dark-bg: 40 57 57;
+	--glass-dark-border: 255 255 255;
+	--glass-dark-bg-opacity: 0.46;
+	--glass-dark-border-opacity: 0.12;
+	--glass-dark-blur: 22px;
+
+	/* ─── Typography: families ─── */
+	--font-sans: "Inter", "ITF Huwiya Arabic", system-ui, sans-serif;
+	/* Arabic-first stack for RTL-only surfaces */
+	--font-arabic: "ITF Huwiya Arabic", "Inter", system-ui, sans-serif;
+	--font-brand: "Futura", "Inter", system-ui, sans-serif;
+
+	/*
+	 * Typographic roles — Latin. Arabic uses parallel sizes + looser leading.
+	 * display: marketing / hero ONLY. body: UI + reading. label/caption: controls + meta.
+	 */
+	--type-display-size: var(--text-2xl);
+	--type-display-weight: var(--font-bold);
+	--type-display-leading: var(--leading-tight);
+
+	--type-title-size: var(--text-xl);
+	--type-title-weight: var(--font-bold);
+	--type-title-leading: var(--leading-snug);
+
+	--type-heading-size: var(--text-lg);
+	--type-heading-weight: var(--font-bold); /* titles/headings = 700 */
+	--type-heading-leading: var(--leading-snug);
+
+	--type-body-size: var(--text-md);
+	--type-body-weight: var(--font-medium); /* body UI = 500 */
+	--type-body-leading: var(--leading-normal);
+	--type-body-leading-ar: 1.65;
+
+	--type-caption-size: var(--text-sm);
+	--type-caption-weight: var(--font-medium);
+	--type-caption-leading: var(--leading-normal);
+
+	--type-label-size: var(--text-xs);
+	--type-label-weight: var(--font-medium);
+	--type-label-leading: var(--leading-snug);
+
+	/* Floor: readable UI text ≥ 13px (xs). Do not use <13px for copy. */
+	--text-xs: 0.8125rem; /* 13px */
+	--text-sm: 0.875rem; /* 14px */
+	--text-md: 1rem;
+	--text-lg: 1.25rem;
+	--text-xl: 1.5rem;
+	--text-2xl: 1.875rem;
+
+	--leading-tight: 1.25;
+	--leading-snug: 1.375;
+	--leading-normal: 1.5;
+	--leading-relaxed: 1.625;
+
+	--font-regular: 400;
+	--font-medium: 500;
+	--font-semibold: 600;
+	--font-bold: 700;
+
+	/* ─── Spacing scale ─── */
+	--space-xs: 0.25rem;
+	--space-sm: 0.5rem;
+	--space-md: 1rem;
+	--space-lg: 1.5rem;
+	--space-xl: 2rem;
+	--space-2xl: 2.5rem;
+	--space-3xl: 3rem;
+
+	/*
+	 * Layout density presets — pick ONE per route/screen.
+	 * section gap: vertical rhythm between major blocks.
+	 * card padding: inside cards; stack gap: between sibling items in a section.
+	 */
+	--layout-section-gap-compact: var(--space-md);
+	--layout-section-gap-default: var(--space-xl);
+	--layout-section-gap-roomy: var(--space-3xl);
+	--layout-card-padding-compact: var(--space-sm);
+	--layout-card-padding-default: var(--space-md);
+	--layout-card-padding-roomy: var(--space-lg);
+	--layout-stack-gap-compact: var(--space-sm);
+	--layout-stack-gap-default: var(--space-md);
+	--layout-stack-gap-roomy: var(--space-lg);
+
+	/* ─── Radius scale + roles (controls vs cards vs sheets) ───
+	   ONE canonical scale. Every component uses a token; no arbitrary
+	   px radii in markup. Rungs are ~geometric so adjacent steps read as
+	   distinct without a jump: xs→tiny chips, sm→tags/controls, md→inputs
+	   & list rows, lg→cards, xl→large cards/modals, 2xl→bottom sheets,
+	   3xl→oversized decorative frames. */
+	--radius-xs: 0.25rem;
+	--radius-sm: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.5rem;
+	--radius-2xl: 1.625rem;
+	--radius-3xl: 2rem;
+	--radius-full: 9999px;
+
+	--radius-role-control: var(--radius-md);
+	--radius-role-card: var(--radius-lg);
+	--radius-role-sheet: var(--radius-xl);
+	--radius-role-button: var(--radius-xl);
+
+	--duration-fast: 150ms;
+	--duration-normal: 250ms;
+	--duration-slow: 400ms;
+	/* Living-material language (see farq-motion.css). One-shot, not loops. */
+	--farq-motion-sweep: 450ms;
+	--farq-motion-glow: 900ms;
+	--farq-motion-reveal: 280ms;
+	--easing-default: ease-in-out;
+	--easing-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+	--easing-enter: cubic-bezier(0, 0, 0.2, 1);
+	--easing-exit: cubic-bezier(0.4, 0, 1, 1);
+	/* Strong curves for enter/exit motion — built-in CSS easings are too weak
+	   for UI that should feel instant. Drawer curve matches iOS sheets (Ionic/Vaul). */
+	--easing-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+	--easing-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+	--comp-button-height: 3rem;
+	--comp-button-padding-x: 1rem;
+	--comp-button-radius: var(--radius-role-button);
+	--comp-card-padding: var(--layout-card-padding-default);
+	--comp-card-radius: var(--radius-role-card);
+}
+
+/* Layer-2 zone + chrome: surface/accent/primary/cta (Header sets data-sector).
+   Primary action tokens follow the active sector so login / lists / Accept match. */
+[data-sector="grocery"],
+[data-sector-page="grocery"] {
+	--sector-surface: var(--sector-grocery-page);
+	--sector-accent: var(--sector-grocery-tab);
+	--sector-soft: var(--sector-grocery-page);
+	--sector-light: var(--sector-grocery-border);
+	--sector-deep: var(--sector-grocery-primary);
+	--sector-base: var(--sector-grocery-tab);
+	--sector-primary: var(--sector-grocery-primary);
+	--sector-cta: var(--sector-grocery-cta);
+	--sector-border: var(--sector-grocery-border);
+	--line: var(--sector-grocery-border);
+	--sem-action-primary-default: var(--sector-grocery-cta);
+	--sem-action-primary-hover: var(--sector-grocery-primary);
+	--sem-action-primary-active: var(--sector-grocery-primary);
+	--sem-action-primary-pressed: var(--sector-grocery-primary);
+}
+[data-sector="restaurants"],
+[data-sector-page="restaurants"] {
+	--sector-surface: var(--sector-restaurants-page);
+	--sector-accent: var(--sector-restaurants-tab);
+	--sector-soft: var(--sector-restaurants-page);
+	--sector-light: var(--sector-restaurants-border);
+	--sector-deep: var(--sector-restaurants-primary);
+	--sector-base: var(--sector-restaurants-tab);
+	--sector-primary: var(--sector-restaurants-primary);
+	--sector-cta: var(--sector-restaurants-cta);
+	--sector-border: var(--sector-restaurants-border);
+	--line: var(--sector-restaurants-border);
+	--sem-action-primary-default: var(--sector-restaurants-cta);
+	--sem-action-primary-hover: var(--sector-restaurants-primary);
+	--sem-action-primary-active: var(--sector-restaurants-primary);
+	--sem-action-primary-pressed: var(--sector-restaurants-primary);
+}
+[data-sector="hotels"],
+[data-sector-page="hotels"] {
+	--sector-surface: var(--sector-hotels-page);
+	--sector-accent: var(--sector-hotels-tab);
+	--sector-soft: var(--sector-hotels-page);
+	--sector-light: var(--sector-hotels-border);
+	--sector-deep: var(--sector-hotels-primary);
+	--sector-base: var(--sector-hotels-tab);
+	--sector-primary: var(--sector-hotels-primary);
+	--sector-cta: var(--sector-hotels-cta);
+	--sector-border: var(--sector-hotels-border);
+	--line: var(--sector-hotels-border);
+	--sem-action-primary-default: var(--sector-hotels-cta);
+	--sem-action-primary-hover: var(--sector-hotels-primary);
+	--sem-action-primary-active: var(--sector-hotels-primary);
+	--sem-action-primary-pressed: var(--sector-hotels-primary);
+}
+[data-sector="flights"],
+[data-sector-page="flights"] {
+	--sector-surface: var(--sector-flights-page);
+	--sector-accent: var(--sector-flights-tab);
+	--sector-soft: var(--sector-flights-page);
+	--sector-light: var(--sector-flights-border);
+	--sector-deep: var(--sector-flights-primary);
+	--sector-base: var(--sector-flights-tab);
+	--sector-primary: var(--sector-flights-primary);
+	--sector-cta: var(--sector-flights-cta);
+	--sector-border: var(--sector-flights-border);
+	--line: var(--sector-flights-border);
+	--sem-action-primary-default: var(--sector-flights-cta);
+	--sem-action-primary-hover: var(--sector-flights-primary);
+	--sem-action-primary-active: var(--sector-flights-primary);
+	--sem-action-primary-pressed: var(--sector-flights-primary);
+}
+
+.dark {
+	/* Early dark proposal: surface #0B1A18 · raised #132B27 · border #1E403A */
+	--surface: 19 43 39; /* #132B27 raised cards */
+	--surface-2: 11 26 24; /* #0B1A18 canvas */
+	--surface-3: 30 64 58; /* #1E403A-ish elevated */
+
+	--sector-header-fixed: 11 26 24;
+	--sector-restaurants-page: 11 26 24;
+	--sector-grocery-page: 11 26 24;
+	--sector-flights-page: 11 26 24;
+	--sector-hotels-page: 11 26 24;
+
+	--ink: 255 255 255; /* pure white primary on dark */
+	--ink-subtle: 220 232 227; /* bright secondary */
+	--ink-muted: 186 204 198; /* muted still crisp */
+
+	--line: 58 74 68;
+	--line-strong: 78 98 90;
+
+	--success: 72 214 150;
+	--success-bg: 12 56 40;
+
+	--focus: var(--mint-600);
+
+	--sem-feedback-warning-bg: 69 46 15;
+	--sem-feedback-danger-bg: 60 25 25;
+	--sem-feedback-info-bg: 30 40 55;
+
+	--sem-action-primary-hover: var(--brand-800);
+	--sem-action-primary-active: var(--brand-700);
+	--sem-action-primary-pressed: var(--brand-700);
+	--sem-action-primary-focus-visible: var(--mint-500);
+
+	--sem-bg-secondary: var(--surface-3);
+	--sem-bg-muted: var(--surface-3);
+	--sem-fg-on-accent: var(--fareeq-ice);
+
+	--glass-light-bg: 17 24 39;
+	--glass-light-border: 255 255 255;
+	--glass-light-bg-opacity: 0.55;
+	--glass-light-border-opacity: 0.12;
+
+	--glass-dark-bg: 15 23 42;
+	--glass-dark-border-opacity: 0.18;
+
+	--mint-400: 165 239 200;
+}
+
+@layer utilities {
+	/* Provider/store brand marks with dark lettering (Carrefour, Danube,
+	   ToYou) are illegible straight on dark surfaces. One utility = one
+	   consistent plate on every grocery + restaurant surface.
+	   Light mode is deliberately untouched — the plate exists only in dark. */
+	.dark .logo-plate {
+		background-color: rgb(255 255 255 / 0.92);
+		padding: 2px;
+	}
+
+	/* Partner marks in full brand color — quiet via size/opacity only. */
+	.logo-trust {
+		height: 24px;
+		width: auto;
+		max-width: 96px;
+		object-fit: contain;
+		opacity: 0.85;
+		filter: none;
+		transition:
+			opacity 160ms ease,
+			transform 160ms ease;
+	}
+	.logo-trust:hover {
+		opacity: 1;
+		transform: translateY(-1px);
+	}
+
+	.shadow-brand {
+		box-shadow: 0 2px 12px rgb(var(--shadow-brand) / 0.06);
+	}
+
+	.glass-light {
+		background: rgb(var(--glass-light-bg) / var(--glass-light-bg-opacity));
+		border: 1px solid
+			rgb(var(--glass-light-border) / var(--glass-light-border-opacity));
+		backdrop-filter: blur(var(--glass-light-blur));
+		-webkit-backdrop-filter: blur(var(--glass-light-blur));
+	}
+
+	.glass-dark {
+		background: rgb(var(--glass-dark-bg) / var(--glass-dark-bg-opacity));
+		border: 1px solid
+			rgb(var(--glass-dark-border) / var(--glass-dark-border-opacity));
+		backdrop-filter: blur(var(--glass-dark-blur));
+		-webkit-backdrop-filter: blur(var(--glass-dark-blur));
+	}
+
+	.transition-ds {
+		transition-duration: var(--duration-normal);
+		transition-timing-function: var(--easing-smooth);
+	}
+
+	.transition-ds-fast {
+		transition-duration: var(--duration-fast);
+		transition-timing-function: var(--easing-default);
+	}
+
+	/* Arabic body text — prefer in RTL blocks */
+	.type-body-ar {
+		font-family: var(--font-arabic);
+		line-height: var(--type-body-leading-ar);
+	}
+
+	/* Focus-visible ring using design token */
+	.focus-ring-ds:focus-visible {
+		outline: 2px solid rgb(var(--sem-action-primary-focus-visible) / 1);
+		outline-offset: 2px;
+	}
+}

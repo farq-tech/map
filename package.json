@@ -1,0 +1,20 @@
+{
+	"name": "map",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Farq Map — investor preview of the comparison street map (separate from farq.sa).",
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev -w @farq/map-web",
+    "dev:api": "npm run dev -w @farq/map-api",
+    "build": "npm run build -w @farq/map-web",
+    "start": "npm run start -w @farq/map-api"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  }
+}
