@@ -1,10 +1,12 @@
 /**
  * Farq map pin builders — Mapbox HTML markers overlaid on the existing map.
- * Gap places become Price Difference Bubbles. No-gap places stay initials.
- * Clusters stay the existing count orbs. Logos are never invented.
+ * Gap places become Price Aura chips (evolved from difference bubbles).
+ * No-gap places stay initials. Server clusters restyle as Opportunity Clusters.
+ * Logos are never invented. Official Farq «ف» is the optional tiny stem mark.
  *
  * Size uses the observed difference_amount only (no Math.abs, no invented gaps).
  */
+import { buildFarqCircleMarkElement } from "./farqBrandAssets";
 import { localizeDigitString } from "./formatPrice";
 import {
 	getProviderLabel,
@@ -15,7 +17,7 @@ import {
 export const FARQ_CLUSTERS_CLASS = "farq-clusters";
 export const PIN_OTHERS_MAX = 3;
 
-/** Mobile-tuned: 3 SAR stays small, 18 SAR is near the ceiling. */
+/** Mobile-tuned: +3 / +7 / +12 / +18 stay distinct without covering the map. */
 export const BUBBLE_SIZE_MIN = 26;
 export const BUBBLE_SIZE_MAX = 52;
 export const BUBBLE_SIZE_BASE = 18;
@@ -23,7 +25,13 @@ export const BUBBLE_SIZE_SCALE = 8;
 export const BUBBLE_CURRENCY_MIN_PX = 38;
 export const BUBBLE_CLEAR_CHANGE = 1;
 export const BUBBLE_ENTER_STAGGER_MAX = 16;
-export const BUBBLE_ENTER_MS = 320;
+export const BUBBLE_ENTER_MS = 360;
+export const BUBBLE_ENTER_SCALE_FROM = 0.82;
+
+/** After pan/zoom STOP — rank loaded markers only (no extra API fetch). */
+export const AURA_VIEWPORT_IDLE_MS = 180;
+export const AURA_PROMOTE_MIN = 8;
+export const AURA_PROMOTE_MAX = 12;
 
 /** Winner pin scale leftover — restaurant initials still use a readable floor. */
 export type PinSizeTier = "sm" | "md" | "lg";
@@ -78,9 +86,82 @@ export function bubbleSizePx(diff: number): number {
 	return Math.max(BUBBLE_SIZE_MIN, Math.min(BUBBLE_SIZE_MAX, size));
 }
 
-export function bubbleZIndex(amount: number, selected = false): number {
+export function bubbleZIndex(
+	amount: number,
+	selected = false,
+	promoted = false,
+): number {
 	const ranked = 100 + Math.round(amount);
-	return selected ? 10_000 + ranked : ranked;
+	if (selected) return 10_000 + ranked;
+	if (promoted) return 500 + ranked;
+	return ranked;
+}
+
+export type AuraRank = "promoted" | "demoted";
+
+/** Promote every visible aura up to MAX; beyond that keep the top MAX. */
+export function promotedAuraLimit(visibleCount: number): number {
+	if (visibleCount <= 0) return 0;
+	if (visibleCount <= AURA_PROMOTE_MAX) return visibleCount;
+	return AURA_PROMOTE_MAX;
+}
+
+export function rankAuraPlaceIds(
+	items: { placeId: string; amount: number }[],
+	limit = promotedAuraLimit(items.length),
+): Set<string> {
+	const ranked = items
+		.filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+		.sort((a, b) => b.amount - a.amount || a.placeId.localeCompare(b.placeId));
+	return new Set(ranked.slice(0, Math.max(0, limit)).map((item) => item.placeId));
+}
+
+export function applyAuraRankClasses(el: HTMLElement, rank: AuraRank): void {
+	el.classList.toggle("farq-gap-bubble--promoted", rank === "promoted");
+	el.classList.toggle("farq-gap-bubble--demoted", rank === "demoted");
+	el.dataset.rank = rank;
+	if (!el.classList.contains("farq-gap-bubble")) return;
+	const amount = Number(el.dataset.amount);
+	if (!Number.isFinite(amount) || amount <= 0) return;
+	el.style.zIndex = String(
+		bubbleZIndex(amount, el.classList.contains("is-selected"), rank === "promoted"),
+	);
+}
+
+/**
+ * Observed max gap already on a server cluster. Never invents a number from count.
+ */
+export function observedClusterTopGap(raw: {
+	difference?: unknown;
+	max_difference_amount?: unknown;
+	top_difference_amount?: unknown;
+} | null | undefined): number | null {
+	if (raw == null) return null;
+	const fromDifference = observedDifferenceAmount(raw.difference);
+	if (fromDifference != null) return fromDifference;
+	for (const value of [raw.max_difference_amount, raw.top_difference_amount]) {
+		const n = Number(value);
+		if (!Number.isFinite(n) || n <= 0) continue;
+		if (Math.round(n) < 1) continue;
+		return n;
+	}
+	return null;
+}
+
+export function clusterOpportunityCount(opts: {
+	count: number;
+	differenceCount?: number;
+}): number {
+	const diffs = Number(opts.differenceCount);
+	if (Number.isFinite(diffs) && diffs > 0) return Math.round(diffs);
+	const count = Number(opts.count);
+	return Number.isFinite(count) ? Math.max(0, Math.round(count)) : 0;
+}
+
+export function clusterOpportunityLabel(count: number, isRTL: boolean): string {
+	const n = Math.max(0, Math.round(count));
+	const digits = localizeDigitString(String(n), isRTL);
+	return isRTL ? `${digits} فرصة` : `${n} opps`;
 }
 
 export function displayGapRiyals(amount: number): number {
@@ -272,10 +353,14 @@ export function featureMarkerKey(
 		feature_type?: string;
 		place_id?: string;
 		count?: number;
+		difference_count?: number;
 		difference?: unknown;
+		max_difference_amount?: unknown;
+		top_difference_amount?: unknown;
 	};
 	if (props.feature_type === "cluster") {
-		return `cluster:${Number(lng).toFixed(5)}:${Number(lat).toFixed(5)}:${props.count ?? 0}`;
+		const top = observedClusterTopGap(props);
+		return `cluster:${Number(lng).toFixed(5)}:${Number(lat).toFixed(5)}:${props.count ?? 0}:${props.difference_count ?? 0}:${top != null ? displayGapRiyals(top) : 0}`;
 	}
 	const placeId = String(props.place_id || "").trim();
 	if (!placeId) return null;
@@ -322,7 +407,7 @@ export function buildGapBubbleElement(opts: {
 	const currency = isRTL ? "ر.س" : "SAR";
 
 	const el = document.createElement("div");
-	el.className = "farq-gap-bubble";
+	el.className = "farq-gap-bubble farq-gap-bubble--aura";
 	if (opts.selected) el.classList.add("is-selected");
 	if (!showCurrency) el.classList.add("farq-gap-bubble--tiny");
 	else if (compact) el.classList.add("farq-gap-bubble--compact");
@@ -335,6 +420,10 @@ export function buildGapBubbleElement(opts: {
 	el.setAttribute("role", "button");
 	el.setAttribute("aria-label", gapBubbleAriaLabel(opts.name, riyal, isRTL));
 	el.title = gapBubbleAriaLabel(opts.name, riyal, isRTL);
+
+	const field = document.createElement("div");
+	field.className = "farq-gap-bubble-field";
+	field.setAttribute("aria-hidden", "true");
 
 	const orb = document.createElement("div");
 	orb.className = "farq-gap-bubble-orb";
@@ -355,7 +444,9 @@ export function buildGapBubbleElement(opts: {
 	const stem = document.createElement("div");
 	stem.className = "farq-gap-bubble-stem";
 	stem.setAttribute("aria-hidden", "true");
+	stem.appendChild(buildFarqCircleMarkElement(10));
 
+	el.appendChild(field);
 	el.appendChild(orb);
 	el.appendChild(stem);
 	return el;
@@ -429,19 +520,42 @@ export function buildPlacePinElement(opts: {
 export function buildClusterPinElement(opts: {
 	count: number;
 	differenceCount?: number;
+	topGap?: number | null;
 	isRTL?: boolean;
 }): HTMLDivElement {
 	const count = Number.isFinite(opts.count) ? Math.max(0, Math.round(opts.count)) : 0;
+	const isRTL = Boolean(opts.isRTL);
+	const opportunities = clusterOpportunityCount({
+		count,
+		differenceCount: opts.differenceCount,
+	});
+	const topGap = observedDifferenceAmount({
+		difference_amount: opts.topGap,
+	});
+	const riyal = topGap != null ? displayGapRiyals(topGap) : null;
 	const el = document.createElement("div");
 	el.className = `farq-3d-cluster ${FARQ_CLUSTERS_CLASS}`;
-	if ((opts.differenceCount || 0) > 0) {
+	if ((opts.differenceCount || 0) > 0 || riyal != null) {
 		el.classList.add("farq-3d-cluster--gaps");
+		el.classList.add("farq-3d-cluster--opportunity");
 	}
 	el.dataset.testid = "farq-map-cluster";
-	el.setAttribute("role", "button");
+	if (riyal != null) el.dataset.topGap = String(riyal);
+	el.dataset.opportunities = String(opportunities);
+	const gapDigits = riyal != null ? localizeDigitString(String(riyal), isRTL) : "";
+	el.setAttribute(
+		"role",
+		"button",
+	);
 	el.setAttribute(
 		"aria-label",
-		opts.isRTL ? `تجمّع ${count} أماكن` : `Cluster of ${count} places`,
+		riyal != null
+			? isRTL
+				? `تجمّع ${opportunities} فرصة، أكبر فرق ${gapDigits}`
+				: `Cluster of ${opportunities} opportunities, top gap ${riyal}`
+			: isRTL
+				? `تجمّع ${count} أماكن`
+				: `Cluster of ${count} places`,
 	);
 
 	const shadow = document.createElement("div");
@@ -450,9 +564,20 @@ export function buildClusterPinElement(opts: {
 
 	const orb = document.createElement("div");
 	orb.className = "farq-3d-cluster-orb";
+
+	if (riyal != null) {
+		const gapEl = document.createElement("span");
+		gapEl.className = "farq-3d-cluster-gap";
+		gapEl.textContent = `+${gapDigits}`;
+		orb.appendChild(gapEl);
+	}
+
 	const label = document.createElement("span");
 	label.className = "farq-3d-cluster-count";
-	label.textContent = String(count);
+	label.textContent =
+		(opts.differenceCount || 0) > 0 || riyal != null
+			? clusterOpportunityLabel(opportunities, isRTL)
+			: String(count);
 	orb.appendChild(label);
 
 	el.appendChild(shadow);
@@ -463,7 +588,10 @@ export function buildClusterPinElement(opts: {
 export function setPinSelected(el: HTMLElement, selected: boolean): void {
 	el.classList.toggle("is-selected", selected);
 	if (!el.classList.contains("farq-gap-bubble")) return;
+	if (selected) applyAuraRankClasses(el, "promoted");
 	const amount = Number(el.dataset.amount);
 	if (!Number.isFinite(amount) || amount <= 0) return;
-	el.style.zIndex = String(bubbleZIndex(amount, selected));
+	el.style.zIndex = String(
+		bubbleZIndex(amount, selected, el.classList.contains("farq-gap-bubble--promoted")),
+	);
 }

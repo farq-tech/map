@@ -8,7 +8,7 @@
  * Never invents lat/lon; never remints Golden place_id.
  */
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Compass, Info, MapPin, Navigation, Search, X } from "lucide-react";
+import { ChevronDown, Info, MapPin, Navigation, Search, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
@@ -28,6 +28,7 @@ import {
 	type IntelligenceMeta,
 } from "../../services/intelligenceService";
 import EmptyState from "../EmptyState";
+import FarqBrandMark from "../FarqBrandMark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch } from "../../routes/map";
@@ -377,7 +378,7 @@ export default function IntelligenceMapSplit({
 		return (
 			<div className="bg-surface px-4 py-10" data-testid="intelligence-map-error">
 				<EmptyState
-					icon={<Compass className="h-8 w-8" />}
+					icon={<FarqBrandMark variant="circle" size={32} />}
 					title="We couldn't load the live map"
 					titleAr="ما قدرنا نحمّل الخريطة حياً"
 					body="Please check your internet connection and try again to see price gaps."
@@ -415,12 +416,7 @@ export default function IntelligenceMapSplit({
 				<div className="absolute inset-x-3 top-3 z-[500] flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
 					<div className="flex min-w-0 items-center gap-4">
 						<div className="flex shrink-0 items-center gap-1.5">
-							<span className="flex size-[29px] items-center justify-center rounded-lg bg-brand-900 text-[14px] font-black leading-none text-mint-500">
-								ف
-							</span>
-							<span className="hidden text-[18px] font-black text-brand-900 lg:inline">
-								فَرْق
-							</span>
+							<FarqBrandMark variant="lockup" size={29} />
 							<label className="relative lg:hidden">
 								<span className="text-[14px] font-black text-brand-900">
 									{selectedCityLabel}
@@ -687,13 +683,16 @@ export default function IntelligenceMapSplit({
 							</p>
 							<ul className="space-y-2 text-[#6b7c7c]">
 								<li className="flex items-center gap-2">
-									<span className="farq-legend-win" aria-hidden>
-										{isRTL ? "+١٨" : "+18"}
+									<span className="farq-legend-bubble" aria-hidden>
+										<span className="farq-legend-win">
+											{isRTL ? "+١٨" : "+18"}
+										</span>
+										<FarqBrandMark variant="circle" size={10} />
 									</span>
 									<span>
 										{isRTL
-											? "فقاعة فرق السعر المرصود"
-											: "Observed price-difference bubble"}
+											? "هالة فرق السعر المرصود"
+											: "Observed price-difference aura"}
 									</span>
 								</li>
 								<li className="flex items-center gap-2">
@@ -708,8 +707,8 @@ export default function IntelligenceMapSplit({
 									<span className="farq-legend-3d-cluster" aria-hidden />
 									<span>
 										{isRTL
-											? "تجمعات مطاعم (قم بالتقريب للرؤية)"
-											: "Restaurant clusters (zoom in to see)"}
+											? "تجمّع فرص (قم بالتقريب للهالات)"
+											: "Opportunity clusters (zoom in to see auras)"}
 									</span>
 								</li>
 							</ul>

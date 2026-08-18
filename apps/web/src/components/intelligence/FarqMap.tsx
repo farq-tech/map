@@ -2,8 +2,8 @@
  * Farq difference map — Mapbox GL Standard, comparison-row coords.
  * Neighborhood polygons are intentionally not painted (not a choropleth mosaic).
  * Never invents pins, never remints place_id, never fakes GPS.
- * Observed gaps overlay as Price Difference Bubbles (size ∝ difference_amount).
- * Missing gaps keep restaurant initials. Clusters stay the existing orbs.
+ * Observed gaps overlay as Price Aura chips (size ∝ difference_amount).
+ * Missing gaps keep restaurant initials. Server clusters restyle as Opportunity Clusters.
  * Pin tap selects the place — no Mapbox infowindow; the split sheet owns the moment.
  * Bubbles are overlay-only: this file must not restyle 3D buildings, terrain,
  * camera, zoom, or the Standard/Satellite basemap.
@@ -13,15 +13,19 @@ import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	AURA_VIEWPORT_IDLE_MS,
 	BUBBLE_CLEAR_CHANGE,
 	BUBBLE_ENTER_MS,
 	BUBBLE_ENTER_STAGGER_MAX,
+	applyAuraRankClasses,
 	buildClusterPinElement,
 	buildPlacePinElement,
 	featureMarkerKey,
+	observedClusterTopGap,
 	observedDifferenceAmount,
 	playBubbleEnter,
 	playMaxGapPulse,
+	rankAuraPlaceIds,
 	setPinSelected,
 	shouldReplayBubbleMotion,
 } from "../../lib/farqMapPins";
@@ -132,6 +136,69 @@ function clearPinMarkers(markers: Map<string, PinRec>) {
 	markers.clear();
 }
 
+/** Rank loaded HTML auras after camera idle. Class toggles only — no refetch, no remint. */
+function applyViewportAuraRanks(
+	map: MapboxMap,
+	markers: Map<string, PinRec>,
+	selectedPlaceId: string | undefined,
+	lastPulseRef: { current: { placeId: string; amount: number } | null },
+	pulseTimerRef: { current: number },
+	pulseDelayMs: number,
+): void {
+	let bounds: ReturnType<MapboxMap["getBounds"]>;
+	try {
+		bounds = map.getBounds();
+	} catch {
+		return;
+	}
+	if (!bounds) return;
+
+	const visible: { placeId: string; amount: number; el: HTMLElement }[] = [];
+	for (const rec of markers.values()) {
+		if (rec.kind !== "place" || !rec.placeId || rec.amount == null) continue;
+		const ll = rec.marker.getLngLat();
+		if (!bounds.contains(ll)) {
+			applyAuraRankClasses(rec.el, "demoted");
+			continue;
+		}
+		visible.push({ placeId: rec.placeId, amount: rec.amount, el: rec.el });
+	}
+
+	const promoted = rankAuraPlaceIds(visible);
+	let maxPlaceId: string | null = null;
+	let maxAmount = -1;
+	let maxEl: HTMLElement | null = null;
+	for (const item of visible) {
+		const isSelected =
+			Boolean(selectedPlaceId) && item.placeId === selectedPlaceId;
+		applyAuraRankClasses(
+			item.el,
+			isSelected || promoted.has(item.placeId) ? "promoted" : "demoted",
+		);
+		if (item.amount > maxAmount) {
+			maxAmount = item.amount;
+			maxPlaceId = item.placeId;
+			maxEl = item.el;
+		}
+	}
+
+	const lastPulse = lastPulseRef.current;
+	const maxChanged =
+		maxPlaceId != null &&
+		maxAmount > 0 &&
+		(!lastPulse ||
+			lastPulse.placeId !== maxPlaceId ||
+			Math.abs(lastPulse.amount - maxAmount) >= BUBBLE_CLEAR_CHANGE);
+	if (maxEl && maxPlaceId && maxChanged) {
+		window.clearTimeout(pulseTimerRef.current);
+		const target = maxEl;
+		pulseTimerRef.current = window.setTimeout(() => {
+			playMaxGapPulse(target);
+		}, pulseDelayMs);
+		lastPulseRef.current = { placeId: maxPlaceId, amount: maxAmount };
+	}
+}
+
 export default function FarqMap({
 	places,
 	neighborhoods: _neighborhoods,
@@ -177,6 +244,7 @@ export default function FarqMap({
 		null,
 	);
 	const pulseTimerRef = useRef(0);
+	const rankTimerRef = useRef(0);
 	const introDoneRef = useRef(false);
 	const lastFocusIdRef = useRef<string | null>(null);
 	const onViewChangeRef = useRef(onViewChange);
@@ -323,6 +391,17 @@ export default function FarqMap({
 			if (!introDoneRef.current) return;
 			persistCamera(map);
 			reportView();
+			window.clearTimeout(rankTimerRef.current);
+			rankTimerRef.current = window.setTimeout(() => {
+				applyViewportAuraRanks(
+					map,
+					pinMarkersRef.current,
+					selectedPlaceIdRef.current,
+					lastPulseRef,
+					pulseTimerRef,
+					0,
+				);
+			}, AURA_VIEWPORT_IDLE_MS);
 		});
 
 		const ro = new ResizeObserver(() => {
@@ -337,6 +416,7 @@ export default function FarqMap({
 		return () => {
 			window.clearTimeout(introTimer);
 			window.clearTimeout(pulseTimerRef.current);
+			window.clearTimeout(rankTimerRef.current);
 			persistCamera(map);
 			ro.disconnect();
 			userMarkerRef.current?.remove();
@@ -378,6 +458,8 @@ export default function FarqMap({
 				count?: number;
 				difference_count?: number;
 				difference?: unknown;
+				max_difference_amount?: unknown;
+				top_difference_amount?: unknown;
 				provider_count?: number | null;
 			};
 
@@ -391,6 +473,7 @@ export default function FarqMap({
 				el = buildClusterPinElement({
 					count: Number(props.count) || 0,
 					differenceCount: Number(props.difference_count) || 0,
+					topGap: observedClusterTopGap(props),
 					isRTL: isRtlRef.current,
 				});
 				el.classList.add(FARQ_CLUSTERS);
@@ -463,42 +546,19 @@ export default function FarqMap({
 			playBubbleEnter(b.el, stagger ? i * 24 : 0);
 		});
 
-		let maxPlaceId: string | null = null;
-		let maxAmount = -1;
-		let maxEl: HTMLElement | null = null;
-		for (const rec of pinMarkersRef.current.values()) {
-			if (
-				rec.kind !== "place" ||
-				!rec.placeId ||
-				rec.amount == null ||
-				rec.amount <= maxAmount
-			) {
-				continue;
-			}
-			maxAmount = rec.amount;
-			maxPlaceId = rec.placeId;
-			maxEl = rec.el;
-		}
-
-		const lastPulse = lastPulseRef.current;
-		const maxChanged =
-			maxPlaceId != null &&
-			maxAmount > 0 &&
-			(!lastPulse ||
-				lastPulse.placeId !== maxPlaceId ||
-				Math.abs(lastPulse.amount - maxAmount) >= BUBBLE_CLEAR_CHANGE);
-		if (maxEl && maxPlaceId && maxChanged) {
-			const enterIdx = entering.findIndex((b) => b.placeId === maxPlaceId);
-			const delay =
-				enterIdx >= 0
-					? BUBBLE_ENTER_MS + (stagger ? enterIdx * 24 : 0)
-					: 0;
-			const target = maxEl;
-			pulseTimerRef.current = window.setTimeout(() => {
-				playMaxGapPulse(target);
-			}, delay);
-			lastPulseRef.current = { placeId: maxPlaceId, amount: maxAmount };
-		}
+		const enterIdx = entering.length > 0 ? 0 : -1;
+		const pulseDelay =
+			enterIdx >= 0
+				? BUBBLE_ENTER_MS + (stagger ? (entering.length - 1) * 24 : 0)
+				: 0;
+		applyViewportAuraRanks(
+			map,
+			pinMarkersRef.current,
+			selectedPlaceIdRef.current,
+			lastPulseRef,
+			pulseTimerRef,
+			pulseDelay,
+		);
 
 		prevAmountsRef.current = nextAmounts;
 	}, [placesData, mapReady]);
