@@ -2,17 +2,18 @@
  * Figma map-desktop-split (2:620) — Mapbox GL + Farq difference panel.
  * Pins come from comparison.discovery_cards via /api/intelligence/map/places
  * (layer=comparison: product-ready restaurants with real lat/lng).
- * Click opens the same /merchant/restaurant/:id menu as a home card.
+ * Pin tap opens a premium sheet/panel; CTA «افتح الأرخص» goes to
+ * /merchant/restaurant/:id (same as a home card).
  * Neighborhoods are fetched for the side panel only — not painted as a mosaic.
  * Never invents lat/lon; never remints Golden place_id.
  */
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Compass, MapPin, Navigation, Search, X } from "lucide-react";
+import { ChevronDown, Compass, Info, MapPin, Navigation, Search, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
-import { useCountUp } from "../../hooks/useCountUp";
 import { localizeCity } from "../../lib/cityNames";
+import { observedDifferenceAmount } from "../../lib/farqMapPins";
 import { localizeDigitString } from "../../lib/formatPrice";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { providerTintClass } from "../../lib/providerTint";
@@ -30,6 +31,7 @@ import EmptyState from "../EmptyState";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch } from "../../routes/map";
+import SelectedPlaceSheet from "./SelectedPlaceSheet";
 import "../../styles/farq-mapbox.css";
 
 const FarqMap = lazy(() => import("./FarqMap"));
@@ -38,49 +40,6 @@ function fmtScore(v: number | string | null | undefined): string {
 	if (v == null || v === "") return "—";
 	const n = Number(v);
 	return Number.isFinite(n) ? n.toFixed(0) : "—";
-}
-
-function freshnessFromObserved(
-	iso: string | null | undefined,
-	isRTL: boolean,
-): { kind: "today" | "week" | "older"; label: string } | null {
-	if (!iso) return null;
-	const t = Date.parse(iso);
-	if (!Number.isFinite(t)) return null;
-	const ageMs = Date.now() - t;
-	const hours = ageMs / 3_600_000;
-	if (hours < 24) {
-		const mins = Math.max(1, Math.round(Math.max(0, ageMs) / 60_000));
-		return {
-			kind: "today",
-			label: isRTL
-				? `الأسعار محدثة آلياً قبل ${localizeDigitString(String(mins), true)} دقيقة`
-				: `Prices updated ${mins} min ago`,
-		};
-	}
-	if (hours < 24 * 7) {
-		return { kind: "week", label: isRTL ? "هذا الأسبوع" : "This week" };
-	}
-	return { kind: "older", label: isRTL ? "قديم" : "Older" };
-}
-
-function GapCountBadge({
-	amount,
-	isRTL,
-}: {
-	amount: number;
-	isRTL: boolean;
-}) {
-	const live = useCountUp(amount);
-	const digits = localizeDigitString(String(Math.round(live)), isRTL);
-	return (
-		<span
-			className="rounded-[10px] bg-mint-500 px-3 py-1.5 text-[32px] font-black leading-none text-brand-900 lg:text-[40px]"
-			data-testid="intelligence-map-gap-count"
-		>
-			{digits} {isRTL ? "ر.س فرق" : "SAR gap"}
-		</span>
-	);
 }
 
 export default function IntelligenceMapSplit({
@@ -119,6 +78,7 @@ export default function IntelligenceMapSplit({
 	} | null>(null);
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
 	const [majorGapsOnly, setMajorGapsOnly] = useState(false);
+	const [legendOpen, setLegendOpen] = useState(false);
 	const [retryTick, setRetryTick] = useState(0);
 
 	const categoryId = toIntelCategoryId(search.category) || "";
@@ -365,6 +325,36 @@ export default function IntelligenceMapSplit({
 		};
 	}, [places, majorGapsOnly]);
 
+	const topSavings = useMemo(() => {
+		const rows: {
+			placeId: string;
+			name: string;
+			amount: number;
+			lat: number;
+			lng: number;
+		}[] = [];
+		for (const f of visiblePlaces?.features || []) {
+			if (f.properties.feature_type === "cluster") continue;
+			const placeId = String(f.properties.place_id || "").trim();
+			if (!placeId) continue;
+			const amount = observedDifferenceAmount(f.properties.difference);
+			if (amount == null) continue;
+			const coords = f.geometry?.coordinates;
+			if (!Array.isArray(coords) || coords.length < 2) continue;
+			const lng = Number(coords[0]);
+			const lat = Number(coords[1]);
+			if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+			rows.push({
+				placeId,
+				name: String(f.properties.name || "").trim(),
+				amount,
+				lat,
+				lng,
+			});
+		}
+		return rows.sort((a, b) => b.amount - a.amount).slice(0, 6);
+	}, [visiblePlaces]);
+
 	const selectedCityLabel = useMemo(() => {
 		const match = (meta?.geo_readiness?.ncp_ready_cities || []).find(
 			(c) => c.city_en === city,
@@ -530,10 +520,10 @@ export default function IntelligenceMapSplit({
 						</div>
 						<label className="flex items-center gap-2 text-[12px] text-[#6b7c7c]">
 							<span className="hidden lg:inline">
-								{isRTL ? "فروقات كبرى فقط" : "Big gaps only"}
+								{isRTL ? "فروقات ملحوظة فقط" : "Observed gaps only"}
 							</span>
 							<span className="lg:hidden">
-								{isRTL ? "فروقات كبرى" : "Big gaps"}
+								{isRTL ? "ملحوظة فقط" : "Gaps only"}
 							</span>
 							<button
 								type="button"
@@ -629,24 +619,9 @@ export default function IntelligenceMapSplit({
 							basemap={basemap}
 							onBasemapChange={setBasemap}
 							isRTL={isRTL}
-							onSelectPlace={(id) => {
-								const feat = places?.features.find(
-									(f) => String(f.properties.place_id) === String(id),
-								);
-								const restaurantId =
-									feat?.properties.restaurant_id ||
-									feat?.properties.menu?.id ||
-									(/^\d+$/.test(id) ? id : "");
-								if (restaurantId) {
-									openRestaurantMenu({
-										restaurantId,
-										name: feat?.properties.name,
-										image: feat?.properties.image_url,
-									});
-									return;
-								}
-								patchSearch({ place: id, neighborhood: undefined });
-							}}
+							onSelectPlace={(id) =>
+								patchSearch({ place: id, neighborhood: undefined })
+							}
 							onSelectNeighborhood={(id) =>
 								patchSearch({ neighborhood: id, place: undefined })
 							}
@@ -655,80 +630,117 @@ export default function IntelligenceMapSplit({
 					</Suspense>
 				</div>
 
-				<div className="pointer-events-auto absolute bottom-3 start-3 z-[400] w-[min(340px,calc(100%-1.5rem))] rounded-xl bg-white p-4 text-[12px] shadow-[0_8px_8px_rgba(0,0,0,0.1)]">
-					<p className="mb-3 text-right text-[14px] font-bold text-brand-900">
-						{isRTL ? "دليل طبقة المقارنة" : "Comparison layer legend"}
-					</p>
-					<ul className="space-y-2 text-[#6b7c7c]">
-						<li className="flex items-center gap-2">
-							<span className="farq-legend-win" aria-hidden>
-								{isRTL ? "فائز" : "Win"}
-							</span>
-							<span>
-								{isRTL
-									? "التطبيق الأرخص بفرق ملحوظ"
-									: "Cheapest app with a noticeable gap"}
-							</span>
-						</li>
-						<li className="flex items-center gap-2">
-							<span className="farq-legend-dot" aria-hidden />
-							<span>
-								{isRTL
-									? "مواقع مطاعم فردية بدون فارق كبير"
-									: "Individual restaurants without a large gap"}
-							</span>
-						</li>
-						<li className="flex items-center gap-2">
-							<span className="farq-legend-3d-cluster" aria-hidden />
-							<span>
-								{isRTL
-									? "تجمعات مطاعم (قم بالتقريب للرؤية)"
-									: "Restaurant clusters (zoom in to see)"}
-							</span>
-						</li>
-					</ul>
-					<hr className="my-3 border-[#e6eef0]" />
-					<p className="max-w-none text-[11px] italic text-[#6b7c7c]">
-						{isRTL
-							? "«دبابيس من طبقة المقارنة المباشرة. الإحداثيات مرصودة حياً. لا نختلق مواقع.»"
-							: "«Pins from the live comparison layer. Coordinates are observed. We never invent locations.»"}
-					</p>
-					<p className="mt-2 text-[10px] font-bold text-brand-900">
-						{isRTL ? "«حجم الدبوس = حجم الفرق»" : "«Pin size = gap size»"}
-					</p>
-				</div>
-			</div>
-
-			<aside className="flex w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:w-[27rem] lg:shrink-0 lg:rounded-none">
-				{placeDetail ? (
+				{placeId ? (
 					<div
-						className="relative h-[140px] shrink-0 overflow-hidden bg-brand-900"
-						data-testid="intelligence-map-place-cover"
+						className="absolute inset-0 z-[520] lg:hidden"
+						data-testid="intelligence-map-place-backdrop"
 					>
-						{(placeDetail.image_url ||
-							selectedPlaceFeature?.properties.image_url) && (
-							<img
-								src={String(
-									placeDetail.image_url ||
-										selectedPlaceFeature?.properties.image_url,
-								)}
-								alt=""
-								className="absolute inset-0 size-full object-cover"
-							/>
-						)}
-						<div className="absolute inset-0 bg-brand-900/20" />
 						<button
 							type="button"
-							className="absolute start-5 top-5 flex size-8 items-center justify-center rounded-2xl bg-white text-brand-900"
+							className="absolute inset-0 bg-brand-900/25"
 							aria-label={isRTL ? "إغلاق" : "Close"}
 							onClick={() =>
 								patchSearch({ neighborhood: undefined, place: undefined })
 							}
-						>
-							<X className="size-3.5" />
-						</button>
+						/>
+						<div className="absolute inset-x-0 bottom-0">
+							<SelectedPlaceSheet
+								variant="sheet"
+								placeDetail={placeDetail}
+								feature={selectedPlaceFeature?.properties}
+								selectedCategory={selectedCategory}
+								selectedRestaurantId={selectedRestaurantId}
+								isRTL={isRTL}
+								onClose={() =>
+									patchSearch({ neighborhood: undefined, place: undefined })
+								}
+								onOpenMenu={openRestaurantMenu}
+							/>
+						</div>
 					</div>
+				) : null}
+
+				<div
+					className={`pointer-events-auto absolute bottom-3 start-3 z-[400] ${
+						placeId ? "hidden lg:block" : ""
+					}`}
+				>
+					<button
+						type="button"
+						className="farq-legend-info"
+						aria-expanded={legendOpen}
+						aria-controls="farq-map-legend"
+						data-testid="intelligence-map-legend-info"
+						onClick={() => setLegendOpen((v) => !v)}
+						aria-label={isRTL ? "دليل الخريطة" : "Map legend"}
+					>
+						<Info className="size-4" />
+					</button>
+					{legendOpen ? (
+						<div
+							id="farq-map-legend"
+							className="farq-legend-popover text-[12px]"
+							data-testid="intelligence-map-legend"
+						>
+							<p className="mb-2 text-right text-[13px] font-bold text-brand-900">
+								{isRTL ? "دليل طبقة المقارنة" : "Comparison layer legend"}
+							</p>
+							<ul className="space-y-2 text-[#6b7c7c]">
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-win" aria-hidden>
+										{isRTL ? "+١٨" : "+18"}
+									</span>
+									<span>
+										{isRTL
+											? "فقاعة فرق السعر المرصود"
+											: "Observed price-difference bubble"}
+									</span>
+								</li>
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-dot" aria-hidden />
+									<span>
+										{isRTL
+											? "مطعم بدون فرق مرصود"
+											: "Restaurant without an observed gap"}
+									</span>
+								</li>
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-3d-cluster" aria-hidden />
+									<span>
+										{isRTL
+											? "تجمعات مطاعم (قم بالتقريب للرؤية)"
+											: "Restaurant clusters (zoom in to see)"}
+									</span>
+								</li>
+							</ul>
+							<p className="mt-2 text-[10px] font-bold text-brand-900">
+								{isRTL ? "«حجم الدبوس = حجم الفرق»" : "«Pin size = gap size»"}
+							</p>
+						</div>
+					) : null}
+				</div>
+			</div>
+
+			<aside
+				className={`hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:flex lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
+					placeId ? "farq-place-panel-host" : ""
+				}`}
+			>
+				{placeId ? (
+					<SelectedPlaceSheet
+						variant="panel"
+						placeDetail={placeDetail}
+						feature={selectedPlaceFeature?.properties}
+						selectedCategory={selectedCategory}
+						selectedRestaurantId={selectedRestaurantId}
+						isRTL={isRTL}
+						onClose={() =>
+							patchSearch({ neighborhood: undefined, place: undefined })
+						}
+						onOpenMenu={openRestaurantMenu}
+					/>
 				) : (
+					<>
 					<div className="flex items-center justify-between border-b border-[#e6eef0] px-5 py-4">
 						<h2 className="min-w-0 truncate text-[16px] font-bold text-brand-900">
 							{selectedHood
@@ -750,165 +762,59 @@ export default function IntelligenceMapSplit({
 							</button>
 						) : null}
 					</div>
-				)}
 				<div className="flex-1 space-y-4 overflow-y-auto">
-					{placeDetail ? (
-						<div data-testid="intelligence-map-place">
-							<div className="flex flex-col gap-1.5 p-5">
-								<div className="flex items-center justify-between gap-3">
-									<span className="rounded-md bg-[#e6eef0] px-2 py-1 text-[10px] font-bold text-brand-900">
-										{[
-											placeDetail.subcategory ||
-												placeDetail.category ||
-												selectedCategory?.category_name_ar ||
-												selectedCategory?.category_name,
-											placeDetail.city,
-										]
-											.filter(Boolean)
-											.join(" · ")}
-									</span>
-									{placeDetail.name_en ? (
-										<span className="text-[12px] text-[#6b7c7c]">
-											{placeDetail.name_en}
-										</span>
-									) : null}
-								</div>
-								<h2 className="text-right text-[18px] font-extrabold text-[#0b1f1f]">
-									{placeDetail.name_ar || placeDetail.name}
-								</h2>
-								{placeDetail.city ? (
-									<p className="flex items-center gap-1 text-[12px] text-[#6b7c7c]">
-										<MapPin className="size-3 text-red-500" />
-										{placeDetail.city}
-									</p>
-								) : null}
-							</div>
-							{placeDetail.difference ? (
-								<div className="px-5 pb-5">
-									<div className="flex flex-col gap-4 rounded-2xl bg-brand-900 p-5 text-white shadow-[0_12px_12px_rgba(4,52,52,0.27)]">
-										<div className="flex flex-col items-center gap-2">
-											{placeDetail.difference.difference_amount != null &&
-											Number.isFinite(
-												Number(placeDetail.difference.difference_amount),
-											) ? (
-												<GapCountBadge
-													amount={Number(
-														placeDetail.difference.difference_amount,
-													)}
-													isRTL={isRTL}
-												/>
-											) : (
-												<span className="rounded-[10px] bg-mint-500 px-3 py-1.5 text-[32px] font-black leading-none text-brand-900">
-													—
-												</span>
-											)}
-											<p className="text-center text-[14px] text-mint-500">
-												{isRTL
-													? "الفارق الكلي في الطلب الأساسي"
-													: "Total gap on the compared order"}
-											</p>
-										</div>
-										<div className="h-px w-full bg-white/15" />
-										<div>
-											<p className="text-[12px] text-mint-500">
-												{isRTL
-													? "الطلب المقارن حالياً"
-													: "Currently compared order"}
-											</p>
-											<p className="mt-1 text-[16px] font-bold">
-												{placeDetail.difference.product_name ||
-													(isRTL ? "طلب مرصود" : "Observed order")}
-											</p>
-										</div>
-										{(() => {
-											const cheap = Number(
-												placeDetail.difference.cheapest_price,
-											);
-											const expensive = Number(
-												placeDetail.difference.expensive_price,
-											);
-											if (
-												!Number.isFinite(cheap) ||
-												!Number.isFinite(expensive) ||
-												expensive <= 0
-											) {
-												return null;
-											}
-											const cheapPct = Math.max(
-												8,
-												Math.min(92, (cheap / expensive) * 100),
-											);
-											return (
-												<div
-													className="flex flex-col gap-2.5"
-													data-testid="intelligence-map-savings-bar"
-													dir="ltr"
-												>
-													<div className="flex h-2.5 overflow-hidden rounded-full bg-[#0b2d2d]">
-														<div
-															className="h-full bg-mint-500"
-															style={{ width: `${cheapPct}%` }}
-														/>
-														<div className="h-full flex-1 bg-[#e85d5d]" />
-													</div>
-													<div className="flex items-center justify-between">
-														<div className="flex items-center gap-1.5">
-															<ProviderLogoMark
-																provider={
-																	placeDetail.difference.cheapest_provider_id
-																}
-																isRTL={isRTL}
-																size={16}
-																tintedFallback
-															/>
-															<span className="text-[12px] font-bold text-mint-500">
-																{localizeDigitString(String(cheap), isRTL)}{" "}
-																{isRTL ? "ر.س" : "SAR"}
-															</span>
-														</div>
-														<div className="flex items-center gap-1.5">
-															<span className="text-[12px] font-bold text-[#ff6b6b]">
-																{localizeDigitString(String(expensive), isRTL)}{" "}
-																{isRTL ? "ر.س" : "SAR"}
-															</span>
-															<ProviderLogoMark
-																provider={
-																	placeDetail.difference.expensive_provider_id
-																}
-																isRTL={isRTL}
-																size={16}
-																tintedFallback
-															/>
-														</div>
-													</div>
-												</div>
-											);
-										})()}
-									</div>
-								</div>
-							) : (
-								<div className="px-5 pb-5">
-									<div
-										className="rounded-2xl bg-[#e6eef0] p-4"
-										data-testid="intelligence-map-place-caution"
-									>
-										<p className="font-bold text-brand-900">
-											{isRTL
-												? "ما رصدنا فرقاً بعد"
-												: "No observed price gap for this place yet."}
-										</p>
-									</div>
-								</div>
-							)}
-						</div>
-					) : (
 					<div className="space-y-4 p-5">
 					{!neighborhoodId ? (
+						<div className="space-y-4">
 						<p className="text-[13px] text-[#6b7c7c]">
 							{isRTL
-								? "اضغط دبوس مطعم لفتح قائمته الحقيقية في فرق. إذا ما فيه فرق مرصود لن نخترع رقماً ولن نخترع إحداثيات."
-								: "Tap a restaurant pin to open its real Farq menu. We never invent a فرق amount or coordinates."}
+								? "اضغط فقاعة فرق لفتح لحظة الفرق — الوجبة، الفرق المرصود، ثم التطبيقات. إذا ما فيه فرق مرصود لن نخترع رقماً ولن نخترع إحداثيات."
+								: "Tap a price-difference bubble to open the Farq moment — meal, observed gap, then apps. We never invent a فرق amount or coordinates."}
 						</p>
+						{topSavings.length ? (
+							<div data-testid="intelligence-map-top-savings">
+								<h3 className="mb-2 text-[13px] font-bold text-brand-900">
+									{isRTL ? "أكبر الفروقات هنا" : "Biggest gaps here"}
+								</h3>
+								<ul className="space-y-1.5">
+									{topSavings.map((row) => (
+										<li key={row.placeId}>
+											<button
+												type="button"
+												className="flex w-full items-center justify-between gap-3 rounded-xl bg-[#e6eef0] px-3 py-2 text-start"
+												data-testid="intelligence-map-top-saving"
+												onClick={() => {
+													lastFocusedPlaceRef.current = row.placeId;
+													setFocusRequest({
+														lat: row.lat,
+														lng: row.lng,
+														id: `place:${row.placeId}`,
+													});
+													patchSearch({
+														place: row.placeId,
+														neighborhood: undefined,
+													});
+												}}
+											>
+												<span className="min-w-0 truncate text-[13px] font-bold text-brand-900">
+													{row.name ||
+														(isRTL ? "مطعم" : "Restaurant")}
+												</span>
+												<span className="shrink-0 text-[13px] font-black text-brand-900">
+													+
+													{localizeDigitString(
+														String(Math.round(row.amount)),
+														isRTL,
+													)}{" "}
+													{isRTL ? "ر.س" : "SAR"}
+												</span>
+											</button>
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
+						</div>
 					) : winner && !promote ? (
 						<div
 							className="rounded-2xl bg-surface-2 p-4"
@@ -957,7 +863,7 @@ export default function IntelligenceMapSplit({
 						</p>
 					)}
 
-					{!placeDetail && promote && winner?.podium ? (
+					{promote && winner?.podium ? (
 						<div>
 							<h3 className="mb-2 text-[13px] font-bold text-ink">
 								{isRTL ? "ترتيب منصات التوصيل" : "Platform ranking"}
@@ -991,65 +897,9 @@ export default function IntelligenceMapSplit({
 						</div>
 					) : null}
 					</div>
-					)}
-
 				</div>
 				<div className="border-t border-[#e6eef0] bg-[#f9fafb] p-4">
-					{(() => {
-						const fresh = freshnessFromObserved(
-							placeDetail?.difference?.observed_at,
-							isRTL,
-						);
-						if (!fresh) return null;
-						const dot =
-							fresh.kind === "today"
-								? "bg-mint-500"
-								: fresh.kind === "week"
-									? "bg-[#ff8a00]"
-									: "bg-[#6b7c7c]";
-						return (
-							<p
-								className="mb-3 flex items-center justify-center gap-1.5 text-[11px] text-[#6b7c7c]"
-								data-testid="intelligence-map-freshness"
-							>
-								<span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
-								{fresh.label}
-							</p>
-						);
-					})()}
-					{selectedRestaurantId ? (
-						<Button
-							asChild
-							variant="primary"
-							className="w-full text-mint-500"
-						>
-							<Link
-								to="/merchant/$type/$id"
-								params={{ type: "restaurant", id: selectedRestaurantId }}
-								search={{
-									...(placeDetail?.name || selectedPlaceFeature?.properties.name
-										? {
-												name:
-													placeDetail?.name ||
-													selectedPlaceFeature?.properties.name,
-											}
-										: {}),
-									...(placeDetail?.image_url ||
-									selectedPlaceFeature?.properties.image_url
-										? {
-												image: String(
-													placeDetail?.image_url ||
-														selectedPlaceFeature?.properties.image_url,
-												),
-											}
-										: {}),
-								}}
-								data-testid="intelligence-map-compare"
-							>
-								{isRTL ? "شف الفرق واطلب الآن" : "See the gap and order now"}
-							</Link>
-						</Button>
-					) : groceryCta ? (
+					{groceryCta ? (
 						<Button
 							asChild
 							variant="primary"
@@ -1083,15 +933,13 @@ export default function IntelligenceMapSplit({
 						</Button>
 					)}
 					<p className="mt-2 text-[11px] text-[#6b7c7c]">
-						{selectedRestaurantId
-							? isRTL
-								? "يفتح قائمة فرق الحقيقية لهذا المطعم — نفس بطاقة الصفحة الرئيسية."
-								: "Opens this restaurant’s real Farq menu — same route as a home card."
-							: isRTL
-								? "يفتح مقارنة فرق الحالية — بدون سكّ place_id."
-								: "Opens the live Farq compare flow — no new place_id."}
+						{isRTL
+							? "يفتح مقارنة فرق الحالية — بدون سكّ place_id."
+							: "Opens the live Farq compare flow — no new place_id."}
 					</p>
 				</div>
+					</>
+				)}
 			</aside>
 		</div>
 	);

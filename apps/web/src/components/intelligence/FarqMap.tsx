@@ -2,20 +2,28 @@
  * Farq difference map — Mapbox GL Standard, comparison-row coords.
  * Neighborhood polygons are intentionally not painted (not a choropleth mosaic).
  * Never invents pins, never remints place_id, never fakes GPS.
- * Place pins are 3D HTML markers: large cheapest-app logo when observed,
- * smaller expensive/other chips underneath from real ids only, else restaurant initials.
+ * Observed gaps overlay as Price Difference Bubbles (size ∝ difference_amount).
+ * Missing gaps keep restaurant initials. Clusters stay the existing orbs.
+ * Pin tap selects the place — no Mapbox infowindow; the split sheet owns the moment.
+ * Bubbles are overlay-only: this file must not restyle 3D buildings, terrain,
+ * camera, zoom, or the Standard/Satellite basemap.
  */
 import type { MapboxSearchBox } from "@mapbox/search-js-web";
 import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { localizeDigitString } from "../../lib/formatPrice";
 import {
+	BUBBLE_CLEAR_CHANGE,
+	BUBBLE_ENTER_MS,
+	BUBBLE_ENTER_STAGGER_MAX,
 	buildClusterPinElement,
 	buildPlacePinElement,
 	featureMarkerKey,
-	parseDifference,
+	observedDifferenceAmount,
+	playBubbleEnter,
+	playMaxGapPulse,
 	setPinSelected,
+	shouldReplayBubbleMotion,
 } from "../../lib/farqMapPins";
 import {
 	getMapboxAccessToken,
@@ -77,57 +85,8 @@ type PinRec = {
 	el: HTMLElement;
 	kind: "place" | "cluster";
 	placeId?: string;
+	amount?: number | null;
 };
-
-function escapeHtml(value: string): string {
-	return String(value)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
-}
-
-function popupHtml(opts: {
-	name: string;
-	difference?: {
-		difference_amount?: number | null;
-		product_name?: string | null;
-		cheapest_provider_id?: string | null;
-		expensive_provider_id?: string | null;
-	} | null;
-	isRTL: boolean;
-}): string {
-	const name = escapeHtml(opts.name || (opts.isRTL ? "مكان" : "Place"));
-	const diff = opts.difference;
-	if (
-		diff &&
-		(diff.difference_amount != null ||
-			diff.product_name ||
-			diff.cheapest_provider_id)
-	) {
-		const amount =
-			diff.difference_amount != null
-				? localizeDigitString(String(diff.difference_amount), opts.isRTL)
-				: "—";
-		const product = diff.product_name
-			? `<p class="farq-mapbox-popup-product">${escapeHtml(String(diff.product_name))}</p>`
-			: "";
-		return `<div dir="${opts.isRTL ? "rtl" : "ltr"}">
-			<p class="farq-mapbox-popup-name">${name}</p>
-			<p class="farq-mapbox-popup-gap">${opts.isRTL ? "فرق مرصود" : "Observed فرق"}</p>
-			<p class="farq-mapbox-popup-amount">${amount} <span style="font-size:13px;font-weight:700">ر.س</span></p>
-			${product}
-		</div>`;
-	}
-	return `<div dir="${opts.isRTL ? "rtl" : "ltr"}">
-		<p class="farq-mapbox-popup-name">${name}</p>
-		<p class="farq-mapbox-popup-empty">${
-			opts.isRTL
-				? "ما عندنا فرق سعر مرصود لهذا المكان بعد."
-				: "No observed price gap for this place yet."
-		}</p>
-	</div>`;
-}
 
 function applyBasemap(map: MapboxMap) {
 	try {
@@ -181,7 +140,7 @@ export default function FarqMap({
 	focusRequest = null,
 	userLocation,
 	showUserLocation = false,
-	placeDetail = null,
+	placeDetail: _placeDetail = null,
 	isRTL = false,
 	basemap: basemapProp,
 	onBasemapChange,
@@ -211,9 +170,13 @@ export default function FarqMap({
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const mapRef = useRef<MapboxMap | null>(null);
 	const searchRef = useRef<MapboxSearchBox | null>(null);
-	const popupRef = useRef<mapboxgl.Popup | null>(null);
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const pinMarkersRef = useRef<Map<string, PinRec>>(new Map());
+	const prevAmountsRef = useRef<Map<string, number>>(new Map());
+	const lastPulseRef = useRef<{ placeId: string; amount: number } | null>(
+		null,
+	);
+	const pulseTimerRef = useRef(0);
 	const introDoneRef = useRef(false);
 	const lastFocusIdRef = useRef<string | null>(null);
 	const onViewChangeRef = useRef(onViewChange);
@@ -373,9 +336,9 @@ export default function FarqMap({
 
 		return () => {
 			window.clearTimeout(introTimer);
+			window.clearTimeout(pulseTimerRef.current);
 			persistCamera(map);
 			ro.disconnect();
-			popupRef.current?.remove();
 			userMarkerRef.current?.remove();
 			clearPinMarkers(pinMarkersRef.current);
 			searchRef.current = null;
@@ -392,30 +355,15 @@ export default function FarqMap({
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
 
-		const openPlacePopup = (
-			lngLat: [number, number],
-			name: string,
-			difference: ReturnType<typeof parseDifference>,
-		) => {
-			popupRef.current?.remove();
-			popupRef.current = new mapboxgl.Popup({
-				offset: 30,
-				className: "farq-mapbox-popup",
-				maxWidth: "18rem",
-				closeButton: true,
-			})
-				.setLngLat(lngLat)
-				.setHTML(
-					popupHtml({
-						name,
-						difference,
-						isRTL: isRtlRef.current,
-					}),
-				)
-				.addTo(map);
-		};
-
+		window.clearTimeout(pulseTimerRef.current);
 		const nextKeys = new Set<string>();
+		const nextAmounts = new Map<string, number>();
+		const createdBubbles: {
+			placeId: string;
+			amount: number;
+			el: HTMLElement;
+		}[] = [];
+
 		for (const feature of placesData.features) {
 			const key = featureMarkerKey(feature);
 			if (!key || feature.geometry.type !== "Point") continue;
@@ -436,6 +384,7 @@ export default function FarqMap({
 			let el: HTMLElement;
 			let kind: PinRec["kind"];
 			let placeId: string | undefined;
+			let amount: number | null = null;
 
 			if (props.feature_type === "cluster") {
 				kind = "cluster";
@@ -457,6 +406,7 @@ export default function FarqMap({
 				kind = "place";
 				placeId = String(props.place_id || "");
 				if (!placeId) continue;
+				amount = observedDifferenceAmount(props.difference);
 				el = buildPlacePinElement({
 					name: String(props.name || ""),
 					difference: props.difference,
@@ -467,12 +417,10 @@ export default function FarqMap({
 				el.addEventListener("click", (ev) => {
 					ev.stopPropagation();
 					onSelectPlaceRef.current(placeId as string);
-					openPlacePopup(
-						coords,
-						String(props.name || ""),
-						parseDifference(props.difference),
-					);
 				});
+				if (amount != null) {
+					createdBubbles.push({ placeId, amount, el });
+				}
 			}
 
 			const marker = new mapboxgl.Marker({
@@ -482,7 +430,14 @@ export default function FarqMap({
 				.setLngLat(coords)
 				.addTo(map);
 
-			pinMarkersRef.current.set(key, { key, marker, el, kind, placeId });
+			pinMarkersRef.current.set(key, {
+				key,
+				marker,
+				el,
+				kind,
+				placeId,
+				amount,
+			});
 		}
 
 		for (const [key, rec] of pinMarkersRef.current) {
@@ -490,6 +445,62 @@ export default function FarqMap({
 			rec.marker.remove();
 			pinMarkersRef.current.delete(key);
 		}
+
+		for (const rec of pinMarkersRef.current.values()) {
+			if (rec.kind !== "place" || rec.placeId == null || rec.amount == null) {
+				continue;
+			}
+			nextAmounts.set(rec.placeId, rec.amount);
+		}
+
+		const prevAmounts = prevAmountsRef.current;
+		const entering = createdBubbles.filter((b) =>
+			shouldReplayBubbleMotion(b.placeId, b.amount, prevAmounts),
+		);
+		const stagger =
+			entering.length > 0 && entering.length <= BUBBLE_ENTER_STAGGER_MAX;
+		entering.forEach((b, i) => {
+			playBubbleEnter(b.el, stagger ? i * 24 : 0);
+		});
+
+		let maxPlaceId: string | null = null;
+		let maxAmount = -1;
+		let maxEl: HTMLElement | null = null;
+		for (const rec of pinMarkersRef.current.values()) {
+			if (
+				rec.kind !== "place" ||
+				!rec.placeId ||
+				rec.amount == null ||
+				rec.amount <= maxAmount
+			) {
+				continue;
+			}
+			maxAmount = rec.amount;
+			maxPlaceId = rec.placeId;
+			maxEl = rec.el;
+		}
+
+		const lastPulse = lastPulseRef.current;
+		const maxChanged =
+			maxPlaceId != null &&
+			maxAmount > 0 &&
+			(!lastPulse ||
+				lastPulse.placeId !== maxPlaceId ||
+				Math.abs(lastPulse.amount - maxAmount) >= BUBBLE_CLEAR_CHANGE);
+		if (maxEl && maxPlaceId && maxChanged) {
+			const enterIdx = entering.findIndex((b) => b.placeId === maxPlaceId);
+			const delay =
+				enterIdx >= 0
+					? BUBBLE_ENTER_MS + (stagger ? enterIdx * 24 : 0)
+					: 0;
+			const target = maxEl;
+			pulseTimerRef.current = window.setTimeout(() => {
+				playMaxGapPulse(target);
+			}, delay);
+			lastPulseRef.current = { placeId: maxPlaceId, amount: maxAmount };
+		}
+
+		prevAmountsRef.current = nextAmounts;
 	}, [placesData, mapReady]);
 
 	useEffect(() => {
@@ -498,31 +509,6 @@ export default function FarqMap({
 			setPinSelected(rec.el, Boolean(selectedPlaceId) && rec.placeId === selectedPlaceId);
 		}
 	}, [selectedPlaceId, placesData, mapReady]);
-
-	useEffect(() => {
-		if (!placeDetail || !selectedPlaceId) return;
-		if (placeDetail.place_id !== selectedPlaceId) return;
-		const map = mapRef.current;
-		if (!map) return;
-		const lngLat: [number, number] = [placeDetail.lng, placeDetail.lat];
-		if (!popupRef.current) {
-			popupRef.current = new mapboxgl.Popup({
-				offset: 30,
-				className: "farq-mapbox-popup",
-				maxWidth: "18rem",
-			});
-		}
-		popupRef.current
-			.setLngLat(lngLat)
-			.setHTML(
-				popupHtml({
-					name: placeDetail.name,
-					difference: placeDetail.difference,
-					isRTL,
-				}),
-			)
-			.addTo(map);
-	}, [placeDetail, selectedPlaceId, isRTL]);
 
 	useEffect(() => {
 		const map = mapRef.current;

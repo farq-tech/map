@@ -5,7 +5,17 @@
 	"buildCommand": "npm run build",
 	"outputDirectory": "apps/web/dist",
 	"rewrites": [
-		{ "source": "/api/:path*", "destination": "https://api.farq.sa/api/:path*" },
-		{ "source": "/((?!api/).*)", "destination": "/index.html" }
+		{
+			"source": "/_api/:path*",
+			"destination": "https://api-production-ddc84.up.railway.app/:path*"
+		},
+		{
+			"source": "/api/:path*",
+			"destination": "https://api-production-ddc84.up.railway.app/api/:path*"
+		},
+		{
+			"source": "/((?!api/|_api/).*)",
+			"destination": "/index.html"
+		}
 	]
 }

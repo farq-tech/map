@@ -1,9 +1,9 @@
 /**
- * 3D HTML pin builders for the Farq Mapbox map.
- * Logos come only from getProviderLogo(real provider ids) — never invented URLs.
+ * Farq map pin builders — Mapbox HTML markers overlaid on the existing map.
+ * Gap places become Price Difference Bubbles. No-gap places stay initials.
+ * Clusters stay the existing count orbs. Logos are never invented.
  *
- * Golden map features expose cheapest_provider_id + expensive_provider_id +
- * provider_count. There is no linked-apps list; do not invent extra apps.
+ * Size uses the observed difference_amount only (no Math.abs, no invented gaps).
  */
 import { localizeDigitString } from "./formatPrice";
 import {
@@ -15,7 +15,17 @@ import {
 export const FARQ_CLUSTERS_CLASS = "farq-clusters";
 export const PIN_OTHERS_MAX = 3;
 
-/** Winner pin scale from an observed gap. Floor stays readable (not Figma’s 32px). */
+/** Mobile-tuned: 3 SAR stays small, 18 SAR is near the ceiling. */
+export const BUBBLE_SIZE_MIN = 26;
+export const BUBBLE_SIZE_MAX = 52;
+export const BUBBLE_SIZE_BASE = 18;
+export const BUBBLE_SIZE_SCALE = 8;
+export const BUBBLE_CURRENCY_MIN_PX = 38;
+export const BUBBLE_CLEAR_CHANGE = 1;
+export const BUBBLE_ENTER_STAGGER_MAX = 16;
+export const BUBBLE_ENTER_MS = 320;
+
+/** Winner pin scale leftover — restaurant initials still use a readable floor. */
 export type PinSizeTier = "sm" | "md" | "lg";
 
 export function pinSizeTier(amount: unknown): PinSizeTier {
@@ -49,6 +59,76 @@ export function parseDifference(raw: unknown): {
 		product_name?: string | null;
 		provider_count?: number | null;
 	};
+}
+
+/**
+ * Observed numeric gap the map already carries. Missing, 0, or sub-riyal
+ * rounds never become a bubble (never +0 / +?).
+ */
+export function observedDifferenceAmount(raw: unknown): number | null {
+	const n = Number(parseDifference(raw)?.difference_amount);
+	if (!Number.isFinite(n) || n <= 0) return null;
+	if (Math.round(n) < 1) return null;
+	return n;
+}
+
+/** size = clamp(MIN, BASE + sqrt(diff) * SCALE, MAX) */
+export function bubbleSizePx(diff: number): number {
+	const size = BUBBLE_SIZE_BASE + Math.sqrt(diff) * BUBBLE_SIZE_SCALE;
+	return Math.max(BUBBLE_SIZE_MIN, Math.min(BUBBLE_SIZE_MAX, size));
+}
+
+export function bubbleZIndex(amount: number, selected = false): number {
+	const ranked = 100 + Math.round(amount);
+	return selected ? 10_000 + ranked : ranked;
+}
+
+export function displayGapRiyals(amount: number): number {
+	return Math.max(1, Math.round(amount));
+}
+
+export function prefersMapMotionReduce(): boolean {
+	return Boolean(
+		typeof window !== "undefined" &&
+			window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches,
+	);
+}
+
+export function shouldReplayBubbleMotion(
+	placeId: string,
+	amount: number,
+	prev: Map<string, number>,
+): boolean {
+	const old = prev.get(placeId);
+	if (old == null) return true;
+	return Math.abs(amount - old) >= BUBBLE_CLEAR_CHANGE;
+}
+
+export function playBubbleEnter(el: HTMLElement, delayMs = 0): void {
+	if (prefersMapMotionReduce()) return;
+	el.classList.add("farq-gap-bubble--enter");
+	if (delayMs > 0) {
+		el.style.setProperty("--farq-enter-delay", `${delayMs}ms`);
+	}
+	const done = () => {
+		el.classList.remove("farq-gap-bubble--enter");
+		el.style.removeProperty("--farq-enter-delay");
+	};
+	el.addEventListener("animationend", done, { once: true });
+}
+
+export function playMaxGapPulse(el: HTMLElement): void {
+	if (prefersMapMotionReduce()) return;
+	el.classList.remove("farq-gap-bubble--pulse");
+	void el.offsetWidth;
+	el.classList.add("farq-gap-bubble--pulse");
+	el.addEventListener(
+		"animationend",
+		() => {
+			el.classList.remove("farq-gap-bubble--pulse");
+		},
+		{ once: true },
+	);
 }
 
 export type ResolvedPinLogo = {
@@ -193,19 +273,17 @@ export function featureMarkerKey(
 		place_id?: string;
 		count?: number;
 		difference?: unknown;
-		provider_count?: number | null;
 	};
 	if (props.feature_type === "cluster") {
 		return `cluster:${Number(lng).toFixed(5)}:${Number(lat).toFixed(5)}:${props.count ?? 0}`;
 	}
 	const placeId = String(props.place_id || "").trim();
 	if (!placeId) return null;
-	const marks = resolvePlacePinMarks(props.difference, props.provider_count);
-	const cheapest = marks.winner?.providerId || "restaurant";
-	const others =
-		marks.others.map((m) => m.providerId).join("+") || "none";
-	const amount = parseDifference(props.difference)?.difference_amount;
-	return `place:${placeId}:${cheapest}:${others}:${marks.extraCount}:${pinSizeTier(amount)}`;
+	const amount = observedDifferenceAmount(props.difference);
+	if (amount != null) {
+		return `place:${placeId}:bubble:${displayGapRiyals(amount)}`;
+	}
+	return `place:${placeId}:restaurant`;
 }
 
 function attachInitial(host: HTMLElement, text: string, className: string): void {
@@ -217,80 +295,88 @@ function attachInitial(host: HTMLElement, text: string, className: string): void
 	host.appendChild(initial);
 }
 
-function attachLogoOrInitial(
-	badge: HTMLElement,
-	mark: { src: string | null; label: string; labelAr: string; initial: string } | null,
+function gapBubbleAriaLabel(
+	name: string,
+	riyal: number,
 	isRTL: boolean,
-	emptyInitial: string | null,
-): void {
-	if (!mark) {
-		if (emptyInitial) attachInitial(badge, emptyInitial, "farq-3d-pin-initial");
-		return;
-	}
-	if (!mark.src) {
-		attachInitial(badge, mark.initial, "farq-3d-pin-initial");
-		return;
-	}
-	const img = document.createElement("img");
-	img.src = mark.src;
-	img.alt = isRTL ? mark.labelAr : mark.label;
-	img.draggable = false;
-	img.decoding = "async";
-	img.addEventListener("error", () => {
-		img.remove();
-		attachInitial(badge, mark.initial, "farq-3d-pin-initial");
-	});
-	badge.appendChild(img);
+): string {
+	const digits = localizeDigitString(String(riyal), isRTL);
+	const title = name || (isRTL ? "مكان" : "Place");
+	return isRTL
+		? `فرق السعر ${digits} ريال في ${title}`
+		: `Price difference ${riyal} riyals at ${title}`;
 }
 
-export function buildPlacePinElement(opts: {
+export function buildGapBubbleElement(opts: {
 	name: string;
-	difference: unknown;
-	providerCount?: number | null;
+	amount: number;
 	selected?: boolean;
 	isRTL?: boolean;
 }): HTMLDivElement {
 	const isRTL = Boolean(opts.isRTL);
-	const marks = resolvePlacePinMarks(opts.difference, opts.providerCount);
-	const { winner, others, extraCount } = marks;
-	const hasStack = others.length > 0 || extraCount > 0;
-	const amount = Number(parseDifference(opts.difference)?.difference_amount);
-	const size = winner ? pinSizeTier(amount) : "sm";
+	const riyal = displayGapRiyals(opts.amount);
+	const size = bubbleSizePx(opts.amount);
+	const showCurrency = size >= BUBBLE_CURRENCY_MIN_PX;
+	const compact = showCurrency && size < 46;
+	const digits = localizeDigitString(String(riyal), isRTL);
+	const currency = isRTL ? "ر.س" : "SAR";
 
 	const el = document.createElement("div");
-	el.className = `farq-3d-pin farq-3d-pin--${size} ${winner ? "farq-3d-pin--provider" : "farq-3d-pin--restaurant"}`;
-	if (hasStack) el.classList.add("farq-3d-pin--stack");
+	el.className = "farq-gap-bubble";
 	if (opts.selected) el.classList.add("is-selected");
-	el.dataset.size = size;
-	el.dataset.testid = winner ? "farq-map-logo-pin" : "farq-map-restaurant-pin";
-	if (winner) el.dataset.provider = winner.providerId;
-	if (others.length) {
-		el.dataset.others = others.map((m) => m.providerId).join(",");
+	if (!showCurrency) el.classList.add("farq-gap-bubble--tiny");
+	else if (compact) el.classList.add("farq-gap-bubble--compact");
+	else el.classList.add("farq-gap-bubble--stacked");
+	el.dataset.testid = "farq-map-gap-bubble";
+	el.dataset.amount = String(riyal);
+	el.dataset.size = String(Math.round(size));
+	el.style.setProperty("--farq-bubble-size", `${size}px`);
+	el.style.zIndex = String(bubbleZIndex(opts.amount, Boolean(opts.selected)));
+	el.setAttribute("role", "button");
+	el.setAttribute("aria-label", gapBubbleAriaLabel(opts.name, riyal, isRTL));
+	el.title = gapBubbleAriaLabel(opts.name, riyal, isRTL);
+
+	const orb = document.createElement("div");
+	orb.className = "farq-gap-bubble-orb";
+	orb.setAttribute("aria-hidden", "true");
+
+	const amountEl = document.createElement("span");
+	amountEl.className = "farq-gap-bubble-amount";
+	amountEl.textContent = `+${digits}`;
+	orb.appendChild(amountEl);
+
+	if (showCurrency) {
+		const currencyEl = document.createElement("span");
+		currencyEl.className = "farq-gap-bubble-currency";
+		currencyEl.textContent = currency;
+		orb.appendChild(currencyEl);
 	}
-	if (extraCount > 0) el.dataset.extra = String(extraCount);
+
+	const stem = document.createElement("div");
+	stem.className = "farq-gap-bubble-stem";
+	stem.setAttribute("aria-hidden", "true");
+
+	el.appendChild(orb);
+	el.appendChild(stem);
+	return el;
+}
+
+function buildRestaurantInitialsPin(opts: {
+	name: string;
+	selected?: boolean;
+	isRTL?: boolean;
+}): HTMLDivElement {
+	const isRTL = Boolean(opts.isRTL);
+	const el = document.createElement("div");
+	el.className = "farq-3d-pin farq-3d-pin--sm farq-3d-pin--restaurant";
+	if (opts.selected) el.classList.add("is-selected");
+	el.dataset.size = "sm";
+	el.dataset.testid = "farq-map-restaurant-pin";
 
 	const title = opts.name || (isRTL ? "مكان" : "Place");
 	el.title = title;
 	el.setAttribute("role", "button");
-	const otherNames = others
-		.map((m) => (isRTL ? m.labelAr : m.label))
-		.join(isRTL ? "، " : ", ");
-	const extraBit =
-		extraCount > 0
-			? isRTL
-				? ` +${extraCount}`
-				: ` +${extraCount}`
-			: "";
-	el.setAttribute(
-		"aria-label",
-		winner
-			? `${title} · ${isRTL ? winner.labelAr : winner.label}${
-					otherNames ? (isRTL ? ` · ${otherNames}` : ` · ${otherNames}`) : ""
-				}${extraBit}`
-			: otherNames
-				? `${title} · ${otherNames}${extraBit}`
-				: title,
-	);
+	el.setAttribute("aria-label", title);
 
 	const shadow = document.createElement("div");
 	shadow.className = "farq-3d-pin-shadow";
@@ -301,76 +387,43 @@ export function buildPlacePinElement(opts: {
 
 	const badge = document.createElement("div");
 	badge.className = "farq-3d-pin-badge farq-3d-pin-badge--winner";
-	attachLogoOrInitial(
-		badge,
-		winner
-			? {
-					src: winner.src,
-					label: winner.label,
-					labelAr: winner.labelAr,
-					initial: providerPinInitial(winner.providerId, isRTL),
-				}
-			: null,
-		isRTL,
-		winner ? null : restaurantPinInitial(opts.name),
-	);
-
-	scene.appendChild(badge);
-
-	if (winner) {
-		const squircle = document.createElement("div");
-		squircle.className = "farq-3d-pin-squircle";
-		squircle.dataset.testid = "farq-map-pin-squircle";
-		const nameEl = document.createElement("span");
-		nameEl.className = "farq-3d-pin-squircle-name";
-		nameEl.textContent = isRTL ? winner.labelAr : winner.label;
-		squircle.appendChild(nameEl);
-		if (Number.isFinite(amount) && amount > 0) {
-			const saveEl = document.createElement("span");
-			saveEl.className = "farq-3d-pin-squircle-save";
-			const digits = localizeDigitString(String(Math.round(amount)), isRTL);
-			saveEl.textContent = isRTL ? `وفر ${digits} ر.س` : `Save ${digits} SAR`;
-			squircle.appendChild(saveEl);
-		}
-		scene.appendChild(squircle);
-	}
-
-	if (hasStack) {
-		const row = document.createElement("div");
-		row.className = "farq-3d-pin-others";
-		row.setAttribute("aria-hidden", "true");
-		for (const mark of others) {
-			const chip = document.createElement("div");
-			chip.className = "farq-3d-pin-chip";
-			chip.dataset.testid = "farq-map-pin-chip";
-			chip.dataset.provider = mark.providerId;
-			const chipLabel = document.createElement("span");
-			chipLabel.className = "farq-3d-pin-chip-label";
-			chipLabel.textContent = isRTL ? mark.labelAr : mark.label;
-			chip.appendChild(chipLabel);
-			row.appendChild(chip);
-		}
-		if (extraCount > 0) {
-			const more = document.createElement("div");
-			more.className = "farq-3d-pin-more";
-			more.dataset.testid = "farq-map-pin-more";
-			more.textContent = `+${extraCount}`;
-			row.appendChild(more);
-		}
-		scene.appendChild(row);
-	}
+	attachInitial(badge, restaurantPinInitial(opts.name), "farq-3d-pin-initial");
 
 	const stem = document.createElement("div");
 	stem.className = "farq-3d-pin-stem";
 	stem.setAttribute("aria-hidden", "true");
-	const shine = document.createElement("span");
-	shine.className = "farq-3d-pin-stem-shine";
-	stem.appendChild(shine);
+	const sig = document.createElement("span");
+	sig.className = "farq-3d-pin-stem-shine";
+	stem.appendChild(sig);
 
+	scene.appendChild(badge);
 	scene.appendChild(stem);
 	el.appendChild(shadow);
 	el.appendChild(scene);
 	return el;
+}
+
+export function buildPlacePinElement(opts: {
+	name: string;
+	difference: unknown;
+	providerCount?: number | null;
+	selected?: boolean;
+	isRTL?: boolean;
+}): HTMLDivElement {
+	const amount = observedDifferenceAmount(opts.difference);
+	if (amount != null) {
+		return buildGapBubbleElement({
+			name: opts.name,
+			amount,
+			selected: opts.selected,
+			isRTL: opts.isRTL,
+		});
+	}
+	return buildRestaurantInitialsPin({
+		name: opts.name,
+		selected: opts.selected,
+		isRTL: opts.isRTL,
+	});
 }
 
 export function buildClusterPinElement(opts: {
@@ -409,4 +462,8 @@ export function buildClusterPinElement(opts: {
 
 export function setPinSelected(el: HTMLElement, selected: boolean): void {
 	el.classList.toggle("is-selected", selected);
+	if (!el.classList.contains("farq-gap-bubble")) return;
+	const amount = Number(el.dataset.amount);
+	if (!Number.isFinite(amount) || amount <= 0) return;
+	el.style.zIndex = String(bubbleZIndex(amount, selected));
 }
