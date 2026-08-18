@@ -2,8 +2,11 @@
  * Farq difference map — Mapbox GL Standard, comparison-row coords.
  * Neighborhood polygons are intentionally not painted (not a choropleth mosaic).
  * Never invents pins, never remints place_id, never fakes GPS.
- * Observed gaps overlay as Price Aura chips (size ∝ difference_amount).
- * Missing gaps keep restaurant initials. Server clusters restyle as Opportunity Clusters.
+ * Restaurant circular photo is the pin hero (image_url from comparison-map,
+ * which maps discovery_cards.branch_image_url). Missing image → initials.
+ * Observed gaps keep a small Price Aura chip (size ∝ difference_amount).
+ * Missing gaps keep a restaurant mark only. Server clusters restyle as
+ * Opportunity Clusters.
  * Pin tap selects the place — no Mapbox infowindow; the split sheet owns the moment.
  * Bubbles are overlay-only: this file must not restyle 3D buildings, terrain,
  * camera, zoom, or the Standard/Satellite basemap.
@@ -23,6 +26,7 @@ import {
 	featureMarkerKey,
 	observedClusterTopGap,
 	observedDifferenceAmount,
+	observedRestaurantImageUrl,
 	playBubbleEnter,
 	playMaxGapPulse,
 	rankAuraPlaceIds,
@@ -461,6 +465,11 @@ export default function FarqMap({
 				max_difference_amount?: unknown;
 				top_difference_amount?: unknown;
 				provider_count?: number | null;
+				image_url?: string | null;
+				branch_image_url?: string | null;
+				restaurant_logo_url?: string | null;
+				restaurant_image_url?: string | null;
+				restaurant_image?: string | null;
 			};
 
 			let el: HTMLElement;
@@ -496,6 +505,7 @@ export default function FarqMap({
 					providerCount: props.provider_count,
 					selected: placeId === selectedPlaceIdRef.current,
 					isRTL: isRtlRef.current,
+					imageUrl: observedRestaurantImageUrl(props),
 				});
 				el.addEventListener("click", (ev) => {
 					ev.stopPropagation();

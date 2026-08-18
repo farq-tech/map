@@ -122,8 +122,8 @@
 }
 
 .farq-3d-pin--restaurant {
-	width: 36px;
-	height: 56px;
+	width: var(--farq-hero-size, 56px);
+	height: calc(var(--farq-hero-size, 56px) + 14px);
 }
 
 .farq-3d-pin--stack {
@@ -535,29 +535,116 @@
 	font-weight: 700;
 }
 
-/* ── Price Aura (overlay only — no map restyle, no backdrop-filter) ─ */
+/* ── Place pin: restaurant hero + small Price Aura chip ─ */
 
-.farq-gap-bubble {
+.farq-place-pin {
+	--farq-hero-size: 56px;
 	--farq-bubble-size: 40px;
 	--farq-enter-delay: 0ms;
 	--farq-aura-opacity: 1;
 	position: relative;
 	display: flex;
-	width: var(--farq-bubble-size);
-	height: calc(var(--farq-bubble-size) + 10px);
+	width: var(--farq-hero-size);
 	flex-direction: column;
 	align-items: center;
 	cursor: pointer;
 	pointer-events: auto;
-	opacity: var(--farq-aura-opacity);
 	transform-origin: 50% 100%;
+}
+
+.farq-place-pin-hero,
+.farq-gap-bubble-mark {
+	position: relative;
+	z-index: 3;
+	display: flex;
+	width: var(--farq-hero-size, 56px);
+	height: var(--farq-hero-size, 56px);
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	border: 2px solid #043434;
+	border-radius: 50%;
+	background: #022222;
+	box-shadow:
+		0 0 0 1px rgba(230, 238, 240, 0.4),
+		0 4px 12px rgba(4, 52, 52, 0.28);
+	color: #fff;
+	pointer-events: none;
+}
+
+.farq-place-pin-hero img,
+.farq-place-pin-hero .farq-pin-photo,
+.farq-gap-bubble-mark img,
+.farq-gap-bubble-mark .farq-pin-photo,
+.farq-3d-pin-badge .farq-pin-photo {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	background: #fff;
+}
+
+.farq-place-pin-initial,
+.farq-gap-bubble-mark-initial {
+	position: relative;
+	z-index: 0;
+	font-family: Tajawal, system-ui, sans-serif;
+	font-size: calc(var(--farq-hero-size, 56px) * 0.4);
+	font-weight: 800;
+	line-height: 1;
+	color: #fff;
+}
+
+.farq-place-pin-stem {
+	width: 2px;
+	height: 10px;
+	margin-top: 2px;
+	background: #6b7c7c;
+}
+
+/* ── Price Aura chip (overlay only — no map restyle, no backdrop-filter) ─ */
+
+.farq-gap-bubble {
+	--farq-bubble-size: 40px;
+	--farq-hero-size: 56px;
+	--farq-enter-delay: 0ms;
+	--farq-aura-opacity: 1;
+	position: relative;
+	display: flex;
+	width: max(var(--farq-hero-size), var(--farq-bubble-size));
+	height: calc(var(--farq-hero-size) + var(--farq-bubble-size) + 4px);
+	flex-direction: column;
+	align-items: center;
+	cursor: pointer;
+	pointer-events: auto;
+	transform-origin: 50% 100%;
+}
+
+.farq-gap-bubble--logo {
+	/* photo present — circular hero already painted */
+}
+
+.farq-gap-bubble-chip {
+	position: relative;
+	z-index: 4;
+	display: flex;
+	width: var(--farq-bubble-size);
+	height: var(--farq-bubble-size);
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	margin-top: -8px;
+	opacity: var(--farq-aura-opacity);
 }
 
 .farq-gap-bubble-field {
 	position: absolute;
 	z-index: 0;
 	left: 50%;
-	top: calc(var(--farq-bubble-size) / 2);
+	top: 50%;
 	width: calc(var(--farq-bubble-size) * 1.55);
 	height: calc(var(--farq-bubble-size) * 1.55);
 	border-radius: 50%;
@@ -677,9 +764,23 @@
 	box-shadow: 0 2px 6px rgba(4, 52, 52, 0.18);
 }
 
+.farq-gap-bubble--demoted:not(.is-selected) .farq-gap-bubble-mark {
+	opacity: 0.72;
+	transform: scale(0.92);
+}
+
 .farq-gap-bubble.is-selected {
 	z-index: 10000;
 	--farq-aura-opacity: 1;
+}
+
+.farq-gap-bubble.is-selected .farq-place-pin-hero,
+.farq-place-pin.is-selected .farq-place-pin-hero,
+.farq-3d-pin--restaurant.is-selected .farq-place-pin-hero {
+	box-shadow:
+		0 0 0 2px #fff,
+		0 0 0 4px #83f1b1,
+		0 6px 14px rgba(4, 52, 52, 0.28);
 }
 
 .farq-gap-bubble.is-selected .farq-gap-bubble-orb {
@@ -689,6 +790,13 @@
 		0 0 0 4px #83f1b1,
 		0 0 18px rgba(131, 241, 177, 0.35),
 		0 4px 12px rgba(4, 52, 52, 0.28);
+}
+
+.farq-gap-bubble.is-selected .farq-gap-bubble-mark {
+	box-shadow:
+		0 0 0 2px #fff,
+		0 0 0 3.5px #83f1b1,
+		0 2px 8px rgba(4, 52, 52, 0.28);
 }
 
 .farq-gap-bubble--enter {
@@ -781,6 +889,16 @@
 	border-radius: 14px;
 	background: #fff;
 	box-shadow: 0 8px 24px rgba(4, 52, 52, 0.16);
+}
+
+.farq-legend-mark {
+	display: block;
+	width: 10px;
+	height: 10px;
+	border: 1px solid rgba(230, 238, 240, 0.9);
+	border-radius: 32%;
+	background: #022222;
+	box-shadow: 0 0 0 2px rgba(131, 241, 177, 0.18);
 }
 
 .farq-legend-win {

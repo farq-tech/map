@@ -684,10 +684,10 @@ export default function IntelligenceMapSplit({
 							<ul className="space-y-2 text-[#6b7c7c]">
 								<li className="flex items-center gap-2">
 									<span className="farq-legend-bubble" aria-hidden>
+										<span className="farq-legend-mark" />
 										<span className="farq-legend-win">
 											{isRTL ? "+١٨" : "+18"}
 										</span>
-										<FarqBrandMark variant="circle" size={10} />
 									</span>
 									<span>
 										{isRTL

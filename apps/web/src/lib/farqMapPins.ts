@@ -1,10 +1,12 @@
 /**
  * Farq map pin builders — Mapbox HTML markers overlaid on the existing map.
- * Gap places become Price Aura chips (evolved from difference bubbles).
- * No-gap places stay initials. Server clusters restyle as Opportunity Clusters.
- * Logos are never invented. Official Farq «ف» is the optional tiny stem mark.
- *
- * Size uses the observed difference_amount only (no Math.abs, no invented gaps).
+ * Restaurant circular photo is the hero. comparison-map maps
+ * discovery_cards.branch_image_url → feature image_url (also reads
+ * branch_image_url and sibling restaurant_* fields if present).
+ * Never invent CDN/Unsplash URLs. Missing image → restaurant initials.
+ * Observed gaps keep a small Price Aura chip (size ∝ difference_amount).
+ * Missing gap → restaurant mark only (never +0). Official Farq stem stays tiny.
+ * Provider app logos stay in SelectedPlaceSheet, never on the pin.
  */
 import { buildFarqCircleMarkElement } from "./farqBrandAssets";
 import { localizeDigitString } from "./formatPrice";
@@ -27,6 +29,26 @@ export const BUBBLE_CLEAR_CHANGE = 1;
 export const BUBBLE_ENTER_STAGGER_MAX = 16;
 export const BUBBLE_ENTER_MS = 360;
 export const BUBBLE_ENTER_SCALE_FROM = 0.82;
+
+/** Restaurant disc — always smaller than the difference chip. */
+export const MARK_SIZE_MIN = 16;
+export const MARK_SIZE_MAX = 28;
+export const MARK_SIZE_RATIO = 0.52;
+export const PIN_THUMB_CSS_PX = 28;
+
+/** Circular restaurant hero — identity stays larger than the aura chip. */
+export const PLACE_HERO_PX = 56;
+
+/** GeoJSON fields that may already carry a real restaurant/branch photo. */
+export const RESTAURANT_IMAGE_FIELDS = [
+	"image_url",
+	"branch_image_url",
+	"restaurant_logo_url",
+	"restaurant_image_url",
+	"restaurant_image",
+] as const;
+
+const CLOUDINARY_FETCH_BLOCKED = ["cdngrubtech.com"] as const;
 
 /** After pan/zoom STOP — rank loaded markers only (no extra API fetch). */
 export const AURA_VIEWPORT_IDLE_MS = 180;
@@ -258,6 +280,80 @@ export function restaurantPinInitial(name: string): string {
 	return (raw.charAt(0) || "•").toUpperCase();
 }
 
+/** Accept only real http(s) or same-origin paths. Never invent a CDN URL. */
+export function sanitizeObservedImageUrl(raw: unknown): string | null {
+	const url = String(raw || "").trim();
+	if (!url) return null;
+	if (/^(javascript|data|blob):/i.test(url)) return null;
+	if (url.startsWith("//") && url.length > 3) return `https:${url}`;
+	if (/^https?:\/\//i.test(url) || url.startsWith("/")) return url;
+	return null;
+}
+
+export function observedRestaurantImageUrl(
+	props: Record<string, unknown> | null | undefined,
+): string | null {
+	if (props == null || typeof props !== "object") return null;
+	for (const key of RESTAURANT_IMAGE_FIELDS) {
+		const url = sanitizeObservedImageUrl(props[key]);
+		if (url) return url;
+	}
+	return null;
+}
+
+export function restaurantMarkSizePx(bubbleSize: number): number {
+	const sized = Number(bubbleSize) * MARK_SIZE_RATIO;
+	const capped = Math.min(MARK_SIZE_MAX, sized, Math.max(0, Number(bubbleSize) - 8));
+	return Math.max(MARK_SIZE_MIN, capped);
+}
+
+export function restaurantImageCoverage(
+	features: Array<{ properties?: Record<string, unknown> | null }>,
+): { total: number; withImage: number; withoutImage: number } {
+	let withImage = 0;
+	let withoutImage = 0;
+	for (const feature of features) {
+		const props = feature.properties;
+		if (!props || props.feature_type === "cluster") continue;
+		if (observedRestaurantImageUrl(props)) withImage += 1;
+		else withoutImage += 1;
+	}
+	return { total: withImage + withoutImage, withImage, withoutImage };
+}
+
+function viteCloudName(): string {
+	try {
+		const env = (
+			import.meta as { env?: { VITE_CLOUDINARY_CLOUD_NAME?: string } }
+		).env;
+		return String(env?.VITE_CLOUDINARY_CLOUD_NAME || "").trim();
+	} catch {
+		return "";
+	}
+}
+
+function cloudinaryHostBlocked(url: string): boolean {
+	try {
+		const host = new URL(url).hostname.toLowerCase();
+		return CLOUDINARY_FETCH_BLOCKED.some(
+			(blocked) => host === blocked || host.endsWith(`.${blocked}`),
+		);
+	} catch {
+		return false;
+	}
+}
+
+/** Small thumb of an already-observed URL. Never invents a source. */
+export function pinThumbSrc(url: string, cssPx = PIN_THUMB_CSS_PX): string {
+	const cloud = viteCloudName();
+	if (!cloud || url.includes("res.cloudinary.com")) return url;
+	if (!/^https?:\/\//i.test(url)) return url;
+	if (cloudinaryHostBlocked(url)) return url;
+	const w = Math.max(16, Math.round(cssPx * 2));
+	const t = `w_${w},h_${w},c_fill,f_auto,q_auto`;
+	return `https://res.cloudinary.com/${cloud}/image/fetch/${t}/${encodeURIComponent(url)}`;
+}
+
 function resolvePinMark(providerId: string): ResolvedPinMark | null {
 	const id = trimId(providerId);
 	if (!id) return null;
@@ -349,7 +445,7 @@ export function featureMarkerKey(
 	}
 	const [lng, lat] = geom.coordinates;
 	if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-	const props = (feature.properties || {}) as {
+	const props = (feature.properties || {}) as Record<string, unknown> & {
 		feature_type?: string;
 		place_id?: string;
 		count?: number;
@@ -364,20 +460,59 @@ export function featureMarkerKey(
 	}
 	const placeId = String(props.place_id || "").trim();
 	if (!placeId) return null;
+	const imgKey = observedRestaurantImageUrl(props) ? "logo" : "mark";
 	const amount = observedDifferenceAmount(props.difference);
 	if (amount != null) {
-		return `place:${placeId}:bubble:${displayGapRiyals(amount)}`;
+		return `place:${placeId}:bubble:${displayGapRiyals(amount)}:${imgKey}`;
 	}
-	return `place:${placeId}:restaurant`;
+	return `place:${placeId}:restaurant:${imgKey}`;
 }
 
-function attachInitial(host: HTMLElement, text: string, className: string): void {
-	host.classList.add("farq-3d-pin-badge--mark");
-	if (host.querySelector(`.${className}`)) return;
+function hideBrokenPinImage(img: HTMLImageElement): void {
+	img.onerror = null;
+	img.removeAttribute("src");
+	img.style.display = "none";
+	img.remove();
+}
+
+function attachRestaurantPhoto(
+	host: HTMLElement,
+	opts: { imageUrl: string; cssPx: number },
+): void {
+	const img = document.createElement("img");
+	img.className = "farq-pin-photo";
+	img.alt = "";
+	img.draggable = false;
+	img.decoding = "async";
+	img.loading = "lazy";
+	img.width = Math.round(opts.cssPx);
+	img.height = Math.round(opts.cssPx);
+	img.referrerPolicy = "no-referrer";
+	img.addEventListener("error", () => hideBrokenPinImage(img), { once: true });
+	img.src = opts.imageUrl;
+	host.appendChild(img);
+}
+
+function buildRestaurantHero(opts: {
+	name: string;
+	imageUrl?: string | null;
+}): HTMLDivElement {
+	const hero = document.createElement("div");
+	hero.className = "farq-place-pin-hero farq-gap-bubble-mark";
+	hero.setAttribute("aria-hidden", "true");
+	hero.dataset.testid = "farq-map-restaurant-mark";
 	const initial = document.createElement("span");
-	initial.className = className;
-	initial.textContent = text;
-	host.appendChild(initial);
+	initial.className = "farq-place-pin-initial farq-gap-bubble-mark-initial farq-3d-pin-initial";
+	initial.textContent = restaurantPinInitial(opts.name);
+	hero.appendChild(initial);
+	const url = sanitizeObservedImageUrl(opts.imageUrl);
+	if (url) {
+		hero.dataset.kind = "photo";
+		attachRestaurantPhoto(hero, { imageUrl: url, cssPx: PLACE_HERO_PX });
+	} else {
+		hero.dataset.kind = "initials";
+	}
+	return hero;
 }
 
 function gapBubbleAriaLabel(
@@ -397,57 +532,65 @@ export function buildGapBubbleElement(opts: {
 	amount: number;
 	selected?: boolean;
 	isRTL?: boolean;
+	imageUrl?: string | null;
 }): HTMLDivElement {
 	const isRTL = Boolean(opts.isRTL);
 	const riyal = displayGapRiyals(opts.amount);
 	const size = bubbleSizePx(opts.amount);
+	const photoUrl = sanitizeObservedImageUrl(opts.imageUrl);
 	const showCurrency = size >= BUBBLE_CURRENCY_MIN_PX;
 	const compact = showCurrency && size < 46;
 	const digits = localizeDigitString(String(riyal), isRTL);
 	const currency = isRTL ? "ر.س" : "SAR";
 
 	const el = document.createElement("div");
-	el.className = "farq-gap-bubble farq-gap-bubble--aura";
+	el.className =
+		"farq-place-pin farq-gap-bubble farq-gap-bubble--aura farq-gap-bubble--identified";
 	if (opts.selected) el.classList.add("is-selected");
+	if (photoUrl) el.classList.add("farq-gap-bubble--logo");
 	if (!showCurrency) el.classList.add("farq-gap-bubble--tiny");
 	else if (compact) el.classList.add("farq-gap-bubble--compact");
 	else el.classList.add("farq-gap-bubble--stacked");
 	el.dataset.testid = "farq-map-gap-bubble";
 	el.dataset.amount = String(riyal);
 	el.dataset.size = String(Math.round(size));
+	el.dataset.mark = photoUrl ? "logo" : "initials";
 	el.style.setProperty("--farq-bubble-size", `${size}px`);
+	el.style.setProperty("--farq-hero-size", `${PLACE_HERO_PX}px`);
 	el.style.zIndex = String(bubbleZIndex(opts.amount, Boolean(opts.selected)));
 	el.setAttribute("role", "button");
 	el.setAttribute("aria-label", gapBubbleAriaLabel(opts.name, riyal, isRTL));
 	el.title = gapBubbleAriaLabel(opts.name, riyal, isRTL);
 
+	const hero = buildRestaurantHero({ name: opts.name, imageUrl: photoUrl });
+
+	const chip = document.createElement("div");
+	chip.className = "farq-gap-bubble-chip";
+	chip.setAttribute("aria-hidden", "true");
 	const field = document.createElement("div");
 	field.className = "farq-gap-bubble-field";
-	field.setAttribute("aria-hidden", "true");
-
 	const orb = document.createElement("div");
 	orb.className = "farq-gap-bubble-orb";
-	orb.setAttribute("aria-hidden", "true");
-
 	const amountEl = document.createElement("span");
 	amountEl.className = "farq-gap-bubble-amount";
 	amountEl.textContent = `+${digits}`;
 	orb.appendChild(amountEl);
-
 	if (showCurrency) {
 		const currencyEl = document.createElement("span");
 		currencyEl.className = "farq-gap-bubble-currency";
 		currencyEl.textContent = currency;
 		orb.appendChild(currencyEl);
 	}
+	chip.appendChild(field);
+	chip.appendChild(orb);
 
 	const stem = document.createElement("div");
 	stem.className = "farq-gap-bubble-stem";
 	stem.setAttribute("aria-hidden", "true");
 	stem.appendChild(buildFarqCircleMarkElement(10));
 
-	el.appendChild(field);
-	el.appendChild(orb);
+	el.appendChild(hero);
+	el.appendChild(chip);
 	el.appendChild(stem);
 	return el;
 }
@@ -456,41 +599,27 @@ function buildRestaurantInitialsPin(opts: {
 	name: string;
 	selected?: boolean;
 	isRTL?: boolean;
+	imageUrl?: string | null;
 }): HTMLDivElement {
 	const isRTL = Boolean(opts.isRTL);
+	const photoUrl = sanitizeObservedImageUrl(opts.imageUrl);
 	const el = document.createElement("div");
-	el.className = "farq-3d-pin farq-3d-pin--sm farq-3d-pin--restaurant";
+	el.className = "farq-place-pin farq-3d-pin--restaurant";
 	if (opts.selected) el.classList.add("is-selected");
-	el.dataset.size = "sm";
+	if (photoUrl) el.classList.add("farq-3d-pin--logo");
+	el.dataset.size = "hero";
 	el.dataset.testid = "farq-map-restaurant-pin";
-
+	el.dataset.mark = photoUrl ? "logo" : "initials";
+	el.style.setProperty("--farq-hero-size", `${PLACE_HERO_PX}px`);
 	const title = opts.name || (isRTL ? "مكان" : "Place");
 	el.title = title;
 	el.setAttribute("role", "button");
 	el.setAttribute("aria-label", title);
-
-	const shadow = document.createElement("div");
-	shadow.className = "farq-3d-pin-shadow";
-	shadow.setAttribute("aria-hidden", "true");
-
-	const scene = document.createElement("div");
-	scene.className = "farq-3d-pin-scene";
-
-	const badge = document.createElement("div");
-	badge.className = "farq-3d-pin-badge farq-3d-pin-badge--winner";
-	attachInitial(badge, restaurantPinInitial(opts.name), "farq-3d-pin-initial");
-
+	el.appendChild(buildRestaurantHero({ name: opts.name, imageUrl: photoUrl }));
 	const stem = document.createElement("div");
-	stem.className = "farq-3d-pin-stem";
+	stem.className = "farq-place-pin-stem";
 	stem.setAttribute("aria-hidden", "true");
-	const sig = document.createElement("span");
-	sig.className = "farq-3d-pin-stem-shine";
-	stem.appendChild(sig);
-
-	scene.appendChild(badge);
-	scene.appendChild(stem);
-	el.appendChild(shadow);
-	el.appendChild(scene);
+	el.appendChild(stem);
 	return el;
 }
 
@@ -500,6 +629,7 @@ export function buildPlacePinElement(opts: {
 	providerCount?: number | null;
 	selected?: boolean;
 	isRTL?: boolean;
+	imageUrl?: string | null;
 }): HTMLDivElement {
 	const amount = observedDifferenceAmount(opts.difference);
 	if (amount != null) {
@@ -508,12 +638,14 @@ export function buildPlacePinElement(opts: {
 			amount,
 			selected: opts.selected,
 			isRTL: opts.isRTL,
+			imageUrl: opts.imageUrl,
 		});
 	}
 	return buildRestaurantInitialsPin({
 		name: opts.name,
 		selected: opts.selected,
 		isRTL: opts.isRTL,
+		imageUrl: opts.imageUrl,
 	});
 }
 

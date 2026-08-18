@@ -319,6 +319,10 @@ export type IntelligenceMapPlaceProperties = {
 	count?: number;
 	difference_count?: number;
 	image_url?: string | null;
+	branch_image_url?: string | null;
+	restaurant_logo_url?: string | null;
+	restaurant_image_url?: string | null;
+	restaurant_image?: string | null;
 	menu?: {
 		to?: string;
 		type?: string;

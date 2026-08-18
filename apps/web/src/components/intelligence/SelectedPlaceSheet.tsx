@@ -120,6 +120,10 @@ export default function SelectedPlaceSheet({
 	const imageUrl = observedImageUrl(
 		placeDetail?.image_url,
 		feature?.image_url,
+		feature?.branch_image_url,
+		feature?.restaurant_logo_url,
+		feature?.restaurant_image_url,
+		feature?.restaurant_image,
 	);
 	const restaurantName =
 		placeDetail?.name_ar ||
