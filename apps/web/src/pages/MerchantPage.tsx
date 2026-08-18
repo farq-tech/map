@@ -1,6 +1,7 @@
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import { ArrowRight, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
+import EmptyState from "../components/EmptyState";
 import Header from "../components/Header";
 import { ProviderLogoMark } from "../components/ProviderLogoMark";
 import { Button } from "../components/ui/Button";
@@ -16,11 +17,83 @@ import {
 type MenuItem = {
 	name?: string;
 	name_ar?: string;
+	name_en?: string;
 	cheapest_provider?: string;
-	cheapest_price?: number;
-	dearest_price?: number;
-	difference_amount?: number;
+	cheapest_price?: number | null;
+	starting_price?: number | null;
+	dearest_price?: number | null;
+	difference_amount?: number | null;
+	savings?: number | null;
+	cheapest_offer?: { price?: number | null } | null;
 };
+
+type CatalogCategory = {
+	name_ar?: string;
+	name_en?: string;
+	item_count?: number;
+	items?: MenuItem[];
+};
+
+type CatalogBody = {
+	ok?: boolean;
+	restaurant?: { name_ar?: string; name_en?: string; image_url?: string };
+	categories?: CatalogCategory[];
+	items?: MenuItem[];
+	error?: string;
+	note?: string;
+};
+
+function finiteAmount(
+	...candidates: Array<number | null | undefined>
+): number | null {
+	for (const raw of candidates) {
+		const n = Number(raw);
+		if (Number.isFinite(n)) return n;
+	}
+	return null;
+}
+
+function itemGap(item: MenuItem): number | null {
+	const n = finiteAmount(item.difference_amount, item.savings);
+	return n != null && n > 0 ? n : null;
+}
+
+function itemPrice(item: MenuItem): number | null {
+	return finiteAmount(
+		item.cheapest_price,
+		item.starting_price,
+		item.cheapest_offer?.price,
+	);
+}
+
+function flattenCatalog(body: CatalogBody | null | undefined): MenuItem[] {
+	if (Array.isArray(body?.items) && body.items.length) return body.items;
+	const categories = Array.isArray(body?.categories) ? body.categories : [];
+	return categories.flatMap((c) => (Array.isArray(c.items) ? c.items : []));
+}
+
+function MenuRow({ item, isRTL }: { item: MenuItem; isRTL: boolean }) {
+	const gap = itemGap(item);
+	const price = itemPrice(item);
+	return (
+		<li className="flex items-center justify-between rounded-xl bg-[#0b2c2c] px-4 py-3">
+			<span>
+				{isRTL
+					? item.name_ar || item.name_en || item.name
+					: item.name_en || item.name_ar || item.name}
+			</span>
+			{gap != null ? (
+				<span className="text-mint-500">
+					{localizeDigitString(String(Math.round(gap)), isRTL)} ر.س
+				</span>
+			) : price != null ? (
+				<span className="text-mint-500">
+					{localizeDigitString(String(Math.round(price)), isRTL)} ر.س
+				</span>
+			) : null}
+		</li>
+	);
+}
 
 export default function MerchantPage() {
 	const { language } = useLanguage();
@@ -29,7 +102,7 @@ export default function MerchantPage() {
 	const search = useSearch({ from: "/merchant/$type/$id" });
 	const [place, setPlace] = useState<IntelligenceMapPlaceDetail | null>(null);
 	const [items, setItems] = useState<MenuItem[]>([]);
-	const [error, setError] = useState<string | null>(null);
+	const [categories, setCategories] = useState<CatalogCategory[]>([]);
 
 	usePageMeta({
 		title: search.name
@@ -46,13 +119,19 @@ export default function MerchantPage() {
 		void IntelligenceService.mapPlace(id, controller.signal)
 			.then(setPlace)
 			.catch(() => setPlace(null));
-		void fetchApi<{ items?: MenuItem[] }>(`/api/restaurant/${encodeURIComponent(id)}/menu`, {
-			signal: controller.signal,
-		})
-			.then((env) => setItems(Array.isArray(env.data?.items) ? env.data.items : []))
+		void fetchApi<CatalogBody>(
+			`/api/comparison/restaurants/${encodeURIComponent(id)}/catalog`,
+			{ signal: controller.signal },
+		)
+			.then((env) => {
+				const body = env.data || {};
+				const cats = Array.isArray(body.categories) ? body.categories : [];
+				setCategories(cats);
+				setItems(flattenCatalog(body));
+			})
 			.catch(() => {
+				setCategories([]);
 				setItems([]);
-				setError(null);
 			});
 		return () => controller.abort();
 	}, [id]);
@@ -106,32 +185,45 @@ export default function MerchantPage() {
 						{isRTL ? "بنود المقارنة" : "Comparison items"}
 					</h2>
 					{items.length === 0 ? (
-						<p className="text-sm text-[#9bb0b0]">
-							{error ||
-								(isRTL
-									? "لا توجد قائمة محلية — عيّن FARQ_API_ORIGIN أو SUPABASE_COMPARISON_DB_URL لجلب القائمة."
-									: "No local menu — set FARQ_API_ORIGIN or SUPABASE_COMPARISON_DB_URL to load items.")}
-						</p>
+						<EmptyState
+							title="No comparison menu yet"
+							titleAr="ما عندنا قائمة مقارنة بعد"
+							body="This restaurant is on the map, but Farq does not have a comparison menu for it yet."
+							bodyAr="المطعم ظاهر على الخريطة، بس ما عندنا قائمة مقارنة له بعد."
+						/>
 					) : (
-						<ul className="space-y-2">
-							{items.slice(0, 24).map((item, i) => (
-								<li
-									key={`${item.name || "item"}-${i}`}
-									className="flex items-center justify-between rounded-xl bg-[#0b2c2c] px-4 py-3"
-								>
-									<span>{isRTL ? item.name_ar || item.name : item.name}</span>
-									{item.difference_amount != null ? (
-										<span className="text-mint-500">
-											{localizeDigitString(
-												String(Math.round(item.difference_amount)),
-												isRTL,
-											)}{" "}
-											ر.س
-										</span>
-									) : null}
-								</li>
-							))}
-						</ul>
+						<div className="space-y-4">
+							{categories.length
+								? categories.map((cat, ci) => (
+										<div key={`${cat.name_en || cat.name_ar || "cat"}-${ci}`}>
+											<h3 className="mb-2 text-sm font-semibold text-[#cfe8d8]">
+												{isRTL
+													? cat.name_ar || cat.name_en
+													: cat.name_en || cat.name_ar}
+											</h3>
+											<ul className="space-y-2">
+												{(cat.items || []).slice(0, 24).map((item, i) => (
+													<MenuRow
+														key={`${item.name || "item"}-${i}`}
+														item={item}
+														isRTL={isRTL}
+													/>
+												))}
+											</ul>
+										</div>
+									))
+								: (
+									<ul className="space-y-2">
+										{items.slice(0, 24).map((item, i) => (
+											<MenuRow
+												key={`${item.name || "item"}-${i}`}
+												item={item}
+												isRTL={isRTL}
+											/>
+										))}
+									</ul>
+								)}
+						</div>
 					)}
 				</section>
 				<div className="mt-8">

@@ -54,6 +54,20 @@ const CLOUDINARY_FETCH_BLOCKED = ["cdngrubtech.com"] as const;
 export const AURA_VIEWPORT_IDLE_MS = 180;
 export const AURA_PROMOTE_MIN = 8;
 export const AURA_PROMOTE_MAX = 12;
+/** Mobile mid-zoom: tighter top-N so the map stays readable at 375–390. */
+export const AURA_PROMOTE_MAX_MOBILE = 8;
+/** Close-in: restaurant disc + difference chip. Below this: difference number only. */
+export const PIN_IDENTITY_ZOOM = 15.4;
+
+export function auraPromoteCap(isMobile: boolean): number {
+	return isMobile ? AURA_PROMOTE_MAX_MOBILE : AURA_PROMOTE_MAX;
+}
+
+export function pinPresentationForZoom(
+	zoom: number,
+): "amount" | "identity" {
+	return Number(zoom) >= PIN_IDENTITY_ZOOM ? "identity" : "amount";
+}
 
 /** Winner pin scale leftover — restaurant initials still use a readable floor. */
 export type PinSizeTier = "sm" | "md" | "lg";
@@ -122,10 +136,13 @@ export function bubbleZIndex(
 export type AuraRank = "promoted" | "demoted";
 
 /** Promote every visible aura up to MAX; beyond that keep the top MAX. */
-export function promotedAuraLimit(visibleCount: number): number {
+export function promotedAuraLimit(
+	visibleCount: number,
+	max = AURA_PROMOTE_MAX,
+): number {
 	if (visibleCount <= 0) return 0;
-	if (visibleCount <= AURA_PROMOTE_MAX) return visibleCount;
-	return AURA_PROMOTE_MAX;
+	if (visibleCount <= max) return visibleCount;
+	return max;
 }
 
 export function rankAuraPlaceIds(
@@ -545,7 +562,7 @@ export function buildGapBubbleElement(opts: {
 
 	const el = document.createElement("div");
 	el.className =
-		"farq-place-pin farq-gap-bubble farq-gap-bubble--aura farq-gap-bubble--identified";
+		"farq-place-pin farq-gap-bubble farq-gap-bubble--aura farq-gap-bubble--identified farq-map-hit";
 	if (opts.selected) el.classList.add("is-selected");
 	if (photoUrl) el.classList.add("farq-gap-bubble--logo");
 	if (!showCurrency) el.classList.add("farq-gap-bubble--tiny");
@@ -604,7 +621,7 @@ function buildRestaurantInitialsPin(opts: {
 	const isRTL = Boolean(opts.isRTL);
 	const photoUrl = sanitizeObservedImageUrl(opts.imageUrl);
 	const el = document.createElement("div");
-	el.className = "farq-place-pin farq-3d-pin--restaurant";
+	el.className = "farq-place-pin farq-3d-pin--restaurant farq-map-hit";
 	if (opts.selected) el.classList.add("is-selected");
 	if (photoUrl) el.classList.add("farq-3d-pin--logo");
 	el.dataset.size = "hero";
@@ -666,7 +683,7 @@ export function buildClusterPinElement(opts: {
 	});
 	const riyal = topGap != null ? displayGapRiyals(topGap) : null;
 	const el = document.createElement("div");
-	el.className = `farq-3d-cluster ${FARQ_CLUSTERS_CLASS}`;
+	el.className = `farq-3d-cluster ${FARQ_CLUSTERS_CLASS} farq-map-hit`;
 	if ((opts.differenceCount || 0) > 0 || riyal != null) {
 		el.classList.add("farq-3d-cluster--gaps");
 		el.classList.add("farq-3d-cluster--opportunity");

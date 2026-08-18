@@ -7,7 +7,10 @@ import {
 	BUBBLE_SIZE_MIN,
 	BUBBLE_SIZE_SCALE,
 	AURA_PROMOTE_MAX,
+	AURA_PROMOTE_MAX_MOBILE,
+	auraPromoteCap,
 	applyAuraRankClasses,
+	pinPresentationForZoom,
 	buildClusterPinElement,
 	buildPlacePinElement,
 	bubbleSizePx,
@@ -321,6 +324,10 @@ describe("Price Aura viewport rank + cluster honesty", () => {
 		}));
 		expect(promotedAuraLimit(20)).toBe(AURA_PROMOTE_MAX);
 		expect(promotedAuraLimit(6)).toBe(6);
+		expect(auraPromoteCap(true)).toBe(AURA_PROMOTE_MAX_MOBILE);
+		expect(promotedAuraLimit(20, auraPromoteCap(true))).toBe(8);
+		expect(pinPresentationForZoom(14)).toBe("amount");
+		expect(pinPresentationForZoom(16)).toBe("identity");
 		const top = rankAuraPlaceIds(items);
 		expect(top.size).toBe(12);
 		expect(top.has("p19")).toBe(true);

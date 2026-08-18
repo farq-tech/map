@@ -18,8 +18,13 @@ export default function MapPage({ search }: { search: MapSearch }) {
 	});
 
 	return (
-		<div className="min-h-screen bg-brand-900" data-testid="intelligence-map-page">
-			<Header />
+		<div
+			className="flex min-h-0 flex-col bg-brand-900 lg:min-h-screen"
+			data-testid="intelligence-map-page"
+		>
+			<div className="hidden lg:block">
+				<Header />
+			</div>
 			<IntelligenceMapSplit search={search} />
 		</div>
 	);

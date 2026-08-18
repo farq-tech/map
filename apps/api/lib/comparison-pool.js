@@ -5,11 +5,17 @@ const { Pool } = require('pg');
 let pool = null;
 
 function comparisonDbUrl() {
-  return (
+  const raw =
     process.env.SUPABASE_COMPARISON_DB_URL ||
     process.env.COMPARISONS_DB_URL ||
-    null
-  );
+    process.env.DATABASE_URL ||
+    null;
+  if (!raw) return null;
+  // node-pg treats sslmode=require as verify-full; Supabase pooler chain fails.
+  return String(raw)
+    .replace(/([?&])sslmode=[^&]*/i, '$1')
+    .replace(/[?&]$/, '')
+    .replace(/\?&/, '?');
 }
 
 function getComparisonPool() {

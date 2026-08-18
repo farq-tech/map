@@ -6,6 +6,12 @@
  */
 import { Link } from "@tanstack/react-router";
 import { MapPin, X } from "lucide-react";
+import {
+	useEffect,
+	useRef,
+	useState,
+	type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useCountUp } from "../../hooks/useCountUp";
 import { localizeDigitString } from "../../lib/formatPrice";
 import { getProviderLogo } from "../../lib/platformLogos";
@@ -172,13 +178,61 @@ export default function SelectedPlaceSheet({
 		});
 	};
 
+	const [sheetSnap, setSheetSnap] = useState<"peek" | "expanded">("peek");
+	const dragRef = useRef<{
+		pointerId: number;
+		startY: number;
+		lastY: number;
+	} | null>(null);
+	const placeKey = placeDetail?.place_id || feature?.place_id || "";
+
+	useEffect(() => {
+		setSheetSnap("peek");
+	}, [placeKey]);
+
+	const onHandlePointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+		if (variant !== "sheet") return;
+		ev.currentTarget.setPointerCapture(ev.pointerId);
+		dragRef.current = {
+			pointerId: ev.pointerId,
+			startY: ev.clientY,
+			lastY: ev.clientY,
+		};
+	};
+	const onHandlePointerMove = (ev: ReactPointerEvent<HTMLDivElement>) => {
+		if (!dragRef.current || dragRef.current.pointerId !== ev.pointerId) return;
+		dragRef.current.lastY = ev.clientY;
+	};
+	const onHandlePointerUp = (ev: ReactPointerEvent<HTMLDivElement>) => {
+		const drag = dragRef.current;
+		dragRef.current = null;
+		if (!drag || drag.pointerId !== ev.pointerId) return;
+		const dy = ev.clientY - drag.startY;
+		if (dy > 72 && sheetSnap === "peek") {
+			onClose();
+			return;
+		}
+		if (dy > 48 && sheetSnap === "expanded") {
+			setSheetSnap("peek");
+			return;
+		}
+		if (dy < -40) {
+			setSheetSnap("expanded");
+		}
+	};
+
 	return (
 		<div
 			className={
 				variant === "sheet"
-					? "farq-place-sheet pointer-events-auto flex max-h-[min(78dvh,40rem)] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-16px_48px_rgba(4,52,52,0.22)]"
+					? `farq-place-sheet farq-place-sheet--mobile ${
+							sheetSnap === "expanded"
+								? "farq-place-sheet--expanded"
+								: "farq-place-sheet--peek"
+						} pointer-events-auto flex w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-16px_48px_rgba(4,52,52,0.22)]`
 					: "farq-place-panel flex h-full w-full flex-col overflow-hidden bg-white"
 			}
+			data-sheet-snap={variant === "sheet" ? sheetSnap : undefined}
 			data-testid={
 				variant === "sheet"
 					? "intelligence-map-place-sheet"
@@ -186,7 +240,17 @@ export default function SelectedPlaceSheet({
 			}
 		>
 			{variant === "sheet" ? (
-				<div className="flex shrink-0 justify-center pt-2" aria-hidden>
+				<div
+					className="farq-place-sheet-handle flex shrink-0 cursor-grab justify-center pt-2 touch-none"
+					data-testid="intelligence-map-place-handle"
+					onPointerDown={onHandlePointerDown}
+					onPointerMove={onHandlePointerMove}
+					onPointerUp={onHandlePointerUp}
+					onPointerCancel={onHandlePointerUp}
+					role="slider"
+					aria-valuetext={sheetSnap}
+					aria-label={isRTL ? "سحب البطاقة" : "Drag sheet"}
+				>
 					<span className="h-1.5 w-12 rounded-full bg-[#d7e2e2]" />
 				</div>
 			) : null}

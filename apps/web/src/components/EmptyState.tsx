@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
+import FarqBrandMark from "./FarqBrandMark";
 import { Button } from "./ui/Button";
 
 interface ActionConfig {
@@ -85,18 +86,13 @@ export default function EmptyState({
 					{illustration}
 				</div>
 			) : null}
-			<div
-				className={`relative flex h-16 w-16 items-center justify-center rounded-full ring-1 ring-mint-500/30 ${ICON_TONES[iconTone]}`}
-			>
-				{icon ?? (
-					<span
-						className={`text-[15px] font-black text-brand-900 ${isRTL ? "font-arabic" : ""}`}
-						aria-hidden
-					>
-						{isRTL ? "فرق" : "F"}
-					</span>
-				)}
-			</div>
+			{!illustration || icon ? (
+				<div
+					className={`relative flex h-16 w-16 items-center justify-center rounded-full ring-1 ring-mint-500/30 ${ICON_TONES[iconTone]}`}
+				>
+					{icon ?? <FarqBrandMark variant="circle" size={32} />}
+				</div>
+			) : null}
 			<h3
 				className={`relative text-[16px] font-bold text-brand-900 dark:text-teal-200 ${isRTL ? "font-arabic" : ""}`}
 			>

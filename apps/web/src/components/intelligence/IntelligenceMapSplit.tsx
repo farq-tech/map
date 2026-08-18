@@ -20,6 +20,7 @@ import { providerTintClass } from "../../lib/providerTint";
 import {
 	IntelligenceService,
 	toIntelCategoryId,
+	type IntelligenceCategory,
 	type IntelligenceCategoryGroup,
 	type IntelligenceDetail,
 	type IntelligenceMapNeighborhoods,
@@ -35,6 +36,20 @@ import type { MapSearch } from "../../routes/map";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
 import "../../styles/farq-mapbox.css";
 
+const MOBILE_FOOD_CHIPS = ["burgers", "pizza", "shawarma"] as const;
+
+function categorySearchQuery(
+	categoryId: string,
+	selected: IntelligenceCategory | null,
+	userQ: string,
+): string | undefined {
+	if (userQ) return userQ;
+	if (!categoryId || categoryId === "food" || categoryId === "grocery") {
+		return undefined;
+	}
+	return selected?.category_name_ar || selected?.category_name || undefined;
+}
+
 const FarqMap = lazy(() => import("./FarqMap"));
 
 function fmtScore(v: number | string | null | undefined): string {
@@ -48,7 +63,7 @@ export default function IntelligenceMapSplit({
 }: {
 	search: MapSearch;
 }) {
-	const { language } = useLanguage();
+	const { language, toggleLanguage, languageSwitching } = useLanguage();
 	const isRTL = language === "ar";
 	const navigate = useNavigate();
 	const {
@@ -81,6 +96,13 @@ export default function IntelligenceMapSplit({
 	const [majorGapsOnly, setMajorGapsOnly] = useState(false);
 	const [legendOpen, setLegendOpen] = useState(false);
 	const [retryTick, setRetryTick] = useState(0);
+	const [moreOpen, setMoreOpen] = useState(false);
+	const [aroundOpen, setAroundOpen] = useState(false);
+	const [chromeOpen, setChromeOpen] = useState(true);
+	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
+	const [placesFetching, setPlacesFetching] = useState(false);
+	const filterKeyRef = useRef("");
+	const scanTimerRef = useRef(0);
 
 	const categoryId = toIntelCategoryId(search.category) || "";
 	const neighborhoodId = search.neighborhood || "";
@@ -150,21 +172,37 @@ export default function IntelligenceMapSplit({
 		placesAbortRef.current?.abort();
 		const controller = new AbortController();
 		placesAbortRef.current = controller;
+		const cat =
+			meta?.categories.find((c) => c.category_id === categoryId) || null;
+		const query = categorySearchQuery(categoryId, cat, q);
+		setPlacesFetching(true);
+		setScanHint((cur) => (cur === "searching" ? "searching" : "ready"));
+		window.clearTimeout(scanTimerRef.current);
+		scanTimerRef.current = window.setTimeout(() => {
+			setScanHint((cur) => (cur === "ready" ? null : cur));
+		}, 700);
 		void IntelligenceService.mapPlaces({
 			bbox,
 			zoom,
-			q: q || undefined,
+			q: query,
+			category: categoryId || undefined,
 			layer: "comparison",
 			limit: 400,
 			signal: controller.signal,
 		})
 			.then((body) => {
-				if (!controller.signal.aborted) setPlaces(body);
+				if (controller.signal.aborted) return;
+				setPlaces(body);
+				setPlacesFetching(false);
+				setScanHint(null);
 			})
 			.catch(() => {
-				if (!controller.signal.aborted) setPlaces(null);
+				if (controller.signal.aborted) return;
+				setPlaces(null);
+				setPlacesFetching(false);
+				setScanHint(null);
 			});
-	}, [q]);
+	}, [q, categoryId, meta]);
 
 	const onViewChange = useCallback(
 		(bbox: string, zoom: number) => {
@@ -180,9 +218,23 @@ export default function IntelligenceMapSplit({
 	);
 
 	useEffect(() => {
+		const key = `${categoryId}|${q}`;
+		if (filterKeyRef.current && filterKeyRef.current !== key) {
+			setPlaces(null);
+			setAroundOpen(false);
+			setScanHint("searching");
+		}
+		filterKeyRef.current = key;
+	}, [categoryId, q]);
+
+	useEffect(() => {
 		const v = viewRef.current;
 		if (v) fetchPlaces(v.bbox, v.zoom);
 	}, [fetchPlaces]);
+
+	useEffect(() => {
+		return () => window.clearTimeout(scanTimerRef.current);
+	}, []);
 
 	useEffect(() => {
 		if (!categoryId) {
@@ -353,7 +405,7 @@ export default function IntelligenceMapSplit({
 				lng,
 			});
 		}
-		return rows.sort((a, b) => b.amount - a.amount).slice(0, 6);
+		return rows.sort((a, b) => b.amount - a.amount).slice(0, 12);
 	}, [visiblePlaces]);
 
 	const selectedCityLabel = useMemo(() => {
@@ -374,11 +426,83 @@ export default function IntelligenceMapSplit({
 		[meta, categoryId],
 	);
 
+	const foodChips = useMemo(() => {
+		const cats = meta?.categories || [];
+		const pinned = MOBILE_FOOD_CHIPS.map((id) =>
+			cats.find((c) => c.category_id === id),
+		).filter(Boolean) as IntelligenceCategory[];
+		const rest = cats.filter(
+			(c) =>
+				!MOBILE_FOOD_CHIPS.includes(
+					c.category_id as (typeof MOBILE_FOOD_CHIPS)[number],
+				) &&
+				c.category_id !== "food" &&
+				c.category_id !== "grocery" &&
+				c.category_id !== "shopping",
+		);
+		return { pinned, rest };
+	}, [meta]);
+
+	const aroundMax = topSavings[0] || null;
+
+	const locateUser = useCallback(() => {
+		if (
+			(locationPinKind === "gps" || locationPinKind === "manual") &&
+			userLocation
+		) {
+			setFocusRequest({
+				lat: userLocation.lat,
+				lng: userLocation.lng,
+				id: `locate:${Date.now()}`,
+			});
+			return;
+		}
+		pendingLocateRef.current = true;
+		if (locationPinKind === "gps" || locationPinKind === "manual") {
+			requestLocation();
+			return;
+		}
+		openMapModal();
+	}, [locationPinKind, userLocation, requestLocation, openMapModal]);
+
+	const applyCategory = useCallback(
+		(nextId: string) => {
+			setPlaces(null);
+			setScanHint("searching");
+			setMoreOpen(false);
+			lastFocusedPlaceRef.current = "";
+			patchSearch({
+				category: nextId || undefined,
+				place: undefined,
+				q: undefined,
+			});
+			setMapQuery("");
+		},
+		[patchSearch],
+	);
+
+	const focusAroundPlace = useCallback(
+		(row: { placeId: string; lat: number; lng: number }) => {
+			lastFocusedPlaceRef.current = row.placeId;
+			setFocusRequest({
+				lat: row.lat,
+				lng: row.lng,
+				id: `place:${row.placeId}`,
+			});
+			patchSearch({
+				place: row.placeId,
+				neighborhood: undefined,
+			});
+			setAroundOpen(false);
+		},
+		[patchSearch],
+	);
+
 	if (error) {
 		return (
 			<div className="bg-surface px-4 py-10" data-testid="intelligence-map-error">
 				<EmptyState
-					icon={<FarqBrandMark variant="circle" size={32} />}
+					illustration={<FarqBrandMark variant="wordmark" />}
 					title="We couldn't load the live map"
 					titleAr="ما قدرنا نحمّل الخريطة حياً"
 					body="Please check your internet connection and try again to see price gaps."
@@ -409,11 +533,130 @@ export default function IntelligenceMapSplit({
 	return (
 		<div
 			dir={isRTL ? "rtl" : "ltr"}
-			className="flex min-h-[calc(100dvh-56px)] flex-col bg-surface lg:flex-row"
+			className="farq-map-split flex h-[calc(100svh-var(--bottom-nav-h))] flex-col bg-surface lg:h-auto lg:min-h-[calc(100dvh-56px)] lg:flex-row"
 			data-testid="intelligence-map-split"
+			data-sheet-open={placeId ? "true" : undefined}
+			data-legend-open={legendOpen ? "true" : undefined}
 		>
-			<div className="relative min-h-[50vh] flex-1 bg-neutral-100 lg:min-h-0">
-				<div className="absolute inset-x-3 top-3 z-[500] flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
+			<div className="relative min-h-0 flex-1 bg-neutral-100 lg:min-h-0">
+				{/* Mobile overlay — compact floating rows, not one giant card */}
+				<div
+					className="farq-map-overlay farq-map-overlay--mobile lg:hidden"
+					data-testid="intelligence-map-overlay"
+				>
+					<div className="farq-map-overlay-row farq-map-overlay-card px-3 py-2">
+						<FarqBrandMark variant="lockup" size={26} />
+						<button
+							type="button"
+							onClick={toggleLanguage}
+							disabled={languageSwitching}
+							className="ms-auto inline-flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-[13px] font-bold text-brand-900"
+							aria-label={
+								language === "en" ? "تبديل إلى العربية" : "Switch to English"
+							}
+						>
+							{language === "en" ? "عربي" : "EN"}
+						</button>
+						<button
+							type="button"
+							className="inline-flex size-11 items-center justify-center rounded-full text-brand-900"
+							aria-expanded={chromeOpen}
+							aria-label={isRTL ? "إخفاء البحث" : "Toggle search"}
+							onClick={() => setChromeOpen((v) => !v)}
+						>
+							{chromeOpen ? <X className="size-4" /> : <Search className="size-4" />}
+						</button>
+					</div>
+					{chromeOpen ? (
+						<>
+							<form
+								className="farq-map-overlay-card flex h-11 w-full items-center gap-2 px-3"
+								onSubmit={(e) => {
+									e.preventDefault();
+									patchSearch({
+										q: mapQuery.trim() || undefined,
+										place: undefined,
+									});
+								}}
+							>
+								<Search className="size-4 shrink-0 text-[#6b7c7c]" />
+								<input
+									value={mapQuery}
+									onChange={(e) => setMapQuery(e.target.value)}
+									placeholder={
+										isRTL
+											? "ابحث عن مطعم أو مقهى…"
+											: "Search a restaurant or café…"
+									}
+									className="h-11 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c]"
+									data-testid="intelligence-map-search"
+									aria-label={isRTL ? "بحث على الخريطة" : "Search the map"}
+								/>
+							</form>
+							<div
+								className="farq-map-chips"
+								data-testid="intelligence-map-chips"
+							>
+								<button
+									type="button"
+									aria-pressed={majorGapsOnly}
+									data-testid="intelligence-map-major-gaps"
+									className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
+										majorGapsOnly
+											? "bg-mint-500 text-brand-900"
+											: "bg-white text-brand-900"
+									}`}
+									onClick={() => setMajorGapsOnly((v) => !v)}
+								>
+									{isRTL ? "🔥 أكبر فرق" : "🔥 Top gaps"}
+								</button>
+								{foodChips.pinned.map((c) => (
+									<button
+										key={c.category_id}
+										type="button"
+										aria-pressed={categoryId === c.category_id}
+										className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
+											categoryId === c.category_id
+												? "bg-mint-500 text-brand-900"
+												: "bg-white text-brand-900"
+										}`}
+										onClick={() => applyCategory(c.category_id)}
+									>
+										{c.category_name_ar || c.category_name}
+									</button>
+								))}
+								<button
+									type="button"
+									aria-pressed={moreOpen}
+									className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
+										moreOpen
+											? "bg-mint-500 text-brand-900"
+											: "bg-white text-brand-900"
+									}`}
+									onClick={() => setMoreOpen((v) => !v)}
+								>
+									{isRTL ? "المزيد" : "More"}
+								</button>
+							</div>
+							{moreOpen ? (
+								<div className="farq-map-overlay-card max-h-40 overflow-y-auto p-2">
+									{foodChips.rest.map((c) => (
+										<button
+											key={c.category_id}
+											type="button"
+											className="flex h-11 w-full items-center px-3 text-start text-[14px] font-bold text-brand-900"
+											onClick={() => applyCategory(c.category_id)}
+										>
+											{c.category_name_ar || c.category_name}
+										</button>
+									))}
+								</div>
+							) : null}
+						</>
+					) : null}
+				</div>
+
+				<div className="absolute inset-x-3 top-3 z-[500] hidden flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
 					<div className="flex min-w-0 items-center gap-4">
 						<div className="flex shrink-0 items-center gap-1.5">
 							<FarqBrandMark variant="lockup" size={29} />
@@ -567,27 +810,9 @@ export default function IntelligenceMapSplit({
 						</div>
 						<button
 							type="button"
-							onClick={() => {
-								if (
-									(locationPinKind === "gps" || locationPinKind === "manual") &&
-									userLocation
-								) {
-									setFocusRequest({
-										lat: userLocation.lat,
-										lng: userLocation.lng,
-										id: `locate:${Date.now()}`,
-									});
-									return;
-								}
-								pendingLocateRef.current = true;
-								if (locationPinKind === "gps" || locationPinKind === "manual") {
-									requestLocation();
-									return;
-								}
-								openMapModal();
-							}}
+							onClick={locateUser}
 							className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#e6eef0] px-2 text-[12px] font-bold text-brand-900"
-							data-testid="intelligence-map-locate"
+							data-testid="intelligence-map-locate-desktop"
 						>
 							<Navigation className="size-3.5" />
 							{isRTL ? "موقعي" : "My location"}
@@ -622,48 +847,129 @@ export default function IntelligenceMapSplit({
 								patchSearch({ neighborhood: id, place: undefined })
 							}
 							onViewChange={onViewChange}
+							sheetOpen={Boolean(placeId)}
 						/>
 					</Suspense>
 				</div>
 
 				{placeId ? (
 					<div
-						className="absolute inset-0 z-[520] lg:hidden"
+						className="farq-map-place-host absolute inset-x-0 bottom-0 z-[520] lg:hidden"
 						data-testid="intelligence-map-place-backdrop"
 					>
-						<button
-							type="button"
-							className="absolute inset-0 bg-brand-900/25"
-							aria-label={isRTL ? "إغلاق" : "Close"}
-							onClick={() =>
+						<SelectedPlaceSheet
+							variant="sheet"
+							placeDetail={placeDetail}
+							feature={selectedPlaceFeature?.properties}
+							selectedCategory={selectedCategory}
+							selectedRestaurantId={selectedRestaurantId}
+							isRTL={isRTL}
+							onClose={() =>
 								patchSearch({ neighborhood: undefined, place: undefined })
 							}
+							onOpenMenu={openRestaurantMenu}
 						/>
-						<div className="absolute inset-x-0 bottom-0">
-							<SelectedPlaceSheet
-								variant="sheet"
-								placeDetail={placeDetail}
-								feature={selectedPlaceFeature?.properties}
-								selectedCategory={selectedCategory}
-								selectedRestaurantId={selectedRestaurantId}
-								isRTL={isRTL}
-								onClose={() =>
-									patchSearch({ neighborhood: undefined, place: undefined })
-								}
-								onOpenMenu={openRestaurantMenu}
-							/>
+					</div>
+				) : null}
+
+				{!placeId ? (
+					<div
+						className="farq-map-around lg:hidden"
+						data-testid="intelligence-map-around"
+					>
+						<div
+							className="farq-map-scan"
+							data-testid="intelligence-map-scan"
+							aria-live="polite"
+						>
+							{scanHint || placesFetching
+								? isRTL
+									? "نبحث عن أكبر الفروقات…"
+									: "Looking for the biggest gaps…"
+								: null}
+						</div>
+						<div className="farq-map-overlay-card overflow-hidden">
+							<button
+								type="button"
+								className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2"
+								data-testid="intelligence-map-around-peek"
+								onClick={() => {
+									if (aroundMax) {
+										focusAroundPlace(aroundMax);
+										return;
+									}
+									setAroundOpen((v) => !v);
+								}}
+							>
+								<span className="text-[13px] font-bold text-brand-900">
+									{isRTL ? "أكبر فرق حولك" : "Biggest gap around you"}
+								</span>
+								<span className="shrink-0 text-[13px] font-black text-brand-900">
+									{aroundMax
+										? `+${localizeDigitString(String(Math.round(aroundMax.amount)), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+										: "—"}
+								</span>
+							</button>
+							<button
+								type="button"
+								className="flex h-11 w-full items-center justify-center border-t border-[#e6eef0] text-[12px] font-bold text-[#6b7c7c]"
+								aria-expanded={aroundOpen}
+								onClick={() => setAroundOpen((v) => !v)}
+							>
+								{isRTL
+									? aroundOpen
+										? "إخفاء القائمة"
+										: "عرض القائمة"
+									: aroundOpen
+										? "Hide list"
+										: "Show list"}
+							</button>
+							{aroundOpen ? (
+								<ul
+									className="max-h-48 space-y-1 overflow-y-auto border-t border-[#e6eef0] p-2"
+									data-testid="intelligence-map-top-savings"
+								>
+									{topSavings.slice(0, 8).map((row) => (
+										<li key={row.placeId}>
+											<button
+												type="button"
+												className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-[#e6eef0] px-3 py-2 text-start"
+												data-testid="intelligence-map-top-saving"
+												onClick={() => focusAroundPlace(row)}
+											>
+												<span className="min-w-0 truncate text-[13px] font-bold text-brand-900">
+													{row.name || (isRTL ? "مطعم" : "Restaurant")}
+												</span>
+												<span className="shrink-0 text-[13px] font-black text-brand-900">
+													+
+													{localizeDigitString(
+														String(Math.round(row.amount)),
+														isRTL,
+													)}{" "}
+													{isRTL ? "ر.س" : "SAR"}
+												</span>
+											</button>
+										</li>
+									))}
+								</ul>
+							) : null}
 						</div>
 					</div>
 				) : null}
 
-				<div
-					className={`pointer-events-auto absolute bottom-3 start-3 z-[400] ${
-						placeId ? "hidden lg:block" : ""
-					}`}
-				>
+				<div className="farq-map-tools farq-map-tools--mobile lg:hidden">
 					<button
 						type="button"
-						className="farq-legend-info"
+						onClick={locateUser}
+						className="farq-map-tools-btn"
+						data-testid="intelligence-map-locate"
+						aria-label={isRTL ? "موقعي" : "My location"}
+					>
+						<Navigation className="size-4" />
+					</button>
+					<button
+						type="button"
+						className="farq-map-tools-btn farq-legend-info"
 						aria-expanded={legendOpen}
 						aria-controls="farq-map-legend"
 						data-testid="intelligence-map-legend-info"
@@ -672,7 +978,22 @@ export default function IntelligenceMapSplit({
 					>
 						<Info className="size-4" />
 					</button>
-					{legendOpen ? (
+				</div>
+
+				<div className="pointer-events-auto absolute bottom-3 start-3 z-[400] hidden lg:block">
+					<button
+						type="button"
+						className="farq-legend-info"
+						aria-expanded={legendOpen}
+						aria-controls="farq-map-legend"
+						onClick={() => setLegendOpen((v) => !v)}
+						aria-label={isRTL ? "دليل الخريطة" : "Map legend"}
+					>
+						<Info className="size-4" />
+					</button>
+				</div>
+				{legendOpen ? (
+					<div className="pointer-events-auto absolute bottom-24 start-3 z-[450] lg:bottom-14">
 						<div
 							id="farq-map-legend"
 							className="farq-legend-popover text-[12px]"
@@ -684,7 +1005,7 @@ export default function IntelligenceMapSplit({
 							<ul className="space-y-2 text-[#6b7c7c]">
 								<li className="flex items-center gap-2">
 									<span className="farq-legend-bubble" aria-hidden>
-										<span className="farq-legend-mark" />
+										<FarqBrandMark variant="circle" size={10} />
 										<span className="farq-legend-win">
 											{isRTL ? "+١٨" : "+18"}
 										</span>
@@ -716,8 +1037,8 @@ export default function IntelligenceMapSplit({
 								{isRTL ? "«حجم الدبوس = حجم الفرق»" : "«Pin size = gap size»"}
 							</p>
 						</div>
-					) : null}
-				</div>
+					</div>
+				) : null}
 			</div>
 
 			<aside

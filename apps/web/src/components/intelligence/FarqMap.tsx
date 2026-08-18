@@ -21,14 +21,17 @@ import {
 	BUBBLE_ENTER_MS,
 	BUBBLE_ENTER_STAGGER_MAX,
 	applyAuraRankClasses,
+	auraPromoteCap,
 	buildClusterPinElement,
 	buildPlacePinElement,
 	featureMarkerKey,
 	observedClusterTopGap,
 	observedDifferenceAmount,
 	observedRestaurantImageUrl,
+	pinPresentationForZoom,
 	playBubbleEnter,
 	playMaxGapPulse,
+	promotedAuraLimit,
 	rankAuraPlaceIds,
 	setPinSelected,
 	shouldReplayBubbleMotion,
@@ -168,7 +171,13 @@ function applyViewportAuraRanks(
 		visible.push({ placeId: rec.placeId, amount: rec.amount, el: rec.el });
 	}
 
-	const promoted = rankAuraPlaceIds(visible);
+	const isMobile =
+		typeof window !== "undefined" &&
+		window.matchMedia("(max-width: 1023px)").matches;
+	const promoted = rankAuraPlaceIds(
+		visible,
+		promotedAuraLimit(visible.length, auraPromoteCap(isMobile)),
+	);
 	let maxPlaceId: string | null = null;
 	let maxAmount = -1;
 	let maxEl: HTMLElement | null = null;
@@ -218,6 +227,8 @@ export default function FarqMap({
 	onSelectPlace,
 	onSelectNeighborhood: _onSelectNeighborhood,
 	onViewChange,
+	hideAddressSearch = false,
+	sheetOpen = false,
 }: {
 	places: IntelligenceMapPlaces | null;
 	/** Accepted for IntelligenceMapSplit compatibility — not painted on the consumer map. */
@@ -236,6 +247,9 @@ export default function FarqMap({
 	onSelectPlace: (placeId: string) => void;
 	onSelectNeighborhood: (neighborhoodId: string) => void;
 	onViewChange?: (bbox: string, zoom: number) => void;
+	/** Mobile Farq search already covers find — hide Mapbox address Search Box. */
+	hideAddressSearch?: boolean;
+	sheetOpen?: boolean;
 }) {
 	const token = getMapboxAccessToken();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -329,12 +343,26 @@ export default function FarqMap({
 				new mapboxgl.NavigationControl({ visualizePitch: true }),
 				"bottom-right",
 			);
+			const mobileChrome =
+				typeof window !== "undefined" &&
+				window.matchMedia("(max-width: 1023px)").matches;
+			if (!hideAddressSearch && !mobileChrome) {
+				try {
+					const box = createFarqSearchBox({ token, isRTL: isRtlRef.current });
+					searchRef.current = box;
+					map.addControl(box, "top-right");
+				} catch {
+					/* Search Box optional if the token lacks Search scope */
+				}
+			}
+
 			try {
-				const box = createFarqSearchBox({ token, isRTL: isRtlRef.current });
-				searchRef.current = box;
-				map.addControl(box, "top-right");
+				const root = containerRef.current?.closest(".farq-mapbox-root");
+				if (root instanceof HTMLElement) {
+					root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom());
+				}
 			} catch {
-				/* Search Box optional if the token lacks Search scope */
+				/* */
 			}
 
 			setMapReady(true);
@@ -395,6 +423,10 @@ export default function FarqMap({
 			if (!introDoneRef.current) return;
 			persistCamera(map);
 			reportView();
+			const root = containerRef.current?.closest(".farq-mapbox-root");
+			if (root instanceof HTMLElement) {
+				root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom());
+			}
 			window.clearTimeout(rankTimerRef.current);
 			rankTimerRef.current = window.setTimeout(() => {
 				applyViewportAuraRanks(
@@ -639,6 +671,8 @@ export default function FarqMap({
 			className="farq-mapbox-root relative h-full min-h-[50vh] w-full"
 			dir={isRTL ? "rtl" : "ltr"}
 			data-testid="intelligence-map-canvas"
+			data-sheet-open={sheetOpen ? "true" : undefined}
+			data-hide-address-search={hideAddressSearch ? "true" : undefined}
 		>
 			<div ref={containerRef} className="h-full min-h-[50vh] w-full" />
 			{onBasemapChange ? null : (

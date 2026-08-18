@@ -6,6 +6,14 @@
 	"outputDirectory": "apps/web/dist",
 	"rewrites": [
 		{
+			"source": "/api/comparison/restaurants/:id/catalog",
+			"destination": "https://api-production-ddc84.up.railway.app/api/comparison/restaurants/:id/catalog"
+		},
+		{
+			"source": "/api/restaurant/:id/menu",
+			"destination": "https://api-production-ddc84.up.railway.app/api/comparison/restaurants/:id/catalog"
+		},
+		{
 			"source": "/_api/:path*",
 			"destination": "https://api-production-ddc84.up.railway.app/:path*"
 		},

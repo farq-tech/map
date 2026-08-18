@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { MapPin } from "lucide-react";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useLocation } from "../contexts/LocationContext";
+import FarqBrandMark from "./FarqBrandMark";
 import { Button } from "./ui/Button";
 
 export default function Header() {
@@ -12,7 +13,12 @@ export default function Header() {
 	return (
 		<header className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-brand-900/95 px-4 py-3 backdrop-blur">
 			<Link to="/" className="flex items-center gap-2">
-				<img src="/Farq.png" alt="Farq" className="h-8 w-8 rounded-lg" />
+				<FarqBrandMark
+					variant="lockup"
+					size={28}
+					wordmarkClassName="h-5 w-auto"
+					title={isRTL ? "فرق" : "Farq"}
+				/>
 				<span className="text-sm font-black text-mint-500">
 					{isRTL ? "خريطة فرق" : "Farq Map"}
 				</span>

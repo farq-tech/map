@@ -562,6 +562,7 @@ export const IntelligenceService = {
 			bbox?: string;
 			zoom?: number;
 			q?: string;
+			category?: string;
 			layer?: "difference" | "places" | "all_food" | "comparison";
 			limit?: number;
 			signal?: AbortSignal;
@@ -571,6 +572,7 @@ export const IntelligenceService = {
 		if (opts.bbox) qs.set("bbox", opts.bbox);
 		if (opts.zoom != null) qs.set("zoom", String(opts.zoom));
 		if (opts.q) qs.set("q", opts.q);
+		if (opts.category) qs.set("category", opts.category);
 		if (opts.layer) qs.set("layer", opts.layer);
 		qs.set("limit", String(opts.limit ?? 400));
 		const env = await fetchApi<IntelligenceMapPlaces>(
