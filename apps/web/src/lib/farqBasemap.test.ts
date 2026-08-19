@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import spec from "mapbox-gl/dist/style-spec/index.cjs";
-import { buildFarqBasemapStyle, farqLabelField, FARQ_BASEMAP_COLORS as C } from "./farqBasemap";
+import { buildFarqBasemapStyle, farqLabelField, FARQ_BASEMAP_COLORS as C, FARQ_PALETTES } from "./farqBasemap";
 
 const style = buildFarqBasemapStyle("ar");
 const byId = new Map(style.layers.map((l) => [l.id, l as Record<string, any>]));
@@ -31,9 +31,17 @@ const lum = (hex: string) => {
 const visibleAt = (zoom: number) => style.layers.filter((l) => (l.minzoom ?? 0) <= zoom && (l.maxzoom ?? 24) > zoom).map((l) => l.id);
 
 describe("Farq Dusk style", () => {
-	it("is a valid Mapbox style in both locales", () => {
-		expect(spec.validate(buildFarqBasemapStyle("ar"))).toEqual([]);
-		expect(spec.validate(buildFarqBasemapStyle("en"))).toEqual([]);
+	it("is a valid Mapbox style in both locales and both hours", () => {
+		for (const theme of ["day", "dusk"] as const) {
+			expect(spec.validate(buildFarqBasemapStyle("ar", theme))).toEqual([]);
+			expect(spec.validate(buildFarqBasemapStyle("en", theme))).toEqual([]);
+		}
+	});
+
+	// Day and dusk must stay interchangeable: one missing token silently falls back
+	// to the other hour's colour and the map goes half-lit.
+	it("keeps both palettes complete", () => {
+		expect(Object.keys(FARQ_PALETTES.dusk).sort()).toEqual(Object.keys(FARQ_PALETTES.day).sort());
 	});
 
 	it("gives every layer its own id", () => {
@@ -42,13 +50,17 @@ describe("Farq Dusk style", () => {
 });
 
 describe("lighting rig", () => {
-	// Blue hour: a cool sky over a warm low sun. Reverse them and it reads as noon.
-	it("puts a cool ambient over a warm key light", () => {
-		const ambient = style.lights?.find((l) => l.type === "ambient");
-		const directional = style.lights?.find((l) => l.type === "directional");
-		expect(ambient && directional).toBeTruthy();
-		expect(lum(ambient!.properties!.color as string)).toBeLessThan(lum(directional!.properties!.color as string));
-		expect((directional!.properties!.direction as number[])[1]).toBeLessThan(60);
+	// The sun is warmer than the sky it hangs in — at any hour. Reverse them and
+	// the city reads as lit by a fluorescent tube.
+	it("hangs a warm key light in a cooler sky", () => {
+		const warmth = (hex: string) => { const n = Number.parseInt(hex.slice(1), 16); return ((n >> 16) & 255) - (n & 255); };
+		for (const theme of ["day", "dusk"] as const) {
+			const lights = buildFarqBasemapStyle("ar", theme).lights!;
+			const ambient = lights.find((l) => l.type === "ambient")!;
+			const directional = lights.find((l) => l.type === "directional")!;
+			expect(warmth(directional.properties!.color as string)).toBeGreaterThan(warmth(ambient.properties!.color as string));
+			expect((directional.properties!.direction as number[])[1]).toBeLessThan(60);
+		}
 	});
 
 	it("casts no shadows, so mobile keeps its frames", () => {
@@ -81,9 +93,15 @@ describe("buildings", () => {
 		expect(paintAt("farq-building-3d", "fill-extrusion-emissive-strength", 17, "Polygon")).toBeLessThanOrEqual(0.1);
 	});
 
-	it("gives taller stock more presence", () => {
-		expect(lum(C.buildingLow)).toBeLessThan(lum(C.buildingMid));
-		expect(lum(C.buildingMid)).toBeLessThan(lum(C.buildingTall));
+	// "Presence" is contrast against the ground, not brightness — on a light map
+	// the tallest stock earns it by going darker, on a dark one by going lighter.
+	it("gives taller stock more presence, in either hour", () => {
+		for (const palette of Object.values(FARQ_PALETTES)) {
+			const presence = (hex: string) => Math.abs(lum(hex) - lum(palette.groundNear));
+			expect(presence(palette.buildingLow)).toBeLessThan(presence(palette.buildingMid));
+			expect(presence(palette.buildingMid)).toBeLessThan(presence(palette.buildingTall));
+			expect(presence(palette.buildingLow)).toBeGreaterThan(0.03);
+		}
 	});
 });
 
@@ -94,8 +112,9 @@ describe("selected opportunity", () => {
 		expect(paintAt("farq-building-3d", "fill-extrusion-emissive-strength", 17, "Polygon", focused)).toBeGreaterThan(
 			paintAt("farq-building-3d", "fill-extrusion-emissive-strength", 17, "Polygon") * 5,
 		);
-		expect(lum(C.accentBuilding)).toBeLessThan(0.35);
-		expect(lum(C.accentBuilding)).toBeLessThan(lum(C.accent));
+		// Tinted and lit, never flooded with the raw signal colour.
+		expect(C.accentBuilding.toLowerCase()).not.toBe(C.accent.toLowerCase());
+		expect(Math.abs(lum(C.accentBuilding) - lum(C.buildingMid))).toBeGreaterThan(0.04);
 	});
 
 	it("spills flood light only from the selection", () => {
@@ -135,9 +154,15 @@ describe("road system", () => {
 		expect(paintAt("farq-road-motorway", "line-border-width", 9)).toBe(0);
 	});
 
-	it("brightens roads by rank", () => {
-		expect(lum(C.motorway)).toBeGreaterThan(lum(C.primary));
-		expect(lum(C.primary)).toBeGreaterThan(lum(C.street));
+	it("separates roads from the local fabric by rank, in either hour", () => {
+		for (const palette of Object.values(FARQ_PALETTES)) {
+			expect(lum(palette.motorway)).toBeGreaterThan(lum(palette.primary));
+			expect(lum(palette.primary)).toBeGreaterThan(lum(palette.street));
+			expect(lum(palette.tunnel)).toBeLessThan(lum(palette.street));
+			// Type has to survive its own halo, and the accent has to survive the ground.
+			expect(Math.abs(lum(palette.labelPrimary) - lum(palette.halo))).toBeGreaterThan(0.4);
+			expect(Math.abs(lum(palette.accent) - lum(palette.groundNear))).toBeGreaterThan(0.2);
+		}
 	});
 });
 
@@ -154,7 +179,6 @@ describe("bridges and tunnels", () => {
 	});
 
 	it("recesses tunnels without losing them", () => {
-		expect(lum(C.tunnel)).toBeLessThan(lum(C.street));
 		expect(layer("farq-road-tunnel").paint["line-dasharray"]).toBeTruthy();
 		expect(paintAt("farq-road-tunnel", "line-opacity", 16)).toBeGreaterThan(0.5);
 	});
