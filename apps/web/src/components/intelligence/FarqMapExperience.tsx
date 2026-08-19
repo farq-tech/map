@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
+import { useLiveLocation } from "../../hooks/useLiveLocation";
 import { mapZoomMode, type MapZoomMode } from "../../lib/mapExploration";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { IntelligenceService, toIntelCategoryId, type IntelligenceCategory, type IntelligenceMapPlaceDetail, type IntelligenceMapPlaces, type IntelligenceMeta } from "../../services/intelligenceService";
@@ -20,6 +21,8 @@ function distanceTo(lat: number, lng: number, toLat: number, toLng: number): num
 
 /** How close the camera goes when a restaurant is picked out of the list. */
 const PICK_ZOOM = 16.4;
+/** Street level, where a live dot is worth following. */
+const LIVE_ZOOM = 16;
 /** Restaurants offered for one tapped cluster. */
 const CLUSTER_LIST_LIMIT = 15;
 
@@ -54,6 +57,11 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
 	const [focusRequest, setFocusRequest] = useState<{ lat: number; lng: number; id: string; zoom?: number } | null>(null);
 	const [clusterPick, setClusterPick] = useState<{ lat: number; lng: number; count: number; id: string } | null>(null);
+	const live = useLiveLocation();
+	/* Following is the camera promise; the watch is the data. They come apart the
+	 * moment the user drags the map, and the dot stays live either way. */
+	const [following, setFollowing] = useState(false);
+	const pendingLiveZoomRef = useRef(false);
 	const requestKeyRef = useRef("");
 	const abortRef = useRef<AbortController | null>(null);
 
@@ -118,17 +126,30 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const showUserLocation = locationPinKind === "gps" || locationPinKind === "manual";
 	const applyCategory = (next: string) => { setCategory(next); setSelectedPlaceId(""); setQuery(""); requestKeyRef.current = ""; };
 	const locate = () => {
-		if (showUserLocation && userLocation) { setFocusRequest({ lat: userLocation.lat, lng: userLocation.lng, id: `user:${Date.now()}` }); return; }
-		if (locationPinKind === "gps" || locationPinKind === "manual") requestLocation(); else openMapModal();
+		if (live.status === "denied" || live.status === "unsupported") { openMapModal(); return; }
+		if (following) { setFollowing(false); live.stop(); return; }
+		pendingLiveZoomRef.current = true;
+		setFollowing(true);
+		live.start();
+		/* Keep the older context fix warm for search, without waiting on it. */
+		if (locationPinKind !== "gps") requestLocation();
 	};
 	const selectOpportunity = (item: (typeof opportunities)[number], opts?: { zoom?: number }) => { setClusterPick(null); setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}:${opts?.zoom ?? "near"}`, zoom: opts?.zoom }); };
+	/* Every fresh fix re-centres while following; the first one also closes in. */
+	useEffect(() => {
+		if (!following || !live.position) return;
+		const zoom = pendingLiveZoomRef.current ? LIVE_ZOOM : undefined;
+		pendingLiveZoomRef.current = false;
+		setFocusRequest({ lat: live.position.lat, lng: live.position.lng, id: `live:${live.position.lat},${live.position.lng},${zoom ?? ""}`, zoom });
+	}, [following, live.position]);
+
 	const openMenu = useCallback((opts: { restaurantId: string; name?: string; image?: string | null }) => { if (!opts.restaurantId) return; void navigate({ to: "/merchant/$type/$id", params: { type: "restaurant", id: opts.restaurantId }, search: { ...(opts.name ? { name: opts.name } : {}), ...(opts.image ? { image: String(opts.image) } : {}) } }); }, [navigate]);
 
 
 	return (
 		<div className="relative h-[calc(100svh-var(--bottom-nav-h))] w-full overflow-hidden bg-surface lg:h-[calc(100dvh-56px)]" dir={isRTL ? "rtl" : "ltr"} data-testid="farq-map-experience" data-map-mode={mode}>
 			<div className="absolute inset-0 z-0">
-				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={userLocation} showUserLocation={showUserLocation} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => { setClusterPick(null); setSelectedPlaceId(id); }} onSelectCluster={(info) => { setSelectedPlaceId(""); setClusterPick({ ...info, id: `cluster:${info.lng.toFixed(4)},${info.lat.toFixed(4)}` }); }} onSelectNeighborhood={() => undefined} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
+				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={live.position ?? userLocation} showUserLocation={Boolean(live.position) || showUserLocation} onUserPan={() => setFollowing(false)} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => { setClusterPick(null); setSelectedPlaceId(id); }} onSelectCluster={(info) => { setSelectedPlaceId(""); setClusterPick({ ...info, id: `cluster:${info.lng.toFixed(4)},${info.lat.toFixed(4)}` }); }} onSelectNeighborhood={() => undefined} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
 			</div>
 
 			<div className="pointer-events-none absolute inset-x-0 top-0 z-[600] p-3 lg:p-4">
@@ -139,9 +160,10 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 							<Search size={17} className="shrink-0 text-[#6b7c7c]" />
 							<input value={query} onChange={(e) => setQuery(e.target.value)} className="h-11 min-w-0 flex-1 bg-transparent text-[14px] font-medium text-brand-900 outline-none" placeholder={isRTL ? "ابحث عن مطعم أو مقهى…" : "Search a restaurant or café…"} />
 						</form>
-						<button type="button" className="grid size-11 shrink-0 place-items-center rounded-xl text-brand-900" onClick={locate} aria-label={isRTL ? "موقعي" : "My location"}><LocateFixed size={19} /></button>
+						<button type="button" aria-pressed={following} className={`grid size-11 shrink-0 place-items-center rounded-xl transition-colors ${following ? "bg-mint-500 text-brand-900" : live.status === "live" ? "text-mint-700" : "text-brand-900"}`} onClick={locate} aria-label={isRTL ? (following ? "إيقاف التتبّع" : "موقعي المباشر") : following ? "Stop following" : "My live location"} data-testid="farq-locate-button" data-live={live.status}><LocateFixed size={19} className={live.status === "locating" ? "animate-pulse" : undefined} /></button>
 					</div>
 					{error ? <div className="rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-brand-900 shadow-sm">{error}</div> : null}
+					{live.status === "denied" ? <div className="rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-brand-900 shadow-sm">{isRTL ? "الموقع مرفوض — فعّله من إعدادات المتصفح أو اختر موقعك يدوياً." : "Location is blocked — enable it in your browser settings, or pick your spot manually."}</div> : null}
 					<div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
 						<button type="button" onClick={() => { if (top) selectOpportunity(top); }} className="h-10 shrink-0 rounded-full bg-brand-900 px-4 text-[13px] font-black text-mint-500">{top ? `🔥 ${isRTL ? "أكبر فرق" : "Top gap"} ${Math.round(top.price.difference || 0)} ${isRTL ? "ر.س" : "SAR"}` : modeLabel(mode, isRTL)}</button>
 						{categories.map((c) => <button key={c.category_id} type="button" onClick={() => applyCategory(c.category_id)} className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${category === c.category_id ? "bg-mint-500 text-brand-900" : "bg-white/95 text-brand-900 shadow-sm"}`}>{c.category_name_ar || c.category_name || c.category_id}</button>)}
