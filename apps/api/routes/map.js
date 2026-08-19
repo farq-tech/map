@@ -3,6 +3,7 @@
 const express = require('express');
 const comparisonMap = require('../lib/comparison-map');
 const { asyncHandler } = require('../lib/async-handler');
+const { buildPresentation } = require('../lib/map-opportunity');
 
 const CATEGORIES = [
   { category_id: 'burgers', category_name: 'Burgers', category_name_ar: 'برجر' },
@@ -55,11 +56,34 @@ function createMapRouter() {
         bbox: req.query.bbox,
         zoom: req.query.zoom,
         q: req.query.q,
+        category: req.query.category,
         layer: 'comparison',
         limit: req.query.limit,
       });
+
+      // Keep the legacy FeatureCollection response for the current map while
+      // adding the semantic Farq layer. This lets the UI migrate incrementally
+      // without changing the existing pin renderer in one risky release.
+      const presentation = buildPresentation(body);
       res.setHeader('Cache-Control', 'public, max-age=60');
-      res.json(body);
+      res.json({ ...body, presentation });
+    })
+  );
+
+  router.get(
+    '/map/opportunities',
+    asyncHandler(async (req, res) => {
+      const body = await comparisonMap.queryPlaces({
+        bbox: req.query.bbox,
+        zoom: req.query.zoom,
+        q: req.query.q,
+        category: req.query.category,
+        layer: 'comparison',
+        limit: req.query.limit,
+      });
+
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      res.json(buildPresentation(body));
     })
   );
 
