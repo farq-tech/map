@@ -464,7 +464,6 @@
 }
 
 .farq-3d-cluster {
-	position: relative;
 	width: 40px;
 	height: 40px;
 	cursor: pointer;
@@ -472,7 +471,7 @@
 }
 
 .farq-3d-cluster--opportunity {
-	width: auto;
+	width: max-content;
 	min-width: 44px;
 	height: auto;
 }
