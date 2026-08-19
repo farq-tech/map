@@ -1,17 +1,20 @@
 /**
- * Farq Basemap — the map's own visual language.
+ * Farq Dusk — the map's own cartography.
  *
- * Not "Mapbox with a tint on top": this is a Farq-owned style built on the
- * Mapbox Streets v8 vector source, so land, buildings, roads, parks, water and
- * type hierarchy are ours to design. Farq mint stays a *signal* colour — it is
- * never painted onto the basemap, only onto the focus layers below.
+ * Not "Mapbox with a tint on top": a Farq-owned style on the Mapbox Streets v8
+ * vector source, so land, buildings, roads, bridges, parks, water and type
+ * hierarchy are ours to design. The hour is blue-hour, not midnight — a cool
+ * ambient sky over a warm low key light, so roofs read brighter than facades
+ * and the city looks like an architectural model rather than a field of blocks.
  *
  * Rules that keep this file honest:
  * - Colours live in FARQ_BASEMAP_COLORS. No hardcoded hex further down.
- * - Labels read Mapbox source fields (`name_ar` / `name_en` / `name`) only.
- *   Nothing is translated, transliterated or invented here.
- * - Layer count stays small on purpose (fewer layers than Mapbox Standard),
- *   and no layer animates per frame.
+ * - Labels and shields read Mapbox source fields (`name_ar`, `name_en`, `ref`,
+ *   `shield`) only. Nothing is translated, transliterated or invented here.
+ * - The basemap is the stage; mint is a signal. Mint never paints the map —
+ *   it only lights the selected opportunity.
+ * - No layer animates per frame, and the layer budget stays far under the
+ *   ~200 that Mapbox Standard carries at every zoom.
  */
 
 import type {
@@ -28,56 +31,64 @@ const STREETS_V8 = "mapbox://mapbox.mapbox-streets-v8";
 const SRC_BASE = "farq-base";
 export const FARQ_FOCUS_SOURCE = "farq-focus";
 export const FARQ_FOCUS_ROAD_SOURCE = "farq-focus-road";
+export const FARQ_SHIELD_IMAGE = "farq-road-shield";
 
-/* ─────────────────────────── Farq basemap palette ───────────────────────────
- * Deep warm charcoal ground with a plum undertone, warm brown-charcoal
- * buildings, cool muted grey roads, muted Farq green parks, desaturated teal
- * water. The saturated mint (#83F1B1) belongs to opportunity UI, not the map.
+/* ──────────────────────────── Farq Dusk palette ────────────────────────────
+ * Warm charcoal ground with a plum undertone, matte brown-charcoal buildings,
+ * cool grey road infrastructure, muted green parks, desaturated teal water and
+ * warm off-white type. Lifted off pure black so the city has air in it.
  */
 export const FARQ_BASEMAP_COLORS = {
-	groundFar: "#100F14",
-	groundNear: "#17161C",
-	groundResidential: "#1A1920",
-	groundCommercial: "#1D1B21",
-	groundIndustrial: "#191820",
-	sand: "#1F1B18",
-	rock: "#1B1A1E",
-	airport: "#1A1A21",
-	parkFar: "#16281E",
-	parkNear: "#1B3125",
-	greenLow: "#182A20",
-	water: "#0C2227",
-	waterDeep: "#0A1C21",
-	waterway: "#123037",
-	buildingLow: "#211E1D",
-	buildingMid: "#272322",
-	buildingTall: "#302B27",
-	buildingCommercial: "#2E2823",
-	buildingFlat: "#201D1D",
-	lightKey: "#F8EFE3",
-	motorway: "#4E545C",
-	trunk: "#454A52",
-	primary: "#3C4046",
-	secondary: "#33363C",
-	street: "#2A2C31",
-	minor: "#242429",
-	tunnel: "#1D1C21",
-	roadCasing: "#0D0C11",
-	admin: "#3A3743",
-	labelPrimary: "#E9EFEC",
-	labelSecondary: "#B9C6C1",
-	labelTertiary: "#8B9793",
-	labelRoadMajor: "#A2AFAA",
-	labelRoadMinor: "#7E8A86",
-	labelWater: "#5C8C8D",
-	labelPark: "#6F9179",
-	labelPoi: "#93A09C",
-	poiDot: "#4C5551",
-	halo: "#0C0B10",
+	groundFar: "#141219",
+	groundNear: "#1B1921",
+	groundResidential: "#221E28",
+	groundCommercial: "#2A2432",
+	groundIndustrial: "#1D1B23",
+	sand: "#251F1A",
+	rock: "#201D22",
+	airport: "#1D1D25",
+	parkFar: "#182C21",
+	parkNear: "#1E3629",
+	greenLow: "#1A2C22",
+	water: "#0E262C",
+	waterDeep: "#0B1E24",
+	waterway: "#154049",
+	buildingLow: "#3A342F",
+	buildingMid: "#463E37",
+	buildingTall: "#51473D",
+	buildingCommercial: "#4B4034",
+	buildingFlat: "#262221",
+	motorway: "#5B616A",
+	trunk: "#4F555D",
+	primary: "#43484F",
+	secondary: "#383C42",
+	street: "#2F3237",
+	minor: "#282A30",
+	tunnel: "#1F1E25",
+	roadCasing: "#121117",
+	bridgeShadow: "#0A090D",
+	shieldFill: "#2B3037",
+	shieldEdge: "#5B616A",
+	shieldText: "#D8DFDB",
+	admin: "#403C4A",
+	labelPrimary: "#EFF2ED",
+	labelSecondary: "#C3CCC6",
+	labelTertiary: "#939F9A",
+	labelRoadMajor: "#AAB6B1",
+	labelRoadMinor: "#848F8B",
+	labelWater: "#5F9294",
+	labelPark: "#75987F",
+	labelPoi: "#98A5A0",
+	poiDot: "#525B57",
+	halo: "#0D0C11",
 	/* Farq signal — focus layers only. */
 	accent: "#83F1B1",
-	fog: "#1A1922",
-	fogHigh: "#233743",
+	accentBuilding: "#1F3A2D",
+	/* Blue-hour sky over a warm low sun. */
+	lightAmbient: "#8FA6BE",
+	lightKey: "#FFE7CA",
+	fog: "#1D1B24",
+	fogHigh: "#26404E",
 	space: "#07070C",
 } as const;
 
@@ -106,6 +117,8 @@ const ROAD_LAYER_IDS = [
 	"farq-road-primary",
 	"farq-road-secondary",
 	"farq-road-street",
+	"farq-bridge-major",
+	"farq-bridge-minor",
 ] as const;
 
 /** Source fields only — never a generated translation. */
@@ -117,18 +130,34 @@ export function farqLabelField(language: FarqMapLanguage): ExpressionSpecificati
 
 const emptyCollection = (): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
-function roadWidth(stops: Array<[number, number]>): ExpressionSpecification {
+/** Selected-opportunity switch, reused wherever the focus changes a paint value. */
+const whenFocused = (on: number | string, off: number | string): ExpressionSpecification =>
+	["case", ["boolean", ["feature-state", "farqFocus"], false], on, off] as ExpressionSpecification;
+
+function zoomRamp(stops: Array<[number, number]>): ExpressionSpecification {
 	return ["interpolate", ["exponential", 1.5], ["zoom"], ...stops.flat()] as ExpressionSpecification;
 }
 
+/* Ground-plane layers opt out of the 3D lighting rig: the palette above is the
+ * design, and only buildings should react to the sun. */
+const UNLIT = 1;
+
+const GROUND = ["match", ["get", "structure"], ["bridge", "tunnel"], false, true] as ExpressionSpecification;
+
+/**
+ * One road tier. `border` is Mapbox's own line casing — real infrastructure
+ * weight without a second layer per class to keep in order.
+ */
 function roadLayer(opts: {
 	id: string;
 	classes: string[];
 	color: string;
 	widths: Array<[number, number]>;
 	minzoom: number;
+	structure?: ExpressionSpecification;
+	border?: Array<[number, number]>;
+	borderColor?: string;
 	opacity?: ExpressionSpecification | number;
-	blur?: number;
 }): LayerSpecification {
 	return {
 		id: opts.id,
@@ -136,17 +165,16 @@ function roadLayer(opts: {
 		source: SRC_BASE,
 		"source-layer": "road",
 		minzoom: opts.minzoom,
-		filter: [
-			"all",
-			["match", ["get", "class"], opts.classes, true, false],
-			["!=", ["get", "structure"], "tunnel"],
-		],
+		filter: ["all", ["match", ["get", "class"], opts.classes, true, false], opts.structure ?? GROUND],
 		layout: { "line-cap": "round", "line-join": "round" },
 		paint: {
 			"line-color": opts.color,
-			"line-width": roadWidth(opts.widths),
+			"line-width": zoomRamp(opts.widths),
 			"line-opacity": opts.opacity ?? 1,
-			...(opts.blur ? { "line-blur": opts.blur } : {}),
+			"line-emissive-strength": UNLIT,
+			...(opts.border
+				? { "line-border-width": zoomRamp(opts.border), "line-border-color": opts.borderColor ?? FARQ_BASEMAP_COLORS.roadCasing }
+				: {}),
 		},
 	} as LayerSpecification;
 }
@@ -164,10 +192,10 @@ function labelLayer(opts: {
 	letterSpacing?: number;
 	haloWidth?: number;
 	placement?: "point" | "line";
-	transform?: "none" | "uppercase";
 	opacity?: ExpressionSpecification | number;
 	maxWidth?: number;
 	offsetY?: number;
+	sortKey?: ExpressionSpecification;
 }): LayerSpecification {
 	return {
 		id: opts.id,
@@ -183,27 +211,28 @@ function labelLayer(opts: {
 			"text-size": opts.size,
 			"text-letter-spacing": opts.letterSpacing ?? 0,
 			"text-max-width": opts.maxWidth ?? 8,
-			"text-transform": opts.transform ?? "none",
+			...(opts.sortKey ? { "symbol-sort-key": opts.sortKey } : {}),
 			...(opts.placement === "line"
-				? { "symbol-placement": "line", "text-rotation-alignment": "map", "text-pitch-alignment": "viewport", "symbol-spacing": 320 }
-				: { "text-padding": 3, ...(opts.offsetY ? { "text-offset": [0, opts.offsetY], "text-anchor": "top" } : {}) }),
+				? { "symbol-placement": "line", "text-rotation-alignment": "map", "text-pitch-alignment": "viewport", "symbol-spacing": 340 }
+				: { "text-padding": 4, ...(opts.offsetY ? { "text-offset": [0, opts.offsetY], "text-anchor": "top" } : {}) }),
 		},
 		paint: {
 			"text-color": opts.color,
 			"text-halo-color": FARQ_BASEMAP_COLORS.halo,
-			"text-halo-width": opts.haloWidth ?? 1.1,
-			"text-halo-blur": 0.5,
+			"text-halo-width": opts.haloWidth ?? 1.2,
+			"text-halo-blur": 0.6,
 			"text-opacity": opts.opacity ?? 1,
+			"text-emissive-strength": UNLIT,
 		},
 	} as LayerSpecification;
 }
 
 /**
- * The Farq basemap style.
+ * Farq Dusk.
  *
- * Zoom story: land + motorways + city names far out, neighbourhoods and
- * secondary roads mid, 3D buildings + streets + POIs close in. Nothing is
- * drawn at every zoom "just in case" — richness arrives with the camera.
+ * Zoom story: land and motorways far out, city structure at z12, neighbourhood
+ * fabric at z14, urban fabric at z16, buildings and streets past z17. Each band
+ * tells a different story instead of enlarging the last one.
  */
 export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSpecification {
 	const C = FARQ_BASEMAP_COLORS;
@@ -214,9 +243,19 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			type: "background",
 			paint: {
 				"background-color": ["interpolate", ["linear"], ["zoom"], 4, C.groundFar, 11, C.groundNear],
+				"background-emissive-strength": UNLIT,
 			},
 		},
-		/* ── Land texture: enough to read the city, never enough to shout ── */
+		/* ── City texture: enough to tell a district from a suburb, no more ── */
+		{
+			id: "farq-landcover-green",
+			type: "fill",
+			source: SRC_BASE,
+			"source-layer": "landcover",
+			minzoom: 5,
+			filter: ["match", ["get", "class"], ["wood", "scrub", "grass", "crop"], true, false],
+			paint: { "fill-color": C.greenLow, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.25, 12, 0.55], "fill-emissive-strength": UNLIT },
+		},
 		{
 			id: "farq-land-rock",
 			type: "fill",
@@ -224,7 +263,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 8,
 			filter: ["match", ["get", "class"], ["rock", "glacier"], true, false],
-			paint: { "fill-color": C.rock, "fill-opacity": 0.5 },
+			paint: { "fill-color": C.rock, "fill-opacity": 0.5, "fill-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-land-sand",
@@ -233,7 +272,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 7,
 			filter: ["match", ["get", "class"], ["sand"], true, false],
-			paint: { "fill-color": C.sand, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.35, 12, 0.7] },
+			paint: { "fill-color": C.sand, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.35, 12, 0.7], "fill-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-land-residential",
@@ -242,7 +281,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 11,
 			filter: ["match", ["get", "class"], ["residential"], true, false],
-			paint: { "fill-color": C.groundResidential, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 13, 0.85] },
+			paint: { "fill-color": C.groundResidential, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 12.5, 0.85], "fill-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-land-commercial",
@@ -251,7 +290,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 11.5,
 			filter: ["match", ["get", "class"], ["commercial_area"], true, false],
-			paint: { "fill-color": C.groundCommercial, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13.5, 0.9] },
+			paint: { "fill-color": C.groundCommercial, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, 0.9], "fill-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-land-industrial",
@@ -260,7 +299,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 12,
 			filter: ["match", ["get", "class"], ["industrial", "facility"], true, false],
-			paint: { "fill-color": C.groundIndustrial, "fill-opacity": 0.8 },
+			paint: { "fill-color": C.groundIndustrial, "fill-opacity": 0.8, "fill-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-land-airport",
@@ -269,18 +308,9 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse",
 			minzoom: 9,
 			filter: ["match", ["get", "class"], ["airport"], true, false],
-			paint: { "fill-color": C.airport, "fill-opacity": 0.9 },
+			paint: { "fill-color": C.airport, "fill-opacity": 0.9, "fill-emissive-strength": UNLIT },
 		},
-		{
-			id: "farq-landcover-green",
-			type: "fill",
-			source: SRC_BASE,
-			"source-layer": "landcover",
-			minzoom: 5,
-			filter: ["match", ["get", "class"], ["wood", "scrub", "grass", "crop"], true, false],
-			paint: { "fill-color": C.greenLow, "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.25, 12, 0.55] },
-		},
-		/* ── Parks: muted Farq green, deliberately behind the mint of an opportunity ── */
+		/* ── Parks: muted Farq green, deliberately behind an opportunity's mint ── */
 		{
 			id: "farq-park",
 			type: "fill",
@@ -291,6 +321,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			paint: {
 				"fill-color": ["interpolate", ["linear"], ["zoom"], 10, C.parkFar, 15, C.parkNear],
 				"fill-opacity": ["interpolate", ["linear"], ["zoom"], 8, 0.55, 13, 0.9],
+				"fill-emissive-strength": UNLIT,
 			},
 		},
 		{
@@ -300,7 +331,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "landuse_overlay",
 			minzoom: 6,
 			filter: ["match", ["get", "class"], ["national_park", "wetland", "wetland_noveg"], true, false],
-			paint: { "fill-color": C.parkFar, "fill-opacity": 0.55 },
+			paint: { "fill-color": C.parkFar, "fill-opacity": 0.55, "fill-emissive-strength": UNLIT },
 		},
 		/* ── Water: calm, low contrast, never competing with an opportunity ── */
 		{
@@ -310,6 +341,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			"source-layer": "water",
 			paint: {
 				"fill-color": ["interpolate", ["linear"], ["zoom"], 4, C.waterDeep, 10, C.water],
+				"fill-emissive-strength": UNLIT,
 			},
 		},
 		{
@@ -318,11 +350,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			source: SRC_BASE,
 			"source-layer": "waterway",
 			minzoom: 8,
-			paint: {
-				"line-color": C.waterway,
-				"line-width": roadWidth([[8, 0.5], [14, 2], [18, 8]]),
-				"line-opacity": 0.75,
-			},
+			paint: { "line-color": C.waterway, "line-width": zoomRamp([[8, 0.5], [14, 2], [18, 8]]), "line-opacity": 0.75, "line-emissive-strength": UNLIT },
 		},
 		{
 			id: "farq-aeroway",
@@ -330,9 +358,25 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			source: SRC_BASE,
 			"source-layer": "aeroway",
 			minzoom: 10,
-			paint: { "line-color": C.minor, "line-width": roadWidth([[10, 0.8], [14, 4], [17, 16]]), "line-opacity": 0.7 },
+			paint: { "line-color": C.minor, "line-width": zoomRamp([[10, 0.8], [14, 4], [17, 16]]), "line-opacity": 0.7, "line-emissive-strength": UNLIT },
 		},
-		/* ── Roads: the hierarchy is the branding ── */
+		/* ── Boundaries: a whisper, undisputed lines only ── */
+		{
+			id: "farq-admin",
+			type: "line",
+			source: SRC_BASE,
+			"source-layer": "admin",
+			minzoom: 2,
+			filter: ["all", ["<=", ["get", "admin_level"], 1], ["==", ["get", "maritime"], "false"], ["==", ["get", "disputed"], "false"], ["==", ["get", "worldview"], "all"]],
+			paint: {
+				"line-color": C.admin,
+				"line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.5, 10, 1.4],
+				"line-opacity": 0.7,
+				"line-dasharray": [3, 2],
+				"line-emissive-strength": UNLIT,
+			},
+		},
+		/* ── Tunnels: recessed, still traceable ── */
 		{
 			id: "farq-road-tunnel",
 			type: "line",
@@ -345,24 +389,21 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 				["match", ["get", "class"], ["motorway", "trunk", "primary", "secondary", "tertiary", "street"], true, false],
 			],
 			layout: { "line-cap": "butt", "line-join": "round" },
-			paint: { "line-color": C.tunnel, "line-width": roadWidth([[12, 0.8], [15, 3], [18, 12]]), "line-opacity": 0.8 },
+			paint: {
+				"line-color": C.tunnel,
+				"line-width": zoomRamp([[12, 0.9], [15, 3.4], [18, 13]]),
+				"line-dasharray": [2.4, 1.4],
+				"line-opacity": 0.85,
+				"line-border-width": zoomRamp([[12, 0.4], [16, 1.4]]),
+				"line-border-color": C.bridgeShadow,
+				"line-emissive-strength": UNLIT,
+			},
 		},
-		roadLayer({
-			id: "farq-road-path",
-			classes: ["path", "pedestrian", "track", "steps"],
-			color: C.minor,
-			widths: [[15, 0.4], [17, 1.2], [19, 3]],
-			minzoom: 15,
-			opacity: 0.45,
-		}),
-		roadLayer({
-			id: "farq-road-service",
-			classes: ["service", "golf"],
-			color: C.minor,
-			widths: [[14.5, 0.5], [17, 2], [19, 6]],
-			minzoom: 14.5,
-			opacity: 0.7,
-		}),
+		/* ── Roads: the hierarchy is the branding ──
+		 * Majors carry a casing so they read as built infrastructure; locals stay
+		 * hairlines so the fabric never turns to noise. */
+		roadLayer({ id: "farq-road-path", classes: ["path", "pedestrian", "track", "steps"], color: C.minor, widths: [[15, 0.4], [17, 1.2], [19, 3]], minzoom: 15, opacity: 0.45 }),
+		roadLayer({ id: "farq-road-service", classes: ["service", "golf"], color: C.minor, widths: [[14.5, 0.5], [17, 2], [19, 6]], minzoom: 14.5, opacity: 0.7 }),
 		roadLayer({
 			id: "farq-road-street",
 			classes: ["street", "street_limited", "construction"],
@@ -385,27 +426,15 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			color: C.primary,
 			widths: [[8.5, 0.5], [12, 1.9], [16, 8], [18, 20], [20, 40]],
 			minzoom: 8.5,
+			border: [[13, 0], [14, 0.6], [17, 1.2]],
 		}),
-		{
-			id: "farq-road-trunk-casing",
-			type: "line",
-			source: SRC_BASE,
-			"source-layer": "road",
-			minzoom: 11,
-			filter: ["all", ["match", ["get", "class"], ["trunk", "motorway"], true, false], ["!=", ["get", "structure"], "tunnel"]],
-			layout: { "line-cap": "round", "line-join": "round" },
-			paint: {
-				"line-color": C.roadCasing,
-				"line-width": roadWidth([[11, 3.2], [14, 7.6], [16, 15], [18, 33], [20, 62]]),
-				"line-opacity": 0.85,
-			},
-		},
 		roadLayer({
 			id: "farq-road-trunk",
 			classes: ["trunk", "trunk_link"],
 			color: C.trunk,
 			widths: [[7, 0.5], [11, 1.6], [14, 4.2], [16, 9.5], [18, 24], [20, 46]],
 			minzoom: 7,
+			border: [[11, 0], [12.5, 0.7], [16, 1.5], [18, 2.2]],
 		}),
 		roadLayer({
 			id: "farq-road-motorway",
@@ -413,25 +442,11 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			color: C.motorway,
 			widths: [[6, 0.5], [10, 1.5], [13, 4], [16, 11], [18, 26], [20, 50]],
 			minzoom: 5.5,
+			border: [[10, 0], [11.5, 0.9], [16, 1.9], [18, 2.8]],
 		}),
-		/* ── Boundaries: a whisper, undisputed lines only ── */
-		{
-			id: "farq-admin",
-			type: "line",
-			source: SRC_BASE,
-			"source-layer": "admin",
-			minzoom: 2,
-			filter: ["all", ["<=", ["get", "admin_level"], 1], ["==", ["get", "maritime"], "false"], ["==", ["get", "disputed"], "false"], ["==", ["get", "worldview"], "all"]],
-			paint: {
-				"line-color": C.admin,
-				"line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.5, 10, 1.4],
-				"line-opacity": 0.7,
-				"line-dasharray": [3, 2],
-			},
-		},
-		/* ── Buildings: atmosphere, not competition ──
-		 * Flat footprints hand over to extrusions as the camera arrives; the
-		 * extrusion grows out of the ground instead of popping in. */
+		/* ── Buildings: a matte architectural model ──
+		 * Flat footprints hand over to extrusions as the camera arrives, and the
+		 * extrusion grows out of the ground rather than popping in. */
 		{
 			id: "farq-building-flat",
 			type: "fill",
@@ -443,6 +458,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			paint: {
 				"fill-color": C.buildingFlat,
 				"fill-opacity": ["interpolate", ["linear"], ["zoom"], 13.5, 0, 14.5, 0.75, 15.6, 0.2, 16, 0],
+				"fill-emissive-strength": UNLIT,
 			},
 		},
 		{
@@ -453,22 +469,71 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			minzoom: 15,
 			filter: ["all", ["==", ["get", "extrude"], "true"], ["!=", ["get", "type"], "building:part"], ["!=", ["get", "underground"], "true"]],
 			paint: {
-				/* Selected opportunity lifts its building a touch — the only mint
-				 * the basemap ever wears, and only while something is selected. */
+				/* Taller buildings gain presence; commercial stock carries its own
+				 * character. The selected opportunity turns a dark mint — lit from
+				 * within, never painted over. */
 				"fill-extrusion-color": [
 					"case",
 					["boolean", ["feature-state", "farqFocus"], false],
-					C.accent,
+					C.accentBuilding,
 					["match", ["get", "type"], ["commercial", "retail", "office", "hotel", "supermarket", "mall"], C.buildingCommercial, ["interpolate", ["linear"], ["number", ["get", "height"], 0], 0, C.buildingLow, 25, C.buildingMid, 90, C.buildingTall]],
 				],
 				"fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, 0, 16.2, ["number", ["get", "height"], 3]],
 				"fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 15, 0, 16.2, ["number", ["get", "min_height"], 0]],
-				"fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 16.5, 0.92],
+				"fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0.55, 16.5, 0.94],
+				/* Roof brighter than facade, facade brighter than base. */
 				"fill-extrusion-vertical-gradient": true,
-				"fill-extrusion-ambient-occlusion-intensity": 0.28,
-				"fill-extrusion-ambient-occlusion-radius": 3,
+				"fill-extrusion-ambient-occlusion-intensity": 0.42,
+				"fill-extrusion-ambient-occlusion-radius": 4,
+				/* A floor of self-lit so nothing sinks to pure black, and a real
+				 * glow on the one building that matters. */
+				"fill-extrusion-emissive-strength": whenFocused(0.3, 0.05),
+				"fill-extrusion-flood-light-color": C.accent,
+				"fill-extrusion-flood-light-intensity": 0.4,
+				"fill-extrusion-flood-light-ground-radius": whenFocused(26, 0),
+				"fill-extrusion-flood-light-wall-radius": whenFocused(14, 0),
+				/* Distant extrusions fade instead of piling up on the horizon. */
+				"fill-extrusion-cutoff-fade-range": 0.4,
+				"fill-extrusion-cast-shadows": false,
 			},
 		},
+		/* ── Bridges: drawn after the buildings they fly over ── */
+		{
+			id: "farq-bridge-shadow",
+			type: "line",
+			source: SRC_BASE,
+			"source-layer": "road",
+			minzoom: 13,
+			filter: ["all", ["==", ["get", "structure"], "bridge"], ["match", ["get", "class"], ["motorway", "motorway_link", "trunk", "trunk_link", "primary", "secondary", "tertiary", "street"], true, false]],
+			layout: { "line-cap": "butt", "line-join": "round" },
+			paint: {
+				"line-color": C.bridgeShadow,
+				"line-width": zoomRamp([[13, 3], [16, 16], [18, 38], [20, 70]]),
+				"line-blur": zoomRamp([[13, 1], [16, 4], [18, 9]]),
+				"line-opacity": 0.55,
+				"line-translate": [0, 2],
+				"line-translate-anchor": "viewport",
+				"line-emissive-strength": UNLIT,
+			},
+		},
+		roadLayer({
+			id: "farq-bridge-minor",
+			classes: ["secondary", "tertiary", "street", "street_limited", "service"],
+			color: C.secondary,
+			widths: [[13, 1], [16, 5], [18, 14], [20, 30]],
+			minzoom: 13,
+			structure: ["==", ["get", "structure"], "bridge"],
+			border: [[13, 0.4], [16, 1.2], [18, 1.8]],
+		}),
+		roadLayer({
+			id: "farq-bridge-major",
+			classes: ["motorway", "motorway_link", "trunk", "trunk_link", "primary"],
+			color: C.motorway,
+			widths: [[13, 2.4], [16, 11], [18, 26], [20, 50]],
+			minzoom: 12,
+			structure: ["==", ["get", "structure"], "bridge"],
+			border: [[12, 0.8], [16, 2.1], [18, 3]],
+		}),
 		/* ── Farq focus: the only mint on the map, and only on selection ── */
 		{
 			id: "farq-focus-road-accent",
@@ -478,9 +543,10 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			layout: { "line-cap": "round", "line-join": "round" },
 			paint: {
 				"line-color": C.accent,
-				"line-width": roadWidth([[14, 1.6], [16, 5], [18, 13]]),
+				"line-width": zoomRamp([[14, 1.6], [16, 5], [18, 13]]),
 				"line-opacity": 0.34,
 				"line-blur": 1.2,
+				"line-emissive-strength": UNLIT,
 			},
 		},
 		{
@@ -493,9 +559,10 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 				"circle-opacity": 0.16,
 				"circle-blur": 1,
 				"circle-pitch-alignment": "map",
+				"circle-emissive-strength": UNLIT,
 			},
 		},
-		/* ── Type: four weights, four jobs ── */
+		/* ── Type: orientation, not information overload ── */
 		labelLayer({
 			id: "farq-label-water",
 			sourceLayer: "natural_label",
@@ -518,43 +585,60 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			color: C.labelPark,
 			font: FONT_MEDIUM,
 		}),
+		/* Farq-drawn shield, filled from the source `ref`. No invented numbers. */
+		{
+			id: "farq-label-road-shield",
+			type: "symbol",
+			source: SRC_BASE,
+			"source-layer": "road",
+			minzoom: 11,
+			filter: ["all", ["has", "ref"], ["<=", ["get", "reflen"], 6], ["match", ["get", "class"], ["motorway", "trunk", "primary"], true, false]],
+			layout: {
+				"text-field": ["get", "ref"],
+				"text-font": FONT_BOLD,
+				"text-size": ["interpolate", ["linear"], ["zoom"], 11, 9, 16, 11],
+				"text-rotation-alignment": "viewport",
+				"text-pitch-alignment": "viewport",
+				"icon-image": FARQ_SHIELD_IMAGE,
+				"icon-text-fit": "both",
+				"icon-text-fit-padding": [1, 4, 1, 4],
+				"icon-rotation-alignment": "viewport",
+				"icon-pitch-alignment": "viewport",
+				"symbol-placement": "line",
+				"symbol-spacing": 420,
+				"symbol-avoid-edges": true,
+			},
+			paint: {
+				"text-color": C.shieldText,
+				"text-emissive-strength": UNLIT,
+				"icon-emissive-strength": UNLIT,
+				"icon-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 12, 0.92],
+				"text-opacity": ["interpolate", ["linear"], ["zoom"], 11, 0, 12, 1],
+			},
+		},
 		labelLayer({
 			id: "farq-label-road-major",
 			sourceLayer: "road",
 			language,
-			minzoom: 12,
+			minzoom: 12.5,
 			filter: ["match", ["get", "class"], ["motorway", "trunk", "primary"], true, false],
-			size: ["interpolate", ["linear"], ["zoom"], 12, 9.5, 16, 12.5],
+			size: ["interpolate", ["linear"], ["zoom"], 12.5, 9.5, 16, 12.5],
 			color: C.labelRoadMajor,
 			font: FONT_MEDIUM,
 			placement: "line",
-			haloWidth: 1.2,
+			haloWidth: 1.3,
 		}),
 		labelLayer({
 			id: "farq-label-road-minor",
 			sourceLayer: "road",
 			language,
-			minzoom: 14.5,
+			minzoom: 15,
 			filter: ["match", ["get", "class"], ["secondary", "tertiary", "street", "street_limited"], true, false],
-			size: ["interpolate", ["linear"], ["zoom"], 14.5, 9, 18, 11.5],
+			size: ["interpolate", ["linear"], ["zoom"], 15, 9, 18, 11.5],
 			color: C.labelRoadMinor,
 			font: FONT_REGULAR,
 			placement: "line",
-			opacity: ["interpolate", ["linear"], ["zoom"], 14.5, 0, 15.5, 1],
-		}),
-		labelLayer({
-			id: "farq-label-poi",
-			sourceLayer: "poi_label",
-			language,
-			minzoom: 15.5,
-			filter: ["all", ["!=", ["get", "class"], "park_like"], ["<=", ["get", "filterrank"], ["step", ["zoom"], 1, 16.5, 2]]],
-			size: ["interpolate", ["linear"], ["zoom"], 15.5, 9.5, 18, 11.5],
-			color: C.labelPoi,
-			font: FONT_REGULAR,
-			maxWidth: 7,
-			/* the dot is the marker, the name hangs under it */
-			offsetY: 0.85,
-			opacity: ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 0.9],
+			opacity: ["interpolate", ["linear"], ["zoom"], 15, 0, 16, 1],
 		}),
 		{
 			id: "farq-poi-dot",
@@ -567,8 +651,25 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 				"circle-color": FARQ_BASEMAP_COLORS.poiDot,
 				"circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 1.2, 18, 2.2],
 				"circle-opacity": 0.8,
+				"circle-emissive-strength": UNLIT,
 			},
 		},
+		/* POIs arrive last and thinnest — one rank at a time, never all at once. */
+		labelLayer({
+			id: "farq-label-poi",
+			sourceLayer: "poi_label",
+			language,
+			minzoom: 16,
+			filter: ["all", ["!=", ["get", "class"], "park_like"], ["<=", ["get", "filterrank"], ["step", ["zoom"], 1, 17, 2, 18, 3]]],
+			size: ["interpolate", ["linear"], ["zoom"], 16, 9.5, 18, 11.5],
+			color: C.labelPoi,
+			font: FONT_REGULAR,
+			maxWidth: 7,
+			/* the dot is the marker, the name hangs under it */
+			offsetY: 0.85,
+			sortKey: ["get", "filterrank"],
+			opacity: ["interpolate", ["linear"], ["zoom"], 16, 0, 16.6, 0.9],
+		}),
 		labelLayer({
 			id: "farq-label-neighborhood",
 			sourceLayer: "place_label",
@@ -579,6 +680,7 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			color: C.labelSecondary,
 			font: FONT_MEDIUM,
 			letterSpacing: 0.07,
+			sortKey: ["get", "filterrank"],
 			opacity: ["interpolate", ["linear"], ["zoom"], 11.5, 0, 12.3, 1],
 		}),
 		labelLayer({
@@ -586,34 +688,39 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 			sourceLayer: "place_label",
 			language,
 			minzoom: 8,
-			maxzoom: 15,
+			maxzoom: 14,
 			filter: ["all", ["==", ["get", "class"], "settlement"], [">", ["get", "symbolrank"], 10]],
 			size: ["interpolate", ["linear"], ["zoom"], 8, 10, 13, 13],
 			color: C.labelTertiary,
 			font: FONT_MEDIUM,
+			sortKey: ["get", "symbolrank"],
 		}),
 		labelLayer({
 			id: "farq-label-settlement-major",
 			sourceLayer: "place_label",
 			language,
-			maxzoom: 14,
+			maxzoom: 13.5,
 			filter: ["all", ["==", ["get", "class"], "settlement"], ["<=", ["get", "symbolrank"], 10]],
 			size: ["interpolate", ["linear"], ["zoom"], 3, 11, 8, 16, 12, 21],
 			color: C.labelPrimary,
 			font: FONT_BOLD,
 			letterSpacing: 0.04,
-			haloWidth: 1.4,
-			opacity: ["interpolate", ["linear"], ["zoom"], 12, 1, 13.6, 0],
+			haloWidth: 1.5,
+			sortKey: ["get", "symbolrank"],
+			opacity: ["interpolate", ["linear"], ["zoom"], 11.5, 1, 13.2, 0],
 		}),
 	];
 
 	return {
 		version: 8,
-		name: "Farq Night",
+		name: "Farq Dusk",
 		glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
-		/* Warm key light from above-left keeps building tops brighter than their
-		 * sides without a single outline. */
-		light: { anchor: "viewport", color: FARQ_BASEMAP_COLORS.lightKey, intensity: 0.3, position: [1.4, 205, 42] },
+		/* Blue hour: a cool sky washing everything, a warm sun low in the west.
+		 * Roofs catch both, facades catch one, bases catch neither. */
+		lights: [
+			{ id: "farq-ambient", type: "ambient", properties: { color: FARQ_BASEMAP_COLORS.lightAmbient, intensity: 0.82 } },
+			{ id: "farq-key", type: "directional", properties: { direction: [205, 35], color: FARQ_BASEMAP_COLORS.lightKey, intensity: 0.55, "cast-shadows": false } },
+		],
 		fog: {
 			range: [0.8, 8],
 			color: FARQ_BASEMAP_COLORS.fog,
@@ -630,6 +737,43 @@ export function buildFarqBasemapStyle(language: FarqMapLanguage = "ar"): StyleSp
 		},
 		layers,
 	} as StyleSpecification;
+}
+
+/**
+ * The Farq route shield — drawn once, stretched around whatever `ref` the
+ * source supplies. Small, muted, and never louder than a street name.
+ */
+export function ensureFarqShieldImage(map: MapboxMap): void {
+	try {
+		if (map.hasImage(FARQ_SHIELD_IMAGE)) return;
+		if (typeof document === "undefined") return;
+		const scale = 2;
+		const w = 26 * scale;
+		const h = 20 * scale;
+		const r = 5 * scale;
+		const canvas = document.createElement("canvas");
+		canvas.width = w;
+		canvas.height = h;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+		const inset = 1 * scale;
+		ctx.beginPath();
+		if (typeof ctx.roundRect === "function") ctx.roundRect(inset, inset, w - inset * 2, h - inset * 2, r);
+		else ctx.rect(inset, inset, w - inset * 2, h - inset * 2);
+		ctx.fillStyle = FARQ_BASEMAP_COLORS.shieldFill;
+		ctx.fill();
+		ctx.lineWidth = scale;
+		ctx.strokeStyle = FARQ_BASEMAP_COLORS.shieldEdge;
+		ctx.stroke();
+		const image = ctx.getImageData(0, 0, w, h);
+		map.addImage(
+			FARQ_SHIELD_IMAGE,
+			{ width: w, height: h, data: new Uint8Array(image.data.buffer) },
+			{ pixelRatio: scale, stretchX: [[8 * scale, 18 * scale]], stretchY: [[7 * scale, 13 * scale]], content: [4 * scale, 3 * scale, 22 * scale, 17 * scale] },
+		);
+	} catch {
+		/* no shield is better than a broken style — road names still carry it */
+	}
 }
 
 /** Swap label locale in place — cheaper and calmer than reloading the style. */
@@ -704,7 +848,8 @@ function clearFocusedBuilding(map: MapboxMap): void {
 
 /**
  * Point the Farq accent at one place — ground glow, the road it sits on, and
- * its building. Runs once per selection, never per frame.
+ * its building, which lights from within rather than turning green.
+ * Runs once per selection, never per frame.
  */
 export function applyFarqFocus(map: MapboxMap, coords: [number, number] | null): void {
 	clearFocusedBuilding(map);
