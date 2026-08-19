@@ -325,6 +325,12 @@
 	   distinct without a jump: xs→tiny chips, sm→tags/controls, md→inputs
 	   & list rows, lg→cards, xl→large cards/modals, 2xl→bottom sheets,
 	   3xl→oversized decorative frames. */
+	/* Layout — the map sizes itself against this. The legacy bottom nav is gone,
+	   so it is 0px, but it must stay *defined*: `calc(100svh - var(--bottom-nav-h))`
+	   is dropped as invalid when it is missing, collapsing the map to zero height
+	   on the mobile breakpoint that has no `lg:` height to fall back on. */
+	--bottom-nav-h: 0px;
+
 	--radius-xs: 0.25rem;
 	--radius-sm: 0.5rem;
 	--radius-md: 0.75rem;

@@ -101,8 +101,6 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const selectOpportunity = (item: (typeof opportunities)[number]) => { setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}` }); };
 	const openMenu = useCallback((opts: { restaurantId: string; name?: string; image?: string | null }) => { if (!opts.restaurantId) return; void navigate({ to: "/merchant/$type/$id", params: { type: "restaurant", id: opts.restaurantId }, search: { ...(opts.name ? { name: opts.name } : {}), ...(opts.image ? { image: String(opts.image) } : {}) } }); }, [navigate]);
 
-	if (loading || !meta) return <div className="flex h-[calc(100svh-var(--bottom-nav-h))] items-center justify-center bg-surface text-ink-muted">{isRTL ? "نحمّل الخريطة…" : "Loading map…"}</div>;
-	if (error && !places) return <div className="flex h-[calc(100svh-var(--bottom-nav-h))] items-center justify-center bg-surface px-6 text-center text-ink-muted">{error}</div>;
 
 	return (
 		<div className="relative h-[calc(100svh-var(--bottom-nav-h))] w-full overflow-hidden bg-surface lg:h-[calc(100dvh-56px)]" dir={isRTL ? "rtl" : "ltr"} data-testid="farq-map-experience" data-map-mode={mode}>
@@ -120,6 +118,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 						</form>
 						<button type="button" className="grid size-11 shrink-0 place-items-center rounded-xl text-brand-900" onClick={locate} aria-label={isRTL ? "موقعي" : "My location"}><LocateFixed size={19} /></button>
 					</div>
+					{error ? <div className="rounded-full bg-white/95 px-4 py-2 text-[12px] font-bold text-brand-900 shadow-sm">{error}</div> : null}
 					<div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
 						<button type="button" onClick={() => { if (top) selectOpportunity(top); }} className="h-10 shrink-0 rounded-full bg-brand-900 px-4 text-[13px] font-black text-mint-500">{top ? `🔥 ${isRTL ? "أكبر فرق" : "Top gap"} ${Math.round(top.price.difference || 0)} ${isRTL ? "ر.س" : "SAR"}` : modeLabel(mode, isRTL)}</button>
 						{categories.map((c) => <button key={c.category_id} type="button" onClick={() => applyCategory(c.category_id)} className={`h-10 shrink-0 rounded-full px-4 text-[13px] font-bold ${category === c.category_id ? "bg-mint-500 text-brand-900" : "bg-white/95 text-brand-900 shadow-sm"}`}>{c.category_name_ar || c.category_name || c.category_id}</button>)}
@@ -130,7 +129,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 			<div className="pointer-events-none absolute inset-x-0 bottom-0 z-[500] p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] lg:p-4">
 				<div className="mx-auto max-w-5xl">
 					<div className="flex items-center justify-between gap-3">
-						<div className="rounded-full bg-white/92 px-4 py-2 text-[12px] font-bold text-brand-900 shadow-lg backdrop-blur-md">{fetching ? (isRTL ? "نحدّث الفرص…" : "Refreshing opportunities…") : modeLabel(mode, isRTL)}</div>
+						<div className="rounded-full bg-white/92 px-4 py-2 text-[12px] font-bold text-brand-900 shadow-lg backdrop-blur-md">{fetching || loading ? (isRTL ? "نحدّث الفرص…" : "Refreshing opportunities…") : modeLabel(mode, isRTL)}</div>
 						{top && !selectedPlaceId ? <button type="button" onClick={() => selectOpportunity(top)} className="pointer-events-auto rounded-2xl bg-brand-900 px-4 py-3 text-start text-white shadow-xl"><span className="block text-[11px] font-medium text-mint-500">{isRTL ? "أكبر فرق حولك" : "Biggest gap here"}</span><strong className="text-[16px]">{top.place.name || (isRTL ? "مطعم" : "Restaurant")} · {Math.round(top.price.difference || 0)} {isRTL ? "ر.س" : "SAR"}</strong></button> : null}
 					</div>
 				</div>
@@ -141,7 +140,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 				<div className="space-y-2"><button type="button" className="w-full rounded-xl bg-brand-900 p-3 text-start font-bold text-mint-500" onClick={() => { if (top) selectOpportunity(top); setDrawerOpen(false); }}>🔥 {isRTL ? "أكبر فرق" : "Biggest gap"}</button>{categories.map((c) => <button key={c.category_id} type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { applyCategory(c.category_id); setDrawerOpen(false); }}>{c.category_name_ar || c.category_name || c.category_id}</button>)}<div className="my-3 border-t border-[#e6eef0]" /><button type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { setBasemap(basemap === "standard" ? "satellite" : "standard"); setDrawerOpen(false); }}>{basemap === "standard" ? (isRTL ? "قمر صناعي" : "Satellite") : (isRTL ? "خريطة" : "Map")}</button></div>
 			</aside></div> : null}
 
-			{selectedPlaceId ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[800] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto"><div className="pointer-events-auto"><SelectedPlaceSheet variant="sheet" placeDetail={placeDetail} feature={places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties} selectedCategory={meta.categories.find((c) => c.category_id === category) || null} selectedRestaurantId={placeDetail?.restaurant_id || places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties.restaurant_id || ""} isRTL={isRTL} onClose={() => setSelectedPlaceId("")} onOpenMenu={openMenu} /></div></div> : null}
+			{selectedPlaceId ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[800] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto"><div className="pointer-events-auto"><SelectedPlaceSheet variant="sheet" placeDetail={placeDetail} feature={places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties} selectedCategory={meta?.categories.find((c) => c.category_id === category) || null} selectedRestaurantId={placeDetail?.restaurant_id || places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties.restaurant_id || ""} isRTL={isRTL} onClose={() => setSelectedPlaceId("")} onOpenMenu={openMenu} /></div></div> : null}
 		</div>
 	);
 }
