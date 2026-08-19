@@ -6,9 +6,11 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useLocation } from "../contexts/LocationContext";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
+	ensureRtlTextPlugin,
 	getMapboxAccessToken,
-	MAPBOX_STYLE_STANDARD,
+	mapboxStyleUrl,
 } from "../lib/mapboxAccess";
+import { applyFarqLabelLanguage } from "../lib/farqBasemap";
 import {
 	bindSearchBoxToMap,
 	createFarqSearchBox,
@@ -64,17 +66,18 @@ async function reverseAddress(
 	return result.displayName;
 }
 
-function applyPickerBasemap(map: MapboxMap) {
+function applyPickerBasemap(map: MapboxMap, isRTL: boolean) {
 	try {
 		map.setConfigProperty("basemap", "lightPreset", "dusk");
 	} catch {
-		/* */
+		/* Farq basemap brings its own light — this only matters if the style changes */
 	}
 	try {
 		map.setConfigProperty("basemap", "show3dObjects", true);
 	} catch {
-		/* */
+		/* as above */
 	}
+	applyFarqLabelLanguage(map, isRTL ? "ar" : "en");
 }
 
 export default function MapPickerModal({
@@ -164,11 +167,12 @@ export default function MapPickerModal({
 	// One Mapbox map per open — pin moves are handled below, not by remounting.
 	useEffect(() => {
 		if (!isOpen || !token || !mapHostRef.current || mapRef.current) return;
+		ensureRtlTextPlugin();
 		mapboxgl.accessToken = token;
 		const [startLat, startLng] = selectedPositionRef.current;
 		const map = new mapboxgl.Map({
 			container: mapHostRef.current,
-			style: MAPBOX_STYLE_STANDARD,
+			style: mapboxStyleUrl("standard", isRtlRef.current ? "ar" : "en"),
 			center: [startLng, startLat],
 			zoom: 13,
 			pitch: 42,
@@ -179,7 +183,7 @@ export default function MapPickerModal({
 		});
 		mapRef.current = map;
 
-		map.on("style.load", () => applyPickerBasemap(map));
+		map.on("style.load", () => applyPickerBasemap(map, isRtlRef.current));
 
 		map.once("load", () => {
 			map.addControl(
