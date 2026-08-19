@@ -6,11 +6,11 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useLocation } from "../contexts/LocationContext";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import {
+	applyMapLanguage,
 	ensureRtlTextPlugin,
 	getMapboxAccessToken,
 	mapboxStyleUrl,
 } from "../lib/mapboxAccess";
-import { applyFarqLabelLanguage, ensureFarqShieldImage } from "../lib/farqBasemap";
 import {
 	bindSearchBoxToMap,
 	createFarqSearchBox,
@@ -77,8 +77,7 @@ function applyPickerBasemap(map: MapboxMap, isRTL: boolean) {
 	} catch {
 		/* as above */
 	}
-	ensureFarqShieldImage(map);
-	applyFarqLabelLanguage(map, isRTL ? "ar" : "en");
+	applyMapLanguage(map, isRTL);
 }
 
 export default function MapPickerModal({
@@ -175,7 +174,7 @@ export default function MapPickerModal({
 		try {
 			map = new mapboxgl.Map({
 				container: mapHostRef.current,
-				style: mapboxStyleUrl("standard", isRtlRef.current ? "ar" : "en"),
+				style: mapboxStyleUrl("standard"),
 				center: [startLng, startLat],
 				zoom: 13,
 				pitch: 42,

@@ -4,10 +4,8 @@
  */
 
 import mapboxgl from "mapbox-gl";
-import type { StyleSpecification } from "mapbox-gl";
-import { buildFarqBasemapStyle, type FarqMapLanguage } from "./farqBasemap";
 
-/** Satellite keeps Mapbox imagery — Farq owns the drawn map, not the photo. */
+export const MAPBOX_STYLE_STANDARD = "mapbox://styles/mapbox/standard";
 export const MAPBOX_STYLE_SATELLITE =
 	"mapbox://styles/mapbox/standard-satellite";
 
@@ -41,11 +39,15 @@ export function ensureRtlTextPlugin(): void {
 	}
 }
 
-export function mapboxStyleUrl(
-	kind: MapboxBasemap,
-	language: FarqMapLanguage = "ar",
-): string | StyleSpecification {
-	return kind === "satellite"
-		? MAPBOX_STYLE_SATELLITE
-		: buildFarqBasemapStyle(language);
+/** Mapbox Standard reads its own label locale; ours follows the app's. */
+export function applyMapLanguage(map: mapboxgl.Map, isRTL: boolean): void {
+	try {
+		map.setLanguage(isRTL ? "ar" : "en");
+	} catch {
+		/* style without imports — Mapbox keeps its default local names */
+	}
+}
+
+export function mapboxStyleUrl(kind: MapboxBasemap): string {
+	return kind === "satellite" ? MAPBOX_STYLE_SATELLITE : MAPBOX_STYLE_STANDARD;
 }
