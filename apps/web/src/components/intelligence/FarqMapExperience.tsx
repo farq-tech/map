@@ -1,16 +1,22 @@
-import { ChevronDown, LocateFixed, Menu, Search, X } from "lucide-react";
+import { LocateFixed, Menu, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { mapZoomMode, type MapZoomMode } from "../../lib/mapExploration";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
-import { observedDifferenceAmount } from "../../lib/farqMapPins";
 import { IntelligenceService, toIntelCategoryId, type IntelligenceCategory, type IntelligenceMapPlaceDetail, type IntelligenceMapPlaces, type IntelligenceMeta } from "../../services/intelligenceService";
 import type { MapSearch } from "../../routes/map";
 import FarqMap from "./FarqMap";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
 import "../../styles/farq-mapbox.css";
+
+/** Feature coordinates arrive untyped from the API — read them, never assume them. */
+function lngLat(coordinates: unknown): [number, number] | null {
+	if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+	const lng = Number(coordinates[0]); const lat = Number(coordinates[1]);
+	return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+}
 
 function modeLabel(mode: MapZoomMode, isRTL: boolean) {
 	if (isRTL) return mode === "discover" ? "اكتشف الفرص" : mode === "opportunity" ? "أكبر فروقات الأسعار" : mode === "restaurant" ? "مطاعم وفرص قريبة" : "المقارنة";
@@ -82,7 +88,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const opportunities = useMemo(() => {
 		const fromPresentation = places?.presentation?.opportunities || [];
 		if (fromPresentation.length) return [...fromPresentation].sort((a, b) => b.opportunity_score - a.opportunity_score);
-		return (places?.features || []).filter((f) => f.properties.feature_type === "place").map((f) => ({ id: String(f.properties.place_id || ""), type: "opportunity" as const, place: { id: String(f.properties.place_id || ""), restaurant_id: f.properties.restaurant_id || null, name: f.properties.name || null, lat: Number(f.geometry.coordinates[1]), lng: Number(f.geometry.coordinates[0]), image_url: f.properties.image_url || null }, category: null, product: f.properties.difference?.product_name ? { name: f.properties.difference.product_name } : null, price: { cheapest: f.properties.difference?.cheapest_price ?? null, expensive: f.properties.difference?.expensive_price ?? null, difference: f.properties.difference?.difference_amount ?? null, percentage: null, currency: "SAR" as const }, providers: { count: f.properties.provider_count ?? null }, evidence: { observed: Boolean(f.properties.difference) }, opportunity_score: Number(f.properties.difference?.difference_amount || 0) }));
+		return (places?.features || []).flatMap((f) => { if (f.properties.feature_type !== "place") return []; const point = lngLat(f.geometry.coordinates); if (!point) return []; return [{ id: String(f.properties.place_id || ""), type: "opportunity" as const, place: { id: String(f.properties.place_id || ""), restaurant_id: f.properties.restaurant_id || null, name: f.properties.name || null, lat: point[1], lng: point[0], image_url: f.properties.image_url || null }, category: null, product: f.properties.difference?.product_name ? { name: f.properties.difference.product_name } : null, price: { cheapest: f.properties.difference?.cheapest_price ?? null, expensive: f.properties.difference?.expensive_price ?? null, difference: f.properties.difference?.difference_amount ?? null, percentage: null, currency: "SAR" as const }, providers: { count: f.properties.provider_count ?? null }, evidence: { observed: Boolean(f.properties.difference) }, opportunity_score: Number(f.properties.difference?.difference_amount || 0) }]; });
 	}, [places]);
 
 	const top = opportunities[0] || null;
