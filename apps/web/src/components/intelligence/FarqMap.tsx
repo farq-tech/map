@@ -23,6 +23,7 @@ import {
 	setPinSelected,
 	shouldReplayBubbleMotion,
 } from "../../lib/farqMapPins";
+import { neighborhoodBounds } from "../../lib/neighborhoodOpportunities";
 import { applyMapLanguage, ensureRtlTextPlugin, getMapboxAccessToken, type MapboxBasemap, mapboxStyleUrl, RIYADH_LNG_LAT } from "../../lib/mapboxAccess";
 import { createFarqSearchBox } from "../../lib/mapboxSearch";
 import type { IntelligenceMapNeighborhoods, IntelligenceMapPlaceDetail, IntelligenceMapPlaces } from "../../services/intelligenceService";
@@ -36,6 +37,10 @@ const HOOD_LABELS = "farq-hood-labels";
 const HOOD_FILL = "farq-hood-fill";
 const HOOD_LINE = "farq-hood-line";
 const HOOD_COUNT = "farq-hood-count";
+const HOOD_PICK_FILL = "farq-hood-pick-fill";
+const HOOD_PICK_LINE = "farq-hood-pick-line";
+/** Matches nothing until a حي is picked. */
+const NO_HOOD = ["==", ["get", "neighborhood_id"], "\u0000"] as unknown;
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /** Neighbourhood choropleth: the count decides the tint, so a busy حي reads
@@ -54,6 +59,17 @@ function ensureHoodLayers(map: MapboxMap) {
 		if (!map.getLayer(HOOD_LINE)) map.addLayer({
 			id: HOOD_LINE, type: "line", source: HOOD_SHAPES, slot: "middle", maxzoom: 15,
 			paint: { "line-color": "#83F1B1", "line-width": 1, "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.35, 13, 0.5, 15, 0] },
+		} as never);
+		/* The picked حي keeps its outline at every zoom — it is the thing being
+		 * looked at, so it outlives the choropleth that fades out at z15. */
+		if (!map.getLayer(HOOD_PICK_FILL)) map.addLayer({
+			id: HOOD_PICK_FILL, type: "fill", source: HOOD_SHAPES, slot: "middle", filter: NO_HOOD,
+			paint: { "fill-color": "#83F1B1", "fill-opacity": 0.1 },
+		} as never);
+		if (!map.getLayer(HOOD_PICK_LINE)) map.addLayer({
+			id: HOOD_PICK_LINE, type: "line", source: HOOD_SHAPES, slot: "middle", filter: NO_HOOD,
+			layout: { "line-join": "round", "line-cap": "round" },
+			paint: { "line-color": "#83F1B1", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 1.6, 14, 2.6, 17, 3.4], "line-opacity": 0.95, "line-blur": 0.3 },
 		} as never);
 		if (!map.getLayer(HOOD_COUNT)) map.addLayer({
 			id: HOOD_COUNT, type: "symbol", source: HOOD_LABELS, maxzoom: 15,
@@ -113,11 +129,11 @@ function applyViewportAuraRanks(map: MapboxMap, markers: Map<string, PinRec>, se
 }
 
 export default function FarqMap({
-	places, neighborhoodShapes = null, neighborhoodLabels = null, neighborhoods: _neighborhoods, selectedPlaceId, selectedNeighborhoodId: _selectedNeighborhoodId, focusRequest = null, userLocation, showUserLocation = false, placeDetail: _placeDetail = null, isRTL = false, basemap: basemapProp, onBasemapChange, onSelectPlace, onSelectCluster, onUserPan, onSelectNeighborhood, onViewChange, hideAddressSearch = false, sheetOpen = false, mapMode = "discover",
+	places, neighborhoodShapes = null, neighborhoodLabels = null, neighborhoods: _neighborhoods, selectedPlaceId, selectedNeighborhoodId, focusRequest = null, userLocation, showUserLocation = false, placeDetail: _placeDetail = null, isRTL = false, basemap: basemapProp, onBasemapChange, onSelectPlace, onSelectCluster, onUserPan, onSelectNeighborhood, onViewChange, hideAddressSearch = false, sheetOpen = false, mapMode = "discover",
 }: {
 	places: IntelligenceMapPlaces | null; neighborhoodShapes?: GeoJSON.FeatureCollection | null; neighborhoodLabels?: GeoJSON.FeatureCollection | null; neighborhoods: IntelligenceMapNeighborhoods | null; selectedPlaceId?: string; selectedNeighborhoodId?: string; focusRequest?: CameraFocusRequest | null; userLocation?: { lat: number; lng: number } | null; showUserLocation?: boolean; placeDetail?: IntelligenceMapPlaceDetail | null; basemap?: MapboxBasemap; onBasemapChange?: (kind: MapboxBasemap) => void; isRTL?: boolean; onSelectPlace: (placeId: string) => void; onSelectCluster?: (info: { lat: number; lng: number; count: number }) => void; onUserPan?: () => void; onSelectNeighborhood: (neighborhoodId: string) => void; onViewChange?: (bbox: string, zoom: number) => void; hideAddressSearch?: boolean; sheetOpen?: boolean; mapMode?: MapZoomMode;
 }) {
-	const token = getMapboxAccessToken(); const containerRef = useRef<HTMLDivElement | null>(null); const mapRef = useRef<MapboxMap | null>(null); const searchRef = useRef<MapboxSearchBox | null>(null); const userMarkerRef = useRef<mapboxgl.Marker | null>(null); const pinMarkersRef = useRef<Map<string, PinRec>>(new Map()); const prevAmountsRef = useRef<Map<string, number>>(new Map()); const lastPulseRef = useRef<{ placeId: string; amount: number } | null>(null); const pulseTimerRef = useRef(0); const rankTimerRef = useRef(0); const introDoneRef = useRef(false); const lastFocusIdRef = useRef<string | null>(null); const onViewChangeRef = useRef(onViewChange); const onSelectPlaceRef = useRef(onSelectPlace); const onSelectClusterRef = useRef(onSelectCluster); const onSelectHoodRef = useRef(onSelectNeighborhood); const onUserPanRef = useRef(onUserPan); const isRtlRef = useRef(isRTL); const selectedPlaceIdRef = useRef(selectedPlaceId); const appliedStyleRef = useRef<MapboxBasemap>("standard"); const [internalBasemap, setInternalBasemap] = useState<MapboxBasemap>("standard"); const basemap = basemapProp ?? internalBasemap; const setBasemap = (next: MapboxBasemap) => { onBasemapChange?.(next); if (basemapProp === undefined) setInternalBasemap(next); }; const [mapReady, setMapReady] = useState(false); const [introDone, setIntroDone] = useState(false); const [missingToken] = useState(() => !token); const [initFailed, setInitFailed] = useState(false);
+	const token = getMapboxAccessToken(); const containerRef = useRef<HTMLDivElement | null>(null); const mapRef = useRef<MapboxMap | null>(null); const searchRef = useRef<MapboxSearchBox | null>(null); const userMarkerRef = useRef<mapboxgl.Marker | null>(null); const pinMarkersRef = useRef<Map<string, PinRec>>(new Map()); const prevAmountsRef = useRef<Map<string, number>>(new Map()); const lastPulseRef = useRef<{ placeId: string; amount: number } | null>(null); const pulseTimerRef = useRef(0); const rankTimerRef = useRef(0); const introDoneRef = useRef(false); const lastFocusIdRef = useRef<string | null>(null); const lastHoodFitRef = useRef<string | null>(null); const onViewChangeRef = useRef(onViewChange); const onSelectPlaceRef = useRef(onSelectPlace); const onSelectClusterRef = useRef(onSelectCluster); const onSelectHoodRef = useRef(onSelectNeighborhood); const onUserPanRef = useRef(onUserPan); const isRtlRef = useRef(isRTL); const selectedPlaceIdRef = useRef(selectedPlaceId); const appliedStyleRef = useRef<MapboxBasemap>("standard"); const [internalBasemap, setInternalBasemap] = useState<MapboxBasemap>("standard"); const basemap = basemapProp ?? internalBasemap; const setBasemap = (next: MapboxBasemap) => { onBasemapChange?.(next); if (basemapProp === undefined) setInternalBasemap(next); }; const [mapReady, setMapReady] = useState(false); const [introDone, setIntroDone] = useState(false); const [missingToken] = useState(() => !token); const [initFailed, setInitFailed] = useState(false);
 	onViewChangeRef.current = onViewChange; onSelectPlaceRef.current = onSelectPlace; onSelectClusterRef.current = onSelectCluster; onSelectHoodRef.current = onSelectNeighborhood; onUserPanRef.current = onUserPan; isRtlRef.current = isRTL; selectedPlaceIdRef.current = selectedPlaceId;
 	const placesData = useMemo((): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features: (places?.features || []).filter((f) => { const c = f.geometry?.coordinates; return Array.isArray(c) && c.length >= 2; }) as GeoJSON.Feature[] }), [places]);
 
@@ -163,6 +179,30 @@ export default function FarqMap({
 	useEffect(() => { for (const rec of pinMarkersRef.current.values()) if (rec.kind === "place") setPinSelected(rec.el, Boolean(selectedPlaceId) && rec.placeId === selectedPlaceId); }, [selectedPlaceId, placesData, mapReady]);
 	useEffect(() => { const map = mapRef.current; if (!map || !mapReady) return; applyMapLanguage(map, isRTL); }, [isRTL, mapReady]);
 	useEffect(() => { const map = mapRef.current; if (!map || !mapReady) return; ensureHoodLayers(map); setHoodData(map, neighborhoodShapes ?? EMPTY_FC, neighborhoodLabels ?? EMPTY_FC); }, [neighborhoodShapes, neighborhoodLabels, mapReady, basemap]);
+	/* Picking a حي draws its border and frames it. The camera moves once per
+	 * pick, so re-renders and viewport refetches never yank it back. */
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		const id = selectedNeighborhoodId || "";
+		try {
+			const match = id ? ["==", ["get", "neighborhood_id"], id] : NO_HOOD;
+			if (map.getLayer(HOOD_PICK_FILL)) map.setFilter(HOOD_PICK_FILL, match as never);
+			if (map.getLayer(HOOD_PICK_LINE)) map.setFilter(HOOD_PICK_LINE, match as never);
+		} catch {
+			/* layers arrive with the style */
+		}
+		if (!id || lastHoodFitRef.current === id) { if (!id) lastHoodFitRef.current = null; return; }
+		const feature = (neighborhoodShapes?.features ?? []).find((f) => String((f.properties as { neighborhood_id?: unknown } | null)?.neighborhood_id ?? "") === id);
+		const bounds = feature ? neighborhoodBounds(feature as never) : null;
+		if (!bounds) return;
+		lastHoodFitRef.current = id;
+		try {
+			map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: { top: 150, bottom: 300, left: 32, right: 32 }, duration: 900, maxZoom: 15.5, essential: true });
+		} catch {
+			/* a degenerate polygon is not worth a broken camera */
+		}
+	}, [selectedNeighborhoodId, neighborhoodShapes, mapReady]);
 	useEffect(() => { const map = mapRef.current; if (!map || !introDone) return; if (!showUserLocation || !userLocation) { userMarkerRef.current?.remove(); userMarkerRef.current = null; return; } if (!userMarkerRef.current) { const el = document.createElement("div"); el.className = "farq-user-pulse"; userMarkerRef.current = new mapboxgl.Marker({ element: el }).setLngLat([userLocation.lng, userLocation.lat]).addTo(map); } else userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]); }, [showUserLocation, userLocation, introDone]);
 	useEffect(() => { const map = mapRef.current; if (!map || !introDone || !focusRequest || lastFocusIdRef.current === focusRequest.id) return; lastFocusIdRef.current = focusRequest.id; const target = focusRequest.zoom; map.easeTo({ center: [focusRequest.lng, focusRequest.lat], ...(target == null ? {} : { zoom: Math.max(map.getZoom(), target) }), duration: target == null ? 700 : 1100, pitch: map.getPitch(), essential: true }); }, [focusRequest, introDone]);
 	useEffect(() => { const map = mapRef.current; if (!map || appliedStyleRef.current === basemap) return; persistCamera(map); appliedStyleRef.current = basemap; map.setStyle(mapboxStyleUrl(basemap)); }, [basemap]);
