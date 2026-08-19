@@ -11,6 +11,18 @@ import FarqMap from "./FarqMap";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
 import "../../styles/farq-mapbox.css";
 
+/** Close enough for ranking a handful of pins against one tapped cluster. */
+function distanceTo(lat: number, lng: number, toLat: number, toLng: number): number {
+	const dLat = lat - toLat;
+	const dLng = (lng - toLng) * Math.cos((toLat * Math.PI) / 180);
+	return dLat * dLat + dLng * dLng;
+}
+
+/** How close the camera goes when a restaurant is picked out of the list. */
+const PICK_ZOOM = 16.4;
+/** Restaurants offered for one tapped cluster. */
+const CLUSTER_LIST_LIMIT = 15;
+
 /** Feature coordinates arrive untyped from the API — read them, never assume them. */
 function lngLat(coordinates: unknown): [number, number] | null {
 	if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
@@ -40,7 +52,8 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const [error, setError] = useState<string | null>(null);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
-	const [focusRequest, setFocusRequest] = useState<{ lat: number; lng: number; id: string } | null>(null);
+	const [focusRequest, setFocusRequest] = useState<{ lat: number; lng: number; id: string; zoom?: number } | null>(null);
+	const [clusterPick, setClusterPick] = useState<{ lat: number; lng: number; count: number; id: string } | null>(null);
 	const requestKeyRef = useRef("");
 	const abortRef = useRef<AbortController | null>(null);
 
@@ -91,6 +104,16 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 		return (places?.features || []).flatMap((f) => { if (f.properties.feature_type !== "place") return []; const point = lngLat(f.geometry.coordinates); if (!point) return []; return [{ id: String(f.properties.place_id || ""), type: "opportunity" as const, place: { id: String(f.properties.place_id || ""), restaurant_id: f.properties.restaurant_id || null, name: f.properties.name || null, lat: point[1], lng: point[0], image_url: f.properties.image_url || null }, category: null, product: f.properties.difference?.product_name ? { name: f.properties.difference.product_name } : null, price: { cheapest: f.properties.difference?.cheapest_price ?? null, expensive: f.properties.difference?.expensive_price ?? null, difference: f.properties.difference?.difference_amount ?? null, percentage: null, currency: "SAR" as const }, providers: { count: f.properties.provider_count ?? null }, evidence: { observed: Boolean(f.properties.difference) }, opportunity_score: Number(f.properties.difference?.difference_amount || 0) }]; });
 	}, [places]);
 
+	/* The restaurants behind a tapped cluster: nearest first, then biggest gap
+	 * first, so the list answers "where is the money here" straight away. */
+	const clusterList = useMemo(() => {
+		if (!clusterPick) return [];
+		return [...opportunities]
+			.sort((a, b) => distanceTo(a.place.lat, a.place.lng, clusterPick.lat, clusterPick.lng) - distanceTo(b.place.lat, b.place.lng, clusterPick.lat, clusterPick.lng))
+			.slice(0, CLUSTER_LIST_LIMIT)
+			.sort((a, b) => (b.price.difference ?? 0) - (a.price.difference ?? 0));
+	}, [clusterPick, opportunities]);
+
 	const top = opportunities[0] || null;
 	const showUserLocation = locationPinKind === "gps" || locationPinKind === "manual";
 	const applyCategory = (next: string) => { setCategory(next); setSelectedPlaceId(""); setQuery(""); requestKeyRef.current = ""; };
@@ -98,14 +121,14 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 		if (showUserLocation && userLocation) { setFocusRequest({ lat: userLocation.lat, lng: userLocation.lng, id: `user:${Date.now()}` }); return; }
 		if (locationPinKind === "gps" || locationPinKind === "manual") requestLocation(); else openMapModal();
 	};
-	const selectOpportunity = (item: (typeof opportunities)[number]) => { setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}` }); };
+	const selectOpportunity = (item: (typeof opportunities)[number], opts?: { zoom?: number }) => { setClusterPick(null); setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}:${opts?.zoom ?? "near"}`, zoom: opts?.zoom }); };
 	const openMenu = useCallback((opts: { restaurantId: string; name?: string; image?: string | null }) => { if (!opts.restaurantId) return; void navigate({ to: "/merchant/$type/$id", params: { type: "restaurant", id: opts.restaurantId }, search: { ...(opts.name ? { name: opts.name } : {}), ...(opts.image ? { image: String(opts.image) } : {}) } }); }, [navigate]);
 
 
 	return (
 		<div className="relative h-[calc(100svh-var(--bottom-nav-h))] w-full overflow-hidden bg-surface lg:h-[calc(100dvh-56px)]" dir={isRTL ? "rtl" : "ltr"} data-testid="farq-map-experience" data-map-mode={mode}>
 			<div className="absolute inset-0 z-0">
-				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={userLocation} showUserLocation={showUserLocation} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => setSelectedPlaceId(id)} onSelectNeighborhood={() => undefined} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
+				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={userLocation} showUserLocation={showUserLocation} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => { setClusterPick(null); setSelectedPlaceId(id); }} onSelectCluster={(info) => { setSelectedPlaceId(""); setClusterPick({ ...info, id: `cluster:${info.lng.toFixed(4)},${info.lat.toFixed(4)}` }); }} onSelectNeighborhood={() => undefined} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
 			</div>
 
 			<div className="pointer-events-none absolute inset-x-0 top-0 z-[600] p-3 lg:p-4">
@@ -139,6 +162,41 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 				<div className="mb-5 flex items-center justify-between"><strong className="text-lg text-brand-900">{isRTL ? "استكشاف" : "Explore"}</strong><button type="button" onClick={() => setDrawerOpen(false)}><X size={20} /></button></div>
 				<div className="space-y-2"><button type="button" className="w-full rounded-xl bg-brand-900 p-3 text-start font-bold text-mint-500" onClick={() => { if (top) selectOpportunity(top); setDrawerOpen(false); }}>🔥 {isRTL ? "أكبر فرق" : "Biggest gap"}</button>{categories.map((c) => <button key={c.category_id} type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { applyCategory(c.category_id); setDrawerOpen(false); }}>{c.category_name_ar || c.category_name || c.category_id}</button>)}<div className="my-3 border-t border-[#e6eef0]" /><button type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { setBasemap(basemap === "standard" ? "satellite" : "standard"); setDrawerOpen(false); }}>{basemap === "standard" ? (isRTL ? "قمر صناعي" : "Satellite") : (isRTL ? "خريطة" : "Map")}</button></div>
 			</aside></div> : null}
+
+			{clusterPick && !selectedPlaceId ? (
+				<div className="pointer-events-none absolute inset-x-0 bottom-0 z-[750] p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto lg:p-0">
+					<div className="pointer-events-auto mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(4,52,52,.22)]" data-testid="farq-cluster-sheet">
+						<div className="flex items-center justify-between gap-3 px-4 pt-4">
+							<div>
+								<span className="block text-[11px] font-bold text-[#6b7c7c]">{isRTL ? "مطاعم هذه المنطقة" : "Restaurants here"}</span>
+								<strong className="text-[16px] text-brand-900">{isRTL ? `${clusterPick.count} فرصة` : `${clusterPick.count} opportunities`}</strong>
+							</div>
+							<button type="button" className="grid size-9 place-items-center rounded-full bg-[#f3f7f7] text-brand-900" onClick={() => setClusterPick(null)} aria-label={isRTL ? "إغلاق" : "Close"}><X size={18} /></button>
+						</div>
+						<div className="mt-3 max-h-[46svh] overflow-y-auto overscroll-contain px-3 pb-3">
+							{clusterList.length === 0 ? (
+								<p className="px-1 py-6 text-center text-[13px] font-medium text-ink-muted">{fetching ? (isRTL ? "نحمّل مطاعم المنطقة…" : "Loading restaurants here…") : (isRTL ? "قرّب أكثر لعرض المطاعم." : "Zoom in to see the restaurants.")}</p>
+							) : (
+								<ul className="space-y-1.5">
+									{clusterList.map((item) => (
+										<li key={item.id}>
+											<button type="button" onClick={() => selectOpportunity(item, { zoom: PICK_ZOOM })} className="flex w-full items-center gap-3 rounded-2xl bg-[#f3f7f7] p-3 text-start transition-colors hover:bg-[#e6eef0]">
+												<span className="min-w-0 flex-1">
+													<strong className="block truncate text-[14px] text-brand-900">{item.place.name || (isRTL ? "مطعم" : "Restaurant")}</strong>
+													<span className="text-[11px] font-medium text-[#6b7c7c]">{item.providers.count ? (isRTL ? `${item.providers.count} تطبيقات` : `${item.providers.count} apps`) : isRTL ? "مقارنة" : "Comparison"}</span>
+												</span>
+												{item.price.difference != null ? (
+													<span className="shrink-0 rounded-full bg-brand-900 px-3 py-1.5 text-[12px] font-black text-mint-500">{Math.round(item.price.difference)} {isRTL ? "ر.س" : "SAR"}</span>
+												) : null}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			{selectedPlaceId ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[800] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto"><div className="pointer-events-auto"><SelectedPlaceSheet variant="sheet" placeDetail={placeDetail} feature={places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties} selectedCategory={meta?.categories.find((c) => c.category_id === category) || null} selectedRestaurantId={placeDetail?.restaurant_id || places?.features.find((f) => String(f.properties.place_id) === selectedPlaceId)?.properties.restaurant_id || ""} isRTL={isRTL} onClose={() => setSelectedPlaceId("")} onOpenMenu={openMenu} /></div></div> : null}
 		</div>
