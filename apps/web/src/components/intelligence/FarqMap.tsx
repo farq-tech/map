@@ -60,7 +60,7 @@ function placeCoords(data: GeoJSON.FeatureCollection, placeId: string | undefine
 	return null;
 }
 function applyViewportAuraRanks(map: MapboxMap, markers: Map<string, PinRec>, selectedPlaceId: string | undefined, lastPulseRef: { current: { placeId: string; amount: number } | null }, pulseTimerRef: { current: number }, pulseDelayMs: number) {
-	let bounds: ReturnType<MapboxMap["getBounds"]>; try { bounds = map.getBounds(); } catch { return; }
+	let bounds: ReturnType<MapboxMap["getBounds"]>; try { bounds = map.getBounds(); } catch { return; } if (!bounds) return;
 	const visible: { placeId: string; amount: number; el: HTMLElement }[] = [];
 	for (const rec of markers.values()) { if (rec.kind !== "place" || !rec.placeId || rec.amount == null) continue; const ll = rec.marker.getLngLat(); if (!bounds.contains(ll)) { applyAuraRankClasses(rec.el, "demoted"); continue; } visible.push({ placeId: rec.placeId, amount: rec.amount, el: rec.el }); }
 	const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
