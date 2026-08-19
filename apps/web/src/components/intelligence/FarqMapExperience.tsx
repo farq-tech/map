@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { useLiveLocation } from "../../hooks/useLiveLocation";
+import { neighborhoodLabels, neighborhoodShapes, tallyByNeighborhood, type NeighborhoodFeature } from "../../lib/neighborhoodOpportunities";
 import { mapZoomMode, type MapZoomMode } from "../../lib/mapExploration";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { IntelligenceService, toIntelCategoryId, type IntelligenceCategory, type IntelligenceMapPlaceDetail, type IntelligenceMapPlaces, type IntelligenceMeta } from "../../services/intelligenceService";
@@ -57,6 +58,8 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
 	const [focusRequest, setFocusRequest] = useState<{ lat: number; lng: number; id: string; zoom?: number } | null>(null);
 	const [clusterPick, setClusterPick] = useState<{ lat: number; lng: number; count: number; id: string } | null>(null);
+	const [hoods, setHoods] = useState<NeighborhoodFeature[]>([]);
+	const [hoodPick, setHoodPick] = useState<string | null>(null);
 	const live = useLiveLocation();
 	/* Following is the camera promise; the watch is the data. They come apart the
 	 * moment the user drags the map, and the dot stays live either way. */
@@ -74,6 +77,16 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 		void IntelligenceService.meta(controller.signal).then(setMeta).catch(() => setError(isRTL ? "تعذر تحميل الخريطة." : "Could not load the map.")).finally(() => setLoading(false));
 		return () => controller.abort();
 	}, [isRTL]);
+
+	/* Polygons change with the category, not with the camera — fetch once per
+	 * category and let the tally follow whatever opportunities are loaded. */
+	useEffect(() => {
+		const controller = new AbortController();
+		void IntelligenceService.mapNeighborhoods({ category: category || undefined, signal: controller.signal })
+			.then((body) => { if (!controller.signal.aborted) setHoods((body?.features ?? []) as unknown as NeighborhoodFeature[]); })
+			.catch(() => { if (!controller.signal.aborted) setHoods([]); });
+		return () => controller.abort();
+	}, [category]);
 
 	const loadViewport = useCallback((bbox: string, zoom: number) => {
 		const nextMode = mapZoomMode(zoom);
@@ -122,6 +135,16 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 			.sort((a, b) => (b.price.difference ?? 0) - (a.price.difference ?? 0));
 	}, [clusterPick, opportunities]);
 
+	/* Which حي each opportunity physically falls in, and how many that makes. */
+	const hoodTally = useMemo(
+		() => tallyByNeighborhood(hoods, opportunities.map((o) => ({ id: o.id, lat: o.place.lat, lng: o.place.lng, gap: o.price.difference ?? null }))),
+		[hoods, opportunities],
+	);
+	const hoodShapeData = useMemo(() => (hoods.length ? neighborhoodShapes(hoods, hoodTally.tallies) : null), [hoods, hoodTally]);
+	const hoodLabelData = useMemo(() => (hoods.length ? neighborhoodLabels(hoods, hoodTally.tallies, isRTL) : null), [hoods, hoodTally, isRTL]);
+	const hoodList = useMemo(() => (hoodPick ? opportunities.filter((o) => hoodTally.assignment.get(o.id) === hoodPick) : []), [hoodPick, opportunities, hoodTally]);
+	const pickedHood = hoodPick ? hoodTally.tallies.get(hoodPick) ?? null : null;
+
 	const top = opportunities[0] || null;
 	const showUserLocation = locationPinKind === "gps" || locationPinKind === "manual";
 	const applyCategory = (next: string) => { setCategory(next); setSelectedPlaceId(""); setQuery(""); requestKeyRef.current = ""; };
@@ -134,7 +157,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 		/* Keep the older context fix warm for search, without waiting on it. */
 		if (locationPinKind !== "gps") requestLocation();
 	};
-	const selectOpportunity = (item: (typeof opportunities)[number], opts?: { zoom?: number }) => { setClusterPick(null); setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}:${opts?.zoom ?? "near"}`, zoom: opts?.zoom }); };
+	const selectOpportunity = (item: (typeof opportunities)[number], opts?: { zoom?: number }) => { setClusterPick(null); setHoodPick(null); setSelectedPlaceId(item.place.id); setFocusRequest({ lat: item.place.lat, lng: item.place.lng, id: `place:${item.id}:${opts?.zoom ?? "near"}`, zoom: opts?.zoom }); };
 	/* Every fresh fix re-centres while following; the first one also closes in. */
 	useEffect(() => {
 		if (!following || !live.position) return;
@@ -149,7 +172,7 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 	return (
 		<div className="relative h-[calc(100svh-var(--bottom-nav-h))] w-full overflow-hidden bg-surface lg:h-[calc(100dvh-56px)]" dir={isRTL ? "rtl" : "ltr"} data-testid="farq-map-experience" data-map-mode={mode}>
 			<div className="absolute inset-0 z-0">
-				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={live.position ?? userLocation} showUserLocation={Boolean(live.position) || showUserLocation} onUserPan={() => setFollowing(false)} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => { setClusterPick(null); setSelectedPlaceId(id); }} onSelectCluster={(info) => { setSelectedPlaceId(""); setClusterPick({ ...info, id: `cluster:${info.lng.toFixed(4)},${info.lat.toFixed(4)}` }); }} onSelectNeighborhood={() => undefined} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
+				<FarqMap places={places} neighborhoods={null} selectedPlaceId={selectedPlaceId || undefined} focusRequest={focusRequest} userLocation={live.position ?? userLocation} showUserLocation={Boolean(live.position) || showUserLocation} onUserPan={() => setFollowing(false)} placeDetail={placeDetail} basemap={basemap} onBasemapChange={setBasemap} isRTL={isRTL} onSelectPlace={(id) => { setClusterPick(null); setSelectedPlaceId(id); }} onSelectCluster={(info) => { setSelectedPlaceId(""); setHoodPick(null); setClusterPick({ ...info, id: `cluster:${info.lng.toFixed(4)},${info.lat.toFixed(4)}` }); }} neighborhoodShapes={hoodShapeData} neighborhoodLabels={hoodLabelData} onSelectNeighborhood={(id) => { setSelectedPlaceId(""); setClusterPick(null); setHoodPick(id); }} onViewChange={onViewChange} hideAddressSearch sheetOpen={Boolean(selectedPlaceId)} mapMode={mode} />
 			</div>
 
 			<div className="pointer-events-none absolute inset-x-0 top-0 z-[600] p-3 lg:p-4">
@@ -185,7 +208,42 @@ export default function FarqMapExperience({ search }: { search: MapSearch }) {
 				<div className="space-y-2"><button type="button" className="w-full rounded-xl bg-brand-900 p-3 text-start font-bold text-mint-500" onClick={() => { if (top) selectOpportunity(top); setDrawerOpen(false); }}>🔥 {isRTL ? "أكبر فرق" : "Biggest gap"}</button>{categories.map((c) => <button key={c.category_id} type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { applyCategory(c.category_id); setDrawerOpen(false); }}>{c.category_name_ar || c.category_name || c.category_id}</button>)}<div className="my-3 border-t border-[#e6eef0]" /><button type="button" className="w-full rounded-xl bg-[#f3f7f7] p-3 text-start font-bold text-brand-900" onClick={() => { setBasemap(basemap === "standard" ? "satellite" : "standard"); setDrawerOpen(false); }}>{basemap === "standard" ? (isRTL ? "قمر صناعي" : "Satellite") : (isRTL ? "خريطة" : "Map")}</button></div>
 			</aside></div> : null}
 
-			{clusterPick && !selectedPlaceId ? (
+			{hoodPick && !selectedPlaceId ? (
+				<div className="pointer-events-none absolute inset-x-0 bottom-0 z-[750] p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto lg:p-0">
+					<div className="pointer-events-auto mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(4,52,52,.22)]" data-testid="farq-hood-sheet">
+						<div className="flex items-center justify-between gap-3 px-4 pt-4">
+							<div>
+								<span className="block text-[11px] font-bold text-[#6b7c7c]">{(isRTL ? pickedHood?.nameAr || pickedHood?.nameEn : pickedHood?.nameEn || pickedHood?.nameAr) || (isRTL ? "الحي" : "Neighbourhood")}</span>
+								<strong className="text-[16px] text-brand-900">{isRTL ? `${pickedHood?.count ?? 0} فرصة` : `${pickedHood?.count ?? 0} opportunities`}</strong>
+							</div>
+							<button type="button" className="grid size-9 place-items-center rounded-full bg-[#f3f7f7] text-brand-900" onClick={() => setHoodPick(null)} aria-label={isRTL ? "إغلاق" : "Close"}><X size={18} /></button>
+						</div>
+						<div className="mt-3 max-h-[46svh] overflow-y-auto overscroll-contain px-3 pb-3">
+							{hoodList.length === 0 ? (
+								<p className="px-1 py-6 text-center text-[13px] font-medium text-ink-muted">{fetching ? (isRTL ? "نحمّل مطاعم الحي…" : "Loading this neighbourhood…") : (isRTL ? "لا توجد فرص محمّلة داخل هذا الحي." : "No opportunities loaded inside this neighbourhood.")}</p>
+							) : (
+								<ul className="space-y-1.5">
+									{hoodList.map((item) => (
+										<li key={item.id}>
+											<button type="button" onClick={() => selectOpportunity(item, { zoom: PICK_ZOOM })} className="flex w-full items-center gap-3 rounded-2xl bg-[#f3f7f7] p-3 text-start transition-colors hover:bg-[#e6eef0]">
+												<span className="min-w-0 flex-1">
+													<strong className="block truncate text-[14px] text-brand-900">{item.place.name || (isRTL ? "مطعم" : "Restaurant")}</strong>
+													<span className="text-[11px] font-medium text-[#6b7c7c]">{item.providers.count ? (isRTL ? `${item.providers.count} تطبيقات` : `${item.providers.count} apps`) : isRTL ? "مقارنة" : "Comparison"}</span>
+												</span>
+												{item.price.difference != null ? (
+													<span className="shrink-0 rounded-full bg-brand-900 px-3 py-1.5 text-[12px] font-black text-mint-500">{Math.round(item.price.difference)} {isRTL ? "ر.س" : "SAR"}</span>
+												) : null}
+											</button>
+										</li>
+									))}
+								</ul>
+							)}
+						</div>
+					</div>
+				</div>
+			) : null}
+
+			{clusterPick && !hoodPick && !selectedPlaceId ? (
 				<div className="pointer-events-none absolute inset-x-0 bottom-0 z-[750] p-3 pb-[calc(env(safe-area-inset-bottom)+12px)] lg:bottom-4 lg:start-4 lg:end-auto lg:w-[420px] lg:inset-x-auto lg:p-0">
 					<div className="pointer-events-auto mx-auto max-w-5xl overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(4,52,52,.22)]" data-testid="farq-cluster-sheet">
 						<div className="flex items-center justify-between gap-3 px-4 pt-4">
