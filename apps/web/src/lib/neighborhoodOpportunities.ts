@@ -119,6 +119,14 @@ export function tallyByNeighborhood(features: NeighborhoodFeature[], opportuniti
 	return { tallies, assignment };
 }
 
+/** West, south, east, north — what the camera needs to frame one حي. */
+export function neighborhoodBounds(feature: NeighborhoodFeature): [number, number, number, number] | null {
+	const polygons = ringsOf(feature.geometry);
+	if (!polygons.length) return null;
+	const bbox = boundsOf(polygons);
+	return Number.isFinite(bbox[0]) && bbox[0] <= bbox[2] && bbox[1] <= bbox[3] ? bbox : null;
+}
+
 /** A point to hang the label on: the centre of the bounds when that is inside. */
 export function labelPoint(feature: NeighborhoodFeature): [number, number] | null {
 	const polygons = ringsOf(feature.geometry);
