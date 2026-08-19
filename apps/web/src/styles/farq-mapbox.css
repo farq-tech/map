@@ -15,6 +15,23 @@
 	font-family: Tajawal, system-ui, sans-serif;
 }
 
+/*
+ * Positioning a pin belongs to Mapbox, not to us.
+ *
+ * Mapbox puts .mapboxgl-marker on the very element we hand it, and this file
+ * loads after mapbox-gl.css — so any `position` a pin root declares outranks
+ * `position: absolute` and drops that pin into normal document flow. It then
+ * sits at a flow offset that shifts every time the marker set changes, which
+ * is every zoom, so pins slide off their coordinates. Re-assert it here, with
+ * enough specificity to win, and only for elements Mapbox has claimed.
+ */
+.farq-mapbox-root .mapboxgl-marker,
+.farq-mapbox-picker .mapboxgl-marker {
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
 .farq-mapbox-root .mapboxgl-ctrl-top-right {
 	top: 6.5rem;
 	right: 0.65rem;

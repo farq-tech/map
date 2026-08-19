@@ -40,6 +40,12 @@ function readCamera(map: MapboxMap): PersistedCamera { const c = map.getCenter()
 function persistCamera(map: MapboxMap) { try { mapSession.camera = readCamera(map); } catch {} }
 type PinRec = { key: string; marker: mapboxgl.Marker; el: HTMLElement; kind: "place" | "cluster"; placeId?: string; amount?: number | null };
 function clearPinMarkers(markers: Map<string, PinRec>) { for (const rec of markers.values()) rec.marker.remove(); markers.clear(); }
+/** Pins are sized by this attribute. Set it before the first pin exists, or they
+ *  render at the wrong size until the user happens to move the map. */
+function syncPinPresentation(container: HTMLElement | null, map: MapboxMap) {
+	const root = container?.closest(".farq-mapbox-root");
+	if (root instanceof HTMLElement) root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom());
+}
 function applyBasemap(map: MapboxMap, isRTL: boolean) {
 	try { map.setConfigProperty("basemap", "lightPreset", "dusk"); } catch {}
 	try { map.setConfigProperty("basemap", "show3dObjects", true); } catch {}
@@ -78,11 +84,12 @@ export default function FarqMap({
 		map.once("load", () => {
 			map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "bottom-right"); const mobileChrome = window.matchMedia("(max-width: 1023px)").matches;
 			if (!hideAddressSearch && !mobileChrome) { try { const box = createFarqSearchBox({ token, isRTL: isRtlRef.current }); searchRef.current = box; map.addControl(box, "top-right"); } catch {} }
+			syncPinPresentation(containerRef.current, map);
 			setMapReady(true);
-			const land = (camera: PersistedCamera) => { map.jumpTo(camera); introDoneRef.current = true; mapSession.introStarted = true; persistCamera(map); setIntroDone(true); reportView(); };
+			const land = (camera: PersistedCamera) => { map.jumpTo(camera); syncPinPresentation(containerRef.current, map); introDoneRef.current = true; mapSession.introStarted = true; persistCamera(map); setIntroDone(true); reportView(); };
 			if (mapSession.introStarted && mapSession.camera) land(mapSession.camera); else if (mapSession.introStarted) land({ center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 48, bearing: -18 }); else if (reduced) land({ center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 48, bearing: -18 }); else { mapSession.introStarted = true; map.flyTo({ center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 54, bearing: -20, duration: INTRO_MS, essential: true, curve: 1.55, speed: 0.55 }); introTimer = window.setTimeout(() => { if (mapRef.current !== map) return; introDoneRef.current = true; persistCamera(map); setIntroDone(true); reportView(); }, INTRO_MS + 120); }
 		});
-		map.on("moveend", () => { if (!introDoneRef.current) return; persistCamera(map); reportView(); const root = containerRef.current?.closest(".farq-mapbox-root"); if (root instanceof HTMLElement) root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom()); window.clearTimeout(rankTimerRef.current); rankTimerRef.current = window.setTimeout(() => applyViewportAuraRanks(map, pinMarkersRef.current, selectedPlaceIdRef.current, lastPulseRef, pulseTimerRef, 0), AURA_VIEWPORT_IDLE_MS); });
+		map.on("moveend", () => { if (!introDoneRef.current) return; persistCamera(map); reportView(); syncPinPresentation(containerRef.current, map); window.clearTimeout(rankTimerRef.current); rankTimerRef.current = window.setTimeout(() => applyViewportAuraRanks(map, pinMarkersRef.current, selectedPlaceIdRef.current, lastPulseRef, pulseTimerRef, 0), AURA_VIEWPORT_IDLE_MS); });
 		map.on("dragstart", () => onUserPanRef.current?.());
 		const ro = new ResizeObserver(() => { try { map.resize(); } catch {} }); ro.observe(containerRef.current);
 		return () => { window.clearTimeout(introTimer); window.clearTimeout(pulseTimerRef.current); window.clearTimeout(rankTimerRef.current); persistCamera(map); ro.disconnect(); userMarkerRef.current?.remove(); clearPinMarkers(pinMarkersRef.current); searchRef.current = null; setMapReady(false); setIntroDone(false); map.remove(); mapRef.current = null; };
