@@ -171,17 +171,22 @@ export default function MapPickerModal({
 		ensureRtlTextPlugin();
 		mapboxgl.accessToken = token;
 		const [startLat, startLng] = selectedPositionRef.current;
-		const map = new mapboxgl.Map({
-			container: mapHostRef.current,
-			style: mapboxStyleUrl("standard", isRtlRef.current ? "ar" : "en"),
-			center: [startLng, startLat],
-			zoom: 13,
-			pitch: 42,
-			bearing: -12,
-			projection: "globe",
-			attributionControl: { compact: true } as unknown as boolean,
-			accessToken: token,
-		});
+		let map: MapboxMap;
+		try {
+			map = new mapboxgl.Map({
+				container: mapHostRef.current,
+				style: mapboxStyleUrl("standard", isRtlRef.current ? "ar" : "en"),
+				center: [startLng, startLat],
+				zoom: 13,
+				pitch: 42,
+				bearing: -12,
+				projection: "globe",
+				attributionControl: { compact: true } as unknown as boolean,
+				accessToken: token,
+			});
+		} catch {
+			return; /* no WebGL — the picker stays usable without a preview map */
+		}
 		mapRef.current = map;
 
 		map.on("style.load", () => applyPickerBasemap(map, isRtlRef.current));
