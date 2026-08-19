@@ -24,7 +24,7 @@ import {
 	shouldReplayBubbleMotion,
 } from "../../lib/farqMapPins";
 import { ensureRtlTextPlugin, getMapboxAccessToken, type MapboxBasemap, mapboxStyleUrl, RIYADH_LNG_LAT } from "../../lib/mapboxAccess";
-import { applyFarqFocus, applyFarqLabelLanguage, type FarqMapLanguage } from "../../lib/farqBasemap";
+import { applyFarqFocus, applyFarqLabelLanguage, ensureFarqShieldImage, type FarqMapLanguage } from "../../lib/farqBasemap";
 import { createFarqSearchBox } from "../../lib/mapboxSearch";
 import type { IntelligenceMapNeighborhoods, IntelligenceMapPlaceDetail, IntelligenceMapPlaces } from "../../services/intelligenceService";
 import type { MapZoomMode } from "../../lib/mapExploration";
@@ -44,6 +44,7 @@ function clearPinMarkers(markers: Map<string, PinRec>) { for (const rec of marke
 function applyBasemap(map: MapboxMap, language: FarqMapLanguage) {
 	try { map.setConfigProperty("basemap", "lightPreset", "dusk"); } catch {}
 	try { map.setConfigProperty("basemap", "show3dObjects", true); } catch {}
+	ensureFarqShieldImage(map);
 	applyFarqLabelLanguage(map, language);
 	try { if (!map.getSource("mapbox-dem")) map.addSource("mapbox-dem", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 }); map.setTerrain({ source: "mapbox-dem", exaggeration: 1.15 }); } catch {}
 }

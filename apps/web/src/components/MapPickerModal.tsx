@@ -10,7 +10,7 @@ import {
 	getMapboxAccessToken,
 	mapboxStyleUrl,
 } from "../lib/mapboxAccess";
-import { applyFarqLabelLanguage } from "../lib/farqBasemap";
+import { applyFarqLabelLanguage, ensureFarqShieldImage } from "../lib/farqBasemap";
 import {
 	bindSearchBoxToMap,
 	createFarqSearchBox,
@@ -77,6 +77,7 @@ function applyPickerBasemap(map: MapboxMap, isRTL: boolean) {
 	} catch {
 		/* as above */
 	}
+	ensureFarqShieldImage(map);
 	applyFarqLabelLanguage(map, isRTL ? "ar" : "en");
 }
 
