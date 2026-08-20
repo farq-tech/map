@@ -2386,18 +2386,32 @@
 		background: transparent;
 	}
 
+	/*
+	 * The split is exactly one viewport tall. It used to grow with the aside's
+	 * content, which stretched the map canvas to thousands of pixels: the map's
+	 * centre — and every pin placed around it — ended up far below the fold.
+	 * The aside scrolls inside itself instead.
+	 */
 	.farq-map-split {
 		display: flex;
-		height: auto;
-		min-height: calc(100dvh - 56px);
-		overflow: visible;
+		height: calc(100dvh - 56px);
+		min-height: 0;
+		overflow: hidden;
 		flex-direction: row;
 	}
 
 	.farq-map-stage {
 		position: relative;
 		flex: 1 1 auto;
-		min-height: calc(100dvh - 56px);
+		min-height: 0;
+		height: 100%;
+	}
+
+	.farq-map-split > .farq-map-compare-aside {
+		min-height: 0;
+		height: 100%;
+		overflow-y: auto;
+		overscroll-behavior: contain;
 	}
 
 	.farq-explore-chrome,
