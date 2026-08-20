@@ -384,6 +384,29 @@ export type CityOpportunities = {
 	features: IntelligenceMapGeojsonFeature<CityOpportunityProperties>[];
 };
 
+export type CityAreaProperties = {
+	h3: string;
+	places: number;
+	opportunities: number;
+	max_gap: number | null;
+	top_place_id: string | null;
+	comparisons: number;
+	wins: Record<string, number>;
+	enough_for_app_verdict: boolean;
+	cheapest_app: string | null;
+	cheapest_app_wins: number | null;
+};
+
+export type CityAreas = {
+	type: "FeatureCollection";
+	city: string;
+	resolution: number;
+	min_comparisons_for_app_verdict: number;
+	generated_at: string | null;
+	count: number;
+	features: Array<{ type: "Feature"; id?: string; geometry: GeoJSON.Polygon; properties: CityAreaProperties }>;
+};
+
 export type IntelligenceMapGeojsonFeature<P> = {
 	type: "Feature";
 	id?: string;
@@ -637,6 +660,15 @@ export const IntelligenceService = {
 		return env.data;
 	},
 
+	/** H3 res-8 cells for the city: how many opportunities, the biggest, which app was cheapest how often. */
+	async cityAreas(opts: { city: string; signal?: AbortSignal }): Promise<CityAreas> {
+		const env = await fetchApi<CityAreas>(
+			`/api/intelligence/map/city/${encodeURIComponent(opts.city)}/areas`,
+			{ signal: opts.signal },
+			{ timeoutMs: 30_000 },
+		);
+		return env.data;
+	},
 	/** The whole city at once; the browser caches it by ETag, the server by TTL. */
 	async cityOpportunities(opts: { city: string; include?: "all"; signal?: AbortSignal }): Promise<CityOpportunities> {
 		const qs = new URLSearchParams();

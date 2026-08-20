@@ -134,7 +134,7 @@ function validateAction(action, rows) {
 /* ---------- optional Gemini phrasing ---------- */
 
 function geminiKey() {
-  return String(process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || '').trim();
+  return String(process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '').trim();
 }
 
 const GEMINI_MODELS = Object.freeze(

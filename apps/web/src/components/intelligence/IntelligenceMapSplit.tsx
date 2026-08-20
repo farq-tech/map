@@ -54,6 +54,7 @@ import {
 	type IntelligenceMapPlaces,
 	type IntelligenceMeta,
 	type CityOpportunities,
+	type CityAreas,
 } from "../../services/intelligenceService";
 import EmptyState from "../EmptyState";
 import FarqBrandMark from "../FarqBrandMark";
@@ -215,6 +216,7 @@ export default function IntelligenceMapSplit({
 	const [placesFetching, setPlacesFetching] = useState(false);
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
+	const [cityAreas, setCityAreas] = useState<CityAreas | null>(null);
 	const cityStatusRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
 	const [viewBbox, setViewBbox] = useState<[number, number, number, number] | null>(null);
 	/* Copilot: the exchange shown above the list, and what its last action pinned. */
@@ -332,6 +334,9 @@ export default function IntelligenceMapSplit({
 		}
 		const controller = new AbortController();
 		cityStatusRef.current = "loading";
+		void IntelligenceService.cityAreas({ city: key, signal: controller.signal })
+			.then((body) => { if (!controller.signal.aborted) setCityAreas(body); })
+			.catch(() => { if (!controller.signal.aborted) setCityAreas(null); });
 		void IntelligenceService.cityOpportunities({ city: key, signal: controller.signal })
 			.then((body) => {
 				if (controller.signal.aborted) return;
@@ -1400,6 +1405,7 @@ export default function IntelligenceMapSplit({
 					>
 						<FarqMap
 							places={displayPlaces}
+							areas={cityAreas}
 							bottomInset={sheetInset}
 							initialCamera={initialCamera}
 							neighborhoods={hoods}

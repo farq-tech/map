@@ -39,6 +39,8 @@ import {
 	ensurePriceTileLayers,
 	syncPriceTileData,
 } from "../../lib/farqPriceTiles";
+import { ensureAreaLayers, syncAreaData } from "../../lib/farqAreaTiles";
+import type { CityAreas } from "../../services/intelligenceService";
 import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
 import {
 	getMapboxAccessToken,
@@ -368,6 +370,7 @@ export default function FarqMap({
 	onViewChange,
 	bottomInset = 0,
 	initialCamera = null,
+	areas = null,
 	hideAddressSearch = false,
 	sheetOpen = false,
 	gisNeighborhoods = null,
@@ -402,6 +405,8 @@ export default function FarqMap({
 	bottomInset?: number;
 	/** A link's camera; used once, on the first landing, instead of the city default. */
 	initialCamera?: { center: [number, number]; zoom: number } | null;
+	/** H3 cells for the city zoom — the opportunity field under the clusters. */
+	areas?: CityAreas | null;
 	hideAddressSearch?: boolean;
 	sheetOpen?: boolean;
 	onMapInteraction?: (phase: "start" | "end") => void;
@@ -454,6 +459,19 @@ export default function FarqMap({
 	selectedPlaceIdRef.current = selectedPlaceId;
 	gisNeighborhoodsRef.current = gisNeighborhoods;
 	placeDetailRef.current = placeDetail;
+
+	const areasRef = useRef(areas);
+	areasRef.current = areas;
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		try {
+			ensureAreaLayers(map);
+			syncAreaData(map, areas);
+		} catch {
+			/* style mid-swap — the style.load handler re-adds layers */
+		}
+	}, [areas, mapReady, basemap]);
 
 	const placesData = useMemo((): GeoJSON.FeatureCollection => {
 		const features = (places?.features || []).filter((f) => {
@@ -522,6 +540,12 @@ export default function FarqMap({
 
 		map.on("style.load", () => {
 			applyBasemap(map, isRtlRef.current);
+			try {
+				ensureAreaLayers(map);
+				syncAreaData(map, areasRef.current);
+			} catch {
+				/* added again once the style settles */
+			}
 			if (introDoneRef.current && mapSession.camera) {
 				map.jumpTo(mapSession.camera);
 			}
