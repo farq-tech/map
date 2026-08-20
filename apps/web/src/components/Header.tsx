@@ -13,15 +13,15 @@ export default function Header() {
 	return (
 		<header className="sticky top-0 z-40 flex items-center justify-between gap-3 bg-brand-900/95 px-4 py-3 backdrop-blur">
 			<Link to="/" className="flex items-center gap-2">
-				<FarqBrandMark
-					variant="lockup"
-					size={28}
-					wordmarkClassName="h-5 w-auto"
-					title={isRTL ? "فرق" : "Farq"}
-				/>
-				<span className="text-sm font-black text-mint-500">
-					{isRTL ? "خريطة فرق" : "Farq Map"}
-				</span>
+					<FarqBrandMark
+						variant="lockup"
+						size={28}
+						wordmarkClassName="h-5 w-auto"
+						title={isRTL ? "فرق" : "فرق"}
+					/>
+					<span className="text-sm font-black text-mint-500">
+						{isRTL ? "خريطة فرق" : "Map"}
+					</span>
 			</Link>
 			<div className="flex items-center gap-2">
 				<Button

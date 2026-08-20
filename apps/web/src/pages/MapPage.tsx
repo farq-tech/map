@@ -19,8 +19,9 @@ export default function MapPage({ search }: { search: MapSearch }) {
 
 	return (
 		<div
-			className="flex min-h-0 flex-col bg-brand-900 lg:min-h-screen"
+			className="farq-map-page flex min-h-0 flex-col lg:min-h-screen"
 			data-testid="intelligence-map-page"
+			style={{ ["--bottom-nav-h" as string]: "0px" }}
 		>
 			<div className="hidden lg:block">
 				<Header />

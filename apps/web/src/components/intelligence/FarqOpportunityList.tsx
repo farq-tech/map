@@ -1,0 +1,157 @@
+import { useEffect, useRef } from "react";
+import { localizeDigitString } from "../../lib/formatPrice";
+import { formatObservedDistance } from "../../lib/farqOpportunities";
+import type { OpportunityRow } from "../../lib/farqOpportunities";
+import { getProviderLabel } from "../../lib/platformLogos";
+
+function ProviderPriceLine({
+	kind,
+	provider,
+	price,
+	isRTL,
+}: {
+	kind: "cheap" | "expensive";
+	provider?: string | null;
+	price?: number | null;
+	isRTL: boolean;
+}) {
+	if (!provider && price == null) return null;
+	const name = getProviderLabel(provider, { isRTL }) || provider || "";
+	const label =
+		kind === "cheap"
+			? isRTL
+				? "الأرخص"
+				: "Cheapest"
+			: isRTL
+				? "الأغلى"
+				: "Highest";
+	const amount =
+		price != null
+			? `${localizeDigitString(String(Math.round(price)), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+			: "";
+	return (
+		<p
+			className={`farq-opportunity-line farq-opportunity-line--${kind}`}
+			data-testid={`farq-opportunity-${kind}`}
+		>
+			{label}: {name}
+			{amount ? ` — ${amount}` : ""}
+		</p>
+	);
+}
+
+export function FarqOpportunityCard({
+	row,
+	isRTL,
+	selected,
+	onSelect,
+}: {
+	row: OpportunityRow;
+	isRTL: boolean;
+	selected?: boolean;
+	onSelect: (row: OpportunityRow) => void;
+}) {
+	const gap = localizeDigitString(String(Math.round(row.amount)), isRTL);
+	const title =
+		row.productName || row.name || (isRTL ? "فرصة مرصودة" : "Observed opportunity");
+	const distance = formatObservedDistance(row.distanceMeters, isRTL);
+	return (
+		<button
+			type="button"
+			className={`farq-opportunity-card ${selected ? "is-selected" : ""}`}
+			data-testid="intelligence-map-top-saving"
+			data-opportunity-id={row.placeId}
+			data-place-id={row.placeId}
+			aria-current={selected ? "true" : undefined}
+			onClick={() => onSelect(row)}
+		>
+			<p className="farq-opportunity-gap">
+				🔥 {gap} {isRTL ? "ر.س فرق" : "SAR gap"}
+			</p>
+			<p className="farq-opportunity-item">{title}</p>
+			{row.productName && row.name && row.name !== row.productName ? (
+				<p className="farq-opportunity-place">{row.name}</p>
+			) : null}
+			<ProviderPriceLine
+				kind="cheap"
+				provider={row.cheapestProvider}
+				price={row.cheapestPrice}
+				isRTL={isRTL}
+			/>
+			<ProviderPriceLine
+				kind="expensive"
+				provider={row.expensiveProvider}
+				price={row.expensivePrice}
+				isRTL={isRTL}
+			/>
+			{distance ? (
+				<p className="farq-opportunity-distance">{distance}</p>
+			) : null}
+		</button>
+	);
+}
+
+export default function FarqOpportunityList({
+	rows,
+	isRTL,
+	selectedPlaceId,
+	onSelect,
+	empty,
+	countLabel,
+}: {
+	rows: OpportunityRow[];
+	isRTL: boolean;
+	selectedPlaceId?: string;
+	onSelect: (row: OpportunityRow) => void;
+	empty: boolean;
+	countLabel?: string;
+}) {
+	const listRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!selectedPlaceId || !listRef.current) return;
+		const node = listRef.current.querySelector(
+			`[data-opportunity-id="${CSS.escape(selectedPlaceId)}"]`,
+		);
+		if (node instanceof HTMLElement) {
+			node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+		}
+	}, [selectedPlaceId, rows]);
+
+	return (
+		<div
+			ref={listRef}
+			className="farq-opportunity-list"
+			data-testid="farq-opportunity-list"
+		>
+			{countLabel ? (
+				<p className="farq-opportunity-count">{countLabel}</p>
+			) : null}
+			{empty ? (
+				<div
+					className="farq-opportunity-empty"
+					data-testid="intelligence-map-empty"
+				>
+					<p className="text-[16px] font-extrabold text-brand-900">
+						{isRTL
+							? "ما رصدنا فرق يستحق حولك بعد"
+							: "No worthwhile gap observed around you yet"}
+					</p>
+				</div>
+			) : (
+				<ul className="farq-opportunity-ul">
+					{rows.map((row) => (
+						<li key={row.placeId}>
+							<FarqOpportunityCard
+								row={row}
+								isRTL={isRTL}
+								selected={row.placeId === selectedPlaceId}
+								onSelect={onSelect}
+							/>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	);
+}

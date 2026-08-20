@@ -57,6 +57,7 @@ function createMapRouter() {
         q: req.query.q,
         layer: 'comparison',
         limit: req.query.limit,
+        fields: req.query.fields,
       });
       res.setHeader('Cache-Control', 'public, max-age=60');
       res.json(body);

@@ -12,7 +12,9 @@
     "dev:web": "npm run dev -w @farq/map-web",
     "dev:api": "npm run dev -w @farq/map-api",
     "build": "npm run build -w @farq/map-web",
-    "start": "npm run start -w @farq/map-api"
+    "start": "npm run start -w @farq/map-api",
+    "test": "npm run test -w @farq/map-api",
+    "test:chat": "npm run test -w @farq/map-api"
   },
   "engines": {
     "node": ">=20 <25"

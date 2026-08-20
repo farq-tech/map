@@ -4,16 +4,40 @@
  * (layer=comparison: product-ready restaurants with real lat/lng).
  * Pin tap opens a premium sheet/panel; CTA «افتح الأرخص» goes to
  * /merchant/restaurant/:id (same as a home card).
- * Neighborhoods are fetched for the side panel only — not painted as a mosaic.
+ * Neighborhoods are fetched for the side panel; optional GIS outlines (Golden NCP)
+ * can be stroked from the drawer — never a choropleth mosaic.
  * Never invents lat/lon; never remints Golden place_id.
  */
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Info, MapPin, Navigation, Search, X } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
+	Info,
+	MapPin,
+	Navigation,
+	Search,
+	X,
+} from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { localizeCity } from "../../lib/cityNames";
-import { observedDifferenceAmount } from "../../lib/farqMapPins";
+import {
+	differenceFromPinProps,
+	pinFetchCapForZoom,
+} from "../../lib/farqMapPins";
+import { pinGapAmount } from "../../lib/farqPriceTiles";
+import {
+	TOP_OPPORTUNITIES,
+	topOpportunities,
+	withObservedDistances,
+	type OpportunityRow,
+} from "../../lib/farqOpportunities";
+import {
+	shouldOfferSearchHere,
+	type MapViewChangeMeta,
+} from "../../lib/farqMapViewport";
 import { localizeDigitString } from "../../lib/formatPrice";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { providerTintClass } from "../../lib/providerTint";
@@ -32,11 +56,20 @@ import EmptyState from "../EmptyState";
 import FarqBrandMark from "../FarqBrandMark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
-import type { MapSearch } from "../../routes/map";
+import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
+import { resolveMapSort, resolveMapView } from "../../routes/map";
+import MapAskChat from "./MapAskChat";
+import FarqExploreChrome, {
+	EXPLORE_ZOOM,
+	type ExploreRadius,
+	type FilterRailId,
+	type MapLayerId,
+	type SheetSnap,
+} from "./FarqExploreChrome";
+import FarqViewSortBar from "./FarqViewSortBar";
+import FarqOpportunityList, { FarqOpportunityCard } from "./FarqOpportunityList";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
 import "../../styles/farq-mapbox.css";
-
-const MOBILE_FOOD_CHIPS = ["burgers", "pizza", "shawarma"] as const;
 
 function categorySearchQuery(
 	categoryId: string,
@@ -69,8 +102,10 @@ export default function IntelligenceMapSplit({
 	const {
 		userLocation,
 		locationPinKind,
-		openMapModal,
+		locationError,
+		isLocating,
 		requestLocation,
+		dismissError,
 	} = useLocation();
 	const [meta, setMeta] = useState<IntelligenceMeta | null>(null);
 	const [places, setPlaces] = useState<IntelligenceMapPlaces | null>(null);
@@ -83,22 +118,45 @@ export default function IntelligenceMapSplit({
 	const [loading, setLoading] = useState(true);
 	const [mapQuery, setMapQuery] = useState(search.q || "");
 	const viewRef = useRef<{ bbox: string; zoom: number } | null>(null);
-	const viewTimerRef = useRef<number>(0);
+	const fetchedViewRef = useRef<{ bbox: string; zoom: number } | null>(null);
+	const intentionalFetchRef = useRef(false);
 	const placesAbortRef = useRef<AbortController | null>(null);
+	const placesRef = useRef<IntelligenceMapPlaces | null>(null);
 	const lastFocusedPlaceRef = useRef<string>("");
 	const pendingLocateRef = useRef(false);
+	const [livePlaceId, setLivePlaceId] = useState(search.place || "");
+	const [searchHere, setSearchHere] = useState(false);
 	const [focusRequest, setFocusRequest] = useState<{
 		lat: number;
 		lng: number;
 		id: string;
+		zoom?: number;
+		kind?: "select" | "locate" | "cluster";
 	} | null>(null);
+	const [leftUserLocation, setLeftUserLocation] = useState(false);
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
-	const [majorGapsOnly, setMajorGapsOnly] = useState(false);
+	const [majorGapsOnly, setMajorGapsOnly] = useState(true);
 	const [legendOpen, setLegendOpen] = useState(false);
 	const [retryTick, setRetryTick] = useState(0);
-	const [moreOpen, setMoreOpen] = useState(false);
-	const [aroundOpen, setAroundOpen] = useState(false);
-	const [chromeOpen, setChromeOpen] = useState(true);
+	const [drawerOpen, setDrawerOpen] = useState(false);
+	const [gisHoodsOn, setGisHoodsOn] = useState(false);
+	const [overlayHoods, setOverlayHoods] =
+		useState<IntelligenceMapNeighborhoods | null>(null);
+	const [exploreRadius, setExploreRadius] = useState<ExploreRadius>("hawally");
+	const pendingRadiusRef = useRef<ExploreRadius | null>(null);
+	const [rail, setRail] = useState<FilterRailId>("restaurants");
+	const [sheetSnap, setSheetSnap] = useState<SheetSnap>("peek");
+	const [comparePanelHidden, setComparePanelHidden] = useState(false);
+	const [searchFocused, setSearchFocused] = useState(false);
+	const chromeHideTimerRef = useRef(0);
+	const splitRef = useRef<HTMLDivElement | null>(null);
+	const [layers, setLayers] = useState<Record<MapLayerId, boolean>>({
+		opportunities: true,
+		restaurants: false,
+		providers: false,
+		prices: true,
+		delivery: false,
+	});
 	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
 	const [placesFetching, setPlacesFetching] = useState(false);
 	const filterKeyRef = useRef("");
@@ -109,11 +167,14 @@ export default function IntelligenceMapSplit({
 	const city = search.city || "";
 	const placeId = search.place || "";
 	const q = search.q || "";
+	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const view = resolveMapView(search, pathname);
+	const sort = resolveMapSort(search);
 
 	const patchSearch = useCallback(
 		(next: Partial<MapSearch>) => {
 			void navigate({
-				to: "/map",
+				to: pathname === "/" ? "/" : "/map",
 				search: (prev: MapSearch) => ({
 					neighborhood:
 						"neighborhood" in next ? next.neighborhood : prev.neighborhood,
@@ -121,15 +182,21 @@ export default function IntelligenceMapSplit({
 					city: "city" in next ? next.city : prev.city,
 					q: "q" in next ? next.q : prev.q,
 					place: "place" in next ? next.place : prev.place,
+					view: "view" in next ? next.view : prev.view,
+					sort: "sort" in next ? next.sort : prev.sort,
 				}),
 			});
 		},
-		[navigate],
+		[navigate, pathname],
 	);
 
 	useEffect(() => {
 		setMapQuery(search.q || "");
 	}, [search.q]);
+
+	useEffect(() => {
+		setLivePlaceId(placeId);
+	}, [placeId]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -140,13 +207,8 @@ export default function IntelligenceMapSplit({
 			.then((m) => {
 				if (cancelled) return;
 				setMeta(m);
-				if (!search.category && m.categories.length) {
-					const grocery = m.categories.find((c) => c.category_id === "grocery");
-					const food = m.categories.find((c) => c.category_id === "burgers");
-					patchSearch({
-						category: (food || grocery || m.categories[0]).category_id,
-						city: search.city || "Riyadh",
-					});
+				if (!search.city) {
+					patchSearch({ city: "Riyadh" });
 				}
 			})
 			.catch(() => {
@@ -175,7 +237,9 @@ export default function IntelligenceMapSplit({
 		const cat =
 			meta?.categories.find((c) => c.category_id === categoryId) || null;
 		const query = categorySearchQuery(categoryId, cat, q);
-		setPlacesFetching(true);
+		if (!placesRef.current) setPlacesFetching(true);
+		fetchedViewRef.current = { bbox, zoom };
+		setSearchHere(false);
 		setScanHint((cur) => (cur === "searching" ? "searching" : "ready"));
 		window.clearTimeout(scanTimerRef.current);
 		scanTimerRef.current = window.setTimeout(() => {
@@ -187,7 +251,8 @@ export default function IntelligenceMapSplit({
 			q: query,
 			category: categoryId || undefined,
 			layer: "comparison",
-			limit: 400,
+			limit: pinFetchCapForZoom(zoom),
+			fields: "pin",
 			signal: controller.signal,
 		})
 			.then((body) => {
@@ -205,23 +270,41 @@ export default function IntelligenceMapSplit({
 	}, [q, categoryId, meta]);
 
 	const onViewChange = useCallback(
-		(bbox: string, zoom: number) => {
-			const prev = viewRef.current;
-			if (prev && prev.bbox === bbox && prev.zoom === zoom) return;
-			viewRef.current = { bbox, zoom };
-			window.clearTimeout(viewTimerRef.current);
-			viewTimerRef.current = window.setTimeout(() => {
+		(bbox: string, zoom: number, meta?: MapViewChangeMeta) => {
+			const next = { bbox, zoom };
+			viewRef.current = next;
+			if (!fetchedViewRef.current) {
 				fetchPlaces(bbox, zoom);
-			}, 200);
+				return;
+			}
+			if (intentionalFetchRef.current) {
+				intentionalFetchRef.current = false;
+				fetchPlaces(bbox, zoom);
+				return;
+			}
+			const offer = shouldOfferSearchHere({
+				userGesture: Boolean(meta?.userGesture),
+				hasFetched: true,
+				fetched: fetchedViewRef.current,
+				current: next,
+			});
+			setSearchHere((cur) => (cur === offer ? cur : offer));
 		},
 		[fetchPlaces],
 	);
+
+	const searchThisView = useCallback(() => {
+		const v = viewRef.current;
+		if (v) fetchPlaces(v.bbox, v.zoom);
+	}, [fetchPlaces]);
+
+	const getViewportBbox = useCallback(() => viewRef.current?.bbox || "", []);
 
 	useEffect(() => {
 		const key = `${categoryId}|${q}`;
 		if (filterKeyRef.current && filterKeyRef.current !== key) {
 			setPlaces(null);
-			setAroundOpen(false);
+			setSheetSnap("peek");
 			setScanHint("searching");
 		}
 		filterKeyRef.current = key;
@@ -233,7 +316,16 @@ export default function IntelligenceMapSplit({
 	}, [fetchPlaces]);
 
 	useEffect(() => {
-		return () => window.clearTimeout(scanTimerRef.current);
+		if (drawerOpen || searchFocused || sheetSnap === "expanded") {
+			splitRef.current?.removeAttribute("data-chrome-hidden");
+		}
+	}, [drawerOpen, searchFocused, sheetSnap]);
+
+	useEffect(() => {
+		return () => {
+			window.clearTimeout(scanTimerRef.current);
+			window.clearTimeout(chromeHideTimerRef.current);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -251,6 +343,18 @@ export default function IntelligenceMapSplit({
 			.catch(() => setHoods(null));
 		return () => controller.abort();
 	}, [categoryId, city]);
+
+	useEffect(() => {
+		if (!gisHoodsOn) return;
+		const controller = new AbortController();
+		void IntelligenceService.mapNeighborhoods({
+			city: city || "Riyadh",
+			signal: controller.signal,
+		})
+			.then(setOverlayHoods)
+			.catch(() => setOverlayHoods(null));
+		return () => controller.abort();
+	}, [gisHoodsOn, city]);
 
 	useEffect(() => {
 		if (!neighborhoodId || !categoryId) {
@@ -280,23 +384,23 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		if (!placeDetail || !placeId) return;
 		if (placeDetail.place_id !== placeId) return;
-		if (lastFocusedPlaceRef.current === placeId) return;
 		lastFocusedPlaceRef.current = placeId;
-		setFocusRequest({
-			lat: placeDetail.lat,
-			lng: placeDetail.lng,
-			id: `place:${placeId}`,
-		});
+		/* Pin click must not wait for this network + camera. List focus sets focusRequest itself. */
 	}, [placeDetail, placeId]);
 
 	useEffect(() => {
 		if (!pendingLocateRef.current || !userLocation) return;
 		if (locationPinKind !== "gps" && locationPinKind !== "manual") return;
 		pendingLocateRef.current = false;
+		const radius = pendingRadiusRef.current;
+		pendingRadiusRef.current = null;
+		intentionalFetchRef.current = true;
 		setFocusRequest({
 			lat: userLocation.lat,
 			lng: userLocation.lng,
 			id: `locate:${Date.now()}`,
+			kind: "locate",
+			...(radius ? { zoom: EXPLORE_ZOOM[radius] } : {}),
 		});
 	}, [userLocation, locationPinKind]);
 
@@ -352,61 +456,121 @@ export default function IntelligenceMapSplit({
 	);
 
 	const selectedPlaceFeature = places?.features.find(
-		(f) => String(f.properties.place_id) === String(placeId),
+		(f) => String(f.properties.place_id) === String(livePlaceId),
 	);
 	const selectedRestaurantId =
 		placeDetail?.restaurant_id ||
 		placeDetail?.menu?.id ||
 		selectedPlaceFeature?.properties.restaurant_id ||
 		selectedPlaceFeature?.properties.menu?.id ||
-		(/^\d+$/.test(placeId) ? placeId : "");
+		(/^\d+$/.test(livePlaceId) ? livePlaceId : "");
 
 	const showUserDot = locationPinKind === "gps" || locationPinKind === "manual";
+	placesRef.current = places;
 
 	const visiblePlaces = useMemo(() => {
-		if (!places || !majorGapsOnly) return places;
+		if (!places) return places;
+		const gapsOnly = true;
 		return {
 			...places,
 			features: places.features.filter((f) => {
-				if (f.properties.feature_type === "cluster") {
-					return Number(f.properties.difference_count || 0) > 0;
-				}
-				if (f.properties.has_difference) return true;
-				const amount = Number(f.properties.difference?.difference_amount);
-				return Number.isFinite(amount) && amount > 0;
+				const isCluster = f.properties.feature_type === "cluster";
+				const amount = pinGapAmount(f.properties);
+				const hasGap = isCluster
+					? Number(f.properties.difference_count || 0) > 0
+					: Boolean(f.properties.has_difference) || amount != null;
+				if (!layers.opportunities && hasGap) return false;
+				if (gapsOnly) return hasGap;
+				return true;
 			}),
 		};
-	}, [places, majorGapsOnly]);
+	}, [places, layers.opportunities]);
 
-	const topSavings = useMemo(() => {
-		const rows: {
-			placeId: string;
-			name: string;
-			amount: number;
-			lat: number;
-			lng: number;
-		}[] = [];
+	const viewportSavings = useMemo(() => {
+		const rows: OpportunityRow[] = [];
 		for (const f of visiblePlaces?.features || []) {
 			if (f.properties.feature_type === "cluster") continue;
 			const placeId = String(f.properties.place_id || "").trim();
 			if (!placeId) continue;
-			const amount = observedDifferenceAmount(f.properties.difference);
+			const amount = pinGapAmount(f.properties);
 			if (amount == null) continue;
 			const coords = f.geometry?.coordinates;
 			if (!Array.isArray(coords) || coords.length < 2) continue;
 			const lng = Number(coords[0]);
 			const lat = Number(coords[1]);
 			if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+			const diff = differenceFromPinProps(f.properties);
+			const cheap = Number(
+				f.properties.cheapest_price ??
+					(diff && "cheapest_price" in diff ? diff.cheapest_price : NaN),
+			);
+			const expensive = Number(
+				f.properties.expensive_price ??
+					(diff && "expensive_price" in diff ? diff.expensive_price : NaN),
+			);
+			const product =
+				String(
+					f.properties.product_name ||
+						(diff && "product_name" in diff ? diff.product_name : "") ||
+						"",
+				).trim() || null;
 			rows.push({
 				placeId,
 				name: String(f.properties.name || "").trim(),
 				amount,
 				lat,
 				lng,
+				cheapestPrice: Number.isFinite(cheap) ? cheap : null,
+				expensivePrice: Number.isFinite(expensive) ? expensive : null,
+				productName: product,
+				cheapestProvider:
+					String(
+						f.properties.cheapest_provider_id ||
+							diff?.cheapest_provider_id ||
+							"",
+					).trim() || null,
+				expensiveProvider:
+					String(
+						f.properties.expensive_provider_id ||
+							(diff && "expensive_provider_id" in diff
+								? diff.expensive_provider_id
+								: "") ||
+							"",
+					).trim() || null,
 			});
 		}
-		return rows.sort((a, b) => b.amount - a.amount).slice(0, 12);
-	}, [visiblePlaces]);
+		const located =
+			showUserDot && userLocation
+				? withObservedDistances(rows, userLocation.lat, userLocation.lng)
+				: rows;
+		return located;
+	}, [visiblePlaces, showUserDot, userLocation]);
+
+	const cheapestReady = useMemo(
+		() => viewportSavings.some((row) => row.cheapestPrice != null),
+		[viewportSavings],
+	);
+	const nearReady = Boolean(showUserDot && userLocation);
+
+	const opportunityList = useMemo(
+		() => topOpportunities(viewportSavings, sort, TOP_OPPORTUNITIES),
+		[viewportSavings, sort],
+	);
+
+	const topSavings = opportunityList;
+
+	const displayPlaces = useMemo(() => {
+		if (!visiblePlaces) return visiblePlaces;
+		const ids = new Set(topSavings.map((row) => row.placeId));
+		if (livePlaceId) ids.add(livePlaceId);
+		return {
+			...visiblePlaces,
+			count: topSavings.length,
+			features: visiblePlaces.features.filter((f) =>
+				ids.has(String(f.properties.place_id || "")),
+			),
+		};
+	}, [visiblePlaces, topSavings, livePlaceId]);
 
 	const selectedCityLabel = useMemo(() => {
 		const match = (meta?.geo_readiness?.ncp_ready_cities || []).find(
@@ -426,50 +590,30 @@ export default function IntelligenceMapSplit({
 		[meta, categoryId],
 	);
 
-	const foodChips = useMemo(() => {
-		const cats = meta?.categories || [];
-		const pinned = MOBILE_FOOD_CHIPS.map((id) =>
-			cats.find((c) => c.category_id === id),
-		).filter(Boolean) as IntelligenceCategory[];
-		const rest = cats.filter(
-			(c) =>
-				!MOBILE_FOOD_CHIPS.includes(
-					c.category_id as (typeof MOBILE_FOOD_CHIPS)[number],
-				) &&
-				c.category_id !== "food" &&
-				c.category_id !== "grocery" &&
-				c.category_id !== "shopping",
-		);
-		return { pinned, rest };
-	}, [meta]);
-
 	const aroundMax = topSavings[0] || null;
 
 	const locateUser = useCallback(() => {
-		if (
-			(locationPinKind === "gps" || locationPinKind === "manual") &&
-			userLocation
-		) {
+		pendingLocateRef.current = true;
+		dismissError();
+		/* Always getCurrentPosition in this click turn (iOS Safari). */
+		requestLocation();
+		if (locationPinKind === "gps" && userLocation) {
+			intentionalFetchRef.current = true;
 			setFocusRequest({
 				lat: userLocation.lat,
 				lng: userLocation.lng,
 				id: `locate:${Date.now()}`,
+				kind: "locate",
 			});
-			return;
+			setLeftUserLocation(false);
 		}
-		pendingLocateRef.current = true;
-		if (locationPinKind === "gps" || locationPinKind === "manual") {
-			requestLocation();
-			return;
-		}
-		openMapModal();
-	}, [locationPinKind, userLocation, requestLocation, openMapModal]);
+	}, [dismissError, locationPinKind, requestLocation, userLocation]);
 
 	const applyCategory = useCallback(
 		(nextId: string) => {
 			setPlaces(null);
 			setScanHint("searching");
-			setMoreOpen(false);
+			setDrawerOpen(false);
 			lastFocusedPlaceRef.current = "";
 			patchSearch({
 				category: nextId || undefined,
@@ -481,26 +625,136 @@ export default function IntelligenceMapSplit({
 		[patchSearch],
 	);
 
+	const applyRail = useCallback(
+		(next: FilterRailId) => {
+			setRail(next);
+			if (next === "gaps") {
+				setMajorGapsOnly(true);
+				patchSearch({ sort: "gap" });
+				return;
+			}
+			if (next === "cheapest") {
+				setMajorGapsOnly(false);
+				patchSearch({ sort: "cheap" });
+				return;
+			}
+			setMajorGapsOnly(false);
+			if (next === "grocery") {
+				applyCategory("grocery");
+				return;
+			}
+			if (next === "restaurants") {
+				applyCategory("");
+			}
+		},
+		[applyCategory, patchSearch],
+	);
+
+	const toggleLayer = useCallback((id: MapLayerId) => {
+		setLayers((cur) => ({ ...cur, [id]: !cur[id] }));
+	}, []);
+
+	const onMapInteraction = useCallback((phase: "start" | "end") => {
+		if (drawerOpen || searchFocused || sheetSnap === "expanded") return;
+		const root = splitRef.current;
+		window.clearTimeout(chromeHideTimerRef.current);
+		if (phase === "start") {
+			root?.setAttribute("data-chrome-hidden", "true");
+			return;
+		}
+		chromeHideTimerRef.current = window.setTimeout(() => {
+			root?.removeAttribute("data-chrome-hidden");
+		}, 900);
+	}, [drawerOpen, searchFocused, sheetSnap]);
+
 	const focusAroundPlace = useCallback(
 		(row: { placeId: string; lat: number; lng: number }) => {
 			lastFocusedPlaceRef.current = row.placeId;
+			setLivePlaceId(row.placeId);
 			setFocusRequest({
 				lat: row.lat,
 				lng: row.lng,
 				id: `place:${row.placeId}`,
+				kind: "select",
 			});
 			patchSearch({
 				place: row.placeId,
 				neighborhood: undefined,
 			});
-			setAroundOpen(false);
+			setSheetSnap("peek");
+			setComparePanelHidden(false);
+			setDrawerOpen(false);
 		},
 		[patchSearch],
 	);
 
-	if (error) {
+	const applyView = useCallback(
+		(next: MapViewMode) => {
+			patchSearch({ view: next });
+			if (next !== "map") return;
+			const row = topSavings.find((item) => item.placeId === livePlaceId);
+			if (!row) return;
+			setFocusRequest({
+				lat: row.lat,
+				lng: row.lng,
+				id: `place:${row.placeId}`,
+				kind: "select",
+			});
+		},
+		[patchSearch, topSavings, livePlaceId],
+	);
+
+	const applySort = useCallback(
+		(next: MapSort) => {
+			if (next === "near" && !nearReady) locateUser();
+			patchSearch({ sort: next });
+			if (next === "gap") setMajorGapsOnly(true);
+			if (next === "cheap" || next === "near") setRail(next === "cheap" ? "cheapest" : "gaps");
+		},
+		[locateUser, nearReady, patchSearch],
+	);
+
+	const applyExploreRadius = useCallback(
+		(next: ExploreRadius) => {
+			setExploreRadius(next);
+			if (
+				userLocation &&
+				(locationPinKind === "gps" || locationPinKind === "manual")
+			) {
+				intentionalFetchRef.current = true;
+				setFocusRequest({
+					lat: userLocation.lat,
+					lng: userLocation.lng,
+					id: `radius:${next}:${Date.now()}`,
+					kind: "locate",
+					zoom: EXPLORE_ZOOM[next],
+				});
+				return;
+			}
+			pendingRadiusRef.current = next;
+			locateUser();
+		},
+		[userLocation, locationPinKind, locateUser],
+	);
+
+	const selectedTopIndex = opportunityList.findIndex((row) => row.placeId === livePlaceId);
+
+	const closePlace = useCallback(() => {
+		setLivePlaceId("");
+		patchSearch({ neighborhood: undefined, place: undefined });
+	}, [patchSearch]);
+	const stepOpportunity = useCallback(
+		(dir: -1 | 1) => {
+			if (selectedTopIndex < 0) return;
+			const next = opportunityList[selectedTopIndex + dir];
+			if (next) focusAroundPlace(next);
+		},
+		[selectedTopIndex, opportunityList, focusAroundPlace],
+	);
+
+	if (error && !meta) {
 		return (
-			<div className="bg-surface px-4 py-10" data-testid="intelligence-map-error">
+			<div className="farq-map-split farq-map-split--message px-4 py-10" data-testid="intelligence-map-error">
 				<EmptyState
 					illustration={<FarqBrandMark variant="wordmark" />}
 					title="We couldn't load the live map"
@@ -522,141 +776,90 @@ export default function IntelligenceMapSplit({
 		);
 	}
 
-	if (loading || !meta) {
-		return (
-			<div className="bg-surface px-4 py-10 text-center text-ink-muted" aria-busy>
-				{isRTL ? "نحمّل الخريطة…" : "Loading map…"}
-			</div>
-		);
-	}
+	const readyMeta = meta;
+	const hasViewportPlaces = Boolean(visiblePlaces?.features?.length);
 
 	return (
 		<div
+			ref={splitRef}
 			dir={isRTL ? "rtl" : "ltr"}
-			className="farq-map-split flex h-[calc(100svh-var(--bottom-nav-h))] flex-col bg-surface lg:h-auto lg:min-h-[calc(100dvh-56px)] lg:flex-row"
+			className={`farq-map-split lg:flex lg:min-h-[calc(100dvh-56px)] ${
+				isRTL ? "lg:flex-row-reverse" : "lg:flex-row"
+			}`}
 			data-testid="intelligence-map-split"
-			data-sheet-open={placeId ? "true" : undefined}
+			data-view={view}
+			data-sheet-open={livePlaceId && !comparePanelHidden ? "true" : undefined}
+			data-sheet-snap={livePlaceId ? undefined : sheetSnap}
+			data-panel-collapsed={comparePanelHidden ? "true" : undefined}
 			data-legend-open={legendOpen ? "true" : undefined}
+			data-drawer-open={drawerOpen ? "true" : undefined}
+			data-hide-prices={layers.prices ? undefined : "true"}
 		>
-			<div className="relative min-h-0 flex-1 bg-neutral-100 lg:min-h-0">
-				{/* Mobile overlay — compact floating rows, not one giant card */}
-				<div
-					className="farq-map-overlay farq-map-overlay--mobile lg:hidden"
-					data-testid="intelligence-map-overlay"
-				>
-					<div className="farq-map-overlay-row farq-map-overlay-card px-3 py-2">
-						<FarqBrandMark variant="lockup" size={26} />
-						<button
-							type="button"
-							onClick={toggleLanguage}
-							disabled={languageSwitching}
-							className="ms-auto inline-flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-[13px] font-bold text-brand-900"
-							aria-label={
-								language === "en" ? "تبديل إلى العربية" : "Switch to English"
-							}
-						>
-							{language === "en" ? "عربي" : "EN"}
-						</button>
-						<button
-							type="button"
-							className="inline-flex size-11 items-center justify-center rounded-full text-brand-900"
-							aria-expanded={chromeOpen}
-							aria-label={isRTL ? "إخفاء البحث" : "Toggle search"}
-							onClick={() => setChromeOpen((v) => !v)}
-						>
-							{chromeOpen ? <X className="size-4" /> : <Search className="size-4" />}
-						</button>
-					</div>
-					{chromeOpen ? (
-						<>
-							<form
-								className="farq-map-overlay-card flex h-11 w-full items-center gap-2 px-3"
-								onSubmit={(e) => {
-									e.preventDefault();
-									patchSearch({
-										q: mapQuery.trim() || undefined,
-										place: undefined,
-									});
-								}}
-							>
-								<Search className="size-4 shrink-0 text-[#6b7c7c]" />
-								<input
-									value={mapQuery}
-									onChange={(e) => setMapQuery(e.target.value)}
-									placeholder={
-										isRTL
-											? "ابحث عن مطعم أو مقهى…"
-											: "Search a restaurant or café…"
-									}
-									className="h-11 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c]"
-									data-testid="intelligence-map-search"
-									aria-label={isRTL ? "بحث على الخريطة" : "Search the map"}
-								/>
-							</form>
-							<div
-								className="farq-map-chips"
-								data-testid="intelligence-map-chips"
-							>
-								<button
-									type="button"
-									aria-pressed={majorGapsOnly}
-									data-testid="intelligence-map-major-gaps"
-									className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
-										majorGapsOnly
-											? "bg-mint-500 text-brand-900"
-											: "bg-white text-brand-900"
-									}`}
-									onClick={() => setMajorGapsOnly((v) => !v)}
-								>
-									{isRTL ? "🔥 أكبر فرق" : "🔥 Top gaps"}
-								</button>
-								{foodChips.pinned.map((c) => (
-									<button
-										key={c.category_id}
-										type="button"
-										aria-pressed={categoryId === c.category_id}
-										className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
-											categoryId === c.category_id
-												? "bg-mint-500 text-brand-900"
-												: "bg-white text-brand-900"
-										}`}
-										onClick={() => applyCategory(c.category_id)}
-									>
-										{c.category_name_ar || c.category_name}
-									</button>
-								))}
-								<button
-									type="button"
-									aria-pressed={moreOpen}
-									className={`inline-flex h-11 shrink-0 items-center rounded-full px-4 text-[13px] font-bold ${
-										moreOpen
-											? "bg-mint-500 text-brand-900"
-											: "bg-white text-brand-900"
-									}`}
-									onClick={() => setMoreOpen((v) => !v)}
-								>
-									{isRTL ? "المزيد" : "More"}
-								</button>
-							</div>
-							{moreOpen ? (
-								<div className="farq-map-overlay-card max-h-40 overflow-y-auto p-2">
-									{foodChips.rest.map((c) => (
-										<button
-											key={c.category_id}
-											type="button"
-											className="flex h-11 w-full items-center px-3 text-start text-[14px] font-bold text-brand-900"
-											onClick={() => applyCategory(c.category_id)}
-										>
-											{c.category_name_ar || c.category_name}
-										</button>
-									))}
-								</div>
-							) : null}
-						</>
-					) : null}
-				</div>
+			<div className="farq-map-stage">
+				<FarqExploreChrome
+					isRTL={isRTL}
+					language={language}
+					languageSwitching={languageSwitching}
+					onToggleLanguage={toggleLanguage}
+					mapQuery={mapQuery}
+					onMapQueryChange={setMapQuery}
+					onSearchSubmit={(q) =>
+						patchSearch({ q: q || undefined, place: undefined })
+					}
+					rail={rail}
+					onRail={applyRail}
+					categoryId={categoryId}
+					onApplyCategory={applyCategory}
+					majorGapsOnly={majorGapsOnly}
+					onToggleMajorGaps={() => setMajorGapsOnly((v) => !v)}
+					drawerOpen={drawerOpen}
+					onDrawerOpenChange={setDrawerOpen}
+					cities={readyMeta?.geo_readiness?.ncp_ready_cities || []}
+					city={city}
+					onCityChange={(next) =>
+						patchSearch({
+							city: next || undefined,
+							neighborhood: undefined,
+						})
+					}
+					categoryGroups={categoryGroups}
+					gisHoodsOn={gisHoodsOn}
+					onToggleGisHoods={() => setGisHoodsOn((v) => !v)}
+					layers={layers}
+					onToggleLayer={toggleLayer}
+					exploreRadius={exploreRadius}
+					onExploreRadius={applyExploreRadius}
+					aroundMax={aroundMax}
+					topSavings={topSavings}
+					sheetSnap={sheetSnap}
+					onSheetSnap={setSheetSnap}
+					placesFetching={placesFetching}
+					scanHint={scanHint}
+					hasViewportPlaces={hasViewportPlaces}
+					placesReady={places != null}
+					chromeHidden={false}
+					searchFocused={searchFocused}
+					onSearchFocused={setSearchFocused}
+					onLocate={locateUser}
+					locateBusy={isLocating}
+					onFocusPlace={focusAroundPlace}
+					showHereHint={showUserDot}
+					leftUserLocation={leftUserLocation}
+					placeSelected={Boolean(livePlaceId)}
+					cheapestReady={cheapestReady}
+					nearReady={nearReady}
+					view={view}
+					onView={applyView}
+					sort={sort}
+					onSort={applySort}
+					onNeedLocation={locateUser}
+					basemap={basemap}
+					onBasemapChange={setBasemap}
+					legendOpen={legendOpen}
+					onLegendOpenChange={setLegendOpen}
+				/>
 
-				<div className="absolute inset-x-3 top-3 z-[500] hidden flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
+				{readyMeta ? <div className="absolute inset-x-3 top-3 z-[500] hidden flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
 					<div className="flex min-w-0 items-center gap-4">
 						<div className="flex shrink-0 items-center gap-1.5">
 							<FarqBrandMark variant="lockup" size={29} />
@@ -678,7 +881,7 @@ export default function IntelligenceMapSplit({
 									<option value="">
 										{isRTL ? "كل المدن الجاهزة" : "All ready cities"}
 									</option>
-									{(meta.geo_readiness?.ncp_ready_cities || []).map((c) => (
+									{(readyMeta.geo_readiness?.ncp_ready_cities || []).map((c) => (
 										<option key={c.city_en} value={c.city_en}>
 											{localizeCity(c.city_ar || c.city_en, isRTL)}
 										</option>
@@ -703,7 +906,7 @@ export default function IntelligenceMapSplit({
 								<option value="">
 									{isRTL ? "كل المدن الجاهزة" : "All ready cities"}
 								</option>
-								{(meta.geo_readiness?.ncp_ready_cities || []).map((c) => (
+								{(readyMeta.geo_readiness?.ncp_ready_cities || []).map((c) => (
 									<option key={c.city_en} value={c.city_en}>
 										{localizeCity(c.city_ar || c.city_en, isRTL)}
 									</option>
@@ -725,8 +928,8 @@ export default function IntelligenceMapSplit({
 								onChange={(e) => setMapQuery(e.target.value)}
 								placeholder={
 									isRTL
-										? "ابحث عن مطعم أو مقهى…"
-										: "Search a restaurant or café…"
+										? "ابحث عن وجبة أو فرصة…"
+										: "Search a dish or opportunity…"
 								}
 								className="h-7 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c] lg:max-w-[14rem]"
 								data-testid="intelligence-map-search"
@@ -734,6 +937,16 @@ export default function IntelligenceMapSplit({
 							/>
 						</form>
 					</div>
+					<FarqViewSortBar
+						view={view}
+						onView={applyView}
+						sort={sort}
+						onSort={applySort}
+						isRTL={isRTL}
+						nearReady={nearReady}
+						cheapReady={cheapestReady}
+						onNeedLocation={locateUser}
+					/>
 					<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6eef0] pt-2.5 lg:border-0 lg:pt-0">
 						<div className="flex items-center gap-1">
 							<label className="relative">
@@ -746,6 +959,9 @@ export default function IntelligenceMapSplit({
 									aria-label={isRTL ? "الفئة" : "Category"}
 									data-testid="intelligence-map-category"
 								>
+									<option value="">
+										{isRTL ? "كل المطاعم" : "All restaurants"}
+									</option>
 									{categoryGroups.flatMap((g) =>
 										g.categories.map((c) => (
 											<option key={c.category_id} value={c.category_id}>
@@ -811,16 +1027,49 @@ export default function IntelligenceMapSplit({
 						<button
 							type="button"
 							onClick={locateUser}
-							className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#e6eef0] px-2 text-[12px] font-bold text-brand-900"
+							className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-[#e6eef0] px-2 text-[12px] font-bold text-brand-900"
 							data-testid="intelligence-map-locate-desktop"
+							aria-busy={isLocating}
 						>
 							<Navigation className="size-3.5" />
-							{isRTL ? "موقعي" : "My location"}
+							{isLocating
+								? isRTL
+									? "نحدد موقعك…"
+									: "Locating…"
+								: isRTL
+									? "موقعي"
+									: "My location"}
 						</button>
 					</div>
-				</div>
+				</div> : null}
 
-				<div className="h-full min-h-[50vh]" data-testid="intelligence-map-canvas-wrap">
+
+
+				<div className="farq-map-canvas" data-testid="intelligence-map-canvas-wrap">
+					{view === "list" ? (
+						<FarqOpportunityList
+							rows={topSavings}
+							isRTL={isRTL}
+							selectedPlaceId={livePlaceId}
+							onSelect={focusAroundPlace}
+							empty={
+								Boolean(places) &&
+								!placesFetching &&
+								topSavings.length === 0
+							}
+							countLabel={
+								topSavings.length
+									? isRTL
+										? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص حولك`
+										: `Top ${topSavings.length} opportunities around you`
+									: undefined
+							}
+						/>
+					) : null}
+					<div
+						className={view === "list" ? "farq-map-canvas-keep" : undefined}
+						aria-hidden={view === "list" ? true : undefined}
+					>
 					<Suspense
 						fallback={
 							<div className="flex h-full items-center justify-center text-ink-muted">
@@ -829,9 +1078,10 @@ export default function IntelligenceMapSplit({
 						}
 					>
 						<FarqMap
-							places={visiblePlaces}
+							places={displayPlaces}
 							neighborhoods={hoods}
-							selectedPlaceId={placeId}
+							gisNeighborhoods={gisHoodsOn ? overlayHoods : null}
+							selectedPlaceId={livePlaceId}
 							selectedNeighborhoodId={neighborhoodId}
 							focusRequest={focusRequest}
 							userLocation={userLocation}
@@ -840,145 +1090,119 @@ export default function IntelligenceMapSplit({
 							basemap={basemap}
 							onBasemapChange={setBasemap}
 							isRTL={isRTL}
-							onSelectPlace={(id) =>
-								patchSearch({ place: id, neighborhood: undefined })
-							}
+							onSelectPlace={(id) => {
+								setLivePlaceId(id);
+								lastFocusedPlaceRef.current = id;
+								setComparePanelHidden(false);
+								patchSearch({ place: id, neighborhood: undefined });
+							}}
 							onSelectNeighborhood={(id) =>
 								patchSearch({ neighborhood: id, place: undefined })
 							}
 							onViewChange={onViewChange}
-							sheetOpen={Boolean(placeId)}
+							sheetOpen={Boolean(livePlaceId) && !comparePanelHidden}
+							onMapInteraction={onMapInteraction}
+							onLeftUserLocation={setLeftUserLocation}
 						/>
 					</Suspense>
+					</div>
+					{locationError ? (
+						<div
+							role="alert"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-locate-error"
+						>
+							<p>{locationError}</p>
+							<button
+								type="button"
+								onClick={dismissError}
+								aria-label={isRTL ? "إغلاق" : "Dismiss"}
+							>
+								<X className="size-3.5" />
+							</button>
+						</div>
+					) : null}
+					{searchHere && !livePlaceId && view === "map" ? (
+						<button
+							type="button"
+							className="farq-search-here"
+							data-testid="intelligence-map-search-here"
+							onClick={searchThisView}
+						>
+							{isRTL ? "ابحث في هذه المنطقة" : "Search this area"}
+						</button>
+					) : null}
+					{view === "map" ? (
+					<MapAskChat
+						isRTL={isRTL}
+						language={language}
+						getViewportBbox={getViewportBbox}
+						selectedPlaceName={
+							placeDetail?.name ||
+							selectedPlaceFeature?.properties.name ||
+							""
+						}
+						userLat={
+							(locationPinKind === "gps" || locationPinKind === "manual") &&
+							userLocation
+								? userLocation.lat
+								: undefined
+						}
+						userLng={
+							(locationPinKind === "gps" || locationPinKind === "manual") &&
+							userLocation
+								? userLocation.lng
+								: undefined
+						}
+					/>
+					) : null}
+					{(loading || !readyMeta || placesFetching) && !visiblePlaces ? (
+						<div className="farq-map-skeleton" aria-hidden data-testid="intelligence-map-skeleton" />
+					) : null}
 				</div>
 
-				{placeId ? (
+				{livePlaceId && !comparePanelHidden ? (
 					<div
-						className="farq-map-place-host absolute inset-x-0 bottom-0 z-[520] lg:hidden"
+						className="farq-map-place-host lg:hidden"
 						data-testid="intelligence-map-place-backdrop"
+						onPointerDown={(e) => e.stopPropagation()}
+						onPointerMove={(e) => e.stopPropagation()}
 					>
 						<SelectedPlaceSheet
-							variant="sheet"
+							variant="panel"
 							placeDetail={placeDetail}
 							feature={selectedPlaceFeature?.properties}
 							selectedCategory={selectedCategory}
 							selectedRestaurantId={selectedRestaurantId}
 							isRTL={isRTL}
-							onClose={() =>
-								patchSearch({ neighborhood: undefined, place: undefined })
-							}
+							onClose={closePlace}
+							onHide={() => setComparePanelHidden(true)}
 							onOpenMenu={openRestaurantMenu}
+							opportunityIndex={selectedTopIndex}
+							opportunityCount={opportunityList.length}
+							onPrevOpportunity={() => stepOpportunity(-1)}
+							onNextOpportunity={() => stepOpportunity(1)}
 						/>
 					</div>
 				) : null}
 
-				{!placeId ? (
-					<div
-						className="farq-map-around lg:hidden"
-						data-testid="intelligence-map-around"
+				{comparePanelHidden ? (
+					<button
+						type="button"
+						className={`farq-map-panel-tab inline-flex ${livePlaceId ? "" : "hidden lg:inline-flex"}`}
+						data-testid="intelligence-map-panel-tab"
+						aria-label={isRTL ? "إظهار المقارنة" : "Show comparison"}
+						onClick={() => setComparePanelHidden(false)}
 					>
-						<div
-							className="farq-map-scan"
-							data-testid="intelligence-map-scan"
-							aria-live="polite"
-						>
-							{scanHint || placesFetching
-								? isRTL
-									? "نبحث عن أكبر الفروقات…"
-									: "Looking for the biggest gaps…"
-								: null}
-						</div>
-						<div className="farq-map-overlay-card overflow-hidden">
-							<button
-								type="button"
-								className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2"
-								data-testid="intelligence-map-around-peek"
-								onClick={() => {
-									if (aroundMax) {
-										focusAroundPlace(aroundMax);
-										return;
-									}
-									setAroundOpen((v) => !v);
-								}}
-							>
-								<span className="text-[13px] font-bold text-brand-900">
-									{isRTL ? "أكبر فرق حولك" : "Biggest gap around you"}
-								</span>
-								<span className="shrink-0 text-[13px] font-black text-brand-900">
-									{aroundMax
-										? `+${localizeDigitString(String(Math.round(aroundMax.amount)), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
-										: "—"}
-								</span>
-							</button>
-							<button
-								type="button"
-								className="flex h-11 w-full items-center justify-center border-t border-[#e6eef0] text-[12px] font-bold text-[#6b7c7c]"
-								aria-expanded={aroundOpen}
-								onClick={() => setAroundOpen((v) => !v)}
-							>
-								{isRTL
-									? aroundOpen
-										? "إخفاء القائمة"
-										: "عرض القائمة"
-									: aroundOpen
-										? "Hide list"
-										: "Show list"}
-							</button>
-							{aroundOpen ? (
-								<ul
-									className="max-h-48 space-y-1 overflow-y-auto border-t border-[#e6eef0] p-2"
-									data-testid="intelligence-map-top-savings"
-								>
-									{topSavings.slice(0, 8).map((row) => (
-										<li key={row.placeId}>
-											<button
-												type="button"
-												className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-[#e6eef0] px-3 py-2 text-start"
-												data-testid="intelligence-map-top-saving"
-												onClick={() => focusAroundPlace(row)}
-											>
-												<span className="min-w-0 truncate text-[13px] font-bold text-brand-900">
-													{row.name || (isRTL ? "مطعم" : "Restaurant")}
-												</span>
-												<span className="shrink-0 text-[13px] font-black text-brand-900">
-													+
-													{localizeDigitString(
-														String(Math.round(row.amount)),
-														isRTL,
-													)}{" "}
-													{isRTL ? "ر.س" : "SAR"}
-												</span>
-											</button>
-										</li>
-									))}
-								</ul>
-							) : null}
-						</div>
-					</div>
+						{isRTL ? (
+							<ChevronLeft className="size-3.5" />
+						) : (
+							<ChevronRight className="size-3.5" />
+						)}
+						<span>{isRTL ? "الفرق" : "Gap"}</span>
+					</button>
 				) : null}
-
-				<div className="farq-map-tools farq-map-tools--mobile lg:hidden">
-					<button
-						type="button"
-						onClick={locateUser}
-						className="farq-map-tools-btn"
-						data-testid="intelligence-map-locate"
-						aria-label={isRTL ? "موقعي" : "My location"}
-					>
-						<Navigation className="size-4" />
-					</button>
-					<button
-						type="button"
-						className="farq-map-tools-btn farq-legend-info"
-						aria-expanded={legendOpen}
-						aria-controls="farq-map-legend"
-						data-testid="intelligence-map-legend-info"
-						onClick={() => setLegendOpen((v) => !v)}
-						aria-label={isRTL ? "دليل الخريطة" : "Map legend"}
-					>
-						<Info className="size-4" />
-					</button>
-				</div>
 
 				<div className="pointer-events-auto absolute bottom-3 start-3 z-[400] hidden lg:block">
 					<button
@@ -1042,11 +1266,11 @@ export default function IntelligenceMapSplit({
 			</div>
 
 			<aside
-				className={`hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:flex lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
-					placeId ? "farq-place-panel-host" : ""
-				}`}
+				className={`farq-map-compare-aside hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
+					comparePanelHidden ? "" : "lg:flex"
+				} ${livePlaceId ? "farq-place-panel-host" : ""}`}
 			>
-				{placeId ? (
+				{livePlaceId ? (
 					<SelectedPlaceSheet
 						variant="panel"
 						placeDetail={placeDetail}
@@ -1054,9 +1278,8 @@ export default function IntelligenceMapSplit({
 						selectedCategory={selectedCategory}
 						selectedRestaurantId={selectedRestaurantId}
 						isRTL={isRTL}
-						onClose={() =>
-							patchSearch({ neighborhood: undefined, place: undefined })
-						}
+						onClose={closePlace}
+						onHide={() => setComparePanelHidden(true)}
 						onOpenMenu={openRestaurantMenu}
 					/>
 				) : (
@@ -1069,18 +1292,33 @@ export default function IntelligenceMapSplit({
 									? "تفاصيل الفرق"
 									: "Farq difference"}
 						</h2>
-						{neighborhoodId ? (
+						<div className="flex shrink-0 items-center gap-1">
 							<button
 								type="button"
 								className="rounded-full p-1 text-[#6b7c7c] hover:bg-[#e6eef0]"
-								aria-label={isRTL ? "إغلاق" : "Close"}
-								onClick={() =>
-									patchSearch({ neighborhood: undefined, place: undefined })
-								}
+								aria-label={isRTL ? "إخفاء" : "Hide"}
+								data-testid="intelligence-map-panel-hide"
+								onClick={() => setComparePanelHidden(true)}
 							>
-								<X className="h-4 w-4" />
+								{isRTL ? (
+									<ChevronRight className="h-4 w-4" />
+								) : (
+									<ChevronLeft className="h-4 w-4" />
+								)}
 							</button>
-						) : null}
+							{neighborhoodId ? (
+								<button
+									type="button"
+									className="rounded-full p-1 text-[#6b7c7c] hover:bg-[#e6eef0]"
+									aria-label={isRTL ? "إغلاق" : "Close"}
+									onClick={() =>
+										patchSearch({ neighborhood: undefined, place: undefined })
+									}
+								>
+									<X className="h-4 w-4" />
+								</button>
+							) : null}
+						</div>
 					</div>
 				<div className="flex-1 space-y-4 overflow-y-auto">
 					<div className="space-y-4 p-5">
@@ -1088,51 +1326,35 @@ export default function IntelligenceMapSplit({
 						<div className="space-y-4">
 						<p className="text-[13px] text-[#6b7c7c]">
 							{isRTL
-								? "اضغط فقاعة فرق لفتح لحظة الفرق — الوجبة، الفرق المرصود، ثم التطبيقات. إذا ما فيه فرق مرصود لن نخترع رقماً ولن نخترع إحداثيات."
-								: "Tap a price-difference bubble to open the Farq moment — meal, observed gap, then apps. We never invent a فرق amount or coordinates."}
+								? "وين أقدر أوفّر فلوسي الآن؟ القائمة والخارطة نفس الفرص — أكبر فرق حولك، بدون اختراع سعر أو إحداثيات."
+								: "Where can you save money now? List and map are the same opportunities — biggest observed gaps, never invented prices or coordinates."}
 						</p>
 						{topSavings.length ? (
 							<div data-testid="intelligence-map-top-savings">
 								<h3 className="mb-2 text-[13px] font-bold text-brand-900">
-									{isRTL ? "أكبر الفروقات هنا" : "Biggest gaps here"}
+									{isRTL
+										? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص حولك`
+										: `Top ${topSavings.length} opportunities around you`}
 								</h3>
 								<ul className="space-y-1.5">
 									{topSavings.map((row) => (
 										<li key={row.placeId}>
-											<button
-												type="button"
-												className="flex w-full items-center justify-between gap-3 rounded-xl bg-[#e6eef0] px-3 py-2 text-start"
-												data-testid="intelligence-map-top-saving"
-												onClick={() => {
-													lastFocusedPlaceRef.current = row.placeId;
-													setFocusRequest({
-														lat: row.lat,
-														lng: row.lng,
-														id: `place:${row.placeId}`,
-													});
-													patchSearch({
-														place: row.placeId,
-														neighborhood: undefined,
-													});
-												}}
-											>
-												<span className="min-w-0 truncate text-[13px] font-bold text-brand-900">
-													{row.name ||
-														(isRTL ? "مطعم" : "Restaurant")}
-												</span>
-												<span className="shrink-0 text-[13px] font-black text-brand-900">
-													+
-													{localizeDigitString(
-														String(Math.round(row.amount)),
-														isRTL,
-													)}{" "}
-													{isRTL ? "ر.س" : "SAR"}
-												</span>
-											</button>
+											<FarqOpportunityCard
+												row={row}
+												isRTL={isRTL}
+												selected={row.placeId === livePlaceId}
+												onSelect={focusAroundPlace}
+											/>
 										</li>
 									))}
 								</ul>
 							</div>
+						) : places != null && !placesFetching ? (
+							<p className="text-[14px] font-extrabold text-brand-900">
+								{isRTL
+									? "ما رصدنا فرق يستحق حولك بعد"
+									: "No worthwhile gap observed around you yet"}
+							</p>
 						) : null}
 						</div>
 					) : winner && !promote ? (

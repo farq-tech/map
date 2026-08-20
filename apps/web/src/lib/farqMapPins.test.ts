@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { PLATFORM_LOGOS } from "./platformLogos";
+import { TOP_OPPORTUNITIES } from "./farqOpportunities";
 import {
 	BUBBLE_SIZE_BASE,
 	BUBBLE_SIZE_MAX,
@@ -8,20 +9,28 @@ import {
 	BUBBLE_SIZE_SCALE,
 	AURA_PROMOTE_MAX,
 	AURA_PROMOTE_MAX_MOBILE,
+	CLUSTER_BREAK_ZOOM,
+	MAP_PIN_CAP,
+	MAP_PIN_HTML_CAP,
+	PIN_IDENTITY_ZOOM,
 	auraPromoteCap,
 	applyAuraRankClasses,
 	pinPresentationForZoom,
+	pinIdentityReveal,
 	buildClusterPinElement,
 	buildPlacePinElement,
 	bubbleSizePx,
 	clusterOpportunityCount,
 	clusterOpportunityLabel,
+	clusterGapHeroLabel,
+	gapRiyalLabel,
 	FARQ_CLUSTERS_CLASS,
 	featureMarkerKey,
 	observedClusterTopGap,
 	observedDifferenceAmount,
 	parseDifference,
 	PLACE_HERO_PX,
+	PROVIDER_HERO_PX,
 	pinSizeTier,
 	promotedAuraLimit,
 	rankAuraPlaceIds,
@@ -34,7 +43,11 @@ import {
 	observedRestaurantImageUrl,
 	sanitizeObservedImageUrl,
 	setPinSelected,
+	shouldAttachPinPhoto,
 	shouldReplayBubbleMotion,
+	pinDomCapForZoom,
+	differenceFromPinProps,
+	updatePlacePinChip,
 } from "./farqMapPins";
 
 describe("resolveCheapestPinLogo — honest cheapest-app only", () => {
@@ -85,7 +98,7 @@ describe("resolveCheapestPinLogo — honest cheapest-app only", () => {
 });
 
 describe("Price Difference Bubble HTML", () => {
-	it("renders a gap bubble from observed difference_amount — no app logos or names", () => {
+	it("renders a gap bubble with the cheapest app logo larger than the price chip", () => {
 		const el = buildPlacePinElement({
 			name: "برجر ستيشن",
 			isRTL: true,
@@ -96,21 +109,18 @@ describe("Price Difference Bubble HTML", () => {
 			},
 		});
 		expect(el.dataset.testid).toBe("farq-map-gap-bubble");
-		expect(el.classList.contains("farq-gap-bubble")).toBe(true);
-		expect(el.querySelector("img")).toBeNull();
-		expect(el.textContent).not.toContain("Ninja");
+		expect(el.classList.contains("farq-gap-bubble--provider")).toBe(true);
+		expect(el.dataset.mark).toBe("provider");
+		expect(el.querySelector("img")?.getAttribute("src")).toContain("ninja");
+		expect(Number(el.dataset.size)).toBeLessThan(PROVIDER_HERO_PX);
 		expect(el.textContent).not.toContain("برجر ستيشن");
-		expect(el.textContent).toContain("+١٨");
-		expect(el.textContent).toContain("ر.س");
+		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+١٨");
+		expect(el.textContent).not.toContain("ر.س");
+		expect(el.querySelector(".farq-gap-bubble-currency")).toBeNull();
+		expect(Number(el.dataset.size)).toBeLessThanOrEqual(BUBBLE_SIZE_MAX);
 		expect(el.getAttribute("aria-label")).toBe(
 			"فرق السعر ١٨ ريال في برجر ستيشن",
 		);
-		expect(el.querySelector(".farq-gap-bubble-mark")?.textContent).toBe("ب");
-		expect(el.querySelector(".farq-gap-bubble-stem")).toBeTruthy();
-		
-		expect(el.querySelector(".farq-gap-bubble-field")).toBeTruthy();
-		expect(el.classList.contains("farq-gap-bubble--aura")).toBe(true);
-		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+١٨");
 	});
 
 	it("tiny gaps show +N and initials — never +0, names, or both prices", () => {
@@ -145,15 +155,18 @@ describe("Price Difference Bubble HTML", () => {
 			difference: { cheapest_provider_id: "ninja" },
 		});
 		expect(el.dataset.testid).toBe("farq-map-restaurant-pin");
-		expect(el.querySelector("img")).toBeNull();
+		expect(el.querySelector("img")?.getAttribute("src")).toContain("ninja");
+		expect(el.querySelector(".farq-gap-bubble-amount")).toBeNull();
 		expect(el.textContent).not.toContain("+");
 	});
 
-	it("cluster keeps the count and never invents a provider logo", () => {
+	it("cluster count is observed opportunities and never invents a provider logo", () => {
 		const el = buildClusterPinElement({ count: 14, differenceCount: 3 });
 		expect(el.classList.contains(FARQ_CLUSTERS_CLASS)).toBe(true);
 		expect(el.classList.contains("farq-3d-cluster--opportunity")).toBe(true);
-		expect(el.querySelector(".farq-3d-cluster-count")?.textContent).toBe("3 opps");
+		expect(el.querySelector(".farq-3d-cluster-count")?.textContent).toBe("🔥 3 places");
+		expect(el.dataset.opportunities).toBe("3");
+		expect(el.dataset.count).toBe("14");
 		expect(el.querySelector(".farq-3d-cluster-gap")).toBeNull();
 		expect(el.querySelector("img")).toBeNull();
 		expect(el.dataset.provider).toBeUndefined();
@@ -162,7 +175,7 @@ describe("Price Difference Bubble HTML", () => {
 	it("opportunity cluster shows an observed top gap and never invents one", () => {
 		const plain = buildClusterPinElement({ count: 24, differenceCount: 24, isRTL: true });
 		expect(plain.querySelector(".farq-3d-cluster-gap")).toBeNull();
-		expect(plain.querySelector(".farq-3d-cluster-count")?.textContent).toBe("٢٤ فرصة");
+		expect(plain.querySelector(".farq-3d-cluster-count")?.textContent).toBe("🔥 ٢٤ مكان");
 		expect(plain.textContent).not.toMatch(/\+/);
 
 		const topped = buildClusterPinElement({
@@ -171,8 +184,8 @@ describe("Price Difference Bubble HTML", () => {
 			topGap: 18,
 			isRTL: true,
 		});
-		expect(topped.querySelector(".farq-3d-cluster-gap")?.textContent).toBe("+١٨");
-		expect(topped.querySelector(".farq-3d-cluster-count")?.textContent).toBe("٢٤ فرصة");
+		expect(topped.querySelector(".farq-3d-cluster-gap")?.textContent).toBe("🔥 ١٨ ر.س فرق");
+		expect(topped.querySelector(".farq-3d-cluster-count")?.textContent).toBe("٢٤ مكان");
 		expect(topped.querySelector("img")).toBeNull();
 	});
 
@@ -189,7 +202,7 @@ describe("Price Difference Bubble HTML", () => {
 });
 
 describe("featureMarkerKey", () => {
-	it("keys observed gaps by place_id + rounded riyals", () => {
+	it("keys by place_id only — gap or photo flicker does not remint", () => {
 		const key = featureMarkerKey({
 			type: "Feature",
 			geometry: { type: "Point", coordinates: [46.67, 24.71] },
@@ -203,10 +216,10 @@ describe("featureMarkerKey", () => {
 				},
 			},
 		});
-		expect(key).toBe("place:FARQ-PLACE-008559:bubble:18:mark");
+		expect(key).toBe("place:FARQ-PLACE-008559");
 	});
 
-	it("keys an observed restaurant photo so the pin remints when a logo arrives", () => {
+	it("stays place:id when a restaurant photo arrives", () => {
 		const key = featureMarkerKey({
 			type: "Feature",
 			geometry: { type: "Point", coordinates: [46.67, 24.71] },
@@ -217,10 +230,10 @@ describe("featureMarkerKey", () => {
 				difference: { difference_amount: 18 },
 			},
 		});
-		expect(key).toBe("place:FARQ-PLACE-008559:bubble:18:logo");
+		expect(key).toBe("place:FARQ-PLACE-008559");
 	});
 
-	it("keys places without an observed gap as restaurant — not a fake +0", () => {
+	it("keys places without an observed gap as place:id — not a fake +0", () => {
 		const key = featureMarkerKey({
 			type: "Feature",
 			geometry: { type: "Point", coordinates: [46.67, 24.71] },
@@ -230,7 +243,33 @@ describe("featureMarkerKey", () => {
 				has_difference: false,
 			},
 		});
-		expect(key).toBe("place:FARQ-PLACE-1:restaurant:mark");
+		expect(key).toBe("place:FARQ-PLACE-1");
+	});
+
+	it("updates the mint chip in place instead of reminting", () => {
+		const el = buildPlacePinElement({
+			name: "X",
+			difference: { difference_amount: 12 },
+		});
+		updatePlacePinChip(el, 22, false);
+		expect(el.dataset.amount).toBe("22");
+		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+22");
+	});
+
+	it("reads slim gap + cheapest_provider_id without a nested difference", () => {
+		expect(
+			differenceFromPinProps({
+				gap: 18,
+				cheapest_provider_id: "jahez",
+			}),
+		).toEqual({
+			difference_amount: 18,
+			cheapest_provider_id: "jahez",
+			expensive_provider_id: null,
+			cheapest_price: null,
+			expensive_price: null,
+			product_name: null,
+		});
 	});
 });
 
@@ -255,9 +294,10 @@ describe("bubble size — observed difference only", () => {
 		expect(bubbleSizePx(3)).toBeGreaterThanOrEqual(BUBBLE_SIZE_MIN);
 		expect(bubbleSizePx(18)).toBeLessThanOrEqual(BUBBLE_SIZE_MAX);
 		expect(bubbleSizePx(400)).toBe(BUBBLE_SIZE_MAX);
-		expect(bubbleSizePx(7) - bubbleSizePx(3)).toBeGreaterThanOrEqual(5);
-		expect(bubbleSizePx(12) - bubbleSizePx(7)).toBeGreaterThanOrEqual(5);
-		expect(bubbleSizePx(18) - bubbleSizePx(12)).toBeGreaterThanOrEqual(4);
+		expect(BUBBLE_SIZE_MAX).toBeLessThan(PROVIDER_HERO_PX);
+		expect(bubbleSizePx(18)).toBeGreaterThanOrEqual(20);
+		expect(bubbleSizePx(18)).toBeLessThanOrEqual(24);
+		expect(bubbleSizePx(18)).toBeLessThan(PROVIDER_HERO_PX);
 	});
 
 	it("stamps pixel size from the observed gap, not rating or count", () => {
@@ -317,17 +357,32 @@ describe("resolvePlacePinMarks — honest winner + expensive only", () => {
 });
 
 describe("Price Aura viewport rank + cluster honesty", () => {
-	it("promotes the top 8–12 observed gaps and never invents extras", () => {
+	it("ranks top gaps and switches pin presentation at the cluster break", () => {
 		const items = Array.from({ length: 20 }, (_, i) => ({
 			placeId: `p${i}`,
 			amount: i + 1,
 		}));
+		expect(CLUSTER_BREAK_ZOOM).toBe(14);
+		expect(PIN_IDENTITY_ZOOM).toBe(14);
+		expect(MAP_PIN_CAP).toBe(400);
+		expect(TOP_OPPORTUNITIES).toBe(10);
+		expect(MAP_PIN_HTML_CAP).toBe(1);
+		expect(pinDomCapForZoom(16)).toBe(1);
+		expect(shouldAttachPinPhoto(false)).toBe(false);
+		expect(shouldAttachPinPhoto(true)).toBe(true);
 		expect(promotedAuraLimit(20)).toBe(AURA_PROMOTE_MAX);
 		expect(promotedAuraLimit(6)).toBe(6);
 		expect(auraPromoteCap(true)).toBe(AURA_PROMOTE_MAX_MOBILE);
 		expect(promotedAuraLimit(20, auraPromoteCap(true))).toBe(8);
-		expect(pinPresentationForZoom(14)).toBe("amount");
+		expect(pinPresentationForZoom(11.8)).toBe("amount");
+		expect(pinPresentationForZoom(13.9)).toBe("amount");
+		expect(pinPresentationForZoom(14)).toBe("identity");
 		expect(pinPresentationForZoom(16)).toBe("identity");
+		expect(pinIdentityReveal(13.2)).toBe(0);
+		expect(pinIdentityReveal(13.99)).toBeGreaterThan(0.4);
+		expect(pinIdentityReveal(13.99)).toBeLessThan(0.6);
+		expect(pinIdentityReveal(14.01)).toBeGreaterThan(pinIdentityReveal(13.99));
+		expect(pinIdentityReveal(14.7)).toBe(1);
 		const top = rankAuraPlaceIds(items);
 		expect(top.size).toBe(12);
 		expect(top.has("p19")).toBe(true);
@@ -346,6 +401,10 @@ describe("Price Aura viewport rank + cluster honesty", () => {
 		applyAuraRankClasses(el, "demoted");
 		expect(el.dataset.rank).toBe("demoted");
 		expect(el.classList.contains("farq-gap-bubble--demoted")).toBe(true);
+		applyAuraRankClasses(el, "visible");
+		expect(el.dataset.rank).toBe("visible");
+		expect(el.classList.contains("farq-gap-bubble--demoted")).toBe(false);
+		expect(el.classList.contains("farq-gap-bubble--promoted")).toBe(false);
 		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+12");
 	});
 
@@ -357,7 +416,9 @@ describe("Price Aura viewport rank + cluster honesty", () => {
 		expect(observedClusterTopGap({ })).toBeNull();
 		expect(clusterOpportunityCount({ count: 24, differenceCount: 8 })).toBe(8);
 		expect(clusterOpportunityCount({ count: 14 })).toBe(14);
-		expect(clusterOpportunityLabel(24, true)).toBe("٢٤ فرصة");
+		expect(clusterOpportunityLabel(24, true)).toBe("٢٤ مكان");
+		expect(gapRiyalLabel(38, true)).toBe("٣٨ ر.س فرق");
+		expect(clusterGapHeroLabel(38, true)).toBe("🔥 ٣٨ ر.س فرق");
 	});
 });
 
@@ -401,12 +462,16 @@ describe("restaurant identity on Price Aura — real URLs only", () => {
 		expect(observedRestaurantImageUrl(null)).toBeNull();
 	});
 
-	it("keeps the circular restaurant hero at least as large as the max aura chip", () => {
-		expect(PLACE_HERO_PX).toBeGreaterThan(restaurantMarkSizePx(52));
-		expect(PLACE_HERO_PX).toBeGreaterThanOrEqual(BUBBLE_SIZE_MAX);
+	it("keeps the app logo larger than the max price chip", () => {
+		expect(BUBBLE_SIZE_MIN).toBe(20);
+		expect(BUBBLE_SIZE_MAX).toBe(24);
+		expect(BUBBLE_SIZE_MAX).toBeLessThanOrEqual(26);
+		expect(PROVIDER_HERO_PX).toBeGreaterThan(BUBBLE_SIZE_MAX);
+		expect(PLACE_HERO_PX).toBeGreaterThan(BUBBLE_SIZE_MAX);
+		expect(BUBBLE_SIZE_MAX).toBeLessThanOrEqual(PROVIDER_HERO_PX - 16);
 	});
 
-	it("sits a real restaurant photo as the hero with a small Farq chip and tiny stem", () => {
+	it("sits the cheapest app logo as the hero with a smaller price chip", () => {
 		const src = "https://images.deliveryhero.io/image/hungerstation/restaurant/logo/abc.png";
 		const el = buildPlacePinElement({
 			name: "كودو",
@@ -415,20 +480,17 @@ describe("restaurant identity on Price Aura — real URLs only", () => {
 			difference: { difference_amount: 18, cheapest_provider_id: "jahez" },
 		});
 		const img = el.querySelector("img");
-		expect(el.dataset.mark).toBe("logo");
-		expect(el.classList.contains("farq-gap-bubble--logo")).toBe(true);
+		expect(el.dataset.mark).toBe("provider");
+		expect(el.classList.contains("farq-gap-bubble--provider")).toBe(true);
 		expect(
 			(el.querySelector(".farq-gap-bubble-mark") as HTMLElement | null)?.dataset.kind,
-		).toBe("photo");
-		expect(img).toBeTruthy();
-		expect(img?.getAttribute("src")).toContain("images.deliveryhero.io");
+		).toBe("provider");
+		expect(img?.getAttribute("src")).toBe(PLATFORM_LOGOS.jahez.src);
+		expect(Number(el.dataset.size)).toBeLessThanOrEqual(BUBBLE_SIZE_MAX);
+		expect(Number(el.dataset.size)).toBeLessThan(PROVIDER_HERO_PX);
 		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+١٨");
-		expect(el.querySelector(".farq-gap-bubble-stem .farq-brand-mark")).toBeTruthy();
-		
-		expect(el.textContent).not.toContain("كودو");
-		expect(el.textContent).not.toContain("جاهز");
-		expect(el.textContent).not.toContain("Jahez");
-		expect(el.style.getPropertyValue("--farq-hero-size")).toBe(`${PLACE_HERO_PX}px`);
+		expect(el.textContent).not.toContain("ر.س");
+		expect(el.style.getPropertyValue("--farq-hero-size")).toBe(`${PROVIDER_HERO_PX}px`);
 	});
 
 	it("falls back to initials when the photo URL is missing — never invents Unsplash", () => {
@@ -444,10 +506,22 @@ describe("restaurant identity on Price Aura — real URLs only", () => {
 		expect(el.innerHTML).not.toContain("unsplash");
 	});
 
+	it("never attaches a restaurant photo on unselected pins", () => {
+		const el = buildPlacePinElement({
+			name: "كودو",
+			imageUrl: "https://images.deliveryhero.io/logo.png",
+			includePhoto: false,
+			difference: { difference_amount: 12 },
+		});
+		expect(el.querySelector("img")).toBeNull();
+		expect(el.dataset.mark).toBe("initials");
+	});
+
 	it("hides a broken photo and shows initials on error", () => {
 		const el = buildPlacePinElement({
 			name: "Burger Queen",
 			imageUrl: "https://cdn.example/missing-logo.png",
+			includePhoto: true,
 			difference: { difference_amount: 7 },
 		});
 		const img = el.querySelector("img");
@@ -469,6 +543,7 @@ describe("restaurant identity on Price Aura — real URLs only", () => {
 		const photo = buildPlacePinElement({
 			name: "Golden cafe",
 			difference: null,
+			includePhoto: true,
 			imageUrl: "https://images.deliveryhero.io/logo.png",
 		});
 		expect(photo.dataset.mark).toBe("logo");

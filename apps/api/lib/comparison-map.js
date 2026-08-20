@@ -85,9 +85,32 @@ function parseBbox(raw) {
   return { west, south, east, north, clamped: false };
 }
 
+/**
+ * Map list is always honest points. Mapbox `cluster: true`
+ * (clusterMaxZoom 13) owns aggregation below CLUSTER_BREAK_ZOOM.
+ * Cap: MAP_PIN_CAP (request max MAP_PIN_CAP_MAX). Over cap → spatial sample
+ * of the viewport, plus a small reserved slice for top observed gaps.
+ */
+const CLUSTER_BREAK_ZOOM = 14;
+const PIN_FIELDS = Object.freeze([
+  'feature_type',
+  'place_id',
+  'name',
+  'gap',
+  'cheapest_provider_id',
+  'expensive_provider_id',
+  'has_difference',
+  'product_name',
+  'cheapest_price',
+  'expensive_price',
+]);
+const MAP_PIN_CAP = 400;
+const MAP_PIN_CAP_MAX = 800;
+const MAP_PIN_HERO_RESERVE = 24;
+
 function cellSizeForZoom(zoom) {
   const z = Number(zoom);
-  if (!Number.isFinite(z) || z >= 14) return 0;
+  if (!Number.isFinite(z) || z >= CLUSTER_BREAK_ZOOM) return 0;
   if (z >= 12) return 0.02;
   if (z >= 10) return 0.05;
   return 0.1;
@@ -119,6 +142,14 @@ function toPlacePin(p) {
           difference_amount: amount,
           cheapest_provider_id: cheapest,
           expensive_provider_id: expensive,
+          cheapest_price:
+            p.cheapest_price != null && Number.isFinite(Number(p.cheapest_price))
+              ? Number(p.cheapest_price)
+              : null,
+          expensive_price:
+            p.dearest_price != null && Number.isFinite(Number(p.dearest_price))
+              ? Number(p.dearest_price)
+              : null,
           product_name: p.product_name || null,
         }
       : null,
@@ -175,28 +206,57 @@ function spatialSample(places, n) {
   return out;
 }
 
-function clusterPlaces(places, zoom, limit) {
-  const cell = cellSizeForZoom(zoom);
-  if (!cell) {
-    if (places.length <= limit) return places;
-    const diffs = places.filter((p) => p.has_difference);
-    const rest = places.filter((p) => !p.has_difference);
-    const keepDiffs = diffs.slice(0, limit);
-    const sampled = spatialSample(rest, Math.max(0, limit - keepDiffs.length));
-    return [...keepDiffs, ...sampled];
-  }
+function observedGapRiyals(difference) {
+  const n = Number(difference?.difference_amount);
+  if (!Number.isFinite(n) || n <= 0 || Math.round(n) < 1) return null;
+  return Math.round(n);
+}
 
-  const out = gridCluster(places, cell);
-  if (out.length <= limit) return out;
-  out.sort((a, b) => {
-    const ac = a.type === 'cluster' ? a.count : 1;
-    const bc = b.type === 'cluster' ? b.count : 1;
-    const ad = a.type === 'cluster' ? a.difference_count : a.has_difference ? 1 : 0;
-    const bd = b.type === 'cluster' ? b.difference_count : b.has_difference ? 1 : 0;
-    if (bd !== ad) return bd - ad;
-    return bc - ac;
-  });
-  return out.slice(0, limit);
+function pinFieldsMode(raw) {
+  return String(raw || 'pin').toLowerCase() === 'full' ? 'full' : 'pin';
+}
+
+function observedPrice(raw) {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function toSlimPinFeature(f) {
+  const gap = observedGapRiyals(f.difference);
+  const diff = f.difference || {};
+  return {
+    type: 'Feature',
+    id: f.place_id,
+    geometry: { type: 'Point', coordinates: [f.lng, f.lat] },
+    properties: {
+      feature_type: 'place',
+      place_id: f.place_id,
+      name: f.name,
+      gap,
+      cheapest_provider_id: diff.cheapest_provider_id || null,
+      expensive_provider_id: diff.expensive_provider_id || null,
+      has_difference: Boolean(f.has_difference),
+      product_name: diff.product_name || null,
+      cheapest_price: observedPrice(diff.cheapest_price),
+      expensive_price: observedPrice(diff.expensive_price),
+    },
+  };
+}
+
+/** Points only — Mapbox GPU clustering owns zoom < 14. Never emit grid orbs. */
+function clusterPlaces(places, zoom, limit) {
+  void zoom;
+  if (places.length <= limit) return places;
+  const heroBudget = Math.min(
+    MAP_PIN_HERO_RESERVE,
+    Math.max(0, Math.floor(limit * 0.15)),
+  );
+  const diffs = places.filter((p) => p.has_difference);
+  const heroes = diffs.slice(0, heroBudget);
+  const heroIds = new Set(heroes.map((p) => p.place_id));
+  const rest = places.filter((p) => !heroIds.has(p.place_id));
+  const sampled = spatialSample(rest, Math.max(0, limit - heroes.length));
+  return [...heroes, ...sampled];
 }
 
 function emptyCoverage() {
@@ -291,6 +351,14 @@ function rowToPlace(row) {
     dearest_provider: row.dearest_provider || null,
     difference_amount:
       row.difference_amount != null ? Number(row.difference_amount) : null,
+    cheapest_price:
+      row.cheapest_price != null && Number.isFinite(Number(row.cheapest_price))
+        ? Number(row.cheapest_price)
+        : null,
+    dearest_price:
+      row.dearest_price != null && Number.isFinite(Number(row.dearest_price))
+        ? Number(row.dearest_price)
+        : null,
     product_name: row.product_name || null,
     image_url: row.branch_image_url || null,
     has_difference: Boolean(row.cheapest_provider),
@@ -335,10 +403,84 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
    AND dc.longitude BETWEEN $7 AND $8
 `;
 
+const SOURCE_MATCH_SQL = `
+SELECT dc.canonical_restaurant_id::text AS restaurant_id,
+       dc.canonical_name_ar,
+       dc.canonical_name_en,
+       dc.latitude,
+       dc.longitude,
+       dc.city,
+       dc.provider_count,
+       dc.branch_image_url,
+       s.cheapest_provider,
+       s.dearest_provider,
+       s.cheapest_price,
+       s.dearest_price,
+       s.difference_amount,
+       s.product_name
+  FROM comparison.discovery_cards dc
+  JOIN LATERAL (
+    SELECT ips.cheapest_provider,
+           ips.dearest_provider,
+           ips.cheapest_price,
+           ips.dearest_price,
+           (ips.dearest_price - ips.cheapest_price) AS difference_amount,
+           COALESCE(ips.name_ar, ips.name_en) AS product_name
+      FROM comparison.item_price_spread ips
+     WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
+       AND ips.cheapest_provider IS NOT NULL
+       AND btrim(ips.cheapest_provider) <> ''
+       AND EXISTS (
+         SELECT 1
+           FROM unnest($9::text[]) t
+          WHERE COALESCE(ips.name_ar, '') ILIKE '%' || t || '%'
+             OR COALESCE(ips.name_en, '') ILIKE '%' || t || '%'
+       )
+       AND COALESCE(ips.name_ar, '') !~* 'صوص|خبز|إضافة|اضافه'
+       AND COALESCE(ips.name_en, '') !~* 'sauce|bun|add.?on'
+     ORDER BY ips.cheapest_price ASC NULLS LAST,
+              (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
+     LIMIT 1
+  ) s ON true
+ WHERE dc.latitude IS NOT NULL
+   AND dc.longitude IS NOT NULL
+   AND dc.latitude BETWEEN $1 AND $2
+   AND dc.longitude BETWEEN $3 AND $4
+   AND dc.latitude BETWEEN $5 AND $6
+   AND dc.longitude BETWEEN $7 AND $8
+`;
+
 function matchesQuery(place, q) {
   if (!q) return true;
-  const hay = norm([place.name, place.name_ar, place.name_en, place.city].join(' '));
+  const hay = norm(
+    [place.name, place.name_ar, place.name_en, place.city, place.product_name].join(
+      ' ',
+    ),
+  );
   return hay.includes(q);
+}
+
+function bboxAroundPoint(lng, lat, padDeg = 0.018) {
+  const pad = Number(padDeg);
+  const d = Number.isFinite(pad) && pad > 0 ? pad : 0.018;
+  if (!validCoord(lng, lat)) return null;
+  return {
+    west: lng - d,
+    south: lat - d,
+    east: lng + d,
+    north: lat + d,
+  };
+}
+
+function bboxToCsv(bbox) {
+  if (!bbox) return '';
+  return `${bbox.west},${bbox.south},${bbox.east},${bbox.north}`;
+}
+
+function likeSafe(term) {
+  return String(term || '')
+    .replace(/[%_\\]/g, '')
+    .trim();
 }
 
 function emptyCollection(opts) {
@@ -362,7 +504,7 @@ function emptyCollection(opts) {
   };
 }
 
-function toFeature(f) {
+function toFeature(f, fields = 'pin') {
   if (f.type === 'cluster') {
     return {
       type: 'Feature',
@@ -374,6 +516,7 @@ function toFeature(f) {
       },
     };
   }
+  if (pinFieldsMode(fields) === 'pin') return toSlimPinFeature(f);
   return {
     type: 'Feature',
     id: f.place_id,
@@ -389,6 +532,8 @@ function toFeature(f) {
       difference: f.difference,
       menu: f.menu,
       image_url: f.image_url || null,
+      gap: observedGapRiyals(f.difference),
+      cheapest_provider_id: f.difference?.cheapest_provider_id || null,
     },
   };
 }
@@ -406,7 +551,8 @@ async function queryPlaces(opts = {}) {
   const bbox = parseBbox(opts.bbox) || RIYADH_VIEW.bbox;
   const zoom = Number(opts.zoom);
   const q = norm(opts.q);
-  const limit = Math.min(Math.max(Number(opts.limit) || 400, 1), 800);
+  const fields = pinFieldsMode(opts.fields);
+  const limit = Math.min(Math.max(Number(opts.limit) || MAP_PIN_CAP, 1), MAP_PIN_CAP_MAX);
 
   const [rows, coverage] = await Promise.all([
     comparisonQuery(LIST_SQL, [
@@ -443,6 +589,11 @@ async function queryPlaces(opts = {}) {
     type: 'FeatureCollection',
     count: features.length,
     matched: pool.length,
+    limit,
+    capped: pool.length > features.length,
+    cluster_break_zoom: CLUSTER_BREAK_ZOOM,
+    fields,
+    server_clusters: false,
     layer: 'comparison',
     bbox,
     zoom: Number.isFinite(zoom) ? zoom : null,
@@ -456,10 +607,10 @@ async function queryPlaces(opts = {}) {
       db_join: null,
     },
     note_ar:
-      'دبابيس مطاعم المقارنة من إحداثيات الصف الحقيقية. اضغط الدبوس لفتح قائمة فرق.',
+      `دبابيس مطاعم المقارنة من إحداثيات الصف الحقيقية. الحد ${limit} نقطة (تجميع Mapbox تحت زوم ${CLUSTER_BREAK_ZOOM}).`,
     note_en:
-      'Comparison restaurant pins from real row coordinates. Tap a pin to open the Farq menu.',
-    features: features.map(toFeature),
+      `Comparison restaurant pins from real row coordinates. Cap ${limit} points — Mapbox clusters below zoom ${CLUSTER_BREAK_ZOOM}.`,
+    features: features.map((f) => toFeature(f, fields)),
   };
 }
 
@@ -563,11 +714,244 @@ function __resetCoverageCacheForTests() {
   coverageCache = { at: 0, value: null };
 }
 
+/**
+ * Viewport bbox for chat — the request's camera box only.
+ * Never falls back to all-Riyadh. Never substitutes RIYADH_VIEW.
+ */
+function parseViewportBbox(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw !== null) {
+    const west = Number(raw.west);
+    const south = Number(raw.south);
+    const east = Number(raw.east);
+    const north = Number(raw.north);
+    if (![west, south, east, north].every(isFiniteNum)) return null;
+    if (east === west || north === south) return null;
+    return {
+      west: Math.min(west, east),
+      south: Math.min(south, north),
+      east: Math.max(west, east),
+      north: Math.max(south, north),
+    };
+  }
+  const parts = String(raw)
+    .split(',')
+    .map((x) => Number.parseFloat(x));
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
+  let [west, south, east, north] = parts;
+  if (west > east) [west, east] = [east, west];
+  if (south > north) [south, north] = [north, south];
+  if (east === west || north === south) return null;
+  return { west, south, east, north };
+}
+
+const VISIBLE_OPPORTUNITY_CAP = 12;
+const SLIM_OPPORTUNITY_KEYS = Object.freeze([
+  'place',
+  'cheapest_provider',
+  'expensive_provider',
+  'cheapest_price',
+  'highest_price',
+  'difference_amount',
+  'item',
+  'lat',
+  'lng',
+]);
+
+function slimOpportunity(place) {
+  const slim = {};
+  const name = String(place.name || '').trim();
+  if (name) slim.place = name;
+  if (place.cheapest_provider) slim.cheapest_provider = String(place.cheapest_provider);
+  if (place.dearest_provider) slim.expensive_provider = String(place.dearest_provider);
+  if (place.cheapest_price != null && Number.isFinite(Number(place.cheapest_price))) {
+    slim.cheapest_price = Number(place.cheapest_price);
+  }
+  if (place.dearest_price != null && Number.isFinite(Number(place.dearest_price))) {
+    slim.highest_price = Number(place.dearest_price);
+  }
+  if (
+    place.difference_amount != null &&
+    Number.isFinite(Number(place.difference_amount))
+  ) {
+    slim.difference_amount = Number(place.difference_amount);
+  }
+  const item = String(place.product_name || '').trim();
+  if (item) slim.item = item;
+  if (isFiniteNum(place.lat)) slim.lat = place.lat;
+  if (isFiniteNum(place.lng)) slim.lng = place.lng;
+  return slim;
+}
+
+function isComparablePlace(place) {
+  return Boolean(
+    place &&
+      place.has_difference &&
+      (place.cheapest_price != null || place.difference_amount != null),
+  );
+}
+
+function clipRequestedBbox(requested) {
+  if (!requested) {
+    return { queried: null, empty_reason: 'invalid_bbox' };
+  }
+  const south = Math.max(requested.south, KSA.latMin);
+  const north = Math.min(requested.north, KSA.latMax);
+  const west = Math.max(requested.west, KSA.lngMin);
+  const east = Math.min(requested.east, KSA.lngMax);
+  if (south >= north || west >= east) {
+    return { queried: null, empty_reason: 'out_of_coverage' };
+  }
+  return { queried: { west, south, east, north }, empty_reason: null };
+}
+
+function sortSlimOpportunities(slim, sort) {
+  const rows = slim.slice();
+  if (sort === 'cheapest') {
+    rows.sort(
+      (a, b) => (a.cheapest_price ?? Number.POSITIVE_INFINITY) - (b.cheapest_price ?? Number.POSITIVE_INFINITY),
+    );
+    return rows;
+  }
+  rows.sort((a, b) => (b.difference_amount || 0) - (a.difference_amount || 0));
+  return rows;
+}
+
+async function queryOpportunitiesInBbox(opts = {}) {
+  const requested = parseViewportBbox(opts.bbox) || parseBbox(opts.bbox);
+  const cap = Math.min(
+    Math.max(Number(opts.limit) || VISIBLE_OPPORTUNITY_CAP, 1),
+    VISIBLE_OPPORTUNITY_CAP,
+  );
+  const clipped = clipRequestedBbox(requested);
+  if (!clipped.queried) {
+    return {
+      opportunities: [],
+      queried_bbox: null,
+      requested_bbox: requested,
+      empty_reason: clipped.empty_reason,
+    };
+  }
+  const queried = clipped.queried;
+  const query = typeof opts.__query === 'function' ? opts.__query : comparisonQuery;
+  if (!readEnabled() && typeof opts.__query !== 'function') {
+    return {
+      opportunities: [],
+      queried_bbox: queried,
+      requested_bbox: requested,
+      empty_reason: 'read_disabled',
+    };
+  }
+  const qTerms = (Array.isArray(opts.qTerms) ? opts.qTerms : [])
+    .map((t) => likeSafe(t))
+    .filter((t) => t.length >= 3)
+    .slice(0, 8);
+  const params = [
+    queried.south,
+    queried.north,
+    queried.west,
+    queried.east,
+    KSA.latMin,
+    KSA.latMax,
+    KSA.lngMin,
+    KSA.lngMax,
+  ];
+  const sql = qTerms.length ? SOURCE_MATCH_SQL : LIST_SQL;
+  if (qTerms.length) params.push(qTerms);
+  const rows = await query(sql, params);
+  const slim = [];
+  for (const row of rows) {
+    const place = rowToPlace(row);
+    if (!isComparablePlace(place)) continue;
+    slim.push(slimOpportunity(place));
+  }
+  const sorted = sortSlimOpportunities(slim, opts.sort);
+  return {
+    opportunities: sorted.slice(0, cap),
+    queried_bbox: queried,
+    requested_bbox: requested,
+    empty_reason: slim.length ? null : 'insufficient_comparison',
+    q_terms: qTerms.length ? qTerms : null,
+    sort: opts.sort === 'cheapest' ? 'cheapest' : 'gap',
+  };
+}
+
+/**
+ * Slim observed gaps in the request viewport. Not a GeoJSON dump, not
+ * clustered pins, not all-Riyadh unless that is the bbox the client sent.
+ */
+async function queryVisibleOpportunities(opts = {}) {
+  const requested = parseViewportBbox(opts.bbox);
+  if (!requested) {
+    return {
+      opportunities: [],
+      queried_bbox: null,
+      requested_bbox: null,
+      empty_reason: 'invalid_bbox',
+    };
+  }
+  return queryOpportunitiesInBbox({
+    bbox: requested,
+    limit: opts.limit,
+    __query: opts.__query,
+    sort: 'gap',
+  });
+}
+
+/**
+ * Same Farq comparison source as the map pins (discovery_cards +
+ * item_price_spread). Bbox comes from a geocoded place, user GPS, or
+ * documented Riyadh coverage — never an invented restaurant coordinate.
+ */
+async function querySourceOpportunities(opts = {}) {
+  const requested =
+    parseViewportBbox(opts.bbox) ||
+    parseBbox(opts.bbox) ||
+    (opts.bbox && typeof opts.bbox === 'object' ? opts.bbox : null);
+  if (!requested) {
+    return {
+      opportunities: [],
+      queried_bbox: null,
+      requested_bbox: null,
+      empty_reason: 'invalid_bbox',
+    };
+  }
+  return queryOpportunitiesInBbox({
+    bbox: requested,
+    qTerms: opts.qTerms,
+    sort: opts.sort,
+    limit: opts.limit,
+    __query: opts.__query,
+  });
+}
+
 module.exports = {
   RIYADH_VIEW,
+  CLUSTER_BREAK_ZOOM,
+  PIN_FIELDS,
+  MAP_PIN_CAP,
+  MAP_PIN_CAP_MAX,
+  MAP_PIN_HERO_RESERVE,
+  VISIBLE_OPPORTUNITY_CAP,
+  SLIM_OPPORTUNITY_KEYS,
   restaurantMenu,
   validCoord,
   parseBbox,
+  parseViewportBbox,
+  slimOpportunity,
+  bboxAroundPoint,
+  bboxToCsv,
+  likeSafe,
+  queryVisibleOpportunities,
+  querySourceOpportunities,
+  cellSizeForZoom,
+  spatialSample,
+  clusterPlaces,
+  gridCluster,
+  observedGapRiyals,
+  pinFieldsMode,
+  toSlimPinFeature,
+  toFeature,
   queryPlaces,
   getPlace,
   mapHealth,

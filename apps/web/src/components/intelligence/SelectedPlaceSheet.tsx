@@ -5,7 +5,7 @@
  * CTA «افتح الأرخص» opens the real /merchant/restaurant/:id menu.
  */
 import { Link } from "@tanstack/react-router";
-import { MapPin, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
 import {
 	useEffect,
 	useRef,
@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useCountUp } from "../../hooks/useCountUp";
 import { localizeDigitString } from "../../lib/formatPrice";
-import { getProviderLogo } from "../../lib/platformLogos";
+import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import type {
 	IntelligenceCategory,
 	IntelligenceMapPlaceDetail,
@@ -108,20 +108,30 @@ export default function SelectedPlaceSheet({
 	isRTL,
 	variant,
 	onClose,
+	onHide,
 	onOpenMenu,
+	opportunityIndex,
+	opportunityCount,
+	onPrevOpportunity,
+	onNextOpportunity,
 }: {
 	placeDetail: IntelligenceMapPlaceDetail | null;
 	feature?: IntelligenceMapPlaceProperties | null;
 	selectedCategory?: IntelligenceCategory | null;
 	selectedRestaurantId?: string;
 	isRTL: boolean;
-	variant: "sheet" | "panel";
+	variant: "sheet" | "panel" | "popup";
 	onClose: () => void;
+	onHide?: () => void;
 	onOpenMenu: (opts: {
 		restaurantId: string;
 		name?: string;
 		image?: string | null;
 	}) => void;
+	opportunityIndex?: number;
+	opportunityCount?: number;
+	onPrevOpportunity?: () => void;
+	onNextOpportunity?: () => void;
 }) {
 	const imageUrl = observedImageUrl(
 		placeDetail?.image_url,
@@ -148,11 +158,22 @@ export default function SelectedPlaceSheet({
 		difference_amount?: number | null;
 		observed_at?: string | null;
 	} | null;
-	const mealName = difference?.product_name || null;
-	const gapAmount = Number(difference?.difference_amount);
+	const mealName =
+		difference?.product_name || feature?.product_name || null;
+	const gapAmount = Number(
+		difference?.difference_amount ?? feature?.gap,
+	);
 	const hasGap = Number.isFinite(gapAmount) && gapAmount > 0;
-	const cheap = Number(difference?.cheapest_price);
-	const expensive = Number(difference?.expensive_price);
+	const cheap = Number(
+		difference?.cheapest_price ?? feature?.cheapest_price,
+	);
+	const expensive = Number(
+		difference?.expensive_price ?? feature?.expensive_price,
+	);
+	const cheapProvider =
+		difference?.cheapest_provider_id || feature?.cheapest_provider_id;
+	const expensiveProvider =
+		difference?.expensive_provider_id || feature?.expensive_provider_id;
 	const hasPrices =
 		Number.isFinite(cheap) && Number.isFinite(expensive) && expensive > 0;
 	const cheapPct = hasPrices
@@ -177,6 +198,195 @@ export default function SelectedPlaceSheet({
 			image: imageUrl,
 		});
 	};
+
+	const hideButton = onHide ? (
+		<button
+			type="button"
+			className="farq-place-hit flex size-9 items-center justify-center rounded-2xl bg-white text-brand-900 shadow-sm"
+			aria-label={isRTL ? "إخفاء" : "Hide"}
+			data-testid="intelligence-map-place-hide"
+			onClick={onHide}
+		>
+			{isRTL ? (
+				<ChevronRight className="size-3.5" />
+			) : (
+				<ChevronLeft className="size-3.5" />
+			)}
+		</button>
+	) : null;
+
+	const opportunityNav =
+		opportunityCount &&
+		opportunityCount > 1 &&
+		opportunityIndex != null &&
+		opportunityIndex >= 0 ? (
+			<div className="flex shrink-0 items-center gap-1">
+				<button
+					type="button"
+					className="inline-flex h-9 items-center rounded-full bg-[#e6eef0] px-3 text-[12px] font-extrabold text-brand-900 disabled:opacity-30"
+					aria-label={isRTL ? "السابق" : "Previous"}
+					disabled={opportunityIndex <= 0}
+					onClick={(e) => {
+						e.stopPropagation();
+						onPrevOpportunity?.();
+					}}
+				>
+					{isRTL ? "→ السابق" : "← Prev"}
+				</button>
+				<span
+					className="min-w-10 text-center text-[12px] font-bold text-brand-900"
+					data-testid="intelligence-map-opportunity-index"
+				>
+					{localizeDigitString(String(opportunityIndex + 1), isRTL)}{" "}
+					{isRTL ? "من" : "of"}{" "}
+					{localizeDigitString(String(opportunityCount), isRTL)}{" "}
+					{isRTL ? "فرق" : ""}
+				</span>
+				<button
+					type="button"
+					className="inline-flex h-9 items-center rounded-full bg-mint-500 px-3 text-[12px] font-extrabold text-brand-900 disabled:opacity-30"
+					aria-label={isRTL ? "التالي" : "Next"}
+					disabled={opportunityIndex >= opportunityCount - 1}
+					onClick={(e) => {
+						e.stopPropagation();
+						onNextOpportunity?.();
+					}}
+				>
+					{isRTL ? "التالي ←" : "Next →"}
+				</button>
+			</div>
+		) : null;
+
+	if (variant === "popup") {
+		return (
+			<div
+				className="farq-place-popup pointer-events-auto"
+				data-testid="intelligence-map-place-sheet"
+				data-sheet-snap="peek"
+			>
+				<div className="absolute end-2 top-2 flex items-center gap-1">
+					{onHide ? (
+						<button
+							type="button"
+							className="inline-flex size-8 items-center justify-center rounded-full bg-[#e6eef0] text-brand-900"
+							aria-label={isRTL ? "إخفاء" : "Hide"}
+							data-testid="intelligence-map-place-hide"
+							onClick={onHide}
+						>
+							{isRTL ? (
+								<ChevronRight className="size-3.5" />
+							) : (
+								<ChevronLeft className="size-3.5" />
+							)}
+						</button>
+					) : null}
+					<button
+						type="button"
+						className="inline-flex size-8 items-center justify-center rounded-full bg-[#e6eef0] text-brand-900"
+						aria-label={isRTL ? "إغلاق" : "Close"}
+						onClick={onClose}
+					>
+						<X className="size-3.5" />
+					</button>
+				</div>
+				{hasGap ? (
+					<p className="pe-8 text-[22px] font-black leading-none text-brand-900">
+						{localizeDigitString(String(Math.round(gapAmount)), isRTL)}{" "}
+						{isRTL ? "ر.س فرق" : "SAR gap"}
+					</p>
+				) : (
+					<p className="pe-8 text-[13px] font-bold text-[#6b7c7c]">
+						{isRTL ? "ما رصدنا فرقاً بعد" : "No observed gap yet"}
+					</p>
+				)}
+				{categoryLabel ? (
+					<p className="mt-1.5 text-[11px] font-bold text-[#6b7c7c]">{categoryLabel}</p>
+				) : null}
+				<p className="mt-0.5 text-[13px] font-bold leading-snug text-brand-900">
+					{restaurantName}
+				</p>
+				{(cheapProvider || expensiveProvider) && (
+					<div
+						className="mt-3 flex items-center justify-between gap-2"
+						data-testid="intelligence-map-place-apps"
+					>
+						<div className="flex min-w-0 items-center gap-2">
+							<AppMark
+								provider={cheapProvider}
+								isRTL={isRTL}
+								size={32}
+							/>
+							<div className="min-w-0">
+								<p className="text-[10px] font-extrabold text-mint-700">
+									{isRTL ? "الأرخص" : "Cheapest"}
+								</p>
+								<p className="truncate text-[12px] font-black text-brand-900">
+									{getProviderLabel(cheapProvider, {
+										isRTL,
+									}) || (isRTL ? "الأرخص" : "Cheapest")}
+									{hasPrices
+										? ` · ${localizeDigitString(String(cheap), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+										: ""}
+								</p>
+							</div>
+						</div>
+						<span className="text-[12px] font-black text-[#6b7c7c]" aria-hidden>
+							← →
+						</span>
+						<div className="flex min-w-0 items-center gap-2">
+							<div className="min-w-0 text-end">
+								<p className="text-[10px] font-extrabold text-[#c45c5c]">
+									{isRTL ? "الأغلى" : "Highest"}
+								</p>
+								<p className="truncate text-[12px] font-black text-brand-900">
+									{getProviderLabel(expensiveProvider, {
+										isRTL,
+									}) || (isRTL ? "الأغلى" : "Highest")}
+									{hasPrices
+										? ` · ${localizeDigitString(String(expensive), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+										: ""}
+								</p>
+							</div>
+							<AppMark
+								provider={expensiveProvider}
+								isRTL={isRTL}
+								size={32}
+							/>
+						</div>
+					</div>
+				)}
+				<div className="mt-3 flex items-center justify-between gap-2">
+					{opportunityNav}
+				</div>
+				{selectedRestaurantId ? (
+					<Button asChild variant="primary" className="mt-3 w-full text-mint-500">
+						<Link
+							to="/merchant/$type/$id"
+							params={{ type: "restaurant", id: selectedRestaurantId }}
+							search={{
+								...(restaurantName ? { name: restaurantName } : {}),
+								...(imageUrl ? { image: imageUrl } : {}),
+							}}
+							data-testid="intelligence-map-compare"
+							onClick={() => openMenu()}
+						>
+							{isRTL ? "قارن الآن ←" : "Compare now →"}
+						</Link>
+					</Button>
+				) : (
+					<Button
+						type="button"
+						variant="primary"
+						className="mt-3 w-full text-mint-500"
+						disabled
+						data-testid="intelligence-map-compare"
+					>
+						{isRTL ? "قارن الآن ←" : "Compare now →"}
+					</Button>
+				)}
+			</div>
+		);
+	}
 
 	const [sheetSnap, setSheetSnap] = useState<"peek" | "expanded">("peek");
 	const dragRef = useRef<{
@@ -208,15 +418,19 @@ export default function SelectedPlaceSheet({
 		dragRef.current = null;
 		if (!drag || drag.pointerId !== ev.pointerId) return;
 		const dy = ev.clientY - drag.startY;
-		if (dy > 72 && sheetSnap === "peek") {
+		if (Math.abs(dy) < 12) {
+			if (sheetSnap === "peek") setSheetSnap("expanded");
+			return;
+		}
+		if (dy > 56 && sheetSnap === "peek") {
 			onClose();
 			return;
 		}
-		if (dy > 48 && sheetSnap === "expanded") {
+		if (dy > 40 && sheetSnap === "expanded") {
 			setSheetSnap("peek");
 			return;
 		}
-		if (dy < -40) {
+		if (dy < -32) {
 			setSheetSnap("expanded");
 		}
 	};
@@ -255,7 +469,81 @@ export default function SelectedPlaceSheet({
 				</div>
 			) : null}
 
-			<div className="relative flex-1 overflow-y-auto" data-testid="intelligence-map-place">
+			{variant === "sheet" ? (
+				<div
+					className="farq-place-sheet-peekbar flex min-h-11 shrink-0 items-center justify-between gap-2 px-4 pb-2 touch-none"
+					data-testid="intelligence-map-place-peek"
+					onPointerDown={onHandlePointerDown}
+					onPointerMove={onHandlePointerMove}
+					onPointerUp={onHandlePointerUp}
+					onPointerCancel={onHandlePointerUp}
+				>
+					<div className="min-w-0">
+						<p className="truncate text-[14px] font-extrabold text-brand-900">
+							{restaurantName}
+						</p>
+						{hasGap ? (
+							<p className="text-[12px] font-black text-brand-900">
+								+
+								{localizeDigitString(String(Math.round(gapAmount)), isRTL)}{" "}
+								{isRTL ? "ر.س" : "SAR"}
+							</p>
+						) : null}
+					</div>
+					{opportunityCount &&
+					opportunityCount > 1 &&
+					opportunityIndex != null &&
+					opportunityIndex >= 0 ? (
+						<div className="flex shrink-0 items-center">
+							<button
+								type="button"
+								className="inline-flex size-11 items-center justify-center text-brand-900 disabled:opacity-30"
+								aria-label={isRTL ? "السابق" : "Previous"}
+								disabled={opportunityIndex <= 0}
+								onClick={(e) => {
+									e.stopPropagation();
+									onPrevOpportunity?.();
+								}}
+							>
+								{isRTL ? (
+									<ChevronRight className="size-4" />
+								) : (
+									<ChevronLeft className="size-4" />
+								)}
+							</button>
+							<span
+								className="min-w-10 text-center text-[12px] font-bold text-brand-900"
+								data-testid="intelligence-map-opportunity-index"
+							>
+								{localizeDigitString(String(opportunityIndex + 1), isRTL)}{" "}
+								{isRTL ? "من" : "of"}{" "}
+								{localizeDigitString(String(opportunityCount), isRTL)}
+							</span>
+							<button
+								type="button"
+								className="inline-flex size-11 items-center justify-center text-brand-900 disabled:opacity-30"
+								aria-label={isRTL ? "التالي" : "Next"}
+								disabled={opportunityIndex >= opportunityCount - 1}
+								onClick={(e) => {
+									e.stopPropagation();
+									onNextOpportunity?.();
+								}}
+							>
+								{isRTL ? (
+									<ChevronLeft className="size-4" />
+								) : (
+									<ChevronRight className="size-4" />
+								)}
+							</button>
+						</div>
+					) : null}
+				</div>
+			) : null}
+
+			<div
+				className="farq-place-sheet-detail relative min-h-0 flex-1 overflow-y-auto"
+				data-testid="intelligence-map-place"
+			>
 				{imageUrl ? (
 					<div
 						className="relative h-[148px] overflow-hidden bg-brand-900"
@@ -267,28 +555,34 @@ export default function SelectedPlaceSheet({
 							className="absolute inset-0 size-full object-cover"
 						/>
 						<div className="absolute inset-0 bg-gradient-to-t from-brand-900/55 to-brand-900/10" />
-						<button
-							type="button"
-							className="absolute start-4 top-4 flex size-9 items-center justify-center rounded-2xl bg-white text-brand-900 shadow-sm"
-							aria-label={isRTL ? "إغلاق" : "Close"}
-							onClick={onClose}
-						>
-							<X className="size-3.5" />
-						</button>
+						<div className="absolute start-4 top-4 flex items-center gap-1.5">
+							{hideButton}
+							<button
+								type="button"
+								className="farq-place-hit flex size-9 items-center justify-center rounded-2xl bg-white text-brand-900 shadow-sm"
+								aria-label={isRTL ? "إغلاق" : "Close"}
+								onClick={onClose}
+							>
+								<X className="size-3.5" />
+							</button>
+						</div>
 					</div>
 				) : (
 					<div className="flex items-center justify-between px-5 pb-1 pt-4">
 						<p className="text-[11px] font-bold uppercase tracking-wide text-[#6b7c7c]">
 							{isRTL ? "فرق مرصود" : "Observed فرق"}
 						</p>
-						<button
-							type="button"
-							className="flex size-8 items-center justify-center rounded-2xl bg-[#e6eef0] text-brand-900"
-							aria-label={isRTL ? "إغلاق" : "Close"}
-							onClick={onClose}
-						>
-							<X className="size-3.5" />
-						</button>
+						<div className="flex items-center gap-1">
+							{hideButton}
+							<button
+								type="button"
+								className="farq-place-hit flex size-8 items-center justify-center rounded-2xl bg-[#e6eef0] text-brand-900"
+								aria-label={isRTL ? "إغلاق" : "Close"}
+								onClick={onClose}
+							>
+								<X className="size-3.5" />
+							</button>
+						</div>
 					</div>
 				)}
 
@@ -297,7 +591,7 @@ export default function SelectedPlaceSheet({
 						<div className="flex flex-col gap-4 rounded-[22px] bg-brand-900 p-5 text-white shadow-[0_16px_28px_rgba(4,52,52,0.28)]">
 							<div className="flex flex-col items-center gap-2">
 								<p className="text-[12px] font-bold text-mint-500">
-									{isRTL ? "الفرق المرصود" : "Observed فرق"}
+									{isRTL ? "فلوسك تضيع هنا" : "Your money leaks here"}
 								</p>
 								{hasGap ? (
 									<GapCountBadge amount={gapAmount} isRTL={isRTL} />
@@ -307,9 +601,13 @@ export default function SelectedPlaceSheet({
 									</span>
 								)}
 								<p className="text-center text-[13px] text-white/70">
-									{isRTL
-										? "الفارق الكلي في الطلب الأساسي"
-										: "Total gap on the compared order"}
+									{hasGap
+										? isRTL
+											? `لو طلبت هذا من المزوّد الغلط تدفع ${localizeDigitString(String(Math.round(gapAmount)), true)} ر.س زيادة`
+											: `If you order from the wrong provider you pay ${Math.round(gapAmount)} SAR extra`
+										: isRTL
+											? "ما رصدنا فرق يستحق هنا بعد"
+											: "No worthwhile gap observed here yet"}
 								</p>
 							</div>
 
@@ -324,9 +622,7 @@ export default function SelectedPlaceSheet({
 								</p>
 							</div>
 
-							{hasPrices ||
-							difference?.cheapest_provider_id ||
-							difference?.expensive_provider_id ? (
+							{hasPrices || cheapProvider || expensiveProvider ? (
 								<div className="flex flex-col gap-3" data-testid="intelligence-map-place-apps">
 									<p className="text-[12px] font-bold text-mint-500">
 										{isRTL ? "الأرخص مقابل الأغلى" : "Cheapest vs expensive"}
@@ -335,7 +631,7 @@ export default function SelectedPlaceSheet({
 										<div className="rounded-2xl bg-white/8 px-3 py-3">
 											<div className="flex items-center gap-2">
 												<AppMark
-													provider={difference?.cheapest_provider_id}
+													provider={cheapProvider}
 													isRTL={isRTL}
 													size={28}
 												/>
@@ -355,7 +651,7 @@ export default function SelectedPlaceSheet({
 										<div className="rounded-2xl bg-white/8 px-3 py-3">
 											<div className="flex items-center gap-2">
 												<AppMark
-													provider={difference?.expensive_provider_id}
+													provider={expensiveProvider}
 													isRTL={isRTL}
 													size={28}
 												/>
@@ -426,7 +722,7 @@ export default function SelectedPlaceSheet({
 				</div>
 			</div>
 
-			<div className="shrink-0 border-t border-[#e6eef0] bg-[#f9fafb] p-4">
+			<div className="farq-place-sheet-cta shrink-0 border-t border-[#e6eef0] bg-[#f9fafb] p-4">
 				{fresh ? (
 					<p
 						className="mb-3 flex items-center justify-center gap-1.5 text-[11px] text-[#6b7c7c]"
@@ -457,7 +753,7 @@ export default function SelectedPlaceSheet({
 							data-testid="intelligence-map-compare"
 							onClick={() => openMenu()}
 						>
-							{isRTL ? "افتح الأرخص" : "Open the cheapest"}
+							{isRTL ? "قارن الآن ←" : "Compare now →"}
 						</Link>
 					</Button>
 				) : (
@@ -468,7 +764,7 @@ export default function SelectedPlaceSheet({
 						disabled
 						data-testid="intelligence-map-compare"
 					>
-						{isRTL ? "افتح الأرخص" : "Open the cheapest"}
+					{isRTL ? "قارن الآن ←" : "Compare now →"}
 					</Button>
 				)}
 				<p className="mt-2 text-center text-[11px] text-[#6b7c7c]">

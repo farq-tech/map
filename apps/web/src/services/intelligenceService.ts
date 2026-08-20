@@ -318,6 +318,12 @@ export type IntelligenceMapPlaceProperties = {
 	has_difference?: boolean;
 	count?: number;
 	difference_count?: number;
+	gap?: number | null;
+	cheapest_provider_id?: string | null;
+	expensive_provider_id?: string | null;
+	product_name?: string | null;
+	cheapest_price?: number | null;
+	expensive_price?: number | null;
 	image_url?: string | null;
 	branch_image_url?: string | null;
 	restaurant_logo_url?: string | null;
@@ -351,6 +357,11 @@ export type IntelligenceMapPlaces = {
 	type: "FeatureCollection";
 	count: number;
 	matched?: number;
+	limit?: number;
+	capped?: boolean;
+	cluster_break_zoom?: number;
+	fields?: "pin" | "full" | string;
+	server_clusters?: boolean;
 	layer?: string;
 	default_view?: IntelligenceMapView;
 	coverage?: {
@@ -565,6 +576,7 @@ export const IntelligenceService = {
 			category?: string;
 			layer?: "difference" | "places" | "all_food" | "comparison";
 			limit?: number;
+			fields?: "pin" | "full";
 			signal?: AbortSignal;
 		} = {},
 	): Promise<IntelligenceMapPlaces> {
@@ -574,6 +586,7 @@ export const IntelligenceService = {
 		if (opts.q) qs.set("q", opts.q);
 		if (opts.category) qs.set("category", opts.category);
 		if (opts.layer) qs.set("layer", opts.layer);
+		qs.set("fields", opts.fields ?? "pin");
 		qs.set("limit", String(opts.limit ?? 400));
 		const env = await fetchApi<IntelligenceMapPlaces>(
 			`/api/intelligence/map/places?${qs}`,

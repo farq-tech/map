@@ -1,12 +1,8 @@
 /**
  * Farq map pin builders — Mapbox HTML markers overlaid on the existing map.
- * Restaurant circular photo is the hero. comparison-map maps
- * discovery_cards.branch_image_url → feature image_url (also reads
- * branch_image_url and sibling restaurant_* fields if present).
- * Never invent CDN/Unsplash URLs. Missing image → restaurant initials.
+ * App logo is the pin hero. The price chip is always smaller.
  * Observed gaps keep a small Price Aura chip (size ∝ difference_amount).
  * Missing gap → restaurant mark only (never +0). Official Farq stem stays tiny.
- * Provider app logos stay in SelectedPlaceSheet, never on the pin.
  */
 import { buildFarqCircleMarkElement } from "./farqBrandAssets";
 import { localizeDigitString } from "./formatPrice";
@@ -19,25 +15,29 @@ import {
 export const FARQ_CLUSTERS_CLASS = "farq-clusters";
 export const PIN_OTHERS_MAX = 3;
 
-/** Mobile-tuned: +3 / +7 / +12 / +18 stay distinct without covering the map. */
-export const BUBBLE_SIZE_MIN = 26;
-export const BUBBLE_SIZE_MAX = 52;
-export const BUBBLE_SIZE_BASE = 18;
-export const BUBBLE_SIZE_SCALE = 8;
-export const BUBBLE_CURRENCY_MIN_PX = 38;
 export const BUBBLE_CLEAR_CHANGE = 1;
 export const BUBBLE_ENTER_STAGGER_MAX = 16;
 export const BUBBLE_ENTER_MS = 360;
 export const BUBBLE_ENTER_SCALE_FROM = 0.82;
 
-/** Restaurant disc — always smaller than the difference chip. */
+/** Price badge — 20–24px so digits stay sharp; still clearly below the 40px logo. */
+export const BUBBLE_SIZE_MIN = 20;
+export const BUBBLE_SIZE_MAX = 24;
+export const BUBBLE_SIZE_HARD_MAX = 26;
+export const BUBBLE_SIZE_BASE = 19;
+export const BUBBLE_SIZE_SCALE = 0.7;
+export const BUBBLE_CURRENCY_MIN_PX = 48;
+export const BUBBLE_HERO_GAP_PX = 16;
+
+/** Restaurant disc leftover — must stay smaller than the provider hero. */
 export const MARK_SIZE_MIN = 16;
-export const MARK_SIZE_MAX = 28;
+export const MARK_SIZE_MAX = 22;
 export const MARK_SIZE_RATIO = 0.52;
 export const PIN_THUMB_CSS_PX = 28;
 
-/** Circular restaurant hero — identity stays larger than the aura chip. */
-export const PLACE_HERO_PX = 56;
+/** App logo is the pin hero. Price chip is always smaller. */
+export const PROVIDER_HERO_PX = 40;
+export const PLACE_HERO_PX = PROVIDER_HERO_PX;
 
 /** GeoJSON fields that may already carry a real restaurant/branch photo. */
 export const RESTAURANT_IMAGE_FIELDS = [
@@ -50,23 +50,209 @@ export const RESTAURANT_IMAGE_FIELDS = [
 
 const CLOUDINARY_FETCH_BLOCKED = ["cdngrubtech.com"] as const;
 
-/** After pan/zoom STOP — rank loaded markers only (no extra API fetch). */
+/**
+ * Three utility zooms (GPU + HTML must match):
+ * - FAR  (zoom < 14): 🔥 + gap number only. No names, logos, ratings.
+ * - NEAR (zoom ≥ 14): opportunity + «N ر.س فرق», then place + cheapest provider.
+ * - TAP: comparison sheet — not a pin.
+ * Display cap is TOP_OPPORTUNITIES (list + map). MAP_PIN_CAP is fetch only.
+ */
+export const CLUSTER_BREAK_ZOOM = 14;
+export const MAP_PIN_CAP = 400;
+/** GPU symbols own unselected pins — HTML budget is the selected pin only. */
+export const MAP_PIN_HTML_CAP = 1;
+/** Leftover HTML farm caps if GPU symbols are unavailable. */
+export const MAP_PIN_DOM_FAR = 32;
+export const MAP_PIN_DOM_MID = 36;
+export const MAP_PIN_DOM_NEAR = 40;
+/** After pan/zoom STOP — restack z-index + pulse the max gap (no extra API fetch). */
 export const AURA_VIEWPORT_IDLE_MS = 180;
 export const AURA_PROMOTE_MIN = 8;
 export const AURA_PROMOTE_MAX = 12;
 /** Mobile mid-zoom: tighter top-N so the map stays readable at 375–390. */
 export const AURA_PROMOTE_MAX_MOBILE = 8;
-/** Close-in: restaurant disc + difference chip. Below this: difference number only. */
-export const PIN_IDENTITY_ZOOM = 15.4;
+/**
+ * Restaurant discs show on every individual pin. Server clusters hide the pile
+ * until CLUSTER_BREAK_ZOOM — we no longer wait until 15.4 to show logos.
+ */
+export const PIN_IDENTITY_ZOOM = CLUSTER_BREAK_ZOOM;
 
 export function auraPromoteCap(isMobile: boolean): number {
 	return isMobile ? AURA_PROMOTE_MAX_MOBILE : AURA_PROMOTE_MAX;
 }
 
+/** FAR = gap beacon. NEAR = opportunity + cheapest provider. */
 export function pinPresentationForZoom(
 	zoom: number,
 ): "amount" | "identity" {
-	return Number(zoom) >= PIN_IDENTITY_ZOOM ? "identity" : "amount";
+	return Number(zoom) >= CLUSTER_BREAK_ZOOM ? "identity" : "amount";
+}
+
+/** Soften the 13.99→14.01 identity cut — 0 = amount only, 1 = full restaurant hero. */
+export const IDENTITY_REVEAL_START = 13.35;
+export const IDENTITY_REVEAL_END = 14.65;
+
+export function pinIdentityReveal(zoom: number): number {
+	const z = Number(zoom);
+	if (!Number.isFinite(z)) return 0;
+	if (z <= IDENTITY_REVEAL_START) return 0;
+	if (z >= IDENTITY_REVEAL_END) return 1;
+	return (z - IDENTITY_REVEAL_START) / (IDENTITY_REVEAL_END - IDENTITY_REVEAL_START);
+}
+
+export type PinZoomBand = "far" | "mid" | "near";
+
+export function pinZoomBand(zoom: number): PinZoomBand {
+	const z = Number(zoom);
+	if (!Number.isFinite(z) || z < 12) return "far";
+	if (z < CLUSTER_BREAK_ZOOM) return "mid";
+	return "near";
+}
+
+/** HTML marker budget — GPU symbols own the rest. Selected pin only. */
+export function pinDomCapForZoom(_zoom?: number): number {
+	return MAP_PIN_HTML_CAP;
+}
+
+/** GPU source can take the API ceiling — no HTML farm. */
+export function pinFetchCapForZoom(_zoom?: number): number {
+	return MAP_PIN_CAP;
+}
+
+/** Restaurant photos only on the selected HTML pin / sheet — never unselected. */
+export function shouldAttachPinPhoto(selected: boolean): boolean {
+	return Boolean(selected);
+}
+
+function featureLngLat(
+	feature: GeoJSON.Feature,
+): [number, number] | null {
+	const geom = feature.geometry;
+	if (!geom || geom.type !== "Point" || !Array.isArray(geom.coordinates)) {
+		return null;
+	}
+	const [lng, lat] = geom.coordinates;
+	if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+	return [lng, lat];
+}
+
+function featureGapAmount(feature: GeoJSON.Feature): number {
+	const props = (feature.properties || {}) as {
+		feature_type?: string;
+		difference?: unknown;
+		max_difference_amount?: unknown;
+		top_difference_amount?: unknown;
+	};
+	if (props.feature_type === "cluster") {
+		return observedClusterTopGap(props) ?? 0;
+	}
+	return observedDifferenceAmount(props.difference) ?? 0;
+}
+
+/** Stride sample across lat/lng — coverage of the view, not top-gaps-only. */
+export function spatialSampleFeatures<T extends GeoJSON.Feature>(
+	features: T[],
+	n: number,
+): T[] {
+	const want = Math.max(0, Math.floor(n));
+	if (features.length <= want) return features;
+	const sorted = features.slice().sort((a, b) => {
+		const pa = featureLngLat(a);
+		const pb = featureLngLat(b);
+		if (!pa || !pb) return 0;
+		return pa[1] - pb[1] || pa[0] - pb[0];
+	});
+	const out: T[] = [];
+	const seen = new Set<T>();
+	const step = sorted.length / want;
+	for (let i = 0; i < want; i += 1) {
+		const item = sorted[Math.min(sorted.length - 1, Math.floor(i * step))];
+		if (seen.has(item)) continue;
+		seen.add(item);
+		out.push(item);
+	}
+	return out;
+}
+
+/**
+ * Client HTML-marker budget. Keeps the selected pin and already-drawn keys
+ * (so a pan does not remint the set), then spatial-samples the rest.
+ */
+export function sampleViewportPins<T extends GeoJSON.Feature>(
+	features: T[],
+	opts: {
+		cap: number;
+		selectedPlaceId?: string;
+		keepKeys?: Iterable<string>;
+	},
+): T[] {
+	const cap = Math.max(0, Math.floor(opts.cap));
+	if (cap <= 0) return [];
+	if (features.length <= cap) return features;
+
+	const keepKeys = new Set(opts.keepKeys || []);
+	const selected = String(opts.selectedPlaceId || "").trim();
+	const locked: T[] = [];
+	const rest: T[] = [];
+	for (const feature of features) {
+		const key = featureMarkerKey(feature);
+		const placeId = String(
+			(feature.properties as { place_id?: string } | null)?.place_id || "",
+		).trim();
+		if ((selected && placeId === selected) || (key && keepKeys.has(key))) {
+			locked.push(feature);
+		} else {
+			rest.push(feature);
+		}
+	}
+
+	if (locked.length >= cap) {
+		const selectedRows = selected
+			? locked.filter(
+					(f) =>
+						String(
+							(f.properties as { place_id?: string } | null)?.place_id || "",
+						).trim() === selected,
+				)
+			: [];
+		const others = locked.filter((f) => !selectedRows.includes(f));
+		return [...selectedRows, ...others].slice(0, cap);
+	}
+
+	const budget = cap - locked.length;
+	const clusters = rest.filter(
+		(f) =>
+			(f.properties as { feature_type?: string } | null)?.feature_type ===
+			"cluster",
+	);
+	const pins = rest.filter(
+		(f) =>
+			(f.properties as { feature_type?: string } | null)?.feature_type !==
+			"cluster",
+	);
+	const heroBudget = Math.min(8, Math.max(0, Math.floor(budget * 0.2)));
+	const heroes = pins
+		.filter((f) => featureGapAmount(f) > 0)
+		.sort(
+			(a, b) =>
+				featureGapAmount(b) - featureGapAmount(a) ||
+				String(
+					(a.properties as { place_id?: string } | null)?.place_id || "",
+				).localeCompare(
+					String(
+						(b.properties as { place_id?: string } | null)?.place_id || "",
+					),
+				),
+		)
+		.slice(0, heroBudget);
+	const heroSet = new Set(heroes);
+	const leftoverPins = pins.filter((f) => !heroSet.has(f));
+	const leftover = [...clusters, ...leftoverPins];
+	const sampled = spatialSampleFeatures(
+		leftover,
+		Math.max(0, budget - heroes.length),
+	);
+	return [...locked, ...heroes, ...sampled];
 }
 
 /** Winner pin scale leftover — restaurant initials still use a readable floor. */
@@ -84,6 +270,8 @@ export function parseDifference(raw: unknown): {
 	difference_amount?: number | null;
 	cheapest_provider_id?: string | null;
 	expensive_provider_id?: string | null;
+	cheapest_price?: number | null;
+	expensive_price?: number | null;
 	product_name?: string | null;
 	provider_count?: number | null;
 } | null {
@@ -100,6 +288,8 @@ export function parseDifference(raw: unknown): {
 		difference_amount?: number | null;
 		cheapest_provider_id?: string | null;
 		expensive_provider_id?: string | null;
+		cheapest_price?: number | null;
+		expensive_price?: number | null;
 		product_name?: string | null;
 		provider_count?: number | null;
 	};
@@ -133,7 +323,7 @@ export function bubbleZIndex(
 	return ranked;
 }
 
-export type AuraRank = "promoted" | "demoted";
+export type AuraRank = "promoted" | "demoted" | "visible";
 
 /** Promote every visible aura up to MAX; beyond that keep the top MAX. */
 export function promotedAuraLimit(
@@ -187,20 +377,35 @@ export function observedClusterTopGap(raw: {
 	return null;
 }
 
+export function clusterRestaurantCount(count: number): number {
+	const n = Number(count);
+	return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+/** Observed opportunity count. Uses difference_count when the API sent it. */
 export function clusterOpportunityCount(opts: {
 	count: number;
 	differenceCount?: number;
 }): number {
-	const diffs = Number(opts.differenceCount);
-	if (Number.isFinite(diffs) && diffs > 0) return Math.round(diffs);
-	const count = Number(opts.count);
-	return Number.isFinite(count) ? Math.max(0, Math.round(count)) : 0;
+	const gaps = Number(opts.differenceCount);
+	if (Number.isFinite(gaps) && gaps >= 0) return Math.round(gaps);
+	return clusterRestaurantCount(opts.count);
 }
 
 export function clusterOpportunityLabel(count: number, isRTL: boolean): string {
 	const n = Math.max(0, Math.round(count));
 	const digits = localizeDigitString(String(n), isRTL);
-	return isRTL ? `${digits} فرصة` : `${n} opps`;
+	return isRTL ? `${digits} مكان` : `${n} places`;
+}
+
+/** Hero copy: the riyal gap is the product, never “38 فرصة”. */
+export function gapRiyalLabel(amount: number, isRTL: boolean): string {
+	const digits = localizeDigitString(String(displayGapRiyals(amount)), isRTL);
+	return isRTL ? `${digits} ر.س فرق` : `${displayGapRiyals(amount)} SAR gap`;
+}
+
+export function clusterGapHeroLabel(amount: number, isRTL: boolean): string {
+	return `🔥 ${gapRiyalLabel(amount, isRTL)}`;
 }
 
 export function displayGapRiyals(amount: number): number {
@@ -465,24 +670,70 @@ export function featureMarkerKey(
 	const props = (feature.properties || {}) as Record<string, unknown> & {
 		feature_type?: string;
 		place_id?: string;
-		count?: number;
-		difference_count?: number;
-		difference?: unknown;
-		max_difference_amount?: unknown;
-		top_difference_amount?: unknown;
 	};
-	if (props.feature_type === "cluster") {
-		const top = observedClusterTopGap(props);
-		return `cluster:${Number(lng).toFixed(5)}:${Number(lat).toFixed(5)}:${props.count ?? 0}:${props.difference_count ?? 0}:${top != null ? displayGapRiyals(top) : 0}`;
-	}
+	if (props.feature_type === "cluster") return null;
 	const placeId = String(props.place_id || "").trim();
 	if (!placeId) return null;
-	const imgKey = observedRestaurantImageUrl(props) ? "logo" : "mark";
-	const amount = observedDifferenceAmount(props.difference);
-	if (amount != null) {
-		return `place:${placeId}:bubble:${displayGapRiyals(amount)}:${imgKey}`;
-	}
-	return `place:${placeId}:restaurant:${imgKey}`;
+	return `place:${placeId}`;
+}
+
+/** Slim list pins carry gap + prices + product; full pins nest difference. */
+export function differenceFromPinProps(props: {
+	difference?: unknown;
+	gap?: unknown;
+	cheapest_provider_id?: unknown;
+	expensive_provider_id?: unknown;
+	product_name?: unknown;
+	cheapest_price?: unknown;
+	expensive_price?: unknown;
+} | null | undefined): {
+	difference_amount?: number | null;
+	cheapest_provider_id?: string | null;
+	expensive_provider_id?: string | null;
+	cheapest_price?: number | null;
+	expensive_price?: number | null;
+	product_name?: string | null;
+} | null {
+	if (props == null) return null;
+	if (props.difference != null) return parseDifference(props.difference);
+	const gap = Number(props.gap);
+	const provider = String(props.cheapest_provider_id || "").trim();
+	const expensive = String(props.expensive_provider_id || "").trim();
+	const product = String(props.product_name || "").trim();
+	const cheap = Number(props.cheapest_price);
+	const dear = Number(props.expensive_price);
+	const amount = Number.isFinite(gap) && Math.round(gap) >= 1 ? gap : null;
+	if (amount == null && !provider && !product) return null;
+	return {
+		difference_amount: amount,
+		cheapest_provider_id: provider || null,
+		expensive_provider_id: expensive || null,
+		cheapest_price: Number.isFinite(cheap) && cheap > 0 ? cheap : null,
+		expensive_price: Number.isFinite(dear) && dear > 0 ? dear : null,
+		product_name: product || null,
+	};
+}
+
+/** Update the mint chip digits in place — never remint on gap flicker. */
+export function updatePlacePinChip(
+	el: HTMLElement,
+	amount: number | null,
+	isRTL = false,
+): void {
+	const amountEl = el.querySelector(".farq-gap-bubble-amount");
+	if (!(amountEl instanceof HTMLElement)) return;
+	if (amount == null || amount <= 0) return;
+	const riyal = displayGapRiyals(amount);
+	amountEl.textContent = `+${localizeDigitString(String(riyal), isRTL)}`;
+	el.dataset.amount = String(riyal);
+	const size = Math.min(
+		bubbleSizePx(amount),
+		PROVIDER_HERO_PX - BUBBLE_HERO_GAP_PX,
+		BUBBLE_SIZE_HARD_MAX,
+		BUBBLE_SIZE_MAX,
+	);
+	el.dataset.size = String(Math.round(size));
+	el.style.setProperty("--farq-bubble-size", `${size}px`);
 }
 
 function hideBrokenPinImage(img: HTMLImageElement): void {
@@ -510,22 +761,26 @@ function attachRestaurantPhoto(
 	host.appendChild(img);
 }
 
-function buildRestaurantHero(opts: {
+function buildProviderHero(opts: {
 	name: string;
 	imageUrl?: string | null;
+	difference?: unknown;
 }): HTMLDivElement {
 	const hero = document.createElement("div");
 	hero.className = "farq-place-pin-hero farq-gap-bubble-mark";
 	hero.setAttribute("aria-hidden", "true");
-	hero.dataset.testid = "farq-map-restaurant-mark";
+	hero.dataset.testid = "farq-map-provider-mark";
+	const cheapest = resolveCheapestPinLogo(opts.difference);
 	const initial = document.createElement("span");
 	initial.className = "farq-place-pin-initial farq-gap-bubble-mark-initial farq-3d-pin-initial";
-	initial.textContent = restaurantPinInitial(opts.name);
+	initial.textContent = cheapest
+		? providerPinInitial(cheapest.providerId)
+		: restaurantPinInitial(opts.name);
 	hero.appendChild(initial);
-	const url = sanitizeObservedImageUrl(opts.imageUrl);
-	if (url) {
-		hero.dataset.kind = "photo";
-		attachRestaurantPhoto(hero, { imageUrl: url, cssPx: PLACE_HERO_PX });
+	const logoUrl = cheapest?.src || sanitizeObservedImageUrl(opts.imageUrl);
+	if (logoUrl) {
+		hero.dataset.kind = cheapest?.src ? "provider" : "photo";
+		attachRestaurantPhoto(hero, { imageUrl: logoUrl, cssPx: PROVIDER_HERO_PX });
 	} else {
 		hero.dataset.kind = "initials";
 	}
@@ -550,36 +805,50 @@ export function buildGapBubbleElement(opts: {
 	selected?: boolean;
 	isRTL?: boolean;
 	imageUrl?: string | null;
+	includePhoto?: boolean;
+	difference?: unknown;
+	/** Unselected place pins stay small — sheet holds the comparison. */
+	quiet?: boolean;
 }): HTMLDivElement {
 	const isRTL = Boolean(opts.isRTL);
 	const riyal = displayGapRiyals(opts.amount);
-	const size = bubbleSizePx(opts.amount);
-	const photoUrl = sanitizeObservedImageUrl(opts.imageUrl);
-	const showCurrency = size >= BUBBLE_CURRENCY_MIN_PX;
-	const compact = showCurrency && size < 46;
+	const size = Math.min(
+		bubbleSizePx(opts.amount),
+		PROVIDER_HERO_PX - BUBBLE_HERO_GAP_PX,
+		BUBBLE_SIZE_HARD_MAX,
+		BUBBLE_SIZE_MAX,
+	);
+	const cheapest = resolveCheapestPinLogo(opts.difference);
+	const photoUrl =
+		cheapest?.src ||
+		(opts.includePhoto
+			? sanitizeObservedImageUrl(opts.imageUrl)
+			: null);
 	const digits = localizeDigitString(String(riyal), isRTL);
-	const currency = isRTL ? "ر.س" : "SAR";
 
 	const el = document.createElement("div");
 	el.className =
-		"farq-place-pin farq-gap-bubble farq-gap-bubble--aura farq-gap-bubble--identified farq-map-hit";
+		"farq-place-pin farq-gap-bubble farq-gap-bubble--aura farq-gap-bubble--identified farq-gap-bubble--tiny farq-map-hit";
 	if (opts.selected) el.classList.add("is-selected");
+	if (opts.quiet && !opts.selected) el.classList.add("farq-gap-bubble--quiet");
 	if (photoUrl) el.classList.add("farq-gap-bubble--logo");
-	if (!showCurrency) el.classList.add("farq-gap-bubble--tiny");
-	else if (compact) el.classList.add("farq-gap-bubble--compact");
-	else el.classList.add("farq-gap-bubble--stacked");
+	if (cheapest?.src) el.classList.add("farq-gap-bubble--provider");
 	el.dataset.testid = "farq-map-gap-bubble";
 	el.dataset.amount = String(riyal);
 	el.dataset.size = String(Math.round(size));
-	el.dataset.mark = photoUrl ? "logo" : "initials";
+	el.dataset.mark = cheapest?.src ? "provider" : photoUrl ? "logo" : "initials";
 	el.style.setProperty("--farq-bubble-size", `${size}px`);
-	el.style.setProperty("--farq-hero-size", `${PLACE_HERO_PX}px`);
+	el.style.setProperty("--farq-hero-size", `${PROVIDER_HERO_PX}px`);
 	el.style.zIndex = String(bubbleZIndex(opts.amount, Boolean(opts.selected)));
 	el.setAttribute("role", "button");
 	el.setAttribute("aria-label", gapBubbleAriaLabel(opts.name, riyal, isRTL));
 	el.title = gapBubbleAriaLabel(opts.name, riyal, isRTL);
 
-	const hero = buildRestaurantHero({ name: opts.name, imageUrl: photoUrl });
+	const hero = buildProviderHero({
+		name: opts.name,
+		imageUrl: photoUrl,
+		difference: opts.difference,
+	});
 
 	const chip = document.createElement("div");
 	chip.className = "farq-gap-bubble-chip";
@@ -592,12 +861,6 @@ export function buildGapBubbleElement(opts: {
 	amountEl.className = "farq-gap-bubble-amount";
 	amountEl.textContent = `+${digits}`;
 	orb.appendChild(amountEl);
-	if (showCurrency) {
-		const currencyEl = document.createElement("span");
-		currencyEl.className = "farq-gap-bubble-currency";
-		currencyEl.textContent = currency;
-		orb.appendChild(currencyEl);
-	}
 	chip.appendChild(field);
 	chip.appendChild(orb);
 
@@ -617,22 +880,36 @@ function buildRestaurantInitialsPin(opts: {
 	selected?: boolean;
 	isRTL?: boolean;
 	imageUrl?: string | null;
+	includePhoto?: boolean;
+	difference?: unknown;
 }): HTMLDivElement {
 	const isRTL = Boolean(opts.isRTL);
-	const photoUrl = sanitizeObservedImageUrl(opts.imageUrl);
+	const cheapest = resolveCheapestPinLogo(opts.difference);
+	const photoUrl =
+		cheapest?.src ||
+		(opts.includePhoto
+			? sanitizeObservedImageUrl(opts.imageUrl)
+			: null);
 	const el = document.createElement("div");
 	el.className = "farq-place-pin farq-3d-pin--restaurant farq-map-hit";
 	if (opts.selected) el.classList.add("is-selected");
 	if (photoUrl) el.classList.add("farq-3d-pin--logo");
+	if (cheapest?.src) el.classList.add("farq-gap-bubble--provider");
 	el.dataset.size = "hero";
 	el.dataset.testid = "farq-map-restaurant-pin";
-	el.dataset.mark = photoUrl ? "logo" : "initials";
+	el.dataset.mark = cheapest?.src ? "provider" : photoUrl ? "logo" : "initials";
 	el.style.setProperty("--farq-hero-size", `${PLACE_HERO_PX}px`);
 	const title = opts.name || (isRTL ? "مكان" : "Place");
 	el.title = title;
 	el.setAttribute("role", "button");
 	el.setAttribute("aria-label", title);
-	el.appendChild(buildRestaurantHero({ name: opts.name, imageUrl: photoUrl }));
+	el.appendChild(
+		buildProviderHero({
+			name: opts.name,
+			imageUrl: photoUrl,
+			difference: opts.difference,
+		}),
+	);
 	const stem = document.createElement("div");
 	stem.className = "farq-place-pin-stem";
 	stem.setAttribute("aria-hidden", "true");
@@ -647,6 +924,8 @@ export function buildPlacePinElement(opts: {
 	selected?: boolean;
 	isRTL?: boolean;
 	imageUrl?: string | null;
+	includePhoto?: boolean;
+	quiet?: boolean;
 }): HTMLDivElement {
 	const amount = observedDifferenceAmount(opts.difference);
 	if (amount != null) {
@@ -656,6 +935,9 @@ export function buildPlacePinElement(opts: {
 			selected: opts.selected,
 			isRTL: opts.isRTL,
 			imageUrl: opts.imageUrl,
+			includePhoto: opts.includePhoto,
+			difference: opts.difference,
+			quiet: opts.quiet,
 		});
 	}
 	return buildRestaurantInitialsPin({
@@ -663,7 +945,38 @@ export function buildPlacePinElement(opts: {
 		selected: opts.selected,
 		isRTL: opts.isRTL,
 		imageUrl: opts.imageUrl,
+		includePhoto: opts.includePhoto,
+		difference: opts.difference,
 	});
+}
+
+/** Attach or strip a restaurant photo without reminting the marker. */
+export function syncPinPhoto(
+	el: HTMLElement,
+	imageUrl: string | null | undefined,
+): void {
+	const hero = el.querySelector(
+		".farq-place-pin-hero, .farq-gap-bubble-mark",
+	) as HTMLElement | null;
+	if (!hero) return;
+	const url = sanitizeObservedImageUrl(imageUrl);
+	const existing = hero.querySelector("img");
+	if (!url) {
+		if (existing) existing.remove();
+		hero.dataset.kind = "initials";
+		el.classList.remove("farq-gap-bubble--logo", "farq-3d-pin--logo");
+		el.dataset.mark = "initials";
+		return;
+	}
+	if (existing) return;
+	attachRestaurantPhoto(hero, { imageUrl: url, cssPx: PLACE_HERO_PX });
+	hero.dataset.kind = "photo";
+	if (el.classList.contains("farq-gap-bubble")) {
+		el.classList.add("farq-gap-bubble--logo");
+	} else {
+		el.classList.add("farq-3d-pin--logo");
+	}
+	el.dataset.mark = "logo";
 }
 
 export function buildClusterPinElement(opts: {
@@ -672,8 +985,9 @@ export function buildClusterPinElement(opts: {
 	topGap?: number | null;
 	isRTL?: boolean;
 }): HTMLDivElement {
-	const count = Number.isFinite(opts.count) ? Math.max(0, Math.round(opts.count)) : 0;
+	const count = clusterRestaurantCount(opts.count);
 	const isRTL = Boolean(opts.isRTL);
+	const restaurants = clusterRestaurantCount(count);
 	const opportunities = clusterOpportunityCount({
 		count,
 		differenceCount: opts.differenceCount,
@@ -684,14 +998,23 @@ export function buildClusterPinElement(opts: {
 	const riyal = topGap != null ? displayGapRiyals(topGap) : null;
 	const el = document.createElement("div");
 	el.className = `farq-3d-cluster ${FARQ_CLUSTERS_CLASS} farq-map-hit`;
-	if ((opts.differenceCount || 0) > 0 || riyal != null) {
+	if (opportunities > 0 || riyal != null) {
 		el.classList.add("farq-3d-cluster--gaps");
 		el.classList.add("farq-3d-cluster--opportunity");
 	}
 	el.dataset.testid = "farq-map-cluster";
 	if (riyal != null) el.dataset.topGap = String(riyal);
+	el.dataset.count = String(restaurants);
 	el.dataset.opportunities = String(opportunities);
 	const gapDigits = riyal != null ? localizeDigitString(String(riyal), isRTL) : "";
+	const labeled =
+		opportunities > 0 ? opportunities : restaurants;
+	const countLabel =
+		opportunities > 0
+			? clusterOpportunityLabel(opportunities, isRTL)
+			: isRTL
+				? localizeDigitString(String(labeled), true)
+				: String(labeled);
 	el.setAttribute(
 		"role",
 		"button",
@@ -700,11 +1023,11 @@ export function buildClusterPinElement(opts: {
 		"aria-label",
 		riyal != null
 			? isRTL
-				? `تجمّع ${opportunities} فرصة، أكبر فرق ${gapDigits}`
-				: `Cluster of ${opportunities} opportunities, top gap ${riyal}`
+				? `تجمّع ${countLabel}، أكبر فرق ${gapDigits}`
+				: `Cluster of ${restaurants} restaurants, top gap ${riyal}`
 			: isRTL
-				? `تجمّع ${count} أماكن`
-				: `Cluster of ${count} places`,
+				? `تجمّع ${countLabel}`
+				: `Cluster of ${restaurants} restaurants`,
 	);
 
 	const shadow = document.createElement("div");
@@ -717,16 +1040,13 @@ export function buildClusterPinElement(opts: {
 	if (riyal != null) {
 		const gapEl = document.createElement("span");
 		gapEl.className = "farq-3d-cluster-gap";
-		gapEl.textContent = `+${gapDigits}`;
+		gapEl.textContent = clusterGapHeroLabel(riyal, isRTL);
 		orb.appendChild(gapEl);
 	}
 
 	const label = document.createElement("span");
 	label.className = "farq-3d-cluster-count";
-	label.textContent =
-		(opts.differenceCount || 0) > 0 || riyal != null
-			? clusterOpportunityLabel(opportunities, isRTL)
-			: String(count);
+	label.textContent = riyal != null ? countLabel : `🔥 ${countLabel}`;
 	orb.appendChild(label);
 
 	el.appendChild(shadow);

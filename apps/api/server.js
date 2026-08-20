@@ -8,7 +8,9 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
 const express = require('express');
 const cors = require('cors');
 const createMapRouter = require('./routes/map');
+const createChatRouter = require('./routes/chat');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
+const { chatConfigured } = require('./lib/chat-handler');
 
 const PORT = Number(process.env.PORT || 4001);
 const FARQ_API_ORIGIN = (process.env.FARQ_API_ORIGIN || '').replace(/\/$/, '');
@@ -39,6 +41,10 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 
+app.get('/version', (_req, res) => {
+  res.json({ ok: true, service: 'farq-map-api' });
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -46,10 +52,12 @@ app.get('/api/health', (_req, res) => {
     comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
     menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
     farq_api_origin: Boolean(FARQ_API_ORIGIN),
+    chat_configured: chatConfigured(),
   });
 });
 
 app.use('/api/intelligence', createMapRouter());
+app.use('/api/chat', createChatRouter());
 
 async function proxyFarqCatalog(id) {
   if (!FARQ_API_ORIGIN) return null;
@@ -130,7 +138,8 @@ if (FARQ_API_ORIGIN) {
     if (
       req.path.startsWith('/intelligence') ||
       req.path.startsWith('/restaurant/') ||
-      req.path.startsWith('/comparison/')
+      req.path.startsWith('/comparison/') ||
+      req.path.startsWith('/chat')
     ) {
       return next();
     }

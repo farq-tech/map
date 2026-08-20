@@ -1,12 +1,10 @@
 /**
  * Farq difference map — Mapbox GL Standard, comparison-row coords.
- * Neighborhood polygons are intentionally not painted (not a choropleth mosaic).
+ * Neighborhood polygons are never a choropleth mosaic. An optional line-outline
+ * toggle (Golden NCP, default off) may stroke rings — no fill.
  * Never invents pins, never remints place_id, never fakes GPS.
- * Restaurant circular photo is the pin hero (image_url from comparison-map,
- * which maps discovery_cards.branch_image_url). Missing image → initials.
- * Observed gaps keep a small Price Aura chip (size ∝ difference_amount).
- * Missing gaps keep a restaurant mark only. Server clusters restyle as
- * Opportunity Clusters.
+ * App logo is the pin hero. The price chip is always smaller.
+ * GPU symbols at every zoom for unselected places. One HTML pin = selected.
  * Pin tap selects the place — no Mapbox infowindow; the split sheet owns the moment.
  * Bubbles are overlay-only: this file must not restyle 3D buildings, terrain,
  * camera, zoom, or the Standard/Satellite basemap.
@@ -16,26 +14,32 @@ import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	shouldShow3dObjects,
+	shouldSkipGlobeIntro,
+} from "../../lib/farqMapDevice";
+import {
 	AURA_VIEWPORT_IDLE_MS,
 	BUBBLE_CLEAR_CHANGE,
 	BUBBLE_ENTER_MS,
-	BUBBLE_ENTER_STAGGER_MAX,
 	applyAuraRankClasses,
-	auraPromoteCap,
-	buildClusterPinElement,
 	buildPlacePinElement,
+	differenceFromPinProps,
 	featureMarkerKey,
-	observedClusterTopGap,
 	observedDifferenceAmount,
-	observedRestaurantImageUrl,
+	pinIdentityReveal,
 	pinPresentationForZoom,
+	pinZoomBand,
 	playBubbleEnter,
 	playMaxGapPulse,
-	promotedAuraLimit,
-	rankAuraPlaceIds,
 	setPinSelected,
-	shouldReplayBubbleMotion,
+	syncPinPhoto,
+	updatePlacePinChip,
 } from "../../lib/farqMapPins";
+import {
+	ensurePriceTileLayers,
+	syncPriceTileData,
+} from "../../lib/farqPriceTiles";
+import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
 import {
 	getMapboxAccessToken,
 	type MapboxBasemap,
@@ -51,13 +55,46 @@ import type {
 import "../../styles/farq-mapbox.css";
 
 const INTRO_MS = 5600;
-const FARQ_CLUSTERS = "farq-clusters";
 
 type CameraFocusRequest = {
 	lat: number;
 	lng: number;
 	id: string;
+	zoom?: number;
+	/** Select pads the popup; locate/cluster keep more map around the point. */
+	kind?: "select" | "locate" | "cluster";
 };
+
+function cameraPadding(kind: CameraFocusRequest["kind"]): {
+	top: number;
+	bottom: number;
+	left: number;
+	right: number;
+} {
+	const mobile =
+		typeof window !== "undefined" &&
+		window.matchMedia("(max-width: 1023px)").matches;
+	if (!mobile) {
+		return { top: 88, bottom: 40, left: 40, right: 40 };
+	}
+	if (kind === "select") {
+		return { top: 132, bottom: 292, left: 24, right: 24 };
+	}
+	if (kind === "locate") {
+		return { top: 120, bottom: 112, left: 28, right: 28 };
+	}
+	return { top: 96, bottom: 96, left: 24, right: 24 };
+}
+
+function leftUserDot(
+	center: { lat: number; lng: number },
+	user: { lat: number; lng: number } | null | undefined,
+): boolean {
+	if (!user) return false;
+	const dlat = center.lat - user.lat;
+	const dlng = center.lng - user.lng;
+	return dlat * dlat + dlng * dlng > 0.000012;
+}
 
 type PersistedCamera = {
 	center: [number, number];
@@ -97,42 +134,103 @@ type PinRec = {
 	kind: "place" | "cluster";
 	placeId?: string;
 	amount?: number | null;
+	imageUrl?: string | null;
 };
 
-function applyBasemap(map: MapboxMap) {
+/**
+ * Mapbox DEM terrain (`mapbox-dem` + setTerrain) paints a city-wide diagonal
+ * hatch on Safari / WebKit and freezes the canvas. 3D buildings stay.
+ */
+function applyBasemap(map: MapboxMap, isRTL: boolean) {
 	try {
 		map.setConfigProperty("basemap", "lightPreset", "dusk");
 	} catch {
 		/* classic styles ignore Standard config */
 	}
 	try {
-		map.setConfigProperty("basemap", "show3dObjects", true);
+		map.setConfigProperty("basemap", "show3dObjects", shouldShow3dObjects());
 	} catch {
 		/* */
 	}
 	try {
-		if (!map.getSource("mapbox-dem")) {
-			map.addSource("mapbox-dem", {
-				type: "raster-dem",
-				url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-				tileSize: 512,
-				maxzoom: 14,
-			});
-		}
-		map.setTerrain({ source: "mapbox-dem", exaggeration: 1.15 });
+		map.setConfigProperty("basemap", "showPointOfInterestLabels", false);
 	} catch {
-		/* terrain optional if DEM unavailable */
+		/* Standard-only; leave classic styles untouched */
 	}
 	try {
-		map.setFog({
-			color: "rgb(186, 210, 235)",
-			"high-color": "rgb(36, 92, 223)",
-			"horizon-blend": 0.03,
-			"space-color": "rgb(11, 11, 25)",
-			"star-intensity": 0.55,
+		map.setConfigProperty("basemap", "showTransitLabels", false);
+	} catch {
+		/* */
+	}
+	try {
+		/* Arabic map product — hide English-heavy road names that fight Farq pins. */
+		map.setConfigProperty("basemap", "showRoadLabels", false);
+	} catch {
+		/* */
+	}
+	try {
+		map.setConfigProperty("basemap", "language", isRTL ? "ar" : "en");
+	} catch {
+		/* */
+	}
+	try {
+		map.setTerrain(null);
+	} catch {
+		/* */
+	}
+}
+
+const GIS_HOODS_SOURCE = "farq-gis-hoods";
+const GIS_HOODS_LAYER = "farq-gis-hoods-outline";
+
+const EMPTY_GIS: GeoJSON.FeatureCollection = {
+	type: "FeatureCollection",
+	features: [],
+};
+
+/** Stroke Golden neighborhood rings only — never fill, never a mosaic. */
+function applyGisOverlays(
+	map: MapboxMap,
+	opts: {
+		neighborhoodsOn: boolean;
+		neighborhoods: { type: string; features?: unknown[] } | null;
+	},
+) {
+	const data = (
+		opts.neighborhoodsOn && opts.neighborhoods?.features?.length
+			? opts.neighborhoods
+			: EMPTY_GIS
+	) as GeoJSON.FeatureCollection;
+	const src = map.getSource(GIS_HOODS_SOURCE);
+	if (!src) {
+		map.addSource(GIS_HOODS_SOURCE, { type: "geojson", data });
+		map.addLayer({
+			id: GIS_HOODS_LAYER,
+			type: "line",
+			source: GIS_HOODS_SOURCE,
+			minzoom: 10,
+			layout: {
+				visibility: opts.neighborhoodsOn ? "visible" : "none",
+				"line-cap": "round",
+				"line-join": "round",
+			},
+			paint: {
+				"line-color": "#8aa0a0",
+				"line-width": 0.7,
+				"line-opacity": 0.28,
+			},
 		});
-	} catch {
-		/* */
+		return;
+	}
+	if ("setData" in src && typeof src.setData === "function") {
+		src.setData(data);
+	}
+	if (map.getLayer(GIS_HOODS_LAYER)) {
+		map.setLayoutProperty(
+			GIS_HOODS_LAYER,
+			"visibility",
+			opts.neighborhoodsOn ? "visible" : "none",
+		);
 	}
 }
 
@@ -141,6 +239,45 @@ function clearPinMarkers(markers: Map<string, PinRec>) {
 		rec.marker.remove();
 	}
 	markers.clear();
+}
+
+/** Same-frame pin select — class toggle only, never remint markers. */
+function applyInstantPinSelection(
+	markers: Map<string, PinRec>,
+	placeId: string,
+	roots: Array<Element | null | undefined>,
+) {
+	for (const rec of markers.values()) {
+		if (rec.kind !== "place") continue;
+		setPinSelected(rec.el, rec.placeId === placeId);
+	}
+	for (const root of roots) {
+		if (!(root instanceof HTMLElement)) continue;
+		root.classList.add("is-pin-selected");
+		root.setAttribute("data-sheet-open", "true");
+	}
+}
+
+function cullPinsToViewport(
+	map: MapboxMap,
+	markers: Map<string, PinRec>,
+	selectedPlaceId: string | undefined,
+): void {
+	let bounds: ReturnType<MapboxMap["getBounds"]>;
+	try {
+		bounds = map.getBounds();
+	} catch {
+		return;
+	}
+	if (!bounds) return;
+	for (const [key, rec] of markers) {
+		const keep =
+			(Boolean(selectedPlaceId) && rec.placeId === selectedPlaceId) ||
+			bounds.contains(rec.marker.getLngLat());
+		if (keep) continue;
+		rec.marker.remove();
+		markers.delete(key);
+	}
 }
 
 /** Rank loaded HTML auras after camera idle. Class toggles only — no refetch, no remint. */
@@ -165,34 +302,29 @@ function applyViewportAuraRanks(
 		if (rec.kind !== "place" || !rec.placeId || rec.amount == null) continue;
 		const ll = rec.marker.getLngLat();
 		if (!bounds.contains(ll)) {
-			applyAuraRankClasses(rec.el, "demoted");
+			applyAuraRankClasses(rec.el, "visible");
 			continue;
 		}
 		visible.push({ placeId: rec.placeId, amount: rec.amount, el: rec.el });
 	}
 
-	const isMobile =
-		typeof window !== "undefined" &&
-		window.matchMedia("(max-width: 1023px)").matches;
-	const promoted = rankAuraPlaceIds(
-		visible,
-		promotedAuraLimit(visible.length, auraPromoteCap(isMobile)),
-	);
 	let maxPlaceId: string | null = null;
 	let maxAmount = -1;
 	let maxEl: HTMLElement | null = null;
 	for (const item of visible) {
-		const isSelected =
-			Boolean(selectedPlaceId) && item.placeId === selectedPlaceId;
-		applyAuraRankClasses(
-			item.el,
-			isSelected || promoted.has(item.placeId) ? "promoted" : "demoted",
-		);
 		if (item.amount > maxAmount) {
 			maxAmount = item.amount;
 			maxPlaceId = item.placeId;
 			maxEl = item.el;
 		}
+	}
+	for (const item of visible) {
+		const isSelected =
+			Boolean(selectedPlaceId) && item.placeId === selectedPlaceId;
+		applyAuraRankClasses(
+			item.el,
+			isSelected || item.placeId === maxPlaceId ? "promoted" : "visible",
+		);
 	}
 
 	const lastPulse = lastPulseRef.current;
@@ -220,7 +352,7 @@ export default function FarqMap({
 	focusRequest = null,
 	userLocation,
 	showUserLocation = false,
-	placeDetail: _placeDetail = null,
+	placeDetail = null,
 	isRTL = false,
 	basemap: basemapProp,
 	onBasemapChange,
@@ -229,10 +361,15 @@ export default function FarqMap({
 	onViewChange,
 	hideAddressSearch = false,
 	sheetOpen = false,
+	gisNeighborhoods = null,
+	onMapInteraction,
+	onLeftUserLocation,
 }: {
 	places: IntelligenceMapPlaces | null;
-	/** Accepted for IntelligenceMapSplit compatibility — not painted on the consumer map. */
+	/** Accepted for IntelligenceMapSplit compatibility — not painted as a mosaic. */
 	neighborhoods: IntelligenceMapNeighborhoods | null;
+	/** Golden NCP polygons stroked as line outlines when the drawer toggle is on. */
+	gisNeighborhoods?: IntelligenceMapNeighborhoods | null;
 	selectedPlaceId?: string;
 	selectedNeighborhoodId?: string;
 	/** One-shot camera move (locate click or newly selected pin). Never a live GPS/Riyadh follow. */
@@ -246,10 +383,16 @@ export default function FarqMap({
 	isRTL?: boolean;
 	onSelectPlace: (placeId: string) => void;
 	onSelectNeighborhood: (neighborhoodId: string) => void;
-	onViewChange?: (bbox: string, zoom: number) => void;
+	onViewChange?: (
+		bbox: string,
+		zoom: number,
+		meta?: MapViewChangeMeta,
+	) => void;
 	/** Mobile Farq search already covers find — hide Mapbox address Search Box. */
 	hideAddressSearch?: boolean;
 	sheetOpen?: boolean;
+	onMapInteraction?: (phase: "start" | "end") => void;
+	onLeftUserLocation?: (left: boolean) => void;
 }) {
 	const token = getMapboxAccessToken();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -257,7 +400,6 @@ export default function FarqMap({
 	const searchRef = useRef<MapboxSearchBox | null>(null);
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const pinMarkersRef = useRef<Map<string, PinRec>>(new Map());
-	const prevAmountsRef = useRef<Map<string, number>>(new Map());
 	const lastPulseRef = useRef<{ placeId: string; amount: number } | null>(
 		null,
 	);
@@ -267,9 +409,16 @@ export default function FarqMap({
 	const lastFocusIdRef = useRef<string | null>(null);
 	const onViewChangeRef = useRef(onViewChange);
 	const onSelectPlaceRef = useRef(onSelectPlace);
+	const onMapInteractionRef = useRef(onMapInteraction);
+	const onLeftUserLocationRef = useRef(onLeftUserLocation);
+	const userLocationRef = useRef(userLocation);
 	const isRtlRef = useRef(isRTL);
 	const selectedPlaceIdRef = useRef(selectedPlaceId);
+	const gisNeighborhoodsRef = useRef(gisNeighborhoods);
 	const appliedStyleRef = useRef<MapboxBasemap>("standard");
+	const lastPinSigRef = useRef("");
+	const placeDetailRef = useRef(placeDetail);
+	const syncPinsRef = useRef<() => void>(() => {});
 	const [internalBasemap, setInternalBasemap] =
 		useState<MapboxBasemap>("standard");
 	const basemap = basemapProp ?? internalBasemap;
@@ -283,8 +432,13 @@ export default function FarqMap({
 
 	onViewChangeRef.current = onViewChange;
 	onSelectPlaceRef.current = onSelectPlace;
+	onMapInteractionRef.current = onMapInteraction;
+	onLeftUserLocationRef.current = onLeftUserLocation;
+	userLocationRef.current = userLocation;
 	isRtlRef.current = isRTL;
 	selectedPlaceIdRef.current = selectedPlaceId;
+	gisNeighborhoodsRef.current = gisNeighborhoods;
+	placeDetailRef.current = placeDetail;
 
 	const placesData = useMemo((): GeoJSON.FeatureCollection => {
 		const features = (places?.features || []).filter((f) => {
@@ -304,39 +458,88 @@ export default function FarqMap({
 		const reduced = Boolean(
 			window.matchMedia("(prefers-reduced-motion: reduce)").matches,
 		);
+		const skipGlobe = shouldSkipGlobeIntro({ reducedMotion: reduced });
 
 		const map = new mapboxgl.Map({
 			container: containerRef.current,
 			style: mapboxStyleUrl("standard"),
-			center: [20, 18],
-			zoom: reduced ? 11.6 : 1.55,
-			pitch: 0,
-			bearing: 0,
-			projection: "globe",
+			center: skipGlobe ? RIYADH_LNG_LAT : [20, 18],
+			zoom: skipGlobe ? 12.15 : reduced ? 11.6 : 1.55,
+			pitch: skipGlobe ? 32 : 0,
+			bearing: skipGlobe ? -12 : 0,
+			projection: skipGlobe ? "mercator" : "globe",
 			attributionControl: { compact: true } as unknown as boolean,
 			maxPitch: 75,
 			accessToken: token,
+			cooperativeGestures: false,
+			dragPan: true,
 		});
 		mapRef.current = map;
+		try {
+			map.dragPan.enable();
+		} catch {
+			/* */
+		}
 		let introTimer = 0;
 
-		const reportView = () => {
+		const reportView = (userGesture = false) => {
 			try {
 				const b = map.getBounds();
 				if (!b) return;
 				const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-				onViewChangeRef.current?.(bbox, map.getZoom());
+				onViewChangeRef.current?.(bbox, map.getZoom(), { userGesture });
 			} catch {
 				/* */
 			}
 		};
 
 		map.on("style.load", () => {
-			applyBasemap(map);
+			applyBasemap(map, isRtlRef.current);
 			if (introDoneRef.current && mapSession.camera) {
 				map.jumpTo(mapSession.camera);
 			}
+			const hoods = gisNeighborhoodsRef.current;
+			try {
+				applyGisOverlays(map, {
+					neighborhoodsOn: Boolean(hoods?.features?.length),
+					neighborhoods: hoods,
+				});
+			} catch {
+				/* style mid-swap */
+			}
+			try {
+				ensurePriceTileLayers(map, (id) => {
+					applyInstantPinSelection(pinMarkersRef.current, id, [
+						containerRef.current?.closest(".farq-mapbox-root"),
+						containerRef.current?.closest(".farq-map-split"),
+					]);
+					selectedPlaceIdRef.current = id;
+					onSelectPlaceRef.current(id);
+					lastPinSigRef.current = "";
+					syncPinsRef.current();
+				});
+				syncPinsRef.current();
+			} catch {
+				/* */
+			}
 		});
+
+		const applyPinPresentation = () => {
+			const root = containerRef.current?.closest(".farq-mapbox-root");
+			if (!(root instanceof HTMLElement)) return;
+			let z = 12;
+			try {
+				z = map.getZoom();
+			} catch {
+				return;
+			}
+			root.dataset.pinPresentation = pinPresentationForZoom(z);
+			root.dataset.pinBand = pinZoomBand(z);
+			root.style.setProperty(
+				"--farq-identity-reveal",
+				pinIdentityReveal(z).toFixed(3),
+			);
+		};
 
 		map.once("load", () => {
 			map.addControl(
@@ -357,18 +560,34 @@ export default function FarqMap({
 			}
 
 			try {
-				const root = containerRef.current?.closest(".farq-mapbox-root");
-				if (root instanceof HTMLElement) {
-					root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom());
-				}
+				applyPinPresentation();
 			} catch {
 				/* */
 			}
 
 			setMapReady(true);
+			try {
+				ensurePriceTileLayers(map, (id) => {
+					applyInstantPinSelection(pinMarkersRef.current, id, [
+						containerRef.current?.closest(".farq-mapbox-root"),
+						containerRef.current?.closest(".farq-map-split"),
+					]);
+					selectedPlaceIdRef.current = id;
+					onSelectPlaceRef.current(id);
+					lastPinSigRef.current = "";
+					syncPinsRef.current();
+				});
+			} catch {
+				/* style not ready */
+			}
 
 			const landQuietly = (camera: PersistedCamera) => {
-				map.jumpTo(camera);
+				try {
+					map.setProjection("mercator");
+				} catch {
+					/* */
+				}
+				map.jumpTo({ ...camera, pitch: Math.min(camera.pitch, 36) });
 				introDoneRef.current = true;
 				mapSession.introStarted = true;
 				persistCamera(map);
@@ -382,17 +601,22 @@ export default function FarqMap({
 				landQuietly({
 					center: RIYADH_LNG_LAT,
 					zoom: 12.15,
-					pitch: 48,
-					bearing: -18,
+					pitch: 32,
+					bearing: -12,
 				});
-			} else if (reduced) {
+			} else if (skipGlobe) {
 				mapSession.introStarted = true;
 				map.jumpTo({
 					center: RIYADH_LNG_LAT,
 					zoom: 12.15,
-					pitch: 48,
-					bearing: -18,
+					pitch: 32,
+					bearing: -12,
 				});
+				try {
+					map.setProjection("mercator");
+				} catch {
+					/* */
+				}
 				introDoneRef.current = true;
 				persistCamera(map);
 				setIntroDone(true);
@@ -402,8 +626,8 @@ export default function FarqMap({
 				map.flyTo({
 					center: RIYADH_LNG_LAT,
 					zoom: 12.15,
-					pitch: 54,
-					bearing: -20,
+					pitch: 32,
+					bearing: -12,
 					duration: INTRO_MS,
 					essential: true,
 					curve: 1.55,
@@ -411,6 +635,11 @@ export default function FarqMap({
 				});
 				introTimer = window.setTimeout(() => {
 					if (mapRef.current !== map) return;
+					try {
+						map.setProjection("mercator");
+					} catch {
+						/* globe intro only */
+					}
 					introDoneRef.current = true;
 					persistCamera(map);
 					setIntroDone(true);
@@ -419,14 +648,73 @@ export default function FarqMap({
 			}
 		});
 
+		let zoomRaf = 0;
+		const onZoomFrame = () => {
+			zoomRaf = 0;
+			applyPinPresentation();
+		};
+		map.on("zoom", () => {
+			if (zoomRaf) return;
+			zoomRaf = window.requestAnimationFrame(onZoomFrame);
+		});
+
+		const stopProgrammaticCamera = () => {
+			if (!introDoneRef.current) return;
+			try {
+				map.stop();
+			} catch {
+				/* leftover flyTo/easeTo only — user drag has not started */
+			}
+		};
+		const canvasHost = map.getCanvasContainer();
+		canvasHost.addEventListener("pointerdown", stopProgrammaticCamera, true);
+		let userGesture = false;
+		const markUserGesture = (ev: unknown) => {
+			if (
+				ev &&
+				typeof ev === "object" &&
+				"originalEvent" in ev &&
+				(ev as { originalEvent?: Event }).originalEvent
+			) {
+				userGesture = true;
+			}
+		};
+		const onInteractStart = (ev: unknown) => {
+			markUserGesture(ev);
+			if (!introDoneRef.current) return;
+			onMapInteractionRef.current?.("start");
+		};
+		const onInteractEnd = () => {
+			if (!introDoneRef.current) return;
+			onMapInteractionRef.current?.("end");
+		};
+		map.on("dragstart", onInteractStart);
+		map.on("zoomstart", onInteractStart);
+		map.on("rotatestart", onInteractStart);
+		map.on("pitchstart", onInteractStart);
+		map.on("dragend", onInteractEnd);
+		map.on("zoomend", () => {
+			onInteractEnd();
+			syncPinsRef.current();
+		});
+		map.on("rotateend", onInteractEnd);
+		map.on("pitchend", onInteractEnd);
+
 		map.on("moveend", () => {
 			if (!introDoneRef.current) return;
+			const wasUser = userGesture;
+			userGesture = false;
 			persistCamera(map);
-			reportView();
-			const root = containerRef.current?.closest(".farq-mapbox-root");
-			if (root instanceof HTMLElement) {
-				root.dataset.pinPresentation = pinPresentationForZoom(map.getZoom());
+			reportView(wasUser);
+			try {
+				onLeftUserLocationRef.current?.(
+					leftUserDot(map.getCenter(), userLocationRef.current),
+				);
+			} catch {
+				/* */
 			}
+			applyPinPresentation();
+			cullPinsToViewport(map, pinMarkersRef.current, selectedPlaceIdRef.current);
 			window.clearTimeout(rankTimerRef.current);
 			rankTimerRef.current = window.setTimeout(() => {
 				applyViewportAuraRanks(
@@ -453,6 +741,8 @@ export default function FarqMap({
 			window.clearTimeout(introTimer);
 			window.clearTimeout(pulseTimerRef.current);
 			window.clearTimeout(rankTimerRef.current);
+			if (zoomRaf) window.cancelAnimationFrame(zoomRaf);
+			canvasHost.removeEventListener("pointerdown", stopProgrammaticCamera, true);
 			persistCamera(map);
 			ro.disconnect();
 			userMarkerRef.current?.remove();
@@ -471,146 +761,145 @@ export default function FarqMap({
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
 
-		window.clearTimeout(pulseTimerRef.current);
-		const nextKeys = new Set<string>();
-		const nextAmounts = new Map<string, number>();
-		const createdBubbles: {
-			placeId: string;
-			amount: number;
-			el: HTMLElement;
-		}[] = [];
-
-		for (const feature of placesData.features) {
-			const key = featureMarkerKey(feature);
-			if (!key || feature.geometry.type !== "Point") continue;
-			nextKeys.add(key);
-			if (pinMarkersRef.current.has(key)) continue;
-
-			const coords = feature.geometry.coordinates as [number, number];
-			const props = (feature.properties || {}) as {
-				feature_type?: string;
-				place_id?: string;
-				name?: string;
-				count?: number;
-				difference_count?: number;
-				difference?: unknown;
-				max_difference_amount?: unknown;
-				top_difference_amount?: unknown;
-				provider_count?: number | null;
-				image_url?: string | null;
-				branch_image_url?: string | null;
-				restaurant_logo_url?: string | null;
-				restaurant_image_url?: string | null;
-				restaurant_image?: string | null;
-			};
-
-			let el: HTMLElement;
-			let kind: PinRec["kind"];
-			let placeId: string | undefined;
-			let amount: number | null = null;
-
-			if (props.feature_type === "cluster") {
-				kind = "cluster";
-				el = buildClusterPinElement({
-					count: Number(props.count) || 0,
-					differenceCount: Number(props.difference_count) || 0,
-					topGap: observedClusterTopGap(props),
-					isRTL: isRtlRef.current,
-				});
-				el.classList.add(FARQ_CLUSTERS);
-				el.addEventListener("click", (ev) => {
-					ev.stopPropagation();
-					map.easeTo({
-						center: coords,
-						zoom: Math.min(16.5, map.getZoom() + 2.2),
-						duration: 650,
-					});
-				});
-			} else {
-				kind = "place";
-				placeId = String(props.place_id || "");
-				if (!placeId) continue;
-				amount = observedDifferenceAmount(props.difference);
-				el = buildPlacePinElement({
-					name: String(props.name || ""),
-					difference: props.difference,
-					providerCount: props.provider_count,
-					selected: placeId === selectedPlaceIdRef.current,
-					isRTL: isRtlRef.current,
-					imageUrl: observedRestaurantImageUrl(props),
-				});
-				el.addEventListener("click", (ev) => {
-					ev.stopPropagation();
-					onSelectPlaceRef.current(placeId as string);
-				});
-				if (amount != null) {
-					createdBubbles.push({ placeId, amount, el });
-				}
+		const syncPins = () => {
+			if (mapRef.current !== map) return;
+			let zoom = 12;
+			try {
+				zoom = map.getZoom();
+			} catch {
+				return;
+			}
+			const selectedId = String(selectedPlaceIdRef.current || "").trim();
+			try {
+				syncPriceTileData(map, placesData, zoom, selectedId);
+			} catch {
+				/* */
 			}
 
+			const selectedFeature = selectedId
+				? placesData.features.find((feature) => {
+						const placeId = String(
+							(feature.properties as { place_id?: string } | null)
+								?.place_id || "",
+						).trim();
+						return placeId === selectedId && feature.geometry.type === "Point";
+					})
+				: undefined;
+
+			for (const [key, rec] of pinMarkersRef.current) {
+				if (selectedId && rec.placeId === selectedId && selectedFeature) continue;
+				rec.marker.remove();
+				pinMarkersRef.current.delete(key);
+			}
+
+			if (!selectedFeature || selectedFeature.geometry.type !== "Point") {
+				lastPinSigRef.current = selectedId;
+				return;
+			}
+
+			const key = featureMarkerKey(selectedFeature) || `place:${selectedId}`;
+			const coords = selectedFeature.geometry.coordinates as [number, number];
+			const props = (selectedFeature.properties || {}) as {
+				place_id?: string;
+				name?: string;
+				difference?: unknown;
+				gap?: unknown;
+				cheapest_provider_id?: unknown;
+				provider_count?: number | null;
+				image_url?: string | null;
+			};
+			const difference =
+				differenceFromPinProps(props) ||
+				differenceFromPinProps(placeDetailRef.current);
+			const amount =
+				observedDifferenceAmount(difference) ??
+				observedDifferenceAmount({
+					difference_amount: Number(props.gap),
+				});
+			const imageUrl =
+				placeDetailRef.current?.image_url || props.image_url || null;
+			const existing = pinMarkersRef.current.get(key);
+			if (existing) {
+				updatePlacePinChip(existing.el, amount, isRtlRef.current);
+				setPinSelected(existing.el, true);
+				if (imageUrl) syncPinPhoto(existing.el, imageUrl);
+				existing.marker.setLngLat(coords);
+				existing.amount = amount;
+				existing.imageUrl = imageUrl;
+				lastPinSigRef.current = key;
+				return;
+			}
+
+			const el = buildPlacePinElement({
+				name:
+					String(placeDetailRef.current?.name || props.name || ""),
+				difference,
+				providerCount:
+					placeDetailRef.current?.provider_count ?? props.provider_count,
+				selected: true,
+				isRTL: isRtlRef.current,
+				imageUrl,
+				includePhoto: true,
+				quiet: false,
+			});
+			el.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+			el.addEventListener("click", (ev) => {
+				ev.stopPropagation();
+				applyInstantPinSelection(pinMarkersRef.current, selectedId, [
+					containerRef.current?.closest(".farq-mapbox-root"),
+					containerRef.current?.closest(".farq-map-split"),
+				]);
+				selectedPlaceIdRef.current = selectedId;
+				onSelectPlaceRef.current(selectedId);
+			});
 			const marker = new mapboxgl.Marker({
 				element: el,
 				anchor: "bottom",
 			})
 				.setLngLat(coords)
 				.addTo(map);
-
 			pinMarkersRef.current.set(key, {
 				key,
 				marker,
 				el,
-				kind,
-				placeId,
+				kind: "place",
+				placeId: selectedId,
 				amount,
+				imageUrl,
 			});
-		}
+			if (amount != null) playBubbleEnter(el, 0);
+			applyViewportAuraRanks(
+				map,
+				pinMarkersRef.current,
+				selectedId,
+				lastPulseRef,
+				pulseTimerRef,
+				BUBBLE_ENTER_MS,
+			);
+			lastPinSigRef.current = key;
+		};
 
-		for (const [key, rec] of pinMarkersRef.current) {
-			if (nextKeys.has(key)) continue;
-			rec.marker.remove();
-			pinMarkersRef.current.delete(key);
-		}
-
-		for (const rec of pinMarkersRef.current.values()) {
-			if (rec.kind !== "place" || rec.placeId == null || rec.amount == null) {
-				continue;
-			}
-			nextAmounts.set(rec.placeId, rec.amount);
-		}
-
-		const prevAmounts = prevAmountsRef.current;
-		const entering = createdBubbles.filter((b) =>
-			shouldReplayBubbleMotion(b.placeId, b.amount, prevAmounts),
-		);
-		const stagger =
-			entering.length > 0 && entering.length <= BUBBLE_ENTER_STAGGER_MAX;
-		entering.forEach((b, i) => {
-			playBubbleEnter(b.el, stagger ? i * 24 : 0);
-		});
-
-		const enterIdx = entering.length > 0 ? 0 : -1;
-		const pulseDelay =
-			enterIdx >= 0
-				? BUBBLE_ENTER_MS + (stagger ? (entering.length - 1) * 24 : 0)
-				: 0;
-		applyViewportAuraRanks(
-			map,
-			pinMarkersRef.current,
-			selectedPlaceIdRef.current,
-			lastPulseRef,
-			pulseTimerRef,
-			pulseDelay,
-		);
-
-		prevAmountsRef.current = nextAmounts;
-	}, [placesData, mapReady]);
+		syncPinsRef.current = syncPins;
+		syncPins();
+	}, [placesData, mapReady, placeDetail]);
 
 	useEffect(() => {
+		const root = containerRef.current?.closest(".farq-mapbox-root");
+		if (root instanceof HTMLElement) {
+			root.classList.toggle("is-pin-selected", Boolean(selectedPlaceId));
+			if (selectedPlaceId) root.setAttribute("data-sheet-open", "true");
+			else root.removeAttribute("data-sheet-open");
+		}
 		for (const rec of pinMarkersRef.current.values()) {
 			if (rec.kind !== "place") continue;
-			setPinSelected(rec.el, Boolean(selectedPlaceId) && rec.placeId === selectedPlaceId);
+			setPinSelected(
+				rec.el,
+				Boolean(selectedPlaceId) && rec.placeId === selectedPlaceId,
+			);
 		}
-	}, [selectedPlaceId, placesData, mapReady]);
+		lastPinSigRef.current = "";
+		syncPinsRef.current();
+	}, [selectedPlaceId]);
 
 	useEffect(() => {
 		const map = mapRef.current;
@@ -624,10 +913,25 @@ export default function FarqMap({
 			const el = document.createElement("div");
 			el.className = "farq-user-pulse";
 			el.dataset.testid = "farq-map-user-pulse";
+			const ringA = document.createElement("span");
+			ringA.className = "farq-user-pulse-ring";
+			const ringB = document.createElement("span");
+			ringB.className = "farq-user-pulse-ring farq-user-pulse-ring--delay";
+			const core = document.createElement("span");
+			core.className = "farq-user-pulse-core";
+			core.setAttribute("aria-hidden", "true");
+			const label = document.createElement("span");
+			label.className = "farq-user-here";
+			label.textContent = isRtlRef.current ? "أنت هنا" : "You are here";
+			el.append(ringA, ringB, core, label);
 			userMarkerRef.current = new mapboxgl.Marker({ element: el })
 				.setLngLat([userLocation.lng, userLocation.lat])
 				.addTo(map);
 		} else {
+			const label = userMarkerRef.current.getElement().querySelector(".farq-user-here");
+			if (label) {
+				label.textContent = isRtlRef.current ? "أنت هنا" : "You are here";
+			}
 			userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
 		}
 	}, [showUserLocation, userLocation]);
@@ -639,8 +943,19 @@ export default function FarqMap({
 		lastFocusIdRef.current = focusRequest.id;
 		map.easeTo({
 			center: [focusRequest.lng, focusRequest.lat],
-			duration: 700,
+			duration:
+				focusRequest.kind === "select"
+					? 880
+					: focusRequest.kind === "locate"
+						? 820
+						: 740,
+			essential: true,
+			easing: (t) => 1 - (1 - t) ** 3,
+			padding: cameraPadding(focusRequest.kind),
 			pitch: map.getPitch(),
+			...(typeof focusRequest.zoom === "number"
+				? { zoom: focusRequest.zoom }
+				: {}),
 		});
 	}, [focusRequest, introDone]);
 
@@ -653,10 +968,23 @@ export default function FarqMap({
 		map.setStyle(mapboxStyleUrl(basemap));
 	}, [basemap]);
 
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		try {
+			applyGisOverlays(map, {
+				neighborhoodsOn: Boolean(gisNeighborhoods?.features?.length),
+				neighborhoods: gisNeighborhoods,
+			});
+		} catch {
+			/* style mid-swap — style.load reapplies */
+		}
+	}, [gisNeighborhoods, mapReady]);
+
 	if (missingToken) {
 		return (
 			<div
-				className="flex h-full min-h-[50vh] items-center justify-center bg-neutral-900 px-6 text-center text-sm text-white/80"
+				className="flex h-full items-center justify-center bg-neutral-900 px-6 text-center text-sm text-white/80"
 				data-testid="intelligence-map-canvas"
 			>
 				{isRTL
@@ -668,13 +996,13 @@ export default function FarqMap({
 
 	return (
 		<div
-			className="farq-mapbox-root relative h-full min-h-[50vh] w-full"
-			dir={isRTL ? "rtl" : "ltr"}
+			className="farq-mapbox-root relative h-full w-full"
+			dir="ltr"
 			data-testid="intelligence-map-canvas"
 			data-sheet-open={sheetOpen ? "true" : undefined}
 			data-hide-address-search={hideAddressSearch ? "true" : undefined}
 		>
-			<div ref={containerRef} className="h-full min-h-[50vh] w-full" />
+			<div ref={containerRef} className="absolute inset-0 h-full w-full" />
 			{onBasemapChange ? null : (
 				<div className="absolute bottom-3 end-3 z-[20] flex overflow-hidden rounded-lg bg-[#e6eef0] p-0.5 text-[11px] font-bold">
 					<button
