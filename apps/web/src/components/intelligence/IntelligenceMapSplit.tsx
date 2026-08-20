@@ -29,7 +29,6 @@ import {
 } from "../../lib/farqMapPins";
 import { pinGapAmount } from "../../lib/farqPriceTiles";
 import {
-	TOP_OPPORTUNITIES,
 	topOpportunities,
 	withObservedDistances,
 	type OpportunityRow,
@@ -51,6 +50,7 @@ import {
 	type IntelligenceMapPlaceDetail,
 	type IntelligenceMapPlaces,
 	type IntelligenceMeta,
+	type CityOpportunities,
 } from "../../services/intelligenceService";
 import EmptyState from "../EmptyState";
 import FarqBrandMark from "../FarqBrandMark";
@@ -81,6 +81,55 @@ function categorySearchQuery(
 		return undefined;
 	}
 	return selected?.category_name_ar || selected?.category_name || undefined;
+}
+
+/** Rows the list shows at once; the map draws every visible opportunity regardless. */
+const LIST_CAP = 30;
+
+/** Cities served by the whole-city read model; everything else still fetches by viewport. */
+const CITY_READ_MODEL = new Set(["riyadh"]);
+
+function cityKeyOf(city: string): string {
+	return String(city || "").trim().toLowerCase();
+}
+
+function bboxFromCsv(csv: string): [number, number, number, number] | null {
+	const p = String(csv || "").split(",").map(Number);
+	if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null;
+	return [Math.min(p[0], p[2]), Math.min(p[1], p[3]), Math.max(p[0], p[2]), Math.max(p[1], p[3])];
+}
+
+function inBbox(lng: number, lat: number, b: [number, number, number, number]): boolean {
+	return lng >= b[0] && lng <= b[2] && lat >= b[1] && lat <= b[3];
+}
+
+/**
+ * The same honest substring match the API applies to `q`, run over the cached
+ * city so typing a dish or a restaurant never costs a network round trip.
+ */
+function filterCityByQuery(
+	city: CityOpportunities,
+	query: string | undefined,
+): IntelligenceMapPlaces {
+	const needle = String(query || "").trim().toLowerCase();
+	const features = needle
+		? city.features.filter((f) => {
+				const p = f.properties;
+				return `${p.name || ""} ${p.name_en || ""} ${p.product_name || ""}`
+					.toLowerCase()
+					.includes(needle);
+			})
+		: city.features;
+	return {
+		type: "FeatureCollection",
+		count: features.length,
+		matched: features.length,
+		layer: "comparison",
+		features: features as unknown as IntelligenceMapPlaces["features"],
+		note_ar: city.generated_at
+			? `بيانات المقارنة محدثة بتاريخ ${city.generated_at.slice(0, 10)}`
+			: undefined,
+	};
 }
 
 const FarqMap = lazy(() => import("./FarqMap"));
@@ -159,6 +208,10 @@ export default function IntelligenceMapSplit({
 	});
 	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
 	const [placesFetching, setPlacesFetching] = useState(false);
+	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
+	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
+	const cityStatusRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
+	const [viewBbox, setViewBbox] = useState<[number, number, number, number] | null>(null);
 	const filterKeyRef = useRef("");
 	const scanTimerRef = useRef(0);
 
@@ -230,6 +283,36 @@ export default function IntelligenceMapSplit({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [retryTick]);
 
+	useEffect(() => {
+		const key = cityKeyOf(city || "riyadh");
+		if (!CITY_READ_MODEL.has(key)) {
+			cityStatusRef.current = "idle";
+			setCityPlaces(null);
+			return;
+		}
+		const controller = new AbortController();
+		cityStatusRef.current = "loading";
+		void IntelligenceService.cityOpportunities({ city: key, signal: controller.signal })
+			.then((body) => {
+				if (controller.signal.aborted) return;
+				cityStatusRef.current = "ready";
+				setCityPlaces(body);
+				setPlacesFetching(false);
+				setSearchHere(false);
+			})
+			.catch(() => {
+				if (controller.signal.aborted) return;
+				cityStatusRef.current = "failed";
+				setCityPlaces(null);
+				/* fall back to the viewport fetch for whatever the camera shows now */
+				const v = viewRef.current;
+				if (v && !fetchedViewRef.current) fetchPlacesRef.current?.(v.bbox, v.zoom);
+			});
+		return () => controller.abort();
+	}, [city, retryTick]);
+
+	const fetchPlacesRef = useRef<((bbox: string, zoom: number) => void) | null>(null);
+
 	const fetchPlaces = useCallback((bbox: string, zoom: number) => {
 		placesAbortRef.current?.abort();
 		const controller = new AbortController();
@@ -268,11 +351,19 @@ export default function IntelligenceMapSplit({
 				setScanHint(null);
 			});
 	}, [q, categoryId, meta]);
+	fetchPlacesRef.current = fetchPlaces;
 
 	const onViewChange = useCallback(
 		(bbox: string, zoom: number, meta?: MapViewChangeMeta) => {
 			const next = { bbox, zoom };
 			viewRef.current = next;
+			setViewBbox(bboxFromCsv(bbox));
+			/* With the city in memory, moving the camera is a filter, not a request. */
+			if (cityStatusRef.current === "loading" || cityStatusRef.current === "ready") {
+				intentionalFetchRef.current = false;
+				setSearchHere(false);
+				return;
+			}
 			if (!fetchedViewRef.current) {
 				fetchPlaces(bbox, zoom);
 				return;
@@ -455,7 +546,18 @@ export default function IntelligenceMapSplit({
 		[navigate],
 	);
 
-	const selectedPlaceFeature = places?.features.find(
+	const cityQuery = useMemo(() => {
+		const cat = meta?.categories.find((c) => c.category_id === categoryId) || null;
+		return categorySearchQuery(categoryId, cat, q);
+	}, [meta, categoryId, q]);
+
+	/* One source of places: the cached city when we have it, the viewport fetch otherwise. */
+	const sourcePlaces = useMemo(
+		() => (cityPlaces ? filterCityByQuery(cityPlaces, cityQuery) : places),
+		[cityPlaces, cityQuery, places],
+	);
+
+	const selectedPlaceFeature = sourcePlaces?.features.find(
 		(f) => String(f.properties.place_id) === String(livePlaceId),
 	);
 	const selectedRestaurantId =
@@ -466,14 +568,14 @@ export default function IntelligenceMapSplit({
 		(/^\d+$/.test(livePlaceId) ? livePlaceId : "");
 
 	const showUserDot = locationPinKind === "gps" || locationPinKind === "manual";
-	placesRef.current = places;
+	placesRef.current = sourcePlaces;
 
 	const visiblePlaces = useMemo(() => {
-		if (!places) return places;
+		if (!sourcePlaces) return sourcePlaces;
 		const gapsOnly = true;
 		return {
-			...places,
-			features: places.features.filter((f) => {
+			...sourcePlaces,
+			features: sourcePlaces.features.filter((f) => {
 				const isCluster = f.properties.feature_type === "cluster";
 				const amount = pinGapAmount(f.properties);
 				const hasGap = isCluster
@@ -484,10 +586,12 @@ export default function IntelligenceMapSplit({
 				return true;
 			}),
 		};
-	}, [places, layers.opportunities]);
+	}, [sourcePlaces, layers.opportunities]);
 
+	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
 		const rows: OpportunityRow[] = [];
+		const clip = cityPlaces ? viewBbox : null;
 		for (const f of visiblePlaces?.features || []) {
 			if (f.properties.feature_type === "cluster") continue;
 			const placeId = String(f.properties.place_id || "").trim();
@@ -499,6 +603,7 @@ export default function IntelligenceMapSplit({
 			const lng = Number(coords[0]);
 			const lat = Number(coords[1]);
 			if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+			if (clip && !inBbox(lng, lat, clip)) continue;
 			const diff = differenceFromPinProps(f.properties);
 			const cheap = Number(
 				f.properties.cheapest_price ??
@@ -544,7 +649,7 @@ export default function IntelligenceMapSplit({
 				? withObservedDistances(rows, userLocation.lat, userLocation.lng)
 				: rows;
 		return located;
-	}, [visiblePlaces, showUserDot, userLocation]);
+	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox]);
 
 	const cheapestReady = useMemo(
 		() => viewportSavings.some((row) => row.cheapestPrice != null),
@@ -553,7 +658,7 @@ export default function IntelligenceMapSplit({
 	const nearReady = Boolean(showUserDot && userLocation);
 
 	const opportunityList = useMemo(
-		() => topOpportunities(viewportSavings, sort, TOP_OPPORTUNITIES),
+		() => topOpportunities(viewportSavings, sort, LIST_CAP),
 		[viewportSavings, sort],
 	);
 
@@ -561,6 +666,8 @@ export default function IntelligenceMapSplit({
 
 	const displayPlaces = useMemo(() => {
 		if (!visiblePlaces) return visiblePlaces;
+		/* The GPU draws every opportunity and clusters them itself; the cap was a DOM limit. */
+		if (cityPlaces) return visiblePlaces;
 		const ids = new Set(topSavings.map((row) => row.placeId));
 		if (livePlaceId) ids.add(livePlaceId);
 		return {
@@ -570,7 +677,7 @@ export default function IntelligenceMapSplit({
 				ids.has(String(f.properties.place_id || "")),
 			),
 		};
-	}, [visiblePlaces, topSavings, livePlaceId]);
+	}, [visiblePlaces, topSavings, livePlaceId, cityPlaces]);
 
 	const selectedCityLabel = useMemo(() => {
 		const match = (meta?.geo_readiness?.ncp_ready_cities || []).find(
@@ -836,7 +943,7 @@ export default function IntelligenceMapSplit({
 					placesFetching={placesFetching}
 					scanHint={scanHint}
 					hasViewportPlaces={hasViewportPlaces}
-					placesReady={places != null}
+					placesReady={sourcePlaces != null}
 					chromeHidden={false}
 					searchFocused={searchFocused}
 					onSearchFocused={setSearchFocused}
@@ -1053,7 +1160,7 @@ export default function IntelligenceMapSplit({
 							selectedPlaceId={livePlaceId}
 							onSelect={focusAroundPlace}
 							empty={
-								Boolean(places) &&
+								Boolean(sourcePlaces) &&
 								!placesFetching &&
 								topSavings.length === 0
 							}
@@ -1349,7 +1456,7 @@ export default function IntelligenceMapSplit({
 									))}
 								</ul>
 							</div>
-						) : places != null && !placesFetching ? (
+						) : sourcePlaces != null && !placesFetching ? (
 							<p className="text-[14px] font-extrabold text-brand-900">
 								{isRTL
 									? "ما رصدنا فرق يستحق حولك بعد"

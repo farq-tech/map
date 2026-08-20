@@ -1,11 +1,22 @@
 /**
- * GPU savings beacons. FAR (z<14): mint circle + gap number only (no emoji:
- * Mapbox glyphs stop at U+FFFF, so 🔥 never rendered and only warned).
- * NEAR (z≥14): opportunity + «N ر.س فرق», then cheapest-provider mark.
- * Display set is the same top-N as the list — no 400-pin restaurant farm.
- * HTML markers are the selected pin only.
+ * GPU opportunity layers — one entity that changes resolution with zoom.
+ *
+ * FAR / AREA (z < CLUSTER_BREAK_ZOOM): Mapbox clusters the city's opportunities
+ * in a worker. A cluster is a mint disc carrying the biggest gap inside it and
+ * how many opportunities it stands for; a lone opportunity is a mint disc
+ * sized by its approved tier, carrying its gap. Collision is on and the
+ * biggest gap wins the pixel, so density never turns into noise.
+ *
+ * NEAR (z ≥ CLUSTER_BREAK_ZOOM): the cheapest app's logo with the gap on a
+ * mint pill at its corner, then the item name underneath.
+ *
+ * The selected place is excluded from the GPU source and drawn once as HTML.
+ * No emoji in any text-field (Mapbox glyphs stop at U+FFFF). Every layer is
+ * emissive so Standard's dusk/night presets cannot darken the opportunity
+ * colour. Digits are Western on every locale (approved 2026-08-20).
  */
 import type {
+	ExpressionSpecification,
 	GeoJSONSource,
 	Map as MapboxMap,
 	MapLayerMouseEvent,
@@ -16,6 +27,7 @@ import {
 	observedDifferenceAmount,
 	parseDifference,
 } from "./farqMapPins";
+import { tierForGap, type OpportunityTier } from "./farqOpportunityTiers";
 import {
 	ALL_PLATFORM_KEYS,
 	normalizePlatformKey,
@@ -24,44 +36,61 @@ import {
 } from "./platformLogos";
 
 export const PRICE_TILE_SOURCE = "farq-price-tiles";
-export const PRICE_TILE_HALO = "farq-price-halo";
-export const PRICE_TILE_CIRCLES = "farq-price-circles";
-export const PRICE_TILE_LABELS = "farq-price-labels";
-export const PRICE_TILE_CLUSTER_HALO = "farq-price-cluster-halo";
+export const PRICE_TILE_POINTS = "farq-price-points";
 export const PRICE_TILE_CLUSTERS = "farq-price-clusters";
-export const PRICE_TILE_CLUSTER_COUNT = "farq-price-cluster-count";
 export const PRICE_TILE_ICONS = "farq-price-icons";
-export const PRICE_TILE_CHIPS = "farq-price-chips";
-export const PRICE_TILE_CHIP_LABELS = "farq-price-chip-labels";
 export const PRICE_TILE_NEAR_TEXT = "farq-price-near-text";
 
-/** Radiant mint fill — number is dark Farq teal `#043434`, never white on mint. */
+/** Mint disc, dark Farq teal number — never white on mint. */
 export const PRICE_CIRCLE_FILL = FARQ_MINT;
-export const PRICE_CIRCLE_HALO = "#A8F8C9";
-/* Standard's dusk/night presets colour-grade every layer that is not emissive;
- * without emissive strength the mint discs rendered as dark teal in production. */
 export const PRICE_CIRCLE_STROKE = "#FFFFFF";
 export const PRICE_CIRCLE_TEXT = FARQ_BRAND_900;
 
 export const GPU_ICON_PREFIX = "farq-icon-";
 export const GPU_ICON_FALLBACK = "farq-icon-fallback";
 export const GPU_ICON_PX = 40;
-/** Near-band mint chip — 24px, teal `#043434` on mint `#83F1B1`. */
-export const GPU_CHIP_PX = 24;
-export const GPU_CHIP_RADIUS = 12;
-export const GPU_CHIP_TEXT_SIZE = 13;
-/** FAR city beacons — big readable gap, no logos. */
-export const FAR_BEACON_PX = 36;
-export const FAR_BEACON_RADIUS = 18;
-export const FAR_BEACON_TEXT_SIZE = 15;
+export const GPU_DISC_PREFIX = "farq-disc-";
+
+/** Disc diameters per approved tier (CSS px). Hero is a top-decile gap. */
+export const DISC_PX: Record<OpportunityTier, number> = {
+	hero: 38,
+	strong: 30,
+	regular: 24,
+	faint: 14,
+};
+export const DISC_TEXT_PX: Record<OpportunityTier, number> = {
+	hero: 15,
+	strong: 13,
+	regular: 12,
+	faint: 0,
+};
+export const CLUSTER_DISC_PX = { sm: 40, md: 48, lg: 56 } as const;
+export const CLUSTER_STEP_MD = 12;
+export const CLUSTER_STEP_LG = 40;
+export const CLUSTER_MAX_ZOOM = CLUSTER_BREAK_ZOOM - 1;
+export const CLUSTER_RADIUS_PX = 64;
+
+/* Kept for callers/tests that describe the far band in these terms. */
+export const FAR_BEACON_PX = DISC_PX.hero;
+export const FAR_BEACON_RADIUS = FAR_BEACON_PX / 2;
+export const FAR_BEACON_TEXT_SIZE = DISC_TEXT_PX.hero;
 export const GPU_CLUSTER_TEXT_SIZE = 15;
-export const GPU_CLUSTER_RADIUS = 18;
+/** Near-band gap pill: text on a mint halo at the logo's corner. */
+export const GPU_CHIP_PX = 24;
+export const GPU_CHIP_RADIUS = GPU_CHIP_PX / 2;
+export const GPU_CHIP_TEXT_SIZE = 13;
+
+const TEXT_FONT = ["DIN Pro Bold", "Arial Unicode MS Bold"];
 
 const lastTileHash = new WeakMap<MapboxMap, string>();
 
 export function gpuIconId(key: PlatformKey | string | null | undefined): string {
 	const normalized = normalizePlatformKey(key);
 	return normalized ? `${GPU_ICON_PREFIX}${normalized}` : GPU_ICON_FALLBACK;
+}
+
+export function discImageId(tier: OpportunityTier | null | undefined): string {
+	return `${GPU_DISC_PREFIX}${tier || "faint"}`;
 }
 
 export function pinGapAmount(props: {
@@ -86,6 +115,14 @@ export function cheapestProviderId(props: {
 	);
 }
 
+/** Mapbox glyphs stop at U+FFFF: strip emoji and other astral characters from label text. */
+export function mapSafeText(raw: unknown): string {
+	return String(raw || "")
+		.replace(/[\u{10000}-\u{10FFFF}]/gu, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
 export function toPriceTileCollection(
 	places: GeoJSON.FeatureCollection | null | undefined,
 	selectedPlaceId?: string,
@@ -99,6 +136,7 @@ export function toPriceTileCollection(
 			place_id?: string;
 			name?: string;
 			gap?: unknown;
+			tier?: unknown;
 			difference?: unknown;
 			cheapest_provider_id?: unknown;
 			product_name?: unknown;
@@ -108,15 +146,20 @@ export function toPriceTileCollection(
 		if (!placeId) continue;
 		if (selected && placeId === selected) continue;
 		const gap = pinGapAmount(props);
-		const product = String(props.product_name || "").trim();
+		const tier =
+			(typeof props.tier === "string" ? (props.tier as OpportunityTier) : null) ||
+			tierForGap(gap);
+		const product = mapSafeText(props.product_name);
 		features.push({
 			type: "Feature",
+			id: Number.isFinite(Number(placeId)) ? Number(placeId) : undefined,
 			geometry: feature.geometry,
 			properties: {
 				place_id: placeId,
 				name: String(props.name || ""),
 				product_name: product,
 				gap: gap != null ? Math.round(gap) : 0,
+				tier: tier || "faint",
 				icon: gpuIconId(cheapestProviderId(props)),
 			},
 		});
@@ -134,16 +177,19 @@ export function hashPriceTileCollection(
 		const props = (feature.properties || {}) as {
 			place_id?: string;
 			gap?: unknown;
+			tier?: string;
 			icon?: string;
 			product_name?: string;
 		};
 		parts.push(
-			`${props.place_id || ""}|${props.gap ?? 0}|${props.icon || ""}|${props.product_name || ""}|${lng}|${lat}`,
+			`${props.place_id || ""}|${props.gap ?? 0}|${props.tier || ""}|${props.icon || ""}|${props.product_name || ""}|${lng}|${lat}`,
 		);
 	}
 	parts.sort();
 	return `${parts.length}:${parts.join(";")}`;
 }
+
+/* ---------- images: provider logos and tier discs, drawn once ---------- */
 
 function roundedIconImageData(
 	img: CanvasImageSource | null,
@@ -170,6 +216,31 @@ function roundedIconImageData(
 	return ctx.getImageData(0, 0, size, size);
 }
 
+/** Mint disc with a white ring; a faint inner teal line keeps it legible on mint-ish ground. */
+export function discImageData(cssPx: number): ImageData {
+	const size = cssPx * 2;
+	const canvas = document.createElement("canvas");
+	canvas.width = size;
+	canvas.height = size;
+	const ctx = canvas.getContext("2d");
+	if (!ctx) return new ImageData(size, size);
+	const c = size / 2;
+	ctx.beginPath();
+	ctx.arc(c, c, c - 1, 0, Math.PI * 2);
+	ctx.fillStyle = PRICE_CIRCLE_STROKE;
+	ctx.fill();
+	ctx.beginPath();
+	ctx.arc(c, c, c - 5, 0, Math.PI * 2);
+	ctx.fillStyle = PRICE_CIRCLE_FILL;
+	ctx.fill();
+	ctx.beginPath();
+	ctx.arc(c, c, c - 5, 0, Math.PI * 2);
+	ctx.lineWidth = 1.5;
+	ctx.strokeStyle = "rgba(4, 52, 52, 0.28)";
+	ctx.stroke();
+	return ctx.getImageData(0, 0, size, size);
+}
+
 function loadMapImage(
 	map: MapboxMap,
 	url: string,
@@ -183,6 +254,19 @@ function loadMapImage(
 			resolve(image);
 		});
 	});
+}
+
+export function ensureDiscImages(map: MapboxMap): void {
+	if (typeof document === "undefined") return;
+	const add = (id: string, px: number) => {
+		if (!map.hasImage(id)) map.addImage(id, discImageData(px), { pixelRatio: 2 });
+	};
+	for (const tier of Object.keys(DISC_PX) as OpportunityTier[]) {
+		add(discImageId(tier), DISC_PX[tier]);
+	}
+	add(`${GPU_DISC_PREFIX}cluster-sm`, CLUSTER_DISC_PX.sm);
+	add(`${GPU_DISC_PREFIX}cluster-md`, CLUSTER_DISC_PX.md);
+	add(`${GPU_DISC_PREFIX}cluster-lg`, CLUSTER_DISC_PX.lg);
 }
 
 export async function preloadPlatformAtlas(map: MapboxMap): Promise<void> {
@@ -202,6 +286,8 @@ export async function preloadPlatformAtlas(map: MapboxMap): Promise<void> {
 	);
 }
 
+/* ---------- layers ---------- */
+
 function pickPlaceFromEvent(
 	map: MapboxMap,
 	ev: MapLayerMouseEvent,
@@ -211,247 +297,177 @@ function pickPlaceFromEvent(
 	return String(hit[0]?.properties?.place_id || "").trim();
 }
 
+const TIER_EXPR: ExpressionSpecification = ["coalesce", ["get", "tier"], "faint"];
+const GAP_EXPR: ExpressionSpecification = ["coalesce", ["get", "gap"], 0];
+/** Biggest gap first: lower sort keys are placed first, so negate the gap. */
+const SORT_BY_GAP: ExpressionSpecification = ["-", 0, GAP_EXPR];
+
 export function ensurePriceTileLayers(
 	map: MapboxMap,
 	onSelectPlace: (placeId: string) => void,
 ): void {
 	if (map.getSource(PRICE_TILE_SOURCE)) {
+		ensureDiscImages(map);
 		void preloadPlatformAtlas(map);
 		return;
 	}
+	ensureDiscImages(map);
 	map.addSource(PRICE_TILE_SOURCE, {
 		type: "geojson",
 		data: { type: "FeatureCollection", features: [] },
-		cluster: false,
-	});
-	map.addLayer({
-		id: PRICE_TILE_CLUSTER_HALO,
-		type: "circle",
-		source: PRICE_TILE_SOURCE,
-		maxzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["has", "point_count"],
-		paint: {
-			"circle-emissive-strength": 1,
-			"circle-color": PRICE_CIRCLE_HALO,
-			"circle-radius": ["step", ["get", "point_count"], 22, 8, 26, 24, 30],
-			"circle-opacity": 0.42,
-			"circle-blur": 0,
+		cluster: true,
+		clusterMaxZoom: CLUSTER_MAX_ZOOM,
+		clusterRadius: CLUSTER_RADIUS_PX,
+		clusterProperties: {
+			/* the biggest observed gap inside the cluster — never a sum, never invented */
+			max_gap: ["max", GAP_EXPR],
 		},
 	});
+
+	/* AREA: clusters as discs carrying the biggest gap and the count. */
 	map.addLayer({
 		id: PRICE_TILE_CLUSTERS,
-		type: "circle",
+		type: "symbol",
 		source: PRICE_TILE_SOURCE,
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["has", "point_count"],
-		paint: {
-			"circle-emissive-strength": 1,
-			"circle-color": PRICE_CIRCLE_FILL,
-			"circle-stroke-color": PRICE_CIRCLE_STROKE,
-			"circle-stroke-width": 2,
-			"circle-radius": [
+		layout: {
+			"icon-image": [
 				"step",
 				["get", "point_count"],
-				GPU_CLUSTER_RADIUS,
-				8,
-				20,
-				24,
-				22,
+				`${GPU_DISC_PREFIX}cluster-sm`,
+				CLUSTER_STEP_MD,
+				`${GPU_DISC_PREFIX}cluster-md`,
+				CLUSTER_STEP_LG,
+				`${GPU_DISC_PREFIX}cluster-lg`,
 			],
-			"circle-opacity": 1,
-		},
-	});
-	map.addLayer({
-		id: PRICE_TILE_CLUSTER_COUNT,
-		type: "symbol",
-		source: PRICE_TILE_SOURCE,
-		maxzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["has", "point_count"],
-		layout: {
-			"text-field": ["to-string", ["round", ["coalesce", ["get", "max_gap"], 0]]],
+			"icon-allow-overlap": true,
+			"icon-ignore-placement": true,
+			"text-field": [
+				"format",
+				["to-string", ["round", ["get", "max_gap"]]],
+				{ "font-scale": 1 },
+				"\n",
+				{},
+				["to-string", ["get", "point_count"]],
+				{ "font-scale": 0.68 },
+			],
+			"text-font": TEXT_FONT,
 			"text-size": GPU_CLUSTER_TEXT_SIZE,
-			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+			"text-line-height": 1.05,
 			"text-allow-overlap": true,
 			"text-ignore-placement": true,
+			"symbol-sort-key": ["-", 0, ["coalesce", ["get", "max_gap"], 0]],
 		},
 		paint: {
-			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
-			"text-halo-color": PRICE_CIRCLE_STROKE,
-			"text-halo-width": 1,
+			"text-emissive-strength": 1,
+			"icon-emissive-strength": 1,
 		},
 	});
+
+	/* AREA: lone opportunities as tiered discs; collision on, biggest gap wins. */
 	map.addLayer({
-		id: PRICE_TILE_HALO,
-		type: "circle",
-		source: PRICE_TILE_SOURCE,
-		maxzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["!", ["has", "point_count"]],
-		paint: {
-			"circle-emissive-strength": 1,
-			"circle-color": PRICE_CIRCLE_HALO,
-			"circle-radius": [
-				"interpolate",
-				["linear"],
-				["coalesce", ["get", "gap"], 0],
-				8,
-				FAR_BEACON_RADIUS + 3,
-				50,
-				FAR_BEACON_RADIUS + 8,
-			],
-			"circle-opacity": 0.4,
-			"circle-blur": 0,
-		},
-	});
-	map.addLayer({
-		id: PRICE_TILE_CIRCLES,
-		type: "circle",
-		source: PRICE_TILE_SOURCE,
-		maxzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["!", ["has", "point_count"]],
-		paint: {
-			"circle-emissive-strength": 1,
-			"circle-color": PRICE_CIRCLE_FILL,
-			"circle-stroke-color": PRICE_CIRCLE_STROKE,
-			"circle-stroke-width": 2,
-			"circle-radius": [
-				"interpolate",
-				["linear"],
-				["coalesce", ["get", "gap"], 0],
-				8,
-				FAR_BEACON_RADIUS,
-				50,
-				FAR_BEACON_RADIUS + 5,
-			],
-			"circle-opacity": 1,
-		},
-	});
-	map.addLayer({
-		id: PRICE_TILE_LABELS,
+		id: PRICE_TILE_POINTS,
 		type: "symbol",
 		source: PRICE_TILE_SOURCE,
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
 		layout: {
-			"text-field": ["to-string", ["get", "gap"]],
-			"text-size": FAR_BEACON_TEXT_SIZE,
-			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
-			"text-allow-overlap": true,
-			"text-ignore-placement": true,
+			"icon-image": ["concat", GPU_DISC_PREFIX, TIER_EXPR],
+			"icon-allow-overlap": false,
+			"icon-ignore-placement": false,
+			"icon-padding": 1,
+			"text-field": [
+				"case",
+				["==", TIER_EXPR, "faint"],
+				"",
+				["to-string", ["get", "gap"]],
+			],
+			"text-font": TEXT_FONT,
+			"text-size": [
+				"match",
+				TIER_EXPR,
+				"hero",
+				DISC_TEXT_PX.hero,
+				"strong",
+				DISC_TEXT_PX.strong,
+				"regular",
+				DISC_TEXT_PX.regular,
+				10,
+			],
+			"text-allow-overlap": false,
+			"text-ignore-placement": false,
+			"symbol-sort-key": SORT_BY_GAP,
 		},
 		paint: {
-			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
-			"text-halo-color": PRICE_CIRCLE_STROKE,
-			"text-halo-width": 1,
+			"text-emissive-strength": 1,
+			"icon-emissive-strength": 1,
 		},
 	});
+
+	/* NEAR: cheapest app's logo with the gap on a mint pill at its corner. */
 	map.addLayer({
 		id: PRICE_TILE_ICONS,
 		type: "symbol",
 		source: PRICE_TILE_SOURCE,
 		minzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
-		paint: { "icon-emissive-strength": 1 },
 		layout: {
 			"icon-image": ["coalesce", ["get", "icon"], GPU_ICON_FALLBACK],
 			"icon-size": 1,
 			"icon-anchor": "bottom",
-			"icon-allow-overlap": true,
-			"icon-ignore-placement": true,
-			"icon-padding": 0,
+			"icon-allow-overlap": false,
+			"icon-ignore-placement": false,
+			"icon-padding": 2,
+			"text-field": ["case", [">", GAP_EXPR, 0], ["to-string", ["get", "gap"]], ""],
+			"text-font": TEXT_FONT,
+			"text-size": GPU_CHIP_TEXT_SIZE,
+			"text-anchor": "bottom-left",
+			"text-offset": [0.9, -2.2],
+			"text-allow-overlap": true,
+			"text-ignore-placement": true,
+			"text-optional": true,
+			"symbol-sort-key": SORT_BY_GAP,
+		},
+		paint: {
+			"text-color": PRICE_CIRCLE_TEXT,
+			"text-halo-color": PRICE_CIRCLE_FILL,
+			"text-halo-width": 6,
+			"text-halo-blur": 0,
+			"text-emissive-strength": 1,
+			"icon-emissive-strength": 1,
 		},
 	});
+
+	/* NEAR: the item under the logo — shaped by the RTL plugin, dropped before the logo is. */
 	map.addLayer({
 		id: PRICE_TILE_NEAR_TEXT,
 		type: "symbol",
 		source: PRICE_TILE_SOURCE,
-		minzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["!", ["has", "point_count"]],
+		minzoom: CLUSTER_BREAK_ZOOM + 1,
+		filter: ["all", ["!", ["has", "point_count"]], [">", ["length", ["coalesce", ["get", "product_name"], ""]], 0]],
 		layout: {
-			"text-field": [
-				"case",
-				[">", ["length", ["coalesce", ["get", "product_name"], ""]], 0],
-				[
-					"concat",
-					["get", "product_name"],
-					"\n",
-					["to-string", ["get", "gap"]],
-					" ر.س فرق",
-				],
-				[
-					"concat",
-					["to-string", ["get", "gap"]],
-					" ر.س فرق",
-				],
-			],
-			"text-size": 12,
-			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+			"text-field": ["get", "product_name"],
+			"text-size": 11.5,
+			"text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
 			"text-anchor": "top",
-			"text-offset": [0, 0.35],
-			"text-line-height": 1.15,
+			"text-offset": [0, 0.4],
 			"text-max-width": 9,
-			"text-allow-overlap": true,
-			"text-ignore-placement": true,
+			"text-allow-overlap": false,
+			"text-ignore-placement": false,
+			"symbol-sort-key": SORT_BY_GAP,
 		},
 		paint: {
-			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_STROKE,
 			"text-halo-width": 1.2,
-		},
-	});
-	map.addLayer({
-		id: PRICE_TILE_CHIPS,
-		type: "circle",
-		source: PRICE_TILE_SOURCE,
-		minzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "gap"], 0]],
-		paint: {
-			"circle-emissive-strength": 1,
-			"circle-color": PRICE_CIRCLE_FILL,
-			"circle-stroke-color": PRICE_CIRCLE_STROKE,
-			"circle-stroke-width": 2,
-			"circle-radius": GPU_CHIP_RADIUS,
-			"circle-opacity": 1,
-			"circle-blur": 0,
-			"circle-translate": [18, -36],
-			"circle-translate-anchor": "viewport",
-		},
-	});
-	map.addLayer({
-		id: PRICE_TILE_CHIP_LABELS,
-		type: "symbol",
-		source: PRICE_TILE_SOURCE,
-		minzoom: CLUSTER_BREAK_ZOOM,
-		filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "gap"], 0]],
-		layout: {
-			"text-field": ["to-string", ["get", "gap"]],
-			"text-size": GPU_CHIP_TEXT_SIZE,
-			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
-			"text-allow-overlap": true,
-			"text-ignore-placement": true,
-			"icon-allow-overlap": true,
-			"text-anchor": "center",
-		},
-		paint: {
 			"text-emissive-strength": 1,
-			"text-color": PRICE_CIRCLE_TEXT,
-			"text-halo-color": PRICE_CIRCLE_STROKE,
-			"text-halo-width": 1,
-			"text-translate": [18, -36],
-			"text-translate-anchor": "viewport",
 		},
 	});
 
-	const pickLayers = [
-		PRICE_TILE_CIRCLES,
-		PRICE_TILE_LABELS,
-		PRICE_TILE_ICONS,
-		PRICE_TILE_NEAR_TEXT,
-		PRICE_TILE_CHIPS,
-		PRICE_TILE_CHIP_LABELS,
-	];
+	const pickLayers = [PRICE_TILE_POINTS, PRICE_TILE_ICONS, PRICE_TILE_NEAR_TEXT];
 	const pickPlace = (ev: MapLayerMouseEvent) => {
 		const id = pickPlaceFromEvent(map, ev, pickLayers);
 		if (id) onSelectPlace(id);
@@ -472,20 +488,12 @@ export function ensurePriceTileLayers(
 			if (err || zoom == null) return;
 			map.easeTo({
 				center: ev.lngLat,
-				zoom,
-				duration: 700,
+				zoom: Math.min(zoom, CLUSTER_BREAK_ZOOM + 0.5),
+				duration: 650,
 			});
 		});
 	});
-	const hoverLayers = [
-		PRICE_TILE_CIRCLES,
-		PRICE_TILE_LABELS,
-		PRICE_TILE_CLUSTERS,
-		PRICE_TILE_ICONS,
-		PRICE_TILE_NEAR_TEXT,
-		PRICE_TILE_CHIPS,
-	];
-	for (const id of hoverLayers) {
+	for (const id of [...pickLayers, PRICE_TILE_CLUSTERS]) {
 		map.on("mouseenter", id, () => {
 			map.getCanvas().style.cursor = "pointer";
 		});

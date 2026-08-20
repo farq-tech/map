@@ -312,6 +312,9 @@ export type IntelligenceMapPlaceProperties = {
 	feature_type: "place" | "cluster";
 	place_id?: string;
 	name?: string;
+	name_en?: string | null;
+	tier?: OpportunityTier | null;
+	pct?: number | null;
 	kind?: "difference" | "restaurant" | "cafe" | "comparison" | string;
 	restaurant_id?: string;
 	provider_count?: number | null;
@@ -341,6 +344,44 @@ export type IntelligenceMapPlaceProperties = {
 		expensive_provider_id?: string | null;
 		product_name?: string | null;
 	} | null;
+};
+
+/** Approved opportunity tiers (2026-08-20): Hero ≥36 · Strong 15–35 · Regular 5–14 · Faint <5. */
+export type OpportunityTier = "hero" | "strong" | "regular" | "faint";
+
+/** One restaurant in the city read model — slim, observed fields only. */
+export type CityOpportunityProperties = {
+	feature_type: "place";
+	place_id: string;
+	name: string;
+	name_en?: string | null;
+	gap: number | null;
+	pct: number | null;
+	tier: OpportunityTier | null;
+	item_id: string | null;
+	product_name: string | null;
+	cheapest_provider_id: string | null;
+	expensive_provider_id: string | null;
+	cheapest_price: number | null;
+	expensive_price: number | null;
+	has_difference: boolean;
+	provider_count: number | null;
+	comparisons: number;
+	wins: Record<string, number> | null;
+	h3: string;
+};
+
+export type CityOpportunities = {
+	type: "FeatureCollection";
+	city: string;
+	include: "opportunities" | "all";
+	count: number;
+	with_gap: number;
+	consumer_price_cap_sar: number;
+	tiers: { hero: number; strong: number; regular: number };
+	freshness: "read_layer";
+	generated_at: string | null;
+	features: IntelligenceMapGeojsonFeature<CityOpportunityProperties>[];
 };
 
 export type IntelligenceMapGeojsonFeature<P> = {
@@ -596,6 +637,18 @@ export const IntelligenceService = {
 		return env.data;
 	},
 
+	/** The whole city at once; the browser caches it by ETag, the server by TTL. */
+	async cityOpportunities(opts: { city: string; include?: "all"; signal?: AbortSignal }): Promise<CityOpportunities> {
+		const qs = new URLSearchParams();
+		if (opts.include) qs.set("include", opts.include);
+		const suffix = qs.toString() ? `?${qs}` : "";
+		const env = await fetchApi<CityOpportunities>(
+			`/api/intelligence/map/city/${encodeURIComponent(opts.city)}/opportunities${suffix}`,
+			{ signal: opts.signal },
+			{ timeoutMs: 30_000 },
+		);
+		return env.data;
+	},
 	async mapPlace(
 		placeId: string,
 		signal?: AbortSignal,
