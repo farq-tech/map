@@ -77,35 +77,43 @@ function ProviderCompareLine({
 	isRTL: boolean;
 }) {
 	if (!provider && price == null) return null;
-	const name = getProviderLabel(provider, { isRTL }) || provider || "";
+	/* A price without a provider is still observed — name it as a price, not as an unknown app. */
+	const name = provider ? getProviderLabel(provider, { isRTL }) || provider : "";
+	const heading =
+		kind === "cheap"
+			? isRTL
+				? "الأرخص"
+				: "Cheapest"
+			: provider
+				? isRTL
+					? "الأغلى"
+					: "Highest"
+				: isRTL
+					? "أعلى سعر مرصود"
+					: "Highest observed price";
+	const amount =
+		price != null
+			? `${localizeDigitString(String(price), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+			: "";
 	return (
 		<div
 			className={`farq-map-aha-app farq-map-aha-app--${kind}`}
 			data-testid={`intelligence-map-aha-${kind}`}
 		>
-			<ProviderLogoMark
-				provider={provider}
-				label={name}
-				isRTL={isRTL}
-				size={28}
-				rounded="md"
-				tintedFallback
-			/>
+			{provider ? (
+				<ProviderLogoMark
+					provider={provider}
+					label={name}
+					isRTL={isRTL}
+					size={28}
+					rounded="md"
+					tintedFallback
+				/>
+			) : null}
 			<div className="min-w-0">
-				<p className="text-[10px] font-extrabold">
-					{kind === "cheap"
-						? isRTL
-							? "الأرخص"
-							: "Cheapest"
-						: isRTL
-							? "الأغلى"
-							: "Highest"}
-				</p>
+				<p className="text-[10px] font-extrabold">{heading}</p>
 				<p className="truncate text-[12px] font-black text-brand-900">
-					{name}
-					{price != null
-						? ` · ${localizeDigitString(String(price), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
-						: ""}
+					{name && amount ? `${name} · ${amount}` : name || amount}
 				</p>
 			</div>
 		</div>

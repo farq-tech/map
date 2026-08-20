@@ -718,13 +718,13 @@ export function differenceFromPinProps(props: {
 export function updatePlacePinChip(
 	el: HTMLElement,
 	amount: number | null,
-	isRTL = false,
 ): void {
 	const amountEl = el.querySelector(".farq-gap-bubble-amount");
 	if (!(amountEl instanceof HTMLElement)) return;
 	if (amount == null || amount <= 0) return;
 	const riyal = displayGapRiyals(amount);
-	amountEl.textContent = `+${localizeDigitString(String(riyal), isRTL)}`;
+	/* Digits on the map are Western on every locale (approved 2026-08-20); UI text keeps localised digits. */
+	amountEl.textContent = `+${riyal}`;
 	el.dataset.amount = String(riyal);
 	const size = Math.min(
 		bubbleSizePx(amount),

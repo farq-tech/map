@@ -44,8 +44,7 @@ import {
 	getMapboxAccessToken,
 	type MapboxBasemap,
 	mapboxStyleUrl,
-	RIYADH_LNG_LAT,
-} from "../../lib/mapboxAccess";
+	RIYADH_LNG_LAT, ensureRtlTextPlugin } from "../../lib/mapboxAccess";
 import { createFarqSearchBox } from "../../lib/mapboxSearch";
 import type {
 	IntelligenceMapNeighborhoods,
@@ -169,9 +168,11 @@ function applyBasemap(map: MapboxMap, isRTL: boolean) {
 		/* */
 	}
 	try {
-		map.setConfigProperty("basemap", "language", isRTL ? "ar" : "en");
+		/* Standard has no `language` config key (it silently ignored the old call);
+		 * labels follow the map's own language setting, which GL JS v3 exposes here. */
+		map.setLanguage(isRTL ? "ar" : "en");
 	} catch {
-		/* */
+		/* classic styles without Mapbox vector sources keep local names */
 	}
 	try {
 		map.setTerrain(null);
@@ -454,11 +455,15 @@ export default function FarqMap({
 	useEffect(() => {
 		if (!token || !containerRef.current || mapRef.current) return;
 		mapboxgl.accessToken = token;
+		ensureRtlTextPlugin();
 
 		const reduced = Boolean(
 			window.matchMedia("(prefers-reduced-motion: reduce)").matches,
 		);
-		const skipGlobe = shouldSkipGlobeIntro({ reducedMotion: reduced });
+		/* The globe intro is retired: the first useful frame is Riyadh with numbers,
+		 * on every device, and the first data request no longer waits 5.6s for it. */
+		const skipGlobe = true;
+		void shouldSkipGlobeIntro;
 
 		const map = new mapboxgl.Map({
 			container: containerRef.current,
@@ -473,8 +478,13 @@ export default function FarqMap({
 			accessToken: token,
 			cooperativeGestures: false,
 			dragPan: true,
+			language: isRtlRef.current ? "ar" : "en",
 		});
 		mapRef.current = map;
+		if (import.meta.env.DEV) {
+			/* Dev-only handle for browser QA scripts (camera, layers). Never shipped. */
+			(window as unknown as { __farqMap?: MapboxMap }).__farqMap = map;
+		}
 		try {
 			map.dragPan.enable();
 		} catch {
@@ -820,7 +830,7 @@ export default function FarqMap({
 				placeDetailRef.current?.image_url || props.image_url || null;
 			const existing = pinMarkersRef.current.get(key);
 			if (existing) {
-				updatePlacePinChip(existing.el, amount, isRtlRef.current);
+				updatePlacePinChip(existing.el, amount);
 				setPinSelected(existing.el, true);
 				if (imageUrl) syncPinPhoto(existing.el, imageUrl);
 				existing.marker.setLngLat(coords);

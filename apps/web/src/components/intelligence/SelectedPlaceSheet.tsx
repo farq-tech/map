@@ -336,22 +336,26 @@ export default function SelectedPlaceSheet({
 						<div className="flex min-w-0 items-center gap-2">
 							<div className="min-w-0 text-end">
 								<p className="text-[10px] font-extrabold text-[#c45c5c]">
-									{isRTL ? "الأغلى" : "Highest"}
+									{expensiveProvider
+										? isRTL
+											? "الأغلى"
+											: "Highest"
+										: isRTL
+											? "أعلى سعر مرصود"
+											: "Highest observed price"}
 								</p>
 								<p className="truncate text-[12px] font-black text-brand-900">
-									{getProviderLabel(expensiveProvider, {
-										isRTL,
-									}) || (isRTL ? "الأغلى" : "Highest")}
+									{expensiveProvider
+										? getProviderLabel(expensiveProvider, { isRTL }) || expensiveProvider
+										: ""}
 									{hasPrices
-										? ` · ${localizeDigitString(String(expensive), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
+										? `${expensiveProvider ? " · " : ""}${localizeDigitString(String(expensive), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
 										: ""}
 								</p>
 							</div>
-							<AppMark
-								provider={expensiveProvider}
-								isRTL={isRTL}
-								size={32}
-							/>
+							{expensiveProvider ? (
+								<AppMark provider={expensiveProvider} isRTL={isRTL} size={32} />
+							) : null}
 						</div>
 					</div>
 				)}
@@ -650,14 +654,22 @@ export default function SelectedPlaceSheet({
 										</div>
 										<div className="rounded-2xl bg-white/8 px-3 py-3">
 											<div className="flex items-center gap-2">
-												<AppMark
-													provider={expensiveProvider}
-													isRTL={isRTL}
-													size={28}
-												/>
+												{expensiveProvider ? (
+													<AppMark
+														provider={expensiveProvider}
+														isRTL={isRTL}
+														size={28}
+													/>
+												) : null}
 												<div className="min-w-0">
 													<p className="text-[10px] font-bold text-[#ff8a8a]">
-														{isRTL ? "أغلى تطبيق" : "Expensive app"}
+														{expensiveProvider
+															? isRTL
+																? "أغلى تطبيق"
+																: "Expensive app"
+															: isRTL
+																? "أعلى سعر مرصود"
+																: "Highest observed price"}
 													</p>
 													{hasPrices ? (
 														<p className="text-[15px] font-black text-[#ff6b6b]">

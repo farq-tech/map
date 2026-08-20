@@ -16,15 +16,20 @@ function ProviderPriceLine({
 	isRTL: boolean;
 }) {
 	if (!provider && price == null) return null;
-	const name = getProviderLabel(provider, { isRTL }) || provider || "";
+	/* A price without a provider is still observed — name it as a price, not as an unknown app. */
+	const name = provider ? getProviderLabel(provider, { isRTL }) || provider : "";
 	const label =
 		kind === "cheap"
 			? isRTL
 				? "الأرخص"
 				: "Cheapest"
-			: isRTL
-				? "الأغلى"
-				: "Highest";
+			: provider
+				? isRTL
+					? "الأغلى"
+					: "Highest"
+				: isRTL
+					? "أعلى سعر مرصود"
+					: "Highest observed price";
 	const amount =
 		price != null
 			? `${localizeDigitString(String(Math.round(price)), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
@@ -34,7 +39,8 @@ function ProviderPriceLine({
 			className={`farq-opportunity-line farq-opportunity-line--${kind}`}
 			data-testid={`farq-opportunity-${kind}`}
 		>
-			{label}: {name}
+			{label}
+			{name ? `: ${name}` : ""}
 			{amount ? ` — ${amount}` : ""}
 		</p>
 	);

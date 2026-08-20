@@ -251,7 +251,7 @@ describe("featureMarkerKey", () => {
 			name: "X",
 			difference: { difference_amount: 12 },
 		});
-		updatePlacePinChip(el, 22, false);
+		updatePlacePinChip(el, 22);
 		expect(el.dataset.amount).toBe("22");
 		expect(el.querySelector(".farq-gap-bubble-amount")?.textContent).toBe("+22");
 	});

@@ -106,6 +106,15 @@ const PIN_FIELDS = Object.freeze([
 ]);
 const MAP_PIN_CAP = 400;
 const MAP_PIN_CAP_MAX = 800;
+/**
+ * A restaurant's representative opportunity is its largest observed gap among
+ * *consumer* items. Items priced above this (catering trays, 20-person meals)
+ * are real but do not describe what a person orders for dinner — they are kept
+ * out of the headline and ranking until a dedicated "جمعات" mode shows them.
+ * Approved product threshold (2026-08-20).
+ */
+const CONSUMER_PRICE_CAP_SAR = 200;
+
 const MAP_PIN_HERO_RESERVE = 24;
 
 function cellSizeForZoom(zoom) {
@@ -392,6 +401,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
+       AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
      ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
      LIMIT 1
   ) s ON true
@@ -430,6 +440,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
+       AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
        AND EXISTS (
          SELECT 1
            FROM unnest($9::text[]) t
@@ -641,6 +652,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
+       AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
      ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
      LIMIT 1
   ) s ON true
@@ -932,6 +944,7 @@ module.exports = {
   MAP_PIN_CAP,
   MAP_PIN_CAP_MAX,
   MAP_PIN_HERO_RESERVE,
+  CONSUMER_PRICE_CAP_SAR,
   VISIBLE_OPPORTUNITY_CAP,
   SLIM_OPPORTUNITY_KEYS,
   restaurantMenu,

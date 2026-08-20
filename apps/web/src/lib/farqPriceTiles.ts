@@ -1,5 +1,6 @@
 /**
- * GPU savings beacons. FAR (z<14): mint circle + 🔥 gap number only.
+ * GPU savings beacons. FAR (z<14): mint circle + gap number only (no emoji:
+ * Mapbox glyphs stop at U+FFFF, so 🔥 never rendered and only warned).
  * NEAR (z≥14): opportunity + «N ر.س فرق», then cheapest-provider mark.
  * Display set is the same top-N as the list — no 400-pin restaurant farm.
  * HTML markers are the selected pin only.
@@ -37,6 +38,8 @@ export const PRICE_TILE_NEAR_TEXT = "farq-price-near-text";
 /** Radiant mint fill — number is dark Farq teal `#043434`, never white on mint. */
 export const PRICE_CIRCLE_FILL = FARQ_MINT;
 export const PRICE_CIRCLE_HALO = "#A8F8C9";
+/* Standard's dusk/night presets colour-grade every layer that is not emissive;
+ * without emissive strength the mint discs rendered as dark teal in production. */
 export const PRICE_CIRCLE_STROKE = "#FFFFFF";
 export const PRICE_CIRCLE_TEXT = FARQ_BRAND_900;
 
@@ -228,6 +231,7 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["has", "point_count"],
 		paint: {
+			"circle-emissive-strength": 1,
 			"circle-color": PRICE_CIRCLE_HALO,
 			"circle-radius": ["step", ["get", "point_count"], 22, 8, 26, 24, 30],
 			"circle-opacity": 0.42,
@@ -241,6 +245,7 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["has", "point_count"],
 		paint: {
+			"circle-emissive-strength": 1,
 			"circle-color": PRICE_CIRCLE_FILL,
 			"circle-stroke-color": PRICE_CIRCLE_STROKE,
 			"circle-stroke-width": 2,
@@ -263,17 +268,14 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["has", "point_count"],
 		layout: {
-			"text-field": [
-				"concat",
-				"🔥",
-				["to-string", ["round", ["coalesce", ["get", "max_gap"], 0]]],
-			],
+			"text-field": ["to-string", ["round", ["coalesce", ["get", "max_gap"], 0]]],
 			"text-size": GPU_CLUSTER_TEXT_SIZE,
 			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
 			"text-allow-overlap": true,
 			"text-ignore-placement": true,
 		},
 		paint: {
+			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_STROKE,
 			"text-halo-width": 1,
@@ -286,6 +288,7 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
 		paint: {
+			"circle-emissive-strength": 1,
 			"circle-color": PRICE_CIRCLE_HALO,
 			"circle-radius": [
 				"interpolate",
@@ -307,6 +310,7 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
 		paint: {
+			"circle-emissive-strength": 1,
 			"circle-color": PRICE_CIRCLE_FILL,
 			"circle-stroke-color": PRICE_CIRCLE_STROKE,
 			"circle-stroke-width": 2,
@@ -329,17 +333,14 @@ export function ensurePriceTileLayers(
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
 		layout: {
-			"text-field": [
-				"concat",
-				"🔥",
-				["to-string", ["get", "gap"]],
-			],
+			"text-field": ["to-string", ["get", "gap"]],
 			"text-size": FAR_BEACON_TEXT_SIZE,
 			"text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
 			"text-allow-overlap": true,
 			"text-ignore-placement": true,
 		},
 		paint: {
+			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_STROKE,
 			"text-halo-width": 1,
@@ -351,6 +352,7 @@ export function ensurePriceTileLayers(
 		source: PRICE_TILE_SOURCE,
 		minzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
+		paint: { "icon-emissive-strength": 1 },
 		layout: {
 			"icon-image": ["coalesce", ["get", "icon"], GPU_ICON_FALLBACK],
 			"icon-size": 1,
@@ -393,6 +395,7 @@ export function ensurePriceTileLayers(
 			"text-ignore-placement": true,
 		},
 		paint: {
+			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_STROKE,
 			"text-halo-width": 1.2,
@@ -405,6 +408,7 @@ export function ensurePriceTileLayers(
 		minzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["all", ["!", ["has", "point_count"]], [">", ["get", "gap"], 0]],
 		paint: {
+			"circle-emissive-strength": 1,
 			"circle-color": PRICE_CIRCLE_FILL,
 			"circle-stroke-color": PRICE_CIRCLE_STROKE,
 			"circle-stroke-width": 2,
@@ -431,6 +435,7 @@ export function ensurePriceTileLayers(
 			"text-anchor": "center",
 		},
 		paint: {
+			"text-emissive-strength": 1,
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_STROKE,
 			"text-halo-width": 1,
