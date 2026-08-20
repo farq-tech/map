@@ -7,7 +7,9 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env.local') });
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const createMapRouter = require('./routes/map');
+const { warmCityCache } = require('./lib/city-opportunities');
 const createChatRouter = require('./routes/chat');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
 const { chatConfigured } = require('./lib/chat-handler');
@@ -22,6 +24,8 @@ const corsOrigins = String(process.env.CORS_ORIGINS || '')
 
 const app = express();
 app.disable('x-powered-by');
+/* The city read model is ~2.7 MB of JSON and ~380 KB gzipped; never send it raw. */
+app.use(compression({ threshold: 1024 }));
 app.use(
   cors({
     origin(origin, callback) {
@@ -161,4 +165,7 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`[farq-map-api] listening on :${PORT}`);
+  if (process.env.SUPABASE_COMPARISON_READ_ENABLED === '1' || process.env.SUPABASE_COMPARISON_READ_ENABLED === 'true') {
+    warmCityCache(['riyadh']);
+  }
 });

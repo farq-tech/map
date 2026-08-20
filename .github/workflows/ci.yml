@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: API tests
+        run: npm test -w @farq/map-api
+      - name: Web tests
+        run: npm test -w @farq/map-web
+      - name: Web build (type-check + bundle)
+        run: npm run build
+        env:
+          # Build-time only; the bundle reads the real token from the Vercel project.
+          VITE_MAPBOX_ACCESS_TOKEN: ci-placeholder

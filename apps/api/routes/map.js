@@ -3,6 +3,7 @@
 const express = require('express');
 const comparisonMap = require('../lib/comparison-map');
 const { asyncHandler } = require('../lib/async-handler');
+const cityOpportunities = require('../lib/city-opportunities');
 
 const CATEGORIES = [
   { category_id: 'burgers', category_name: 'Burgers', category_name_ar: 'برجر' },
@@ -61,6 +62,42 @@ function createMapRouter() {
       });
       res.setHeader('Cache-Control', 'public, max-age=60');
       res.json(body);
+    })
+  );
+
+  /**
+   * The whole city at once — opportunities only by default, `include=all` for
+   * every restaurant with coordinates. Cached server-side and ETagged so a
+   * returning client pays nothing when the read layer has not changed.
+   */
+  router.get(
+    '/map/city/:city/opportunities',
+    asyncHandler(async (req, res) => {
+      const result = await cityOpportunities.getCityOpportunities({
+        city: req.params.city,
+        include: req.query.include,
+      });
+      if (!result) {
+        return res.status(404).json({ error: 'unknown_city', city: req.params.city });
+      }
+      res.setHeader('ETag', result.etag);
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+      if (req.headers['if-none-match'] === result.etag) return res.status(304).end();
+      res.json(result.body);
+    })
+  );
+
+  router.get(
+    '/map/city/:city/areas',
+    asyncHandler(async (req, res) => {
+      const result = await cityOpportunities.getCityAreas({ city: req.params.city });
+      if (!result) {
+        return res.status(404).json({ error: 'unknown_city', city: req.params.city });
+      }
+      res.setHeader('ETag', result.etag);
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+      if (req.headers['if-none-match'] === result.etag) return res.status(304).end();
+      res.json(result.body);
     })
   );
 
