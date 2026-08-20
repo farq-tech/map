@@ -61,7 +61,8 @@ import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
 import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
-import MapAskChat from "./MapAskChat";
+import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
+import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
 import FarqExploreChrome, {
 	EXPLORE_ZOOM,
 	type ExploreRadius,
@@ -183,7 +184,8 @@ export default function IntelligenceMapSplit({
 		lng: number;
 		id: string;
 		zoom?: number;
-		kind?: "select" | "locate" | "cluster";
+		kind?: "select" | "locate" | "cluster" | "bounds";
+		bounds?: [number, number, number, number] | null;
 	} | null>(null);
 	const [leftUserLocation, setLeftUserLocation] = useState(false);
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
@@ -215,6 +217,11 @@ export default function IntelligenceMapSplit({
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
 	const cityStatusRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
 	const [viewBbox, setViewBbox] = useState<[number, number, number, number] | null>(null);
+	/* Copilot: the exchange shown above the list, and what its last action pinned. */
+	const [ask, setAsk] = useState<{ question: string; response: CopilotResponse | null; busy: boolean; error: string | null } | null>(null);
+	const [pinnedIds, setPinnedIds] = useState<Set<string> | null>(null);
+	const [minGapFilter, setMinGapFilter] = useState<number | null>(null);
+	const askAbortRef = useRef<AbortController | null>(null);
 	const filterKeyRef = useRef("");
 	const scanTimerRef = useRef(0);
 
@@ -424,7 +431,6 @@ export default function IntelligenceMapSplit({
 		if (v) fetchPlaces(v.bbox, v.zoom);
 	}, [fetchPlaces]);
 
-	const getViewportBbox = useCallback(() => viewRef.current?.bbox || "", []);
 
 	useEffect(() => {
 		const key = `${categoryId}|${q}`;
@@ -617,11 +623,13 @@ export default function IntelligenceMapSplit({
 					? Number(f.properties.difference_count || 0) > 0
 					: Boolean(f.properties.has_difference) || amount != null;
 				if (!layers.opportunities && hasGap) return false;
+				if (pinnedIds && !pinnedIds.has(String(f.properties.place_id || ""))) return false;
+				if (minGapFilter != null && (amount == null || amount < minGapFilter)) return false;
 				if (gapsOnly) return hasGap;
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
@@ -874,6 +882,104 @@ export default function IntelligenceMapSplit({
 		[patchSearch],
 	);
 
+	const clearAsk = useCallback(() => {
+		askAbortRef.current?.abort();
+		setAsk(null);
+		setPinnedIds(null);
+		setMinGapFilter(null);
+	}, []);
+
+	/* The copilot proposes; the app executes — only with ids and bounds it was given. */
+	const applyCopilotAction = useCallback(
+		(action: CopilotAction, rows: CopilotRow[]) => {
+			const byId = new Map(rows.map((r) => [r.place_id, r]));
+			const fit = (bbox?: [number, number, number, number] | null) => {
+				if (!bbox) return;
+				setFocusRequest({ lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, id: `bounds:${bbox.join(",")}`, kind: "bounds", bounds: bbox });
+			};
+			switch (action.type) {
+				case "FOCUS_PLACE": {
+					const row = action.place_id ? byId.get(action.place_id) : null;
+					if (row) focusAroundPlace(rowToOpportunity(row));
+					return;
+				}
+				case "SHOW_RESULTS": {
+					const ids = (action.place_ids || []).filter((id) => byId.has(id));
+					if (!ids.length) return;
+					setPinnedIds(new Set(ids));
+					setLivePlaceId("");
+					fit(action.bbox);
+					return;
+				}
+				case "FIT_BOUNDS":
+					fit(action.bbox);
+					return;
+				case "SET_FILTER":
+					if (typeof action.min_gap === "number") setMinGapFilter(action.min_gap);
+					fit(action.bbox);
+					return;
+				case "SET_CATEGORY":
+				case "SET_SEARCH":
+					if (action.q) {
+						setMapQuery(action.q);
+						patchSearch({ q: action.q, place: undefined });
+					}
+					fit(action.bbox);
+					return;
+				case "RETURN_TO_USER":
+					locateUser();
+					return;
+				default:
+					return;
+			}
+		},
+		[focusAroundPlace, locateUser, patchSearch],
+	);
+
+	const askFarq = useCallback(
+		(text: string) => {
+			const message = String(text || "").trim();
+			if (!message) return;
+			askAbortRef.current?.abort();
+			const controller = new AbortController();
+			askAbortRef.current = controller;
+			setPinnedIds(null);
+			setMinGapFilter(null);
+			setAsk({ question: message, response: null, busy: true, error: null });
+			setSheetSnap("half");
+			const located = (locationPinKind === "gps" || locationPinKind === "manual") && userLocation;
+			void askCopilot({
+				message,
+				sessionId: readSessionId(),
+				language: isRTL ? "ar" : "en",
+				context: {
+					bbox: viewRef.current?.bbox,
+					zoom: viewRef.current?.zoom,
+					selected_place_id: livePlaceId || undefined,
+					user_lat: located ? userLocation.lat : undefined,
+					user_lng: located ? userLocation.lng : undefined,
+					city: "riyadh",
+				},
+				signal: controller.signal,
+			})
+				.then((response) => {
+					if (controller.signal.aborted) return;
+					setAsk({ question: message, response, busy: false, error: null });
+					applyCopilotAction(response.action, response.results);
+				})
+				.catch(() => {
+					if (controller.signal.aborted) return;
+					setAsk({
+						question: message,
+						response: null,
+						busy: false,
+						error: isRTL ? "تعذّر الوصول لمساعد فرق الآن. الخريطة والبحث يعملان." : "Farq's assistant is unavailable right now. The map and search still work.",
+					});
+				});
+		},
+		[applyCopilotAction, isRTL, livePlaceId, locationPinKind, userLocation],
+	);
+
 	const applyView = useCallback(
 		(next: MapViewMode) => {
 			patchSearch({ view: next });
@@ -989,9 +1095,10 @@ export default function IntelligenceMapSplit({
 					onToggleLanguage={toggleLanguage}
 					mapQuery={mapQuery}
 					onMapQueryChange={setMapQuery}
-					onSearchSubmit={(q) =>
-						patchSearch({ q: q || undefined, place: undefined })
-					}
+					onSearchSubmit={(q) => {
+						clearAsk();
+						patchSearch({ q: q || undefined, place: undefined });
+					}}
 					rail={rail}
 					onRail={applyRail}
 					categoryId={categoryId}
@@ -1018,6 +1125,9 @@ export default function IntelligenceMapSplit({
 					aroundMax={aroundMax}
 					topSavings={topSavings}
 					headline={headline}
+					ask={ask}
+					onAsk={askFarq}
+					onCloseAsk={clearAsk}
 					selectedPanel={
 						livePlaceId ? (
 							<SelectedPlaceSheet
@@ -1125,7 +1235,12 @@ export default function IntelligenceMapSplit({
 							className="flex min-w-0 flex-1 items-center gap-2"
 							onSubmit={(e) => {
 								e.preventDefault();
-								patchSearch({ q: mapQuery.trim() || undefined, place: undefined });
+								const text = mapQuery.trim();
+								if (looksLikeQuestion(text)) askFarq(text);
+								else {
+									clearAsk();
+									patchSearch({ q: text || undefined, place: undefined });
+								}
 							}}
 						>
 							<Search className="size-4 shrink-0 text-[#6b7c7c]" />
@@ -1134,8 +1249,8 @@ export default function IntelligenceMapSplit({
 								onChange={(e) => setMapQuery(e.target.value)}
 								placeholder={
 									isRTL
-										? "ابحث عن وجبة أو فرصة…"
-										: "Search a dish or opportunity…"
+										? "ابحث أو اسأل فرق: وين أكبر فرق حولي؟"
+										: "Search or ask Farq: biggest gap near me?"
 								}
 								className="h-7 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c] lg:max-w-[14rem]"
 								data-testid="intelligence-map-search"
@@ -1342,30 +1457,6 @@ export default function IntelligenceMapSplit({
 							{isRTL ? "ابحث في هذه المنطقة" : "Search this area"}
 						</button>
 					) : null}
-					{view === "map" ? (
-					<MapAskChat
-						isRTL={isRTL}
-						language={language}
-						getViewportBbox={getViewportBbox}
-						selectedPlaceName={
-							placeDetail?.name ||
-							selectedPlaceFeature?.properties.name ||
-							""
-						}
-						userLat={
-							(locationPinKind === "gps" || locationPinKind === "manual") &&
-							userLocation
-								? userLocation.lat
-								: undefined
-						}
-						userLng={
-							(locationPinKind === "gps" || locationPinKind === "manual") &&
-							userLocation
-								? userLocation.lng
-								: undefined
-						}
-					/>
-					) : null}
 					{(loading || !readyMeta || placesFetching) && !visiblePlaces ? (
 						<div className="farq-map-skeleton" aria-hidden data-testid="intelligence-map-skeleton" />
 					) : null}
@@ -1514,6 +1605,18 @@ export default function IntelligenceMapSplit({
 								? "وين أقدر أوفّر فلوسي الآن؟ القائمة والخارطة نفس الفرص — أكبر فرق حولك، بدون اختراع سعر أو إحداثيات."
 								: "Where can you save money now? List and map are the same opportunities — biggest observed gaps, never invented prices or coordinates."}
 						</p>
+						{ask ? (
+							<FarqAnswerCard
+								question={ask.question}
+								response={ask.response}
+								busy={ask.busy}
+								error={ask.error}
+								isRTL={isRTL}
+								onAsk={askFarq}
+								onSelect={focusAroundPlace}
+								onClose={clearAsk}
+							/>
+						) : null}
 						{topSavings.length ? (
 							<div data-testid="intelligence-map-top-savings">
 								<h3 className="mb-2 text-[13px] font-bold text-brand-900">

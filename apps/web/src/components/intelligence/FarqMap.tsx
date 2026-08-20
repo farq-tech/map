@@ -61,7 +61,9 @@ type CameraFocusRequest = {
 	id: string;
 	zoom?: number;
 	/** Select pads the popup; locate/cluster keep more map around the point. */
-	kind?: "select" | "locate" | "cluster";
+	kind?: "select" | "locate" | "cluster" | "bounds";
+	/** When set, the camera fits these bounds instead of centring on lat/lng. */
+	bounds?: [number, number, number, number] | null;
 };
 
 function cameraPadding(
@@ -973,6 +975,17 @@ export default function FarqMap({
 		if (!map || !introDone || !focusRequest) return;
 		if (lastFocusIdRef.current === focusRequest.id) return;
 		lastFocusIdRef.current = focusRequest.id;
+		if (focusRequest.bounds) {
+			const [w, s, e, n] = focusRequest.bounds;
+			const pad = cameraPadding("select", bottomInsetRef.current);
+			map.fitBounds([[w, s], [e, n]], {
+				padding: { top: pad.top, bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
+				duration: 900,
+				maxZoom: 15.5,
+				essential: true,
+			});
+			return;
+		}
 		map.easeTo({
 			center: [focusRequest.lng, focusRequest.lat],
 			duration:

@@ -120,7 +120,9 @@ function validateAction(action, rows) {
     return Number.isFinite(minGap) && minGap > 0 ? { type: 'SET_FILTER', min_gap: minGap, bbox: tools.bboxOf(rows) } : { type: 'NOOP' };
   }
   if (action.type === 'SET_CATEGORY') {
-    return action.category ? { type: 'SET_CATEGORY', category: String(action.category), bbox: tools.bboxOf(rows) } : { type: 'NOOP' };
+    return action.category
+      ? { type: 'SET_CATEGORY', category: String(action.category), q: action.q ? String(action.q).slice(0, 80) : undefined, bbox: tools.bboxOf(rows) }
+      : { type: 'NOOP' };
   }
   if (action.type === 'SET_SEARCH') {
     return action.q ? { type: 'SET_SEARCH', q: String(action.q).slice(0, 80), bbox: tools.bboxOf(rows) } : { type: 'NOOP' };
@@ -366,7 +368,7 @@ async function handleCopilot(input, deps = {}) {
   }
   if (plan.intent === 'SET_CATEGORY') {
     const intro = lang === 'en' ? `${found.total} ${plan.slots.q} opportunities ${where}, biggest first:` : `${found.total} فرصة ${plan.slots.q} ${where}، الأكبر أولاً:`;
-    return finish(listAnswer(rows.slice(0, 3), scope, lang, intro), rows, { type: 'SET_CATEGORY', category: plan.slots.category }, { total: found.total });
+    return finish(listAnswer(rows.slice(0, 3), scope, lang, intro), rows, { type: 'SET_CATEGORY', category: plan.slots.category, q: plan.slots.q }, { total: found.total });
   }
   if (plan.intent === 'PLACE_SCOPE' || plan.intent === 'AROUND_POINT') {
     const intro = lang === 'en' ? `${found.total} opportunities ${where}, biggest first:` : `${found.total} فرصة ${where}، الأكبر أولاً:`;

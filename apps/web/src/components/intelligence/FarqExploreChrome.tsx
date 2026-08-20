@@ -29,6 +29,8 @@ import FarqBrandMark from "../FarqBrandMark";
 import FarqViewSortBar from "./FarqViewSortBar";
 import { FarqOpportunityCard } from "./FarqOpportunityList";
 import FarqBottomSheet, { type SheetSnap as BottomSnap } from "./FarqBottomSheet";
+import FarqAnswerCard from "./FarqAnswerCard";
+import { looksLikeQuestion, type CopilotResponse } from "../../lib/farqAsk";
 
 export type ExploreRadius = "hawally" | "1km" | "3km" | "5km" | "city";
 export type FilterRailId = "gaps" | "restaurants" | "grocery" | "cheapest";
@@ -98,6 +100,9 @@ export default function FarqExploreChrome({
 	placesReady,
 	headline,
 	selectedPanel = null,
+	ask,
+	onAsk,
+	onCloseAsk,
 	chromeHidden,
 	searchFocused,
 	onSearchFocused,
@@ -150,6 +155,10 @@ export default function FarqExploreChrome({
 	headline: ReactNode;
 	/** The selected place's panel; when present it replaces the list inside the sheet. */
 	selectedPanel?: ReactNode;
+	/** The copilot exchange in flight or answered; shown above the list. */
+	ask: { question: string; response: CopilotResponse | null; busy: boolean; error: string | null } | null;
+	onAsk: (text: string) => void;
+	onCloseAsk: () => void;
 	sheetSnap: SheetSnap;
 	onSheetSnap: (snap: SheetSnap) => void;
 	placesFetching: boolean;
@@ -262,7 +271,9 @@ export default function FarqExploreChrome({
 					className="farq-map-search-compact"
 					onSubmit={(e) => {
 						e.preventDefault();
-						onSearchSubmit(mapQuery.trim());
+						const text = mapQuery.trim();
+						if (looksLikeQuestion(text)) onAsk(text);
+						else onSearchSubmit(text);
 					}}
 				>
 					<Search className="size-4 shrink-0 text-[#6b7c7c]" />
@@ -274,7 +285,7 @@ export default function FarqExploreChrome({
 							window.setTimeout(() => onSearchFocused(false), 180);
 						}}
 						placeholder={
-							isRTL ? "ماذا تريد أن تستكشف؟" : "What do you want to explore?"
+							isRTL ? "ابحث أو اسأل فرق: وين أكبر فرق حولي؟" : "Search or ask Farq: biggest gap near me?"
 						}
 						className="h-10 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c]"
 						data-testid="intelligence-map-search"
@@ -364,6 +375,18 @@ export default function FarqExploreChrome({
 					/>
 				}
 			>
+				{ask ? (
+					<FarqAnswerCard
+						question={ask.question}
+						response={ask.response}
+						busy={ask.busy}
+						error={ask.error}
+						isRTL={isRTL}
+						onAsk={onAsk}
+						onSelect={onFocusPlace}
+						onClose={onCloseAsk}
+					/>
+				) : null}
 				{placeSelected && selectedPanel ? (
 					selectedPanel
 				) : sort === "cheap" && !cheapestReady ? (
