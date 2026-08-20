@@ -70,7 +70,7 @@ function GapCountBadge({
 	const digits = localizeDigitString(String(Math.round(live)), isRTL);
 	return (
 		<span
-			className="rounded-[10px] bg-mint-500 px-3 py-1.5 text-[40px] font-black leading-none text-brand-900 lg:text-[48px]"
+			className="rounded-[10px] bg-mint-500 px-3 py-1.5 text-[32px] font-black leading-none text-brand-900 lg:text-[40px]"
 			data-testid="intelligence-map-gap-count"
 		>
 			{digits} {isRTL ? "ر.س فرق" : "SAR gap"}
@@ -548,54 +548,46 @@ export default function SelectedPlaceSheet({
 				className="farq-place-sheet-detail relative min-h-0 flex-1 overflow-y-auto"
 				data-testid="intelligence-map-place"
 			>
-				{imageUrl ? (
-					<div
-						className="relative h-[148px] overflow-hidden bg-brand-900"
-						data-testid="intelligence-map-place-cover"
-					>
+				{/* A compact head: the observed photo as a thumbnail, the item, and the controls.
+				    The half-height sheet must show the number and the two apps without scrolling. */}
+				<div
+					className="flex items-center gap-3 px-4 pb-1 pt-4"
+					data-testid="intelligence-map-place-cover"
+				>
+					{imageUrl ? (
 						<img
 							src={imageUrl}
 							alt=""
-							className="absolute inset-0 size-full object-cover"
+							className="size-14 shrink-0 rounded-2xl bg-brand-900 object-cover"
 						/>
-						<div className="absolute inset-0 bg-gradient-to-t from-brand-900/55 to-brand-900/10" />
-						<div className="absolute start-4 top-4 flex items-center gap-1.5">
-							{hideButton}
-							<button
-								type="button"
-								className="farq-place-hit flex size-9 items-center justify-center rounded-2xl bg-white text-brand-900 shadow-sm"
-								aria-label={isRTL ? "إغلاق" : "Close"}
-								onClick={onClose}
-							>
-								<X className="size-3.5" />
-							</button>
-						</div>
-					</div>
-				) : (
-					<div className="flex items-center justify-between px-5 pb-1 pt-4">
-						<p className="text-[11px] font-bold uppercase tracking-wide text-[#6b7c7c]">
-							{isRTL ? "فرق مرصود" : "Observed فرق"}
+					) : null}
+					<div className="min-w-0 flex-1">
+						<p className="text-[11px] font-bold text-[#6b7c7c]">
+							{isRTL ? "فرق مرصود" : "Observed gap"}
 						</p>
-						<div className="flex items-center gap-1">
-							{hideButton}
-							<button
-								type="button"
-								className="farq-place-hit flex size-8 items-center justify-center rounded-2xl bg-[#e6eef0] text-brand-900"
-								aria-label={isRTL ? "إغلاق" : "Close"}
-								onClick={onClose}
-							>
-								<X className="size-3.5" />
-							</button>
-						</div>
+						<p className="truncate text-[15px] font-extrabold leading-snug text-brand-900">
+							{mealName || restaurantName}
+						</p>
 					</div>
-				)}
+					<div className="flex shrink-0 items-center gap-1">
+						{hideButton}
+						<button
+							type="button"
+							className="farq-place-hit flex size-9 items-center justify-center rounded-2xl bg-[#e6eef0] text-brand-900"
+							aria-label={isRTL ? "إغلاق" : "Close"}
+							onClick={onClose}
+						>
+							<X className="size-3.5" />
+						</button>
+					</div>
+				</div>
 
-				<div className="flex flex-col gap-5 p-5">
+				<div className="flex flex-col gap-4 p-4">
 					{hasGap || difference ? (
-						<div className="flex flex-col gap-4 rounded-[22px] bg-brand-900 p-5 text-white shadow-[0_16px_28px_rgba(4,52,52,0.28)]">
-							<div className="flex flex-col items-center gap-2">
+						<div className="flex flex-col gap-3 rounded-[20px] bg-brand-900 p-4 text-white shadow-[0_12px_24px_rgba(4,52,52,0.24)]">
+							<div className="flex flex-col items-center gap-1.5">
 								<p className="text-[12px] font-bold text-mint-500">
-									{isRTL ? "فلوسك تضيع هنا" : "Your money leaks here"}
+									{isRTL ? "الفرق المرصود على هذا الصنف" : "Observed gap on this item"}
 								</p>
 								{hasGap ? (
 									<GapCountBadge amount={gapAmount} isRTL={isRTL} />
@@ -604,11 +596,11 @@ export default function SelectedPlaceSheet({
 										—
 									</span>
 								)}
-								<p className="text-center text-[13px] text-white/70">
+								<p className="text-center text-[12.5px] text-white/70">
 									{hasGap
 										? isRTL
-											? `لو طلبت هذا من المزوّد الغلط تدفع ${localizeDigitString(String(Math.round(gapAmount)), true)} ر.س زيادة`
-											: `If you order from the wrong provider you pay ${Math.round(gapAmount)} SAR extra`
+											? "بين أرخص تطبيق وأغلاه لنفس الصنف"
+											: "Between the cheapest and the dearest app for the same item"
 										: isRTL
 											? "ما رصدنا فرق يستحق هنا بعد"
 											: "No worthwhile gap observed here yet"}
