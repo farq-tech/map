@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const compression = require('compression');
 const createMapRouter = require('./routes/map');
+const createCopilotRouter = require('./routes/copilot');
 const { warmCityCache } = require('./lib/city-opportunities');
 const createChatRouter = require('./routes/chat');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
@@ -61,6 +62,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/intelligence', createMapRouter());
+app.use('/api/copilot', createCopilotRouter());
 app.use('/api/chat', createChatRouter());
 
 async function proxyFarqCatalog(id) {

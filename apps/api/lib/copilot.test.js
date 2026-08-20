@@ -1,0 +1,166 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { classifyIntent, normalizeArabic, providersIn } = require('./copilot-intent');
+const { handleCopilot, validateAction, __resetSessionsForTests } = require('./copilot');
+const { __resetCityCacheForTests } = require('./city-opportunities');
+
+/* A tiny synthetic Riyadh: three restaurants with observed gaps, one without. */
+const ROWS = [
+  { place_id: '1', canonical_name_ar: 'برجر الحي', canonical_name_en: 'Hood Burger', latitude: 24.71, longitude: 46.68, provider_count: 3, item_id: '11', cheapest_provider: 'mrsool', dearest_provider: 'hungerstation', cheapest_price: 24, dearest_price: 42, gap: 18, product_name: 'برجر دبل تشيز', wins: { mrsool: 6, jahez: 1 }, comparisons: 7 },
+  { place_id: '2', canonical_name_ar: 'شاورما عربي', canonical_name_en: 'Arabi Shawarma', latitude: 24.712, longitude: 46.682, provider_count: 2, item_id: '22', cheapest_provider: 'jahez', dearest_provider: 'hungerstation', cheapest_price: 12, dearest_price: 41, gap: 29, product_name: 'شاورما عربي', wins: { jahez: 4 }, comparisons: 4 },
+  { place_id: '3', canonical_name_ar: 'بيتزا بعيدة', canonical_name_en: 'Far Pizza', latitude: 24.9, longitude: 46.9, provider_count: 4, item_id: '33', cheapest_provider: 'ninja', dearest_provider: 'jahez', cheapest_price: 30, dearest_price: 70, gap: 40, product_name: 'بيتزا مارجريتا', wins: { ninja: 9 }, comparisons: 9 },
+  { place_id: '4', canonical_name_ar: 'مطعم بلا فرق', canonical_name_en: 'No Gap', latitude: 24.711, longitude: 46.681, provider_count: 2, gap: null, wins: null, comparisons: null },
+];
+const __query = async (sql) => (/read_layer_meta/.test(sql) ? [{ generated_at: '2026-08-16T06:40:22Z' }] : ROWS);
+const deps = { __query, disableModel: true };
+const NEAR = { bbox: '46.67,24.70,46.69,24.72', zoom: 14, userLat: 24.711, userLng: 46.681 };
+
+test.beforeEach(() => {
+  __resetSessionsForTests();
+  __resetCityCacheForTests();
+});
+
+test('normalizeArabic: digits, hamza, taa marbuta, punctuation', () => {
+  assert.equal(normalizeArabic('أبي ٥ فرصٍ فوق ٢٠؟'), 'ابي 5 فرص فوق 20');
+  assert.equal(normalizeArabic('قهوة إسبريسو، مَعَ تطويــل'), 'قهوه اسبريسو مع تطويل');
+  assert.deepEqual(providersIn(normalizeArabic('هنقرستيشن ولا جاهز؟')), ['hungerstation', 'jahez']);
+});
+
+test('intents for the product contract prompts', () => {
+  const ctx = { hasSession: true, hasSelected: true, hasUser: true, hasViewport: true };
+  const cases = [
+    ['وين أكبر فرق حولي؟', 'BIGGEST_GAP', 'near'],
+    ['وش الأرخص؟', 'FOLLOWUP_CHEAPEST', null],
+    ['أبي برجر', 'SET_CATEGORY', null],
+    ['وش حول هذا المكان؟', 'AROUND_POINT', null],
+    ['ليش هذا أغلى؟', 'EXPLAIN_SELECTED', null],
+    ['خذني له', 'GOTO_REFERENT', null],
+    ['ورني أفضل 5', 'TOP_N', null],
+    ['أي تطبيق أرخص حولي الليلة؟', 'APP_CHOICE', 'near'],
+    ['كم الفرق بين جاهز وهنقرستيشن؟', 'APP_PAIR', null],
+    ['وش فيه في النرجس؟', 'PLACE_SCOPE', 'place'],
+    ['ورني اللي فرقها فوق 20', 'SET_MIN_GAP', null],
+    ['قارن هذا بالمطعم اللي جنبه', 'COMPARE_NEAREST', null],
+    ['وش أقدر أوفر الليلة؟', 'VAGUE_SAVE', null],
+    ['السعر بيرخص بكرة؟', 'FORECAST', null],
+    ['رجّعني لموقعي', 'RETURN_TO_USER', null],
+    ['أرخص برجر حولي', 'CHEAPEST_IN_CATEGORY', 'near'],
+  ];
+  for (const [q, intent, scope] of cases) {
+    const r = classifyIntent(q, ctx);
+    assert.equal(r.intent, intent, `${q} → ${r.intent}`);
+    if (scope) assert.equal(r.slots.scope, scope, `${q} scope`);
+  }
+  assert.equal(classifyIntent('ورني أفضل 5', ctx).slots.topN, 5);
+  assert.equal(classifyIntent('فوق ٢٠', ctx).slots.minGap, 20);
+  assert.equal(classifyIntent('وش فيه في حي النرجس', ctx).slots.placeText, 'النرجس');
+  assert.equal(classifyIntent('وش الأرخص؟', { hasSession: false }).intent, 'BIGGEST_GAP', 'no session → no follow-up');
+});
+
+test('biggest gap near me: answer from rows, FOCUS_PLACE on a real id, far places excluded', async () => {
+  const r = await handleCopilot({ message: 'وين أكبر فرق حولي؟', context: NEAR }, deps);
+  assert.equal(r.ok, true);
+  assert.equal(r.intent, 'BIGGEST_GAP');
+  assert.equal(r.action.type, 'FOCUS_PLACE');
+  assert.equal(r.action.place_id, '2', 'شاورما (29) beats برجر (18); بيتزا (40) is 25 km away');
+  assert.match(r.answer, /29 ر\.س/);
+  assert.match(r.answer, /جاهز/);
+  assert.ok(r.results.every((row) => row.place_id !== '3'));
+  assert.equal(r.model, 'template');
+});
+
+test('follow-ups resolve against the session: الأرخص؟ then ليش؟ then خذني له', async () => {
+  const first = await handleCopilot({ message: 'وين أكبر فرق حولي؟', context: NEAR }, deps);
+  const sid = first.session_id;
+  const cheap = await handleCopilot({ message: 'وش الأرخص؟', sessionId: sid, context: NEAR }, deps);
+  assert.equal(cheap.intent, 'FOLLOWUP_CHEAPEST');
+  assert.equal(cheap.action.place_id, '2', 'cheapest price among the same results is 12 SAR');
+  const why = await handleCopilot({ message: 'ليش؟', sessionId: sid, context: NEAR }, deps);
+  assert.equal(why.intent, 'EXPLAIN_SELECTED');
+  assert.match(why.answer, /12 ر\.س في جاهز/);
+  assert.match(why.answer, /41 في هنقرستيشن/);
+  assert.equal(why.action.type, 'NOOP');
+  const go = await handleCopilot({ message: 'خذني له', sessionId: sid, context: NEAR }, deps);
+  assert.equal(go.action.type, 'FOCUS_PLACE');
+  assert.equal(go.action.place_id, '2');
+});
+
+test('the selected place on the map wins over the session for ليش', async () => {
+  const r = await handleCopilot({ message: 'ليش هذا أغلى؟', context: { ...NEAR, selectedPlaceId: '1' } }, deps);
+  assert.match(r.answer, /برجر دبل تشيز/);
+  assert.match(r.answer, /18 ر\.س/);
+});
+
+test('top N returns SHOW_RESULTS with only real ids and a bbox', async () => {
+  const r = await handleCopilot({ message: 'ورني أفضل 5', context: NEAR }, deps);
+  assert.equal(r.action.type, 'SHOW_RESULTS');
+  assert.deepEqual(r.action.place_ids, ['2', '1']);
+  assert.equal(r.action.bbox.length, 4);
+});
+
+test('min gap filter becomes SET_FILTER and counts honestly', async () => {
+  const r = await handleCopilot({ message: 'ورني اللي فرقها فوق 20', context: NEAR }, deps);
+  assert.equal(r.action.type, 'SET_FILTER');
+  assert.equal(r.action.min_gap, 20);
+  assert.equal(r.total, 1);
+});
+
+test('category question sets the category and lists matches', async () => {
+  const r = await handleCopilot({ message: 'أبي برجر', context: NEAR }, deps);
+  assert.equal(r.intent, 'SET_CATEGORY');
+  assert.equal(r.action.type, 'SET_CATEGORY');
+  assert.equal(r.action.category, 'burgers');
+  assert.equal(r.results[0].place_id, '1');
+});
+
+test('app verdict needs enough comparisons and always states its sample', async () => {
+  const near = await handleCopilot({ message: 'أي تطبيق أرخص حولي؟', context: NEAR }, deps);
+  assert.equal(near.intent, 'APP_CHOICE');
+  assert.match(near.answer, /مرسول أرخص في 6 من 11 مقارنة/);
+  const tiny = await handleCopilot({ message: 'أي تطبيق أرخص؟', context: { bbox: '46.675,24.7115,46.69,24.72', zoom: 15 } }, deps);
+  assert.match(tiny.answer, /غير كافية/);
+  assert.equal(tiny.action.type, 'NOOP');
+});
+
+test('a named place that cannot be geocoded is refused, never invented', async () => {
+  const r = await handleCopilot({ message: 'وش فيه في أتلانتس؟', context: NEAR }, { ...deps, geocodePlace: async () => ({ ok: false, reason: 'place_not_found', bbox: null }) });
+  assert.equal(r.refused, 'place_not_found');
+  assert.equal(r.action.type, 'NOOP');
+  assert.match(r.answer, /أتلانتس/);
+});
+
+test('a geocoded place scopes the search and shows the results', async () => {
+  const r = await handleCopilot({ message: 'وش فيه في النرجس؟', context: NEAR }, { ...deps, geocodePlace: async () => ({ ok: true, bbox: [46.85, 24.85, 46.95, 24.95], label: 'النرجس' }) });
+  assert.equal(r.intent, 'PLACE_SCOPE');
+  assert.equal(r.action.type, 'SHOW_RESULTS');
+  assert.deepEqual(r.action.place_ids, ['3']);
+  assert.match(r.answer, /في النرجس/);
+});
+
+test('forecasts are refused and the map is left alone', async () => {
+  const r = await handleCopilot({ message: 'السعر بيرخص بكرة؟', context: NEAR }, deps);
+  assert.equal(r.refused, 'forecast');
+  assert.equal(r.action.type, 'NOOP');
+});
+
+test('empty scope answers honestly with no action', async () => {
+  const r = await handleCopilot({ message: 'وين أكبر فرق؟', context: { bbox: '40.0,20.0,40.1,20.1', zoom: 14 } }, deps);
+  assert.equal(r.action.type, 'NOOP');
+  assert.match(r.answer, /ما عندنا مقارنة مرصودة/);
+});
+
+test('validateAction never lets an unknown id or type through', () => {
+  const rows = [{ place_id: '9', lat: 24.7, lng: 46.7 }];
+  assert.deepEqual(validateAction({ type: 'FOCUS_PLACE', place_id: '404' }, rows), { type: 'NOOP' });
+  assert.deepEqual(validateAction({ type: 'DELETE_EVERYTHING' }, rows), { type: 'NOOP' });
+  assert.equal(validateAction({ type: 'SHOW_RESULTS', place_ids: ['9', '404'] }, rows).place_ids.length, 1);
+  assert.equal(validateAction({ type: 'FIT_BOUNDS', bbox: 'x' }, rows).type, 'NOOP');
+});
+
+test('english questions get english answers', async () => {
+  const r = await handleCopilot({ message: 'biggest gap near me', language: 'en', context: NEAR }, deps);
+  assert.match(r.answer, /Biggest observed gap around you/);
+  assert.match(r.answer, /SAR on Jahez/);
+});
