@@ -9,7 +9,8 @@
  * an action can only ever point at something that exists.
  */
 
-const { getCityOpportunities } = require('./city-opportunities');
+const { getCityOpportunities, normalizeCity } = require('./city-opportunities');
+const { findDistrictByName } = require('./city-districts');
 const { geocodePlace } = require('./geocode-place');
 const { normalizeArabic } = require('./copilot-intent');
 
@@ -60,8 +61,9 @@ function bboxOf(rows) {
 }
 
 /**
- * Resolve where to look. Priority: a named place (geocoded, never invented),
- * the user's position (2 km), the viewport, the city. The result says which.
+ * Resolve where to look. Priority: a named حي (its own polygon), a named
+ * place (geocoded, never invented), the user's position (2 km), the viewport,
+ * the city. The result says which.
  */
 async function resolveScope(plan, ctx = {}, deps = {}) {
   const want = plan.slots?.scope || null;
@@ -72,6 +74,19 @@ async function resolveScope(plan, ctx = {}, deps = {}) {
   const viewport = parseBboxCsv(ctx.bbox);
 
   if (want === 'place' && plan.slots.placeText) {
+    const cityKey = normalizeCity(ctx.city) || 'riyadh';
+    const district = (deps.findDistrictByName || findDistrictByName)(cityKey, plan.slots.placeText);
+    if (district) {
+      return {
+        kind: 'district',
+        district_id: district.district_id,
+        bbox: district.bbox,
+        label: district.name_ar,
+        label_ar: district.name_ar,
+        label_en: district.name_en,
+        placeText: plan.slots.placeText,
+      };
+    }
     const geocode = deps.geocodePlace || geocodePlace;
     const hit = await geocode(plan.slots.placeText, { fetch: deps.fetch });
     if (hit && hit.ok && hit.bbox) {
@@ -136,6 +151,7 @@ async function findOpportunities(args, deps = {}) {
     if (!p.has_difference) continue;
     const [lng, lat] = f.geometry.coordinates;
     if (scope.bbox && !inBbox(lng, lat, scope.bbox)) continue;
+    if (scope.district_id && String(p.district_id || '') !== String(scope.district_id)) continue;
     if (center && scope.radiusKm && haversineKm(center.lat, center.lng, lat, lng) > scope.radiusKm) continue;
     if (minGap != null && Number(p.gap) < minGap) continue;
     if (args.excludePlaceId && String(p.place_id) === String(args.excludePlaceId)) continue;
@@ -175,6 +191,7 @@ async function compareApps(args, deps = {}) {
     const p = f.properties || {};
     const [lng, lat] = f.geometry.coordinates;
     if (scope.bbox && !inBbox(lng, lat, scope.bbox)) continue;
+    if (scope.district_id && String(p.district_id || '') !== String(scope.district_id)) continue;
     if (center && scope.radiusKm && haversineKm(center.lat, center.lng, lat, lng) > scope.radiusKm) continue;
     if (!p.wins) continue;
     places += 1;

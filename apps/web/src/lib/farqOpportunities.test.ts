@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	TOP_OPPORTUNITIES,
+	dedupeByBrand,
 	formatObservedDistance,
 	observedDistanceMeters,
 	rankOpportunities,
@@ -70,5 +71,42 @@ describe("top opportunities — one world for list and map", () => {
 			"near",
 		);
 		expect(fallback[0]?.placeId).toBe("big");
+	});
+});
+
+describe("one row per chain, a dinner order first", () => {
+	const row = (
+		placeId: string,
+		amount: number,
+		extra: Partial<OpportunityRow> = {},
+	): OpportunityRow => ({ placeId, name: `مطعم ${placeId}`, amount, lat: 24.7, lng: 46.7, ...extra });
+
+	it("keeps a brand once and counts the branches it folded", () => {
+		const rows = [
+			row("1", 30, { brandKey: "pizzahut" }),
+			row("2", 30, { brandKey: "pizzahut" }),
+			row("3", 30, { brandKey: "pizzahut" }),
+			row("4", 12, { brandKey: "twina" }),
+		];
+		const out = dedupeByBrand(rows);
+		expect(out.map((r) => r.placeId)).toEqual(["1", "4"]);
+		expect(out[0].branchCount).toBe(3);
+		expect(out[1].branchCount).toBeUndefined();
+	});
+
+	it("never merges rows it cannot prove are the same chain", () => {
+		const rows = [row("1", 10), row("2", 9), row("3", 8, { brandKey: "" })];
+		expect(dedupeByBrand(rows)).toHaveLength(3);
+	});
+
+	it("ranks a real order above a share box of the same size, and the map keeps every branch", () => {
+		const rows = [
+			row("box", 60, { demoteReason: "share" }),
+			row("dish", 40),
+			row("tub", 55, { demoteReason: "retail" }),
+		];
+		expect(rankOpportunities(rows, "gap").map((r) => r.placeId)).toEqual(["dish", "box", "tub"]);
+		/* Opting out of the dedupe is how the map keeps every branch pin. */
+		expect(topOpportunities([row("a", 5, { brandKey: "x" }), row("b", 4, { brandKey: "x" })], "gap", 10, { dedupeBrands: false })).toHaveLength(2);
 	});
 });

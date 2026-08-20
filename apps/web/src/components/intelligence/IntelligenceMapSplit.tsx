@@ -19,7 +19,7 @@ import {
 	Search,
 	X,
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { localizeCity } from "../../lib/cityNames";
@@ -28,6 +28,12 @@ import {
 	pinFetchCapForZoom,
 } from "../../lib/farqMapPins";
 import { pinGapAmount } from "../../lib/farqPriceTiles";
+import { DISTRICT_FILL_STEPS, districtBounds, type DistrictLens } from "../../lib/farqDistrictTiles";
+import FarqDistrictPicker from "./FarqDistrictPicker";
+import { matchesQuery } from "../../lib/farqTextSearch";
+import { readLayerFreshness } from "../../lib/farqFreshness";
+import { track } from "../../lib/farqAnalytics";
+import { PROVIDER_MAP_COLOR } from "../../lib/platformLogos";
 import {
 	topOpportunities,
 	withObservedDistances,
@@ -55,6 +61,7 @@ import {
 	type IntelligenceMeta,
 	type CityOpportunities,
 	type CityAreas,
+	type CityDistricts,
 } from "../../services/intelligenceService";
 import EmptyState from "../EmptyState";
 import FarqBrandMark from "../FarqBrandMark";
@@ -109,20 +116,20 @@ function inBbox(lng: number, lat: number, b: [number, number, number, number]): 
 }
 
 /**
- * The same honest substring match the API applies to `q`, run over the cached
- * city so typing a dish or a restaurant never costs a network round trip.
+ * Search the cached city without a network round trip — and in the Arabic
+ * people actually type: برجر finds برغر, قهوه finds قهوة, ٥ finds 5. The
+ * matcher is shared with the copilot's normaliser, so the same word means the
+ * same thing whether it was typed here or asked as a sentence.
  */
 function filterCityByQuery(
 	city: CityOpportunities,
 	query: string | undefined,
 ): IntelligenceMapPlaces {
-	const needle = String(query || "").trim().toLowerCase();
+	const needle = String(query || "").trim();
 	const features = needle
 		? city.features.filter((f) => {
 				const p = f.properties;
-				return `${p.name || ""} ${p.name_en || ""} ${p.product_name || ""}`
-					.toLowerCase()
-					.includes(needle);
+				return matchesQuery([p.name, p.name_en, p.product_name], needle);
 			})
 		: city.features;
 	return {
@@ -192,6 +199,8 @@ export default function IntelligenceMapSplit({
 	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
 	const [majorGapsOnly, setMajorGapsOnly] = useState(true);
 	const [legendOpen, setLegendOpen] = useState(false);
+	/* What the district colour answers: "how many فرص" or "which app wins". */
+	const [districtLens, setDistrictLens] = useState<DistrictLens>("gap");
 	const [retryTick, setRetryTick] = useState(0);
 	const [drawerOpen, setDrawerOpen] = useState(false);
 	const [gisHoodsOn, setGisHoodsOn] = useState(false);
@@ -217,6 +226,9 @@ export default function IntelligenceMapSplit({
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
 	const [cityAreas, setCityAreas] = useState<CityAreas | null>(null);
+	/* The city's أحياء; `?neighborhood=` is one of their ids and scopes list, headline and map alike. */
+	const [cityDistricts, setCityDistricts] = useState<CityDistricts | null>(null);
+	const districtFocusRef = useRef<string>("");
 	const cityStatusRef = useRef<"idle" | "loading" | "ready" | "failed">("idle");
 	const [viewBbox, setViewBbox] = useState<[number, number, number, number] | null>(null);
 	/* Copilot: the exchange shown above the list, and what its last action pinned. */
@@ -330,6 +342,7 @@ export default function IntelligenceMapSplit({
 		if (!CITY_READ_MODEL.has(key)) {
 			cityStatusRef.current = "idle";
 			setCityPlaces(null);
+			setCityDistricts(null);
 			return;
 		}
 		const controller = new AbortController();
@@ -337,6 +350,10 @@ export default function IntelligenceMapSplit({
 		void IntelligenceService.cityAreas({ city: key, signal: controller.signal })
 			.then((body) => { if (!controller.signal.aborted) setCityAreas(body); })
 			.catch(() => { if (!controller.signal.aborted) setCityAreas(null); });
+		/* A city without boundaries is a 404 → null → the H3 field stays; nothing is drawn from a guess. */
+		void IntelligenceService.cityDistricts({ city: key, signal: controller.signal })
+			.then((body) => { if (!controller.signal.aborted) setCityDistricts(body?.features?.length ? body : null); })
+			.catch(() => { if (!controller.signal.aborted) setCityDistricts(null); });
 		void IntelligenceService.cityOpportunities({ city: key, signal: controller.signal })
 			.then((body) => {
 				if (controller.signal.aborted) return;
@@ -558,6 +575,64 @@ export default function IntelligenceMapSplit({
 	const selectedHood = hoods?.features.find(
 		(f) => String(f.properties.neighborhood_id) === String(neighborhoodId),
 	);
+	const selectedDistrict = useMemo(
+		() =>
+			neighborhoodId && cityDistricts
+				? cityDistricts.features.find((f) => f.properties.district_id === neighborhoodId) || null
+				: null,
+		[cityDistricts, neighborhoodId],
+	);
+	const districtName = selectedDistrict
+		? isRTL
+			? selectedDistrict.properties.name_ar
+			: selectedDistrict.properties.name_en
+		: "";
+	/* The حي scopes the shared result set only where places carry a geometric district_id (the city read model). */
+	const districtScope = cityPlaces && neighborhoodId ? neighborhoodId : "";
+	const nearLabel = districtName ? (isRTL ? `في ${districtName}` : `in ${districtName}`) : isRTL ? "حولك" : "around you";
+
+	const focusDistrict = useCallback((feature: CityDistricts["features"][number]) => {
+		const bounds = districtBounds(feature);
+		if (!bounds) return;
+		districtFocusRef.current = feature.properties.district_id;
+		setFocusRequest({
+			lat: (bounds[1] + bounds[3]) / 2,
+			lng: (bounds[0] + bounds[2]) / 2,
+			id: `district:${feature.properties.district_id}`,
+			kind: "bounds",
+			bounds,
+		});
+	}, []);
+	/* One path for a tap on the field, a link, and a copilot answer that names a حي. */
+	const selectDistrict = useCallback(
+		(id: string) => {
+			const did = String(id || "").trim();
+			if (!did) return;
+			setLivePlaceId("");
+			setComparePanelHidden(false);
+			setSheetSnap("half");
+			setDrawerOpen(false);
+			patchSearch({ neighborhood: did, place: undefined });
+			const feature = cityDistricts?.features.find((f) => f.properties.district_id === did);
+			if (feature) focusDistrict(feature);
+			track("district_select", { district_id: did });
+		},
+		[cityDistricts, focusDistrict, patchSearch],
+	);
+	const clearDistrict = useCallback(() => {
+		districtFocusRef.current = "";
+		patchSearch({ neighborhood: undefined });
+		track("district_clear");
+	}, [patchSearch]);
+	/* A link or an answer can name a حي before anyone taps it: frame it once, never yank the camera back later. */
+	useEffect(() => {
+		if (!neighborhoodId) {
+			districtFocusRef.current = "";
+			return;
+		}
+		if (!selectedDistrict || districtFocusRef.current === neighborhoodId) return;
+		focusDistrict(selectedDistrict);
+	}, [neighborhoodId, selectedDistrict, focusDistrict]);
 	const winner = detail?.winner;
 	const promote = Boolean(winner?.promote_in_consumer_ui);
 	const groceryCta = categoryId === "grocery" || categoryId === "shopping";
@@ -592,10 +667,36 @@ export default function IntelligenceMapSplit({
 		[navigate],
 	);
 
+	/**
+	 * A category is answered from the read model's per-category gaps, not by
+	 * searching for the word "برجر" in item names — a restaurant whose burger
+	 * differs by 18 SAR belongs under "برجر" even when its largest gap that day
+	 * was a dessert. Categories the read model does not carry fall back to the
+	 * old text search rather than silently returning nothing.
+	 */
+	const categoryIsGapped = useMemo(
+		() =>
+			Boolean(
+				categoryId &&
+					cityPlaces?.features.some(
+						(f) => (f.properties.category_gaps || {})[categoryId] != null,
+					),
+			),
+		[cityPlaces, categoryId],
+	);
+	const activeCategoryLabel = useMemo(() => {
+		const cat = meta?.categories.find((c) => c.category_id === categoryId) || null;
+		return (
+			(isRTL ? cat?.category_name_ar || cat?.category_name : cat?.category_name) ||
+			categoryId ||
+			null
+		);
+	}, [meta, categoryId, isRTL]);
 	const cityQuery = useMemo(() => {
+		if (categoryIsGapped) return q || undefined;
 		const cat = meta?.categories.find((c) => c.category_id === categoryId) || null;
 		return categorySearchQuery(categoryId, cat, q);
-	}, [meta, categoryId, q]);
+	}, [meta, categoryId, q, categoryIsGapped]);
 
 	/* One source of places: the cached city when we have it, the viewport fetch otherwise. */
 	const sourcePlaces = useMemo(
@@ -629,21 +730,32 @@ export default function IntelligenceMapSplit({
 					: Boolean(f.properties.has_difference) || amount != null;
 				if (!layers.opportunities && hasGap) return false;
 				if (pinnedIds && !pinnedIds.has(String(f.properties.place_id || ""))) return false;
+				if (districtScope && String(f.properties.district_id || "") !== districtScope) return false;
+				if (categoryIsGapped && (f.properties.category_gaps || {})[categoryId] == null) return false;
 				if (minGapFilter != null && (amount == null || amount < minGapFilter)) return false;
 				if (gapsOnly) return hasGap;
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
 		const rows: OpportunityRow[] = [];
-		const clip = cityPlaces ? viewBbox : null;
+		/* A selected حي is the scope; the camera no longer clips what it lists. */
+		const clip = cityPlaces && !districtScope ? viewBbox : null;
 		for (const f of visiblePlaces?.features || []) {
 			if (f.properties.feature_type === "cluster") continue;
 			const placeId = String(f.properties.place_id || "").trim();
 			if (!placeId) continue;
+			/**
+			 * A category narrows *which restaurants* are shown — it does not change
+			 * the number on the card. Ranking by the category's gap while the card
+			 * still printed the representative item's name and its two prices made
+			 * 62.5% of filtered rows contradict themselves on one line ("٢٧ ر.س فرق"
+			 * over "٩٩ → ١٢٧"). Until the category's own item travels with its gap,
+			 * the honest card is the one whose number, dish and prices agree.
+			 */
 			const amount = pinGapAmount(f.properties);
 			if (amount == null) continue;
 			const coords = f.geometry?.coordinates;
@@ -690,6 +802,15 @@ export default function IntelligenceMapSplit({
 								: "") ||
 							"",
 					).trim() || null,
+				brandKey: f.properties.brand_key || null,
+				demoteReason: f.properties.demote_reason || null,
+				comparisons: Number(f.properties.comparisons) || 0,
+				/* Only when the card's own dish is not the one the category asked for. */
+				categoryGap:
+					categoryIsGapped && (f.properties.category_gaps || {})[categoryId] !== amount
+						? ((f.properties.category_gaps || {})[categoryId] ?? null)
+						: null,
+				categoryLabel: categoryIsGapped ? activeCategoryLabel : null,
 			});
 		}
 		const located =
@@ -697,7 +818,7 @@ export default function IntelligenceMapSplit({
 				? withObservedDistances(rows, userLocation.lat, userLocation.lng)
 				: rows;
 		return located;
-	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox]);
+	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox, districtScope, categoryIsGapped, categoryId, activeCategoryLabel]);
 
 	const cheapestReady = useMemo(
 		() => viewportSavings.some((row) => row.cheapestPrice != null),
@@ -749,41 +870,95 @@ export default function IntelligenceMapSplit({
 
 	/* One honest line for what the camera shows — the sheet's head on the phone. */
 	const stats = useMemo(
-		() => viewportStats((visiblePlaces?.features || []) as Parameters<typeof viewportStats>[0], cityPlaces ? viewBbox : null),
-		[visiblePlaces, cityPlaces, viewBbox],
+		() => viewportStats((visiblePlaces?.features || []) as Parameters<typeof viewportStats>[0], cityPlaces && !districtScope ? viewBbox : null),
+		[visiblePlaces, cityPlaces, viewBbox, districtScope],
 	);
+	const freshness = useMemo(
+		() => readLayerFreshness(cityPlaces?.generated_at, isRTL),
+		[cityPlaces, isRTL],
+	);
+	/* Only apps that actually won a حي appear in the lens legend — the palette
+	 * never advertises an app the data has not put on the map. */
+	const appLensProviders = useMemo(() => {
+		const seen = new Map<string, number>();
+		for (const f of cityDistricts?.features || []) {
+			const app = f.properties.cheapest_app;
+			if (!app || !f.properties.enough_for_app_verdict) continue;
+			seen.set(app, (seen.get(app) || 0) + 1);
+		}
+		return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([app]) => app);
+	}, [cityDistricts]);
 	const headline = useMemo(() => {
 		const n = (v: number) => localizeDigitString(String(v), isRTL);
-		const generated = cityPlaces?.generated_at ? cityPlaces.generated_at.slice(0, 10) : null;
+		/* With a حي selected the line describes the حي, not the camera. */
+		const hood = districtScope && selectedDistrict ? districtName : "";
+		const here = hood ? (isRTL ? `في ${hood}` : `in ${hood}`) : isRTL ? "حولك" : "here";
 		const primary =
 			stats.count > 0
-				? isRTL
-					? `${n(stats.count)} فرصة في هذا النطاق · أكبرها ${n(stats.maxGap || 0)} ر.س`
-					: `${stats.count} opportunities here · biggest ${stats.maxGap} SAR`
-				: isRTL
-					? "لا فرص مرصودة في هذا النطاق"
-					: "No observed opportunities in this area";
+				? hood
+					? isRTL
+						? `${hood}: ${n(stats.count)} فرصة · أكبرها ${n(stats.maxGap || 0)} ر.س`
+						: `${hood}: ${stats.count} opportunities · biggest ${stats.maxGap} SAR`
+					: isRTL
+						? `${n(stats.count)} فرصة في هذا النطاق · أكبرها ${n(stats.maxGap || 0)} ر.س`
+						: `${stats.count} opportunities here · biggest ${stats.maxGap} SAR`
+				: hood
+					? isRTL
+						? `لا فرص مرصودة في ${hood}`
+						: `No observed opportunities in ${hood}`
+					: isRTL
+						? "لا فرص مرصودة في هذا النطاق"
+						: "No observed opportunities in this area";
 		const verdict = stats.verdict;
 		const secondary = verdict
 			? isRTL
-				? `${getProviderLabel(verdict.provider, { isRTL: true }) || verdict.provider} أرخص في ${n(verdict.wins)} من ${n(verdict.comparisons)} مقارنة حولك`
-				: `${getProviderLabel(verdict.provider, { isRTL: false }) || verdict.provider} cheapest in ${verdict.wins} of ${verdict.comparisons} comparisons here`
+				? `${getProviderLabel(verdict.provider, { isRTL: true }) || verdict.provider} أرخص في ${n(verdict.wins)} من ${n(verdict.comparisons)} مقارنة ${here}`
+				: `${getProviderLabel(verdict.provider, { isRTL: false }) || verdict.provider} cheapest in ${verdict.wins} of ${verdict.comparisons} comparisons ${here}`
 			: stats.count > 0
-				? generated
+				? null
+				: hood
 					? isRTL
-						? `بيانات المقارنة محدثة ${n(Number(generated.slice(8, 10)))}/${n(Number(generated.slice(5, 7)))}`
-						: `Comparison data as of ${generated}`
-					: null
-				: isRTL
-					? "حرّك الخريطة أو وسّع النطاق"
-					: "Move the map or widen the area";
+						? "اختر حياً آخر أو أزل التحديد"
+						: "Pick another district or clear it"
+					: isRTL
+						? "حرّك الخريطة أو وسّع النطاق"
+						: "Move the map or widen the area";
 		return (
 			<>
-				<strong>{primary}</strong>
+				<strong>
+					{primary}
+					{hood ? (
+						<button
+							type="button"
+							className="farq-headline-clear"
+							aria-label={isRTL ? `إلغاء تحديد ${hood}` : `Clear ${hood}`}
+							data-testid="intelligence-map-district-clear"
+							/* The sheet header captures pointerdown to drag-resize; without
+							   stopping it here, clearing a حي also snapped the sheet open. */
+							onPointerDown={(e) => e.stopPropagation()}
+							onClick={(e) => {
+								e.stopPropagation();
+								clearDistrict();
+							}}
+						>
+							×
+						</button>
+					) : null}
+				</strong>
 				{secondary ? <span>{secondary}</span> : null}
+				{/* How old these prices are — always on screen, never a hover. */}
+				{freshness ? (
+					<span
+						className={`farq-freshness ${freshness.stale ? "is-stale" : ""}`}
+						data-testid="intelligence-map-freshness"
+						title={cityPlaces?.generated_at || undefined}
+					>
+						{freshness.label}
+					</span>
+				) : null}
 			</>
 		);
-	}, [stats, cityPlaces, isRTL]);
+	}, [stats, cityPlaces, isRTL, districtScope, selectedDistrict, districtName, clearDistrict, freshness]);
 	const sheetInset = sheetHeightPx(
 		sheetSnap,
 		typeof window !== "undefined" ? window.innerHeight : 800,
@@ -791,6 +966,7 @@ export default function IntelligenceMapSplit({
 
 	const locateUser = useCallback(() => {
 		pendingLocateRef.current = true;
+		track("locate_click");
 		dismissError();
 		/* Always getCurrentPosition in this click turn (iOS Safari). */
 		requestLocation();
@@ -877,12 +1053,11 @@ export default function IntelligenceMapSplit({
 				id: `place:${row.placeId}`,
 				kind: "select",
 			});
-			patchSearch({
-				place: row.placeId,
-				neighborhood: undefined,
-			});
+			/* A place inside a selected حي keeps the حي: the person is exploring it, not leaving it. */
+			patchSearch({ place: row.placeId });
 			setComparePanelHidden(false);
 			setDrawerOpen(false);
+			track("place_select", { source: "list" });
 		},
 		[patchSearch],
 	);
@@ -896,10 +1071,10 @@ export default function IntelligenceMapSplit({
 
 	/* The copilot proposes; the app executes — only with ids and bounds it was given. */
 	const applyCopilotAction = useCallback(
-		(action: CopilotAction, rows: CopilotRow[]) => {
+		(action: CopilotAction, rows: CopilotRow[], opts: { skipFit?: boolean } = {}) => {
 			const byId = new Map(rows.map((r) => [r.place_id, r]));
 			const fit = (bbox?: [number, number, number, number] | null) => {
-				if (!bbox) return;
+				if (!bbox || opts.skipFit) return;
 				setFocusRequest({ lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, id: `bounds:${bbox.join(",")}`, kind: "bounds", bounds: bbox });
 			};
 			switch (action.type) {
@@ -952,6 +1127,8 @@ export default function IntelligenceMapSplit({
 			setMinGapFilter(null);
 			setAsk({ question: message, response: null, busy: true, error: null });
 			setSheetSnap("half");
+			/* The question itself never leaves the browser — only that one was asked. */
+			track("copilot_ask", { has_query: true });
 			const located = (locationPinKind === "gps" || locationPinKind === "manual") && userLocation;
 			void askCopilot({
 				message,
@@ -970,7 +1147,21 @@ export default function IntelligenceMapSplit({
 				.then((response) => {
 					if (controller.signal.aborted) return;
 					setAsk({ question: message, response, busy: false, error: null });
-					applyCopilotAction(response.action, response.results);
+					/* An answer scoped to a حي selects that حي — the same path a tap uses — and its
+					 * polygon, not the rows' bbox, frames the camera. A FOCUS_PLACE still flies in. */
+					track("copilot_action", {
+						intent: response.intent,
+						action: response.action?.type,
+						result_count: response.results?.length ?? 0,
+					});
+					const districtId = String(response.scope?.district_id || "").trim();
+					const known = districtId && cityDistricts?.features.some((f) => f.properties.district_id === districtId);
+					if (known) {
+						selectDistrict(districtId);
+						applyCopilotAction(response.action, response.results, { skipFit: true });
+					} else {
+						applyCopilotAction(response.action, response.results);
+					}
 				})
 				.catch(() => {
 					if (controller.signal.aborted) return;
@@ -982,12 +1173,13 @@ export default function IntelligenceMapSplit({
 					});
 				});
 		},
-		[applyCopilotAction, isRTL, livePlaceId, locationPinKind, userLocation],
+		[applyCopilotAction, cityDistricts, isRTL, livePlaceId, locationPinKind, selectDistrict, userLocation],
 	);
 
 	const applyView = useCallback(
 		(next: MapViewMode) => {
 			patchSearch({ view: next });
+			track(next === "map" ? "map_open" : "list_open");
 			if (next !== "map") return;
 			const row = topSavings.find((item) => item.placeId === livePlaceId);
 			if (!row) return;
@@ -1005,6 +1197,7 @@ export default function IntelligenceMapSplit({
 		(next: MapSort) => {
 			if (next === "near" && !nearReady) locateUser();
 			patchSearch({ sort: next });
+			track("sort_change", { sort: next });
 			if (next === "gap") setMajorGapsOnly(true);
 			if (next === "cheap" || next === "near") setRail(next === "cheap" ? "cheapest" : "gaps");
 		},
@@ -1038,7 +1231,7 @@ export default function IntelligenceMapSplit({
 
 	const closePlace = useCallback(() => {
 		setLivePlaceId("");
-		patchSearch({ neighborhood: undefined, place: undefined });
+		patchSearch({ place: undefined });
 	}, [patchSearch]);
 	const stepOpportunity = useCallback(
 		(dir: -1 | 1) => {
@@ -1103,6 +1296,8 @@ export default function IntelligenceMapSplit({
 					onSearchSubmit={(q) => {
 						clearAsk();
 						patchSearch({ q: q || undefined, place: undefined });
+						/* Whether someone searched, never what they typed. */
+						track("search_submit", { has_query: Boolean(q), source: "sheet" });
 					}}
 					rail={rail}
 					onRail={applyRail}
@@ -1173,15 +1368,27 @@ export default function IntelligenceMapSplit({
 					onView={applyView}
 					sort={sort}
 					onSort={applySort}
-					onNeedLocation={locateUser}
 					basemap={basemap}
 					onBasemapChange={setBasemap}
 					legendOpen={legendOpen}
 					onLegendOpenChange={setLegendOpen}
+					districts={cityDistricts}
+					selectedDistrictId={neighborhoodId}
+					onSelectDistrict={selectDistrict}
+					onClearDistrict={clearDistrict}
+					districtLens={districtLens}
+					onDistrictLensChange={(lens) => {
+						setDistrictLens(lens);
+						track("lens_change", { lens });
+					}}
+					appLensProviders={appLensProviders}
 				/>
 
-				{readyMeta ? <div className="absolute inset-x-3 top-3 z-[500] hidden flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:py-3">
-					<div className="flex min-w-0 items-center gap-4">
+				{readyMeta ? <div className="absolute inset-x-3 top-3 z-[500] hidden flex-col gap-3 rounded-2xl bg-white p-4 shadow-[0_8px_8px_rgba(0,0,0,0.1)] lg:flex lg:flex-row lg:flex-wrap lg:items-center lg:justify-between lg:gap-x-4 lg:gap-y-2 lg:py-3">
+					{/* Wraps instead of overlapping: at 1024–1440 the fixed-width controls
+					    used to slide on top of each other, and «اختر حي» — a white pill with
+					    a shadow — landed squarely over «خريطة / قائمة». */}
+					<div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-4">
 						<div className="flex shrink-0 items-center gap-1.5">
 							<FarqBrandMark variant="lockup" size={29} />
 							<label className="relative lg:hidden">
@@ -1212,7 +1419,7 @@ export default function IntelligenceMapSplit({
 						</div>
 						<span className="hidden h-6 w-px bg-[#e6eef0] lg:block" aria-hidden />
 						<label className="relative hidden items-center gap-1 lg:flex">
-							<MapPin className="size-3.5 shrink-0 text-[#6b7c7c]" />
+							<MapPin className="size-3.5 shrink-0 text-[#5c6d6d]" />
 							<select
 								value={city}
 								onChange={(e) =>
@@ -1233,8 +1440,17 @@ export default function IntelligenceMapSplit({
 									</option>
 								))}
 							</select>
-							<ChevronDown className="pointer-events-none absolute end-0 size-3 text-[#6b7c7c]" />
+							<ChevronDown className="pointer-events-none absolute end-0 size-3 text-[#5c6d6d]" />
 						</label>
+						<FarqDistrictPicker
+							districts={cityDistricts}
+							selectedId={neighborhoodId}
+							isRTL={isRTL}
+							onSelect={selectDistrict}
+							onClear={clearDistrict}
+							variant="toolbar"
+							className="hidden lg:block"
+						/>
 						<span className="hidden h-6 w-px bg-[#e6eef0] lg:block" aria-hidden />
 						<form
 							className="flex min-w-0 flex-1 items-center gap-2"
@@ -1245,10 +1461,11 @@ export default function IntelligenceMapSplit({
 								else {
 									clearAsk();
 									patchSearch({ q: text || undefined, place: undefined });
+									track("search_submit", { has_query: Boolean(text), source: "toolbar" });
 								}
 							}}
 						>
-							<Search className="size-4 shrink-0 text-[#6b7c7c]" />
+							<Search className="size-4 shrink-0 text-[#5c6d6d]" />
 							<input
 								value={mapQuery}
 								onChange={(e) => setMapQuery(e.target.value)}
@@ -1257,7 +1474,7 @@ export default function IntelligenceMapSplit({
 										? "ابحث أو اسأل فرق: وين أكبر فرق حولي؟"
 										: "Search or ask Farq: biggest gap near me?"
 								}
-								className="h-7 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c] lg:max-w-[14rem]"
+								className="h-7 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#5c6d6d] lg:max-w-[14rem]"
 								data-testid="intelligence-map-search"
 								aria-label={isRTL ? "بحث على الخريطة" : "Search the map"}
 							/>
@@ -1271,7 +1488,6 @@ export default function IntelligenceMapSplit({
 						isRTL={isRTL}
 						nearReady={nearReady}
 						cheapReady={cheapestReady}
-						onNeedLocation={locateUser}
 					/>
 					<div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6eef0] pt-2.5 lg:border-0 lg:pt-0">
 						<div className="flex items-center gap-1">
@@ -1299,7 +1515,7 @@ export default function IntelligenceMapSplit({
 								<ChevronDown className="pointer-events-none absolute end-2 top-1/2 size-3 -translate-y-1/2 text-brand-900" />
 							</label>
 						</div>
-						<label className="flex items-center gap-2 text-[12px] text-[#6b7c7c]">
+						<label className="flex items-center gap-2 text-[12px] text-[#5c6d6d]">
 							<span className="hidden lg:inline">
 								{isRTL ? "فروقات ملحوظة فقط" : "Observed gaps only"}
 							</span>
@@ -1331,7 +1547,7 @@ export default function IntelligenceMapSplit({
 								className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${
 									basemap === "satellite"
 										? "bg-brand-900 text-mint-500"
-										: "text-[#6b7c7c]"
+										: "text-[#5c6d6d]"
 								}`}
 								onClick={() => setBasemap("satellite")}
 							>
@@ -1343,7 +1559,7 @@ export default function IntelligenceMapSplit({
 								className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${
 									basemap === "standard"
 										? "bg-brand-900 text-mint-500"
-										: "text-[#6b7c7c]"
+										: "text-[#5c6d6d]"
 								}`}
 								onClick={() => setBasemap("standard")}
 							>
@@ -1386,8 +1602,8 @@ export default function IntelligenceMapSplit({
 							countLabel={
 								topSavings.length
 									? isRTL
-										? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص حولك`
-										: `Top ${topSavings.length} opportunities around you`
+										? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص ${nearLabel}`
+										: `Top ${topSavings.length} opportunities ${nearLabel}`
 									: undefined
 							}
 						/>
@@ -1406,6 +1622,8 @@ export default function IntelligenceMapSplit({
 						<FarqMap
 							places={displayPlaces}
 							areas={cityAreas}
+							districts={cityDistricts}
+							districtLens={districtLens}
 							bottomInset={sheetInset}
 							initialCamera={initialCamera}
 							neighborhoods={hoods}
@@ -1424,11 +1642,9 @@ export default function IntelligenceMapSplit({
 								setSheetSnap("half");
 								lastFocusedPlaceRef.current = id;
 								setComparePanelHidden(false);
-								patchSearch({ place: id, neighborhood: undefined });
+								patchSearch({ place: id });
 							}}
-							onSelectNeighborhood={(id) =>
-								patchSearch({ neighborhood: id, place: undefined })
-							}
+							onSelectNeighborhood={selectDistrict}
 							onViewChange={onViewChange}
 							sheetOpen={Boolean(livePlaceId) && !comparePanelHidden}
 							onMapInteraction={onMapInteraction}
@@ -1492,7 +1708,12 @@ export default function IntelligenceMapSplit({
 						className="farq-legend-info"
 						aria-expanded={legendOpen}
 						aria-controls="farq-map-legend"
-						onClick={() => setLegendOpen((v) => !v)}
+						onClick={() => {
+							setLegendOpen((v) => {
+								if (!v) track("legend_open", { lens: districtLens });
+								return !v;
+							});
+						}}
 						aria-label={isRTL ? "دليل الخريطة" : "Map legend"}
 					>
 						<Info className="size-4" />
@@ -1505,10 +1726,115 @@ export default function IntelligenceMapSplit({
 							className="farq-legend-popover text-[12px]"
 							data-testid="intelligence-map-legend"
 						>
-							<p className="mb-2 text-right text-[13px] font-bold text-brand-900">
-								{isRTL ? "دليل طبقة المقارنة" : "Comparison layer legend"}
+							<p className="mb-2 text-start text-[13px] font-bold text-brand-900">
+								{isRTL ? "دليل الخريطة" : "Map legend"}
 							</p>
-							<ul className="space-y-2 text-[#6b7c7c]">
+							<p className="farq-legend-kicker">{isRTL ? "لون الحي يعني" : "District colour means"}</p>
+							{/* The legend explains the colour, so it is also where you change what
+							    the colour answers. Both lenses read the same server numbers. */}
+							<div className="farq-legend-lens" role="group" aria-label={isRTL ? "معنى اللون" : "Colour meaning"}>
+								{(
+									[
+										["gap", isRTL ? "عدد الفرص" : "Opportunities"],
+										["app", isRTL ? "التطبيق الأرخص" : "Cheapest app"],
+									] as const
+								).map(([id, label]) => (
+									<button
+										key={id}
+										type="button"
+										aria-pressed={districtLens === id}
+										className={districtLens === id ? "is-on" : ""}
+										data-testid={`intelligence-map-lens-${id}`}
+										onClick={() => {
+											setDistrictLens(id);
+											track("lens_change", { lens: id });
+										}}
+									>
+										{label}
+									</button>
+								))}
+							</div>
+							{districtLens === "gap" ? (
+								<>
+									<div className="farq-legend-scale" aria-hidden>
+										{[{ min: 0, opacity: 0 }, ...DISTRICT_FILL_STEPS].map((s) => (
+											<span key={s.min} className="farq-legend-swatch" style={{ "--o": s.opacity } as CSSProperties} />
+										))}
+									</div>
+									<div className="farq-legend-scale-labels" aria-hidden>
+										{[0, ...DISTRICT_FILL_STEPS.map((s) => s.min)].map((m, i) => (
+											<span key={m}>{i === 0 ? localizeDigitString("0", isRTL) : `${localizeDigitString(String(m), isRTL)}+`}</span>
+										))}
+									</div>
+									<p className="farq-legend-note">
+										{isRTL
+											? "اللون: عدد الفرص المرصودة في الحي · الرقم على الحي: أكبر فرق فيه"
+											: "Tint: observed opportunities in the district · number on it: its biggest gap"}
+									</p>
+								</>
+							) : (
+								<>
+									<ul className="farq-legend-apps">
+										{appLensProviders.map((provider) => (
+											<li key={provider}>
+												<span
+													className="farq-legend-app-swatch"
+													style={{ "--app": PROVIDER_MAP_COLOR[provider] || "#94a3b8" } as CSSProperties}
+													aria-hidden
+												/>
+												<span>{getProviderLabel(provider, { isRTL }) || provider}</span>
+											</li>
+										))}
+										{appLensProviders.length === 0 ? (
+											<li className="farq-legend-apps-empty">
+												{isRTL ? "لا يوجد حي بمقارنات كافية بعد" : "No district has enough comparisons yet"}
+											</li>
+										) : null}
+									</ul>
+									{/* The two states that are not a win, each with its own mark — a third
+									    of the city is one of them, and neither used to be in the key. */}
+									<ul className="farq-legend-apps farq-legend-apps--states">
+										<li>
+											<span className="farq-legend-app-swatch is-close" aria-hidden />
+											<span>{isRTL ? "متقارب — لا فائز واضح" : "Too close to call"}</span>
+										</li>
+										<li>
+											<span className="farq-legend-app-swatch is-empty" aria-hidden />
+											<span>{isRTL ? "مقارنات غير كافية" : "Not enough comparisons"}</span>
+										</li>
+									</ul>
+									<p className="farq-legend-note">
+										{isRTL
+											? `يُسمّى تطبيق فائز فقط من ${localizeDigitString("8", true)} مقارنات فأكثر وبفارق ${localizeDigitString("5", true)}٪ على الأقل — وكثافة اللون بحجم الفارق.`
+											: "An app is named only from 8 comparisons up and a lead of at least 5 points — the stronger the lead, the stronger the colour."}
+									</p>
+								</>
+							)}
+							<ul className="space-y-2 text-[#5c6d6d]">
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-selected" aria-hidden />
+									<span>
+										{isRTL
+											? "الحي المحدد — إطار حوله، والقائمة والعنوان يصفانه هو فقط"
+											: "Selected district — outlined, and the list and headline describe it alone"}
+									</span>
+								</li>
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-3d-cluster" aria-hidden />
+									<span>
+										{isRTL
+											? "تجمّع فرص: الرقم الكبير أكبر فرق داخله، الصغير عددها"
+											: "Cluster: big number = biggest gap inside, small = how many"}
+									</span>
+								</li>
+								<li className="flex items-center gap-2">
+									<span className="farq-legend-disc" aria-hidden>36</span>
+									<span>
+										{isRTL
+											? "فرصة واحدة — حجم القرص بحجم الفرق: ٣٦+ · ١٥–٣٥ · ٥–١٤ · أقل من ٥ ر.س"
+											: "One opportunity — disc size by gap: 36+ · 15–35 · 5–14 · under 5 SAR"}
+									</span>
+								</li>
 								<li className="flex items-center gap-2">
 									<span className="farq-legend-bubble" aria-hidden>
 										<FarqBrandMark variant="circle" size={10} />
@@ -1518,29 +1844,13 @@ export default function IntelligenceMapSplit({
 									</span>
 									<span>
 										{isRTL
-											? "هالة فرق السعر المرصود"
-											: "Observed price-difference aura"}
-									</span>
-								</li>
-								<li className="flex items-center gap-2">
-									<span className="farq-legend-dot" aria-hidden />
-									<span>
-										{isRTL
-											? "مطعم بدون فرق مرصود"
-											: "Restaurant without an observed gap"}
-									</span>
-								</li>
-								<li className="flex items-center gap-2">
-									<span className="farq-legend-3d-cluster" aria-hidden />
-									<span>
-										{isRTL
-											? "تجمّع فرص (قم بالتقريب للهالات)"
-											: "Opportunity clusters (zoom in to see auras)"}
+											? "عند التقريب: شعار التطبيق الأرخص وفرقه المرصود"
+											: "Zoomed in: the cheapest app's logo and its observed gap"}
 									</span>
 								</li>
 							</ul>
 							<p className="mt-2 text-[10px] font-bold text-brand-900">
-								{isRTL ? "«حجم الدبوس = حجم الفرق»" : "«Pin size = gap size»"}
+								{isRTL ? "كل رقم من مقارنة مرصودة — لا شيء مُخترع" : "Every number is an observed comparison — nothing invented"}
 							</p>
 						</div>
 					</div>
@@ -1568,16 +1878,18 @@ export default function IntelligenceMapSplit({
 					<>
 					<div className="flex items-center justify-between border-b border-[#e6eef0] px-5 py-4">
 						<h2 className="min-w-0 truncate text-[16px] font-bold text-brand-900">
-							{selectedHood
-								? `${isRTL ? "تفاصيل الحي" : "Neighborhood detail"} · ${selectedHood.properties.neighborhood_ar || selectedHood.properties.neighborhood_en}`
-								: isRTL
-									? "تفاصيل الفرق"
-									: "Farq difference"}
+							{selectedDistrict
+								? `${isRTL ? "حي" : "District"} · ${districtName}`
+								: selectedHood
+									? `${isRTL ? "تفاصيل الحي" : "Neighborhood detail"} · ${selectedHood.properties.neighborhood_ar || selectedHood.properties.neighborhood_en}`
+									: isRTL
+										? "تفاصيل الفرق"
+										: "Farq difference"}
 						</h2>
 						<div className="flex shrink-0 items-center gap-1">
 							<button
 								type="button"
-								className="rounded-full p-1 text-[#6b7c7c] hover:bg-[#e6eef0]"
+								className="rounded-full p-1 text-[#5c6d6d] hover:bg-[#e6eef0]"
 								aria-label={isRTL ? "إخفاء" : "Hide"}
 								data-testid="intelligence-map-panel-hide"
 								onClick={() => setComparePanelHidden(true)}
@@ -1591,7 +1903,7 @@ export default function IntelligenceMapSplit({
 							{neighborhoodId ? (
 								<button
 									type="button"
-									className="rounded-full p-1 text-[#6b7c7c] hover:bg-[#e6eef0]"
+									className="rounded-full p-1 text-[#5c6d6d] hover:bg-[#e6eef0]"
 									aria-label={isRTL ? "إغلاق" : "Close"}
 									onClick={() =>
 										patchSearch({ neighborhood: undefined, place: undefined })
@@ -1604,13 +1916,13 @@ export default function IntelligenceMapSplit({
 					</div>
 				<div className="flex-1 space-y-4 overflow-y-auto">
 					<div className="space-y-4 p-5">
-					{!neighborhoodId ? (
+					{!neighborhoodId || selectedDistrict ? (
 						<div className="space-y-4">
-						<p className="text-[13px] text-[#6b7c7c]">
-							{isRTL
-								? "وين أقدر أوفّر فلوسي الآن؟ القائمة والخارطة نفس الفرص — أكبر فرق حولك، بدون اختراع سعر أو إحداثيات."
-								: "Where can you save money now? List and map are the same opportunities — biggest observed gaps, never invented prices or coordinates."}
-						</p>
+						{/* The one true sentence about what the camera is showing. It was
+						    computed for both viewports but only ever rendered inside the
+						    phone's sheet header, so the desktop — the investor screen —
+						    got a tagline instead of the numbers. */}
+						<div className="farq-sheet-headline farq-panel-headline">{headline}</div>
 						{ask ? (
 							<FarqAnswerCard
 								question={ask.question}
@@ -1623,13 +1935,17 @@ export default function IntelligenceMapSplit({
 								onClose={clearAsk}
 							/>
 						) : null}
-						{topSavings.length ? (
+						{/* In list view the main column already is this list; rendering it in
+						    the panel too printed the same 30 cards twice, side by side. */}
+						{topSavings.length && view !== "list" ? (
 							<div data-testid="intelligence-map-top-savings">
-								<h3 className="mb-2 text-[13px] font-bold text-brand-900">
-									{isRTL
-										? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص حولك`
-										: `Top ${topSavings.length} opportunities around you`}
-								</h3>
+								<div className="mb-2 flex items-baseline justify-between gap-2">
+									<h3 className="text-[13px] font-bold text-brand-900">
+										{isRTL
+											? `أفضل ${localizeDigitString(String(topSavings.length), true)} فرص ${nearLabel}`
+											: `Top ${topSavings.length} opportunities ${nearLabel}`}
+									</h3>
+								</div>
 								<ul className="space-y-1.5">
 									{topSavings.map((row) => (
 										<li key={row.placeId}>
@@ -1768,10 +2084,10 @@ export default function IntelligenceMapSplit({
 							</Link>
 						</Button>
 					)}
-					<p className="mt-2 text-[11px] text-[#6b7c7c]">
+					<p className="mt-2 text-[11px] text-[#5c6d6d]">
 						{isRTL
-							? "يفتح مقارنة فرق الحالية — بدون سكّ place_id."
-							: "Opens the live Farq compare flow — no new place_id."}
+							? "يفتح المقارنة الكاملة على فرق."
+							: "Opens the full comparison on Farq."}
 					</p>
 				</div>
 					</>

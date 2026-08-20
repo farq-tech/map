@@ -205,7 +205,7 @@
 	height: 24px;
 	border-radius: 12px;
 	border-width: 1.5px;
-	border-color: #6b7c7c;
+	border-color: #5c6d6d;
 	background: #022222;
 	box-shadow: none;
 }
@@ -359,7 +359,7 @@
 }
 
 .farq-3d-pin-chip-label {
-	color: #6b7c7c;
+	color: #5c6d6d;
 	font-family: Tajawal, system-ui, sans-serif;
 	font-size: 8px;
 	font-weight: 400;
@@ -383,7 +383,7 @@
 .farq-3d-pin-chip.farq-3d-pin-badge--mark .farq-3d-pin-initial {
 	font-size: 7px;
 	font-weight: 400;
-	color: #6b7c7c;
+	color: #5c6d6d;
 }
 
 .farq-3d-pin-more {
@@ -395,7 +395,7 @@
 	padding: 1px 4px;
 	transform: none;
 	background: #0b2d2d;
-	color: #6b7c7c;
+	color: #5c6d6d;
 	font-family: Tajawal, system-ui, sans-serif;
 	font-size: 7px;
 	font-weight: 800;
@@ -423,7 +423,7 @@
 .farq-3d-pin--restaurant .farq-3d-pin-stem {
 	width: 1.5px;
 	height: 10px;
-	background: #6b7c7c;
+	background: #5c6d6d;
 }
 
 .farq-3d-pin-stem-shine {
@@ -616,7 +616,7 @@
 	width: 2px;
 	height: 10px;
 	margin-top: 2px;
-	background: #6b7c7c;
+	background: #5c6d6d;
 }
 
 /* ── Price Aura chip (overlay only — no map restyle, no backdrop-filter) ─ */
@@ -1654,7 +1654,7 @@
 .farq-opportunity-place,
 .farq-opportunity-distance {
 	margin: 0;
-	color: #6b7c7c;
+	color: #5c6d6d;
 	font-size: 12px;
 	font-weight: 700;
 }
@@ -1784,7 +1784,7 @@
 	display: flex;
 	align-items: center;
 	gap: 0.35rem;
-	color: #6b7c7c;
+	color: #5c6d6d;
 	font-size: 11px;
 	font-weight: 800;
 }
@@ -1809,7 +1809,7 @@
 }
 
 .farq-map-drawer-item.is-muted {
-	color: #6b7c7c;
+	color: #5c6d6d;
 }
 
 .farq-map-skeleton {
@@ -2558,4 +2558,510 @@
 	font-size: 10.5px;
 	font-weight: 700;
 	color: #5e7471;
+}
+
+/* A selected حي names itself in the headline; one small control lets it go. */
+.farq-sheet-headline strong .farq-headline-clear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	margin-inline-start: 8px;
+	border-radius: 9999px;
+	background: #e6eef0;
+	color: #043434;
+	font-size: 13px;
+	font-weight: 800;
+	line-height: 1;
+	vertical-align: middle;
+	cursor: pointer;
+}
+
+.farq-sheet-headline strong .farq-headline-clear:hover,
+.farq-sheet-headline strong .farq-headline-clear:focus-visible {
+	background: #83f1b1;
+	outline: none;
+}
+
+/* ---- District picker: "اختر حي" at any zoom, on any device ---- */
+.farq-district-picker {
+	position: relative;
+	min-width: 0;
+}
+
+.farq-district-picker-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	height: 28px;
+	max-width: 15rem;
+	padding-inline: 0.6rem;
+	border: 1px solid rgba(230, 238, 240, 0.95);
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.92);
+	color: #043434;
+	font-size: 12px;
+	font-weight: 800;
+	box-shadow: 0 2px 8px rgba(4, 52, 52, 0.08);
+}
+
+.farq-district-picker-btn.is-on {
+	background: #83f1b1;
+	border-color: #83f1b1;
+}
+
+.farq-district-picker-btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.farq-district-picker--toolbar .farq-district-picker-btn {
+	height: 30px;
+	font-size: 13px;
+}
+
+.farq-district-picker-pop {
+	position: absolute;
+	top: calc(100% + 6px);
+	inset-inline-start: 0;
+	z-index: 650;
+	width: min(320px, calc(100vw - 1.5rem));
+	padding: 10px;
+	border-radius: 14px;
+	background: #fff;
+	box-shadow: 0 10px 28px rgba(4, 52, 52, 0.18);
+}
+
+.farq-district-picker-search {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	height: 36px;
+	padding-inline: 0.6rem;
+	border-radius: 10px;
+	background: #eef4f4;
+	color: #5c6d6d;
+}
+
+.farq-district-picker-search input {
+	flex: 1;
+	min-width: 0;
+	height: 100%;
+	background: transparent;
+	font-size: 13px;
+	color: #043434;
+}
+
+.farq-district-picker-search input::placeholder {
+	color: #5c6d6d;
+}
+
+.farq-district-picker-search button {
+	display: inline-flex;
+	width: 22px;
+	height: 22px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9999px;
+	color: #043434;
+}
+
+.farq-district-picker-list {
+	margin-top: 8px;
+	max-height: min(52dvh, 380px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.farq-district-picker-list li > button {
+	display: flex;
+	width: 100%;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 7px 9px;
+	border-radius: 10px;
+	text-align: start;
+	font-size: 13px;
+	font-weight: 800;
+	color: #043434;
+}
+
+.farq-district-picker-list li > button:hover,
+.farq-district-picker-list li > button:focus-visible {
+	background: #eef4f4;
+	outline: none;
+}
+
+.farq-district-picker-list li > button.is-on {
+	background: #83f1b1;
+}
+
+.farq-district-picker-list .meta {
+	flex-shrink: 0;
+	font-size: 11px;
+	font-weight: 700;
+	color: #5e7471;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.farq-district-picker-list .is-empty .name,
+.farq-district-picker-list .is-empty .meta {
+	color: #667878;
+}
+
+.farq-district-picker-empty {
+	padding: 12px;
+	font-size: 12px;
+	font-weight: 700;
+	color: #5c6d6d;
+	text-align: center;
+}
+
+.farq-district-picker-clear {
+	margin-top: 8px;
+	width: 100%;
+	height: 34px;
+	border-radius: 10px;
+	background: #e6eef0;
+	font-size: 12px;
+	font-weight: 800;
+	color: #043434;
+}
+
+.farq-district-picker-hint {
+	margin-top: 6px;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: #5c6d6d;
+	text-align: center;
+}
+
+.farq-map-district-row {
+	display: flex;
+	transition: opacity 220ms ease;
+}
+
+.farq-explore-chrome.is-hidden .farq-map-district-row,
+.farq-map-split[data-chrome-hidden="true"] .farq-explore-chrome .farq-map-district-row {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ---- The حي under the cursor names itself ---- */
+.farq-district-hover-chip {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 25;
+	margin: 16px 0 0 16px;
+	padding: 4px 10px;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.96);
+	color: #043434;
+	font-size: 12px;
+	font-weight: 800;
+	line-height: 1.4;
+	white-space: nowrap;
+	pointer-events: none;
+	box-shadow: 0 4px 12px rgba(4, 52, 52, 0.14);
+	will-change: transform;
+}
+
+.farq-district-hover-chip[hidden] {
+	display: none;
+}
+
+/* ---- Legend: the district scale is drawn from the layer's own steps ---- */
+.farq-legend-kicker {
+	margin: 0 0 6px;
+	font-size: 11px;
+	font-weight: 800;
+	color: #043434;
+}
+
+.farq-legend-scale {
+	display: flex;
+	gap: 3px;
+}
+
+.farq-legend-swatch {
+	flex: 1;
+	height: 14px;
+	border-radius: 4px;
+	/* mint at the layer's opacity over a basemap-like ground */
+	background:
+		linear-gradient(rgba(131, 241, 177, var(--o, 0)), rgba(131, 241, 177, var(--o, 0))),
+		#4a5568;
+}
+
+.farq-legend-scale-labels {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 3px;
+	font-size: 10px;
+	font-weight: 700;
+	color: #5c6d6d;
+	font-variant-numeric: tabular-nums;
+}
+
+.farq-legend-note {
+	margin: 6px 0 10px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: #5c6d6d;
+}
+
+/* Drawn exactly as the map draws it: a white casing under a dark rule, and no
+   fill — a mint wash here would promise a colour the map stopped painting. */
+.farq-legend-selected {
+	display: inline-block;
+	flex-shrink: 0;
+	width: 18px;
+	height: 13px;
+	border: 2px solid #043434;
+	border-radius: 3px;
+	background: transparent;
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.farq-legend-disc {
+	display: inline-flex;
+	flex-shrink: 0;
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	border: 1.5px solid #fff;
+	border-radius: 9999px;
+	background: #83f1b1;
+	color: #043434;
+	font-size: 9px;
+	font-weight: 800;
+	box-shadow: 0 0 0 1px rgba(4, 52, 52, 0.2);
+}
+
+/* The canvas rule above stretches every direct child of the root to the map; the hover chip is not a canvas. */
+.farq-map-canvas .farq-mapbox-root > .farq-district-hover-chip {
+	inset: auto;
+	top: 0;
+	left: 0;
+	width: max-content;
+	max-width: calc(100% - 2rem);
+	height: auto;
+	min-height: 0;
+}
+
+/* ---- Legend: switch what the colour answers, and name the apps it uses ---- */
+.farq-legend-lens {
+	display: flex;
+	gap: 3px;
+	margin-bottom: 8px;
+	padding: 2px;
+	border-radius: 9999px;
+	background: #eef4f4;
+}
+
+.farq-legend-lens button {
+	flex: 1;
+	height: 26px;
+	border-radius: 9999px;
+	font-size: 11px;
+	font-weight: 800;
+	color: #5e7471;
+}
+
+.farq-legend-lens button.is-on {
+	background: #043434;
+	color: #83f1b1;
+}
+
+.farq-legend-apps {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	margin-bottom: 6px;
+}
+
+.farq-legend-apps li {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 11px;
+	font-weight: 700;
+	color: #043434;
+}
+
+.farq-legend-apps-empty {
+	color: #5c6d6d;
+	font-weight: 700;
+}
+
+.farq-legend-app-swatch {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border-radius: 3px;
+	box-shadow: 0 0 0 1px rgba(4, 52, 52, 0.15);
+	/* Composited exactly as the map paints it — brand hex at the layer's own
+	 * opacity over a basemap-like ground. Showing the raw brand colour here put
+	 * fire-engine red in the key against a dull mauve on the map. */
+	background:
+		linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0)),
+		color-mix(in srgb, var(--app, #94a3b8) 34%, #4a5568);
+}
+
+.farq-legend-app-swatch.is-close {
+	background: color-mix(in srgb, #94a3b8 14%, #4a5568);
+}
+
+.farq-legend-app-swatch.is-empty {
+	background: #4a5568;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.farq-legend-apps--states {
+	margin-top: 2px;
+	padding-top: 6px;
+	border-top: 1px solid #eef4f4;
+}
+
+/* ---- How old the prices are, always on screen ---- */
+.farq-sheet-headline .farq-freshness {
+	font-size: 10.5px;
+	font-weight: 700;
+	color: #5c6d6d;
+}
+
+.farq-sheet-headline .farq-freshness.is-stale {
+	color: #a15c00;
+}
+
+.farq-freshness-inline {
+	flex-shrink: 0;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: #5c6d6d;
+	white-space: nowrap;
+}
+
+.farq-freshness-inline.is-stale {
+	color: #a15c00;
+}
+
+/* The headline reads the same in the phone's sheet and the desktop panel.
+ * The sheet's own typography lives inside a mobile media query, so the panel
+ * has to state its colours itself — inheriting left the main sentence white
+ * on a white panel, present in the DOM and invisible on screen. */
+.farq-panel-headline {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	padding-bottom: 2px;
+	text-align: start;
+}
+
+.farq-panel-headline strong {
+	font-size: 15px;
+	font-weight: 800;
+	color: #043434;
+	line-height: 1.35;
+	font-variant-numeric: tabular-nums;
+}
+
+.farq-panel-headline span {
+	font-size: 11.5px;
+	font-weight: 700;
+	color: #5e7471;
+	line-height: 1.4;
+}
+
+/* What backs the number: evidence depth, item kind, branches, distance. */
+.farq-opportunity-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	margin-top: 4px;
+	font-size: 10.5px;
+	font-weight: 700;
+	color: #5c6d6d;
+	font-variant-numeric: tabular-nums;
+}
+
+.farq-opportunity-tag {
+	padding: 1px 6px;
+	border-radius: 9999px;
+	background: #eef4f4;
+	color: #5e7471;
+}
+
+.farq-opportunity-tag.is-category {
+	background: #83f1b1;
+	color: #043434;
+}
+
+/* Toolbar controls hold their size instead of sliding over their neighbours. */
+.farq-view-sort {
+	flex: 0 0 auto;
+}
+
+.farq-district-picker--toolbar {
+	flex: 0 0 auto;
+}
+
+.farq-district-picker--toolbar .farq-district-picker-btn {
+	max-width: 11rem;
+}
+
+/* One branded focus ring. The browser default (#005FCC) clashed with teal and
+   vanished entirely on the dark header, and every control was using it. */
+.farq-map-split :focus-visible,
+.farq-explore-chrome :focus-visible,
+.farq-district-picker :focus-visible {
+	outline: 2px solid #043434;
+	outline-offset: 2px;
+	border-radius: 6px;
+}
+
+.farq-map-split .farq-map-topbar :focus-visible,
+.farq-mapbox-root :focus-visible {
+	outline-color: #83f1b1;
+}
+
+/* Touch targets: the × that clears a حي is the only way back to the city. */
+.farq-sheet-headline strong .farq-headline-clear {
+	width: 44px;
+	height: 44px;
+	margin-inline-start: 4px;
+	background: transparent;
+	font-size: 18px;
+	vertical-align: middle;
+}
+
+.farq-sheet-headline strong .farq-headline-clear::before {
+	content: "";
+	position: absolute;
+	inset: 12px;
+	border-radius: 9999px;
+	background: #e6eef0;
+	z-index: -1;
+}
+
+.farq-sheet-headline strong .farq-headline-clear {
+	position: relative;
+	z-index: 0;
+}
+
+.farq-district-picker-list li > button {
+	min-height: 44px;
+}
+
+.farq-district-picker-btn {
+	min-height: 36px;
 }

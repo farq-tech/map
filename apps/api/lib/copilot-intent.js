@@ -15,6 +15,7 @@ const { classifyQuestion } = require('./chat-policy');
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
 const EXTENDED_INDIC = '۰۱۲۳۴۵۶۷۸۹';
 
+/* نسخة الويب: normalizeSearchText في apps/web/src/lib/farqTextSearch.ts — عدّل الاثنين معاً. */
 function normalizeArabic(raw) {
   let s = String(raw || '');
   s = s.replace(/[٠-٩]/g, (ch) => String(ARABIC_INDIC.indexOf(ch)));
@@ -78,7 +79,7 @@ function providersIn(text) {
 
 /** Category vocabulary — the words people use, mapped to search terms over item/restaurant names. */
 const CATEGORY_GROUPS = Object.freeze([
-  { id: 'burgers', terms: ['برجر', 'برغر', 'burger'] },
+  { id: 'burgers', terms: ['برجر', 'برغر', 'برقر', 'همبرجر', 'burger'] },
   { id: 'pizza', terms: ['بيتزا', 'pizza'] },
   { id: 'coffee', terms: ['قهوه', 'كوفي', 'كافيه', 'لاتيه', 'اسبريسو', 'coffee', 'latte'] },
   { id: 'shawarma', terms: ['شاورما', 'shawarma'] },

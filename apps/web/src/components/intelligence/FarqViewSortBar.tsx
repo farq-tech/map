@@ -8,7 +8,6 @@ export default function FarqViewSortBar({
 	isRTL,
 	nearReady,
 	cheapReady,
-	onNeedLocation,
 	hideViewToggle = false,
 }: {
 	view: MapViewMode;
@@ -18,7 +17,6 @@ export default function FarqViewSortBar({
 	isRTL: boolean;
 	nearReady: boolean;
 	cheapReady: boolean;
-	onNeedLocation?: () => void;
 	/** On the phone the list is the sheet; there is no "view" to toggle. */
 	hideViewToggle?: boolean;
 }) {
@@ -71,10 +69,10 @@ export default function FarqViewSortBar({
 								: "Nearest needs your observed location"
 					}
 					className={`farq-map-chip ${sort === "near" ? "is-on" : ""}`}
-					onClick={() => {
-						if (!nearReady) onNeedLocation?.();
-						onSort("near");
-					}}
+					/* Asking for location belongs to whoever owns `onSort` — it already
+					 * requests a fix when "near" is picked without one, and the drawer
+					 * reaches the same handler. Calling it here too fired the intent twice. */
+					onClick={() => onSort("near")}
 				>
 					{isRTL ? "الأقرب" : "Nearest"}
 				</button>

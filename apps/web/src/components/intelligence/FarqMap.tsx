@@ -1,7 +1,9 @@
 /**
  * Farq difference map — Mapbox GL Standard, comparison-row coords.
- * Neighborhood polygons are never a choropleth mosaic. An optional line-outline
- * toggle (Golden NCP, default off) may stroke rings — no fill.
+ * At city zoom the field is the official أحياء (MOMRAH polygons), each tinted
+ * only by how many observed opportunities fall inside it; H3 cells are the
+ * fallback for a city without boundaries. An optional line-outline toggle
+ * (Golden NCP, default off) may stroke rings — no fill.
  * Never invents pins, never remints place_id, never fakes GPS.
  * App logo is the pin hero. The price chip is always smaller.
  * GPU symbols at every zoom for unselected places. One HTML pin = selected.
@@ -13,6 +15,9 @@ import type { MapboxSearchBox } from "@mapbox/search-js-web";
 import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
+import { localizeDigitString } from "../../lib/formatPrice";
+import { getProviderLabel } from "../../lib/platformLogos";
 import {
 	shouldShow3dObjects,
 	shouldSkipGlobeIntro,
@@ -40,7 +45,22 @@ import {
 	syncPriceTileData,
 } from "../../lib/farqPriceTiles";
 import { ensureAreaLayers, syncAreaData } from "../../lib/farqAreaTiles";
-import type { CityAreas } from "../../services/intelligenceService";
+import {
+	bindDistrictClick,
+	bindDistrictHover,
+	ensureDistrictLayers,
+	setDistrictLens,
+	setDistrictLocale,
+	setSelectedDistrict,
+	syncDistrictData,
+	type DistrictLens,
+} from "../../lib/farqDistrictTiles";
+import {
+	PRICE_TILE_CLUSTERS,
+	PRICE_TILE_ICONS,
+	PRICE_TILE_POINTS,
+} from "../../lib/farqPriceTiles";
+import type { CityAreas, CityDistricts } from "../../services/intelligenceService";
 import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
 import {
 	getMapboxAccessToken,
@@ -357,7 +377,7 @@ export default function FarqMap({
 	places,
 	neighborhoods: _neighborhoods,
 	selectedPlaceId,
-	selectedNeighborhoodId: _selectedNeighborhoodId,
+	selectedNeighborhoodId = "",
 	focusRequest = null,
 	userLocation,
 	showUserLocation = false,
@@ -366,11 +386,13 @@ export default function FarqMap({
 	basemap: basemapProp,
 	onBasemapChange,
 	onSelectPlace,
-	onSelectNeighborhood: _onSelectNeighborhood,
+	onSelectNeighborhood,
 	onViewChange,
 	bottomInset = 0,
 	initialCamera = null,
 	areas = null,
+	districts = null,
+	districtLens = "gap",
 	hideAddressSearch = false,
 	sheetOpen = false,
 	gisNeighborhoods = null,
@@ -407,6 +429,10 @@ export default function FarqMap({
 	initialCamera?: { center: [number, number]; zoom: number } | null;
 	/** H3 cells for the city zoom — the opportunity field under the clusters. */
 	areas?: CityAreas | null;
+	/** The city's أحياء with their counts; when present they are the field and the H3 cells stay hidden. */
+	districts?: CityDistricts | null;
+	/** What the district colour means: how many opportunities, or which app wins. */
+	districtLens?: DistrictLens;
 	hideAddressSearch?: boolean;
 	sheetOpen?: boolean;
 	onMapInteraction?: (phase: "start" | "end") => void;
@@ -462,16 +488,73 @@ export default function FarqMap({
 
 	const areasRef = useRef(areas);
 	areasRef.current = areas;
+	const districtsRef = useRef(districts);
+	districtsRef.current = districts;
+	const districtLensRef = useRef(districtLens);
+	districtLensRef.current = districtLens;
+	const reducedMotion = usePrefersReducedMotion();
+	const reducedMotionRef = useRef(reducedMotion);
+	reducedMotionRef.current = reducedMotion;
+	const selectedDistrictRef = useRef(selectedNeighborhoodId);
+	selectedDistrictRef.current = selectedNeighborhoodId;
+	const onSelectNeighborhoodRef = useRef(onSelectNeighborhood);
+	onSelectNeighborhoodRef.current = onSelectNeighborhood;
+	/* One HTML chip names the حي under the cursor; moved by hand, never through React state. */
+	const hoverChipRef = useRef<HTMLDivElement | null>(null);
+
+	/* One field at city zoom: the أحياء when the city has boundaries, H3 cells otherwise. */
+	const syncField = (map: MapboxMap) => {
+		const hoods = districtsRef.current;
+		const hasDistricts = Boolean(hoods?.features?.length);
+		ensureAreaLayers(map);
+		syncAreaData(map, hasDistricts ? null : areasRef.current);
+		ensureDistrictLayers(map, {
+			isRTL: isRtlRef.current,
+			selectedId: selectedDistrictRef.current,
+			lens: districtLensRef.current,
+		});
+		syncDistrictData(map, hasDistricts ? hoods : null);
+		setSelectedDistrict(map, selectedDistrictRef.current);
+		setDistrictLens(map, districtLensRef.current);
+	};
+	const syncFieldRef = useRef(syncField);
+	syncFieldRef.current = syncField;
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
 		try {
-			ensureAreaLayers(map);
-			syncAreaData(map, areas);
+			syncFieldRef.current(map);
 		} catch {
 			/* style mid-swap — the style.load handler re-adds layers */
 		}
-	}, [areas, mapReady, basemap]);
+	}, [areas, districts, mapReady, basemap]);
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		try {
+			setSelectedDistrict(map, selectedNeighborhoodId);
+		} catch {
+			/* style mid-swap */
+		}
+	}, [selectedNeighborhoodId, mapReady]);
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		try {
+			setDistrictLocale(map, isRTL);
+		} catch {
+			/* style mid-swap */
+		}
+	}, [isRTL, mapReady]);
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		try {
+			setDistrictLens(map, districtLens);
+		} catch {
+			/* style mid-swap — the style.load handler reapplies */
+		}
+	}, [districtLens, mapReady]);
 
 	const placesData = useMemo((): GeoJSON.FeatureCollection => {
 		const features = (places?.features || []).filter((f) => {
@@ -496,9 +579,14 @@ export default function FarqMap({
 		 * on every device, and the first data request no longer waits 5.6s for it. */
 		const skipGlobe = true;
 		void shouldSkipGlobeIntro;
+		/* Flat and north-up by default. At city zoom the picture is the أحياء and
+		 * their numbers; a 32° tilt foreshortens the far half of every polygon,
+		 * crowds the Arabic labels into each other, and costs a phone GPU frames
+		 * for a view no decision needs. Tilt stays one gesture away for anyone
+		 * who wants it, and a saved camera is restored exactly as it was left. */
 		const landing = initialCamera && !mapSession.introStarted
 			? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
-			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 32, bearing: -12 };
+			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
 
 		const map = new mapboxgl.Map({
 			container: containerRef.current,
@@ -538,11 +626,12 @@ export default function FarqMap({
 			}
 		};
 
+		let unbindDistrictClick: () => void = () => {};
+		let unbindDistrictHover: () => void = () => {};
 		map.on("style.load", () => {
 			applyBasemap(map, isRtlRef.current);
 			try {
-				ensureAreaLayers(map);
-				syncAreaData(map, areasRef.current);
+				syncFieldRef.current(map);
 			} catch {
 				/* added again once the style settles */
 			}
@@ -621,6 +710,57 @@ export default function FarqMap({
 
 			setMapReady(true);
 			try {
+				/* Layer-scoped listeners survive a style swap; bind once. A tap on a
+				 * cluster or a pin is theirs — the حي only takes the empty field. */
+				unbindDistrictClick = bindDistrictClick(
+					map,
+					(id) => onSelectNeighborhoodRef.current?.(id),
+					{ unlessLayers: [PRICE_TILE_CLUSTERS, PRICE_TILE_POINTS, PRICE_TILE_ICONS] },
+				);
+				const coarse =
+					typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+				unbindDistrictHover = bindDistrictHover(map, (hit) => {
+					const el = hoverChipRef.current;
+					if (!el) return;
+					if (!hit || coarse) {
+						el.hidden = true;
+						return;
+					}
+					const rtl = isRtlRef.current;
+					const name = rtl ? hit.name_ar : hit.name_en;
+					/* This chip is HTML chrome, not a glyph drawn on the map, so it
+					 * speaks the interface's numerals and carries the unit — the
+					 * headline beside it says the same sentence the same way. */
+					const n = (v: number) => localizeDigitString(String(v), rtl);
+					const lens =
+						districtLensRef.current === "app"
+							? hit.cheapest_app
+								? rtl
+									? ` · الأرخص غالبًا: ${getProviderLabel(hit.cheapest_app, { isRTL: true }) || hit.cheapest_app}${hit.cheapest_app_share ? ` (${n(hit.cheapest_app_share)}٪)` : ""}`
+									: ` · mostly cheapest: ${getProviderLabel(hit.cheapest_app, { isRTL: false }) || hit.cheapest_app}${hit.cheapest_app_share ? ` (${hit.cheapest_app_share}%)` : ""}`
+								: hit.app_verdict_too_close
+									? rtl
+										? " · متقارب — لا فائز واضح"
+										: " · too close to call"
+									: rtl
+										? " · مقارنات غير كافية"
+										: " · not enough comparisons"
+							: "";
+					el.textContent =
+						hit.opportunities > 0
+							? rtl
+								? `${name} · ${n(hit.opportunities)} فرصة${hit.max_gap ? ` · أكبرها ${n(hit.max_gap)} ر.س` : ""}${lens}`
+								: `${name} · ${hit.opportunities} opportunities${hit.max_gap ? ` · biggest ${hit.max_gap} SAR` : ""}${lens}`
+							: rtl
+								? `${name} · لا فرص مرصودة${lens}`
+								: `${name} · no observed gaps${lens}`;
+					el.style.transform = `translate(${Math.round(hit.x)}px, ${Math.round(hit.y)}px)`;
+					el.hidden = false;
+				});
+			} catch {
+				/* */
+			}
+			try {
 				ensurePriceTileLayers(map, (id) => {
 					applyInstantPinSelection(pinMarkersRef.current, id, [
 						containerRef.current?.closest(".farq-mapbox-root"),
@@ -655,8 +795,8 @@ export default function FarqMap({
 				landQuietly({
 					center: RIYADH_LNG_LAT,
 					zoom: 12.15,
-					pitch: 32,
-					bearing: -12,
+					pitch: 0,
+					bearing: 0,
 				});
 			} else if (skipGlobe) {
 				mapSession.introStarted = true;
@@ -801,6 +941,8 @@ export default function FarqMap({
 			window.clearTimeout(rankTimerRef.current);
 			if (zoomRaf) window.cancelAnimationFrame(zoomRaf);
 			canvasHost.removeEventListener("pointerdown", stopProgrammaticCamera, true);
+			unbindDistrictClick();
+			unbindDistrictHover();
 			persistCamera(map);
 			ro.disconnect();
 			userMarkerRef.current?.remove();
@@ -999,12 +1141,14 @@ export default function FarqMap({
 		if (!map || !introDone || !focusRequest) return;
 		if (lastFocusIdRef.current === focusRequest.id) return;
 		lastFocusIdRef.current = focusRequest.id;
+		/* Reduced motion means arrive, not travel: the same camera, no journey. */
+		const travel = (ms: number) => (reducedMotionRef.current ? 0 : ms);
 		if (focusRequest.bounds) {
 			const [w, s, e, n] = focusRequest.bounds;
 			const pad = cameraPadding("select", bottomInsetRef.current);
 			map.fitBounds([[w, s], [e, n]], {
 				padding: { top: pad.top, bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
-				duration: 900,
+				duration: travel(900),
 				maxZoom: 15.5,
 				essential: true,
 			});
@@ -1012,12 +1156,13 @@ export default function FarqMap({
 		}
 		map.easeTo({
 			center: [focusRequest.lng, focusRequest.lat],
-			duration:
+			duration: travel(
 				focusRequest.kind === "select"
 					? 880
 					: focusRequest.kind === "locate"
 						? 820
 						: 740,
+			),
 			essential: true,
 			easing: (t) => 1 - (1 - t) ** 3,
 			padding: cameraPadding(focusRequest.kind, bottomInsetRef.current),
@@ -1072,12 +1217,20 @@ export default function FarqMap({
 			data-hide-address-search={hideAddressSearch ? "true" : undefined}
 		>
 			<div ref={containerRef} className="absolute inset-0 h-full w-full" />
+			<div
+				ref={hoverChipRef}
+				hidden
+				className="farq-district-hover-chip"
+				dir="auto"
+				aria-hidden
+				data-testid="intelligence-map-district-hover"
+			/>
 			{onBasemapChange ? null : (
 				<div className="absolute bottom-3 end-3 z-[20] flex overflow-hidden rounded-lg bg-[#e6eef0] p-0.5 text-[11px] font-bold">
 					<button
 						type="button"
 						data-testid="farq-map-style-satellite"
-						className={`rounded-md px-2.5 py-1 ${basemap === "satellite" ? "bg-brand-900 text-mint-500" : "text-[#6b7c7c]"}`}
+						className={`rounded-md px-2.5 py-1 ${basemap === "satellite" ? "bg-brand-900 text-mint-500" : "text-[#5c6d6d]"}`}
 						onClick={() => setBasemap("satellite")}
 					>
 						{isRTL ? "قمر صناعي" : "Satellite"}
@@ -1085,7 +1238,7 @@ export default function FarqMap({
 					<button
 						type="button"
 						data-testid="farq-map-style-standard"
-						className={`rounded-md px-2.5 py-1 ${basemap === "standard" ? "bg-brand-900 text-mint-500" : "text-[#6b7c7c]"}`}
+						className={`rounded-md px-2.5 py-1 ${basemap === "standard" ? "bg-brand-900 text-mint-500" : "text-[#5c6d6d]"}`}
 						onClick={() => setBasemap("standard")}
 					>
 						{isRTL ? "خريطة" : "Map"}

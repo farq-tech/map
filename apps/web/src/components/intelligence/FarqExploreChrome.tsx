@@ -13,6 +13,7 @@ import {
 import {
 	useRef,
 	useState,
+	type CSSProperties,
 	type PointerEvent as ReactPointerEvent,
 	type ReactNode,
 } from "react";
@@ -21,11 +22,15 @@ import type { OpportunityRow } from "../../lib/farqOpportunities";
 import type { MapSort, MapViewMode } from "../../routes/map";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import type {
+	CityDistricts,
 	IntelligenceCategory,
 	IntelligenceCategoryGroup,
 	IntelligenceCityCoverage,
 } from "../../services/intelligenceService";
+import { PROVIDER_MAP_COLOR, getProviderLabel } from "../../lib/platformLogos";
 import FarqBrandMark from "../FarqBrandMark";
+import FarqDistrictPicker from "./FarqDistrictPicker";
+import type { DistrictLens } from "../../lib/farqDistrictTiles";
 import FarqViewSortBar from "./FarqViewSortBar";
 import { FarqOpportunityCard } from "./FarqOpportunityList";
 import FarqBottomSheet, { type SheetSnap as BottomSnap } from "./FarqBottomSheet";
@@ -118,11 +123,17 @@ export default function FarqExploreChrome({
 	onView,
 	sort,
 	onSort,
-	onNeedLocation,
 	basemap,
 	onBasemapChange,
 	legendOpen,
 	onLegendOpenChange,
+	districts = null,
+	selectedDistrictId = "",
+	onSelectDistrict,
+	onClearDistrict,
+	districtLens = "gap",
+	onDistrictLensChange,
+	appLensProviders = [],
 }: {
 	isRTL: boolean;
 	language: string;
@@ -180,11 +191,21 @@ export default function FarqExploreChrome({
 	onView: (view: MapViewMode) => void;
 	sort: MapSort;
 	onSort: (sort: MapSort) => void;
-	onNeedLocation?: () => void;
 	basemap: MapboxBasemap;
 	onBasemapChange: (kind: MapboxBasemap) => void;
 	legendOpen: boolean;
 	onLegendOpenChange: (open: boolean) => void;
+	/** The city's أحياء for the picker under the search; null when the city has no boundaries. */
+	districts?: CityDistricts | null;
+	selectedDistrictId?: string;
+	onSelectDistrict: (districtId: string) => void;
+	onClearDistrict: () => void;
+	/** What the district colour answers. The ⓘ legend is desktop-only, so the
+	 *  switch has to live here too or the phone cannot reach it at all. */
+	districtLens?: DistrictLens;
+	onDistrictLensChange?: (lens: DistrictLens) => void;
+	/** Apps that actually win a حي — the phone's only key for the app lens. */
+	appLensProviders?: string[];
 }) {
 	const [drawerDragX, setDrawerDragX] = useState(0);
 	const [mapOptionsOpen, setMapOptionsOpen] = useState(false);
@@ -276,7 +297,7 @@ export default function FarqExploreChrome({
 						else onSearchSubmit(text);
 					}}
 				>
-					<Search className="size-4 shrink-0 text-[#6b7c7c]" />
+					<Search className="size-4 shrink-0 text-[#5c6d6d]" />
 					<input
 						value={mapQuery}
 						onChange={(e) => onMapQueryChange(e.currentTarget.value)}
@@ -287,11 +308,22 @@ export default function FarqExploreChrome({
 						placeholder={
 							isRTL ? "ابحث أو اسأل فرق: وين أكبر فرق حولي؟" : "Search or ask Farq: biggest gap near me?"
 						}
-						className="h-10 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#6b7c7c]"
+						className="h-10 min-w-0 flex-1 bg-transparent text-[14px] text-brand-900 placeholder:text-[#5c6d6d]"
 						data-testid="intelligence-map-search"
 						aria-label={isRTL ? "استكشاف على الخريطة" : "Explore the map"}
 					/>
 				</form>
+
+				<div className="farq-map-district-row">
+					<FarqDistrictPicker
+						districts={districts}
+						selectedId={selectedDistrictId}
+						isRTL={isRTL}
+						onSelect={onSelectDistrict}
+						onClear={onClearDistrict}
+						variant="chip"
+					/>
+				</div>
 
 				{searchFocused ? (
 					<div>
@@ -311,7 +343,7 @@ export default function FarqExploreChrome({
 								</button>
 							))}
 						</div>
-						<p className="px-1 pt-1 text-[10px] font-bold text-[#6b7c7c]">
+						<p className="px-1 pt-1 text-[10px] font-bold text-[#5c6d6d]">
 							{isRTL
 								? "بحث سريع — مو فلتر مطبخ موثّق"
 								: "Quick search — not a validated cuisine filter"}
@@ -371,7 +403,6 @@ export default function FarqExploreChrome({
 						isRTL={isRTL}
 						nearReady={nearReady}
 						cheapReady={cheapestReady}
-						onNeedLocation={onNeedLocation}
 					/>
 				}
 			>
@@ -399,7 +430,7 @@ export default function FarqExploreChrome({
 								? "ما عندنا سعر أرخص مرصود للترتيب هنا"
 								: "No observed cheapest price to rank here"}
 						</p>
-						<p className="text-[12px] font-bold text-[#6b7c7c]">
+						<p className="text-[12px] font-bold text-[#5c6d6d]">
 							{isRTL
 								? "الأرخص يظهر فقط لما الرصد فيه سعر أرخص."
 								: "Cheapest ranking stays off until a cheapest price is observed."}
@@ -506,6 +537,71 @@ export default function FarqExploreChrome({
 							</div>
 						</section>
 
+						{/* How to read the map is not an advanced option — it decides what the
+						    whole city zoom is saying, so it sits with Explore, one tap in. */}
+						{onDistrictLensChange ? (
+							<section className="mt-5 space-y-2">
+								<p className="farq-map-drawer-kicker">
+									{isRTL ? "لون الحي يعني" : "District colour means"}
+								</p>
+								<div className="flex overflow-hidden rounded-xl bg-[#e6eef0] p-0.5">
+									{(
+										[
+											["gap", isRTL ? "عدد الفرص" : "Opportunities"],
+											["app", isRTL ? "التطبيق الأرخص" : "Cheapest app"],
+										] as const
+									).map(([id, label]) => (
+										<button
+											key={id}
+											type="button"
+											aria-pressed={districtLens === id}
+											data-testid={`intelligence-map-lens-${id}`}
+											className={`h-10 flex-1 rounded-lg text-[12px] font-bold ${
+												districtLens === id ? "bg-brand-900 text-mint-500" : "text-[#5c6d6d]"
+											}`}
+											onClick={() => onDistrictLensChange(id)}
+										>
+											{label}
+										</button>
+									))}
+								</div>
+								{/* Desktop reads the key in the ⓘ legend, which the phone never
+								    shows — without this the phone got a colour map of Riyadh
+								    with nothing on screen saying what the colours mean. */}
+								{districtLens === "app" ? (
+									<>
+										<ul className="farq-legend-apps mt-1">
+											{appLensProviders.map((provider) => (
+												<li key={provider}>
+													<span
+														className="farq-legend-app-swatch"
+														style={{ "--app": PROVIDER_MAP_COLOR[provider] || "#94a3b8" } as CSSProperties}
+														aria-hidden
+													/>
+													<span>{getProviderLabel(provider, { isRTL }) || provider}</span>
+												</li>
+											))}
+										</ul>
+										<ul className="farq-legend-apps farq-legend-apps--states">
+											<li>
+												<span className="farq-legend-app-swatch is-close" aria-hidden />
+												<span>{isRTL ? "متقارب — لا فائز واضح" : "Too close to call"}</span>
+											</li>
+											<li>
+												<span className="farq-legend-app-swatch is-empty" aria-hidden />
+												<span>{isRTL ? "مقارنات غير كافية" : "Not enough comparisons"}</span>
+											</li>
+										</ul>
+										<p className="farq-legend-note">
+											{isRTL
+												? "يُسمّى تطبيق فائز فقط من ٨ مقارنات فأكثر وبفارق ٥٪ على الأقل."
+												: "An app is named only from 8 comparisons up and a lead of at least 5 points."}
+										</p>
+									</>
+								) : null}
+							</section>
+						) : null}
+
 						<button
 							type="button"
 							className="farq-map-drawer-item mt-5"
@@ -554,7 +650,7 @@ export default function FarqExploreChrome({
 								>
 									<span>{label}</span>
 									{wired ? null : (
-										<span className="text-[10px] font-bold text-[#6b7c7c]">
+										<span className="text-[10px] font-bold text-[#5c6d6d]">
 											{isRTL ? "غير متاح" : "Unavailable"}
 										</span>
 									)}
@@ -593,7 +689,7 @@ export default function FarqExploreChrome({
 									className={`h-10 flex-1 rounded-lg text-[12px] font-bold ${
 										basemap === "standard"
 											? "bg-brand-900 text-mint-500"
-											: "text-[#6b7c7c]"
+											: "text-[#5c6d6d]"
 									}`}
 									onClick={() => onBasemapChange("standard")}
 								>
@@ -604,7 +700,7 @@ export default function FarqExploreChrome({
 									className={`h-10 flex-1 rounded-lg text-[12px] font-bold ${
 										basemap === "satellite"
 											? "bg-brand-900 text-mint-500"
-											: "text-[#6b7c7c]"
+											: "text-[#5c6d6d]"
 									}`}
 									onClick={() => onBasemapChange("satellite")}
 								>
@@ -636,7 +732,7 @@ export default function FarqExploreChrome({
 							<p className="farq-map-drawer-kicker">
 								{isRTL ? "نطاق العرض" : "View range"}
 							</p>
-							<p className="text-[11px] font-bold text-[#6b7c7c]">
+							<p className="text-[11px] font-bold text-[#5c6d6d]">
 								{isRTL
 									? "استكشاف قريب — يغيّر تقريب الخريطة فقط، مو نطاق توصيل"
 									: "Nearby explore — camera zoom only, not a delivery radius"}

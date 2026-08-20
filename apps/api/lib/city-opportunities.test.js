@@ -136,3 +136,46 @@ test('getCityAreas wraps the aggregate as a FeatureCollection', async () => {
   assert.equal(areas.body.count, 1);
   assert.equal(areas.body.min_comparisons_for_app_verdict, 8);
 });
+
+const { getCityDistricts } = require('./city-opportunities');
+const { districtOfPoint } = require('./city-districts');
+
+test('every city opportunity carries the حي its coordinates fall in, and the districts aggregate it', async () => {
+  const __query = async (sql) => (/read_layer_meta/.test(sql) ? [] : [ROW]);
+  const city = await getCityOpportunities({ city: 'riyadh', __query });
+  const f = city.body.features[0];
+  const expected = districtOfPoint('riyadh', ROW.longitude, ROW.latitude);
+  assert.equal(typeof expected, 'string');
+  assert.equal(f.properties.district_id, expected);
+  assert.match(city.etag, /^W\/"v3-riyadh-/);
+
+  const d = await getCityDistricts({ city: 'riyadh', __query });
+  assert.equal(d.body.count, 187);
+  assert.equal(d.body.source, 'momrah_administrative_districts');
+  const hit = d.body.features.find((x) => x.properties.district_id === expected);
+  assert.ok(hit.properties.name_ar && hit.properties.name_en);
+  assert.ok(Array.isArray(hit.properties.label_point) && hit.properties.label_point.length === 2);
+  assert.equal(districtOfPoint('riyadh', hit.properties.label_point[0], hit.properties.label_point[1]), expected, 'the label point is inside its own حي');
+  assert.equal(hit.geometry.type === 'Polygon' || hit.geometry.type === 'MultiPolygon', true);
+  assert.equal(hit.properties.places, 1);
+  assert.equal(hit.properties.opportunities, 1);
+  assert.equal(hit.properties.max_gap, 13);
+  assert.equal(hit.properties.top_place_id, '5454');
+  assert.equal(hit.properties.comparisons, 4);
+  assert.equal(hit.properties.cheapest_app, null, 'four comparisons never name a winner');
+  assert.equal(d.body.features[0].properties.district_id, expected, 'busiest حي first');
+  const empty = d.body.features.find((x) => x.properties.district_id !== expected);
+  assert.equal(empty.properties.opportunities, 0);
+  assert.equal(empty.properties.max_gap, null);
+  assert.equal(empty.properties.top_place_id, null);
+});
+
+test('a point outside every حي is counted nowhere, and an unknown city has no districts', async () => {
+  const far = { ...ROW, place_id: '7', latitude: 25.9, longitude: 49.9 };
+  const __query = async (sql) => (/read_layer_meta/.test(sql) ? [] : [far]);
+  const city = await getCityOpportunities({ city: 'riyadh', __query });
+  assert.equal(city.body.features[0].properties.district_id, null);
+  const d = await getCityDistricts({ city: 'riyadh', __query });
+  assert.equal(d.body.features.reduce((n, x) => n + x.properties.opportunities, 0), 0);
+  assert.equal(await getCityDistricts({ city: 'atlantis', __query }), null);
+});

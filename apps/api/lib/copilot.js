@@ -81,6 +81,9 @@ function scopeLabel(scope, lang) {
   if (!scope) return '';
   if (scope.kind === 'near') return lang === 'en' ? 'around you' : 'حولك';
   if (scope.kind === 'viewport') return lang === 'en' ? 'in this area' : 'في هذا النطاق';
+  if (scope.kind === 'district') {
+    return lang === 'en' ? `in ${scope.label_en || scope.label}` : `في حي ${scope.label_ar || scope.label}`;
+  }
   if (scope.kind === 'place') return lang === 'en' ? `in ${scope.label}` : `في ${scope.label}`;
   return lang === 'en' ? 'in Riyadh' : 'في الرياض';
 }
@@ -217,6 +220,10 @@ async function handleCopilot(input, deps = {}) {
   });
 
   const base = { ok: true, session_id: session.id, intent: plan.intent, source: 'city_read_model', model: 'template' };
+  /* Where this answer looked — so the client can select the same حي the answer names. */
+  let scope = null;
+  const publicScope = (s) =>
+    s ? { kind: s.kind, label: s.label || null, district_id: s.district_id || null, bbox: s.bbox || null } : null;
   const finish = async (answer, rows, action, extra = {}) => {
     const validated = validateAction(action, rows);
     let model = 'template';
@@ -232,7 +239,7 @@ async function handleCopilot(input, deps = {}) {
     session.intent = plan.intent;
     session.updatedAt = now();
     if (validated.type === 'FOCUS_PLACE') session.selectedPlaceId = validated.place_id;
-    return { ...base, answer: text, action: validated, results: rows, model, ...extra };
+    return { ...base, answer: text, action: validated, results: rows, model, scope: publicScope(scope), ...extra };
   };
 
   if (plan.intent === 'EMPTY') {
@@ -285,7 +292,6 @@ async function handleCopilot(input, deps = {}) {
   }
 
   /* Everything else resolves a scope first */
-  let scope;
   if (plan.intent === 'AROUND_POINT') {
     const me = await tools.getPlaceRow(selectedPlaceId, deps, city);
     scope = me

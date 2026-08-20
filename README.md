@@ -19,7 +19,10 @@ comparison.discovery_cards + item_price_spread   (Postgres matviews; refreshed b
         ▼  one set-based query per city, cached 10 min, warmed at boot, ETag + gzip
 GET /api/intelligence/map/city/:city/opportunities     every opportunity in the city (≈5k rows, ≈380 KB gz)
 GET /api/intelligence/map/city/:city/areas             H3 res-8 cells: count, biggest gap, which app was cheapest how often
+GET /api/intelligence/map/city/:city/districts         the city's أحياء (MOMRAH polygons, apps/api/data/districts) with the same aggregates
 GET /api/intelligence/map/places/:id                   one place (image, menu link, representative gap)
+GET /api/intelligence/map/places/:id/items             the evidence: every compared item, priced per app
+POST /api/analytics                                    allow-listed product events; never free text
 POST /api/copilot                                      sentence → intent (code) → tools over the cached city → answer + ONE validated map action
         │
         ▼
@@ -33,12 +36,20 @@ Web: the city is loaded once and kept in memory. Panning and zooming are filters
 
 Product rules that are encoded, not implied:
 
-- A restaurant's representative opportunity is its largest observed gap among items priced ≤ **200 SAR** (catering and group meals are real but not what a person orders for dinner).
+- A restaurant's representative opportunity is its largest observed gap among items priced ≤ **200 SAR** **that one person plausibly orders**. The price cap alone was not enough: 7.1% of Riyadh's gapped items are share boxes and bulk packs, and their average gap is 15.6 SAR against 5.5 for everything else, so they owned the top of every list. `apps/api/lib/consumer-items.js` demotes them by a measured lexicon and says why (`demote_reason: 'share' | 'retail'`); nothing is hidden, and a restaurant with only a share box still shows it, labelled. Terms were counted against the live read layer before being accepted — `سعره N` looked like a scraped price but is a **calorie** count on 10,248 items (18% of the city), so it is not in the lexicon.
+- Each restaurant also carries its best gap **per food category** (`category_gaps`), so filtering برجر ranks a restaurant by its burger rather than by whatever item happened to be its largest. The category list is the one the copilot already uses — one vocabulary, whether typed, spoken, or filtered.
+- `brand_key` travels with every place: 5,222 of Riyadh's 8,745 cards are extra branches of a chain, so the **list** shows a brand once while the **map** keeps every branch pin, because every branch is a real place you can order from.
+- A **delivery-adjusted gap** is only computed when a fee is observed for *both* the cheapest and the dearest provider. Today that is zero restaurants (2,813 have one side, 3,157 the other, none both), so the number is null everywhere — the rule and the plumbing exist so the honest figure appears by itself the day both are recorded, and nobody is tempted to fill the gap with an average.
+- Freshness is on screen, not in a tooltip: one honest timestamp for the whole read layer, said as «محدّث قبل ٤ أيام» (`apps/web/src/lib/farqFreshness.ts`).
+- The district colour has two lenses: how many opportunities a حي holds, or **which app was cheapest there** — the second only where the server has ≥ 8 observed comparisons, otherwise the حي stays unpainted.
+- The camera lands flat (pitch 0, bearing 0) and honours `prefers-reduced-motion` by arriving instead of travelling.
+- Product analytics (`POST /api/analytics`, `apps/web/src/lib/farqAnalytics.ts`) records **that** something happened, never what was typed: event types are allow-listed, `meta` keys are allow-listed per event, string values must be slug-shaped, and the endpoint is gated behind `ANALYTICS_WRITE_ENABLED`.
 - Tiers: **Hero ≥ 36 · Strong 15–35 · Regular 5–14 · Faint < 5 SAR** (`apps/web/src/lib/farqOpportunityTiers.ts`, mirrored in the API).
 - "Which app is cheapest here" is answered only from **8 comparisons** up, and always with its sample size.
 - Freshness is a property of the whole read layer (`generated_at`); the source has no per-place observation time, so none is shown.
 - Digits drawn on the map are Western; UI text follows the locale.
 - Nothing is invented: no coordinates, prices, providers, places or neighbourhoods that are not in the source. Unknown places are refused in the person's own words.
+- A حي is geography, not a name match: every city opportunity carries the `district_id` whose official polygon contains its coordinates (null outside every one). At city zoom the أحياء are the field (tinted only by observed count; H3 cells are the fallback for a city without boundaries); `?neighborhood=<district_id>` scopes the list, the headline and the map together, and the copilot resolves "في حي النرجس" against that polygon before it ever asks a geocoder.
 
 ## How to run
 

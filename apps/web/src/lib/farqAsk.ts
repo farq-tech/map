@@ -56,6 +56,13 @@ export type CopilotResponse = {
 	total?: number;
 	refused?: string | null;
 	clarification?: string | null;
+	/** Where the answer looked; a `district_id` is a حي the map can select itself. */
+	scope?: {
+		kind: string;
+		label?: string | null;
+		district_id?: string | null;
+		bbox?: [number, number, number, number] | null;
+	} | null;
 };
 
 export type CopilotContext = {

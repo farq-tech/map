@@ -20,6 +20,21 @@ export type OpportunityRow = {
 	cheapestProvider?: string | null;
 	expensiveProvider?: string | null;
 	distanceMeters?: number | null;
+	/** Chain identity, so a list can show a brand once. */
+	brandKey?: string | null;
+	/** How many branches of this brand the dedupe folded into this row (1 = only this one). */
+	branchCount?: number;
+	/** How many item comparisons this restaurant's number rests on — 1 is not 221. */
+	comparisons?: number;
+	/**
+	 * Why this restaurant matched the active category, when its headline item is
+	 * something else: the category's own biggest observed gap here. Shown beside
+	 * the card's number, never instead of it — the two belong to different dishes.
+	 */
+	categoryGap?: number | null;
+	categoryLabel?: string | null;
+	/** Why this item is not what one person orders — 'share', 'retail', or absent. */
+	demoteReason?: "share" | "retail" | null;
 };
 
 export function haversineMeters(
@@ -96,6 +111,39 @@ export function withObservedDistances(
 	}));
 }
 
+/**
+ * One row per chain. Six branches of the same brand carry the same item at the
+ * same price, so a ranked list becomes one brand repeated — 5,222 of Riyadh's
+ * 8,745 cards are extra branches. The map keeps every branch, because every
+ * branch is a real place you can order from; the list keeps the best one and
+ * says how many others there are.
+ */
+export function dedupeByBrand(rows: OpportunityRow[]): OpportunityRow[] {
+	const seen = new Map<string, OpportunityRow>();
+	const out: OpportunityRow[] = [];
+	for (const row of rows) {
+		const key = String(row.brandKey || "").trim();
+		/* No brand key means we cannot claim two rows are the same chain. */
+		if (!key) {
+			out.push(row);
+			continue;
+		}
+		const kept = seen.get(key);
+		if (!kept) {
+			seen.set(key, row);
+			out.push(row);
+			continue;
+		}
+		kept.branchCount = (kept.branchCount || 1) + 1;
+	}
+	return out;
+}
+
+/** A dinner order outranks a party box of the same size; the number stays observed. */
+function personalFirst(a: OpportunityRow, b: OpportunityRow): number {
+	return Number(Boolean(a.demoteReason)) - Number(Boolean(b.demoteReason));
+}
+
 export function rankOpportunities(
 	rows: OpportunityRow[],
 	sort: OpportunitySort,
@@ -123,8 +171,9 @@ export function rankOpportunities(
 		});
 		return list;
 	}
+	/* "أكبر فرق" ranks by the observed gap, but a share box never opens the list. */
 	list.sort(
-		(a, b) => b.amount - a.amount || a.placeId.localeCompare(b.placeId),
+		(a, b) => personalFirst(a, b) || b.amount - a.amount || a.placeId.localeCompare(b.placeId),
 	);
 	return list;
 }
@@ -133,6 +182,9 @@ export function topOpportunities(
 	rows: OpportunityRow[],
 	sort: OpportunitySort,
 	cap = TOP_OPPORTUNITIES,
+	opts: { dedupeBrands?: boolean } = {},
 ): OpportunityRow[] {
-	return rankOpportunities(rows, sort).slice(0, Math.max(0, cap));
+	const ranked = rankOpportunities(rows, sort);
+	const list = opts.dedupeBrands === false ? ranked : dedupeByBrand(ranked);
+	return list.slice(0, Math.max(0, cap));
 }

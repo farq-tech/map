@@ -319,6 +319,16 @@ export type IntelligenceMapPlaceProperties = {
 	restaurant_id?: string;
 	provider_count?: number | null;
 	has_difference?: boolean;
+	/** The حي whose polygon holds this place (city read model only); null outside every one. */
+	district_id?: string | null;
+	/** Chain identity — several branches share one brand_key (city read model only). */
+	brand_key?: string | null;
+	/** 'share' or 'retail' when the representative item is not a one-person order. */
+	demote_reason?: "share" | "retail" | null;
+	/** Best observed gap per food category, keyed by category id. */
+	category_gaps?: Record<string, number> | null;
+	/** How many item comparisons back this restaurant's numbers. */
+	comparisons?: number;
 	count?: number;
 	difference_count?: number;
 	gap?: number | null;
@@ -369,6 +379,18 @@ export type CityOpportunityProperties = {
 	comparisons: number;
 	wins: Record<string, number> | null;
 	h3: string;
+	/** Geometric membership decided on the server; null when outside every حي. */
+	district_id?: string | null;
+	/** Chain identity — branches of one brand repeat the same item and gap. */
+	brand_key?: string | null;
+	/** null when the representative item is a normal order; 'share' or 'retail' otherwise. */
+	demote_reason?: "share" | "retail" | null;
+	/** Best observed gap per food category for this restaurant. */
+	category_gaps?: Record<string, number> | null;
+	cheapest_delivery_fee?: number | null;
+	expensive_delivery_fee?: number | null;
+	/** Only when BOTH fees were observed — null everywhere today, by design. */
+	delivery_adjusted_gap?: number | null;
 };
 
 export type CityOpportunities = {
@@ -393,8 +415,14 @@ export type CityAreaProperties = {
 	comparisons: number;
 	wins: Record<string, number>;
 	enough_for_app_verdict: boolean;
+	/** Enough comparisons, but no app clearly ahead — not the same as no data. */
+	app_verdict_too_close?: boolean;
 	cheapest_app: string | null;
 	cheapest_app_wins: number | null;
+	/** The winner's share of comparisons, and its lead over the runner-up, in points. */
+	cheapest_app_share?: number | null;
+	cheapest_app_margin?: number | null;
+	runner_up_app?: string | null;
 };
 
 export type CityAreas = {
@@ -405,6 +433,46 @@ export type CityAreas = {
 	generated_at: string | null;
 	count: number;
 	features: Array<{ type: "Feature"; id?: string; geometry: GeoJSON.Polygon; properties: CityAreaProperties }>;
+};
+
+/** One حي: its official names, its polygon, and the same aggregates an H3 cell carries. */
+export type CityDistrictProperties = {
+	district_id: string;
+	name_ar: string;
+	name_en: string;
+	bbox: [number, number, number, number];
+	/** One point inside the largest part — where its single label sits. */
+	label_point: [number, number] | null;
+	places: number;
+	opportunities: number;
+	max_gap: number | null;
+	top_place_id: string | null;
+	comparisons: number;
+	wins: Record<string, number>;
+	enough_for_app_verdict: boolean;
+	/** Enough comparisons, but no app clearly ahead — not the same as no data. */
+	app_verdict_too_close?: boolean;
+	cheapest_app: string | null;
+	cheapest_app_wins: number | null;
+	/** The winner's share of comparisons, and its lead over the runner-up, in points. */
+	cheapest_app_share?: number | null;
+	cheapest_app_margin?: number | null;
+	runner_up_app?: string | null;
+};
+
+export type CityDistricts = {
+	type: "FeatureCollection";
+	city: string;
+	source: string | null;
+	min_comparisons_for_app_verdict: number;
+	generated_at: string | null;
+	count: number;
+	features: Array<{
+		type: "Feature";
+		id?: string;
+		geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+		properties: CityDistrictProperties;
+	}>;
 };
 
 export type IntelligenceMapGeojsonFeature<P> = {
@@ -485,6 +553,52 @@ export type IntelligenceMapPlaceDetail = {
 		note_en?: string;
 	};
 	image_url?: string | null;
+};
+
+/** One app's row for a restaurant. delivery_fee is observed on a minority of rows — optional evidence, never a requirement. */
+export type IntelligenceMapPlaceProvider = {
+	provider_id: string;
+	delivery_fee: number | null;
+	min_order: number | null;
+	rating: number | null;
+	eta: string | null;
+};
+
+/**
+ * One compared item and its price on each app — the evidence behind the pin's
+ * «فرق». An app with no observed offer for the item is simply not a key in
+ * `prices`: never null, never 0.
+ */
+export type IntelligenceMapPlaceItem = {
+	item_id: string;
+	name: string;
+	name_ar: string | null;
+	name_en: string | null;
+	provider_count: number;
+	cheapest_provider_id: string | null;
+	cheapest_price: number;
+	expensive_provider_id: string | null;
+	expensive_price: number;
+	gap: number;
+	pct: number | null;
+	typical_price: number | null;
+	/** The ranking layer rejects spreads at 2x or more as scrape errors; this row is one. */
+	price_outlier?: boolean;
+	prices: Record<string, number>;
+};
+
+export type IntelligenceMapPlaceItems = {
+	place_id: string;
+	name: string;
+	name_ar: string | null;
+	name_en: string | null;
+	city: string | null;
+	provider_count: number | null;
+	providers: IntelligenceMapPlaceProvider[];
+	count: number;
+	items: IntelligenceMapPlaceItem[];
+	source?: string;
+	generated_at: string | null;
 };
 
 export type IntelligenceMapNeighborhoodProperties = {
@@ -669,6 +783,15 @@ export const IntelligenceService = {
 		);
 		return env.data;
 	},
+	/** The city's أحياء: official polygons with how many opportunities each holds and the biggest. */
+	async cityDistricts(opts: { city: string; signal?: AbortSignal }): Promise<CityDistricts> {
+		const env = await fetchApi<CityDistricts>(
+			`/api/intelligence/map/city/${encodeURIComponent(opts.city)}/districts`,
+			{ signal: opts.signal },
+			{ timeoutMs: 30_000 },
+		);
+		return env.data;
+	},
 	/** The whole city at once; the browser caches it by ETag, the server by TTL. */
 	async cityOpportunities(opts: { city: string; include?: "all"; signal?: AbortSignal }): Promise<CityOpportunities> {
 		const qs = new URLSearchParams();
@@ -689,6 +812,19 @@ export const IntelligenceService = {
 			`/api/intelligence/map/places/${encodeURIComponent(placeId)}`,
 			{ signal },
 			{ timeoutMs: 12_000 },
+		);
+		return env.data;
+	},
+
+	/** The proof table for one restaurant: every compared item, priced on every app that lists it. */
+	async mapPlaceItems(
+		placeId: string,
+		signal?: AbortSignal,
+	): Promise<IntelligenceMapPlaceItems> {
+		const env = await fetchApi<IntelligenceMapPlaceItems>(
+			`/api/intelligence/map/places/${encodeURIComponent(placeId)}/items`,
+			{ signal },
+			{ timeoutMs: 15_000 },
 		);
 		return env.data;
 	},

@@ -131,12 +131,36 @@ test('a named place that cannot be geocoded is refused, never invented', async (
   assert.match(r.answer, /أتلانتس/);
 });
 
-test('a geocoded place scopes the search and shows the results', async () => {
-  const r = await handleCopilot({ message: 'وش فيه في النرجس؟', context: NEAR }, { ...deps, geocodePlace: async () => ({ ok: true, bbox: [46.85, 24.85, 46.95, 24.95], label: 'النرجس' }) });
+test('a named place that is not a حي is geocoded, scopes the search and shows the results', async () => {
+  const r = await handleCopilot({ message: 'وش فيه في بوليفارد؟', context: NEAR }, { ...deps, geocodePlace: async () => ({ ok: true, bbox: [46.85, 24.85, 46.95, 24.95], label: 'بوليفارد' }) });
   assert.equal(r.intent, 'PLACE_SCOPE');
+  assert.equal(r.scope.kind, 'place');
   assert.equal(r.action.type, 'SHOW_RESULTS');
   assert.deepEqual(r.action.place_ids, ['3']);
-  assert.match(r.answer, /في النرجس/);
+  assert.match(r.answer, /في بوليفارد/);
+});
+
+test('a named حي scopes the answer to its own polygon — no geocoder, no radius', async () => {
+  const { interiorPoint, loadDistricts } = require('./city-districts');
+  const narjas = loadDistricts('riyadh').prepared.find((d) => d.name_ar === 'النرجس');
+  assert.ok(narjas, 'the committed Riyadh boundaries know النرجس');
+  const [lng, lat] = interiorPoint('riyadh', narjas.id);
+  const rows = [{ ...ROWS[0], place_id: '10', latitude: lat, longitude: lng }, ROWS[2]];
+  const q = async (sql) => (/read_layer_meta/.test(sql) ? [] : rows);
+  const r = await handleCopilot(
+    { message: 'وش فيه في حي النرجس؟', context: NEAR },
+    { __query: q, disableModel: true, geocodePlace: async () => { throw new Error('the geocoder must not be asked about a known حي'); } },
+  );
+  assert.equal(r.intent, 'PLACE_SCOPE');
+  assert.equal(r.scope.kind, 'district');
+  assert.equal(r.scope.district_id, narjas.id);
+  assert.deepEqual(r.results.map((x) => x.place_id), ['10'], 'only the place inside the polygon');
+  assert.equal(r.action.type, 'SHOW_RESULTS');
+  assert.match(r.answer, /في حي النرجس/);
+  /* Place extraction is Arabic-first; the English reply still names the حي by its official English name. */
+  const en = await handleCopilot({ message: 'وش فيه في حي النرجس؟', language: 'en', context: NEAR }, { __query: q, disableModel: true });
+  assert.equal(en.scope.district_id, narjas.id);
+  assert.match(en.answer, /in Al Narjas/);
 });
 
 test('forecasts are refused and the map is left alone', async () => {

@@ -14,6 +14,34 @@ export type PlatformKey =
 	| "mrmandoob"
 	| "brand_app";
 
+/**
+ * Brand colours for GPU layers, where a CSS class cannot reach. Same identities
+ * as `providerTintClass`, as hex, so a district painted by "which app is
+ * cheapest" reads as that app and nothing else. Recognition only — a colour
+ * never decides a winner; the server does, and only from enough comparisons.
+ */
+export const PROVIDER_MAP_COLOR: Record<string, string> = {
+	jahez: "#dc2626",
+	hungerstation: "#f97316",
+	thechefz: "#7c3aed",
+	toyou: "#14b8a6",
+	keeta: "#eab308",
+	/* Ninja and a restaurant's own app are near-black and slate in their own
+	 * branding. Measured as a 34%-opacity area fill over the Standard basemap,
+	 * both landed within ΔE 3.6–4.8 of unpainted ground — invisible, and worse,
+	 * indistinguishable from "no data". Area fill needs separation more than it
+	 * needs the exact brand hue, so these two are lightened and shifted; the
+	 * logos and chips elsewhere still carry the real brand. */
+	ninja: "#cbd5e1",
+	brand_app: "#db2777",
+	mrsool: "#0369a1",
+	mrmandoob: "#0891b2",
+	noon: "#a3e635",
+};
+
+/** A district with enough comparisons where no app is clearly ahead. */
+export const PROVIDER_MAP_COLOR_TOO_CLOSE = "#94a3b8";
+
 export const PLATFORM_LOGOS: Record<
 	PlatformKey,
 	{ src: string; label: string; labelAr: string }

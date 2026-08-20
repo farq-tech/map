@@ -699,6 +699,277 @@ async function getPlace(placeId) {
   };
 }
 
+/**
+ * The proof behind a pin. A number on a map is a claim; this is the evidence —
+ * every item this restaurant sells on more than one app, with the price on
+ * each app, so a person can check the «فرق» instead of trusting it.
+ *
+ * Source is comparison.menu_item_offers, one row per app per item, and NOT
+ * item_price_spread: the spread matview keeps only items that actually differ,
+ * so building the table from it would silently hide every item priced the same
+ * everywhere — which is evidence too. The spread is still joined for the
+ * canonical item name and typical_price.
+ *
+ * A provider with no offer row for an item is simply absent from `prices` —
+ * never a null, never a zero, never carried over from another app.
+ */
+const META_SQL = `SELECT generated_at FROM comparison.read_layer_meta LIMIT 1`;
+
+const PLACE_ITEMS_CAP = 200;
+
+/**
+ * An app can list the same item on several branch rows at different prices.
+ * The price a person pays on that app is the lowest of them, which is also
+ * exactly what item_price_spread aggregates — verified equal on the sampled
+ * restaurants (2026-08-20), so the table can never contradict the pin.
+ */
+const PLACE_ITEMS_SQL = `
+WITH offers AS (
+  SELECT o.canonical_item_id,
+         o.provider_code,
+         o.current_price,
+         o.provider_item_name_ar,
+         o.provider_item_name_en
+    FROM comparison.menu_item_offers o
+   WHERE o.canonical_restaurant_id = $1::bigint
+     AND o.provider_code IS NOT NULL
+     AND btrim(o.provider_code) <> ''
+     AND o.current_price IS NOT NULL
+     AND o.current_price > 0
+),
+app_price AS (
+  SELECT canonical_item_id, provider_code, min(current_price) AS price
+    FROM offers
+   GROUP BY 1, 2
+),
+offer_name AS (
+  SELECT canonical_item_id,
+         mode() WITHIN GROUP (ORDER BY provider_item_name_ar)
+           FILTER (WHERE btrim(COALESCE(provider_item_name_ar, '')) <> '') AS name_ar,
+         mode() WITHIN GROUP (ORDER BY provider_item_name_en)
+           FILTER (WHERE btrim(COALESCE(provider_item_name_en, '')) <> '') AS name_en
+    FROM offers
+   GROUP BY 1
+),
+compared AS (
+  SELECT canonical_item_id,
+         count(*)::int AS provider_count,
+         min(price) AS cheapest_price,
+         max(price) AS dearest_price,
+         jsonb_object_agg(provider_code, price) AS prices
+    FROM app_price
+   GROUP BY 1
+  HAVING count(*) >= 2
+)
+SELECT c.canonical_item_id::text AS item_id,
+       COALESCE(s.name_ar, n.name_ar) AS name_ar,
+       COALESCE(s.name_en, n.name_en) AS name_en,
+       c.provider_count,
+       c.cheapest_price,
+       c.dearest_price,
+       c.prices,
+       s.typical_price
+  FROM compared c
+  LEFT JOIN offer_name n ON n.canonical_item_id = c.canonical_item_id
+  LEFT JOIN comparison.item_price_spread s
+    ON s.canonical_restaurant_id = $1::bigint
+   AND s.canonical_item_id = c.canonical_item_id
+ ORDER BY (c.dearest_price - c.cheapest_price) DESC, c.canonical_item_id
+ LIMIT $2
+`;
+
+const PLACE_ITEMS_HEAD_SQL = `
+SELECT dc.canonical_restaurant_id::text AS place_id,
+       dc.canonical_name_ar,
+       dc.canonical_name_en,
+       dc.city,
+       dc.provider_count
+  FROM comparison.discovery_cards dc
+ WHERE dc.canonical_restaurant_id = $1::bigint
+ LIMIT 1
+`;
+
+/**
+ * One row per app, not per branch: restaurant_providers carries a row per
+ * provider branch and most of them have no delivery_fee at all (~29% do), so
+ * the branch that actually observed a fee wins the dedupe. Fees stay optional
+ * evidence — a null is printed as nothing, never as «free».
+ */
+const PLACE_PROVIDERS_SQL = `
+SELECT DISTINCT ON (rp.provider_code)
+       rp.provider_code,
+       rp.delivery_fee,
+       rp.min_order,
+       rp.rating,
+       rp.eta
+  FROM comparison.restaurant_providers rp
+ WHERE rp.canonical_restaurant_id = $1::bigint
+   AND rp.provider_code IS NOT NULL
+   AND btrim(rp.provider_code) <> ''
+ ORDER BY rp.provider_code,
+          rp.is_active DESC NULLS LAST,
+          (rp.delivery_fee IS NOT NULL) DESC,
+          rp.observed_at DESC NULLS LAST,
+          rp.provider_restaurant_id
+`;
+
+/**
+ * Riyals, two decimals at most — halalas are real money, never rounded away.
+ * A missing value stays null: Number(null) is 0, and a printed 0 would read as
+ * «free delivery» or «no typical price» where we simply never observed one.
+ */
+function riyals(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function itemPct(cheapest, dearest) {
+  const low = Number(cheapest);
+  const high = Number(dearest);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || high <= 0) return null;
+  return Math.round(((high - low) / high) * 100);
+}
+
+/** Provider names come from the price map, so a tie names nobody. */
+function extremeProvider(prices, target) {
+  const hits = Object.keys(prices).filter((code) => prices[code] === target);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+function rowToPlaceItem(row) {
+  const itemId = String(row.item_id || '').trim();
+  if (!/^\d+$/.test(itemId)) return null;
+  const raw = row.prices && typeof row.prices === 'object' ? row.prices : null;
+  if (!raw) return null;
+  const prices = {};
+  for (const [code, value] of Object.entries(raw)) {
+    const key = String(code || '').trim();
+    const price = riyals(value);
+    if (!key || price == null || price <= 0) continue;
+    prices[key] = price;
+  }
+  const codes = Object.keys(prices);
+  if (codes.length < 2) return null;
+  const cheapest = Math.min(...codes.map((c) => prices[c]));
+  const dearest = Math.max(...codes.map((c) => prices[c]));
+  const nameAr = String(row.name_ar || '').trim() || null;
+  const nameEn = String(row.name_en || '').trim() || null;
+  const name = nameAr || nameEn;
+  if (!name) return null;
+  return {
+    item_id: itemId,
+    name,
+    name_ar: nameAr,
+    name_en: nameEn,
+    provider_count: codes.length,
+    cheapest_provider_id: extremeProvider(prices, cheapest),
+    cheapest_price: cheapest,
+    expensive_provider_id: dearest > cheapest ? extremeProvider(prices, dearest) : null,
+    expensive_price: dearest,
+    gap: riyals(dearest - cheapest),
+    pct: itemPct(cheapest, dearest),
+    typical_price: riyals(row.typical_price),
+    /**
+     * The ranking layer refuses any spread where the dearest price is twice the
+     * cheapest or more: `item_price_spread` tops out at a ratio of 1.9 across
+     * all 56,245 rows, because one app at 149.50 against two at 50 is a scrape
+     * error, not a saving. This table reads the raw offers, so without the same
+     * rule it showed the reader exactly the rows the headline had thrown away —
+     * with bigger numbers. The row stays visible and says what it is; silence
+     * would be the worst of the three options.
+     */
+    price_outlier: cheapest > 0 && dearest >= cheapest * PRICE_OUTLIER_RATIO,
+    prices,
+  };
+}
+
+/** The ratio at or above which a spread is treated as a bad scrape, not a gap. */
+const PRICE_OUTLIER_RATIO = 2;
+
+/**
+ * Biggest observed gap first; suspect spreads sit below the numbers the rest of
+ * the product stands behind, and the same-price items stay at the bottom.
+ */
+function sortPlaceItems(items) {
+  return items.slice().sort(
+    (a, b) =>
+      Number(Boolean(a.price_outlier)) - Number(Boolean(b.price_outlier)) ||
+      Number(b.gap > 0) - Number(a.gap > 0) ||
+      b.gap - a.gap ||
+      a.name.localeCompare(b.name, 'ar'),
+  );
+}
+
+function rowToPlaceProvider(row) {
+  const providerId = String(row.provider_code || '').trim();
+  if (!providerId) return null;
+  return {
+    provider_id: providerId,
+    delivery_fee: riyals(row.delivery_fee),
+    min_order: riyals(row.min_order),
+    rating: riyals(row.rating),
+    eta: row.eta ? String(row.eta) : null,
+  };
+}
+
+/**
+ * @param {string} placeId canonical_restaurant_id — digits only, never minted.
+ * @param {{ __query?: Function }} opts
+ */
+async function getPlaceItems(placeId, opts = {}) {
+  const id = String(placeId || '').trim();
+  if (!/^\d+$/.test(id)) return null;
+  const query = typeof opts.__query === 'function' ? opts.__query : comparisonQuery;
+  if (!readEnabled() && typeof opts.__query !== 'function') return null;
+
+  const [headRows, providerRows, itemRows, metaRows] = await Promise.all([
+    query(PLACE_ITEMS_HEAD_SQL, [id]),
+    query(PLACE_PROVIDERS_SQL, [id]),
+    query(PLACE_ITEMS_SQL, [id, PLACE_ITEMS_CAP]),
+    query(META_SQL, []).catch(() => []),
+  ]);
+
+  const head = headRows[0];
+  if (!head) return null;
+  const nameAr = String(head.canonical_name_ar || '').trim() || null;
+  const nameEn = String(head.canonical_name_en || '').trim() || null;
+  const name = nameAr || nameEn;
+  if (!name) return null;
+
+  const providers = [];
+  for (const row of providerRows) {
+    const provider = rowToPlaceProvider(row);
+    if (provider) providers.push(provider);
+  }
+  const items = [];
+  for (const row of itemRows) {
+    const item = rowToPlaceItem(row);
+    if (item) items.push(item);
+  }
+  const sorted = sortPlaceItems(items);
+
+  return {
+    place_id: String(head.place_id),
+    name,
+    name_ar: nameAr,
+    name_en: nameEn,
+    city: head.city ? String(head.city) : null,
+    provider_count:
+      head.provider_count != null && Number.isFinite(Number(head.provider_count))
+        ? Number(head.provider_count)
+        : providers.length || null,
+    providers,
+    count: sorted.length,
+    items: sorted,
+    source: 'comparison.menu_item_offers',
+    generated_at: metaRows[0]?.generated_at
+      ? new Date(metaRows[0].generated_at).toISOString()
+      : null,
+  };
+}
+
 async function mapHealth() {
   if (!readEnabled()) {
     return { ok: false, source: 'comparison.discovery_cards', coverage: emptyCoverage() };
@@ -967,6 +1238,11 @@ module.exports = {
   toFeature,
   queryPlaces,
   getPlace,
+  PLACE_ITEMS_CAP,
+  rowToPlaceItem,
+  rowToPlaceProvider,
+  sortPlaceItems,
+  getPlaceItems,
   mapHealth,
   __resetCoverageCacheForTests,
 };

@@ -101,6 +101,25 @@ function createMapRouter() {
     })
   );
 
+  /**
+   * The city's أحياء with the same aggregates the H3 cells carry. Boundaries are
+   * the committed MOMRAH polygons (apps/api/data/districts); a city without a
+   * file is a 404, never an invented outline.
+   */
+  router.get(
+    '/map/city/:city/districts',
+    asyncHandler(async (req, res) => {
+      const result = await cityOpportunities.getCityDistricts({ city: req.params.city });
+      if (!result) {
+        return res.status(404).json({ error: 'no_districts_for_city', city: req.params.city });
+      }
+      res.setHeader('ETag', result.etag);
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+      if (req.headers['if-none-match'] === result.etag) return res.status(304).end();
+      res.json(result.body);
+    })
+  );
+
   router.get(
     '/map/places/:placeId',
     asyncHandler(async (req, res) => {
@@ -112,6 +131,23 @@ function createMapRouter() {
         });
       }
       res.json(place);
+    })
+  );
+
+  /**
+   * The evidence behind the pin: every item this restaurant sells on more than
+   * one app, with the price on each app. Cached for five minutes — the read
+   * layer refreshes far slower than that.
+   */
+  router.get(
+    '/map/places/:placeId/items',
+    asyncHandler(async (req, res) => {
+      const body = await comparisonMap.getPlaceItems(req.params.placeId);
+      if (!body) {
+        return res.status(404).json({ error: 'not_found', place_id: req.params.placeId });
+      }
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json(body);
     })
   );
 

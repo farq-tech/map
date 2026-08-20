@@ -90,9 +90,44 @@ export function FarqOpportunityCard({
 				price={row.expensivePrice}
 				isRTL={isRTL}
 			/>
-			{distance ? (
-				<p className="farq-opportunity-distance">{distance}</p>
-			) : null}
+			{/* How much evidence is under the number, and whether the dish is a
+			    dinner order at all — a 63 SAR gap resting on one comparison and one
+			    resting on 221 used to look identical on the card. */}
+			<p className="farq-opportunity-meta">
+				{row.categoryGap != null && row.categoryLabel ? (
+					<span className="farq-opportunity-tag is-category">
+						{isRTL
+							? `${row.categoryLabel}: ${localizeDigitString(String(row.categoryGap), true)} ر.س`
+							: `${row.categoryLabel}: ${row.categoryGap} SAR`}
+					</span>
+				) : null}
+				{row.demoteReason ? (
+					<span className="farq-opportunity-tag">
+						{row.demoteReason === "share"
+							? isRTL
+								? "طلب مشاركة"
+								: "Sharing item"
+							: isRTL
+								? "منتج معبأ"
+								: "Packaged product"}
+					</span>
+				) : null}
+				{row.comparisons ? (
+					<span>
+						{isRTL
+							? `من ${localizeDigitString(String(row.comparisons), true)} ${row.comparisons === 1 ? "مقارنة" : "مقارنة"}`
+							: `from ${row.comparisons} comparison${row.comparisons === 1 ? "" : "s"}`}
+					</span>
+				) : null}
+				{row.branchCount && row.branchCount > 1 ? (
+					<span>
+						{isRTL
+							? `${localizeDigitString(String(row.branchCount), true)} فروع`
+							: `${row.branchCount} branches`}
+					</span>
+				) : null}
+				{distance ? <span className="farq-opportunity-distance">{distance}</span> : null}
+			</p>
 		</button>
 	);
 }
