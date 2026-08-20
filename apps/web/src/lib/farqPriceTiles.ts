@@ -69,6 +69,13 @@ export const CLUSTER_STEP_MD = 12;
 export const CLUSTER_STEP_LG = 40;
 export const CLUSTER_MAX_ZOOM = CLUSTER_BREAK_ZOOM - 1;
 export const CLUSTER_RADIUS_PX = 64;
+/** A thumb needs more room than a cursor: on coarse pointers clusters merge sooner. */
+export const CLUSTER_RADIUS_COARSE_PX = 84;
+export function clusterRadiusPx(): number {
+	return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
+		? CLUSTER_RADIUS_COARSE_PX
+		: CLUSTER_RADIUS_PX;
+}
 
 /* Kept for callers/tests that describe the far band in these terms. */
 export const FAR_BEACON_PX = DISC_PX.hero;
@@ -317,7 +324,7 @@ export function ensurePriceTileLayers(
 		data: { type: "FeatureCollection", features: [] },
 		cluster: true,
 		clusterMaxZoom: CLUSTER_MAX_ZOOM,
-		clusterRadius: CLUSTER_RADIUS_PX,
+		clusterRadius: clusterRadiusPx(),
 		clusterProperties: {
 			/* the biggest observed gap inside the cluster — never a sum, never invented */
 			max_gap: ["max", GAP_EXPR],

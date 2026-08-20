@@ -60,7 +60,7 @@ import FarqBrandMark from "../FarqBrandMark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { resolveMapSort, resolveMapView } from "../../routes/map";
+import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
 import MapAskChat from "./MapAskChat";
 import FarqExploreChrome, {
 	EXPLORE_ZOOM,
@@ -240,11 +240,41 @@ export default function IntelligenceMapSplit({
 					place: "place" in next ? next.place : prev.place,
 					view: "view" in next ? next.view : prev.view,
 					sort: "sort" in next ? next.sort : prev.sort,
+					b: "b" in next ? next.b : prev.b,
+					z: "z" in next ? next.z : prev.z,
 				}),
 			});
 		},
 		[navigate, pathname],
 	);
+
+	/* The camera goes into the URL with replaceState after the map settles, so
+	 * a shared link reopens the same scene without flooding history on every pan. */
+	const cameraUrlTimerRef = useRef(0);
+	const writeCameraToUrl = useCallback(
+		(bbox: [number, number, number, number], zoom: number) => {
+			window.clearTimeout(cameraUrlTimerRef.current);
+			cameraUrlTimerRef.current = window.setTimeout(() => {
+				const b = encodeCameraBbox(bbox);
+				const z = Math.round(zoom * 100) / 100;
+				void navigate({
+					to: pathname === "/" ? "/" : "/map",
+					replace: true,
+					search: (prev: MapSearch) => (prev.b === b && prev.z === z ? prev : { ...prev, b, z }),
+				});
+			}, 400);
+		},
+		[navigate, pathname],
+	);
+	useEffect(() => () => window.clearTimeout(cameraUrlTimerRef.current), []);
+
+	/* Where the map should open: the link's camera if it has one, else the city default. Read once. */
+	const [initialCamera] = useState<{ center: [number, number]; zoom: number } | null>(() => {
+		const b = parseCameraBbox(search.b);
+		return b && typeof search.z === "number"
+			? { center: [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2], zoom: search.z }
+			: null;
+	});
 
 	useEffect(() => {
 		setMapQuery(search.q || "");
@@ -360,7 +390,9 @@ export default function IntelligenceMapSplit({
 		(bbox: string, zoom: number, meta?: MapViewChangeMeta) => {
 			const next = { bbox, zoom };
 			viewRef.current = next;
-			setViewBbox(bboxFromCsv(bbox));
+			const parsed = bboxFromCsv(bbox);
+			setViewBbox(parsed);
+			if (parsed) writeCameraToUrl(parsed, zoom);
 			/* With the city in memory, moving the camera is a filter, not a request. */
 			if (cityStatusRef.current === "loading" || cityStatusRef.current === "ready") {
 				intentionalFetchRef.current = false;
@@ -384,7 +416,7 @@ export default function IntelligenceMapSplit({
 			});
 			setSearchHere((cur) => (cur === offer ? cur : offer));
 		},
-		[fetchPlaces],
+		[fetchPlaces, writeCameraToUrl],
 	);
 
 	const searchThisView = useCallback(() => {
@@ -1254,6 +1286,7 @@ export default function IntelligenceMapSplit({
 						<FarqMap
 							places={displayPlaces}
 							bottomInset={sheetInset}
+							initialCamera={initialCamera}
 							neighborhoods={hoods}
 							gisNeighborhoods={gisHoodsOn ? overlayHoods : null}
 							selectedPlaceId={livePlaceId}

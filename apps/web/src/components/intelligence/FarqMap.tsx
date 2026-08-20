@@ -365,6 +365,7 @@ export default function FarqMap({
 	onSelectNeighborhood: _onSelectNeighborhood,
 	onViewChange,
 	bottomInset = 0,
+	initialCamera = null,
 	hideAddressSearch = false,
 	sheetOpen = false,
 	gisNeighborhoods = null,
@@ -397,6 +398,8 @@ export default function FarqMap({
 	/** Mobile Farq search already covers find — hide Mapbox address Search Box. */
 	/** Height of UI covering the bottom of the map (the sheet), for camera padding. */
 	bottomInset?: number;
+	/** A link's camera; used once, on the first landing, instead of the city default. */
+	initialCamera?: { center: [number, number]; zoom: number } | null;
 	hideAddressSearch?: boolean;
 	sheetOpen?: boolean;
 	onMapInteraction?: (phase: "start" | "end") => void;
@@ -473,14 +476,17 @@ export default function FarqMap({
 		 * on every device, and the first data request no longer waits 5.6s for it. */
 		const skipGlobe = true;
 		void shouldSkipGlobeIntro;
+		const landing = initialCamera && !mapSession.introStarted
+			? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
+			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 32, bearing: -12 };
 
 		const map = new mapboxgl.Map({
 			container: containerRef.current,
 			style: mapboxStyleUrl("standard"),
-			center: skipGlobe ? RIYADH_LNG_LAT : [20, 18],
-			zoom: skipGlobe ? 12.15 : reduced ? 11.6 : 1.55,
-			pitch: skipGlobe ? 32 : 0,
-			bearing: skipGlobe ? -12 : 0,
+			center: skipGlobe ? landing.center : [20, 18],
+			zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
+			pitch: skipGlobe ? landing.pitch : 0,
+			bearing: skipGlobe ? landing.bearing : 0,
 			projection: skipGlobe ? "mercator" : "globe",
 			attributionControl: { compact: true } as unknown as boolean,
 			maxPitch: 75,
@@ -628,12 +634,7 @@ export default function FarqMap({
 				});
 			} else if (skipGlobe) {
 				mapSession.introStarted = true;
-				map.jumpTo({
-					center: RIYADH_LNG_LAT,
-					zoom: 12.15,
-					pitch: 32,
-					bearing: -12,
-				});
+				map.jumpTo(landing);
 				try {
 					map.setProjection("mercator");
 				} catch {

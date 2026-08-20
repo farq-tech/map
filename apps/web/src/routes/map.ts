@@ -9,7 +9,34 @@ export type MapSearch = {
 	place?: string;
 	view?: MapViewMode;
 	sort?: MapSort;
+	/** Camera: bbox "west,south,east,north" (4 decimals) and zoom — so a link restores the scene. */
+	b?: string;
+	z?: number;
 };
+
+export type CameraBbox = [number, number, number, number];
+
+export function parseCameraBbox(raw: unknown): CameraBbox | undefined {
+	const parts = String(raw || "")
+		.split(",")
+		.map((v) => Number(v));
+	if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return undefined;
+	const [w, s, e, n] = parts;
+	if (w >= e || s >= n) return undefined;
+	if (w < -180 || e > 180 || s < -85 || n > 85) return undefined;
+	return [w, s, e, n];
+}
+
+export function parseCameraZoom(raw: unknown): number | undefined {
+	const z = Number(raw);
+	if (!Number.isFinite(z) || z < 2 || z > 20) return undefined;
+	return Math.round(z * 100) / 100;
+}
+
+/** Compact, stable encoding for replaceState on every idle move. */
+export function encodeCameraBbox(b: CameraBbox): string {
+	return b.map((v) => v.toFixed(4)).join(",");
+}
 
 function trim(v: unknown, max: number): string | undefined {
 	if (typeof v !== "string") return undefined;
@@ -55,5 +82,7 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		place: trim(s.place, 80),
 		view: parseMapView(s.view),
 		sort: parseMapSort(s.sort),
+		b: parseCameraBbox(s.b) ? encodeCameraBbox(parseCameraBbox(s.b) as CameraBbox) : undefined,
+		z: parseCameraZoom(s.z),
 	};
 }
