@@ -25,3 +25,5 @@ jobs:
         env:
           # Build-time only; the bundle reads the real token from the Vercel project.
           VITE_MAPBOX_ACCESS_TOKEN: ci-placeholder
+      - name: Bundle budget (gzip)
+        run: npm run budget
