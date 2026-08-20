@@ -64,7 +64,10 @@ type CameraFocusRequest = {
 	kind?: "select" | "locate" | "cluster";
 };
 
-function cameraPadding(kind: CameraFocusRequest["kind"]): {
+function cameraPadding(
+	kind: CameraFocusRequest["kind"],
+	bottomInset = 0,
+): {
 	top: number;
 	bottom: number;
 	left: number;
@@ -77,7 +80,8 @@ function cameraPadding(kind: CameraFocusRequest["kind"]): {
 		return { top: 88, bottom: 40, left: 40, right: 40 };
 	}
 	if (kind === "select") {
-		return { top: 132, bottom: 292, left: 24, right: 24 };
+		/* the sheet's real height, so the chosen pin lands above it — never under it */
+		return { top: 132, bottom: Math.max(160, bottomInset + 28), left: 24, right: 24 };
 	}
 	if (kind === "locate") {
 		return { top: 120, bottom: 112, left: 28, right: 28 };
@@ -360,6 +364,7 @@ export default function FarqMap({
 	onSelectPlace,
 	onSelectNeighborhood: _onSelectNeighborhood,
 	onViewChange,
+	bottomInset = 0,
 	hideAddressSearch = false,
 	sheetOpen = false,
 	gisNeighborhoods = null,
@@ -390,6 +395,8 @@ export default function FarqMap({
 		meta?: MapViewChangeMeta,
 	) => void;
 	/** Mobile Farq search already covers find — hide Mapbox address Search Box. */
+	/** Height of UI covering the bottom of the map (the sheet), for camera padding. */
+	bottomInset?: number;
 	hideAddressSearch?: boolean;
 	sheetOpen?: boolean;
 	onMapInteraction?: (phase: "start" | "end") => void;
@@ -409,6 +416,8 @@ export default function FarqMap({
 	const introDoneRef = useRef(false);
 	const lastFocusIdRef = useRef<string | null>(null);
 	const onViewChangeRef = useRef(onViewChange);
+	const bottomInsetRef = useRef(bottomInset);
+	bottomInsetRef.current = bottomInset;
 	const onSelectPlaceRef = useRef(onSelectPlace);
 	const onMapInteractionRef = useRef(onMapInteraction);
 	const onLeftUserLocationRef = useRef(onLeftUserLocation);
@@ -552,13 +561,16 @@ export default function FarqMap({
 		};
 
 		map.once("load", () => {
-			map.addControl(
-				new mapboxgl.NavigationControl({ visualizePitch: true }),
-				"bottom-right",
-			);
 			const mobileChrome =
 				typeof window !== "undefined" &&
 				window.matchMedia("(max-width: 1023px)").matches;
+			/* Zoom buttons earn nothing on a phone with pinch; they only cover the map. */
+			if (!mobileChrome) {
+				map.addControl(
+					new mapboxgl.NavigationControl({ visualizePitch: true }),
+					"bottom-right",
+				);
+			}
 			if (!hideAddressSearch && !mobileChrome) {
 				try {
 					const box = createFarqSearchBox({ token, isRTL: isRtlRef.current });
@@ -689,9 +701,18 @@ export default function FarqMap({
 				userGesture = true;
 			}
 		};
+		const isUserEvent = (ev: unknown) =>
+			Boolean(
+				ev &&
+					typeof ev === "object" &&
+					"originalEvent" in ev &&
+					(ev as { originalEvent?: Event }).originalEvent,
+			);
 		const onInteractStart = (ev: unknown) => {
 			markUserGesture(ev);
 			if (!introDoneRef.current) return;
+			/* Only a finger or a wheel is an interaction; our own easeTo must not collapse the sheet. */
+			if (!isUserEvent(ev)) return;
 			onMapInteractionRef.current?.("start");
 		};
 		const onInteractEnd = () => {
@@ -961,7 +982,7 @@ export default function FarqMap({
 						: 740,
 			essential: true,
 			easing: (t) => 1 - (1 - t) ** 3,
-			padding: cameraPadding(focusRequest.kind),
+			padding: cameraPadding(focusRequest.kind, bottomInsetRef.current),
 			pitch: map.getPitch(),
 			...(typeof focusRequest.zoom === "number"
 				? { zoom: focusRequest.zoom }

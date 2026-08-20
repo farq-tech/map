@@ -9,6 +9,7 @@ export default function FarqViewSortBar({
 	nearReady,
 	cheapReady,
 	onNeedLocation,
+	hideViewToggle = false,
 }: {
 	view: MapViewMode;
 	onView: (view: MapViewMode) => void;
@@ -18,9 +19,12 @@ export default function FarqViewSortBar({
 	nearReady: boolean;
 	cheapReady: boolean;
 	onNeedLocation?: () => void;
+	/** On the phone the list is the sheet; there is no "view" to toggle. */
+	hideViewToggle?: boolean;
 }) {
 	return (
 		<div className="farq-view-sort" data-testid="farq-view-sort">
+			{hideViewToggle ? null : (
 			<div
 				className="farq-view-toggle"
 				role="tablist"
@@ -48,6 +52,7 @@ export default function FarqViewSortBar({
 					{isRTL ? "خريطة" : "Map"}
 				</button>
 			</div>
+			)}
 			<div
 				className="farq-sort-rail"
 				role="group"

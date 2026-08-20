@@ -7,8 +7,9 @@
  * sized by its approved tier, carrying its gap. Collision is on and the
  * biggest gap wins the pixel, so density never turns into noise.
  *
- * NEAR (z ≥ CLUSTER_BREAK_ZOOM): the cheapest app's logo with the gap on a
- * mint pill at its corner, then the item name underneath.
+ * NEAR (z ≥ CLUSTER_BREAK_ZOOM): the cheapest app's logo with one label under
+ * it — the gap on a mint pill, then the item name — so a label never outlives
+ * its logo. Faint gaps (< 5 SAR) show the logo and item without a number.
  *
  * The selected place is excluded from the GPU source and drawn once as HTML.
  * No emoji in any text-field (Mapbox glyphs stop at U+FFFF). Every layer is
@@ -39,7 +40,6 @@ export const PRICE_TILE_SOURCE = "farq-price-tiles";
 export const PRICE_TILE_POINTS = "farq-price-points";
 export const PRICE_TILE_CLUSTERS = "farq-price-clusters";
 export const PRICE_TILE_ICONS = "farq-price-icons";
-export const PRICE_TILE_NEAR_TEXT = "farq-price-near-text";
 
 /** Mint disc, dark Farq teal number — never white on mint. */
 export const PRICE_CIRCLE_FILL = FARQ_MINT;
@@ -407,7 +407,8 @@ export function ensurePriceTileLayers(
 		},
 	});
 
-	/* NEAR: cheapest app's logo with the gap on a mint pill at its corner. */
+	/* NEAR: the cheapest app's logo, and under it one label — the gap on a mint
+	 * pill, then the item. One symbol per place, so a label never outlives its logo. */
 	map.addLayer({
 		id: PRICE_TILE_ICONS,
 		type: "symbol",
@@ -421,53 +422,42 @@ export function ensurePriceTileLayers(
 			"icon-allow-overlap": false,
 			"icon-ignore-placement": false,
 			"icon-padding": 2,
-			"text-field": ["case", [">", GAP_EXPR, 0], ["to-string", ["get", "gap"]], ""],
+			"text-field": [
+				"case",
+				["==", TIER_EXPR, "faint"],
+				["get", "product_name"],
+				[
+					"format",
+					["to-string", ["get", "gap"]],
+					{ "font-scale": 1.15 },
+					["case", [">", ["length", ["get", "product_name"]], 0], "\n", ""],
+					{},
+					["get", "product_name"],
+					{ "font-scale": 0.86 },
+				],
+			],
 			"text-font": TEXT_FONT,
 			"text-size": GPU_CHIP_TEXT_SIZE,
-			"text-anchor": "bottom-left",
-			"text-offset": [0.9, -2.2],
-			"text-allow-overlap": true,
-			"text-ignore-placement": true,
+			"text-anchor": "top",
+			"text-offset": [0, 0.35],
+			"text-max-width": 9,
+			"text-line-height": 1.15,
+			"text-allow-overlap": false,
+			"text-ignore-placement": false,
 			"text-optional": true,
 			"symbol-sort-key": SORT_BY_GAP,
 		},
 		paint: {
 			"text-color": PRICE_CIRCLE_TEXT,
 			"text-halo-color": PRICE_CIRCLE_FILL,
-			"text-halo-width": 6,
+			"text-halo-width": 2.2,
 			"text-halo-blur": 0,
 			"text-emissive-strength": 1,
 			"icon-emissive-strength": 1,
 		},
 	});
 
-	/* NEAR: the item under the logo — shaped by the RTL plugin, dropped before the logo is. */
-	map.addLayer({
-		id: PRICE_TILE_NEAR_TEXT,
-		type: "symbol",
-		source: PRICE_TILE_SOURCE,
-		minzoom: CLUSTER_BREAK_ZOOM + 1,
-		filter: ["all", ["!", ["has", "point_count"]], [">", ["length", ["coalesce", ["get", "product_name"], ""]], 0]],
-		layout: {
-			"text-field": ["get", "product_name"],
-			"text-size": 11.5,
-			"text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
-			"text-anchor": "top",
-			"text-offset": [0, 0.4],
-			"text-max-width": 9,
-			"text-allow-overlap": false,
-			"text-ignore-placement": false,
-			"symbol-sort-key": SORT_BY_GAP,
-		},
-		paint: {
-			"text-color": PRICE_CIRCLE_TEXT,
-			"text-halo-color": PRICE_CIRCLE_STROKE,
-			"text-halo-width": 1.2,
-			"text-emissive-strength": 1,
-		},
-	});
-
-	const pickLayers = [PRICE_TILE_POINTS, PRICE_TILE_ICONS, PRICE_TILE_NEAR_TEXT];
+	const pickLayers = [PRICE_TILE_POINTS, PRICE_TILE_ICONS];
 	const pickPlace = (ev: MapLayerMouseEvent) => {
 		const id = pickPlaceFromEvent(map, ev, pickLayers);
 		if (id) onSelectPlace(id);

@@ -4,8 +4,6 @@
  * Desktop chrome stays in IntelligenceMapSplit.
  */
 import {
-	ChevronLeft,
-	ChevronRight,
 	CircleDot,
 	Info,
 	Menu,
@@ -16,13 +14,11 @@ import {
 	useRef,
 	useState,
 	type PointerEvent as ReactPointerEvent,
+	type ReactNode,
 } from "react";
 import { localizeCity } from "../../lib/cityNames";
-import { localizeDigitString } from "../../lib/formatPrice";
-import { getProviderLabel } from "../../lib/platformLogos";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
 import type { MapSort, MapViewMode } from "../../routes/map";
-import { ProviderLogoMark } from "../ProviderLogoMark";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import type {
 	IntelligenceCategory,
@@ -32,10 +28,11 @@ import type {
 import FarqBrandMark from "../FarqBrandMark";
 import FarqViewSortBar from "./FarqViewSortBar";
 import { FarqOpportunityCard } from "./FarqOpportunityList";
+import FarqBottomSheet, { type SheetSnap as BottomSnap } from "./FarqBottomSheet";
 
 export type ExploreRadius = "hawally" | "1km" | "3km" | "5km" | "city";
 export type FilterRailId = "gaps" | "restaurants" | "grocery" | "cheapest";
-export type SheetSnap = "closed" | "peek" | "expanded";
+export type SheetSnap = BottomSnap;
 export type MapLayerId =
 	| "opportunities"
 	| "restaurants"
@@ -65,61 +62,6 @@ const DISCOVERY_CHIPS = [
 	{ id: "delivery", q: "فرق التوصيل", labelAr: "فرق التوصيل", labelEn: "Delivery gap" },
 ] as const;
 
-function ProviderCompareLine({
-	kind,
-	provider,
-	price,
-	isRTL,
-}: {
-	kind: "cheap" | "expensive";
-	provider?: string | null;
-	price?: number | null;
-	isRTL: boolean;
-}) {
-	if (!provider && price == null) return null;
-	/* A price without a provider is still observed — name it as a price, not as an unknown app. */
-	const name = provider ? getProviderLabel(provider, { isRTL }) || provider : "";
-	const heading =
-		kind === "cheap"
-			? isRTL
-				? "الأرخص"
-				: "Cheapest"
-			: provider
-				? isRTL
-					? "الأغلى"
-					: "Highest"
-				: isRTL
-					? "أعلى سعر مرصود"
-					: "Highest observed price";
-	const amount =
-		price != null
-			? `${localizeDigitString(String(price), isRTL)} ${isRTL ? "ر.س" : "SAR"}`
-			: "";
-	return (
-		<div
-			className={`farq-map-aha-app farq-map-aha-app--${kind}`}
-			data-testid={`intelligence-map-aha-${kind}`}
-		>
-			{provider ? (
-				<ProviderLogoMark
-					provider={provider}
-					label={name}
-					isRTL={isRTL}
-					size={28}
-					rounded="md"
-					tintedFallback
-				/>
-			) : null}
-			<div className="min-w-0">
-				<p className="text-[10px] font-extrabold">{heading}</p>
-				<p className="truncate text-[12px] font-black text-brand-900">
-					{name && amount ? `${name} · ${amount}` : name || amount}
-				</p>
-			</div>
-		</div>
-	);
-}
-
 export default function FarqExploreChrome({
 	isRTL,
 	language,
@@ -146,7 +88,7 @@ export default function FarqExploreChrome({
 	onToggleLayer,
 	exploreRadius,
 	onExploreRadius,
-	aroundMax,
+	aroundMax: _aroundMax,
 	topSavings,
 	sheetSnap,
 	onSheetSnap,
@@ -154,6 +96,8 @@ export default function FarqExploreChrome({
 	scanHint,
 	hasViewportPlaces,
 	placesReady,
+	headline,
+	selectedPanel = null,
 	chromeHidden,
 	searchFocused,
 	onSearchFocused,
@@ -202,6 +146,10 @@ export default function FarqExploreChrome({
 	onExploreRadius: (id: ExploreRadius) => void;
 	aroundMax: ExploreSaving | null;
 	topSavings: ExploreSaving[];
+	/** One line that is true for what the camera shows — the sheet's head. */
+	headline: ReactNode;
+	/** The selected place's panel; when present it replaces the list inside the sheet. */
+	selectedPanel?: ReactNode;
 	sheetSnap: SheetSnap;
 	onSheetSnap: (snap: SheetSnap) => void;
 	placesFetching: boolean;
@@ -232,10 +180,6 @@ export default function FarqExploreChrome({
 	const [drawerDragX, setDrawerDragX] = useState(0);
 	const [mapOptionsOpen, setMapOptionsOpen] = useState(false);
 	const drawerDragRef = useRef<{
-		pointerId: number;
-		startX: number;
-	} | null>(null);
-	const sheetDragRef = useRef<{
 		pointerId: number;
 		startX: number;
 	} | null>(null);
@@ -281,46 +225,19 @@ export default function FarqExploreChrome({
 		if (closing > 64) onDrawerOpenChange(false);
 	};
 
-	const onSheetPointerDown = (ev: ReactPointerEvent<HTMLElement>) => {
-		ev.currentTarget.setPointerCapture(ev.pointerId);
-		sheetDragRef.current = {
-			pointerId: ev.pointerId,
-			startX: ev.clientX,
-		};
-	};
-	const onSheetPointerMove = (ev: ReactPointerEvent<HTMLElement>) => {
-		if (!sheetDragRef.current || sheetDragRef.current.pointerId !== ev.pointerId) {
-			return;
-		}
-	};
-	const onSheetPointerUp = (ev: ReactPointerEvent<HTMLElement>) => {
-		const drag = sheetDragRef.current;
-		sheetDragRef.current = null;
-		if (!drag || drag.pointerId !== ev.pointerId) return;
-		const dx = ev.clientX - drag.startX;
-		const closing = isRTL ? dx : -dx;
-		if (Math.abs(dx) < 12) {
-			if (sheetSnap === "peek") onSheetSnap("expanded");
-			else if (sheetSnap === "closed") onSheetSnap("peek");
-			return;
-		}
-		if (closing > 48) {
-			onSheetSnap("closed");
-		}
-	};
-
 	const emptyViewport =
 		placesReady &&
 		!placesFetching &&
 		!scanHint &&
 		hasViewportPlaces === false &&
 		topSavings.length === 0;
-	const hideFloat = chromeHidden && !drawerOpen && !searchFocused && sheetSnap !== "expanded";
+	const hideFloat = chromeHidden && !drawerOpen && !searchFocused && sheetSnap === "peek";
 
 	return (
 		<div
 			className={`farq-explore-chrome lg:hidden ${hideFloat ? "is-hidden" : ""} ${placeSelected ? "is-place-selected" : ""}`}
 			data-testid="intelligence-map-overlay"
+			data-snap={sheetSnap}
 			data-chrome-hidden={hideFloat ? "true" : undefined}
 		>
 			<div className="farq-explore-top">
@@ -389,18 +306,7 @@ export default function FarqExploreChrome({
 								: "Quick search — not a validated cuisine filter"}
 						</p>
 					</div>
-				) : (
-					<FarqViewSortBar
-						view={view}
-						onView={onView}
-						sort={sort}
-						onSort={onSort}
-						isRTL={isRTL}
-						nearReady={nearReady}
-						cheapReady={cheapestReady}
-						onNeedLocation={onNeedLocation}
-					/>
-				)}
+				) : null}
 			</div>
 
 			<div
@@ -439,201 +345,76 @@ export default function FarqExploreChrome({
 				</button>
 			</div>
 
-			{view === "map" && !placeSelected && sheetSnap === "closed" ? (
-				<button
-					type="button"
-					className="farq-map-panel-tab inline-flex"
-					data-testid="intelligence-map-around-reopen"
-					aria-label={isRTL ? "إظهار أكبر فرق" : "Show top gap"}
-					onClick={() => onSheetSnap("peek")}
-				>
-					{isRTL ? (
-						<ChevronLeft className="size-3.5" />
-					) : (
-						<ChevronRight className="size-3.5" />
-					)}
-					<span>{isRTL ? "أكبر فرق" : "Top gap"}</span>
-				</button>
-			) : null}
-
-			{view === "map" && !placeSelected && sheetSnap !== "closed" ? (
-				<div
-					className={`farq-map-around farq-map-around--side farq-map-around--${sheetSnap}`}
-					data-testid="intelligence-map-around"
-					data-sheet-snap={sheetSnap}
-				>
+			<FarqBottomSheet
+				snap={sheetSnap}
+				onSnap={onSheetSnap}
+				isRTL={isRTL}
+				header={headline}
+				rail={
+					<FarqViewSortBar
+						hideViewToggle
+						view={view}
+						onView={onView}
+						sort={sort}
+						onSort={onSort}
+						isRTL={isRTL}
+						nearReady={nearReady}
+						cheapReady={cheapestReady}
+						onNeedLocation={onNeedLocation}
+					/>
+				}
+			>
+				{placeSelected && selectedPanel ? (
+					selectedPanel
+				) : sort === "cheap" && !cheapestReady ? (
 					<div
-						className="farq-map-scan"
-						data-testid="intelligence-map-scan"
-						aria-live="polite"
+						className="space-y-2 px-2 py-4"
+						data-testid="intelligence-map-cheapest-unavailable"
 					>
-						{scanHint || placesFetching
-							? isRTL
-								? "نبحث عن أكبر الفروقات…"
-								: "Looking for the biggest gaps…"
-							: null}
+						<p className="text-[14px] font-extrabold text-brand-900">
+							{isRTL
+								? "ما عندنا سعر أرخص مرصود للترتيب هنا"
+								: "No observed cheapest price to rank here"}
+						</p>
+						<p className="text-[12px] font-bold text-[#6b7c7c]">
+							{isRTL
+								? "الأرخص يظهر فقط لما الرصد فيه سعر أرخص."
+								: "Cheapest ranking stays off until a cheapest price is observed."}
+						</p>
 					</div>
-					<div className="farq-map-overlay-card overflow-hidden">
-						<div
-							className="farq-map-around-toolbar touch-none"
-							data-testid="intelligence-map-around-handle"
-							onPointerDown={onSheetPointerDown}
-							onPointerMove={onSheetPointerMove}
-							onPointerUp={onSheetPointerUp}
-							onPointerCancel={onSheetPointerUp}
+				) : emptyViewport ? (
+					<div className="space-y-3 px-2 py-4" data-testid="intelligence-map-empty">
+						<p className="text-[14px] font-extrabold text-brand-900">
+							{isRTL
+								? "ما رصدنا فرق يستحق في هذا النطاق بعد"
+								: "No worthwhile gap observed in this area yet"}
+						</p>
+						<button
+							type="button"
+							className="farq-map-empty-cta"
+							onClick={() => {
+								const next =
+									exploreRadius === "1km"
+										? "3km"
+										: exploreRadius === "3km"
+											? "5km"
+											: "city";
+								onExploreRadius(next);
+							}}
 						>
-							<p className="min-w-0 truncate text-[12px] font-extrabold text-brand-900">
-								{isRTL ? "فلوسك تضيع هنا" : "Your money leaks here"}
-							</p>
-							<button
-								type="button"
-								className="farq-map-around-hide"
-								aria-label={isRTL ? "إخفاء" : "Hide"}
-								data-testid="intelligence-map-around-hide"
-								onClick={() => onSheetSnap("closed")}
-							>
-								{isRTL ? (
-									<ChevronRight className="size-4" />
-								) : (
-									<ChevronLeft className="size-4" />
-								)}
-							</button>
-						</div>
-						<div
-							className="farq-map-around-peek"
-							data-testid="intelligence-map-around-peek"
-							aria-expanded={sheetSnap === "expanded"}
-						>
-							{sheetSnap === "expanded" ? (
-								<button
-									type="button"
-									className="w-full min-w-0 truncate text-start text-[13px] font-extrabold text-brand-900"
-									onClick={() => onSheetSnap("peek")}
-								>
-									{isRTL ? "فلوسك تضيع هنا" : "Your money leaks here"}
-								</button>
-							) : aroundMax ? (
-								<div className="farq-map-aha" data-testid="intelligence-map-aha">
-									<p className="farq-map-aha-kicker">
-										{isRTL ? "🔥 أكبر فرق حولك" : "🔥 Biggest gap around you"}
-									</p>
-									<p className="farq-map-aha-gap">
-										{localizeDigitString(
-											String(Math.round(aroundMax.amount)),
-											isRTL,
-										)}{" "}
-										{isRTL ? "ر.س فرق" : "SAR gap"}
-									</p>
-									<p className="farq-map-aha-waste">
-										{isRTL
-											? `لو طلبت هذا من المزوّد الغلط تدفع ${localizeDigitString(String(Math.round(aroundMax.amount)), true)} ر.س زيادة`
-											: `Order from the wrong provider and you pay ${Math.round(aroundMax.amount)} SAR extra`}
-									</p>
-									<p className="farq-map-aha-place">
-										{[aroundMax.productName, aroundMax.name]
-											.filter(Boolean)
-											.join(" · ") || (isRTL ? "مطعم" : "Restaurant")}
-									</p>
-									{(aroundMax.cheapestProvider ||
-										aroundMax.expensiveProvider ||
-										aroundMax.cheapestPrice != null ||
-										aroundMax.expensivePrice != null) && (
-										<div
-											className="farq-map-aha-apps"
-											data-testid="intelligence-map-aha-apps"
-										>
-											<ProviderCompareLine
-												kind="cheap"
-												provider={aroundMax.cheapestProvider}
-												price={aroundMax.cheapestPrice}
-												isRTL={isRTL}
-											/>
-											<ProviderCompareLine
-												kind="expensive"
-												provider={aroundMax.expensiveProvider}
-												price={aroundMax.expensivePrice}
-												isRTL={isRTL}
-											/>
-										</div>
-									)}
-									<button
-										type="button"
-										className="farq-map-aha-cta"
-										data-testid="intelligence-map-aha-cta"
-										onClick={() => onFocusPlace(aroundMax)}
-									>
-										{isRTL ? "قارن الآن ←" : "Compare now →"}
-									</button>
-								</div>
-							) : (
-								<p className="px-1 pb-2 text-[13px] font-extrabold text-brand-900">
-									{isRTL ? "🔥 أكبر فرق حولك" : "🔥 Biggest gap around you"}
-								</p>
-							)}
-						</div>
-						{sheetSnap === "expanded" ? (
-							sort === "cheap" && !cheapestReady ? (
-								<div
-									className="space-y-2 border-t border-[#e6eef0] px-3 py-4"
-									data-testid="intelligence-map-cheapest-unavailable"
-								>
-									<p className="text-[14px] font-extrabold text-brand-900">
-										{isRTL
-											? "ما عندنا سعر أرخص مرصود للترتيب هنا"
-											: "No observed cheapest price to rank here"}
-									</p>
-									<p className="text-[12px] font-bold text-[#6b7c7c]">
-										{isRTL
-											? "الأرخص يظهر فقط لما الرصد فيه cheapest_price."
-											: "Cheapest ranking stays off until cheapest_price is observed."}
-									</p>
-								</div>
-							) : emptyViewport ? (
-								<div
-									className="space-y-3 border-t border-[#e6eef0] px-3 py-4"
-									data-testid="intelligence-map-empty"
-								>
-									<p className="text-[14px] font-extrabold text-brand-900">
-										{isRTL
-											? "ما رصدنا فرق يستحق حولك بعد"
-											: "No worthwhile gap observed around you yet"}
-									</p>
-									<button
-										type="button"
-										className="farq-map-empty-cta"
-										onClick={() => {
-											const next =
-												exploreRadius === "1km"
-													? "3km"
-													: exploreRadius === "3km"
-														? "5km"
-														: "5km";
-											onExploreRadius(next);
-										}}
-									>
-										{isRTL ? "وسّع نطاق الاستكشاف" : "Widen the search"}
-									</button>
-								</div>
-							) : (
-								<ul
-									className="farq-map-around-list"
-									data-testid="intelligence-map-top-savings"
-								>
-									{topSavings.map((row) => (
-										<li key={row.placeId}>
-											<FarqOpportunityCard
-												row={row}
-												isRTL={isRTL}
-												onSelect={onFocusPlace}
-											/>
-										</li>
-									))}
-								</ul>
-							)
-						) : null}
+							{isRTL ? "وسّع النطاق" : "Widen the area"}
+						</button>
 					</div>
-				</div>
-			) : null}
+				) : (
+					<ul className="farq-sheet-list" data-testid="intelligence-map-top-savings">
+						{topSavings.map((row) => (
+							<li key={row.placeId}>
+								<FarqOpportunityCard row={row} isRTL={isRTL} onSelect={onFocusPlace} />
+							</li>
+						))}
+					</ul>
+				)}
+			</FarqBottomSheet>
 
 			{drawerOpen ? (
 				<>

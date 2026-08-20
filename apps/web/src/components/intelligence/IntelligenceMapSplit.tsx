@@ -38,6 +38,9 @@ import {
 	type MapViewChangeMeta,
 } from "../../lib/farqMapViewport";
 import { localizeDigitString } from "../../lib/formatPrice";
+import { viewportStats } from "../../lib/farqViewportStats";
+import { getProviderLabel } from "../../lib/platformLogos";
+import { sheetHeightPx } from "./FarqBottomSheet";
 import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { providerTintClass } from "../../lib/providerTint";
 import {
@@ -407,7 +410,7 @@ export default function IntelligenceMapSplit({
 	}, [fetchPlaces]);
 
 	useEffect(() => {
-		if (drawerOpen || searchFocused || sheetSnap === "expanded") {
+		if (drawerOpen || searchFocused || sheetSnap !== "peek") {
 			splitRef.current?.removeAttribute("data-chrome-hidden");
 		}
 	}, [drawerOpen, searchFocused, sheetSnap]);
@@ -699,6 +702,48 @@ export default function IntelligenceMapSplit({
 
 	const aroundMax = topSavings[0] || null;
 
+	/* One honest line for what the camera shows — the sheet's head on the phone. */
+	const stats = useMemo(
+		() => viewportStats((visiblePlaces?.features || []) as Parameters<typeof viewportStats>[0], cityPlaces ? viewBbox : null),
+		[visiblePlaces, cityPlaces, viewBbox],
+	);
+	const headline = useMemo(() => {
+		const n = (v: number) => localizeDigitString(String(v), isRTL);
+		const generated = cityPlaces?.generated_at ? cityPlaces.generated_at.slice(0, 10) : null;
+		const primary =
+			stats.count > 0
+				? isRTL
+					? `${n(stats.count)} فرصة في هذا النطاق · أكبرها ${n(stats.maxGap || 0)} ر.س`
+					: `${stats.count} opportunities here · biggest ${stats.maxGap} SAR`
+				: isRTL
+					? "لا فرص مرصودة في هذا النطاق"
+					: "No observed opportunities in this area";
+		const verdict = stats.verdict;
+		const secondary = verdict
+			? isRTL
+				? `${getProviderLabel(verdict.provider, { isRTL: true }) || verdict.provider} أرخص في ${n(verdict.wins)} من ${n(verdict.comparisons)} مقارنة حولك`
+				: `${getProviderLabel(verdict.provider, { isRTL: false }) || verdict.provider} cheapest in ${verdict.wins} of ${verdict.comparisons} comparisons here`
+			: stats.count > 0
+				? generated
+					? isRTL
+						? `بيانات المقارنة محدثة ${n(Number(generated.slice(8, 10)))}/${n(Number(generated.slice(5, 7)))}`
+						: `Comparison data as of ${generated}`
+					: null
+				: isRTL
+					? "حرّك الخريطة أو وسّع النطاق"
+					: "Move the map or widen the area";
+		return (
+			<>
+				<strong>{primary}</strong>
+				{secondary ? <span>{secondary}</span> : null}
+			</>
+		);
+	}, [stats, cityPlaces, isRTL]);
+	const sheetInset = sheetHeightPx(
+		sheetSnap,
+		typeof window !== "undefined" ? window.innerHeight : 800,
+	);
+
 	const locateUser = useCallback(() => {
 		pendingLocateRef.current = true;
 		dismissError();
@@ -762,7 +807,9 @@ export default function IntelligenceMapSplit({
 	}, []);
 
 	const onMapInteraction = useCallback((phase: "start" | "end") => {
-		if (drawerOpen || searchFocused || sheetSnap === "expanded") return;
+		/* Touching the map is a vote for the map: the sheet drops to peek, the selection stays. */
+		if (phase === "start" && sheetSnap !== "peek") setSheetSnap("peek");
+		if (drawerOpen || searchFocused || sheetSnap !== "peek") return;
 		const root = splitRef.current;
 		window.clearTimeout(chromeHideTimerRef.current);
 		if (phase === "start") {
@@ -778,6 +825,7 @@ export default function IntelligenceMapSplit({
 		(row: { placeId: string; lat: number; lng: number }) => {
 			lastFocusedPlaceRef.current = row.placeId;
 			setLivePlaceId(row.placeId);
+			setSheetSnap("half");
 			setFocusRequest({
 				lat: row.lat,
 				lng: row.lng,
@@ -788,7 +836,6 @@ export default function IntelligenceMapSplit({
 				place: row.placeId,
 				neighborhood: undefined,
 			});
-			setSheetSnap("peek");
 			setComparePanelHidden(false);
 			setDrawerOpen(false);
 		},
@@ -896,7 +943,7 @@ export default function IntelligenceMapSplit({
 			data-testid="intelligence-map-split"
 			data-view={view}
 			data-sheet-open={livePlaceId && !comparePanelHidden ? "true" : undefined}
-			data-sheet-snap={livePlaceId ? undefined : sheetSnap}
+			data-sheet-snap={sheetSnap}
 			data-panel-collapsed={comparePanelHidden ? "true" : undefined}
 			data-legend-open={legendOpen ? "true" : undefined}
 			data-drawer-open={drawerOpen ? "true" : undefined}
@@ -938,6 +985,26 @@ export default function IntelligenceMapSplit({
 					onExploreRadius={applyExploreRadius}
 					aroundMax={aroundMax}
 					topSavings={topSavings}
+					headline={headline}
+					selectedPanel={
+						livePlaceId ? (
+							<SelectedPlaceSheet
+								variant="panel"
+								placeDetail={placeDetail}
+								feature={selectedPlaceFeature?.properties}
+								selectedCategory={selectedCategory}
+								selectedRestaurantId={selectedRestaurantId}
+								isRTL={isRTL}
+								onClose={closePlace}
+								onHide={() => setSheetSnap("peek")}
+								onOpenMenu={openRestaurantMenu}
+								opportunityIndex={selectedTopIndex}
+								opportunityCount={opportunityList.length}
+								onPrevOpportunity={() => stepOpportunity(-1)}
+								onNextOpportunity={() => stepOpportunity(1)}
+							/>
+						) : null
+					}
 					sheetSnap={sheetSnap}
 					onSheetSnap={setSheetSnap}
 					placesFetching={placesFetching}
@@ -1186,6 +1253,7 @@ export default function IntelligenceMapSplit({
 					>
 						<FarqMap
 							places={displayPlaces}
+							bottomInset={sheetInset}
 							neighborhoods={hoods}
 							gisNeighborhoods={gisHoodsOn ? overlayHoods : null}
 							selectedPlaceId={livePlaceId}
@@ -1199,6 +1267,7 @@ export default function IntelligenceMapSplit({
 							isRTL={isRTL}
 							onSelectPlace={(id) => {
 								setLivePlaceId(id);
+								setSheetSnap("half");
 								lastFocusedPlaceRef.current = id;
 								setComparePanelHidden(false);
 								patchSearch({ place: id, neighborhood: undefined });
@@ -1269,30 +1338,6 @@ export default function IntelligenceMapSplit({
 					) : null}
 				</div>
 
-				{livePlaceId && !comparePanelHidden ? (
-					<div
-						className="farq-map-place-host lg:hidden"
-						data-testid="intelligence-map-place-backdrop"
-						onPointerDown={(e) => e.stopPropagation()}
-						onPointerMove={(e) => e.stopPropagation()}
-					>
-						<SelectedPlaceSheet
-							variant="panel"
-							placeDetail={placeDetail}
-							feature={selectedPlaceFeature?.properties}
-							selectedCategory={selectedCategory}
-							selectedRestaurantId={selectedRestaurantId}
-							isRTL={isRTL}
-							onClose={closePlace}
-							onHide={() => setComparePanelHidden(true)}
-							onOpenMenu={openRestaurantMenu}
-							opportunityIndex={selectedTopIndex}
-							opportunityCount={opportunityList.length}
-							onPrevOpportunity={() => stepOpportunity(-1)}
-							onNextOpportunity={() => stepOpportunity(1)}
-						/>
-					</div>
-				) : null}
 
 				{comparePanelHidden ? (
 					<button
