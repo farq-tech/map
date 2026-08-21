@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  An explicit Info.plist rather than a generated one.
+
+  Xcode's INFOPLIST_KEY_* mechanism only injects keys it already knows about:
+  the location strings below arrive that way, but MBXAccessToken is not on that
+  list and was dropped silently — the app built, installed, launched, and drew
+  no tiles. A real file substitutes any build setting, so the token can come
+  from Secrets.xcconfig, which is not in version control.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Xcode fills these when it generates the file; with an explicit one they
+	     are ours to supply, and a bundle without them installs nowhere. -->
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+
+	<key>CFBundleDisplayName</key>
+	<string>فرق</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+
+	<!-- Substituted from Secrets.xcconfig at build time. -->
+	<key>MBXAccessToken</key>
+	<string>$(MAPBOX_PUBLIC_TOKEN)</string>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>يستخدم فرق موقعك ليعرض أرخص الخيارات حولك وليأخذك إلى الفرع الذي جاء منه السعر.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>التوجيه منعطفًا بمنعطف يحتاج موقعك حتى والشاشة مطفأة أو وأنت في تطبيق آخر.</string>
+
+	<!-- The same family the web loads from Google Fonts. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>Tajawal.ttf</string>
+		<string>Tajawal-Medium.ttf</string>
+		<string>Tajawal-Bold.ttf</string>
+		<string>TajawalExtraBold.ttf</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+</dict>
+</plist>

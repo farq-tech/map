@@ -1,0 +1,416 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		597F2B91D2673DC9395BB813 /* FarqNavigateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC4DDF15475A2CE2BA81444 /* FarqNavigateApp.swift */; };
+		8C9155BE6CFAC86E5231C0A3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F49933B2A32D31EFCFB077CA /* ContentView.swift */; };
+		40486317E416F80DA9E1B242 /* Farq/FarqAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC8A7F0D7AB0504B57BACD4F /* Farq/FarqAPI.swift */; };
+		5133D503529A2E33EF7CF52A /* Farq/Opportunity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64FDC6525DF6FFFEC932191B /* Farq/Opportunity.swift */; };
+		C5AE45645FE864327867554D /* Navigation/RouteConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACDEC328B4B594AFB1234F54 /* Navigation/RouteConfiguration.swift */; };
+		8E4A84E8D9D54E3795D70E78 /* Navigation/NavigationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D3B596842B27F85C62CDE8B /* Navigation/NavigationModel.swift */; };
+		6AE7961CF620FB3BDFD9368C /* Support/LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076E782E11C5D86B022A6624 /* Support/LocationProvider.swift */; };
+		108620F7AF2E32FAEA7BDADC /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 94DB11554AAC596D829299C9 /* MapLibre */; };
+		CE0761884E97CB1983446CF4 /* FerrostarCore in Frameworks */ = {isa = PBXBuildFile; productRef = EB799101214B785051C56286 /* FerrostarCore */; };
+		AF8C55A5DA9280C14FFD5424 /* FerrostarMapLibreUI in Frameworks */ = {isa = PBXBuildFile; productRef = 79255268702224521B57E105 /* FerrostarMapLibreUI */; };
+		12F7F5CB8EF45A5C5F113DC6 /* FerrostarSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F610B010926B2DCC41EB2C6C /* FerrostarSwiftUI */; };
+		A6FCA8ED324290CB01817448 /* Navigation/FarqMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A68829F5D83169EB18692DD7 /* Navigation/FarqMapView.swift */; };
+		F11C534043AA8E2969A0DCA1 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 15EAC762680A41F8EE13792E /* MapboxMaps */; };
+		EF2E37D8690BCB24A79A0972 /* FarqTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EE3EABD30E6A6B53E0214D5 /* FarqTheme.swift */; };
+		E7666648270A1107F6C02DA4 /* FarqChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46673DADB12A8F0B0F50E2ED /* FarqChrome.swift */; };
+		327ADE600FA596EF395A79B1 /* OpportunitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD805ABD2A0ED334C311E53 /* OpportunitySheet.swift */; };
+		12CEDD2DAEAEC0E1D6C45746 /* Tajawal.ttf in Resources */ = {isa = PBXBuildFile; fileRef = BDB8B537518A4285D3A0CCB2 /* Tajawal.ttf */; };
+		5E792686D5FBC1A91452672C /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3B682E738F254D8DEBB25CB5 /* Tajawal-Medium.ttf */; };
+		69A8FBC4218C7033A5CA334D /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */; };
+		7D50B35AFE9089045CCBE64B /* TajawalExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 590E77E1607088A3F18BC7B1 /* TajawalExtraBold.ttf */; };
+		CDF39EDCFA19CB8F1AF33A78 /* FarqField.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		84337AD8D27FCD69AF2C4FC2 /* FarqNavigate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FarqNavigate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDC4DDF15475A2CE2BA81444 /* FarqNavigateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqNavigateApp.swift; sourceTree = "<group>"; };
+		F49933B2A32D31EFCFB077CA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DC8A7F0D7AB0504B57BACD4F /* FarqAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqAPI.swift; sourceTree = "<group>"; };
+		64FDC6525DF6FFFEC932191B /* Opportunity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Opportunity.swift; sourceTree = "<group>"; };
+		ACDEC328B4B594AFB1234F54 /* RouteConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteConfiguration.swift; sourceTree = "<group>"; };
+		3D3B596842B27F85C62CDE8B /* NavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModel.swift; sourceTree = "<group>"; };
+		076E782E11C5D86B022A6624 /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
+		A68829F5D83169EB18692DD7 /* FarqMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqMapView.swift; sourceTree = "<group>"; };
+		4E4D35D364C5210F40D19B2A /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Secrets.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		12F1C9823B7D241C34392D7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		8EE3EABD30E6A6B53E0214D5 /* FarqTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqTheme.swift; sourceTree = "<group>"; };
+		46673DADB12A8F0B0F50E2ED /* FarqChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqChrome.swift; sourceTree = "<group>"; };
+		ADD805ABD2A0ED334C311E53 /* OpportunitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpportunitySheet.swift; sourceTree = "<group>"; };
+		BDB8B537518A4285D3A0CCB2 /* Tajawal.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Tajawal.ttf"; sourceTree = "<group>"; };
+		3B682E738F254D8DEBB25CB5 /* Tajawal-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Tajawal-Medium.ttf"; sourceTree = "<group>"; };
+		7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Tajawal-Bold.ttf"; sourceTree = "<group>"; };
+		590E77E1607088A3F18BC7B1 /* TajawalExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/TajawalExtraBold.ttf"; sourceTree = "<group>"; };
+		C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqField.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		424153ED3CD079DB4DB459AF = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F11C534043AA8E2969A0DCA1 /* MapboxMaps in Frameworks */,
+				108620F7AF2E32FAEA7BDADC /* MapLibre in Frameworks */,
+				CE0761884E97CB1983446CF4 /* FerrostarCore in Frameworks */,
+				AF8C55A5DA9280C14FFD5424 /* FerrostarMapLibreUI in Frameworks */,
+				12F7F5CB8EF45A5C5F113DC6 /* FerrostarSwiftUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B9340614599AB78F485950C7 = {
+			isa = PBXGroup;
+			children = (
+				4E4D35D364C5210F40D19B2A /* Secrets.xcconfig */,
+				82CF2A43A7100F086D7FCFDD /* FarqNavigate */,
+				547D009064F7C3F13BEF3460 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		547D009064F7C3F13BEF3460 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				84337AD8D27FCD69AF2C4FC2 /* FarqNavigate.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		82CF2A43A7100F086D7FCFDD /* FarqNavigate */ = {
+			isa = PBXGroup;
+			children = (
+				887A6F90336FF23D95C3914B /* Resources */,
+				38DF21AEF4612506D6BE5CBE /* Views */,
+				5FDB91368D7DDA2418B6CB65 /* Design */,
+				12F1C9823B7D241C34392D7F /* Info.plist */,
+				DDC4DDF15475A2CE2BA81444 /* FarqNavigateApp.swift */,
+				F49933B2A32D31EFCFB077CA /* ContentView.swift */,
+				48A866FED985E364494A2B60 /* Farq */,
+				B773EB1E0EAC24707A76989B /* Navigation */,
+				F7ED0AE08FBB92027261B793 /* Support */,
+			);
+			path = FarqNavigate;
+			sourceTree = "<group>";
+		};
+		48A866FED985E364494A2B60 /* Farq */ = {
+			isa = PBXGroup;
+			children = (
+				DC8A7F0D7AB0504B57BACD4F /* FarqAPI.swift */,
+				64FDC6525DF6FFFEC932191B /* Opportunity.swift */,
+			);
+			path = Farq;
+			sourceTree = "<group>";
+		};
+		B773EB1E0EAC24707A76989B /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */,
+				A68829F5D83169EB18692DD7 /* FarqMapView.swift */,
+				ACDEC328B4B594AFB1234F54 /* RouteConfiguration.swift */,
+				3D3B596842B27F85C62CDE8B /* NavigationModel.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		F7ED0AE08FBB92027261B793 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				076E782E11C5D86B022A6624 /* LocationProvider.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		5FDB91368D7DDA2418B6CB65 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				8EE3EABD30E6A6B53E0214D5 /* FarqTheme.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		38DF21AEF4612506D6BE5CBE /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				46673DADB12A8F0B0F50E2ED /* FarqChrome.swift */,
+				ADD805ABD2A0ED334C311E53 /* OpportunitySheet.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		887A6F90336FF23D95C3914B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BDB8B537518A4285D3A0CCB2 /* Tajawal.ttf */,
+				3B682E738F254D8DEBB25CB5 /* Tajawal-Medium.ttf */,
+				7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */,
+				590E77E1607088A3F18BC7B1 /* TajawalExtraBold.ttf */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		42AEFBAE01D2DFD981F7DA7D /* FarqNavigate */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 354589B28580510B6EC24620;
+			buildPhases = (
+				7A70D71C385290AF96BF1031,
+				424153ED3CD079DB4DB459AF,
+				285BB1C1430063331E9F5DD0,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = FarqNavigate;
+			packageProductDependencies = (
+				15EAC762680A41F8EE13792E /* MapboxMaps */,
+				94DB11554AAC596D829299C9 /* MapLibre */,
+				EB799101214B785051C56286 /* FerrostarCore */,
+				79255268702224521B57E105 /* FerrostarMapLibreUI */,
+				F610B010926B2DCC41EB2C6C /* FerrostarSwiftUI */,
+			);
+			productName = FarqNavigate;
+			productReference = 84337AD8D27FCD69AF2C4FC2 /* FarqNavigate.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		46F86FAA6BBF9AC94A7E4595 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					42AEFBAE01D2DFD981F7DA7D = { CreatedOnToolsVersion = 16.0; };
+				};
+			};
+			buildConfigurationList = 1F4E3D13C2320EDA50221924;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				ar,
+				Base,
+			);
+			mainGroup = B9340614599AB78F485950C7;
+			packageReferences = (
+				F7A03BCBD89069AF32A3FCBF /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
+				2CFC87C23E5479663AF62E4A /* XCRemoteSwiftPackageReference "maplibre" */,
+				1D9DFCC36AD46F25D2C69DEC /* XCRemoteSwiftPackageReference "ferrostar" */,
+			);
+			productRefGroup = 547D009064F7C3F13BEF3460 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				42AEFBAE01D2DFD981F7DA7D /* FarqNavigate */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		285BB1C1430063331E9F5DD0 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (				7D50B35AFE9089045CCBE64B /* TajawalExtraBold.ttf in Resources */,
+				69A8FBC4218C7033A5CA334D /* Tajawal-Bold.ttf in Resources */,
+				5E792686D5FBC1A91452672C /* Tajawal-Medium.ttf in Resources */,
+				12CEDD2DAEAEC0E1D6C45746 /* Tajawal.ttf in Resources */,
+);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7A70D71C385290AF96BF1031 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDF39EDCFA19CB8F1AF33A78 /* FarqField.swift in Sources */,
+				327ADE600FA596EF395A79B1 /* OpportunitySheet.swift in Sources */,
+				E7666648270A1107F6C02DA4 /* FarqChrome.swift in Sources */,
+				EF2E37D8690BCB24A79A0972 /* FarqTheme.swift in Sources */,
+				597F2B91D2673DC9395BB813 /* FarqNavigateApp.swift in Sources */,
+				8C9155BE6CFAC86E5231C0A3 /* ContentView.swift in Sources */,
+				A6FCA8ED324290CB01817448 /* Navigation/FarqMapView.swift in Sources */,
+				40486317E416F80DA9E1B242 /* Farq/FarqAPI.swift in Sources */,
+				5133D503529A2E33EF7CF52A /* Farq/Opportunity.swift in Sources */,
+				C5AE45645FE864327867554D /* Navigation/RouteConfiguration.swift in Sources */,
+				8E4A84E8D9D54E3795D70E78 /* Navigation/NavigationModel.swift in Sources */,
+				6AE7961CF620FB3BDFD9368C /* Support/LocationProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		029A87E3962F9BA56AEFBA60 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		214ADBCAA287ADBCC809F9EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		445869E5AB0B017BF5AFD352 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4E4D35D364C5210F40D19B2A /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = AppKit;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = MH7J92HV9N;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FarqNavigate/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = sa.farq.navigate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1606928D4833B32747D0560D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4E4D35D364C5210F40D19B2A /* Secrets.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = AppKit;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = MH7J92HV9N;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FarqNavigate/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = sa.farq.navigate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1F4E3D13C2320EDA50221924 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				029A87E3962F9BA56AEFBA60 /* Debug */,
+				214ADBCAA287ADBCC809F9EF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		354589B28580510B6EC24620 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				445869E5AB0B017BF5AFD352 /* Debug */,
+				1606928D4833B32747D0560D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2CFC87C23E5479663AF62E4A /* XCRemoteSwiftPackageReference "maplibre" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.28.0;
+			};
+		};
+		1D9DFCC36AD46F25D2C69DEC /* XCRemoteSwiftPackageReference "ferrostar" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stadiamaps/ferrostar";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.54.0;
+			};
+		};
+		F7A03BCBD89069AF32A3FCBF /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.29.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		94DB11554AAC596D829299C9 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2CFC87C23E5479663AF62E4A /* XCRemoteSwiftPackageReference "maplibre" */;
+			productName = MapLibre;
+		};
+		EB799101214B785051C56286 /* FerrostarCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1D9DFCC36AD46F25D2C69DEC /* XCRemoteSwiftPackageReference "ferrostar" */;
+			productName = FerrostarCore;
+		};
+		79255268702224521B57E105 /* FerrostarMapLibreUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1D9DFCC36AD46F25D2C69DEC /* XCRemoteSwiftPackageReference "ferrostar" */;
+			productName = FerrostarMapLibreUI;
+		};
+		F610B010926B2DCC41EB2C6C /* FerrostarSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1D9DFCC36AD46F25D2C69DEC /* XCRemoteSwiftPackageReference "ferrostar" */;
+			productName = FerrostarSwiftUI;
+		};
+		15EAC762680A41F8EE13792E /* MapboxMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F7A03BCBD89069AF32A3FCBF /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
+			productName = MapboxMaps;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+}

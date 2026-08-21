@@ -1,0 +1,78 @@
+{
+  "originHash" : "ba8704befd0444d51756d19bf20995f5957fb1a43df768eb388d8a6d57c6b365",
+  "pins" : [
+    {
+      "identity" : "ferrostar",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/stadiamaps/ferrostar",
+      "state" : {
+        "revision" : "918a186909535c648d88f2a6a8beb5e650f98ec7",
+        "version" : "0.54.0"
+      }
+    },
+    {
+      "identity" : "mapbox-common-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-common-ios.git",
+      "state" : {
+        "revision" : "8764a64b7505ec19e318b3fb7a2ee4ae6189bd1e",
+        "version" : "24.29.0"
+      }
+    },
+    {
+      "identity" : "mapbox-core-maps-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-core-maps-ios.git",
+      "state" : {
+        "revision" : "ec9669bfef411c9eeb59297fcbac11acfe24e5c1",
+        "version" : "11.29.0"
+      }
+    },
+    {
+      "identity" : "mapbox-maps-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/mapbox-maps-ios.git",
+      "state" : {
+        "revision" : "c624e76b3accfaaf355a33434d8f57db26016034",
+        "version" : "11.29.0"
+      }
+    },
+    {
+      "identity" : "maplibre-gl-native-distribution",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/maplibre/maplibre-gl-native-distribution",
+      "state" : {
+        "revision" : "5ee345ca5d65238a6fce29bba87816204be7df20",
+        "version" : "6.28.0"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
+      }
+    },
+    {
+      "identity" : "swiftui-dsl",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/maplibre/swiftui-dsl",
+      "state" : {
+        "revision" : "139e83d1487f29b42a4f5db2458594170f0ff7e3",
+        "version" : "0.25.0"
+      }
+    },
+    {
+      "identity" : "turf-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mapbox/turf-swift.git",
+      "state" : {
+        "revision" : "bf840e6b9529d105687840fe2c9dcd74197d46d1",
+        "version" : "4.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

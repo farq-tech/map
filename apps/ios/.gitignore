@@ -1,0 +1,9 @@
+# The Mapbox public token. Safe inside a shipped binary, not safe in a public
+# repository — see scripts/write-secrets.sh to regenerate it locally.
+Secrets.xcconfig
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
