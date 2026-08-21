@@ -19,6 +19,7 @@ enum FarqField {
     static let opportunitySource = "farq-opportunities"
     static let clusterCircles = "farq-price-clusters"
     static let pinCircles = "farq-price-pins"
+    static let pinIcons = "farq-price-icons"
 
     /// The handover contract, unchanged from the web: the field fades out as the
     /// clusters fade in, so one picture changes resolution instead of two layers
@@ -160,9 +161,50 @@ enum FarqField {
             try map.addLayer(clusters)
         }
 
+        if map.layerExists(withId: pinIcons) == false {
+            var icons = SymbolLayer(id: pinIcons, source: opportunitySource)
+            /* Close in, the number stops being the whole answer: which app is
+             * cheapest here is the thing no competitor can say, and a mint disc
+             * says nothing about it. */
+            icons.minZoom = clusterBreakZoom
+            icons.filter = Exp(.not) { Exp(.has) { "point_count" } }
+            icons.iconImage = .expression(
+                Exp(.concat) {
+                    "farq-provider-"
+                    Exp(.coalesce) { Exp(.get) { "provider" }; "unknown" }
+                }
+            )
+            icons.iconAnchor = .constant(.bottom)
+            icons.iconAllowOverlap = .constant(false)
+            icons.iconEmissiveStrength = .constant(1)
+            icons.symbolSortKey = .expression(Exp(.product) { gapValue; -1 })
+            icons.textField = .expression(
+                Exp(.switchCase) {
+                    Exp(.gte) { gapValue; 5 }
+                    Exp(.concat) {
+                        Exp(.toString) { Exp(.round) { gapValue } }
+                        " ر.س"
+                    }
+                    Exp(.coalesce) { Exp(.get) { "product_name" }; "" }
+                }
+            )
+            icons.textSize = .constant(12)
+            icons.textAnchor = .constant(.top)
+            icons.textOffset = .constant([0, 0.35])
+            icons.textColor = .constant(StyleColor(hex: brand900))
+            icons.textHaloColor = .constant(StyleColor(hex: mint))
+            icons.textHaloWidth = .constant(2.2)
+            icons.textEmissiveStrength = .constant(1)
+            /* The label may be dropped to save the logo, never the other way
+             * round — a price with no app beside it answers half the question. */
+            icons.textOptional = .constant(true)
+            try map.addLayer(icons)
+        }
+
         if map.layerExists(withId: pinCircles) == false {
             var pins = SymbolLayer(id: pinCircles, source: opportunitySource)
             pins.minZoom = handoverZoom
+            pins.maxZoom = clusterBreakZoom
             pins.filter = Exp(.not) { Exp(.has) { "point_count" } }
             /* Sized by the approved tier, not by taste: a hero is a top-decile
              * gap (≥36 ر.س), a faint one is below the typical gap and shows no
@@ -228,6 +270,85 @@ enum FarqField {
         for (id, diameter) in sizes where map.imageExists(withId: id) == false {
             try map.addImage(disc(diameter: diameter), id: id)
         }
+        try installProviderBadges(on: map)
+    }
+
+    /// The delivery apps' own marks, each on a white chip with a mint edge.
+    ///
+    /// The logo is the identity; the chip is only what makes it legible over a
+    /// dusk basemap. An app we have no mark for still gets a chip, because the
+    /// place is real either way.
+    private static func installProviderBadges(on map: MapboxMap) throws {
+        let assets: [String: String] = [
+            "jahez": "jahez",
+            "mrsool": "mrsool",
+            "hungerstation": "hs",
+            "thechefz": "chefz",
+            "toyou": "toyou",
+            "ninja": "ninja",
+            "keeta": "keeta",
+            "brand_app": "brand_app",
+        ]
+        for (provider, asset) in assets {
+            let id = "farq-provider-\(provider)"
+            guard map.imageExists(withId: id) == false else { continue }
+            try map.addImage(badge(UIImage(named: asset)), id: id)
+        }
+        if map.imageExists(withId: "farq-provider-unknown") == false {
+            try map.addImage(badge(nil), id: "farq-provider-unknown")
+        }
+    }
+
+    private static func badge(_ logo: UIImage?, scale: CGFloat = 3) -> UIImage {
+        let size = CGSize(width: 40, height: 46)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            let circle = CGRect(x: 2, y: 2, width: 36, height: 36)
+            let tail = UIBezierPath()
+            tail.move(to: CGPoint(x: 14, y: 32))
+            tail.addLine(to: CGPoint(x: 20, y: 44))
+            tail.addLine(to: CGPoint(x: 26, y: 32))
+            tail.close()
+
+            ctx.cgContext.setShadow(
+                offset: CGSize(width: 0, height: 1),
+                blur: 4,
+                color: UIColor.black.withAlphaComponent(0.3).cgColor
+            )
+            UIColor.white.setFill()
+            tail.fill()
+            UIBezierPath(ovalIn: circle).fill()
+            ctx.cgContext.setShadow(offset: .zero, blur: 0, color: nil)
+
+            if let logo {
+                let inset = circle.insetBy(dx: 6, dy: 6)
+                logo.draw(in: fit(logo.size, into: inset))
+            } else {
+                UIColor(hex: brand900).setFill()
+                UIBezierPath(ovalIn: circle.insetBy(dx: 13, dy: 13)).fill()
+            }
+
+            UIColor(hex: mint).setStroke()
+            let ring = UIBezierPath(ovalIn: circle.insetBy(dx: 0.9, dy: 0.9))
+            ring.lineWidth = 1.8
+            ring.stroke()
+        }
+    }
+
+    /// Whole logo, never cropped: a mark with its edge cut off is a different
+    /// mark, and these belong to other companies.
+    private static func fit(_ source: CGSize, into box: CGRect) -> CGRect {
+        guard source.width > 0, source.height > 0 else { return box }
+        let scale = min(box.width / source.width, box.height / source.height)
+        let size = CGSize(width: source.width * scale, height: source.height * scale)
+        return CGRect(
+            x: box.midX - size.width / 2,
+            y: box.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
     }
 
     private static func disc(diameter: CGFloat) -> UIImage {
@@ -261,6 +382,9 @@ enum FarqField {
                  * pin labelled 0 claims a comparison that found no difference. */
                 "gap": opportunity.gap.map { JSONValue.number($0) },
                 "name": .string(opportunity.name),
+                "product_name": opportunity.productName.map { JSONValue.string($0) },
+                /* Which app was cheapest here — the thing the map is for. */
+                "provider": opportunity.cheapestProvider.map { JSONValue.string($0) },
             ]
             return feature
         }

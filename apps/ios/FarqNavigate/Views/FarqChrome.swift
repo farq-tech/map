@@ -7,6 +7,9 @@ struct FarqTopChrome: View {
     @Binding var lens: DistrictLens
     let districtLabel: String
     let onPickDistrict: () -> Void
+    /// Your photo, shown where the menu button is once you have chosen one.
+    let avatar: UIImage?
+    let onOpenProfile: () -> Void
 
     var body: some View {
         VStack(spacing: 10) {
@@ -21,17 +24,28 @@ struct FarqTopChrome: View {
     private var header: some View {
         HStack {
             Spacer()
-            HStack(spacing: 10) {
-                Text("Farq")
-                    .font(.custom("Tajawal-Bold", size: 22))
-                    .foregroundStyle(Farq.mint)
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+            Button(action: onOpenProfile) {
+                HStack(spacing: 10) {
+                    Text("Farq")
+                        .font(.custom("Tajawal-Bold", size: 22))
+                        .foregroundStyle(Farq.mint)
+                    if let avatar {
+                        Image(uiImage: avatar)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 28, height: 28)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Farq.mint, lineWidth: 1.5))
+                    } else {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .frame(height: Farq.tapTarget)
+                .background(Farq.brand900, in: RoundedRectangle(cornerRadius: 14))
             }
-            .padding(.horizontal, 16)
-            .frame(height: Farq.tapTarget)
-            .background(Farq.brand900, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 

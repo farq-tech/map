@@ -27,6 +27,18 @@
 		69A8FBC4218C7033A5CA334D /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */; };
 		7D50B35AFE9089045CCBE64B /* TajawalExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 590E77E1607088A3F18BC7B1 /* TajawalExtraBold.ttf */; };
 		CDF39EDCFA19CB8F1AF33A78 /* FarqField.swift in Sources */ = {isa = PBXBuildFile; fileRef = C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */; };
+		84785EE6F2D48CFC20971947 /* FarqVehicle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0451B4EAE02F28E8CE084D84 /* FarqVehicle.swift */; };
+		C297242AB3A4F2F86A3B5D38 /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27FE89133600271A22B55FAA /* UserProfile.swift */; };
+		19F5360DF1E5CAB2AEACFDAA /* FarqProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD287A08602BB3BB21DD265F /* FarqProfileSheet.swift */; };
+		0FFB23BD86657C8A3DFCC021 /* SelectedPlaceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1BFD1E106021C0819B238C /* SelectedPlaceCard.swift */; };
+		3DA017F4A7604507F9753C62 /* jahez.png in Resources */ = {isa = PBXBuildFile; fileRef = D7ABE5E6F7654D7CF710B18C /* jahez.png */; };
+		D15485BB81BC04FAD99D0517 /* mrsool.png in Resources */ = {isa = PBXBuildFile; fileRef = 55A8311B27CEB9C31773BF1A /* mrsool.png */; };
+		54854CC6F9D53A23128465E6 /* hs.png in Resources */ = {isa = PBXBuildFile; fileRef = E3DC2BD6FD86355B0B4F2CD7 /* hs.png */; };
+		65C3C58B665AE55CC07EC4B3 /* chefz.png in Resources */ = {isa = PBXBuildFile; fileRef = 38C8F5223938A3DF9289B0CE /* chefz.png */; };
+		7766F8D2F805230DC491EB47 /* toyou.png in Resources */ = {isa = PBXBuildFile; fileRef = 53AC40FF235A40246066A40D /* toyou.png */; };
+		483ABE3E92057C4EE24416FA /* ninja.png in Resources */ = {isa = PBXBuildFile; fileRef = 73E5BE1FB2FA66B449A17BCE /* ninja.png */; };
+		29817269829B0B9D60947B31 /* keeta.png in Resources */ = {isa = PBXBuildFile; fileRef = FCBEFD45DA63CAFF74D58461 /* keeta.png */; };
+		3C7AE7CBF870A7183A62DA0B /* brand_app.png in Resources */ = {isa = PBXBuildFile; fileRef = 0986196558F216B839C44F96 /* brand_app.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +61,18 @@
 		7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Tajawal-Bold.ttf"; sourceTree = "<group>"; };
 		590E77E1607088A3F18BC7B1 /* TajawalExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/TajawalExtraBold.ttf"; sourceTree = "<group>"; };
 		C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqField.swift; sourceTree = "<group>"; };
+		0451B4EAE02F28E8CE084D84 /* FarqVehicle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqVehicle.swift; sourceTree = "<group>"; };
+		27FE89133600271A22B55FAA /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
+		AD287A08602BB3BB21DD265F /* FarqProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqProfileSheet.swift; sourceTree = "<group>"; };
+		CA1BFD1E106021C0819B238C /* SelectedPlaceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedPlaceCard.swift; sourceTree = "<group>"; };
+		D7ABE5E6F7654D7CF710B18C /* jahez.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/jahez.png"; sourceTree = "<group>"; };
+		55A8311B27CEB9C31773BF1A /* mrsool.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/mrsool.png"; sourceTree = "<group>"; };
+		E3DC2BD6FD86355B0B4F2CD7 /* hs.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/hs.png"; sourceTree = "<group>"; };
+		38C8F5223938A3DF9289B0CE /* chefz.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/chefz.png"; sourceTree = "<group>"; };
+		53AC40FF235A40246066A40D /* toyou.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/toyou.png"; sourceTree = "<group>"; };
+		73E5BE1FB2FA66B449A17BCE /* ninja.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/ninja.png"; sourceTree = "<group>"; };
+		FCBEFD45DA63CAFF74D58461 /* keeta.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/keeta.png"; sourceTree = "<group>"; };
+		0986196558F216B839C44F96 /* brand_app.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/brand_app.png"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,6 +147,7 @@
 		F7ED0AE08FBB92027261B793 /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				27FE89133600271A22B55FAA /* UserProfile.swift */,
 				076E782E11C5D86B022A6624 /* LocationProvider.swift */,
 			);
 			path = Support;
@@ -131,6 +156,7 @@
 		5FDB91368D7DDA2418B6CB65 /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				0451B4EAE02F28E8CE084D84 /* FarqVehicle.swift */,
 				8EE3EABD30E6A6B53E0214D5 /* FarqTheme.swift */,
 			);
 			path = Design;
@@ -139,6 +165,8 @@
 		38DF21AEF4612506D6BE5CBE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				CA1BFD1E106021C0819B238C /* SelectedPlaceCard.swift */,
+				AD287A08602BB3BB21DD265F /* FarqProfileSheet.swift */,
 				46673DADB12A8F0B0F50E2ED /* FarqChrome.swift */,
 				ADD805ABD2A0ED334C311E53 /* OpportunitySheet.swift */,
 			);
@@ -148,6 +176,14 @@
 		887A6F90336FF23D95C3914B /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				0986196558F216B839C44F96 /* brand_app.png */,
+				FCBEFD45DA63CAFF74D58461 /* keeta.png */,
+				73E5BE1FB2FA66B449A17BCE /* ninja.png */,
+				53AC40FF235A40246066A40D /* toyou.png */,
+				38C8F5223938A3DF9289B0CE /* chefz.png */,
+				E3DC2BD6FD86355B0B4F2CD7 /* hs.png */,
+				55A8311B27CEB9C31773BF1A /* mrsool.png */,
+				D7ABE5E6F7654D7CF710B18C /* jahez.png */,
 				BDB8B537518A4285D3A0CCB2 /* Tajawal.ttf */,
 				3B682E738F254D8DEBB25CB5 /* Tajawal-Medium.ttf */,
 				7987DD99888A49D587F11144 /* Tajawal-Bold.ttf */,
@@ -222,7 +258,15 @@
 		285BB1C1430063331E9F5DD0 = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (				7D50B35AFE9089045CCBE64B /* TajawalExtraBold.ttf in Resources */,
+			files = (
+				3DA017F4A7604507F9753C62 /* jahez.png in Resources */,
+				D15485BB81BC04FAD99D0517 /* mrsool.png in Resources */,
+				54854CC6F9D53A23128465E6 /* hs.png in Resources */,
+				65C3C58B665AE55CC07EC4B3 /* chefz.png in Resources */,
+				7766F8D2F805230DC491EB47 /* toyou.png in Resources */,
+				483ABE3E92057C4EE24416FA /* ninja.png in Resources */,
+				29817269829B0B9D60947B31 /* keeta.png in Resources */,
+				3C7AE7CBF870A7183A62DA0B /* brand_app.png in Resources */,				7D50B35AFE9089045CCBE64B /* TajawalExtraBold.ttf in Resources */,
 				69A8FBC4218C7033A5CA334D /* Tajawal-Bold.ttf in Resources */,
 				5E792686D5FBC1A91452672C /* Tajawal-Medium.ttf in Resources */,
 				12CEDD2DAEAEC0E1D6C45746 /* Tajawal.ttf in Resources */,
@@ -236,6 +280,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0FFB23BD86657C8A3DFCC021 /* SelectedPlaceCard.swift in Sources */,
+				19F5360DF1E5CAB2AEACFDAA /* FarqProfileSheet.swift in Sources */,
+				C297242AB3A4F2F86A3B5D38 /* UserProfile.swift in Sources */,
+				84785EE6F2D48CFC20971947 /* FarqVehicle.swift in Sources */,
 				CDF39EDCFA19CB8F1AF33A78 /* FarqField.swift in Sources */,
 				327ADE600FA596EF395A79B1 /* OpportunitySheet.swift in Sources */,
 				E7666648270A1107F6C02DA4 /* FarqChrome.swift in Sources */,

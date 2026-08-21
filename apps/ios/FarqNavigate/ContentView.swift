@@ -11,6 +11,9 @@ struct ContentView: View {
     @StateObject private var location = LocationProvider()
     @StateObject private var model = OpportunitiesModel()
     @StateObject private var navigation = NavigationModel()
+    @StateObject private var profile = UserProfile()
+    @State private var showsProfile = false
+    @State private var selectedPlaceId: String?
     @State private var query = ""
     @State private var lens: DistrictLens = .gap
     @State private var sort: OpportunitySort = .gap
@@ -23,7 +26,9 @@ struct ContentView: View {
                 lens: lens,
                 route: navigation.routes.first,
                 userLocation: location.location?.coordinate,
-                isNavigating: navigation.state == .navigating
+                isNavigating: navigation.state == .navigating,
+                profile: profile,
+                onSelectPlace: { id in selectedPlaceId = id }
             )
 
             if navigation.state == .navigating {
@@ -37,6 +42,22 @@ struct ContentView: View {
             location.request()
             await model.load()
             await smokeRouteIfRequested()
+        }
+        .sheet(item: Binding(
+            get: { selectedPlaceId.map(SelectedPlace.init) },
+            set: { selectedPlaceId = $0?.id }
+        )) { selection in
+            if let opportunity = model.all.first(where: { $0.id == selection.id }) {
+                SelectedPlaceCard(opportunity: opportunity) {
+                    selectedPlaceId = nil
+                    Task { await navigation.planRoute(to: opportunity) }
+                }
+                .presentationDetents([.height(300)])
+            }
+        }
+        .sheet(isPresented: $showsProfile) {
+            FarqProfileSheet(profile: profile)
+                .presentationDetents([.height(520)])
         }
         .onAppear {
             /* Ferrostar keeps its own location provider, and it has to be
@@ -74,7 +95,9 @@ struct ContentView: View {
                 query: $query,
                 lens: $lens,
                 districtLabel: "اختر حي",
-                onPickDistrict: {}
+                onPickDistrict: {},
+                avatar: profile.avatar,
+                onOpenProfile: { showsProfile = true }
             )
             .padding(.top, 8)
 
@@ -99,7 +122,7 @@ struct ContentView: View {
                 onNavigate: { opportunity in
                     Task { await navigation.planRoute(to: opportunity) }
                 },
-                onSelect: { _ in }
+                onSelect: { opportunity in selectedPlaceId = opportunity.id }
             )
             .frame(height: 330)
         }
@@ -146,6 +169,9 @@ struct ContentView: View {
         }
     }
 }
+
+/// A tapped pin, wrapped so a bare id can drive a sheet.
+struct SelectedPlace: Identifiable { let id: String }
 
 /// Loads what is cheap nearby, and keeps the failure honest.
 @MainActor
