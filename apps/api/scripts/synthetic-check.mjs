@@ -46,8 +46,24 @@ const asJson = args.includes('--json');
 
 const results = [];
 
-function check(name, ok, detail) {
-	results.push({ name, ok: Boolean(ok), detail: detail || '' });
+/**
+ * One assertion. `expected` and `actual` are carried separately from the human
+ * sentence because an alert has to say what it wanted and what it got — a
+ * message that only says "district count check failed" sends someone to the
+ * logs to find out the two numbers that were already in hand.
+ */
+function check(name, ok, { expected, actual, endpoint } = {}) {
+	const detail = expected !== undefined || actual !== undefined
+		? `expected ${expected}, got ${actual}`
+		: '';
+	results.push({
+		name,
+		ok: Boolean(ok),
+		expected: expected === undefined ? null : String(expected),
+		actual: actual === undefined ? null : String(actual),
+		endpoint: endpoint || null,
+		detail,
+	});
 	if (!asJson) {
 		console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
 	}
@@ -71,17 +87,15 @@ async function get(path) {
 async function main() {
 	let reachable = false;
 
-	/* 1. The service answers at all, and says whether it believes its own data. */
+	/* 1. Liveness. The platform's own probe, checked here too so an availability
+	 *    failure is distinguishable from a data failure at the first request. */
 	try {
-		const health = await get('/api/health');
+		const version = await get('/version');
 		reachable = true;
-		check('health responds 200', health.status === 200, `got ${health.status}`);
-		check('health reports ok', health.body && health.body.ok === true,
-			health.body && health.body.data_integrity && health.body.data_integrity.last_failure
-				? `last failure: ${health.body.data_integrity.last_failure.detail}`
-				: '');
+		check('service is alive', version.status === 200,
+			{ expected: 200, actual: version.status, endpoint: '/version' });
 	} catch (err) {
-		check('health responds', false, `unreachable: ${err.message}`);
+		check('service is alive', false, { expected: 200, actual: `unreachable (${err.message})`, endpoint: '/version' });
 	}
 
 	if (!reachable) {
@@ -89,52 +103,71 @@ async function main() {
 		return;
 	}
 
-	/* 2. A city we serve returns a map with things on it. This is the assertion
-	 *    that a silently-broken read layer fails, and it is the whole point. */
+	/* 2. Readiness. The process is up; does it believe its own data? */
 	try {
-		const city = await get('/api/intelligence/map/city/riyadh/opportunities');
-		check('riyadh opportunities respond 200', city.status === 200, `got ${city.status}`);
-		const count = city.body && Array.isArray(city.body.features) ? city.body.features.length : 0;
-		check('riyadh is not empty', count >= MIN_RIYADH_OPPORTUNITIES,
-			`${count} features, floor ${MIN_RIYADH_OPPORTUNITIES}`);
-		const status = city.headers.get('x-farq-data-status');
-		check('read layer is not flagged', status !== 'source-empty', `status=${status || 'absent'}`);
-		if (status === 'stale') {
-			check('read layer freshness', false, 'layer is past the staleness ceiling');
-		}
+		const health = await get('/api/health');
+		const dataOk = Boolean(health.body && health.body.ok);
+		const why = health.body && health.body.data && health.body.data.last_failure
+			? health.body.data.last_failure.detail
+			: (health.body && health.body.data && health.body.data.refused_rebuilds || []).length
+				? `rebuild refused: ${health.body.data.refused_rebuilds.map((r) => r.violations.join(',')).join('; ')}`
+				: 'not ok';
+		check('api reports its data is trustworthy', dataOk,
+			{ expected: 'data.ok=true', actual: dataOk ? 'data.ok=true' : why, endpoint: '/api/health' });
 	} catch (err) {
-		check('riyadh opportunities', false, err.message);
+		check('api reports its data is trustworthy', false,
+			{ expected: 'data.ok=true', actual: err.message, endpoint: '/api/health' });
 	}
 
-	/* 3. The boundaries we ship are the boundaries being served. */
+	/* 3. A city we serve returns a map with things on it. This is the assertion a
+	 *    silently-broken read layer fails, and it is the whole point. */
+	try {
+		const city = await get('/api/intelligence/map/city/riyadh/opportunities');
+		check('riyadh opportunities respond 200', city.status === 200,
+			{ expected: 200, actual: city.status, endpoint: '/api/intelligence/map/city/riyadh/opportunities' });
+		const count = city.body && Array.isArray(city.body.features) ? city.body.features.length : 0;
+		check('riyadh is not empty', count >= MIN_RIYADH_OPPORTUNITIES,
+			{ expected: `>= ${MIN_RIYADH_OPPORTUNITIES} features`, actual: `${count} features`, endpoint: '/api/intelligence/map/city/riyadh/opportunities' });
+		const status = city.headers.get('x-farq-data-status');
+		check('read layer is not flagged', status !== 'source-empty' && status !== 'stale',
+			{ expected: 'ok', actual: status || 'absent', endpoint: '/api/intelligence/map/city/riyadh/opportunities' });
+	} catch (err) {
+		check('riyadh opportunities', false,
+			{ expected: 'a populated FeatureCollection', actual: err.message, endpoint: '/api/intelligence/map/city/riyadh/opportunities' });
+	}
+
+	/* 4. The boundaries we ship are the boundaries being served, and a named حي
+	 *    still counts. A broken point-in-polygon pass shows up here as a district
+	 *    that suddenly counts nothing. */
 	try {
 		const districts = await get('/api/intelligence/map/city/riyadh/districts');
-		check('riyadh districts respond 200', districts.status === 200, `got ${districts.status}`);
+		check('riyadh districts respond 200', districts.status === 200,
+			{ expected: 200, actual: districts.status, endpoint: '/api/intelligence/map/city/riyadh/districts' });
 		const features = districts.body && Array.isArray(districts.body.features)
 			? districts.body.features : [];
 		check('riyadh ships exactly the districts we committed',
 			features.length === RIYADH_DISTRICT_COUNT,
-			`${features.length}, expected ${RIYADH_DISTRICT_COUNT}`);
+			{ expected: RIYADH_DISTRICT_COUNT, actual: features.length, endpoint: '/api/intelligence/map/city/riyadh/districts' });
 
-		/* 4. A named حي that must exist and must have opportunities in it. A
-		 *    filter bug or a broken point-in-polygon pass shows up here as a
-		 *    district that suddenly counts nothing. */
 		const anchor = features.find((f) => f.properties && f.properties.district_id === ANCHOR_DISTRICT);
-		check(`${ANCHOR_DISTRICT} exists`, Boolean(anchor));
-		const opportunities = anchor && Number(anchor.properties.opportunities);
+		check(`${ANCHOR_DISTRICT} exists`, Boolean(anchor),
+			{ expected: 'present', actual: anchor ? 'present' : 'missing', endpoint: '/api/intelligence/map/city/riyadh/districts' });
+		const opportunities = anchor ? Number(anchor.properties.opportunities) : NaN;
 		check(`${ANCHOR_DISTRICT} still counts opportunities`,
 			Number.isFinite(opportunities) && opportunities >= MIN_ANCHOR_OPPORTUNITIES,
-			`${opportunities}, floor ${MIN_ANCHOR_OPPORTUNITIES}`);
+			{ expected: `>= ${MIN_ANCHOR_OPPORTUNITIES}`, actual: Number.isFinite(opportunities) ? opportunities : 'absent', endpoint: '/api/intelligence/map/city/riyadh/districts' });
 	} catch (err) {
-		check('riyadh districts', false, err.message);
+		check('riyadh districts', false,
+			{ expected: `${RIYADH_DISTRICT_COUNT} districts`, actual: err.message, endpoint: '/api/intelligence/map/city/riyadh/districts' });
 	}
 
-	/* 5. A city we do not serve is a clean 404, not a 500 and not an empty 200. */
+	/* 5. A city we do not serve is a clean 404 — not a 500, and not an empty 200. */
 	try {
 		const missing = await get('/api/intelligence/map/city/atlantis/opportunities');
-		check('an unserved city is a clean 404', missing.status === 404, `got ${missing.status}`);
+		check('an unserved city is a clean 404', missing.status === 404,
+			{ expected: 404, actual: missing.status, endpoint: '/api/intelligence/map/city/atlantis/opportunities' });
 	} catch (err) {
-		check('unserved city', false, err.message);
+		check('an unserved city is a clean 404', false, { expected: 404, actual: err.message });
 	}
 
 	finish(results.every((r) => r.ok) ? 0 : 1);
@@ -148,7 +181,14 @@ function finish(code) {
 		checked_at: new Date().toISOString(),
 		passed: results.length - failed.length,
 		failed: failed.length,
-		failures: failed.map((f) => `${f.name}${f.detail ? `: ${f.detail}` : ''}`),
+		/* Structured, because the alert needs the two numbers rather than a sentence. */
+		failures: failed.map((f) => ({
+			check: f.name,
+			expected: f.expected,
+			actual: f.actual,
+			endpoint: f.endpoint,
+		})),
+		exit_code: code,
 	};
 	if (asJson) {
 		console.log(JSON.stringify(summary));
@@ -157,7 +197,9 @@ function finish(code) {
 		console.log(summary.ok
 			? `OK — ${summary.passed} checks passed against ${base}`
 			: `FAILED — ${summary.failed} of ${results.length} checks failed against ${base}`);
-		for (const f of summary.failures) console.log(`  · ${f}`);
+		for (const f of summary.failures) {
+			console.log(`  · ${f.check}: expected ${f.expected}, got ${f.actual}`);
+		}
 	}
 	process.exit(code);
 }

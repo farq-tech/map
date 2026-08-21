@@ -157,6 +157,57 @@ node apps/api/scripts/synthetic-check.mjs --json                 # for a schedul
 Exit `0` all passed · `1` an assertion failed · `2` the service was unreachable,
 which is a different problem worth telling apart.
 
+**It runs itself every fifteen minutes** (`.github/workflows/synthetic.yml`) and
+turns a failure into a GitHub issue. No new alerting service: this repository
+already runs Actions, and GitHub already notifies on issue open, comment and
+close — which is exactly deduplication, a thread for a continuing outage, and a
+recovery notification.
+
+The cadence came from measurement. One cycle is four requests, ~512 KB gzipped
+and ~1.4 s; at fifteen minutes that is 384 requests and ~1.5 GB of egress a
+month, negligible against every limit involved, and Actions minutes are free on
+a public repository. The one real cost is deliberate: fifteen minutes sits
+outside the API's ten-minute cache, so each run exercises the read path for real
+instead of reading a warm cache.
+
+Two failure kinds, never mixed:
+
+| Exit | Kind | Alert |
+|---|---|---|
+| `1` | the data is wrong | issue labelled `synthetic-data`, titled `[synthetic] production — data failure` |
+| `2` | the service is unreachable | issue labelled `synthetic-availability` |
+
+Each alert carries the time, environment, exit code, and for every failed
+assertion its endpoint, what was expected and what was actually returned, plus
+the last fully successful run.
+
+**A four-hour outage produces one alert and four notes, not sixteen.** One issue
+per kind is opened and reused; a still-failing run comments at most once an hour;
+recovery closes the issue with a `SYNTHETIC RECOVERY` note, because a channel
+that simply goes quiet cannot be told apart from a monitor that died. The
+decision logic is pure and lives in `apps/api/lib/synthetic-alert.js`, so all of
+that is tested without a running service — including the sixteen-runs-four-notes
+case.
+
+Try the alerting by hand without touching anything:
+
+```bash
+node apps/api/scripts/synthetic-alert.js --result result.json --exit-code 1 --dry-run
+```
+
+Two things about GitHub's scheduler worth knowing: `schedule` is best-effort and
+can be delayed by minutes under load, so treat it as "about every fifteen
+minutes" rather than a heartbeat; and GitHub disables scheduled workflows after
+60 days without repository activity.
+
+### Three signals, kept apart
+
+| Question | Where | Behaviour |
+|---|---|---|
+| Is the process up? | `GET /version` | **liveness** — the platform's probe (Railway polls it with an ON_FAILURE restart policy). Always 200 while serving. Says nothing about data, because a restart does not fix a stale read layer. |
+| Is the data trustworthy? | `GET /api/health` | **readiness** — 503 when the read layer produced nothing or a rebuild was refused. Not a liveness probe. |
+| Can a user actually get a correct result? | the synthetic check | from outside, every fifteen minutes |
+
 ## Place truth
 
 Farq draws one pin per restaurant and attributes it to one حي. Both are claims

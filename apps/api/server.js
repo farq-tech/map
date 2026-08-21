@@ -47,27 +47,62 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 
+/**
+ * Liveness. Is this process running and able to answer?
+ *
+ * This is the platform's probe (Railway is configured to poll it with an
+ * ON_FAILURE restart policy), so it must answer 200 for as long as the process
+ * can serve at all. It deliberately says nothing about whether the data is any
+ * good: a container restart does not fix a stale read layer, and wiring data
+ * quality into a liveness probe turns a data problem into a restart loop.
+ */
 app.get('/version', (_req, res) => {
-  res.json({ ok: true, service: 'farq-map-api' });
+  res.json({ ok: true, service: 'farq-map-api', signal: 'liveness' });
 });
 
+/**
+ * Readiness. Is the data this process is serving worth believing?
+ *
+ * NOT a liveness probe — see /version for that. This one answers 503 when the
+ * read layer produced nothing for a city we serve, or when a rebuild was refused
+ * and we are knowingly serving older data. Both are states where the process is
+ * perfectly healthy and the answers are not.
+ *
+ * Three signals, kept apart on purpose:
+ *   /version           the process is up            (platform probe)
+ *   /api/health        the data can be trusted      (this endpoint)
+ *   synthetic check    a user can actually get a correct result
+ *                      (apps/api/scripts/synthetic-check.mjs, from outside)
+ */
 app.get('/api/health', (_req, res) => {
-  /* Health is not "the process is up". A process serving empty maps with a 200
-   * is up and wrong, which is the state this endpoint exists to expose. */
   const data = resultIntegrity.snapshot();
   /* A refused rebuild means we are deliberately serving older data. That is the
    * correct behaviour and it is still a condition someone must see. */
   const refused = [...cityOpportunities.refusedSnapshots.entries()].map(([city, v]) => ({
     city, at: v.at, violations: v.violations.map((x) => x.rule),
   }));
-  const failing = Boolean(data.last_failure) || refused.length > 0;
-  res.status(failing ? 503 : 200).json({
-    ok: !failing,
-    data_integrity: { ...data, refused_rebuilds: refused },
-    service: 'farq-map-api',
-    comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
-    menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
-    farq_api_origin: Boolean(FARQ_API_ORIGIN),
+  const dataOk = !data.last_failure && refused.length === 0;
+  res.status(dataOk ? 200 : 503).json({
+    ok: dataOk,
+    signal: 'readiness',
+    liveness_endpoint: '/version',
+    process: {
+      ok: true,
+      service: 'farq-map-api',
+      uptime_s: Math.round(process.uptime()),
+    },
+    data: {
+      ok: dataOk,
+      counts: data.counts,
+      last_failure: data.last_failure,
+      refused_rebuilds: refused,
+      stale_after_days: data.stale_after_days,
+    },
+    config: {
+      comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
+      menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
+      farq_api_origin: Boolean(FARQ_API_ORIGIN),
+    },
   });
 });
 

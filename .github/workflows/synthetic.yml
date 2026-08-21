@@ -1,0 +1,100 @@
+# Does production actually work, or does it merely respond?
+#
+# Runs the synthetic check against the real service every fifteen minutes and
+# turns a failure into a GitHub issue. No new alerting service: this repository
+# already runs Actions, and GitHub already notifies on issue open, comment and
+# close — which is exactly deduplication, a thread for a continuing outage, and
+# a recovery notification.
+#
+# Cadence chosen from measurement, not habit. One cycle is four requests,
+# ~512 KB gzipped on the wire and ~1.4 s of wall time; at fifteen minutes that
+# is 384 requests and ~1.5 GB of egress a month, which is negligible against
+# every limit involved. Actions minutes are free on a public repository. The one
+# real cost is that a fifteen-minute cadence sits outside the API's ten-minute
+# cache, so each run exercises the read path for real rather than reading a warm
+# cache — which is the behaviour we want from a synthetic check.
+#
+# Two things about GitHub's scheduler worth knowing before trusting it:
+#   · `schedule` is best-effort. Runs can be delayed by minutes under load, so
+#     treat the cadence as "about every fifteen minutes", not as a heartbeat.
+#   · GitHub disables scheduled workflows after 60 days without repository
+#     activity. If this stops firing and nobody pushed for two months, that is
+#     why.
+
+name: Synthetic
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Base URL to check'
+        required: false
+        default: 'https://farq-map-investor.vercel.app'
+
+permissions:
+  contents: read
+  issues: write
+
+# Never let a slow run overlap the next one; the later run is the useful one.
+concurrency:
+  group: synthetic-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # No `npm ci`: the check uses only built-in fetch, so a run is a
+          # checkout and one node invocation.
+
+      - name: Run synthetic check
+        id: check
+        run: |
+          set +e
+          node apps/api/scripts/synthetic-check.mjs \
+            --base "${{ github.event.inputs.base || 'https://farq-map-investor.vercel.app' }}" \
+            --json > result.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat result.json
+
+      - name: Summarise the run
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("result.json", "utf8"));
+            const code = Number(process.env.EXIT_CODE);
+            const state = code === 0 ? "✅ healthy" : code === 2 ? "🔌 unreachable" : "❌ data failure";
+            const lines = [
+              `## ${state}`, "",
+              `Target: ${r.base}`,
+              `Checked: ${r.checked_at}`,
+              `Passed: ${r.passed} · Failed: ${r.failed} · Exit: ${code}`,
+            ];
+            for (const f of r.failures || []) {
+              lines.push("", `**${f.check}**`, `- endpoint: \`${f.endpoint}\``,
+                `- expected: \`${f.expected}\``, `- actual: \`${f.actual}\``);
+            }
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+
+      # The alert is the issue, not a red run. Failing the job here as well would
+      # send a second notification through a channel with no deduplication, which
+      # is how an outage becomes an inbox full of identical mail.
+      - name: Alert
+        run: |
+          node apps/api/scripts/synthetic-alert.js \
+            --result result.json \
+            --exit-code "${{ steps.check.outputs.exit_code }}" \
+            --environment production
+        env:
+          GH_TOKEN: ${{ github.token }}

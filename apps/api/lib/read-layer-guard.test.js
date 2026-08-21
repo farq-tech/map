@@ -16,7 +16,9 @@ const ALL_PROVIDERS = ['brand_app', 'hungerstation', 'jahez', 'keeta', 'mrsool',
 const snap = (over = {}) => ({
 	city: 'riyadh',
 	generatedAt: '2026-08-16T06:40:22.854Z',
-	count: 5075,
+	count: 8706,
+	gappedCount: 5075,
+	gappedShare: 5075 / 8706,
 	providers: ALL_PROVIDERS,
 	districtsRepresented: 136,
 	nullRates: Object.fromEntries(REQUIRED_FIELDS.map((f) => [f, 0])),
@@ -25,8 +27,9 @@ const snap = (over = {}) => ({
 
 const feature = (over = {}) => ({
 	properties: {
+		has_difference: true,
 		gap: 12, cheapest_price: 20, expensive_price: 32,
-		cheapest_provider_id: 'jahez', name: 'مطعم', item_id: '1',
+		cheapest_provider_id: 'jahez', name: 'مطعم', place_id: '1', item_id: '1',
 		district_id: 'riyadh-al-olaya', ...over,
 	},
 });
@@ -48,22 +51,30 @@ test('summarize produces a comparable fingerprint', async (t) => {
 		assert.equal(s.nullRates.name, 0.5);
 	});
 
-	await t.test('an empty snapshot reports every required field as fully missing', () => {
+	await t.test('an empty snapshot is caught as empty, not as a hundred missing columns', () => {
+		/* With no rows there is nothing to have a null rate ABOUT. Reporting 100%
+		 * missing on every field would bury the one fact that matters — that the
+		 * rebuild produced nothing — under six identical violations. */
 		const s = summarize([], { city: 'riyadh' });
 		assert.equal(s.count, 0);
-		assert.equal(s.nullRates.gap, 1);
+		assert.equal(s.gappedCount, 0);
+		assert.equal(s.nullRates.gap, 0);
+		assert.equal(s.nullRates.name, 1, 'identity is still required, and there is none');
+		const v = evaluateSnapshot(s, null);
+		assert.equal(v.accept, false);
+		assert.ok(v.violations.some((x) => x.rule === 'empty-snapshot'));
 	});
 });
 
 test('the guard refuses a rebuild rather than warning about it', async (t) => {
 	await t.test('a normal rebuild is accepted', () => {
-		const v = evaluateSnapshot(snap({ count: 5210, districtsRepresented: 140 }), snap(), { totalDistricts: 187 });
+		const v = evaluateSnapshot(snap({ count: 8800, gappedCount: 5200, districtsRepresented: 140 }), snap(), { totalDistricts: 187 });
 		assert.equal(v.accept, true);
 		assert.deepEqual(v.violations, []);
 	});
 
 	await t.test('a collapse in row count is refused', () => {
-		const v = evaluateSnapshot(snap({ count: 3000 }), snap(), { totalDistricts: 187 });
+		const v = evaluateSnapshot(snap({ count: 4000 }), snap(), { totalDistricts: 187 });
 		assert.equal(v.accept, false);
 		assert.ok(v.violations.some((x) => x.rule === 'count-collapsed'));
 	});
@@ -72,7 +83,7 @@ test('the guard refuses a rebuild rather than warning about it', async (t) => {
 		/* The ceiling is a catastrophe line, not a drift line — rebuild-to-rebuild
 		 * variance has not been observable with one snapshot, so the guard must not
 		 * pretend to know it. */
-		const justUnder = Math.ceil(5075 * (1 - MAX_COUNT_DROP) + 1);
+		const justUnder = Math.ceil(8706 * (1 - MAX_COUNT_DROP) + 1);
 		assert.equal(evaluateSnapshot(snap({ count: justUnder }), snap(), { totalDistricts: 187 }).accept, true);
 	});
 
@@ -113,5 +124,49 @@ test('the guard refuses a rebuild rather than warning about it', async (t) => {
 
 	await t.test('the provider floor is stated, not implied', () => {
 		assert.equal(MIN_PROVIDERS, 5);
+	});
+});
+
+test('a field is only required where it is actually promised', async (t) => {
+	await t.test('a place with no observed price difference is not a missing column', () => {
+		/* The first version of this guard checked every field on every feature and
+		 * refused a perfectly good snapshot, because 3,631 of Riyadh's 8,706 places
+		 * legitimately carry no gap, no prices and no item. The synthetic check
+		 * caught it on its first structured run. */
+		const withGap = feature();
+		const withoutGap = {
+			properties: {
+				has_difference: false,
+				gap: null, cheapest_price: null, expensive_price: null,
+				cheapest_provider_id: null, item_id: null,
+				name: 'مطعم بلا فرق', place_id: '2', district_id: 'riyadh-al-olaya',
+			},
+		};
+		const s = summarize([withGap, withoutGap], { city: 'riyadh' });
+		assert.equal(s.count, 2);
+		assert.equal(s.gappedCount, 1);
+		assert.equal(s.nullRates.gap, 0, 'gap is judged only where a gap is claimed');
+		assert.equal(s.nullRates.name, 0, 'identity is required everywhere');
+		/* A two-row fixture cannot satisfy the eight-provider floor; this test is
+		 * about which fields are judged where, so that rule is relaxed for it. */
+		assert.equal(evaluateSnapshot(s, null, { minProviders: 1 }).accept, true);
+	});
+
+	await t.test('a row that claims a gap and has no price IS a missing column', () => {
+		const broken = feature({ cheapest_price: null });
+		const s = summarize([broken, feature()], { city: 'riyadh' });
+		assert.equal(s.nullRates.cheapest_price, 0.5);
+		assert.ok(evaluateSnapshot(s, null, { minProviders: 1 })
+			.violations.some((v) => v.rule === 'required-field-missing'));
+	});
+
+	await t.test('places with no comparisons at all is its own failure', () => {
+		const s = summarize([
+			{ properties: { has_difference: false, name: 'a', place_id: '1' } },
+			{ properties: { has_difference: false, name: 'b', place_id: '2' } },
+		], { city: 'riyadh' });
+		const v = evaluateSnapshot(s, null, { minProviders: 0 });
+		assert.equal(v.accept, false);
+		assert.ok(v.violations.some((x) => x.rule === 'no-comparisons'));
 	});
 });
