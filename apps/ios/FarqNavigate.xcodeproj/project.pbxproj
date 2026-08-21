@@ -39,6 +39,9 @@
 		483ABE3E92057C4EE24416FA /* ninja.png in Resources */ = {isa = PBXBuildFile; fileRef = 73E5BE1FB2FA66B449A17BCE /* ninja.png */; };
 		29817269829B0B9D60947B31 /* keeta.png in Resources */ = {isa = PBXBuildFile; fileRef = FCBEFD45DA63CAFF74D58461 /* keeta.png */; };
 		3C7AE7CBF870A7183A62DA0B /* brand_app.png in Resources */ = {isa = PBXBuildFile; fileRef = 0986196558F216B839C44F96 /* brand_app.png */; };
+		53B4F9184C5E1A896D309795 /* FarqLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */; };
+		CA49199FA1666BB748A90116 /* DistrictPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DDB58AFE16D548D9348C6B /* DistrictPickerSheet.swift */; };
+		7E49681AE72C026FE5E9E8C7 /* MapFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40E1C991A4C6A0B022BC68E /* MapFocus.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,7 +52,6 @@
 		64FDC6525DF6FFFEC932191B /* Opportunity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Opportunity.swift; sourceTree = "<group>"; };
 		ACDEC328B4B594AFB1234F54 /* RouteConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteConfiguration.swift; sourceTree = "<group>"; };
 		3D3B596842B27F85C62CDE8B /* NavigationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModel.swift; sourceTree = "<group>"; };
-		076E782E11C5D86B022A6624 /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		A68829F5D83169EB18692DD7 /* FarqMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqMapView.swift; sourceTree = "<group>"; };
 		4E4D35D364C5210F40D19B2A /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Secrets.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		12F1C9823B7D241C34392D7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -73,6 +75,9 @@
 		73E5BE1FB2FA66B449A17BCE /* ninja.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/ninja.png"; sourceTree = "<group>"; };
 		FCBEFD45DA63CAFF74D58461 /* keeta.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/keeta.png"; sourceTree = "<group>"; };
 		0986196558F216B839C44F96 /* brand_app.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "PlatformIcons/brand_app.png"; sourceTree = "<group>"; };
+		EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqLocationSource.swift; sourceTree = "<group>"; };
+		E7DDB58AFE16D548D9348C6B /* DistrictPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistrictPickerSheet.swift; sourceTree = "<group>"; };
+		B40E1C991A4C6A0B022BC68E /* MapFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFocus.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +141,8 @@
 		B773EB1E0EAC24707A76989B /* Navigation */ = {
 			isa = PBXGroup;
 			children = (
+				B40E1C991A4C6A0B022BC68E /* MapFocus.swift */,
+				EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */,
 				C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */,
 				A68829F5D83169EB18692DD7 /* FarqMapView.swift */,
 				ACDEC328B4B594AFB1234F54 /* RouteConfiguration.swift */,
@@ -148,7 +155,6 @@
 			isa = PBXGroup;
 			children = (
 				27FE89133600271A22B55FAA /* UserProfile.swift */,
-				076E782E11C5D86B022A6624 /* LocationProvider.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -165,6 +171,7 @@
 		38DF21AEF4612506D6BE5CBE /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E7DDB58AFE16D548D9348C6B /* DistrictPickerSheet.swift */,
 				CA1BFD1E106021C0819B238C /* SelectedPlaceCard.swift */,
 				AD287A08602BB3BB21DD265F /* FarqProfileSheet.swift */,
 				46673DADB12A8F0B0F50E2ED /* FarqChrome.swift */,
@@ -280,6 +287,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7E49681AE72C026FE5E9E8C7 /* MapFocus.swift in Sources */,
+				CA49199FA1666BB748A90116 /* DistrictPickerSheet.swift in Sources */,
+				53B4F9184C5E1A896D309795 /* FarqLocationSource.swift in Sources */,
 				0FFB23BD86657C8A3DFCC021 /* SelectedPlaceCard.swift in Sources */,
 				19F5360DF1E5CAB2AEACFDAA /* FarqProfileSheet.swift in Sources */,
 				C297242AB3A4F2F86A3B5D38 /* UserProfile.swift in Sources */,

@@ -8,12 +8,15 @@ import SwiftUI
 /// the map at the top, the sheet holding the answer at the bottom, and the map
 /// itself carrying everything else.
 struct ContentView: View {
-    @StateObject private var location = LocationProvider()
     @StateObject private var model = OpportunitiesModel()
     @StateObject private var navigation = NavigationModel()
     @StateObject private var profile = UserProfile()
     @State private var showsProfile = false
     @State private var selectedPlaceId: String?
+    @State private var selectedDistrict: (id: String, name: String)?
+    @State private var showsDistrictPicker = false
+    @State private var focus: MapFocus?
+    @State private var focusToken = 0
     @State private var query = ""
     @State private var lens: DistrictLens = .gap
     @State private var sort: OpportunitySort = .gap
@@ -25,10 +28,22 @@ struct ContentView: View {
                 districts: model.districts,
                 lens: lens,
                 route: navigation.routes.first,
-                userLocation: location.location?.coordinate,
+                userLocation: navigation.mapLocation?.coordinate,
+                locationStream: navigation.locationStream,
                 isNavigating: navigation.state == .navigating,
                 profile: profile,
-                onSelectPlace: { id in selectedPlaceId = id }
+                onSelectPlace: { id in selectedPlaceId = id },
+                onSelectDistrict: { id, name in
+                    /* Tapping the same حي again clears it — the only way back
+                     * to the whole city without hunting for a close button. */
+                    if selectedDistrict?.id == id {
+                        selectedDistrict = nil
+                    } else {
+                        selectedDistrict = (id: id, name: name)
+                    }
+                },
+                selectedDistrictId: selectedDistrict?.id,
+                focus: focus
             )
 
             if navigation.state == .navigating {
@@ -39,7 +54,6 @@ struct ContentView: View {
         }
         .background(Farq.brand900)
         .task {
-            location.request()
             await model.load()
             await smokeRouteIfRequested()
         }
@@ -54,6 +68,24 @@ struct ContentView: View {
                 }
                 .presentationDetents([.height(300)])
             }
+        }
+        .sheet(isPresented: $showsDistrictPicker) {
+            DistrictPickerSheet(
+                districts: DistrictChoice.from(model.districts),
+                selectedId: selectedDistrict?.id,
+                onPick: { district in
+                    selectedDistrict = (id: district.id, name: district.name)
+                    showsDistrictPicker = false
+                    guard let box = district.bbox else { return }
+                    focusToken += 1
+                    focus = .bounds(box, token: focusToken)
+                },
+                onClear: {
+                    selectedDistrict = nil
+                    showsDistrictPicker = false
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showsProfile) {
             FarqProfileSheet(profile: profile)
@@ -94,8 +126,8 @@ struct ContentView: View {
             FarqTopChrome(
                 query: $query,
                 lens: $lens,
-                districtLabel: "اختر حي",
-                onPickDistrict: {},
+                districtLabel: selectedDistrict?.name ?? "اختر حي",
+                onPickDistrict: { showsDistrictPicker = true },
                 avatar: profile.avatar,
                 onOpenProfile: { showsProfile = true }
             )
@@ -114,6 +146,8 @@ struct ContentView: View {
                     .padding(.horizontal, 16)
             }
 
+            locateButton
+
             OpportunitySheet(
                 opportunities: model.visible(sort),
                 comparisonsTotal: model.comparisonsTotal,
@@ -127,6 +161,36 @@ struct ContentView: View {
             .frame(height: 330)
         }
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    /// Take me back to me.
+    ///
+    /// It reads the same position the car is drawn at, so the button and the
+    /// marker can never disagree about where "here" is.
+    private var locateButton: some View {
+        HStack {
+            Button {
+                guard let here = navigation.mapLocation?.coordinate else { return }
+                focusToken += 1
+                focus = .user(here, token: focusToken)
+            } label: {
+                Image(systemName: navigation.mapLocation == nil
+                    ? "location.slash" : "location.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(navigation.mapLocation == nil
+                        ? Farq.inkMuted : Farq.brand900)
+                    .frame(width: 46, height: 46)
+                    .background(.white, in: Circle())
+                    .shadow(color: .black.opacity(0.14), radius: 8, y: 2)
+            }
+            /* Nothing to centre on is not a broken button, it is an honest one:
+             * it stays visible and says it has no fix rather than moving the
+             * camera to a guess. */
+            .disabled(navigation.mapLocation == nil)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 
     private var navigationFailure: String? {

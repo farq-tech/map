@@ -16,6 +16,7 @@ enum FarqField {
     static let districtFill = "farq-district-fill"
     static let districtLine = "farq-district-line"
     static let districtLabels = "farq-district-labels"
+    static let districtSelected = "farq-district-selected-line"
     static let opportunitySource = "farq-opportunities"
     static let clusterCircles = "farq-price-clusters"
     static let pinCircles = "farq-price-pins"
@@ -93,6 +94,17 @@ enum FarqField {
             line.lineColor = .constant(StyleColor(hex: brand900))
             line.lineWidth = .constant(0.6)
             line.lineOpacity = .constant(0.22)
+            try map.addLayer(line)
+        }
+        if map.layerExists(withId: districtSelected) == false {
+            /* The selected حي keeps its outline at every zoom: it is the thing
+             * being looked at, so its border survives all the way in while the
+             * others get out of the way. */
+            var line = LineLayer(id: districtSelected, source: districtSource)
+            line.lineColor = .constant(StyleColor(hex: mint))
+            line.lineWidth = .constant(2.4)
+            line.lineEmissiveStrength = .constant(1)
+            line.filter = Exp(.eq) { Exp(.get) { "district_id" }; "__none__" }
             try map.addLayer(line)
         }
         if map.layerExists(withId: districtLabels) == false {
@@ -392,6 +404,17 @@ enum FarqField {
             withId: opportunitySource,
             geoJSON: .featureCollection(FeatureCollection(features: features))
         )
+    }
+
+    /// Outline one حي, or none. Nothing else on the map changes — selecting is
+    /// not filtering, and the numbers stay the numbers.
+    static func setSelectedDistrict(_ id: String?, on map: MapboxMap) {
+        try? map.updateLayer(withId: districtSelected, type: LineLayer.self) { layer in
+            layer.filter = Exp(.eq) {
+                Exp(.get) { "district_id" }
+                id ?? "__none__"
+            }
+        }
     }
 
     // MARK: Lens

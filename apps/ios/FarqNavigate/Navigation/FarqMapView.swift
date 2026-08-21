@@ -28,14 +28,25 @@ struct FarqMapView: View {
     let lens: DistrictLens
     /// The route being followed, if any. Drawn as a line under the puck.
     let route: Route?
-    /// Where the phone is, so the camera can follow it while navigating.
+    /// Where the map should draw you: the snapped position while you are on a
+    /// route, the raw fix otherwise. One value, shared by the car, the photo
+    /// and the camera — see `FarqLocationSource`.
     let userLocation: CLLocationCoordinate2D?
+    /// The same position as a stream, so Mapbox's own puck stops running on
+    /// its own private CLLocationManager.
+    let locationStream: FarqLocationStream
     /// True once guidance is running — the camera behaves differently then.
     let isNavigating: Bool
     /// Your photo and your car, if you chose them.
     @ObservedObject var profile: UserProfile
     /// A pin was tapped. Clusters are handled here; places go up to the screen.
     let onSelectPlace: (String) -> Void
+    /// A حي was tapped: its id and the name to show for it.
+    let onSelectDistrict: (String, String) -> Void
+    /// Which حي is outlined right now.
+    let selectedDistrictId: String?
+    /// Where the camera has been asked to go, if anywhere.
+    let focus: MapFocus?
 
     @State private var viewport: Viewport = .camera(
         /* Riyadh, as a starting view. Not presented as the user's location: the
@@ -65,6 +76,7 @@ struct FarqMapView: View {
         if let districts { FarqField.setDistricts(districts, on: mapbox) }
         FarqField.setOpportunities(opportunities, on: mapbox)
         FarqField.setLens(lens, on: mapbox)
+        FarqField.setSelectedDistrict(selectedDistrictId, on: mapbox)
     }
 
     private func farqMap(_ proxy: MapProxy) -> some View {
@@ -139,6 +151,11 @@ struct FarqMapView: View {
                                 name: "farq-user-avatar"
                             ))
                             .iconAnchor(.bottom)
+                            /* The pin floats over the car by design — it is a
+                             * marker with a tail, not a correction. `iconOffset`
+                             * is applied in the symbol's own space, so it holds
+                             * through zoom, pitch and rotation; the coordinate
+                             * it is anchored to is the same one the car uses. */
                             .iconOffset(x: 0, y: -14)
                             .iconEmissiveStrength(1)
                     }
@@ -200,7 +217,26 @@ struct FarqMapView: View {
             }
             return true
         }
+        /* The حي is the biggest thing on this map and was the only thing that
+         * did not answer a touch. Its colour is a claim about the whole area;
+         * tapping it should say which area, and what the claim is. */
+        .onLayerTapGesture(FarqField.districtFill) { feature, _ in
+            let properties = feature.feature.properties
+            guard case .string(let id)? = properties?["district_id"] ?? nil
+            else { return false }
+            var name = id
+            if case .string(let arabic)? = properties?["name_ar"] ?? nil, !arabic.isEmpty {
+                name = arabic
+            }
+            onSelectDistrict(id, name)
+            return true
+        }
         .onStyleLoaded { _ in
+            /* The map SDK ships its own location manager, and left alone the
+             * puck listens to that one — a fourth opinion about where you are.
+             * Overriding it is the fix: from here the car is drawn from the
+             * same coordinate the route was built from. */
+            proxy.location?.override(locationProvider: locationStream.signal)
             guard let mapbox = proxy.map else { return }
             do {
                 try FarqField.install(on: mapbox)
@@ -223,6 +259,39 @@ struct FarqMapView: View {
         .onChange(of: lens) { _, next in
             guard let mapbox = proxy.map else { return }
             FarqField.setLens(next, on: mapbox)
+        }
+        .onChange(of: focus) { _, next in
+            guard let next else { return }
+            withViewportAnimation(.easeOut(duration: 0.7)) {
+                switch next.target {
+                case .bounds(let box) where box.count == 4:
+                    /* Frame the whole حي from its own extent, with room for the
+                     * chrome above and the sheet below. */
+                    viewport = .overview(
+                        geometry: Polygon([[
+                            CLLocationCoordinate2D(latitude: box[1], longitude: box[0]),
+                            CLLocationCoordinate2D(latitude: box[1], longitude: box[2]),
+                            CLLocationCoordinate2D(latitude: box[3], longitude: box[2]),
+                            CLLocationCoordinate2D(latitude: box[3], longitude: box[0]),
+                            CLLocationCoordinate2D(latitude: box[1], longitude: box[0]),
+                        ]]),
+                        geometryPadding: .init(top: 150, leading: 30, bottom: 350, trailing: 30)
+                    )
+                case .bounds:
+                    break
+                case .user(let lat, let lng):
+                    viewport = .camera(
+                        center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                        zoom: 15.5,
+                        bearing: 0,
+                        pitch: 0
+                    )
+                }
+            }
+        }
+        .onChange(of: selectedDistrictId) { _, next in
+            guard let mapbox = proxy.map else { return }
+            FarqField.setSelectedDistrict(next, on: mapbox)
         }
         .onChange(of: isNavigating) { _, navigating in
             withViewportAnimation(.easeOut(duration: 0.8)) {

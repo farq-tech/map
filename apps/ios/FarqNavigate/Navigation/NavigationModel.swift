@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import FerrostarCore
 import FerrostarCoreFFI
@@ -21,6 +22,15 @@ final class NavigationModel: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var routes: [Route] = []
     @Published private(set) var destinationLabel: String?
+
+    /// Where the map should draw you — snapped to the road while you are on it.
+    /// Everything that draws a position reads this and only this.
+    @Published private(set) var mapLocation: CLLocation?
+
+    /// The same position, as the stream Mapbox's puck consumes.
+    let locationStream = FarqLocationStream()
+
+    private var cancellables = Set<AnyCancellable>()
 
     /// Nil only when the configured routing endpoint could not be used at all.
     /// The app then says so instead of offering a navigate button that cannot
@@ -74,6 +84,47 @@ final class NavigationModel: ObservableObject {
             core = nil
             state = .failed("تعذّر إعداد المسارات: \(error.localizedDescription)")
         }
+
+        /* Both inputs feed one decision. The raw fix arrives from CoreLocation
+         * whether or not a route exists; the navigation state arrives once one
+         * does and carries the snapped position with it. */
+        locationProvider.$lastLocation
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.republishLocation() }
+            .store(in: &cancellables)
+
+        core?.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.republishLocation() }
+            .store(in: &cancellables)
+    }
+
+    private func republishLocation() {
+        guard let chosen = FarqLocationSource.preferred(
+            navigation: core?.state,
+            raw: locationProvider.lastLocation
+        ) else { return }
+        locationStream.send(chosen)
+        mapLocation = CLLocation(
+            latitude: chosen.coordinates.lat,
+            longitude: chosen.coordinates.lng
+        )
+        #if DEBUG
+        /* The claim this fix makes, stated as a number rather than a look: how
+         * far the drawn position is from the raw fix, and how far it is from
+         * the route it is supposed to be on. On route, the second should be
+         * within a metre; before the fix it was whatever the GPS error was. */
+        if let raw = locationProvider.lastLocation, case .navigating = state {
+            let drawn = CLLocation(latitude: chosen.coordinates.lat, longitude: chosen.coordinates.lng)
+            let unsnapped = CLLocation(latitude: raw.coordinates.lat, longitude: raw.coordinates.lng)
+            NSLog(
+                "[farq-loc] drawn %.6f,%.6f · moved %.1fm from raw · %.2fm from route",
+                chosen.coordinates.lat, chosen.coordinates.lng,
+                drawn.distance(from: unsnapped),
+                metresFromRoute(drawn)
+            )
+        }
+        #endif
     }
 
     /// Ask for routes to an opportunity's destination.
@@ -120,6 +171,17 @@ final class NavigationModel: ObservableObject {
             state = .failed(error.localizedDescription)
         }
     }
+
+    #if DEBUG
+    /// Shortest distance from a point to the planned route's own geometry.
+    private func metresFromRoute(_ point: CLLocation) -> Double {
+        guard let geometry = routes.first?.geometry, !geometry.isEmpty else { return -1 }
+        return geometry.reduce(Double.greatestFiniteMagnitude) { best, vertex in
+            let node = CLLocation(latitude: vertex.lat, longitude: vertex.lng)
+            return min(best, point.distance(from: node))
+        }
+    }
+    #endif
 
     func stop() {
         core?.stopNavigation()
