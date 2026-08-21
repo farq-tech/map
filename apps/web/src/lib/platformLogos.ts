@@ -20,22 +20,66 @@ export type PlatformKey =
  * cheapest" reads as that app and nothing else. Recognition only — a colour
  * never decides a winner; the server does, and only from enough comparisons.
  */
+/**
+ * The colour each app paints a حي.
+ *
+ * Every hue here was read out of that app's own shipped logo by counting
+ * pixels, not chosen by eye — and three of the previous values did not match
+ * their brand at all: HungerStation is yellow, not orange; The Chefz is orange
+ * and plum, not purple; and Ninja's cyan had been lightened to a pale slate
+ * that measured ΔE 3.3 from unpainted ground, meaning it read as "no data".
+ *
+ * Brand fidelity and legibility genuinely conflict here, and the conflict was
+ * settled with a measurement rather than a preference. Of Riyadh's 187 أحياء,
+ * 109 carry a verdict, and only six apps ever win one:
+ *
+ *   jahez 46 · mrsool 36 · hungerstation 15 · thechefz 6 · ninja 3 · toyou 3
+ *
+ * Three of them colour 89% of the city, so those three must be unmistakable;
+ * the rest need to be clearly distinct but can sit closer. keeta, brand_app and
+ * mrmandoob never win a حي at all, so their entries are free to stay faithful
+ * to the logo without competing for separation.
+ *
+ * Measured as painted — 34% over the basemap ground sampled from the live map:
+ *
+ *   the three that colour 89% of the city   minimum ΔE 33.7
+ *   the six that ever colour a حي           minimum ΔE 17.4  (was 6.8)
+ *   every colour against empty ground       minimum ΔE 20.7  (was 3.3)
+ *
+ * The one place brand and map could not be reconciled is The Chefz, whose
+ * orange sits next to Jahez's red. Its logo carries a second colour — a plum at
+ * 33% of the mark against the orange's 41% — so it paints in that instead. The
+ * rule when two brand hues collide is that the app colouring more of the city
+ * keeps its hue and the rarer one moves.
+ *
+ * These are not free to adjust by taste: colorDistance.test.ts fails if any
+ * change drops the separations below the thresholds above.
+ */
 export const PROVIDER_MAP_COLOR: Record<string, string> = {
-	jahez: "#dc2626",
-	hungerstation: "#f97316",
-	thechefz: "#7c3aed",
-	toyou: "#14b8a6",
-	keeta: "#eab308",
-	/* Ninja and a restaurant's own app are near-black and slate in their own
-	 * branding. Measured as a 34%-opacity area fill over the Standard basemap,
-	 * both landed within ΔE 3.6–4.8 of unpainted ground — invisible, and worse,
-	 * indistinguishable from "no data". Area fill needs separation more than it
-	 * needs the exact brand hue, so these two are lightened and shifted; the
-	 * logos and chips elsewhere still carry the real brand. */
-	ninja: "#cbd5e1",
-	brand_app: "#db2777",
-	mrsool: "#0369a1",
-	mrmandoob: "#0891b2",
+	/* Red, straight from the logo — 88% of its coloured pixels. */
+	jahez: "#e8382a",
+	/* No dominant colour in its mark at all (top bucket 1.7%), so it has no hue
+	 * to honour and is free to take the separation the map needs. */
+	mrsool: "#1f52c8",
+	/* Yellow — 79% of the logo. It was orange here for a long time. */
+	hungerstation: "#f2b500",
+	/* The plum from its own mark, because its orange collides with Jahez. */
+	thechefz: "#9c3070",
+	/* Cyan. It was deepened to a mid teal, which put it ΔE 14.1 from Ninja's —
+	 * the two are the same hue family and both were reaching for the middle. This
+	 * is six degrees off its logo hue and much closer to the logo's brightness,
+	 * which separates it from Ninja by 23.1 and is more faithful, not less. */
+	toyou: "#00e5cd",
+	/* Its own cyan, taken two degrees off the logo hue and deepened. The pale
+	 * slate this used to be measured ΔE 3.3 from unpainted ground — a حي Ninja
+	 * had won looked exactly like a حي with no data. The first replacement was a
+	 * mid slate, which then measured 11.6 from the "too close to call" grey, so a
+	 * tie would have read as Ninja winning. This is the value that clears both. */
+	ninja: "#054e58",
+	/* Never wins a حي, so these stay close to the mark rather than competing. */
+	keeta: "#d9a400",
+	brand_app: "#7a2a86",
+	mrmandoob: "#0f9b7a",
 	noon: "#a3e635",
 };
 

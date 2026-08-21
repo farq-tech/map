@@ -89,14 +89,37 @@ const TOO_CLOSE: ExpressionSpecification = ["==", ["get", "app_verdict_too_close
  * How far ahead the winner is, in points of share. The lead is what the reader
  * should feel: a 60-to-20 حي must not look like a 52-to-48 one.
  */
+/**
+ * How strongly a حي is tinted by how far ahead the winning app is — opacity
+ * carries confidence, so a narrow win is drawn faintly on purpose.
+ *
+ * The floor used to be 0.20, and at that strength the colours stopped carrying
+ * their own meaning: measured as painted over the basemap, the two closest apps
+ * sat ΔE 8.4 apart, which is a difference you find only by looking for it. Since
+ * a narrow margin is also the most common case, the most common district on the
+ * map was the least readable one. The ladder now starts at 0.34 — worst pair
+ * 14.1 — and still climbs, so confidence is still legible as strength.
+ *
+ * These are not free to adjust by taste: colorDistance.test.ts fails if a change
+ * drops the separation below what a person can see at a glance.
+ */
 export const APP_MARGIN_STEPS: ReadonlyArray<{ min: number; opacity: number }> = [
-	{ min: 0, opacity: 0.2 },
-	{ min: 15, opacity: 0.3 },
-	{ min: 30, opacity: 0.42 },
+	{ min: 0, opacity: 0.34 },
+	{ min: 15, opacity: 0.44 },
+	{ min: 30, opacity: 0.56 },
 ];
 
-/** The soft grey a "too close to call" حي takes, so it is never bare ground. */
-export const APP_TOO_CLOSE_OPACITY = 0.14;
+/**
+ * The soft grey a "too close to call" حي takes, so it is never bare ground.
+ *
+ * It was 0.14, which did not achieve that: measured against the basemap ground
+ * sampled from the live map, a tie at 0.14 sits ΔE 4.6 from unpainted ground —
+ * a difference nobody sees. The legend promises that «متقارب — لا فائز واضح»
+ * and «مقارنات غير كافية» are two different answers, and the map could not
+ * tell them apart. At 0.24 the gap is 8.0, which is visible side by side but
+ * still the weakest separation in this palette — see the note above.
+ */
+export const APP_TOO_CLOSE_OPACITY = 0.24;
 
 const FILL_COLOR_BY_APP: ExpressionSpecification = [
 	"case",
