@@ -10,7 +10,7 @@
  * the model's imagination. Anything the rules cannot place becomes SEARCH.
  */
 
-const { classifyQuestion } = require('./chat-policy');
+const { classifyQuestion } = require('./reply-policy');
 
 const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
 const EXTENDED_INDIC = '۰۱۲۳۴۵۶۷۸۹';

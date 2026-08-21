@@ -12,9 +12,7 @@ const createMapRouter = require('./routes/map');
 const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
 const { warmCityCache } = require('./lib/city-opportunities');
-const createChatRouter = require('./routes/chat');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
-const { chatConfigured } = require('./lib/chat-handler');
 
 const PORT = Number(process.env.PORT || 4001);
 const FARQ_API_ORIGIN = (process.env.FARQ_API_ORIGIN || '').replace(/\/$/, '');
@@ -58,13 +56,11 @@ app.get('/api/health', (_req, res) => {
     comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
     menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
     farq_api_origin: Boolean(FARQ_API_ORIGIN),
-    chat_configured: chatConfigured(),
   });
 });
 
 app.use('/api/intelligence', createMapRouter());
 app.use('/api/copilot', createCopilotRouter());
-app.use('/api/chat', createChatRouter());
 app.use('/api/analytics', createAnalyticsRouter());
 
 async function proxyFarqCatalog(id) {
@@ -146,8 +142,7 @@ if (FARQ_API_ORIGIN) {
     if (
       req.path.startsWith('/intelligence') ||
       req.path.startsWith('/restaurant/') ||
-      req.path.startsWith('/comparison/') ||
-      req.path.startsWith('/chat')
+      req.path.startsWith('/comparison/')
     ) {
       return next();
     }

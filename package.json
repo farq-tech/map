@@ -14,8 +14,7 @@
     "build": "npm run build -w @farq/map-web",
     "budget": "node scripts/check-bundle-budget.mjs",
     "start": "npm run start -w @farq/map-api",
-    "test": "npm run test -w @farq/map-api",
-    "test:chat": "npm run test -w @farq/map-api"
+    "test": "npm run test -w @farq/map-api"
   },
   "engines": {
     "node": ">=20 <25"

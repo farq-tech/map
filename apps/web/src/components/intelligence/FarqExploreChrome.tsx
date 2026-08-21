@@ -20,7 +20,6 @@ import {
 import { localizeCity } from "../../lib/cityNames";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
 import type { MapSort, MapViewMode } from "../../routes/map";
-import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import type {
 	CityDistricts,
 	IntelligenceCategory,
@@ -28,8 +27,9 @@ import type {
 	IntelligenceCityCoverage,
 } from "../../services/intelligenceService";
 import { PROVIDER_MAP_COLOR, getProviderLabel } from "../../lib/platformLogos";
-import FarqBrandMark from "../FarqBrandMark";
+import FarqWordmark from "../FarqWordmark";
 import FarqDistrictPicker from "./FarqDistrictPicker";
+import FarqLensSwitch from "./FarqLensSwitch";
 import type { DistrictLens } from "../../lib/farqDistrictTiles";
 import FarqViewSortBar from "./FarqViewSortBar";
 import { FarqOpportunityCard } from "./FarqOpportunityList";
@@ -81,8 +81,6 @@ export default function FarqExploreChrome({
 	onRail,
 	categoryId,
 	onApplyCategory,
-	majorGapsOnly,
-	onToggleMajorGaps,
 	drawerOpen,
 	onDrawerOpenChange,
 	cities,
@@ -123,8 +121,6 @@ export default function FarqExploreChrome({
 	onView,
 	sort,
 	onSort,
-	basemap,
-	onBasemapChange,
 	legendOpen,
 	onLegendOpenChange,
 	districts = null,
@@ -146,8 +142,6 @@ export default function FarqExploreChrome({
 	onRail: (id: FilterRailId) => void;
 	categoryId: string;
 	onApplyCategory: (id: string) => void;
-	majorGapsOnly: boolean;
-	onToggleMajorGaps: () => void;
 	drawerOpen: boolean;
 	onDrawerOpenChange: (open: boolean) => void;
 	cities: IntelligenceCityCoverage[];
@@ -191,8 +185,6 @@ export default function FarqExploreChrome({
 	onView: (view: MapViewMode) => void;
 	sort: MapSort;
 	onSort: (sort: MapSort) => void;
-	basemap: MapboxBasemap;
-	onBasemapChange: (kind: MapboxBasemap) => void;
 	legendOpen: boolean;
 	onLegendOpenChange: (open: boolean) => void;
 	/** The city's أحياء for the picker under the search; null when the city has no boundaries. */
@@ -282,10 +274,7 @@ export default function FarqExploreChrome({
 					>
 						<Menu className="size-4" />
 					</button>
-					<FarqBrandMark
-						variant="wordmark"
-						className="farq-map-wordmark-compact"
-					/>
+					<FarqWordmark height={22} />
 				</div>
 
 				<form
@@ -323,6 +312,14 @@ export default function FarqExploreChrome({
 						onClear={onClearDistrict}
 						variant="chip"
 					/>
+					{onDistrictLensChange ? (
+						<FarqLensSwitch
+							lens={districtLens}
+							onChange={onDistrictLensChange}
+							isRTL={isRTL}
+							disabled={!districts}
+						/>
+					) : null}
 				</div>
 
 				{searchFocused ? (
@@ -682,38 +679,6 @@ export default function FarqExploreChrome({
 								className="farq-map-drawer-item is-muted"
 							>
 								<span>{isRTL ? "مباني" : "Buildings"}</span>
-							</button>
-							<div className="flex overflow-hidden rounded-xl bg-[#e6eef0] p-0.5">
-								<button
-									type="button"
-									className={`h-10 flex-1 rounded-lg text-[12px] font-bold ${
-										basemap === "standard"
-											? "bg-brand-900 text-mint-500"
-											: "text-[#5c6d6d]"
-									}`}
-									onClick={() => onBasemapChange("standard")}
-								>
-									{isRTL ? "خريطة" : "Map"}
-								</button>
-								<button
-									type="button"
-									className={`h-10 flex-1 rounded-lg text-[12px] font-bold ${
-										basemap === "satellite"
-											? "bg-brand-900 text-mint-500"
-											: "text-[#5c6d6d]"
-									}`}
-									onClick={() => onBasemapChange("satellite")}
-								>
-									{isRTL ? "قمر صناعي" : "Satellite"}
-								</button>
-							</div>
-							<button
-								type="button"
-								aria-pressed={majorGapsOnly}
-								className={`farq-map-drawer-item ${majorGapsOnly ? "is-on" : ""}`}
-								onClick={onToggleMajorGaps}
-							>
-								{isRTL ? "فروقات ملحوظة فقط" : "Observed gaps only"}
 							</button>
 							<button
 								type="button"

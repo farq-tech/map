@@ -8,7 +8,6 @@ import {
 	toDistrictCollection,
 	toDistrictLabelCollection,
 } from "./farqDistrictTiles";
-import { AREA_MAX_ZOOM } from "./farqAreaTiles";
 import { CLUSTER_BREAK_ZOOM } from "./farqMapPins";
 import type { CityDistricts } from "../services/intelligenceService";
 
@@ -97,7 +96,6 @@ describe("district field", () => {
 	});
 
 	it("hands the picture over in the same order as the H3 field: fill → clusters, lines gone before the pins", () => {
-		expect(DISTRICT_FILL_MAX_ZOOM).toBe(AREA_MAX_ZOOM);
 		expect(DISTRICT_FILL_MAX_ZOOM).toBeLessThan(CLUSTER_BREAK_ZOOM);
 		expect(DISTRICT_LINE_MAX_ZOOM).toBeGreaterThan(DISTRICT_FILL_MAX_ZOOM);
 		expect(DISTRICT_LINE_MAX_ZOOM).toBeLessThanOrEqual(CLUSTER_BREAK_ZOOM + 0.5);

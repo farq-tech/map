@@ -17,7 +17,7 @@
 const crypto = require('crypto');
 const { classifyIntent, providerLabel } = require('./copilot-intent');
 const tools = require('./copilot-tools');
-const { replyUsesOnlyToolNumbers } = require('./chat-policy');
+const { replyUsesOnlyToolNumbers } = require('./reply-policy');
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const sessions = new Map();

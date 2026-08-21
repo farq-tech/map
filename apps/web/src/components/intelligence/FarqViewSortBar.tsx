@@ -101,6 +101,17 @@ export default function FarqViewSortBar({
 				>
 					{isRTL ? "الأرخص" : "Cheapest"}
 				</button>
+				{/* An option, never the default: percentage alone floats 9-riyal cans
+				  * of Mirinda to the top of a savings list. See VALUE_SORT_MIN_GAP_SAR. */}
+				<button
+					type="button"
+					aria-pressed={sort === "value"}
+					data-testid="farq-sort-value"
+					className={`farq-map-chip ${sort === "value" ? "is-on" : ""}`}
+					onClick={() => onSort("value")}
+				>
+					{isRTL ? "الأعلى نسبة" : "Best %"}
+				</button>
 			</div>
 		</div>
 	);

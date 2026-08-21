@@ -3,8 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  aggregateAreas,
-  getCityAreas,
   getCityOpportunities,
   normalizeCity,
   rowToFeature,
@@ -60,7 +58,6 @@ test('rowToFeature keeps observed fields, derives pct/tier/h3, drops invalid row
   assert.equal(f.properties.expensive_provider_id, 'jahez');
   assert.equal(f.properties.has_difference, true);
   assert.equal('observed_at' in f.properties, false, 'no per-place freshness exists in the source');
-  assert.match(f.properties.h3, /^88/); // res 8 cell index prefix
   assert.deepEqual(f.geometry.coordinates, [46.6427, 24.7264]);
 
   assert.equal(rowToFeature({ ...ROW, latitude: null }), null);
@@ -104,37 +101,6 @@ test('getCityOpportunities filters to opportunities by default and exposes inclu
 
 test('getCityOpportunities returns null for an unknown city', async () => {
   assert.equal(await getCityOpportunities({ city: 'gotham', __query: async () => [] }), null);
-});
-
-test('aggregateAreas counts per H3 cell and only names a cheapest app with enough comparisons', () => {
-  const a = rowToFeature(ROW);
-  const b = rowToFeature({ ...ROW, place_id: '2', gap: 40, dearest_price: 70, cheapest_price: 30, wins: { jahez: 6 }, comparisons: 6 });
-  const far = rowToFeature({ ...ROW, place_id: '3', latitude: 24.9, longitude: 46.9, wins: { mrsool: 2 }, comparisons: 2 });
-  const areas = aggregateAreas([a, b, far]);
-  assert.equal(areas.length, 2);
-  const big = areas[0];
-  assert.equal(big.properties.opportunities, 2);
-  assert.equal(big.properties.max_gap, 40);
-  assert.equal(big.properties.top_place_id, '2');
-  assert.equal(big.properties.comparisons, 10);
-  assert.ok(big.properties.comparisons >= MIN_AREA_COMPARISONS);
-  assert.equal(big.properties.cheapest_app, 'jahez');
-  assert.equal(big.properties.cheapest_app_wins, 7);
-  const small = areas[1];
-  assert.equal(small.properties.enough_for_app_verdict, false);
-  assert.equal(small.properties.cheapest_app, null, 'two comparisons do not make a verdict');
-  assert.equal(big.geometry.type, 'Polygon');
-  assert.equal(big.geometry.coordinates[0].length, 7, 'closed hexagon ring');
-});
-
-test('getCityAreas wraps the aggregate as a FeatureCollection', async () => {
-  __resetCityCacheForTests();
-  const __query = async (sql) => (/read_layer_meta/.test(sql) ? [] : [ROW]);
-  const areas = await getCityAreas({ city: 'riyadh', __query });
-  assert.equal(areas.body.type, 'FeatureCollection');
-  assert.equal(areas.body.resolution, 8);
-  assert.equal(areas.body.count, 1);
-  assert.equal(areas.body.min_comparisons_for_app_verdict, 8);
 });
 
 const { getCityDistricts } = require('./city-opportunities');

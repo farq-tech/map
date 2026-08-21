@@ -10,9 +10,9 @@ const {
   applyReplyPolicy,
   formatObservedReply,
   replyUsesOnlyToolNumbers,
-} = require('./chat-policy');
+} = require('./reply-policy');
 
-describe('chat-policy', () => {
+describe('reply policy', () => {
   it('classifies forecast intent and refuses before the model', () => {
     assert.equal(classifyQuestion('كم بيصير سعر البرجر بعد شهر؟'), 'forecast');
     assert.equal(classifyQuestion('forecast the price tomorrow'), 'forecast');

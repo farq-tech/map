@@ -378,7 +378,6 @@ export type CityOpportunityProperties = {
 	provider_count: number | null;
 	comparisons: number;
 	wins: Record<string, number> | null;
-	h3: string;
 	/** Geometric membership decided on the server; null when outside every حي. */
 	district_id?: string | null;
 	/** Chain identity — branches of one brand repeat the same item and gap. */
@@ -406,36 +405,7 @@ export type CityOpportunities = {
 	features: IntelligenceMapGeojsonFeature<CityOpportunityProperties>[];
 };
 
-export type CityAreaProperties = {
-	h3: string;
-	places: number;
-	opportunities: number;
-	max_gap: number | null;
-	top_place_id: string | null;
-	comparisons: number;
-	wins: Record<string, number>;
-	enough_for_app_verdict: boolean;
-	/** Enough comparisons, but no app clearly ahead — not the same as no data. */
-	app_verdict_too_close?: boolean;
-	cheapest_app: string | null;
-	cheapest_app_wins: number | null;
-	/** The winner's share of comparisons, and its lead over the runner-up, in points. */
-	cheapest_app_share?: number | null;
-	cheapest_app_margin?: number | null;
-	runner_up_app?: string | null;
-};
-
-export type CityAreas = {
-	type: "FeatureCollection";
-	city: string;
-	resolution: number;
-	min_comparisons_for_app_verdict: number;
-	generated_at: string | null;
-	count: number;
-	features: Array<{ type: "Feature"; id?: string; geometry: GeoJSON.Polygon; properties: CityAreaProperties }>;
-};
-
-/** One حي: its official names, its polygon, and the same aggregates an H3 cell carries. */
+/** One حي: its official names, its polygon, and everything both lenses paint from. */
 export type CityDistrictProperties = {
 	district_id: string;
 	name_ar: string;
@@ -774,15 +744,6 @@ export const IntelligenceService = {
 		return env.data;
 	},
 
-	/** H3 res-8 cells for the city: how many opportunities, the biggest, which app was cheapest how often. */
-	async cityAreas(opts: { city: string; signal?: AbortSignal }): Promise<CityAreas> {
-		const env = await fetchApi<CityAreas>(
-			`/api/intelligence/map/city/${encodeURIComponent(opts.city)}/areas`,
-			{ signal: opts.signal },
-			{ timeoutMs: 30_000 },
-		);
-		return env.data;
-	},
 	/** The city's أحياء: official polygons with how many opportunities each holds and the biggest. */
 	async cityDistricts(opts: { city: string; signal?: AbortSignal }): Promise<CityDistricts> {
 		const env = await fetchApi<CityDistricts>(

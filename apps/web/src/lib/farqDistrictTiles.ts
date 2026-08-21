@@ -19,7 +19,6 @@ import type {
 	MapMouseEvent,
 } from "mapbox-gl";
 import { FARQ_BRAND_900, FARQ_MINT } from "./farqBrandAssets";
-import { AREA_FADE_START, AREA_FILL, AREA_MAX_ZOOM } from "./farqAreaTiles";
 import { PROVIDER_MAP_COLOR, PROVIDER_MAP_COLOR_TOO_CLOSE } from "./platformLogos";
 import type { CityDistricts } from "../services/intelligenceService";
 
@@ -42,9 +41,15 @@ export const DISTRICT_LABELS = "farq-district-labels";
 export const DISTRICT_SELECTED_FILL = "farq-district-selected-fill";
 export const DISTRICT_SELECTED_LINE = "farq-district-selected-line";
 
-/** Same handover as the H3 field: the fill is gone where the clusters take over. */
-export const DISTRICT_FILL_MAX_ZOOM = AREA_MAX_ZOOM;
-export const DISTRICT_FADE_START = AREA_FADE_START;
+/**
+ * The handover contract for the whole city zoom, and the only copy of it: the
+ * field fades out as Mapbox's clusters fade in, so one picture changes
+ * resolution instead of two layers trading places.
+ */
+export const DISTRICT_FILL_MAX_ZOOM = 11.5;
+export const DISTRICT_FADE_START = 10.6;
+/** Clusters appear here, inside the fade, so one picture hands over to the next. */
+export const DISTRICT_HANDOVER_ZOOM = 10.9;
 /** Boundary lines persist for orientation through the cluster band, never into the pins. */
 export const DISTRICT_LINE_MIN_ZOOM = 9;
 export const DISTRICT_LINE_MAX_ZOOM = 14.5;
@@ -166,7 +171,7 @@ function labelField(isRTL: boolean): ExpressionSpecification {
 }
 
 function beforeLayer(map: MapboxMap): string | undefined {
-	if (map.getLayer(AREA_FILL)) return AREA_FILL;
+	/* Under every symbol we draw, over the basemap. */
 	if (map.getLayer("farq-price-clusters")) return "farq-price-clusters";
 	return undefined;
 }

@@ -65,7 +65,7 @@ npm run dev:web    # http://127.0.0.1:5173  (proxies /api to the API)
 Dev builds expose the map instance on `window.__farqMap` for browser QA scripts.
 
 ```bash
-npm test -w @farq/map-api   # node --test: city read model, copilot contract prompts, chat policy, geocoding
+npm test -w @farq/map-api   # node --test: city read model, copilot contract prompts, reply policy, geocoding
 npm test -w @farq/map-web   # vitest: tiles, tiers, viewport stats, URL camera, pins, sheet helpers
 npm run build               # type-check + bundle
 ```
@@ -81,7 +81,7 @@ CI runs all three on every push and pull request (`.github/workflows/ci.yml`).
 - Actions: `NOOP · FOCUS_PLACE · SHOW_RESULTS · FIT_BOUNDS · SET_FILTER · SET_CATEGORY · SET_SEARCH · RETURN_TO_USER`. Every id is validated against the returned rows.
 - Every intent has a template answer in Arabic and English, so the copilot works with **no model**. With `GEMINI_API_KEY` set, Gemini may rephrase the template (JSON schema, rows in the user turn, model failover `gemini-3.5-flash-lite → gemini-flash-lite-latest`, ordered by what actually answers inside a shared 6 s budget — a reasoning model spends that budget thinking and returns nothing); its text is used only if every number in it exists in the rows.
 
-`POST /api/chat` is the previous assistant and stays mounted until the new client is deployed everywhere; new work goes to `/api/copilot`.
+`/api/chat`, the previous assistant, is gone. It had no caller left in this repo, and with a current model it failed on `thought_signature` in its function-calling turn — a broken duplicate of `/api/copilot`. Its number guard survives as `apps/api/lib/reply-policy.js`, which the copilot uses.
 
 ## Environment variable names
 
@@ -102,8 +102,45 @@ API:
 - `GEMINI_MODEL` — optional comma-separated failover list
 - `CORS_ORIGINS`
 
+## What the map needs from upstream
+
+The map never invents a number, so its honest gaps are the pipeline's gaps: no
+delivery fee outside hungerstation, no per-item observation date anywhere, a read
+layer rebuilt every few days, and one city's worth of data split across several
+spellings of its name. [`docs/data-pipeline-spec.md`](docs/data-pipeline-spec.md)
+states each of those as a measured defect with a column contract and an acceptance
+test. None of it can be built in this repo.
+
 No secrets belong in git. Copy `.env.example` and set values locally or in the Vercel/Railway projects for this repo.
 
 ## Deploy
 
-Vercel builds `apps/web` and rewrites `/api/*` to the Railway API (`vercel.json`). Deploy from Git, not from a working tree: what is on `main` is what users see.
+Vercel builds `apps/web` and rewrites `/api/*` to the Railway API (`vercel.json`).
+
+**Both halves deploy from git, and only from `main`.**
+
+- **Web** — Vercel builds every push to `main` from `farq-tech/map`.
+- **API** — the Railway service `api` in project `farq-map-investor-api` is connected
+  to the same repo and branch, with `rootDirectory = apps/api` and
+  `watchPatterns = ["apps/api/**"]`, so an API deploy is triggered by an API commit
+  and nothing else.
+
+### No deploy outside `main`
+
+Do not run `railway up`, `vercel --prod`, or any other push from a working tree.
+It looks faster and it is how production drifted 13 commits behind this repo: a
+working-tree deploy ships whatever is on that laptop at that moment — uncommitted
+edits, a stale branch, a half-finished experiment — and leaves no commit anyone
+can read, revert, or bisect. Nothing on the deployed site could be traced back to
+a line of code.
+
+The rule: **what is on `main` is what users see, and the only way to change what
+users see is to merge to `main`.** A deploy is then a consequence of a commit, not
+an action someone takes.
+
+If a git-driven deploy is genuinely broken — the trigger does not fire, the build
+cannot reach the repo — fix the connection. Reach for a working-tree deploy only
+after that fails, only with the owner's explicit go-ahead for that one deploy, and
+push the same commit to `main` immediately afterwards so the two never disagree.
+
+Rollback is `git revert` plus a push, for the same reason: it goes through `main`.

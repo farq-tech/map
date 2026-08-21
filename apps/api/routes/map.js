@@ -87,20 +87,6 @@ function createMapRouter() {
     })
   );
 
-  router.get(
-    '/map/city/:city/areas',
-    asyncHandler(async (req, res) => {
-      const result = await cityOpportunities.getCityAreas({ city: req.params.city });
-      if (!result) {
-        return res.status(404).json({ error: 'unknown_city', city: req.params.city });
-      }
-      res.setHeader('ETag', result.etag);
-      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
-      if (req.headers['if-none-match'] === result.etag) return res.status(304).end();
-      res.json(result.body);
-    })
-  );
-
   /**
    * The city's أحياء with the same aggregates the H3 cells carry. Boundaries are
    * the committed MOMRAH polygons (apps/api/data/districts); a city without a

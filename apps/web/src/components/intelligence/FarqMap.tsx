@@ -44,7 +44,6 @@ import {
 	ensurePriceTileLayers,
 	syncPriceTileData,
 } from "../../lib/farqPriceTiles";
-import { ensureAreaLayers, syncAreaData } from "../../lib/farqAreaTiles";
 import {
 	bindDistrictClick,
 	bindDistrictHover,
@@ -60,7 +59,7 @@ import {
 	PRICE_TILE_ICONS,
 	PRICE_TILE_POINTS,
 } from "../../lib/farqPriceTiles";
-import type { CityAreas, CityDistricts } from "../../services/intelligenceService";
+import type { CityDistricts } from "../../services/intelligenceService";
 import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
 import {
 	getMapboxAccessToken,
@@ -384,13 +383,11 @@ export default function FarqMap({
 	placeDetail = null,
 	isRTL = false,
 	basemap: basemapProp,
-	onBasemapChange,
 	onSelectPlace,
 	onSelectNeighborhood,
 	onViewChange,
 	bottomInset = 0,
 	initialCamera = null,
-	areas = null,
 	districts = null,
 	districtLens = "gap",
 	hideAddressSearch = false,
@@ -412,8 +409,8 @@ export default function FarqMap({
 	userLocation?: { lat: number; lng: number } | null;
 	showUserLocation?: boolean;
 	placeDetail?: IntelligenceMapPlaceDetail | null;
+	/** Kept so a future style choice has a seam; today the map is always Standard. */
 	basemap?: MapboxBasemap;
-	onBasemapChange?: (kind: MapboxBasemap) => void;
 	isRTL?: boolean;
 	onSelectPlace: (placeId: string) => void;
 	onSelectNeighborhood: (neighborhoodId: string) => void;
@@ -427,8 +424,6 @@ export default function FarqMap({
 	bottomInset?: number;
 	/** A link's camera; used once, on the first landing, instead of the city default. */
 	initialCamera?: { center: [number, number]; zoom: number } | null;
-	/** H3 cells for the city zoom — the opportunity field under the clusters. */
-	areas?: CityAreas | null;
 	/** The city's أحياء with their counts; when present they are the field and the H3 cells stay hidden. */
 	districts?: CityDistricts | null;
 	/** What the district colour means: how many opportunities, or which app wins. */
@@ -465,13 +460,10 @@ export default function FarqMap({
 	const lastPinSigRef = useRef("");
 	const placeDetailRef = useRef(placeDetail);
 	const syncPinsRef = useRef<() => void>(() => {});
-	const [internalBasemap, setInternalBasemap] =
-		useState<MapboxBasemap>("standard");
-	const basemap = basemapProp ?? internalBasemap;
-	const setBasemap = (next: MapboxBasemap) => {
-		onBasemapChange?.(next);
-		if (basemapProp === undefined) setInternalBasemap(next);
-	};
+	/* Standard only. Satellite imagery drowned the mint field — measured: one
+	 * whole step of the opportunity ramp was ΔE ~6 against imagery whose own
+	 * texture is σ 14–26 RGB — and mint over an arid city reads as vegetation. */
+	const basemap = basemapProp ?? "standard";
 	const [missingToken] = useState(() => !token);
 	const [mapReady, setMapReady] = useState(false);
 	const [introDone, setIntroDone] = useState(false);
@@ -486,8 +478,6 @@ export default function FarqMap({
 	gisNeighborhoodsRef.current = gisNeighborhoods;
 	placeDetailRef.current = placeDetail;
 
-	const areasRef = useRef(areas);
-	areasRef.current = areas;
 	const districtsRef = useRef(districts);
 	districtsRef.current = districts;
 	const districtLensRef = useRef(districtLens);
@@ -502,18 +492,15 @@ export default function FarqMap({
 	/* One HTML chip names the حي under the cursor; moved by hand, never through React state. */
 	const hoverChipRef = useRef<HTMLDivElement | null>(null);
 
-	/* One field at city zoom: the أحياء when the city has boundaries, H3 cells otherwise. */
+	/* One field at city zoom: the city's أحياء. */
 	const syncField = (map: MapboxMap) => {
 		const hoods = districtsRef.current;
-		const hasDistricts = Boolean(hoods?.features?.length);
-		ensureAreaLayers(map);
-		syncAreaData(map, hasDistricts ? null : areasRef.current);
 		ensureDistrictLayers(map, {
 			isRTL: isRtlRef.current,
 			selectedId: selectedDistrictRef.current,
 			lens: districtLensRef.current,
 		});
-		syncDistrictData(map, hasDistricts ? hoods : null);
+		syncDistrictData(map, hoods);
 		setSelectedDistrict(map, selectedDistrictRef.current);
 		setDistrictLens(map, districtLensRef.current);
 	};
@@ -527,7 +514,7 @@ export default function FarqMap({
 		} catch {
 			/* style mid-swap — the style.load handler re-adds layers */
 		}
-	}, [areas, districts, mapReady, basemap]);
+	}, [districts, mapReady, basemap]);
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
@@ -1225,26 +1212,6 @@ export default function FarqMap({
 				aria-hidden
 				data-testid="intelligence-map-district-hover"
 			/>
-			{onBasemapChange ? null : (
-				<div className="absolute bottom-3 end-3 z-[20] flex overflow-hidden rounded-lg bg-[#e6eef0] p-0.5 text-[11px] font-bold">
-					<button
-						type="button"
-						data-testid="farq-map-style-satellite"
-						className={`rounded-md px-2.5 py-1 ${basemap === "satellite" ? "bg-brand-900 text-mint-500" : "text-[#5c6d6d]"}`}
-						onClick={() => setBasemap("satellite")}
-					>
-						{isRTL ? "قمر صناعي" : "Satellite"}
-					</button>
-					<button
-						type="button"
-						data-testid="farq-map-style-standard"
-						className={`rounded-md px-2.5 py-1 ${basemap === "standard" ? "bg-brand-900 text-mint-500" : "text-[#5c6d6d]"}`}
-						onClick={() => setBasemap("standard")}
-					>
-						{isRTL ? "خريطة" : "Map"}
-					</button>
-				</div>
-			)}
 		</div>
 	);
 }

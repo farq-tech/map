@@ -90,7 +90,7 @@ export default function EmptyState({
 				<div
 					className={`relative flex h-16 w-16 items-center justify-center rounded-full ring-1 ring-mint-500/30 ${ICON_TONES[iconTone]}`}
 				>
-					{icon ?? <FarqBrandMark variant="circle" size={32} />}
+					{icon ?? <FarqBrandMark size={32} />}
 				</div>
 			) : null}
 			<h3

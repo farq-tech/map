@@ -24,7 +24,6 @@
  * consumer-priced items (<= CONSUMER_PRICE_CAP_SAR, approved 2026-08-20).
  */
 
-const h3 = require('h3-js');
 const { comparisonQuery } = require('./comparison-pool');
 const { CONSUMER_PRICE_CAP_SAR, validCoord } = require('./comparison-map');
 const { districtOfPoint, loadDistricts } = require('./city-districts');
@@ -52,9 +51,6 @@ const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 /** Approved tiers (2026-08-20): Hero ≥36 · Strong 15–35 · Regular 5–14 · Faint <5. */
 const TIERS = Object.freeze({ hero: 36, strong: 15, regular: 5 });
 
-/** H3 resolution for area aggregates: ~0.74 km² cells — a neighbourhood, not a block. */
-const AREA_H3_RES = 8;
-
 /** Cities the read model knows, with the spellings the source uses. */
 const CITY_ALIASES = Object.freeze({
   riyadh: ['riyadh', 'الرياض'],
@@ -68,10 +64,10 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const cache = new Map(); // city -> { at, value, etag }
 
 /**
- * Aggregates derived from a cached city — the H3 field and the أحياء — used to
- * be rebuilt on every request, folding ~8,700 features each time for an answer
- * that cannot change until the city cache does. Keyed by the city's own ETag,
- * so a refresh invalidates them for free and a stale one is impossible.
+ * The أحياء aggregate derived from a cached city used to be rebuilt on every
+ * request, folding ~8,700 features each time for an answer that cannot change
+ * until the city cache does. Keyed by the city's own ETag, so a refresh
+ * invalidates it for free and a stale one is impossible.
  */
 const derived = new Map(); // `${kind}:${city}` -> { etag, value }
 
@@ -315,7 +311,6 @@ function rowToFeature(row) {
       provider_count: finite(row.provider_count),
       comparisons: finite(row.comparisons) || 0,
       wins: row.wins && typeof row.wins === 'object' ? row.wins : null,
-      h3: h3.latLngToCell(lat, lng, AREA_H3_RES),
     },
   };
 }
@@ -405,27 +400,6 @@ async function getCityOpportunities(opts = {}) {
 }
 
 /**
- * Area aggregates on H3 res 8: how many opportunities, the biggest, and which
- * app was cheapest how often. Counts below MIN_AREA_COMPARISONS are still
- * returned, but `enough_for_app_verdict` tells the client not to name a
- * winner on a handful of rows (approved minimum: 8 comparisons).
- */
-function aggregateAreas(features) {
-  const cells = aggregateByKey(features, (f) => (f.properties && f.properties.h3) || null);
-  const out = [];
-  for (const [id, c] of cells) {
-    out.push({
-      type: 'Feature',
-      id,
-      geometry: { type: 'Polygon', coordinates: [h3.cellToBoundary(id, true)] },
-      properties: { h3: id, ...statsToProperties(c, MIN_AREA_COMPARISONS) },
-    });
-  }
-  out.sort((a, b) => b.properties.opportunities - a.properties.opportunities);
-  return out;
-}
-
-/**
  * The same aggregates per حي. Every district of the city is returned — an
  * empty one carries zero and null, so the map can still draw its boundary —
  * and membership is the geometric `district_id` stamped on each place.
@@ -477,26 +451,6 @@ async function getCityDistricts(opts = {}) {
   };
 }
 
-async function getCityAreas(opts = {}) {
-  const city = await getCityOpportunities({ ...opts, include: 'all' });
-  if (!city) return null;
-  const features = opts.__query
-    ? aggregateAreas(city.body.features)
-    : memoDerived('areas', city.body.city, city.etag, () => aggregateAreas(city.body.features));
-  return {
-    body: {
-      type: 'FeatureCollection',
-      city: city.body.city,
-      resolution: AREA_H3_RES,
-      min_comparisons_for_app_verdict: MIN_AREA_COMPARISONS,
-      generated_at: city.body.generated_at,
-      count: features.length,
-      features,
-    },
-    etag: `${city.etag.slice(0, -1)}-areas"`,
-  };
-}
-
 /**
  * Fill the cache before anyone asks. The SQL runs in ~200 ms but the rows
  * travel far; a cold miss costs seconds, so the server takes it at boot and
@@ -527,13 +481,10 @@ function __resetCityCacheForTests() {
 }
 
 module.exports = {
-  AREA_H3_RES,
   CITY_ALIASES,
   MIN_AREA_COMPARISONS,
   TIERS,
-  aggregateAreas,
   aggregateDistricts,
-  getCityAreas,
   getCityDistricts,
   getCityOpportunities,
   normalizeCity,

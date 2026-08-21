@@ -1263,12 +1263,6 @@
 	font-weight: 800;
 }
 
-.farq-map-wordmark-compact {
-	background: transparent !important;
-	padding: 0 !important;
-	border-radius: 0 !important;
-}
-
 .farq-map-wordmark-compact img {
 	height: 16px !important;
 	width: auto;
@@ -3064,4 +3058,29 @@
 
 .farq-district-picker-btn {
 	min-height: 36px;
+}
+
+/* The lens switch lives on the map, not inside the key that explains it. */
+.farq-lens-switch {
+	display: inline-flex;
+	gap: 3px;
+	padding: 3px;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.94);
+	box-shadow: 0 4px 14px rgba(4, 52, 52, 0.14);
+}
+
+.farq-lens-switch button {
+	min-height: 32px;
+	padding-inline: 0.7rem;
+	border-radius: 9999px;
+	font-size: 11.5px;
+	font-weight: 800;
+	color: #5c6d6d;
+	white-space: nowrap;
+}
+
+.farq-lens-switch button.is-on {
+	background: #043434;
+	color: #83f1b1;
 }

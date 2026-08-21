@@ -6,7 +6,10 @@ import { localizeDigitString } from "./formatPrice";
 
 export const TOP_OPPORTUNITIES = 10;
 
-export type OpportunitySort = "gap" | "near" | "cheap";
+/** A percentage only counts as an opportunity above a real amount of money. */
+export const VALUE_SORT_MIN_GAP_SAR = 15;
+
+export type OpportunitySort = "gap" | "near" | "cheap" | "value";
 
 export type OpportunityRow = {
 	placeId: string;
@@ -26,6 +29,8 @@ export type OpportunityRow = {
 	branchCount?: number;
 	/** How many item comparisons this restaurant's number rests on — 1 is not 221. */
 	comparisons?: number;
+	/** The observed gap as a share of the higher price, straight from the server. */
+	pct?: number | null;
 	/**
 	 * Why this restaurant matched the active category, when its headline item is
 	 * something else: the category's own biggest observed gap here. Shown beside
@@ -149,6 +154,29 @@ export function rankOpportunities(
 	sort: OpportunitySort,
 ): OpportunityRow[] {
 	const list = rows.slice();
+	/**
+	 * "الأعلى نسبة" — the gap as a share of the price, for people who care how
+	 * much of the bill they keep rather than how many riyals move. It carries a
+	 * floor in riyals on purpose: measured on the live read layer, ranking by
+	 * percentage alone puts 17 items tied at the source's 47.4% ceiling on top,
+	 * and they are a 9-riyal bag of fries and a can of Mirinda. A share of
+	 * nothing is not an opportunity.
+	 */
+	if (sort === "value" && list.some((row) => row.pct != null)) {
+		list.sort((a, b) => {
+			const meaningful = (r: OpportunityRow) => r.amount >= VALUE_SORT_MIN_GAP_SAR;
+			const am = meaningful(a);
+			const bm = meaningful(b);
+			if (am !== bm) return am ? -1 : 1;
+			return (
+				personalFirst(a, b) ||
+				(b.pct ?? 0) - (a.pct ?? 0) ||
+				b.amount - a.amount ||
+				a.placeId.localeCompare(b.placeId)
+			);
+		});
+		return list;
+	}
 	if (sort === "cheap" && list.some((row) => row.cheapestPrice != null)) {
 		list.sort((a, b) => {
 			const ac = a.cheapestPrice;

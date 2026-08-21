@@ -30,6 +30,7 @@ import {
 import { pinGapAmount } from "../../lib/farqPriceTiles";
 import { DISTRICT_FILL_STEPS, districtBounds, type DistrictLens } from "../../lib/farqDistrictTiles";
 import FarqDistrictPicker from "./FarqDistrictPicker";
+import FarqLensSwitch from "./FarqLensSwitch";
 import { matchesQuery } from "../../lib/farqTextSearch";
 import { readLayerFreshness } from "../../lib/farqFreshness";
 import { track } from "../../lib/farqAnalytics";
@@ -47,7 +48,6 @@ import { localizeDigitString } from "../../lib/formatPrice";
 import { viewportStats } from "../../lib/farqViewportStats";
 import { getProviderLabel } from "../../lib/platformLogos";
 import { sheetHeightPx } from "./FarqBottomSheet";
-import type { MapboxBasemap } from "../../lib/mapboxAccess";
 import { providerTintClass } from "../../lib/providerTint";
 import {
 	IntelligenceService,
@@ -60,11 +60,11 @@ import {
 	type IntelligenceMapPlaces,
 	type IntelligenceMeta,
 	type CityOpportunities,
-	type CityAreas,
 	type CityDistricts,
 } from "../../services/intelligenceService";
 import EmptyState from "../EmptyState";
 import FarqBrandMark from "../FarqBrandMark";
+import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
@@ -196,8 +196,6 @@ export default function IntelligenceMapSplit({
 		bounds?: [number, number, number, number] | null;
 	} | null>(null);
 	const [leftUserLocation, setLeftUserLocation] = useState(false);
-	const [basemap, setBasemap] = useState<MapboxBasemap>("standard");
-	const [majorGapsOnly, setMajorGapsOnly] = useState(true);
 	const [legendOpen, setLegendOpen] = useState(false);
 	/* What the district colour answers: "how many فرص" or "which app wins". */
 	const [districtLens, setDistrictLens] = useState<DistrictLens>("gap");
@@ -225,7 +223,6 @@ export default function IntelligenceMapSplit({
 	const [placesFetching, setPlacesFetching] = useState(false);
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
-	const [cityAreas, setCityAreas] = useState<CityAreas | null>(null);
 	/* The city's أحياء; `?neighborhood=` is one of their ids and scopes list, headline and map alike. */
 	const [cityDistricts, setCityDistricts] = useState<CityDistricts | null>(null);
 	const districtFocusRef = useRef<string>("");
@@ -347,9 +344,6 @@ export default function IntelligenceMapSplit({
 		}
 		const controller = new AbortController();
 		cityStatusRef.current = "loading";
-		void IntelligenceService.cityAreas({ city: key, signal: controller.signal })
-			.then((body) => { if (!controller.signal.aborted) setCityAreas(body); })
-			.catch(() => { if (!controller.signal.aborted) setCityAreas(null); });
 		/* A city without boundaries is a 404 → null → the H3 field stays; nothing is drawn from a guess. */
 		void IntelligenceService.cityDistricts({ city: key, signal: controller.signal })
 			.then((body) => { if (!controller.signal.aborted) setCityDistricts(body?.features?.length ? body : null); })
@@ -803,6 +797,7 @@ export default function IntelligenceMapSplit({
 							"",
 					).trim() || null,
 				brandKey: f.properties.brand_key || null,
+				pct: Number.isFinite(Number(f.properties.pct)) ? Number(f.properties.pct) : null,
 				demoteReason: f.properties.demote_reason || null,
 				comparisons: Number(f.properties.comparisons) || 0,
 				/* Only when the card's own dish is not the one the category asked for. */
@@ -1002,16 +997,13 @@ export default function IntelligenceMapSplit({
 		(next: FilterRailId) => {
 			setRail(next);
 			if (next === "gaps") {
-				setMajorGapsOnly(true);
 				patchSearch({ sort: "gap" });
 				return;
 			}
 			if (next === "cheapest") {
-				setMajorGapsOnly(false);
 				patchSearch({ sort: "cheap" });
 				return;
 			}
-			setMajorGapsOnly(false);
 			if (next === "grocery") {
 				applyCategory("grocery");
 				return;
@@ -1198,7 +1190,6 @@ export default function IntelligenceMapSplit({
 			if (next === "near" && !nearReady) locateUser();
 			patchSearch({ sort: next });
 			track("sort_change", { sort: next });
-			if (next === "gap") setMajorGapsOnly(true);
 			if (next === "cheap" || next === "near") setRail(next === "cheap" ? "cheapest" : "gaps");
 		},
 		[locateUser, nearReady, patchSearch],
@@ -1246,7 +1237,7 @@ export default function IntelligenceMapSplit({
 		return (
 			<div className="farq-map-split farq-map-split--message px-4 py-10" data-testid="intelligence-map-error">
 				<EmptyState
-					illustration={<FarqBrandMark variant="wordmark" />}
+					illustration={<FarqWordmark height={32} />}
 					title="We couldn't load the live map"
 					titleAr="ما قدرنا نحمّل الخريطة حياً"
 					body="Please check your internet connection and try again to see price gaps."
@@ -1303,8 +1294,6 @@ export default function IntelligenceMapSplit({
 					onRail={applyRail}
 					categoryId={categoryId}
 					onApplyCategory={applyCategory}
-					majorGapsOnly={majorGapsOnly}
-					onToggleMajorGaps={() => setMajorGapsOnly((v) => !v)}
 					drawerOpen={drawerOpen}
 					onDrawerOpenChange={setDrawerOpen}
 					cities={readyMeta?.geo_readiness?.ncp_ready_cities || []}
@@ -1368,8 +1357,6 @@ export default function IntelligenceMapSplit({
 					onView={applyView}
 					sort={sort}
 					onSort={applySort}
-					basemap={basemap}
-					onBasemapChange={setBasemap}
 					legendOpen={legendOpen}
 					onLegendOpenChange={setLegendOpen}
 					districts={cityDistricts}
@@ -1390,7 +1377,7 @@ export default function IntelligenceMapSplit({
 					    a shadow — landed squarely over «خريطة / قائمة». */}
 					<div className="flex min-w-0 flex-1 basis-[22rem] items-center gap-4">
 						<div className="flex shrink-0 items-center gap-1.5">
-							<FarqBrandMark variant="lockup" size={29} />
+							<FarqWordmark height={26} />
 							<label className="relative lg:hidden">
 								<span className="text-[14px] font-black text-brand-900">
 									{selectedCityLabel}
@@ -1515,57 +1502,6 @@ export default function IntelligenceMapSplit({
 								<ChevronDown className="pointer-events-none absolute end-2 top-1/2 size-3 -translate-y-1/2 text-brand-900" />
 							</label>
 						</div>
-						<label className="flex items-center gap-2 text-[12px] text-[#5c6d6d]">
-							<span className="hidden lg:inline">
-								{isRTL ? "فروقات ملحوظة فقط" : "Observed gaps only"}
-							</span>
-							<span className="lg:hidden">
-								{isRTL ? "ملحوظة فقط" : "Gaps only"}
-							</span>
-							<button
-								type="button"
-								role="switch"
-								aria-checked={majorGapsOnly}
-								onClick={() => setMajorGapsOnly((v) => !v)}
-								className={`relative h-[18px] w-8 rounded-full transition-colors ${
-									majorGapsOnly ? "bg-mint-500" : "bg-[#e6eef0]"
-								}`}
-								data-testid="intelligence-map-major-gaps"
-							>
-								<span
-									className={`absolute top-0.5 size-3.5 rounded-full bg-brand-900 transition-[inset-inline-start] ${
-										majorGapsOnly ? "inset-inline-start-[14px]" : "inset-inline-start-0.5"
-									}`}
-								/>
-							</button>
-						</label>
-						<span className="hidden h-6 w-px bg-[#e6eef0] lg:block" aria-hidden />
-						<div className="hidden overflow-hidden rounded-lg bg-[#e6eef0] p-0.5 lg:flex">
-							<button
-								type="button"
-								data-testid="farq-map-style-satellite"
-								className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${
-									basemap === "satellite"
-										? "bg-brand-900 text-mint-500"
-										: "text-[#5c6d6d]"
-								}`}
-								onClick={() => setBasemap("satellite")}
-							>
-								{isRTL ? "قمر صناعي" : "Satellite"}
-							</button>
-							<button
-								type="button"
-								data-testid="farq-map-style-standard"
-								className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${
-									basemap === "standard"
-										? "bg-brand-900 text-mint-500"
-										: "text-[#5c6d6d]"
-								}`}
-								onClick={() => setBasemap("standard")}
-							>
-								{isRTL ? "خريطة" : "Map"}
-							</button>
-						</div>
 						<button
 							type="button"
 							onClick={locateUser}
@@ -1621,7 +1557,6 @@ export default function IntelligenceMapSplit({
 					>
 						<FarqMap
 							places={displayPlaces}
-							areas={cityAreas}
 							districts={cityDistricts}
 							districtLens={districtLens}
 							bottomInset={sheetInset}
@@ -1634,8 +1569,6 @@ export default function IntelligenceMapSplit({
 							userLocation={userLocation}
 							showUserLocation={showUserDot}
 							placeDetail={placeDetail}
-							basemap={basemap}
-							onBasemapChange={setBasemap}
 							isRTL={isRTL}
 							onSelectPlace={(id) => {
 								setLivePlaceId(id);
@@ -1702,7 +1635,24 @@ export default function IntelligenceMapSplit({
 					</button>
 				) : null}
 
-				<div className="pointer-events-auto absolute bottom-3 start-3 z-[400] hidden lg:block">
+				{/* The end corner, not the start one: the start corner already holds the
+				  * zoom pair and the legend ⓘ, and measured at 1440×900 this pill's box
+				  * (x 824–996) landed on top of the zoom-out button at x≈972. */}
+				<div className="pointer-events-auto absolute bottom-16 end-3 z-[400] hidden lg:block">
+					<FarqLensSwitch
+						lens={districtLens}
+						onChange={(next) => {
+							setDistrictLens(next);
+							track("lens_change", { lens: next });
+						}}
+						isRTL={isRTL}
+						disabled={!cityDistricts}
+					/>
+				</div>
+				{/* Clear of the Mapbox attribution strip, which runs the width of the map
+				  * from y≈872 at 900px tall. At bottom-3 this button covered it — the
+				  * one piece of chrome the basemap licence requires stay readable. */}
+				<div className="pointer-events-auto absolute bottom-8 start-3 z-[400] hidden lg:block">
 					<button
 						type="button"
 						className="farq-legend-info"
@@ -1837,7 +1787,7 @@ export default function IntelligenceMapSplit({
 								</li>
 								<li className="flex items-center gap-2">
 									<span className="farq-legend-bubble" aria-hidden>
-										<FarqBrandMark variant="circle" size={10} />
+										<FarqBrandMark size={10} />
 										<span className="farq-legend-win">
 											{isRTL ? "+١٨" : "+18"}
 										</span>

@@ -29,7 +29,7 @@ import {
 	parseDifference,
 } from "./farqMapPins";
 import { tierForGap, type OpportunityTier } from "./farqOpportunityTiers";
-import { AREA_HANDOVER_ZOOM } from "./farqAreaTiles";
+import { DISTRICT_HANDOVER_ZOOM } from "./farqDistrictTiles";
 import {
 	ALL_PLATFORM_KEYS,
 	normalizePlatformKey,
@@ -337,7 +337,7 @@ export function ensurePriceTileLayers(
 		id: PRICE_TILE_CLUSTERS,
 		type: "symbol",
 		source: PRICE_TILE_SOURCE,
-		minzoom: AREA_HANDOVER_ZOOM,
+		minzoom: DISTRICT_HANDOVER_ZOOM,
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["has", "point_count"],
 		layout: {
@@ -380,7 +380,7 @@ export function ensurePriceTileLayers(
 		id: PRICE_TILE_POINTS,
 		type: "symbol",
 		source: PRICE_TILE_SOURCE,
-		minzoom: AREA_HANDOVER_ZOOM,
+		minzoom: DISTRICT_HANDOVER_ZOOM,
 		maxzoom: CLUSTER_BREAK_ZOOM,
 		filter: ["!", ["has", "point_count"]],
 		layout: {

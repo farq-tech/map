@@ -1,5 +1,5 @@
 export type MapViewMode = "list" | "map";
-export type MapSort = "gap" | "near" | "cheap";
+export type MapSort = "gap" | "near" | "cheap" | "value";
 
 export type MapSearch = {
 	neighborhood?: string;
@@ -56,7 +56,7 @@ export function parseMapSort(raw: unknown): MapSort | undefined {
 	const v = String(raw || "")
 		.trim()
 		.toLowerCase();
-	if (v === "gap" || v === "near" || v === "cheap") return v;
+	if (v === "gap" || v === "near" || v === "cheap" || v === "value") return v;
 	return undefined;
 }
 

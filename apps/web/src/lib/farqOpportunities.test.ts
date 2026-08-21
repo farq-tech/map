@@ -110,3 +110,35 @@ describe("one row per chain, a dinner order first", () => {
 		expect(topOpportunities([row("a", 5, { brandKey: "x" }), row("b", 4, { brandKey: "x" })], "gap", 10, { dedupeBrands: false })).toHaveLength(2);
 	});
 });
+
+describe("الأعلى نسبة", () => {
+	it("puts a real amount of money above a bigger percentage of nothing", () => {
+		/* The exact shape measured on the live read layer: cans and side orders
+		 * tie at the source's ratio ceiling, and a 40-riyal meal gap loses to
+		 * them unless the sort insists on riyals first. */
+		const rows = [
+			row("mirinda", 9, { pct: 47.4 }),
+			row("fries", 9, { pct: 47.4 }),
+			row("meal", 40, { pct: 31 }),
+		];
+		expect(rankOpportunities(rows, "value").map((r) => r.placeId)[0]).toBe("meal");
+	});
+
+	it("ranks by share among rows that clear the floor, and still demotes a share box", () => {
+		const rows = [
+			row("small-share", 30, { pct: 20 }),
+			row("big-share", 30, { pct: 45 }),
+			row("party-box", 30, { pct: 60, demoteReason: "share" }),
+		];
+		expect(rankOpportunities(rows, "value").map((r) => r.placeId)).toEqual([
+			"big-share",
+			"small-share",
+			"party-box",
+		]);
+	});
+
+	it("falls back to the observed gap when the server sent no percentage", () => {
+		const rows = [row("a", 12), row("b", 30)];
+		expect(rankOpportunities(rows, "value").map((r) => r.placeId)).toEqual(["b", "a"]);
+	});
+});
