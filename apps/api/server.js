@@ -2,6 +2,7 @@
 
 const cityOpportunities = require('./lib/city-opportunities');
 const resultIntegrity = require('./lib/result-integrity');
+const selfCheck = require('./lib/self-check');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -103,6 +104,7 @@ app.get('/api/health', (_req, res) => {
       service: 'farq-map-api',
       uptime_s: Math.round(process.uptime()),
     },
+    self_check: selfCheck.snapshot(),
     data: {
       ok: dataOk,
       counts: data.counts,
@@ -220,6 +222,10 @@ app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: err.message || 'internal_error' });
 });
+
+/* The intended scheduler is GitHub Actions; this covers the gap while that is
+ * unavailable. Off unless SELF_CHECK_ENABLED=1. See lib/self-check.js. */
+selfCheck.start();
 
 app.listen(PORT, () => {
   console.log(`[farq-map-api] listening on :${PORT}`);

@@ -195,6 +195,24 @@ Try the alerting by hand without touching anything:
 node apps/api/scripts/synthetic-alert.js --result result.json --exit-code 1 --dry-run
 ```
 
+**Right now the scheduler is not GitHub Actions.** The account is locked for a
+billing issue, so no workflow has run since this was set up — neither the
+synthetic check nor CI, which means recent commits were verified locally and not
+on GitHub. The workflow is correct and starts working the moment billing is
+fixed; until then the same check runs from inside the API on the same
+fifteen-minute cadence (`apps/api/lib/self-check.js`), by executing the same
+script rather than reimplementing its assertions.
+
+Enable it with `SELF_CHECK_ENABLED=1` and `SELF_CHECK_BASE_URL`. Results appear
+under `self_check` at `/api/health`, and a failure is recorded through the same
+integrity channel as everything else, so the endpoint answers 503.
+
+Its blind spot is stated in the module and worth repeating: a monitor inside the
+service cannot report that the service is down. That case is covered by the
+platform, which probes `/version` with a restart policy. What this covers is the
+failure it was built for — a healthy process serving wrong or empty data, which
+no liveness probe can see.
+
 Two things about GitHub's scheduler worth knowing: `schedule` is best-effort and
 can be delayed by minutes under load, so treat it as "about every fifteen
 minutes" rather than a heartbeat; and GitHub disables scheduled workflows after
