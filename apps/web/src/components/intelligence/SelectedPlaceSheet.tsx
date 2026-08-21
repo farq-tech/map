@@ -15,6 +15,12 @@ import {
 import { useCountUp } from "../../hooks/useCountUp";
 import { localizeCity } from "../../lib/cityNames";
 import { localizeDigitString } from "../../lib/formatPrice";
+import {
+	navigationNote,
+	navigationTarget,
+	navigationUrl,
+	type NavigationDestination,
+} from "../../lib/farqNavigation";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
 	IntelligenceService,
@@ -1053,6 +1059,46 @@ export default function SelectedPlaceSheet({
 					{isRTL ? "قارن الآن ←" : "Compare now →"}
 					</Button>
 				)}
+				{(() => {
+					/* The branch the price came from, not the pin we drew. The server
+					 * withholds a destination when it cannot tell which branch holds
+					 * this price, and the button disappears rather than guessing. */
+					const destination = (feature?.navigate_to || null) as NavigationDestination | null;
+					const href = navigationUrl(destination);
+					const note = navigationNote(destination, isRTL);
+					const target = navigationTarget(
+						destination,
+						(id) => getProviderLabel(id, { isRTL }) || id,
+						isRTL,
+					);
+					if (!href) {
+						return note ? (
+							<p className="mt-2 text-center text-[11px] text-[#8a6d3b]" data-testid="intelligence-map-navigate-note">
+								{note}
+							</p>
+						) : null;
+					}
+					return (
+						<>
+							<a
+								className="farq-navigate-cta mt-2"
+								href={href}
+								target="_blank"
+								rel="noopener noreferrer"
+								data-testid="intelligence-map-navigate"
+							>
+								<MapPin size={16} aria-hidden />
+								<span>{isRTL ? "خذني هناك" : "Take me there"}</span>
+								{target ? <span className="farq-navigate-target">{target}</span> : null}
+							</a>
+							{note ? (
+								<p className="mt-1 text-center text-[11px] text-[#8a6d3b]" data-testid="intelligence-map-navigate-note">
+									{note}
+								</p>
+							) : null}
+						</>
+					);
+				})()}
 				<p className="mt-2 text-center text-[11px] text-[#5c6d6d]">
 					{selectedRestaurantId
 						? isRTL

@@ -3095,3 +3095,28 @@
 	color: #6b8b8b;
 	white-space: nowrap;
 }
+
+/* «خذني هناك» — secondary to «قارن الآن», because comparing is why someone is
+   here and going is what they do next. */
+.farq-navigate-cta {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 44px;
+	padding: 10px 14px;
+	border: 1px solid #cfe3e0;
+	border-radius: 12px;
+	background: #fff;
+	color: #043434;
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+}
+.farq-navigate-cta:active { background: #f2f8f7; }
+.farq-navigate-target {
+	font-size: 12px;
+	font-weight: 400;
+	color: #6b8b8b;
+}

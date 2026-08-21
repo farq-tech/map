@@ -134,6 +134,7 @@ export type IntelligenceGroceryFarqSample = {
 	product_id?: string | null;
 	product_name?: string;
 	cheapest_provider_id?: string | null;
+	navigate_to?: NavigateTo | null;
 	expensive_provider_id?: string | null;
 	cheapest_price?: number | null;
 	expensive_price?: number | null;
@@ -309,6 +310,7 @@ export type IntelligenceMapView = {
 };
 
 export type IntelligenceMapPlaceProperties = {
+	navigate_to?: NavigateTo | null;
 	feature_type: "place" | "cluster";
 	place_id?: string;
 	name?: string;
@@ -406,6 +408,28 @@ export type CityOpportunities = {
 };
 
 /** One حي: its official names, its polygon, and everything both lenses paint from. */
+/**
+ * Where to actually send someone, resolved on the server. Not the pin: a
+ * canonical restaurant carries one pin while each delivery app lists its own
+ * branch, and 591 Riyadh opportunities have the cheapest branch more than a
+ * kilometre from the pin — the worst by 28.7 km. Null when the server could not
+ * name a branch honestly. See apps/api/lib/place-navigation.js.
+ */
+export type NavigateTo = {
+	lat: number | null;
+	lng: number | null;
+	source: "branch" | "place" | null;
+	provider?: string | null;
+	confidence:
+		| "exact-branch"
+		| "place-pin"
+		| "place-pin-approximate"
+		| "ambiguous-branch"
+		| "unknown";
+	disagreementMeters?: number | null;
+	reason?: string;
+};
+
 export type CityDistrictProperties = {
 	district_id: string;
 	name_ar: string;

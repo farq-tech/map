@@ -28,6 +28,7 @@ const { comparisonQuery } = require('./comparison-pool');
 const { CONSUMER_PRICE_CAP_SAR, validCoord } = require('./comparison-map');
 const { districtOfPoint, loadDistricts } = require('./city-districts');
 const { placeConfidence, attributableToDistrict } = require('./place-truth');
+const { resolveDestination } = require('./place-navigation');
 const readLayerGuard = require('./read-layer-guard');
 const integrity = require('./result-integrity');
 const {
@@ -239,7 +240,9 @@ SELECT dc.canonical_restaurant_id::text AS place_id,
        fd.delivery_fee AS expensive_delivery_fee,
        w.wins,
        w.comparisons,
-       bs.spread_m AS branch_spread_m
+       bs.spread_m AS branch_spread_m,
+       nb.lat AS branch_lat,
+       nb.lon AS branch_lng
   FROM comparison.discovery_cards dc
   LEFT JOIN best b ON b.canonical_restaurant_id = dc.canonical_restaurant_id
   LEFT JOIN cats c ON c.canonical_restaurant_id = dc.canonical_restaurant_id
@@ -256,6 +259,20 @@ SELECT dc.canonical_restaurant_id::text AS place_id,
      ORDER BY rp.provider_restaurant_id
      LIMIT 1
   ) fc ON TRUE
+  /* Where the cheapest offer actually is. A canonical restaurant carries one
+   * pin, but the price we quote belongs to one branch of one app — and measured,
+   * 591 of Riyadh's opportunities have that branch more than a kilometre from
+   * the pin, the worst by 28.7 km. Drawing the pin there is a glance; sending a
+   * person there is their evening. */
+  LEFT JOIN LATERAL (
+    SELECT rp.lat, rp.lon
+      FROM comparison.restaurant_providers rp
+     WHERE rp.canonical_restaurant_id = dc.canonical_restaurant_id
+       AND rp.provider_code = b.cheapest_provider
+       AND rp.lat IS NOT NULL AND rp.lon IS NOT NULL
+     ORDER BY rp.provider_restaurant_id
+     LIMIT 1
+  ) nb ON TRUE
   LEFT JOIN LATERAL (
     SELECT rp.delivery_fee
       FROM comparison.restaurant_providers rp
@@ -346,6 +363,22 @@ function rowToFeature(row) {
         spreadMeters: row.branch_spread_m,
         providerCount: row.provider_count,
       }),
+      /* Where to actually send someone — see place-navigation.js. Null when we
+       * cannot name a branch honestly, which is a better answer than a wrong one. */
+      navigate_to: (() => {
+        const d = resolveDestination({
+          placeLat: lat,
+          placeLng: lng,
+          providerLat: row.branch_lat,
+          providerLng: row.branch_lng,
+          provider: hasGap && row.cheapest_provider ? String(row.cheapest_provider) : null,
+          branchSpreadMeters: row.branch_spread_m,
+          providerCount: row.provider_count,
+        });
+        return d.lat === null
+          ? { lat: null, lng: null, source: null, confidence: d.confidence, reason: d.reason }
+          : d;
+      })(),
       wins: row.wins && typeof row.wins === 'object' ? row.wins : null,
     },
   };
