@@ -1,5 +1,6 @@
 'use strict';
 
+const integrity = require('../lib/result-integrity');
 const express = require('express');
 const comparisonMap = require('../lib/comparison-map');
 const { asyncHandler } = require('../lib/async-handler');
@@ -80,8 +81,26 @@ function createMapRouter() {
       if (!result) {
         return res.status(404).json({ error: 'unknown_city', city: req.params.city });
       }
+      /* A city we serve that produced no rows is a pipeline failure, and serving
+       * it as 200 would tell the user there are no opportunities in their city.
+       * That is a false statement about the world, so it does not get a success
+       * code and it does not get cached. */
+      const verdict = integrity.record(integrity.classifyResult({
+        city: result.body.city,
+        count: result.body.count,
+        generatedAt: result.body.generated_at,
+      }));
+      if (verdict.severity === 'failed') {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(503).json({
+          error: 'read_layer_empty',
+          city: result.body.city,
+          detail: verdict.detail,
+        });
+      }
       res.setHeader('ETag', result.etag);
       res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+      res.setHeader('X-Farq-Data-Status', verdict.status);
       if (req.headers['if-none-match'] === result.etag) return res.status(304).end();
       res.json(result.body);
     })

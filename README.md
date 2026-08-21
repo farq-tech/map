@@ -113,6 +113,75 @@ test. None of it can be built in this repo.
 
 No secrets belong in git. Copy `.env.example` and set values locally or in the Vercel/Railway projects for this repo.
 
+## Data integrity
+
+The map's worst failure is not an error page. It is a well-formed `200` carrying
+an empty map, which tells a user there are no opportunities in their city — a
+false statement about the world, served as success. Three layers exist to stop
+that.
+
+**Empty is classified, never assumed** (`apps/api/lib/result-integrity.js`).
+Every city response is sorted into `ok`, `filtered-zero` (the user's own filter
+removed everything — fine), `stale` (older than the staleness ceiling), or
+`source-empty` (the read layer produced nothing for a city we serve). The last
+one is **not** served as `200`: it answers `503` with `no-store`, because a blank
+map is not a valid answer. The status also rides on the `X-Farq-Data-Status`
+header, and counters are exposed at `/api/health`.
+
+**A rebuild has to earn the right to replace what we are serving**
+(`apps/api/lib/read-layer-guard.js`). When the ten-minute cache refetches, the
+new snapshot is fingerprinted — row count, required-field null rates, providers
+present, أحياء represented — and compared with the last one that passed. A
+snapshot that has lost a third of its restaurants, or a required column, or most
+of its providers, is **refused**: the previous snapshot keeps serving, stale and
+correct rather than fresh and wrong. Refusals appear at `/api/health`.
+
+The thresholds are set at catastrophe level on purpose. The layer rebuilds every
+few days and only one snapshot was observable when they were chosen, so
+rebuild-to-rebuild variance is not yet known; the guard catches a pipeline that
+broke, not one that had a quiet week. Tighten them once two rebuilds have been
+recorded — the reasoning and the measured baseline are in the module.
+
+**Production is checked from outside** (`apps/api/scripts/synthetic-check.mjs`).
+Ten assertions against the real service: health, a city that must not be empty,
+the exact number of أحياء we ship, a named حي that must still count
+opportunities, and a clean `404` for a city we do not serve. Every assertion is a
+floor or a committed value, never an exact count of data that legitimately moves.
+
+```bash
+node apps/api/scripts/synthetic-check.mjs                        # production
+node apps/api/scripts/synthetic-check.mjs --base http://localhost:4001
+node apps/api/scripts/synthetic-check.mjs --json                 # for a scheduler
+```
+
+Exit `0` all passed · `1` an assertion failed · `2` the service was unreachable,
+which is a different problem worth telling apart.
+
+## Place truth
+
+Farq draws one pin per restaurant and attributes it to one حي. Both are claims
+about identity, and upstream that identity is built by matching each delivery
+app's listing to a shared canonical id. When that match lands on the **brand**
+rather than the **branch**, one pin ends up standing for a chain.
+
+Measured on production, 21 Aug 2026, over the restaurants we actually show in
+Riyadh: 6,684 agree within 30 m, 1,390 within a block, 130 within a kilometre,
+and **386 do not** — the worst spans 73 km. That is 4.5% of the places and 8.4%
+of the comparable items.
+
+So every place carries `branch_spread_m` and a `place_confidence`
+(`single-address`, `same-block`, `suspect-merge`, `multi-branch-merge`,
+`single-provider`, `unknown`), and a `multi-branch-merge` **is not assigned to a
+حي**. It stays on the map, it stays in the city total, it keeps its own number —
+it is only barred from being counted as belonging to one neighbourhood, under
+the same rule that already governs a place falling in no polygon: a wrong حي is
+worse than an uncounted one.
+
+`apps/api/lib/place-identity.js` scores two records for sameness and reports
+suspected duplicates **weakest match first**, because the honest way to judge a
+threshold is to look at the worst pairs it still accepts, not at a random sample
+dominated by easy ones.
+
 ## Deploy
 
 Vercel builds `apps/web` and rewrites `/api/*` to the Railway API (`vercel.json`).

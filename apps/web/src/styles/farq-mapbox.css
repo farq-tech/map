@@ -3084,3 +3084,14 @@
 	background: #043434;
 	color: #83f1b1;
 }
+
+/* The tie-breaker beside a حي that shares its name with another one. Quieter
+   than the name it qualifies, because it is a hint and not an identity. */
+.farq-district-hint {
+	display: inline;
+	margin-inline-start: 6px;
+	font-size: 12px;
+	font-weight: 400;
+	color: #6b8b8b;
+	white-space: nowrap;
+}

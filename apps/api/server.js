@@ -1,5 +1,7 @@
 'use strict';
 
+const cityOpportunities = require('./lib/city-opportunities');
+const resultIntegrity = require('./lib/result-integrity');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -50,8 +52,18 @@ app.get('/version', (_req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
+  /* Health is not "the process is up". A process serving empty maps with a 200
+   * is up and wrong, which is the state this endpoint exists to expose. */
+  const data = resultIntegrity.snapshot();
+  /* A refused rebuild means we are deliberately serving older data. That is the
+   * correct behaviour and it is still a condition someone must see. */
+  const refused = [...cityOpportunities.refusedSnapshots.entries()].map(([city, v]) => ({
+    city, at: v.at, violations: v.violations.map((x) => x.rule),
+  }));
+  const failing = Boolean(data.last_failure) || refused.length > 0;
+  res.status(failing ? 503 : 200).json({
+    ok: !failing,
+    data_integrity: { ...data, refused_rebuilds: refused },
     service: 'farq-map-api',
     comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
     menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',

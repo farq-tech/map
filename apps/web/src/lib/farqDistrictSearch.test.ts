@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterDistricts, normalizeDistrictText, rankDistricts } from "./farqDistrictSearch";
+import {
+	districtDisambiguation,
+	filterDistricts,
+	normalizeDistrictText,
+	rankDistricts,
+} from "./farqDistrictSearch";
 import type { CityDistricts } from "../services/intelligenceService";
 
 const hood = (id: string, name_ar: string, name_en: string, opportunities: number, max_gap: number | null): CityDistricts["features"][number] => ({
@@ -68,5 +73,52 @@ describe("district search", () => {
 		expect(filterDistricts(CITY, "")).toHaveLength(CITY.length);
 		expect(filterDistricts(CITY, "أتلانتس")).toEqual([]);
 		expect(filterDistricts(null, "x")).toEqual([]);
+	});
+});
+
+
+/**
+ * Parity with apps/api/lib/arabic-text.js. These vectors appear verbatim in
+ * apps/api/lib/arabic-text.test.js — change one side and the other fails, which
+ * is the only thing keeping a hand-kept copy honest.
+ */
+const PARITY_VECTORS: Array<[string, string]> = [
+	["حي النرجس", "النرجس"],
+	["ﺣﻲ ﺍﻟﻨﺮﺟﺲ", "النرجس"],
+	["حي ۵ نجوم", "5 نجوم"],
+	["حي ٥ نجوم", "5 نجوم"],
+	["Al Narjās", "al narjas"],
+	["الشهداء", "الشهدا"],
+	["مؤسسة", "موسسه"],
+	["سائق", "سايق"],
+	["كووول", "كول"],
+	["کافيه", "كافيه"],
+	["الرِّيَاض", "الرياض"],
+	["الــرياض", "الرياض"],
+	["بنك-الراجحي", "بنك الراجحي"]
+];
+
+describe("normalization parity with the API", () => {
+	it("normalizes every shared vector to the agreed value", () => {
+		for (const [input, expected] of PARITY_VECTORS) {
+			expect(normalizeDistrictText(input)).toBe(expected);
+		}
+	});
+});
+
+describe("disambiguating two أحياء with one name", () => {
+	const feature = (props: Record<string, unknown>) =>
+		({ properties: { name_ar: "الشهداء", name_en: "Al Shohda", ...props } }) as never;
+
+	it("qualifies a name only when the server said it collides", () => {
+		expect(districtDisambiguation(feature({ name_hint_ar: "غرناطة", name_hint_en: "Granada" }), true))
+			.toBe("قرب غرناطة");
+		expect(districtDisambiguation(feature({ name_hint_ar: "غرناطة", name_hint_en: "Granada" }), false))
+			.toBe("near Granada");
+	});
+
+	it("leaves a unique name alone", () => {
+		expect(districtDisambiguation(feature({ name_hint_ar: null, name_hint_en: null }), true)).toBeNull();
+		expect(districtDisambiguation(null, true)).toBeNull();
 	});
 });

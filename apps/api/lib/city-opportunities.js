@@ -27,6 +27,9 @@
 const { comparisonQuery } = require('./comparison-pool');
 const { CONSUMER_PRICE_CAP_SAR, validCoord } = require('./comparison-map');
 const { districtOfPoint, loadDistricts } = require('./city-districts');
+const { placeConfidence, attributableToDistrict } = require('./place-truth');
+const readLayerGuard = require('./read-layer-guard');
+const integrity = require('./result-integrity');
 const {
   categoryCaseSql,
   deliveryAdjustedGap,
@@ -44,7 +47,7 @@ const {
 } = require('./opportunity-aggregate');
 
 /** Bump when the shape of a feature changes, so a cached client refetches. */
-const READ_MODEL_VERSION = 3;
+const READ_MODEL_VERSION = 4;
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 
@@ -61,7 +64,11 @@ const CITY_ALIASES = Object.freeze({
 });
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const cache = new Map(); // city -> { at, value, etag }
+const cache = new Map();
+/** The last snapshot that passed the rebuild guard, per city. */
+const lastGoodSnapshot = new Map();
+/** Why the most recent rebuild was turned away, per city, for the health endpoint. */
+const refusedSnapshots = new Map();
 
 /**
  * The أحياء aggregate derived from a cached city used to be rebuilt on every
@@ -141,7 +148,26 @@ const ITEM_NAME_EXPR = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,
  * the crawler records the pair, rather than waiting for a schema change.
  */
 const CITY_SQL = `
-WITH scored AS (
+WITH branch_spread AS (
+  /* How far apart are the pins the delivery apps give for one canonical
+   * restaurant? A large answer means the upstream match joined branches of a
+   * chain, not listings of one branch — see place-truth.js for what that costs.
+   * Max pairwise, not bounding box: at most eight providers per restaurant, so
+   * the self-join is bounded and the number is exact. */
+  SELECT p.canonical_restaurant_id,
+         MAX(2*6371000*asin(sqrt(
+             power(sin(radians(q.lat::float - p.lat::float)/2), 2)
+           + cos(radians(p.lat::float)) * cos(radians(q.lat::float))
+             * power(sin(radians(q.lon::float - p.lon::float)/2), 2)))) AS spread_m
+    FROM comparison.restaurant_providers p
+    JOIN comparison.restaurant_providers q
+      ON q.canonical_restaurant_id = p.canonical_restaurant_id
+     AND q.provider_restaurant_id::text > p.provider_restaurant_id::text
+   WHERE p.lat IS NOT NULL AND p.lon IS NOT NULL
+     AND q.lat IS NOT NULL AND q.lon IS NOT NULL
+   GROUP BY 1
+),
+scored AS (
   SELECT ips.canonical_restaurant_id,
          ips.canonical_item_id,
          ips.cheapest_provider,
@@ -212,11 +238,13 @@ SELECT dc.canonical_restaurant_id::text AS place_id,
        fc.delivery_fee AS cheapest_delivery_fee,
        fd.delivery_fee AS expensive_delivery_fee,
        w.wins,
-       w.comparisons
+       w.comparisons,
+       bs.spread_m AS branch_spread_m
   FROM comparison.discovery_cards dc
   LEFT JOIN best b ON b.canonical_restaurant_id = dc.canonical_restaurant_id
   LEFT JOIN cats c ON c.canonical_restaurant_id = dc.canonical_restaurant_id
   LEFT JOIN wins w ON w.canonical_restaurant_id = dc.canonical_restaurant_id
+  LEFT JOIN branch_spread bs ON bs.canonical_restaurant_id = dc.canonical_restaurant_id
   /* A restaurant can carry several rows for one app; take one deterministically
    * rather than averaging fees that were never observed together. */
   LEFT JOIN LATERAL (
@@ -310,6 +338,14 @@ function rowToFeature(row) {
       has_difference: hasGap,
       provider_count: finite(row.provider_count),
       comparisons: finite(row.comparisons) || 0,
+      /* How far apart the apps place this restaurant's branches, and what that
+       * lets us claim about it. See place-truth.js — 4.5% of the places we draw
+       * in Riyadh are chains merged into one pin. */
+      branch_spread_m: finite(row.branch_spread_m),
+      place_confidence: placeConfidence({
+        spreadMeters: row.branch_spread_m,
+        providerCount: row.provider_count,
+      }),
       wins: row.wins && typeof row.wins === 'object' ? row.wins : null,
     },
   };
@@ -331,9 +367,16 @@ async function loadCity(cityKey, query) {
   const districts = loadDistricts(cityKey);
   for (const f of features) {
     const [lng, lat] = f.geometry.coordinates;
-    f.properties.district_id = districts
-      ? districtOfPoint(cityKey, lng, lat, { __loaded: districts })
-      : null;
+    /* A place whose own branches are kilometres apart has a pin, but the pin
+     * describes one branch out of several. The map already refuses to place an
+     * opportunity that falls in no polygon, on the rule that a wrong حي is worse
+     * than an uncounted one; this is the same failure wearing a coordinate, so
+     * it gets the same answer. The place still appears on the map with its own
+     * number — it is only barred from being counted as belonging to one حي. */
+    f.properties.district_id =
+      districts && attributableToDistrict(f.properties.place_confidence)
+        ? districtOfPoint(cityKey, lng, lat, { __loaded: districts })
+        : null;
   }
   /* Default order is the one a person should meet: a real dinner order before a
    * share box of the same size, then the biggest gap. Clients re-rank freely. */
@@ -352,6 +395,10 @@ async function loadCity(cityKey, query) {
     city: cityKey,
     count: features.length,
     with_gap: withGap,
+    /* How many أحياء this city ships. The rebuild guard needs the denominator to
+     * judge whether district coverage collapsed; without it that rule silently
+     * never fires, which is worse than not having the rule. */
+    districts_total: districts ? districts.prepared.length : null,
     tiers: TIERS,
     source: 'comparison.discovery_cards + item_price_spread',
     freshness: 'read_layer',
@@ -385,8 +432,51 @@ async function getCityOpportunities(opts = {}) {
         inFlight.set(cityKey, pending);
       }
       const value = await pending;
-      entry = { at: Date.now(), value, etag: etagFor(value) };
-      cache.set(cityKey, entry);
+      /**
+       * The moment a rebuild reaches users. A snapshot that has lost a third of
+       * its restaurants, or a required column, or most of its providers, is not
+       * served — the previous snapshot keeps serving instead, stale and correct
+       * rather than fresh and wrong. See read-layer-guard.js for why the
+       * thresholds are set at catastrophe level and what to tighten them to.
+       */
+      const candidate = readLayerGuard.summarize(value.features, {
+        city: cityKey,
+        generatedAt: value.generated_at,
+      });
+      const verdict = readLayerGuard.evaluateSnapshot(candidate, lastGoodSnapshot.get(cityKey), {
+        totalDistricts: (value.districts_total ?? null),
+      });
+      if (!verdict.accept && entry) {
+        integrity.record({
+          status: 'rebuild-refused',
+          severity: 'failed',
+          city: cityKey,
+          count: candidate.count,
+          sourceCount: candidate.count,
+          detail: verdict.violations.map((v) => `${v.rule}: ${v.detail}`).join('; '),
+        });
+        /* Keep the entry we already had, and let the next refresh try again. */
+        entry.at = Date.now();
+        cache.set(cityKey, entry);
+        refusedSnapshots.set(cityKey, { at: new Date().toISOString(), ...verdict });
+      } else {
+        if (!verdict.accept) {
+          /* Nothing better to fall back to. Serve it, but say so loudly rather
+           * than pretend the first snapshot of the process was verified. */
+          integrity.record({
+            status: 'rebuild-unverified',
+            severity: 'failed',
+            city: cityKey,
+            count: candidate.count,
+            sourceCount: candidate.count,
+            detail: `no previous snapshot to fall back to; ${verdict.violations.map((v) => v.rule).join(', ')}`,
+          });
+        }
+        lastGoodSnapshot.set(cityKey, candidate);
+        refusedSnapshots.delete(cityKey);
+        entry = { at: Date.now(), value, etag: etagFor(value) };
+        cache.set(cityKey, entry);
+      }
     }
   }
   const includeAll = String(opts.include || 'opportunities') === 'all';
@@ -414,6 +504,10 @@ function aggregateDistricts(loaded, features) {
       district_id: d.id,
       name_ar: d.name_ar,
       name_en: d.name_en,
+      /* Only present when this city holds more than one حي by this name — see
+       * stampAmbiguityHints in city-districts.js. */
+      name_hint_ar: d.name_hint_ar || null,
+      name_hint_en: d.name_hint_en || null,
       bbox: d.bbox.slice(),
       label_point: d.label_point ? d.label_point.slice() : null,
       ...statsToProperties(groups.get(d.id) || emptyStats(), MIN_AREA_COMPARISONS),
@@ -481,6 +575,7 @@ function __resetCityCacheForTests() {
 }
 
 module.exports = {
+  refusedSnapshots,
   CITY_ALIASES,
   MIN_AREA_COMPARISONS,
   TIERS,

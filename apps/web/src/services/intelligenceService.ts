@@ -410,6 +410,14 @@ export type CityDistrictProperties = {
 	district_id: string;
 	name_ar: string;
 	name_en: string;
+	/**
+	 * A nearby حي, present only when this city holds more than one حي by this
+	 * name. Riyadh has two called الشهداء, 16 km apart, each with its own
+	 * official code — real districts, not duplicates — and a list that offers the
+	 * same word twice makes the choice a coin flip.
+	 */
+	name_hint_ar: string | null;
+	name_hint_en: string | null;
 	bbox: [number, number, number, number];
 	/** One point inside the largest part — where its single label sits. */
 	label_point: [number, number] | null;

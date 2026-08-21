@@ -17,6 +17,7 @@
  * No boundary is ever invented: an unknown city or a missing file is null.
  */
 
+const { normalizeArabic, matchKey } = require('./arabic-text');
 const fs = require('fs');
 const path = require('path');
 
@@ -72,19 +73,14 @@ function normalizeKey(raw) {
   return String(raw || '').trim().toLowerCase();
 }
 
-/** Digits, hamza, taa marbuta, alef maqsura, diacritics, tatweel, punctuation, case. */
-function normName(raw) {
-  return String(raw || '')
-    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .replace(/[ً-ْـ]/g, '')
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+/**
+ * One normalizer, shared. This used to be a local copy that had drifted: it
+ * missed the extended Arabic-Indic digits (۰-۹), Arabic presentation forms, and
+ * the hamza carriers — so «حي ۵ نجوم» and a district name pasted from a PDF
+ * simply could not be found, while the same text worked in the copilot.
+ * A second implementation of a normalizer is a second set of bugs.
+ */
+const normName = normalizeArabic;
 
 /** "حي النرجس" → "النرجس"; "al narjas" → "narjas"; "النرجس" → "نرجس" too, as a second key. */
 function nameKeys(name) {
@@ -144,6 +140,67 @@ function prepare(feature) {
   };
 }
 
+
+/**
+ * Two أحياء in one city can legitimately share a name — الشهداء appears twice in
+ * Riyadh, 16 km apart, each with its own official code. That is data, not a
+ * defect. What IS a defect is a picker that offers the same word twice and makes
+ * the choice a coin flip.
+ *
+ * So an ambiguous name gets a hint, and the hint is chosen by measurement rather
+ * than by taste. A cardinal direction from the city centre was the obvious
+ * candidate and it fails: both of Jeddah's «المستقبل» أحياء are south-east of
+ * the centre, so the hint would repeat the ambiguity it exists to resolve.
+ * The nearest differently-named حي separates all five ambiguous أحياء we ship,
+ * and it is also how people actually locate a place — «الشهداء اللي جنب غرناطة».
+ *
+ * Deterministic: nearest by bbox centre, ties broken by id, so the same file
+ * always produces the same hint.
+ */
+function stampAmbiguityHints(prepared) {
+  const byName = new Map();
+  for (const d of prepared) {
+    /* The same key the picker matches on: article and type word folded, because
+     * that is the form a user types and therefore the form that collides. */
+    const key = matchKey(d.name_ar);
+    if (!key) continue;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(d);
+  }
+  const ambiguous = [...byName.values()].filter((group) => group.length > 1);
+  if (!ambiguous.length) return;
+
+  const centre = (d) => [(d.bbox[0] + d.bbox[2]) / 2, (d.bbox[1] + d.bbox[3]) / 2];
+  for (const group of ambiguous) {
+    for (const d of group) {
+      const [cx, cy] = centre(d);
+      /* Longitude degrees are shorter than latitude degrees; at this latitude by
+       * about 9%. Comparing them as if they were the same unit would pick the
+       * wrong neighbour near a tie. */
+      const cosLat = Math.cos((cy * Math.PI) / 180);
+      let best = null;
+      let bestDistance = Infinity;
+      for (const other of prepared) {
+        if (other.id === d.id) continue;
+        if (matchKey(other.name_ar) === matchKey(d.name_ar)) continue;
+        const [ox, oy] = centre(other);
+        const dx = (ox - cx) * cosLat;
+        const dy = oy - cy;
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance || (distance === bestDistance && best && other.id < best.id)) {
+          bestDistance = distance;
+          best = other;
+        }
+      }
+      if (!best) continue;
+      d.name_hint_ar = best.name_ar;
+      d.name_hint_en = best.name_en;
+      d.feature.properties.name_hint_ar = best.name_ar;
+      d.feature.properties.name_hint_en = best.name_en;
+    }
+  }
+}
+
 /**
  * @returns {{ city: string, count: number, features: object[], byId: Map, prepared: object[], source: string|null } | null}
  */
@@ -169,6 +226,7 @@ function loadDistricts(cityRaw, opts = {}) {
     prepared.push(d);
     byId.set(d.id, d);
   }
+  stampAmbiguityHints(prepared);
   const loaded = {
     city,
     count: prepared.length,

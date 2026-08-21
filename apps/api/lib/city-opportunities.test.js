@@ -113,7 +113,7 @@ test('every city opportunity carries the حي its coordinates fall in, and the d
   const expected = districtOfPoint('riyadh', ROW.longitude, ROW.latitude);
   assert.equal(typeof expected, 'string');
   assert.equal(f.properties.district_id, expected);
-  assert.match(city.etag, /^W\/"v3-riyadh-/);
+  assert.match(city.etag, /^W\/"v4-riyadh-/);
 
   const d = await getCityDistricts({ city: 'riyadh', __query });
   assert.equal(d.body.count, 187);

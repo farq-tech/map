@@ -10,7 +10,11 @@
 import { ChevronDown, MapPin, Search, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useFocusTrap } from "../../hooks/useFocusTrap";
-import { districtDisplayName, filterDistricts } from "../../lib/farqDistrictSearch";
+import {
+	districtDisambiguation,
+	districtDisplayName,
+	filterDistricts,
+} from "../../lib/farqDistrictSearch";
 import { localizeDigitString } from "../../lib/formatPrice";
 import type { CityDistricts } from "../../services/intelligenceService";
 
@@ -180,7 +184,17 @@ export default function FarqDistrictPicker({
 										className={`${on ? "is-on" : ""} ${p.opportunities ? "" : "is-empty"}`}
 										onClick={() => pick(p.district_id)}
 									>
-										<span className="name">{districtDisplayName(f, isRTL)}</span>
+										<span className="name">
+											{districtDisplayName(f, isRTL)}
+											{/* Two أحياء can share a name — Riyadh has two called الشهداء,
+											    16 km apart. Without this the list offers the same word
+											    twice and the choice is a coin flip. */}
+											{districtDisambiguation(f, isRTL) ? (
+												<span className="farq-district-hint">
+													{districtDisambiguation(f, isRTL)}
+												</span>
+											) : null}
+										</span>
 										<span className="meta">
 											{p.opportunities > 0
 												? isRTL
