@@ -53,6 +53,12 @@ function numbersFromOpportunities(opportunities) {
       'cheapest_price',
       'highest_price',
       'difference_amount',
+      /* The percentage and the app count are observed values on the same row and
+       * the templates already print them — leaving them out made the copilot
+       * refuse its own draft, so a model reply could never pass and the phrasing
+       * step spent a call on every answer only to discard the result. */
+      'pct',
+      'provider_count',
       'lat',
       'lng',
     ]) {
@@ -78,9 +84,13 @@ function replyUsesOnlyToolNumbers(reply, opportunities) {
     const norm = normalizeNumber(n);
     const loose = normalizeNumber(Number(n.toFixed(2)));
     if (allowed.has(norm) || allowed.has(loose)) continue;
+    /* Prices are printed to one decimal (109.95 → "110.0"), so a reply that
+     * shows an observed number the way the product shows it must pass. The
+     * window is half of that last displayed decimal — wide enough for the
+     * rounding we do ourselves, far too narrow to admit a made-up figure. */
     const rounded = [...allowed].some((a) => {
       const av = Number(a);
-      return Number.isFinite(av) && Math.abs(av - n) < 0.011;
+      return Number.isFinite(av) && Math.abs(av - n) <= 0.05;
     });
     if (!rounded) return false;
   }

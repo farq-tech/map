@@ -40,7 +40,11 @@ function chatConfigured() {
 }
 
 function geminiModel() {
-  return String(process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+  /* gemini-2.5-flash was retired — it answers 404 "no longer available to new
+   * users" and this handler has no failover, so every request logged an error.
+   * Verified against this project's key on 2026-08-21: the lite model replies
+   * in ~800 ms where the reasoning models take 3–17 s or return nothing. */
+  return String(process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim();
 }
 
 function unconfiguredPayload() {

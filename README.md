@@ -79,7 +79,7 @@ CI runs all three on every push and pull request (`.github/workflows/ci.yml`).
 - Intent is decided in code after Arabic normalisation (digits, hamza, taa marbuta, diacritics). Follow-ups — الأرخص؟ · ليش؟ · خذني له — resolve against a 30-minute server session.
 - Scope, in order: a named neighbourhood (geocoded), the person's position (2 km), the viewport, the city. The answer names which.
 - Actions: `NOOP · FOCUS_PLACE · SHOW_RESULTS · FIT_BOUNDS · SET_FILTER · SET_CATEGORY · SET_SEARCH · RETURN_TO_USER`. Every id is validated against the returned rows.
-- Every intent has a template answer in Arabic and English, so the copilot works with **no model**. With `GEMINI_API_KEY` set, Gemini may rephrase the template (JSON schema, rows in the user turn, model-id failover `gemini-3.7-flash → gemini-3.5-flash-lite → gemini-2.5-flash`); its text is used only if every number in it exists in the rows.
+- Every intent has a template answer in Arabic and English, so the copilot works with **no model**. With `GEMINI_API_KEY` set, Gemini may rephrase the template (JSON schema, rows in the user turn, model failover `gemini-3.5-flash-lite → gemini-flash-lite-latest`, ordered by what actually answers inside a shared 6 s budget — a reasoning model spends that budget thinking and returns nothing); its text is used only if every number in it exists in the rows.
 
 `POST /api/chat` is the previous assistant and stays mounted until the new client is deployed everywhere; new work goes to `/api/copilot`.
 

@@ -188,3 +188,79 @@ test('english questions get english answers', async () => {
   assert.match(r.answer, /Biggest observed gap around you/);
   assert.match(r.answer, /SAR on Jahez/);
 });
+
+/* ---------- model failover: measured against the live API on 2026-08-21 ---------- */
+
+const { phraseWithGemini } = require('./copilot');
+
+function geminiReply(answer) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ answer }) }] } }] }),
+  };
+}
+const ROWS_FOR_PHRASE = [
+  { id: 'r1', name: 'حلويات ابو انس', product_name: 'مشكل بقلاوة فستق', cheapest_provider_id: 'hungerstation', cheapest_price: 75, expensive_provider_id: 'mrsool', expensive_price: 138, gap: 63, pct: 46 },
+];
+const phraseArgs = { question: 'وين أكبر فرق؟', rows: ROWS_FOR_PHRASE, intent: 'BIGGEST_GAP', lang: 'ar', draft: 'أكبر فرق مرصود: 75 مقابل 138 — فرق 63.' };
+
+test('a retired model does not end rephrasing — the next one answers', async (t) => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  const tried = [];
+  const fetchStub = async (url) => {
+    tried.push(String(url).match(/models\/([^:]+):/)[1]);
+    /* Exactly what the live API returns for gemini-2.5-flash today. */
+    if (tried.length === 1) return { ok: false, status: 404, json: async () => ({ error: { message: 'no longer available to new users' } }) };
+    return geminiReply('أكبر فرق مرصود: 75 مقابل 138 — فرق 63 ر.س.');
+  };
+  const out = await phraseWithGemini(phraseArgs, { fetch: fetchStub });
+  assert.equal(tried.length, 2, 'it tried the next model');
+  assert.match(out.answer, /63/);
+});
+
+test('an overloaded model (503) and an empty reply both fall through', async (t) => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  for (const first of [
+    { ok: false, status: 503, json: async () => ({ error: { message: 'high demand' } }) },
+    /* A reasoning model can burn the whole token budget before writing a word. */
+    geminiReply('   '),
+  ]) {
+    let n = 0;
+    const out = await phraseWithGemini(phraseArgs, {
+      fetch: async () => { n += 1; return n === 1 ? first : geminiReply('فرق 63 ر.س مرصود بين 75 و138.'); },
+    });
+    assert.equal(n, 2);
+    assert.match(out.answer, /63/);
+  }
+});
+
+test('failing over never doubles the wait — one budget for the whole step', async (t) => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  let clock = 1_000_000;
+  let calls = 0;
+  const out = await phraseWithGemini(phraseArgs, {
+    now: () => clock,
+    fetch: async () => {
+      calls += 1;
+      clock += 5500; // the first model eats almost the entire budget
+      throw new Error('TimeoutError');
+    },
+  });
+  assert.equal(calls, 1, 'the second model is not started with no time left');
+  assert.equal(out, null, 'the caller falls back to the template answer');
+});
+
+test('a model that invents a number is refused, not retried', async (t) => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  let calls = 0;
+  const out = await phraseWithGemini(phraseArgs, {
+    fetch: async () => { calls += 1; return geminiReply('وفر 999 ر.س الليلة!'); },
+  });
+  assert.equal(out, null);
+  assert.equal(calls, 1, 'the next model is no more trustworthy about the same rows');
+});

@@ -69,3 +69,28 @@ describe('chat-policy', () => {
     assert.equal(text.includes('البيك'), false);
   });
 });
+
+describe('observed numbers the templates already print', () => {
+  it('lets the copilot pass its own draft — a percentage is an observed number too', () => {
+    const rows = [{ cheapest_price: 110, highest_price: 190, difference_amount: 80, pct: 42, provider_count: 3 }];
+    /* Verbatim what the templates write and what the model echoes back. */
+    const draft = 'أكبر فرق مرصود في هذا النطاق: كيكة المانجو في رايت: 110.0 ر.س في نينجا — فرق 80 ر.س (42%)';
+    assert.equal(replyUsesOnlyToolNumbers(draft, rows), true);
+    assert.equal(replyUsesOnlyToolNumbers('على 3 تطبيقات', rows), true);
+  });
+
+  it('accepts an observed price at the precision the product prints it', () => {
+    /* The templates render price() to one decimal: 109.95 reaches the screen
+     * as "110.0", and refusing that made the copilot refuse its own draft. */
+    const rows = [{ cheapest_price: 109.95, highest_price: 190, difference_amount: 80 }];
+    assert.equal(replyUsesOnlyToolNumbers('السعر 110.0 ر.س', rows), true);
+    assert.equal(replyUsesOnlyToolNumbers('السعر 109.95 ر.س', rows), true);
+    assert.equal(replyUsesOnlyToolNumbers('السعر 111 ر.س', rows), false, 'a full riyal away is not rounding');
+  });
+
+  it('still refuses a number that is on no row — the guard is widened, not loosened', () => {
+    const rows = [{ cheapest_price: 110, highest_price: 190, difference_amount: 80, pct: 42, provider_count: 3 }];
+    assert.equal(replyUsesOnlyToolNumbers('وفر 999 ر.س الليلة', rows), false);
+    assert.equal(replyUsesOnlyToolNumbers('النسبة 77%', rows), false);
+  });
+});

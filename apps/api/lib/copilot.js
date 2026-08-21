@@ -140,12 +140,32 @@ function geminiKey() {
   return String(process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY || '').trim();
 }
 
+/**
+ * Rephrasing is a sub-second courtesy on top of an answer that is already
+ * correct, so the list is ordered by what actually comes back inside the
+ * budget — measured against this project's key on 2026-08-21:
+ *
+ *   gemini-3.5-flash-lite      758 ms, full Arabic answer
+ *   gemini-flash-lite-latest   850 ms, full Arabic answer
+ *   gemini-3.7-flash          3240 ms, EMPTY — spends the token budget thinking
+ *   gemini-3.6-flash         17194 ms, over any sane budget
+ *   gemini-2.5-flash           404, retired: "no longer available to new users"
+ *
+ * The old head of this list returned nothing at all, which is why every reply
+ * shipped as `model: template`. A reasoning model is the wrong tool for a job
+ * whose entire output is one sentence someone is waiting to read.
+ */
 const GEMINI_MODELS = Object.freeze(
-  String(process.env.GEMINI_MODEL || 'gemini-3.7-flash,gemini-3.5-flash-lite,gemini-2.5-flash')
+  String(process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite,gemini-flash-lite-latest')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
 );
+
+/** One budget for the whole step — failing over must never double the wait. */
+const PHRASE_BUDGET_MS = 6000;
+/** Below this there is no point starting an attempt; the lite models answer in ~800 ms. */
+const MIN_ATTEMPT_MS = 1200;
 
 const SYSTEM_PROMPT = [
   'أنت "فرق"، مساعد خريطة يفسّر فروقات الأسعار المرصودة بين تطبيقات التوصيل في السعودية.',
@@ -169,9 +189,16 @@ async function phraseWithGemini({ question, rows, intent, lang, draft }, deps = 
     highest_price: r.expensive_price,
     difference_amount: r.gap,
     pct: r.pct,
+    provider_count: r.provider_count,
   }));
   const userText = `السؤال: ${question}\nالنية: ${intent}\nاللغة: ${lang}\nصياغة أولية صحيحة يمكنك تحسينها دون تغيير أي رقم: ${draft}\nالصفوف:\n${JSON.stringify(slim)}`;
+  const now = deps.now || Date.now;
+  const deadline = now() + PHRASE_BUDGET_MS;
   for (const model of GEMINI_MODELS) {
+    const remaining = deadline - now();
+    /* A retired or overloaded model answers in well under a second, so trying
+     * the next one is nearly free; a slow one simply runs out the clock. */
+    if (remaining < MIN_ATTEMPT_MS) break;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
     const body = {
       system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -183,19 +210,31 @@ async function phraseWithGemini({ question, rows, intent, lang, draft }, deps = 
       },
     };
     try {
-      const res = await fetchFn(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(6000) });
-      if (res.status === 404) continue; // model retired — try the next one
-      if (!res.ok) return null;
+      const res = await fetchFn(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(remaining) });
+      /* 404 retired · 503 overloaded · 429 rate-limited — all of them are this
+       * model failing, not the step failing. Only a retirement used to fall
+       * through, so one busy minute silently disabled rephrasing. */
+      if (!res.ok) continue;
       const payload = await res.json().catch(() => null);
       const text = payload?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-      const parsed = JSON.parse(text);
-      const answer = String(parsed?.answer || '').trim();
-      if (!answer) return null;
-      const policyRows = slim.map((r) => ({ cheapest_price: r.cheapest_price, highest_price: r.highest_price, difference_amount: r.difference_amount, lat: null, lng: null }));
+      let answer = '';
+      try {
+        answer = String(JSON.parse(text)?.answer || '').trim();
+      } catch {
+        answer = '';
+      }
+      /* A reasoning model can spend the whole token budget before it writes a
+       * word. An empty reply is that model failing too — try the next. */
+      if (!answer) continue;
+      const policyRows = slim.map((r) => ({ cheapest_price: r.cheapest_price, highest_price: r.highest_price, difference_amount: r.difference_amount, pct: r.pct, provider_count: r.provider_count, lat: null, lng: null }));
+      /* A model that put a number on screen that is not in the rows is refused
+       * outright and never retried — the next model is no more trustworthy
+       * about the same rows, and the template answer is already correct. */
       if (!replyUsesOnlyToolNumbers(answer, policyRows)) return null;
       return { answer, model };
     } catch {
-      return null;
+      /* Timed out or the network failed; the budget check ends the loop. */
+      continue;
     }
   }
   return null;
