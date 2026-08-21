@@ -90,12 +90,28 @@ async function main() {
 	/* 1. Liveness. The platform's own probe, checked here too so an availability
 	 *    failure is distinguishable from a data failure at the first request. */
 	try {
-		const version = await get('/version');
-		reachable = true;
-		check('service is alive', version.status === 200,
-			{ expected: 200, actual: version.status, endpoint: '/version' });
+		const version = await get('/api/version');
+		/**
+		 * The BODY, not the status code. Reached through the web host, a path this
+		 * service does not own is answered by the CDN with the single-page app's
+		 * HTML and a 200 — so a status-only assertion would call the API alive
+		 * while it was entirely down. A monitor that can be satisfied by an error
+		 * page is not a monitor.
+		 */
+		const alive = version.status === 200
+			&& version.body
+			&& version.body.signal === 'liveness'
+			&& version.body.service === 'farq-map-api';
+		reachable = alive;
+		check('service is alive', alive, {
+			expected: 'HTTP 200 with signal=liveness',
+			actual: alive
+				? 'HTTP 200 with signal=liveness'
+				: `HTTP ${version.status} with ${version.body ? `signal=${version.body.signal}` : `${version.text.slice(0, 40).replace(/\s+/g, ' ')}…`}`,
+			endpoint: '/api/version',
+		});
 	} catch (err) {
-		check('service is alive', false, { expected: 200, actual: `unreachable (${err.message})`, endpoint: '/version' });
+		check('service is alive', false, { expected: 'HTTP 200 with signal=liveness', actual: `unreachable (${err.message})`, endpoint: '/api/version' });
 	}
 
 	if (!reachable) {

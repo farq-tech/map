@@ -61,7 +61,7 @@ function healthyRoutes(overrides = {}) {
 		const url = req.url.split('?')[0];
 		const over = overrides[url];
 		if (over) return over(req, res);
-		if (url === '/version') return json(res, 200, { ok: true, signal: 'liveness' });
+		if (url === '/api/version') return json(res, 200, { ok: true, service: 'farq-map-api', signal: 'liveness' });
 		if (url === '/api/health') return json(res, 200, { ok: true, signal: 'readiness', data: { ok: true } });
 		if (url === '/api/intelligence/map/city/riyadh/opportunities') {
 			res.setHeader('X-Farq-Data-Status', 'ok');
@@ -183,7 +183,7 @@ test('exit 2 — the service cannot be reached at all', async (t) => {
 
 	await t.test('a liveness probe that errors is availability', async () => {
 		const { server, base } = await makeServer((req, res) => {
-			if (req.url === '/version') { req.destroy(); return; }
+			if (req.url === '/api/version') { req.destroy(); return; }
 			json(res, 200, {});
 		});
 		try {
@@ -230,6 +230,36 @@ test('a malformed response is a failure, never a pass', async (t) => {
 		}));
 		try {
 			assert.equal((await runCheck(base)).code, 1);
+		} finally { server.close(); }
+	});
+});
+
+test('an error page is not a live service', async (t) => {
+	await t.test('HTML with a 200 at the liveness path is unreachable, not healthy', () => {});
+
+	await t.test('the CDN serving the app shell must not read as a healthy API', async () => {
+		/* Reached through the web host, a path the API does not own is answered by
+		 * the CDN with the single-page app and a 200. A status-only assertion
+		 * called that "alive" while the API was entirely down — this is that
+		 * exact response. */
+		const { server, base } = await makeServer((req, res) => {
+			res.writeHead(200, { 'content-type': 'text/html' });
+			res.end('<!doctype html><html><head><title>Farq Map</title></head><body></body></html>');
+		});
+		try {
+			const run = await runCheck(base);
+			assert.equal(run.code, 2, 'an app shell where the API should be is an availability failure');
+			const f = run.result.failures.find((x) => x.check === 'service is alive');
+			assert.equal(f.expected, 'HTTP 200 with signal=liveness');
+			assert.match(f.actual, /doctype|signal=undefined/);
+		} finally { server.close(); }
+	});
+
+	await t.test('a 200 with the wrong service name is not our API', async () => {
+		const { server, base } = await makeServer((req, res) =>
+			json(res, 200, { ok: true, service: 'someone-elses-api', signal: 'liveness' }));
+		try {
+			assert.equal((await runCheck(base)).code, 2);
 		} finally { server.close(); }
 	});
 });

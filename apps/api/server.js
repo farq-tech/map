@@ -56,9 +56,21 @@ app.use(express.json({ limit: '1mb' }));
  * good: a container restart does not fix a stale read layer, and wiring data
  * quality into a liveness probe turns a data problem into a restart loop.
  */
-app.get('/version', (_req, res) => {
+const liveness = (_req, res) => {
   res.json({ ok: true, service: 'farq-map-api', signal: 'liveness' });
-});
+};
+
+/* The platform's probe. Railway polls this on the Railway domain directly. */
+app.get('/version', liveness);
+
+/**
+ * The same answer under /api, because that is the only prefix the web host
+ * rewrites through to this service. Reached from the public domain, a bare
+ * /version is served by the CDN as the single-page app's HTML with a 200 — so a
+ * liveness check pointed there would report a healthy API while this process was
+ * entirely down. One path that works from everywhere is worth the duplicate line.
+ */
+app.get('/api/version', liveness);
 
 /**
  * Readiness. Is the data this process is serving worth believing?
