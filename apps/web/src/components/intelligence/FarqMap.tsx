@@ -11,10 +11,17 @@
  * Bubbles are overlay-only: this file must not restyle 3D buildings, terrain,
  * camera, zoom, or the Standard/Satellite basemap.
  */
+import {
+	AVATAR_CHANGED,
+	loadAvatar,
+	loadVehicleColor,
+	normalizeHeading,
+} from "../../lib/farqAvatar";
+import { buildUserMarker, updateUserMarker } from "../../lib/farqUserMarker";
 import type { MapboxSearchBox } from "@mapbox/search-js-web";
 import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import { localizeDigitString } from "../../lib/formatPrice";
 import { getProviderLabel } from "../../lib/platformLogos";
@@ -379,6 +386,7 @@ export default function FarqMap({
 	selectedNeighborhoodId = "",
 	focusRequest = null,
 	userLocation,
+	userHeading = null,
 	showUserLocation = false,
 	placeDetail = null,
 	isRTL = false,
@@ -407,6 +415,8 @@ export default function FarqMap({
 	focusRequest?: CameraFocusRequest | null;
 	zoom?: number;
 	userLocation?: { lat: number; lng: number } | null;
+	/** Degrees clockwise from north when the device reports one, else null. */
+	userHeading?: number | null;
 	showUserLocation?: boolean;
 	placeDetail?: IntelligenceMapPlaceDetail | null;
 	/** Kept so a future style choice has a seam; today the map is always Standard. */
@@ -438,6 +448,18 @@ export default function FarqMap({
 	const mapRef = useRef<MapboxMap | null>(null);
 	const searchRef = useRef<MapboxSearchBox | null>(null);
 	const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
+	const [avatarVersion, setAvatarVersion] = useState(0);
+	/* Read at render rather than held in state: the store is synchronous, so the
+	 * first frame already has the photo and there is no swap from dot to face. */
+	const userMarkerState = useCallback(
+		() => ({
+			avatar: loadAvatar(),
+			vehicleColor: loadVehicleColor(),
+			heading: normalizeHeading(userHeading),
+			isRTL: isRtlRef.current,
+		}),
+		[userHeading, avatarVersion],
+	);
 	const pinMarkersRef = useRef<Map<string, PinRec>>(new Map());
 	const lastPulseRef = useRef<{ placeId: string; amount: number } | null>(
 		null,
@@ -1097,31 +1119,24 @@ export default function FarqMap({
 			return;
 		}
 		if (!userMarkerRef.current) {
-			const el = document.createElement("div");
-			el.className = "farq-user-pulse";
-			el.dataset.testid = "farq-map-user-pulse";
-			const ringA = document.createElement("span");
-			ringA.className = "farq-user-pulse-ring";
-			const ringB = document.createElement("span");
-			ringB.className = "farq-user-pulse-ring farq-user-pulse-ring--delay";
-			const core = document.createElement("span");
-			core.className = "farq-user-pulse-core";
-			core.setAttribute("aria-hidden", "true");
-			const label = document.createElement("span");
-			label.className = "farq-user-here";
-			label.textContent = isRtlRef.current ? "أنت هنا" : "You are here";
-			el.append(ringA, ringB, core, label);
-			userMarkerRef.current = new mapboxgl.Marker({ element: el })
+			userMarkerRef.current = new mapboxgl.Marker({
+				element: buildUserMarker(userMarkerState()),
+			})
 				.setLngLat([userLocation.lng, userLocation.lat])
 				.addTo(map);
 		} else {
-			const label = userMarkerRef.current.getElement().querySelector(".farq-user-here");
-			if (label) {
-				label.textContent = isRtlRef.current ? "أنت هنا" : "You are here";
-			}
+			updateUserMarker(userMarkerRef.current.getElement(), userMarkerState());
 			userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
 		}
-	}, [showUserLocation, userLocation]);
+	}, [showUserLocation, userLocation, userMarkerState, avatarVersion]);
+
+	/* The photo lives in this browser and is changed from a control elsewhere in
+	 * the tree, so the marker listens rather than being handed it. */
+	useEffect(() => {
+		const onChange = () => setAvatarVersion((v) => v + 1);
+		window.addEventListener(AVATAR_CHANGED, onChange);
+		return () => window.removeEventListener(AVATAR_CHANGED, onChange);
+	}, []);
 
 	useEffect(() => {
 		const map = mapRef.current;

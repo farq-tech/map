@@ -3,6 +3,7 @@
  * Floats over the full-screen Mapbox canvas — never a layout slot under the map.
  * Desktop chrome stays in IntelligenceMapSplit.
  */
+import FarqVehicleCard from "./FarqVehicleCard";
 import {
 	CircleDot,
 	Info,
@@ -534,6 +535,8 @@ export default function FarqExploreChrome({
 								))}
 							</div>
 						</section>
+
+						<FarqVehicleCard isRTL={isRTL} />
 
 						{/* How to read the map is not an advanced option — it decides what the
 						    whole city zoom is saying, so it sits with Explore, one tap in. */}

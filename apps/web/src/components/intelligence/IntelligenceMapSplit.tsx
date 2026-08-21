@@ -162,6 +162,7 @@ export default function IntelligenceMapSplit({
 	const navigate = useNavigate();
 	const {
 		userLocation,
+		userHeading,
 		locationPinKind,
 		locationError,
 		isLocating,
@@ -1567,6 +1568,7 @@ export default function IntelligenceMapSplit({
 							selectedNeighborhoodId={neighborhoodId}
 							focusRequest={focusRequest}
 							userLocation={userLocation}
+						userHeading={userHeading}
 							showUserLocation={showUserDot}
 							placeDetail={placeDetail}
 							isRTL={isRTL}
