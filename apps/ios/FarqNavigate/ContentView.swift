@@ -116,6 +116,30 @@ struct ContentView: View {
         try? await Task.sleep(for: .seconds(3))
         await navigation.planRoute(to: target)
         NSLog("[farq-nav] smoke: %@ → %@", target.name, String(describing: navigation.state))
+        /* Read the whole route out in Arabic, in order, without driving it —
+         * the phrasing is the part that cannot be checked from a screenshot. */
+        let steps = navigation.routes.first?.steps ?? []
+        for (index, step) in steps.enumerated() {
+            let content = step.visualInstructions.first?.primaryContent
+            /* Pair each instruction with the step it leads into — the same
+             * pairing the running guide uses. */
+            let next = index + 1 < steps.count ? steps[index + 1] : nil
+            let said = ArabicGuidance.sentence(
+                type: content?.maneuverType,
+                modifier: content?.maneuverModifier,
+                roadName: next?.roadName ?? content?.text,
+                exitNumber: next?.exits.first,
+                roundaboutExit: content?.roundaboutExitDegrees,
+                distanceMeters: step.distance,
+                phase: .prepare
+            )
+            NSLog(
+                "[farq-align] %d | valhalla-next=%@ | farq=%@",
+                index,
+                next?.instruction ?? "—",
+                said ?? "—"
+            )
+        }
         #endif
     }
 
@@ -206,6 +230,27 @@ struct ContentView: View {
     @ViewBuilder
     private func guidance(_ navigation: NavigationModel) -> some View {
         VStack(spacing: 0) {
+            HStack {
+                Button {
+                    navigation.isVoiceOn.toggle()
+                } label: {
+                    Image(systemName: navigation.isVoiceOn
+                        ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(navigation.isVoiceOn ? Farq.brand900 : Farq.inkMuted)
+                        .frame(width: 40, height: 40)
+                        .background(.white, in: Circle())
+                        .shadow(color: .black.opacity(0.16), radius: 6, y: 2)
+                }
+                /* No Arabic voice on the phone is not a broken button: it says
+                 * so instead of pretending it will speak. */
+                .disabled(!navigation.voice.hasVoice)
+                .opacity(navigation.voice.hasVoice ? 1 : 0.4)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+
             if let visual = navigation.core?.state?.currentVisualInstruction {
                 InstructionsView(
                     visualInstruction: visual,

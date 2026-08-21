@@ -30,6 +30,14 @@ final class NavigationModel: ObservableObject {
     /// The same position, as the stream Mapbox's puck consumes.
     let locationStream = FarqLocationStream()
 
+    /// Says the turn out loud, in Arabic we build rather than Arabic we are given.
+    let voice = ArabicVoiceGuide()
+
+    /// Whether the trip is being narrated. Off is a real choice, so it is one.
+    @Published var isVoiceOn = true {
+        didSet { voice.isEnabled = isVoiceOn; if !isVoiceOn { voice.reset() } }
+    }
+
     private var cancellables = Set<AnyCancellable>()
 
     /// Nil only when the configured routing endpoint could not be used at all.
@@ -95,7 +103,10 @@ final class NavigationModel: ObservableObject {
 
         core?.$state
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.republishLocation() }
+            .sink { [weak self] state in
+                self?.republishLocation()
+                self?.voice.consider(state: state)
+            }
             .store(in: &cancellables)
     }
 
@@ -165,6 +176,7 @@ final class NavigationModel: ObservableObject {
                 state = .failed("ما فيه طريق معروف لهذا المكان")
                 return
             }
+            voice.reset()
             try core.startNavigation(route: first)
             state = .navigating
         } catch {
@@ -184,6 +196,7 @@ final class NavigationModel: ObservableObject {
     #endif
 
     func stop() {
+        voice.reset()
         core?.stopNavigation()
         routes = []
         destinationLabel = nil

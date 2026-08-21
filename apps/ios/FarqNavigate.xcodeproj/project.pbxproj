@@ -42,6 +42,8 @@
 		53B4F9184C5E1A896D309795 /* FarqLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */; };
 		CA49199FA1666BB748A90116 /* DistrictPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DDB58AFE16D548D9348C6B /* DistrictPickerSheet.swift */; };
 		7E49681AE72C026FE5E9E8C7 /* MapFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40E1C991A4C6A0B022BC68E /* MapFocus.swift */; };
+		396285576CCCD6EA91DA74B3 /* ArabicGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7E47B3F7C22FB20DDE0FA3 /* ArabicGuidance.swift */; };
+		208DB82D38B904DC8604C5A0 /* ArabicVoiceGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4F7D578DFFAE09314A18048 /* ArabicVoiceGuide.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +80,8 @@
 		EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqLocationSource.swift; sourceTree = "<group>"; };
 		E7DDB58AFE16D548D9348C6B /* DistrictPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistrictPickerSheet.swift; sourceTree = "<group>"; };
 		B40E1C991A4C6A0B022BC68E /* MapFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapFocus.swift; sourceTree = "<group>"; };
+		2B7E47B3F7C22FB20DDE0FA3 /* ArabicGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArabicGuidance.swift; sourceTree = "<group>"; };
+		A4F7D578DFFAE09314A18048 /* ArabicVoiceGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArabicVoiceGuide.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +145,8 @@
 		B773EB1E0EAC24707A76989B /* Navigation */ = {
 			isa = PBXGroup;
 			children = (
+				A4F7D578DFFAE09314A18048 /* ArabicVoiceGuide.swift */,
+				2B7E47B3F7C22FB20DDE0FA3 /* ArabicGuidance.swift */,
 				B40E1C991A4C6A0B022BC68E /* MapFocus.swift */,
 				EFB9A9785FAB15ECF97A0559 /* FarqLocationSource.swift */,
 				C77ABA068CCDC8E0C5495EB8 /* FarqField.swift */,
@@ -287,6 +293,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				208DB82D38B904DC8604C5A0 /* ArabicVoiceGuide.swift in Sources */,
+				396285576CCCD6EA91DA74B3 /* ArabicGuidance.swift in Sources */,
 				7E49681AE72C026FE5E9E8C7 /* MapFocus.swift in Sources */,
 				CA49199FA1666BB748A90116 /* DistrictPickerSheet.swift in Sources */,
 				53B4F9184C5E1A896D309795 /* FarqLocationSource.swift in Sources */,
