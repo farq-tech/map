@@ -515,6 +515,7 @@ export default function FarqExploreChrome({
 										["gaps", isRTL ? "أكبر فرق" : "Biggest gaps", () => onSort("gap")],
 										["near", isRTL ? "الأقرب" : "Nearest", () => onSort("near")],
 										["cheap", isRTL ? "الأرخص" : "Cheapest", () => onSort("cheap")],
+										["value", isRTL ? "الأعلى نسبة" : "Best %", () => onSort("value")],
 										["grocery", isRTL ? "بقالة" : "Grocery", () => onRail("grocery")],
 										["around", isRTL ? "حولي" : "Around you", () => onExploreRadius("hawally")],
 									] as const
