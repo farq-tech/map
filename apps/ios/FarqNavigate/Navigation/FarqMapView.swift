@@ -66,6 +66,7 @@ struct FarqMapView: View {
                         .lineColor(StyleColor(UIColor(red: 0.02, green: 0.20, blue: 0.20, alpha: 1)))
                         .lineWidth(13)
                         .lineJoin(.round)
+                        .lineEmissiveStrength(1)
                 }
                 .layerId("farq-route-casing")
                 .slot(.middle)
@@ -77,6 +78,11 @@ struct FarqMapView: View {
                         .lineColor(StyleColor(UIColor(red: 0.51, green: 0.95, blue: 0.69, alpha: 1)))
                         .lineWidth(8)
                         .lineJoin(.round)
+                        /* Emissive, like every Farq layer over this basemap:
+                         * dusk otherwise dims the mint into the road under it,
+                         * and the route stops being the brightest thing on a
+                         * screen someone is following at speed. */
+                        .lineEmissiveStrength(1)
                 }
                 .layerId("farq-route")
                 .slot(.middle)

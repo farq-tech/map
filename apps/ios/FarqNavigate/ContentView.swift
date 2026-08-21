@@ -10,8 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var location = LocationProvider()
     @StateObject private var model = OpportunitiesModel()
-    @State private var navigation: NavigationModel?
-    @State private var navigationError: String?
+    @StateObject private var navigation = NavigationModel()
     @State private var query = ""
     @State private var lens: DistrictLens = .gap
     @State private var sort: OpportunitySort = .gap
@@ -22,12 +21,12 @@ struct ContentView: View {
                 opportunities: model.all,
                 districts: model.districts,
                 lens: lens,
-                route: navigation?.routes.first,
+                route: navigation.routes.first,
                 userLocation: location.location?.coordinate,
-                isNavigating: navigation?.state == .navigating
+                isNavigating: navigation.state == .navigating
             )
 
-            if navigation?.state == .navigating, let navigation {
+            if navigation.state == .navigating {
                 guidance(navigation)
             } else {
                 browsing
@@ -37,12 +36,34 @@ struct ContentView: View {
         .task {
             location.request()
             await model.load()
+            await smokeRouteIfRequested()
         }
         .onAppear {
-            guard navigation == nil else { return }
-            do { navigation = try NavigationModel() }
-            catch { navigationError = error.localizedDescription }
+            /* Ferrostar keeps its own location provider, and it has to be
+             * running before the first route is asked for — otherwise the
+             * navigate button answers «نحتاج موقعك أولاً» to someone whose
+             * position is already on the screen. */
+            navigation.startLocationUpdates()
         }
+    }
+
+    /// Drive the whole tap → route → guidance path from a launch argument, so
+    /// it can be run without a finger on the glass.
+    ///
+    /// A navigation app whose navigation has never been run end to end is not
+    /// finished, and the one path that cannot be checked by reading the code is
+    /// the one that crosses into Ferrostar and out to a routing server.
+    private func smokeRouteIfRequested() async {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-farq-smoke-route"),
+              let target = model.all.first(where: { $0.destination != nil })
+        else { return }
+        /* A first fix takes a moment; the button a person presses is not
+         * pressed a millisecond after the list arrives. */
+        try? await Task.sleep(for: .seconds(3))
+        await navigation.planRoute(to: target)
+        NSLog("[farq-nav] smoke: %@ → %@", target.name, String(describing: navigation.state))
+        #endif
     }
 
     // MARK: Browsing
@@ -59,7 +80,7 @@ struct ContentView: View {
 
             Spacer(minLength: 0)
 
-            if let message = model.error ?? navigationError ?? navigationFailure {
+            if let message = model.error ?? navigationFailure {
                 Text(message)
                     .font(Farq.font(12.5, .medium))
                     .foregroundStyle(.white)
@@ -76,7 +97,6 @@ struct ContentView: View {
                 freshness: model.freshness,
                 sort: $sort,
                 onNavigate: { opportunity in
-                    guard let navigation else { return }
                     Task { await navigation.planRoute(to: opportunity) }
                 },
                 onSelect: { _ in }
@@ -87,7 +107,7 @@ struct ContentView: View {
     }
 
     private var navigationFailure: String? {
-        if case .failed(let why) = navigation?.state { return why }
+        if case .failed(let why) = navigation.state { return why }
         return nil
     }
 
@@ -99,18 +119,18 @@ struct ContentView: View {
     @ViewBuilder
     private func guidance(_ navigation: NavigationModel) -> some View {
         VStack(spacing: 0) {
-            if let visual = navigation.core.state?.currentVisualInstruction {
+            if let visual = navigation.core?.state?.currentVisualInstruction {
                 InstructionsView(
                     visualInstruction: visual,
-                    distanceToNextManeuver: navigation.core.state?
+                    distanceToNextManeuver: navigation.core?.state?
                         .currentProgress?.distanceToNextManeuver,
-                    remainingSteps: navigation.core.state?.remainingSteps
+                    remainingSteps: navigation.core?.state?.remainingSteps
                 )
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
             }
             Spacer()
-            if let progress = navigation.core.state?.currentProgress {
+            if let progress = navigation.core?.state?.currentProgress {
                 TripProgressView(progress: progress) { navigation.stop() }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 24)

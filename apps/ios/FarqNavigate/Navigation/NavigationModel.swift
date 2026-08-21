@@ -22,10 +22,17 @@ final class NavigationModel: ObservableObject {
     @Published private(set) var routes: [Route] = []
     @Published private(set) var destinationLabel: String?
 
-    let core: FerrostarCore
+    /// Nil only when the configured routing endpoint could not be used at all.
+    /// The app then says so instead of offering a navigate button that cannot
+    /// work.
+    private(set) var core: FerrostarCore?
     private let locationProvider: CoreLocationProvider
 
-    init() throws {
+    /// Non-throwing on purpose: this object is owned by a `@StateObject`, and a
+    /// throwing initialiser forces the view to build it in `onAppear` and hold
+    /// it in plain `@State` — where SwiftUI does not observe it, and guidance
+    /// runs with the map still showing the browsing screen. That was the bug.
+    init() {
         let locationProvider = CoreLocationProvider(
             activityType: .automotiveNavigation,
             allowBackgroundLocationUpdates: false
@@ -53,15 +60,20 @@ final class NavigationModel: ObservableObject {
             snappedLocationCourseFiltering: .snapToRoute
         )
 
-        core = try FerrostarCore(
-            wellKnownRouteProvider: .valhalla(
-                endpointUrl: RouteConfiguration.endpoint,
-                profile: RouteConfiguration.profile,
-                optionsJson: nil
-            ),
-            locationProvider: locationProvider,
-            navigationControllerConfig: config
-        )
+        do {
+            core = try FerrostarCore(
+                wellKnownRouteProvider: .valhalla(
+                    endpointUrl: RouteConfiguration.endpoint,
+                    profile: RouteConfiguration.profile,
+                    optionsJson: nil
+                ),
+                locationProvider: locationProvider,
+                navigationControllerConfig: config
+            )
+        } catch {
+            core = nil
+            state = .failed("تعذّر إعداد المسارات: \(error.localizedDescription)")
+        }
     }
 
     /// Ask for routes to an opportunity's destination.
@@ -70,6 +82,10 @@ final class NavigationModel: ObservableObject {
     /// refusal to navigate is part of the data, and a caller that only had a
     /// coordinate could not honour it.
     func planRoute(to opportunity: Opportunity) async {
+        guard let core else {
+            state = .failed("خدمة المسارات غير مهيأة")
+            return
+        }
         guard let destination = opportunity.destination else {
             state = .failed(opportunity.navigateTo?.caution
                 ?? "ما عندنا وجهة مؤكدة لهذا المكان")
@@ -106,7 +122,7 @@ final class NavigationModel: ObservableObject {
     }
 
     func stop() {
-        core.stopNavigation()
+        core?.stopNavigation()
         routes = []
         destinationLabel = nil
         state = .idle
