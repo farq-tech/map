@@ -88,6 +88,13 @@ import FarqExploreChrome, {
 import FarqViewSortBar from "./FarqViewSortBar";
 import FarqOpportunityList, { FarqOpportunityCard } from "./FarqOpportunityList";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
+import StackedPlacePicker, { CoordinateStackBanner } from "./StackedPlacePicker";
+import {
+	stackAtPlaceId,
+	stackFromFeature,
+	stackSameCoordinateFeatures,
+	type CoordinateStack,
+} from "../../lib/stackSameCoordinates";
 import "../../styles/farq-mapbox.css";
 
 function categorySearchQuery(
@@ -194,6 +201,7 @@ export default function IntelligenceMapSplit({
 	const lastFocusedPlaceRef = useRef<string>("");
 	const pendingLocateRef = useRef(false);
 	const [livePlaceId, setLivePlaceId] = useState(search.place || "");
+	const [stackPick, setStackPick] = useState<CoordinateStack | null>(null);
 	const [searchHere, setSearchHere] = useState(false);
 	const [focusRequest, setFocusRequest] = useState<{
 		lat: number;
@@ -855,17 +863,60 @@ export default function IntelligenceMapSplit({
 	const displayPlaces = useMemo(() => {
 		if (!visiblePlaces) return visiblePlaces;
 		/* The GPU draws every opportunity and clusters them itself; the cap was a DOM limit. */
-		if (cityPlaces) return visiblePlaces;
-		const ids = new Set(topSavings.map((row) => row.placeId));
-		if (livePlaceId) ids.add(livePlaceId);
+		let features = visiblePlaces.features;
+		if (!cityPlaces) {
+			const ids = new Set(topSavings.map((row) => row.placeId));
+			if (livePlaceId) ids.add(livePlaceId);
+			if (stackPick) {
+				for (const member of stackPick.members) ids.add(member.placeId);
+			}
+			features = visiblePlaces.features.filter((f) =>
+				ids.has(String(f.properties.place_id || "")),
+			);
+		}
+		const stacked = stackSameCoordinateFeatures(features);
 		return {
 			...visiblePlaces,
-			count: topSavings.length,
-			features: visiblePlaces.features.filter((f) =>
-				ids.has(String(f.properties.place_id || "")),
-			),
+			count: stacked.length,
+			features: stacked,
 		};
-	}, [visiblePlaces, topSavings, livePlaceId, cityPlaces]);
+	}, [visiblePlaces, topSavings, livePlaceId, cityPlaces, stackPick]);
+
+	const selectedCoordinateStack = useMemo(
+		() => (livePlaceId && visiblePlaces ? stackAtPlaceId(visiblePlaces.features, livePlaceId) : null),
+		[livePlaceId, visiblePlaces],
+	);
+
+	const openCoordinateStack = useCallback(
+		(stack: CoordinateStack) => {
+			setLivePlaceId("");
+			setStackPick(stack);
+			setSheetSnap("half");
+			setComparePanelHidden(false);
+			lastFocusedPlaceRef.current = "";
+			patchSearch({ place: undefined });
+			track("place_select", { source: "stack" });
+		},
+		[patchSearch],
+	);
+
+	const stackRows = useMemo(() => {
+		if (!stackPick) return [];
+		const byId = new Map(viewportSavings.map((row) => [row.placeId, row]));
+		return stackPick.members
+			.map((member) => {
+				const found = byId.get(member.placeId);
+				if (found) return found;
+				return {
+					placeId: member.placeId,
+					name: member.name,
+					amount: member.gap || 0,
+					lat: member.lat,
+					lng: member.lng,
+				};
+			})
+			.sort((a, b) => b.amount - a.amount || a.placeId.localeCompare(b.placeId));
+	}, [stackPick, viewportSavings]);
 
 	const selectedCityLabel = useMemo(() => {
 		const match = (meta?.geo_readiness?.ncp_ready_cities || []).find(
@@ -1067,6 +1118,7 @@ export default function IntelligenceMapSplit({
 	const focusAroundPlace = useCallback(
 		(row: { placeId: string; lat: number; lng: number }) => {
 			lastFocusedPlaceRef.current = row.placeId;
+			setStackPick(null);
 			setLivePlaceId(row.placeId);
 			setSheetSnap("half");
 			setFocusRequest({
@@ -1262,6 +1314,7 @@ export default function IntelligenceMapSplit({
 
 	const closePlace = useCallback(() => {
 		setLivePlaceId("");
+		setStackPick(null);
 		patchSearch({ place: undefined });
 	}, [patchSearch]);
 	const stepOpportunity = useCallback(
@@ -1309,7 +1362,7 @@ export default function IntelligenceMapSplit({
 			}`}
 			data-testid="intelligence-map-split"
 			data-view={view}
-			data-sheet-open={livePlaceId && !comparePanelHidden ? "true" : undefined}
+			data-sheet-open={(livePlaceId || stackPick) && !comparePanelHidden ? "true" : undefined}
 			data-sheet-snap={sheetSnap}
 			data-panel-collapsed={comparePanelHidden ? "true" : undefined}
 			data-legend-open={legendOpen ? "true" : undefined}
@@ -1358,7 +1411,22 @@ export default function IntelligenceMapSplit({
 					onAsk={askFarq}
 					onCloseAsk={clearAsk}
 					selectedPanel={
-						livePlaceId ? (
+						stackPick ? (
+							<StackedPlacePicker
+								rows={stackRows}
+								isRTL={isRTL}
+								onSelect={focusAroundPlace}
+								onClose={closePlace}
+							/>
+						) : livePlaceId ? (
+							<div className="flex min-h-0 flex-1 flex-col">
+								{selectedCoordinateStack ? (
+									<CoordinateStackBanner
+										count={selectedCoordinateStack.members.length}
+										isRTL={isRTL}
+										onOpen={() => openCoordinateStack(selectedCoordinateStack)}
+									/>
+								) : null}
 							<SelectedPlaceSheet
 								variant="panel"
 								placeDetail={placeDetail}
@@ -1374,6 +1442,7 @@ export default function IntelligenceMapSplit({
 								onPrevOpportunity={() => stepOpportunity(-1)}
 								onNextOpportunity={() => stepOpportunity(1)}
 							/>
+							</div>
 						) : null
 					}
 					sheetSnap={sheetSnap}
@@ -1390,7 +1459,7 @@ export default function IntelligenceMapSplit({
 					onFocusPlace={focusAroundPlace}
 					showHereHint={showUserDot}
 					leftUserLocation={leftUserLocation}
-					placeSelected={Boolean(livePlaceId)}
+					placeSelected={Boolean(livePlaceId || stackPick)}
 					cheapestReady={cheapestReady}
 					nearReady={nearReady}
 					view={view}
@@ -1617,6 +1686,15 @@ export default function IntelligenceMapSplit({
 							placeDetail={placeDetail}
 							isRTL={isRTL}
 							onSelectPlace={(id) => {
+								const feature = displayPlaces?.features.find(
+									(row) => String(row.properties.place_id || "") === id,
+								);
+								const stack = stackFromFeature(feature);
+								if (stack) {
+									openCoordinateStack(stack);
+									return;
+								}
+								setStackPick(null);
 								setLivePlaceId(id);
 								setSheetSnap("half");
 								lastFocusedPlaceRef.current = id;
@@ -1625,7 +1703,7 @@ export default function IntelligenceMapSplit({
 							}}
 							onSelectNeighborhood={selectDistrict}
 							onViewChange={onViewChange}
-							sheetOpen={Boolean(livePlaceId) && !comparePanelHidden}
+							sheetOpen={Boolean(livePlaceId || stackPick) && !comparePanelHidden}
 							onMapInteraction={onMapInteraction}
 							onLeftUserLocation={setLeftUserLocation}
 						/>
@@ -1648,7 +1726,7 @@ export default function IntelligenceMapSplit({
 							</button>
 						</div>
 					) : null}
-					{searchHere && !livePlaceId && view === "map" ? (
+					{searchHere && !livePlaceId && !stackPick && view === "map" ? (
 						<button
 							type="button"
 							className="farq-search-here"
@@ -1667,7 +1745,7 @@ export default function IntelligenceMapSplit({
 				{comparePanelHidden ? (
 					<button
 						type="button"
-						className={`farq-map-panel-tab inline-flex ${livePlaceId ? "" : "hidden lg:inline-flex"}`}
+						className={`farq-map-panel-tab inline-flex ${livePlaceId || stackPick ? "" : "hidden lg:inline-flex"}`}
 						data-testid="intelligence-map-panel-tab"
 						aria-label={isRTL ? "إظهار المقارنة" : "Show comparison"}
 						onClick={() => setComparePanelHidden(false)}
@@ -1856,9 +1934,24 @@ export default function IntelligenceMapSplit({
 			<aside
 				className={`farq-map-compare-aside hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
 					comparePanelHidden ? "" : "lg:flex"
-				} ${livePlaceId ? "farq-place-panel-host" : ""}`}
+				} ${livePlaceId || stackPick ? "farq-place-panel-host" : ""}`}
 			>
-				{livePlaceId ? (
+				{stackPick ? (
+					<StackedPlacePicker
+						rows={stackRows}
+						isRTL={isRTL}
+						onSelect={focusAroundPlace}
+						onClose={closePlace}
+					/>
+				) : livePlaceId ? (
+					<div className="flex min-h-0 flex-1 flex-col">
+						{selectedCoordinateStack ? (
+							<CoordinateStackBanner
+								count={selectedCoordinateStack.members.length}
+								isRTL={isRTL}
+								onOpen={() => openCoordinateStack(selectedCoordinateStack)}
+							/>
+						) : null}
 					<SelectedPlaceSheet
 						variant="panel"
 						placeDetail={placeDetail}
@@ -1870,6 +1963,7 @@ export default function IntelligenceMapSplit({
 						onHide={() => setComparePanelHidden(true)}
 						onOpenMenu={openRestaurantMenu}
 					/>
+					</div>
 				) : (
 					<>
 					<div className="flex items-center justify-between border-b border-[#e6eef0] px-5 py-4">

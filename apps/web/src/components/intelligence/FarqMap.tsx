@@ -1002,11 +1002,18 @@ export default function FarqMap({
 
 			const selectedFeature = selectedId
 				? placesData.features.find((feature) => {
-						const placeId = String(
-							(feature.properties as { place_id?: string } | null)
-								?.place_id || "",
-						).trim();
-						return placeId === selectedId && feature.geometry.type === "Point";
+						const props = (feature.properties || {}) as {
+							place_id?: string;
+							stack_place_ids?: unknown;
+						};
+						const placeId = String(props.place_id || "").trim();
+						const stackIds = Array.isArray(props.stack_place_ids)
+							? props.stack_place_ids.map(String)
+							: [];
+						return (
+							feature.geometry.type === "Point" &&
+							(placeId === selectedId || stackIds.includes(selectedId))
+						);
 					})
 				: undefined;
 

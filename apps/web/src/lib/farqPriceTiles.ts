@@ -148,16 +148,22 @@ export function toPriceTileCollection(
 			difference?: unknown;
 			cheapest_provider_id?: unknown;
 			product_name?: unknown;
+			stack_count?: unknown;
+			stack_place_ids?: unknown;
 		};
 		if (props.feature_type === "cluster") continue;
 		const placeId = String(props.place_id || "").trim();
 		if (!placeId) continue;
-		if (selected && placeId === selected) continue;
+		const stackIds = Array.isArray(props.stack_place_ids)
+			? props.stack_place_ids.map(String)
+			: [];
+		if (selected && (placeId === selected || stackIds.includes(selected))) continue;
 		const gap = pinGapAmount(props);
 		const tier =
 			(typeof props.tier === "string" ? (props.tier as OpportunityTier) : null) ||
 			tierForGap(gap);
 		const product = mapSafeText(props.product_name);
+		const stackCount = Number(props.stack_count);
 		features.push({
 			type: "Feature",
 			id: Number.isFinite(Number(placeId)) ? Number(placeId) : undefined,
@@ -169,6 +175,7 @@ export function toPriceTileCollection(
 				gap: gap != null ? Math.round(gap) : 0,
 				tier: tier || "faint",
 				icon: gpuIconId(cheapestProviderId(props)),
+				stack_count: Number.isFinite(stackCount) && stackCount > 1 ? stackCount : 0,
 			},
 		});
 	}
@@ -188,9 +195,10 @@ export function hashPriceTileCollection(
 			tier?: string;
 			icon?: string;
 			product_name?: string;
+			stack_count?: unknown;
 		};
 		parts.push(
-			`${props.place_id || ""}|${props.gap ?? 0}|${props.tier || ""}|${props.icon || ""}|${props.product_name || ""}|${lng}|${lat}`,
+			`${props.place_id || ""}|${props.gap ?? 0}|${props.tier || ""}|${props.icon || ""}|${props.product_name || ""}|${props.stack_count || 0}|${lng}|${lat}`,
 		);
 	}
 	parts.sort();
@@ -434,6 +442,16 @@ export function ensurePriceTileLayers(
 			"icon-padding": 2,
 			"text-field": [
 				"case",
+				[">", ["coalesce", ["get", "stack_count"], 0], 1],
+				[
+					"format",
+					["to-string", ["get", "gap"]],
+					{ "font-scale": 1.15 },
+					"\n×",
+					{},
+					["to-string", ["get", "stack_count"]],
+					{ "font-scale": 0.95 },
+				],
 				["==", TIER_EXPR, "faint"],
 				["get", "product_name"],
 				[

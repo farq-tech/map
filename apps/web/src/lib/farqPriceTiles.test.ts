@@ -90,6 +90,34 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		});
 	});
 
+	it("hides a same-coordinate stack when any member is selected", () => {
+		const stacked = {
+			type: "Feature" as const,
+			geometry: { type: "Point" as const, coordinates: [46.6779465, 24.6852364] },
+			properties: {
+				feature_type: "place",
+				place_id: "689",
+				name: "تيمبو باستا",
+				gap: 22,
+				stack_count: 3,
+				stack_place_ids: ["689", "451", "1288"],
+			},
+		};
+		const open = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [stacked],
+		});
+		expect(open.features[0]?.properties).toMatchObject({
+			place_id: "689",
+			stack_count: 3,
+		});
+		const hidden = toPriceTileCollection(
+			{ type: "FeatureCollection", features: [stacked] },
+			"1288",
+		);
+		expect(hidden.features).toHaveLength(0);
+	});
+
 	it("hashes a collection so unchanged data skips setData", () => {
 		const a = toPriceTileCollection({
 			type: "FeatureCollection",

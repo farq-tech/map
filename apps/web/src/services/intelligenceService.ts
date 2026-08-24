@@ -357,6 +357,13 @@ export type IntelligenceMapPlaceProperties = {
 		expensive_provider_id?: string | null;
 		product_name?: string | null;
 	} | null;
+	/** Exact same lat/lng pile — one drawn pin, every identity kept. Never a merge. */
+	stack_count?: number;
+	stack_key?: string;
+	stack_place_ids?: string[];
+	stack_names?: string[];
+	stack_gaps?: Array<number | null>;
+	never_merged?: boolean;
 };
 
 /** Approved opportunity tiers (2026-08-20): Hero ≥36 · Strong 15–35 · Regular 5–14 · Faint <5. */
