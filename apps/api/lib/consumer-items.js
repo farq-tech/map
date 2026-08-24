@@ -85,6 +85,10 @@ const SHARE_TERM_SOURCES = Object.freeze([
    * was listed. كومبو on its own still stays out. */
   'الثنائي',
   'الثلاثي',
+  /* Picnic pouch, not a bag of beans. "كيسة الطلعة" (تريب 1837 gap 70)
+   * is an outing pack; a burger meal at the same place is 7. Bare كيس
+   * stays out — كيس قهوة / كيس مكسرات are retail, "30 كيس" is a count. */
+  'كيسه\\s*الطلعه',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
