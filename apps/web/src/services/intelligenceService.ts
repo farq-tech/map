@@ -4,6 +4,7 @@
  * place_ids or invent demand / lat-lon.
  */
 import { fetchApi } from "../lib/api";
+import { normalizePlacesBody } from "../lib/mapPlaceContract";
 
 export type IntelligenceConfidence =
 	| "HIGH"
@@ -754,6 +755,8 @@ export const IntelligenceService = {
 			zoom?: number;
 			q?: string;
 			category?: string;
+			sector?: string;
+			filter?: string;
 			layer?: "difference" | "places" | "all_food" | "comparison";
 			limit?: number;
 			fields?: "pin" | "full";
@@ -765,6 +768,8 @@ export const IntelligenceService = {
 		if (opts.zoom != null) qs.set("zoom", String(opts.zoom));
 		if (opts.q) qs.set("q", opts.q);
 		if (opts.category) qs.set("category", opts.category);
+		if (opts.sector) qs.set("sector", opts.sector);
+		if (opts.filter) qs.set("filter", opts.filter);
 		if (opts.layer) qs.set("layer", opts.layer);
 		qs.set("fields", opts.fields ?? "pin");
 		qs.set("limit", String(opts.limit ?? 400));
@@ -773,7 +778,7 @@ export const IntelligenceService = {
 			{ signal: opts.signal },
 			{ timeoutMs: 15_000 },
 		);
-		return env.data;
+		return normalizePlacesBody(env.data);
 	},
 
 	/** The city's أحياء: official polygons with how many opportunities each holds and the biggest. */

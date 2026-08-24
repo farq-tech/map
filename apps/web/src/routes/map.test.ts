@@ -23,6 +23,8 @@ describe("map search — shared list/map world", () => {
 			city: "Riyadh",
 			q: "برجر",
 			place: "123",
+			sector: undefined,
+			filter: undefined,
 			view: "list",
 			sort: "cheap",
 		});

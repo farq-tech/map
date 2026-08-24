@@ -138,6 +138,7 @@ export default function FarqOpportunityList({
 	selectedPlaceId,
 	onSelect,
 	empty,
+	groceryEmpty = false,
 	countLabel,
 }: {
 	rows: OpportunityRow[];
@@ -145,6 +146,7 @@ export default function FarqOpportunityList({
 	selectedPlaceId?: string;
 	onSelect: (row: OpportunityRow) => void;
 	empty: boolean;
+	groceryEmpty?: boolean;
 	countLabel?: string;
 }) {
 	const listRef = useRef<HTMLDivElement | null>(null);
@@ -174,9 +176,13 @@ export default function FarqOpportunityList({
 					data-testid="intelligence-map-empty"
 				>
 					<p className="text-[16px] font-extrabold text-brand-900">
-						{isRTL
-							? "ما رصدنا فرق يستحق حولك بعد"
-							: "No worthwhile gap observed around you yet"}
+						{groceryEmpty
+							? isRTL
+								? "البقالة مقارنة منتجات — مو فروع على الخريطة"
+								: "Grocery is a product compare — not storefront pins"
+							: isRTL
+								? "ما رصدنا فرق يستحق حولك بعد"
+								: "No worthwhile gap observed around you yet"}
 					</p>
 				</div>
 			) : (

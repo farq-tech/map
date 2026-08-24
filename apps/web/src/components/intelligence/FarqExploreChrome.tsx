@@ -3,6 +3,7 @@
  * Floats over the full-screen Mapbox canvas — never a layout slot under the map.
  * Desktop chrome stays in IntelligenceMapSplit.
  */
+import { Link } from "@tanstack/react-router";
 import FarqVehicleCard from "./FarqVehicleCard";
 import {
 	CircleDot,
@@ -39,7 +40,7 @@ import FarqAnswerCard from "./FarqAnswerCard";
 import { looksLikeQuestion, type CopilotResponse } from "../../lib/farqAsk";
 
 export type ExploreRadius = "hawally" | "1km" | "3km" | "5km" | "city";
-export type FilterRailId = "gaps" | "restaurants" | "grocery" | "cheapest";
+export type FilterRailId = "gaps" | "restaurants" | "grocery" | "cheapest" | "multi";
 export type SheetSnap = BottomSnap;
 export type MapLayerId =
 	| "opportunities"
@@ -64,6 +65,7 @@ const DISCOVERY_CHIPS = [
 	{ id: "sushi", q: "سوشي", labelAr: "سوشي", labelEn: "Sushi" },
 	{ id: "coffee", q: "قهوة", labelAr: "قهوة", labelEn: "Coffee" },
 	{ id: "grocery", category: "grocery", labelAr: "بقالة", labelEn: "Grocery" },
+	{ id: "multi", rail: "multi" as const, labelAr: "٣+ تطبيقات", labelEn: "3+ apps" },
 	{ id: "around", radius: "hawally" as const, labelAr: "حولي", labelEn: "Around you" },
 	{ id: "gaps", rail: "gaps" as const, labelAr: "أكبر فرق", labelEn: "Top gaps" },
 	{ id: "cheap", rail: "cheapest" as const, labelAr: "الأرخص", labelEn: "Cheapest" },
@@ -434,6 +436,22 @@ export default function FarqExploreChrome({
 								: "Cheapest ranking stays off until a cheapest price is observed."}
 						</p>
 					</div>
+				) : emptyViewport && (categoryId === "grocery" || categoryId === "shopping") ? (
+					<div className="space-y-3 px-2 py-4" data-testid="intelligence-map-grocery-empty">
+						<p className="text-[14px] font-extrabold text-brand-900">
+							{isRTL
+								? "البقالة مقارنة منتجات — مو فروع على الخريطة"
+								: "Grocery is a product compare — not storefront pins"}
+						</p>
+						<p className="text-[12px] font-bold text-[#5c6d6d]">
+							{isRTL
+								? "ما نخترع إحداثيات لمتجر بقالة. قارن السعر على مستوى المنتج."
+								: "We do not invent grocery storefront coordinates. Compare at the product level."}
+						</p>
+						<Link to="/grocery" className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
+							{isRTL ? "افتح مقارنة البقالة" : "Open grocery compare"}
+						</Link>
+					</div>
 				) : emptyViewport ? (
 					<div className="space-y-3 px-2 py-4" data-testid="intelligence-map-empty">
 						<p className="text-[14px] font-extrabold text-brand-900">
@@ -518,6 +536,7 @@ export default function FarqExploreChrome({
 										["cheap", isRTL ? "الأرخص" : "Cheapest", () => onSort("cheap")],
 										["value", isRTL ? "الأعلى نسبة" : "Best %", () => onSort("value")],
 										["grocery", isRTL ? "بقالة" : "Grocery", () => onRail("grocery")],
+										["multi", isRTL ? "٣+ تطبيقات" : "3+ apps", () => onRail("multi")],
 										["around", isRTL ? "حولي" : "Around you", () => onExploreRadius("hawally")],
 									] as const
 								).map(([id, label, act]) => (

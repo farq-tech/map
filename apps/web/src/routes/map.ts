@@ -1,5 +1,8 @@
+import { parseMapFilter, type MapValueFilter } from "../lib/mapFilters";
+
 export type MapViewMode = "list" | "map";
 export type MapSort = "gap" | "near" | "cheap" | "value";
+export type { MapValueFilter };
 
 export type MapSearch = {
 	neighborhood?: string;
@@ -7,6 +10,8 @@ export type MapSearch = {
 	city?: string;
 	q?: string;
 	place?: string;
+	sector?: string;
+	filter?: MapValueFilter;
 	view?: MapViewMode;
 	sort?: MapSort;
 	/** Camera: bbox "west,south,east,north" (4 decimals) and zoom — so a link restores the scene. */
@@ -80,6 +85,8 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		city: trim(s.city, 40),
 		q: trim(s.q, 200),
 		place: trim(s.place, 80),
+		sector: trim(s.sector, 24),
+		filter: parseMapFilter(s.filter),
 		view: parseMapView(s.view),
 		sort: parseMapSort(s.sort),
 		b: parseCameraBbox(s.b) ? encodeCameraBbox(parseCameraBbox(s.b) as CameraBbox) : undefined,

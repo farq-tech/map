@@ -12,6 +12,13 @@
 'use strict';
 
 const { comparisonQuery } = require('./comparison-pool');
+const {
+  BIGGEST_SAVINGS_MIN_GAP,
+  BIGGEST_SAVINGS_MIN_PRICE,
+  matchesCategory,
+  matchesFilter,
+  matchesSector,
+} = require('./map-filters');
 
 function readEnabled() {
   const v = process.env.SUPABASE_COMPARISON_READ_ENABLED;
@@ -584,6 +591,9 @@ async function queryPlaces(opts = {}) {
     const place = rowToPlace(row);
     if (!place) continue;
     if (!matchesQuery(place, q)) continue;
+    if (!matchesCategory(place, opts.category)) continue;
+    if (!matchesSector(place, opts.sector, opts.category)) continue;
+    if (!matchesFilter(place, opts.filter)) continue;
     pool.push(toPlacePin(place));
   }
 
@@ -609,6 +619,9 @@ async function queryPlaces(opts = {}) {
     bbox,
     zoom: Number.isFinite(zoom) ? zoom : null,
     q: q || null,
+    category: opts.category || null,
+    sector: opts.sector || null,
+    filter: opts.filter || null,
     default_view: RIYADH_VIEW,
     coverage: {
       ...coverage,
@@ -970,6 +983,118 @@ async function getPlaceItems(placeId, opts = {}) {
   };
 }
 
+function classifyDupeNames(names) {
+  const unique = new Set(
+    (names || []).map((n) => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim()).filter(Boolean),
+  );
+  if (unique.size <= 1) return 'same_name';
+  return 'distinct_names';
+}
+
+/**
+ * Read-only quality report. Duplicate coordinates are listed with ids and
+ * names so a human can decide. This never merges on proximity.
+ */
+async function qualityHealth() {
+  if (!readEnabled()) {
+    return { ok: false, source: 'comparison.discovery_cards', issues: [] };
+  }
+  const [summary, groupCount, dupes] = await Promise.all([
+    comparisonQuery(
+      `SELECT
+         count(*)::int AS total,
+         count(*) FILTER (WHERE latitude IS NULL OR longitude IS NULL)::int AS missing_coords,
+         count(*) FILTER (WHERE latitude = 0 AND longitude = 0)::int AS zero_coords,
+         count(*) FILTER (
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+             AND (latitude NOT BETWEEN $1 AND $2 OR longitude NOT BETWEEN $3 AND $4)
+         )::int AS outside_ksa,
+         count(*) FILTER (
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+             AND latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
+         )::int AS valid_coords
+       FROM comparison.discovery_cards`,
+      [KSA.latMin, KSA.latMax, KSA.lngMin, KSA.lngMax],
+    ),
+    comparisonQuery(
+      `SELECT count(*)::int AS groups
+         FROM (
+           SELECT 1
+             FROM comparison.discovery_cards
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+            GROUP BY latitude, longitude
+           HAVING count(*) > 1
+         ) t`,
+    ),
+    comparisonQuery(
+      `SELECT latitude,
+              longitude,
+              count(*)::int AS n,
+              array_agg(canonical_restaurant_id::text ORDER BY canonical_restaurant_id) AS restaurant_ids,
+              array_agg(COALESCE(canonical_name_ar, canonical_name_en) ORDER BY canonical_restaurant_id) AS names
+         FROM comparison.discovery_cards
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        GROUP BY 1, 2
+       HAVING count(*) > 1
+        ORDER BY n DESC
+        LIMIT 20`,
+    ),
+  ]);
+  const s = summary[0] || {};
+  const groups = Number(groupCount[0]?.groups) || 0;
+  const examples = dupes.map((row) => {
+    const names = Array.isArray(row.names) ? row.names.map((n) => String(n)) : [];
+    const ids = Array.isArray(row.restaurant_ids)
+      ? row.restaurant_ids.map((id) => String(id))
+      : [];
+    return {
+      lat: Number(row.latitude),
+      lng: Number(row.longitude),
+      count: Number(row.n) || ids.length,
+      restaurant_ids: ids,
+      names,
+      look: classifyDupeNames(names),
+    };
+  });
+  const issues = [];
+  if (Number(s.missing_coords) > 0) {
+    issues.push({ code: 'missing_coords', count: Number(s.missing_coords) });
+  }
+  if (Number(s.zero_coords) > 0) {
+    issues.push({ code: 'zero_coords', count: Number(s.zero_coords) });
+  }
+  if (Number(s.outside_ksa) > 0) {
+    issues.push({ code: 'outside_supported_geography', count: Number(s.outside_ksa) });
+  }
+  if (groups > 0) {
+    issues.push({
+      code: 'duplicate_coordinates',
+      count: groups,
+      note: 'Same lat/lng on more than one discovery card — reported only, never merged by proximity.',
+    });
+  }
+  return {
+    ok: Number(s.valid_coords) > 0,
+    source: 'comparison.discovery_cards',
+    never_merge_on_proximity: true,
+    biggest_savings: {
+      min_gap_sar: BIGGEST_SAVINGS_MIN_GAP,
+      min_price_sar: BIGGEST_SAVINGS_MIN_PRICE,
+      reused_from: 'comparison-read biggest-savings floors',
+    },
+    summary: {
+      total: Number(s.total) || 0,
+      missing_coords: Number(s.missing_coords) || 0,
+      zero_coords: Number(s.zero_coords) || 0,
+      outside_ksa: Number(s.outside_ksa) || 0,
+      valid_coords: Number(s.valid_coords) || 0,
+      duplicate_coordinate_groups: groups,
+    },
+    duplicate_coordinate_examples: examples,
+    issues,
+  };
+}
+
 async function mapHealth() {
   if (!readEnabled()) {
     return { ok: false, source: 'comparison.discovery_cards', coverage: emptyCoverage() };
@@ -1244,5 +1369,7 @@ module.exports = {
   sortPlaceItems,
   getPlaceItems,
   mapHealth,
+  qualityHealth,
+  classifyDupeNames,
   __resetCoverageCacheForTests,
 };

@@ -15,6 +15,7 @@ const {
   rowToPlaceItem,
   rowToPlaceProvider,
   sortPlaceItems,
+  classifyDupeNames,
 } = require('./comparison-map');
 
 const HEAD = {
@@ -189,4 +190,9 @@ test('a spread the ranking layer rejects is marked, kept, and ranked below the t
     ['2', '1'],
     'the trusted gap leads, the suspect one follows',
   );
+});
+
+test('duplicate coordinates are labelled, never merged', () => {
+  assert.equal(classifyDupeNames(['ماكدونالدز', 'ماكدونالدز']), 'same_name');
+  assert.equal(classifyDupeNames(['ماكدونالدز', 'ستاربكس']), 'distinct_names');
 });

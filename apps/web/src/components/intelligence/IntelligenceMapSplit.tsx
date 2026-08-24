@@ -69,6 +69,12 @@ import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
 import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
+import {
+	isBiggestSavingsPin,
+	isGroceryIdentity,
+	isMultiProviderPin,
+	parseMapFilter,
+} from "../../lib/mapFilters";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
 import FarqExploreChrome, {
@@ -242,6 +248,12 @@ export default function IntelligenceMapSplit({
 	const city = search.city || "";
 	const placeId = search.place || "";
 	const q = search.q || "";
+	const valueFilter = parseMapFilter(search.filter) || "all";
+	const grocerySector =
+		search.sector === "grocery" ||
+		search.sector === "shopping" ||
+		categoryId === "grocery" ||
+		categoryId === "shopping";
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
 	const view = resolveMapView(search, pathname);
 	const sort = resolveMapSort(search);
@@ -257,6 +269,8 @@ export default function IntelligenceMapSplit({
 					city: "city" in next ? next.city : prev.city,
 					q: "q" in next ? next.q : prev.q,
 					place: "place" in next ? next.place : prev.place,
+					sector: "sector" in next ? next.sector : prev.sector,
+					filter: "filter" in next ? next.filter : prev.filter,
 					view: "view" in next ? next.view : prev.view,
 					sort: "sort" in next ? next.sort : prev.sort,
 					b: "b" in next ? next.b : prev.b,
@@ -390,6 +404,8 @@ export default function IntelligenceMapSplit({
 			zoom,
 			q: query,
 			category: categoryId || undefined,
+			sector: grocerySector ? "grocery" : search.sector || undefined,
+			filter: valueFilter !== "all" ? valueFilter : undefined,
 			layer: "comparison",
 			limit: pinFetchCapForZoom(zoom),
 			fields: "pin",
@@ -407,7 +423,7 @@ export default function IntelligenceMapSplit({
 				setPlacesFetching(false);
 				setScanHint(null);
 			});
-	}, [q, categoryId, meta]);
+	}, [q, categoryId, meta, grocerySector, valueFilter, search.sector]);
 	fetchPlacesRef.current = fetchPlaces;
 
 	const onViewChange = useCallback(
@@ -728,11 +744,17 @@ export default function IntelligenceMapSplit({
 				if (districtScope && String(f.properties.district_id || "") !== districtScope) return false;
 				if (categoryIsGapped && (f.properties.category_gaps || {})[categoryId] == null) return false;
 				if (minGapFilter != null && (amount == null || amount < minGapFilter)) return false;
+				if (grocerySector && !isGroceryIdentity(f.properties)) return false;
+				if (valueFilter === "biggest" && !isBiggestSavingsPin({
+					...f.properties,
+					gap: amount,
+				})) return false;
+				if (valueFilter === "multi" && !isMultiProviderPin(f.properties)) return false;
 				if (gapsOnly) return hasGap;
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, valueFilter]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
@@ -986,6 +1008,8 @@ export default function IntelligenceMapSplit({
 			lastFocusedPlaceRef.current = "";
 			patchSearch({
 				category: nextId || undefined,
+				sector: nextId === "grocery" || nextId === "shopping" ? "grocery" : undefined,
+				filter: undefined,
 				place: undefined,
 				q: undefined,
 			});
@@ -998,11 +1022,15 @@ export default function IntelligenceMapSplit({
 		(next: FilterRailId) => {
 			setRail(next);
 			if (next === "gaps") {
-				patchSearch({ sort: "gap" });
+				patchSearch({ sort: "gap", filter: "biggest" });
 				return;
 			}
 			if (next === "cheapest") {
 				patchSearch({ sort: "cheap" });
+				return;
+			}
+			if (next === "multi") {
+				patchSearch({ filter: "multi" });
 				return;
 			}
 			if (next === "grocery") {
@@ -1536,6 +1564,7 @@ export default function IntelligenceMapSplit({
 								!placesFetching &&
 								topSavings.length === 0
 							}
+							groceryEmpty={grocerySector}
 							countLabel={
 								topSavings.length
 									? isRTL
@@ -2015,8 +2044,8 @@ export default function IntelligenceMapSplit({
 								data-testid="intelligence-map-compare"
 							>
 								{isRTL
-									? "شف الفرق وقارن الأسعار في فرق"
-									: "See the gap and compare on Farq"}
+									? "قارن البقالة على مستوى المنتج"
+									: "Compare grocery at the product level"}
 							</Link>
 						</Button>
 					) : (
@@ -2037,9 +2066,13 @@ export default function IntelligenceMapSplit({
 						</Button>
 					)}
 					<p className="mt-2 text-[11px] text-[#5c6d6d]">
-						{isRTL
-							? "يفتح المقارنة الكاملة على فرق."
-							: "Opens the full comparison on Farq."}
+						{groceryCta
+							? isRTL
+								? "مقارنة البقالة على مستوى المنتج — بدون إحداثيات مخترعة لفروع."
+								: "Grocery compare is product-level — no invented storefront pins."
+							: isRTL
+								? "يفتح المقارنة الكاملة على فرق."
+								: "Opens the full comparison on Farq."}
 					</p>
 				</div>
 					</>
