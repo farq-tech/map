@@ -1,5 +1,6 @@
 import { encodeMapFilters, parseMapFilters } from "../lib/mapFilters";
 import type { MapValueFilter } from "../lib/mapFilters";
+import { safeGet, safeSet } from "../lib/safeStorage";
 
 export type MapViewMode = "list" | "map";
 export type MapSort = "gap" | "near" | "cheap" | "value";
@@ -99,18 +100,12 @@ const MAP_RETURN_KEY = "farq-map-return";
 
 /** Last map scene so merchant "Back to map" restores camera, place, and filters. */
 export function writeMapReturn(search: MapSearch): void {
-	if (typeof sessionStorage === "undefined") return;
-	try {
-		sessionStorage.setItem(MAP_RETURN_KEY, JSON.stringify(parseMapSearch({ ...search })));
-	} catch {
-		/* private mode */
-	}
+	safeSet("sessionStorage", MAP_RETURN_KEY, JSON.stringify(parseMapSearch({ ...search })));
 }
 
 export function readMapReturn(): MapSearch {
-	if (typeof sessionStorage === "undefined") return {};
 	try {
-		const raw = JSON.parse(sessionStorage.getItem(MAP_RETURN_KEY) || "{}") as unknown;
+		const raw = JSON.parse(safeGet("sessionStorage", MAP_RETURN_KEY) || "{}") as unknown;
 		if (!raw || typeof raw !== "object") return {};
 		return parseMapSearch(raw as Record<string, unknown>);
 	} catch {
@@ -120,9 +115,22 @@ export function readMapReturn(): MapSearch {
 
 export function mapReturnSearch(placeId?: string): MapSearch {
 	const saved = readMapReturn();
-	const place = String(placeId || saved.place || "").trim();
+	const want = String(placeId || "").trim();
+	const savedPlace = String(saved.place || "").trim();
+	/* Another restaurant's camera/filters would open the wrong scene. */
+	if (want && savedPlace && want !== savedPlace) {
+		return parseMapSearch({ place: want });
+	}
+	const place = want || savedPlace;
 	return parseMapSearch({
 		...saved,
 		...(place ? { place } : {}),
 	});
+}
+
+/** Session camera belongs to the last pan — a bare ?place= link must fly itself. */
+export function resumeMapSessionCamera(search: Pick<MapSearch, "place" | "b" | "z">): boolean {
+	const hasCamera = Boolean(parseCameraBbox(search.b) && parseCameraZoom(search.z));
+	if (hasCamera) return true;
+	return !String(search.place || "").trim();
 }

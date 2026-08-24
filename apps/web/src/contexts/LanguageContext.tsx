@@ -22,6 +22,12 @@ const LanguageContext = createContext<LanguageContextType | undefined>(
 	undefined,
 );
 
+export function applyDocumentLanguage(language: Language): void {
+	if (typeof document === "undefined") return;
+	document.documentElement.lang = language;
+	document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+}
+
 function readInitial(): Language {
 	const stored = safeGet("localStorage", "farq_map_lang");
 	if (stored === "en" || stored === "ar") return stored;
@@ -29,14 +35,17 @@ function readInitial(): Language {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-	const [language, setLanguage] = useState<Language>(readInitial);
+	const [language, setLanguage] = useState<Language>(() => {
+		const initial = readInitial();
+		applyDocumentLanguage(initial);
+		return initial;
+	});
 
 	const toggleLanguage = useCallback(() => {
 		setLanguage((prev) => {
 			const next = prev === "ar" ? "en" : "ar";
 			safeSet("localStorage", "farq_map_lang", next);
-			document.documentElement.lang = next;
-			document.documentElement.dir = next === "ar" ? "rtl" : "ltr";
+			applyDocumentLanguage(next);
 			return next;
 		});
 	}, []);

@@ -4,7 +4,11 @@ export default function RouteFallback() {
 			className="flex min-h-[40vh] items-center justify-center bg-brand-900 text-mint-500"
 			role="status"
 			aria-busy="true"
-			aria-label="Loading"
+			aria-label={
+				typeof document !== "undefined" && document.documentElement.lang === "en"
+					? "Loading"
+					: "جاري التحميل"
+			}
 		>
 			<div className="h-10 w-10 animate-spin rounded-full border-2 border-mint-500 border-t-transparent" />
 		</div>

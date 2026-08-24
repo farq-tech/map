@@ -73,7 +73,7 @@ import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, writeMapReturn } from "../../routes/map";
+import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, resumeMapSessionCamera, writeMapReturn } from "../../routes/map";
 import {
 	isBiggestSavingsPin,
 	isGroceryIdentity,
@@ -774,17 +774,10 @@ export default function IntelligenceMapSplit({
 		}) => {
 			const restaurantId = String(opts.restaurantId || "").trim();
 			if (!restaurantId) return;
-			writeMapReturn(search);
-			void navigate({
-				to: "/merchant/$type/$id",
-				params: { type: "restaurant", id: restaurantId },
-				search: {
-					...(opts.name ? { name: opts.name } : {}),
-					...(opts.image ? { image: String(opts.image) } : {}),
-				},
-			});
+			/* Compare is a Link; this only stamps the scene Back to map will restore. */
+			writeMapReturn({ ...search, place: restaurantId });
 		},
-		[navigate, search],
+		[search],
 	);
 
 	/**
@@ -1845,6 +1838,7 @@ export default function IntelligenceMapSplit({
 							districtLens={districtLens}
 							bottomInset={sheetInset}
 							initialCamera={initialCamera}
+							resumeSessionCamera={resumeMapSessionCamera(search)}
 							neighborhoods={hoods}
 							gisNeighborhoods={gisHoodsOn ? overlayHoods : null}
 							selectedPlaceId={livePlaceId}

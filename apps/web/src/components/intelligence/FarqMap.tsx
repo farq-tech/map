@@ -396,6 +396,7 @@ export default function FarqMap({
 	onViewChange,
 	bottomInset = 0,
 	initialCamera = null,
+	resumeSessionCamera = true,
 	districts = null,
 	districtLens = "gap",
 	hideAddressSearch = false,
@@ -434,6 +435,8 @@ export default function FarqMap({
 	bottomInset?: number;
 	/** A link's camera; used once, on the first landing, instead of the city default. */
 	initialCamera?: { center: [number, number]; zoom: number } | null;
+	/** False for a bare ?place= deeplink so the last pan does not steal the first frame. */
+	resumeSessionCamera?: boolean;
 	/** The city's أحياء with their counts; when present they are the field and the H3 cells stay hidden. */
 	districts?: CityDistricts | null;
 	/** What the district colour means: how many opportunities, or which app wins. */
@@ -599,16 +602,21 @@ export default function FarqMap({
 		 * crowds the Arabic labels into each other, and costs a phone GPU frames
 		 * for a view no decision needs. Tilt stays one gesture away for anyone
 		 * who wants it, and a saved camera is restored exactly as it was left. */
-		const restored = mapSession.camera;
-		const landing = restored
+		const restored = resumeSessionCamera ? mapSession.camera : null;
+		const landing = initialCamera
 			? {
-					center: restored.center,
-					zoom: restored.zoom,
-					pitch: Math.min(restored.pitch, 36),
-					bearing: restored.bearing,
+					center: initialCamera.center,
+					zoom: initialCamera.zoom,
+					pitch: restored ? Math.min(restored.pitch, 36) : 0,
+					bearing: restored ? restored.bearing : 0,
 				}
-			: initialCamera
-				? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
+			: restored
+				? {
+						center: restored.center,
+						zoom: restored.zoom,
+						pitch: Math.min(restored.pitch, 36),
+						bearing: restored.bearing,
+					}
 				: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
 
 		let map: MapboxMap;

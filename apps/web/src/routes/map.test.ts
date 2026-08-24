@@ -8,8 +8,10 @@ import {
 	parseMapSearch,
 	resolveMapSort,
 	resolveMapView,
+	resumeMapSessionCamera,
 	writeMapReturn,
 } from "./map";
+import { resetSafeStorageProbeForTests } from "../lib/safeStorage";
 
 describe("map search — shared list/map world", () => {
 	it("parses view and sort without dropping place/q", () => {
@@ -89,6 +91,59 @@ describe("camera in the URL", () => {
 			filter: "biggest,multi",
 			category: "burgers",
 		});
-		expect(mapReturnSearch("689").place).toBe("689");
+	});
+
+	it("drops another restaurant's camera instead of opening the wrong scene", () => {
+		sessionStorage.clear();
+		writeMapReturn({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+		expect(mapReturnSearch("689")).toEqual({
+			neighborhood: undefined,
+			category: undefined,
+			city: undefined,
+			q: undefined,
+			place: "689",
+			sector: undefined,
+			filter: undefined,
+			view: undefined,
+			sort: undefined,
+			b: undefined,
+			z: undefined,
+		});
+	});
+
+	it("returns only the merchant place when sessionStorage throws", () => {
+		const descriptor = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+		Object.defineProperty(window, "sessionStorage", {
+			configurable: true,
+			get() {
+				throw new Error("storage blocked");
+			},
+		});
+		try {
+			expect(() => writeMapReturn({ place: "1381", z: 15 })).not.toThrow();
+			expect(mapReturnSearch("1381")).toMatchObject({ place: "1381" });
+			expect(mapReturnSearch("1381").b).toBeUndefined();
+		} finally {
+			if (descriptor) Object.defineProperty(window, "sessionStorage", descriptor);
+			resetSafeStorageProbeForTests();
+		}
+	});
+
+	it("resumes a session camera only when the URL already frames the scene", () => {
+		expect(resumeMapSessionCamera({})).toBe(true);
+		expect(resumeMapSessionCamera({ place: "1381" })).toBe(false);
+		expect(
+			resumeMapSessionCamera({
+				place: "1381",
+				b: "46.6600,24.7000,46.6900,24.7300",
+				z: 15.2,
+			}),
+		).toBe(true);
 	});
 });
