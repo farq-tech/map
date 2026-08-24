@@ -2439,6 +2439,14 @@
 		transition: bottom 260ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
+	/* Denied-location copy lived at 5.6rem — under the 148px peek sheet. */
+	.farq-map-split .farq-map-locate-error {
+		bottom: calc(var(--farq-sheet-h) + 12px + env(safe-area-inset-bottom, 0px));
+		z-index: 545;
+		inset-inline-end: 4.25rem;
+		margin-inline: 0;
+	}
+
 	/* Mapbox's own attribution and logo must stay visible above the sheet. */
 	.farq-map-split .mapboxgl-ctrl-bottom-left,
 	.farq-map-split .mapboxgl-ctrl-bottom-right {

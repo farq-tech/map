@@ -69,6 +69,19 @@ export const CLUSTER_DISC_PX = { sm: 40, md: 48, lg: 56 } as const;
 export const CLUSTER_STEP_MD = 12;
 export const CLUSTER_STEP_LG = 40;
 export const CLUSTER_MAX_ZOOM = CLUSTER_BREAK_ZOOM - 1;
+
+/** A tap that would land on the same zoom is a no-op on a phone. Always step in. */
+export function nextClusterZoom(
+	currentZoom: number,
+	expansionZoom: number | null | undefined,
+	cap = CLUSTER_BREAK_ZOOM + 0.5,
+): number {
+	const current = Number(currentZoom);
+	const expansion = Number(expansionZoom);
+	const now = Number.isFinite(current) ? current : 0;
+	const want = Number.isFinite(expansion) ? expansion : now + 1.2;
+	return Math.min(Math.max(want, now + 1.2), cap);
+}
 export const CLUSTER_RADIUS_PX = 64;
 /** A thumb needs more room than a cursor: on coarse pointers clusters merge sooner. */
 export const CLUSTER_RADIUS_COARSE_PX = 84;
@@ -502,12 +515,20 @@ export function ensurePriceTileLayers(
 		if (clusterId == null || !src || !("getClusterExpansionZoom" in src)) {
 			return;
 		}
+		const center = ev.lngLat;
 		src.getClusterExpansionZoom(Number(clusterId), (err, zoom) => {
-			if (err || zoom == null) return;
+			if (err) return;
+			let current = 12;
+			try {
+				current = map.getZoom();
+			} catch {
+				return;
+			}
 			map.easeTo({
-				center: ev.lngLat,
-				zoom: Math.min(zoom, CLUSTER_BREAK_ZOOM + 0.5),
+				center,
+				zoom: nextClusterZoom(current, zoom),
 				duration: 650,
+				essential: true,
 			});
 		});
 	});

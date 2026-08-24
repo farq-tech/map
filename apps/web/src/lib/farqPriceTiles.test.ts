@@ -15,6 +15,7 @@ import {
 	PRICE_CIRCLE_TEXT,
 	cheapestProviderId,
 	hashPriceTileCollection,
+	nextClusterZoom,
 	pinGapAmount,
 	gpuIconId,
 	toPriceTileCollection,
@@ -133,5 +134,11 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		});
 		expect(hashPriceTileCollection(a)).toBe(hashPriceTileCollection(b));
 		expect(hashPriceTileCollection(a)).not.toBe(hashPriceTileCollection(c));
+	});
+
+	it("steps a cluster tap in even when expansion equals the current zoom", () => {
+		expect(nextClusterZoom(11, 11)).toBe(12.2);
+		expect(nextClusterZoom(12, 16)).toBeLessThanOrEqual(15);
+		expect(nextClusterZoom(13, null)).toBe(14.2);
 	});
 });

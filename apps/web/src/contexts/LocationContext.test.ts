@@ -18,4 +18,12 @@ describe("geo location copy", () => {
 		expect(ar).toContain("خدمة الموقع");
 		expect(ar).not.toMatch(/الرياض|24\.7136/);
 	});
+
+	it("never offers Riyadh as a stand-in for a denied GPS fix", () => {
+		for (const kind of ["denied", "unavailable", "timeout", "unsupported"] as const) {
+			const en = geoLocationHelpMessage(false, kind);
+			expect(en.toLowerCase()).not.toContain("riyadh");
+			expect(en).not.toMatch(/24\.7136|46\.6753/);
+		}
+	});
 });

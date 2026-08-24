@@ -572,11 +572,25 @@ export default function IntelligenceMapSplit({
 	}, [placeId]);
 
 	useEffect(() => {
-		if (!placeDetail || !placeId) return;
-		if (placeDetail.place_id !== placeId) return;
+		if (!placeId) return;
+		if (placeDetail && placeDetail.place_id !== placeId) return;
+		if (lastFocusedPlaceRef.current === placeId) return;
+		const lat = Number(placeDetail?.lat);
+		const lng = Number(placeDetail?.lng);
+		if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+		/* Deep link / refresh / share: the URL named a place the camera has not met. */
 		lastFocusedPlaceRef.current = placeId;
-		/* Pin click must not wait for this network + camera. List focus sets focusRequest itself. */
-	}, [placeDetail, placeId]);
+		setLivePlaceId(placeId);
+		setStackPick(null);
+		setComparePanelHidden(false);
+		setSheetSnap("half");
+		setFocusRequest({
+			lat,
+			lng,
+			id: `deeplink:${placeId}`,
+			kind: "select",
+		});
+	}, [placeId, placeDetail]);
 
 	useEffect(() => {
 		if (!pendingLocateRef.current || !userLocation) return;
