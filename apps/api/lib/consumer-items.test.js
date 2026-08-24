@@ -50,6 +50,7 @@ const SHARE = [
   'وجبة جماعية',
   'عرض الرباعي الذهبي 8 مكس',
   'وجبة 2 طاجن',
+  'مفطح شهبار',
 ];
 
 const PERSONAL = [
@@ -78,6 +79,8 @@ const PERSONAL = [
   'إسبريسو شيكر',
   'ستيك شيكر',
   'Grouper Fillet',
+  'بينتو اوفر',
+  'Bento Lunch Offer',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -117,6 +120,7 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('يوسيرين لوشن الأصلي العلاجي, 500 مل'), 'retail');
   assert.equal(demoteReason('إسبريسو شيكر'), null);
   assert.equal(demoteReason('ستيك شيكر'), null);
+  assert.equal(demoteReason('لابيرفا سويتشيس محلى سكر غامق, 100 ظرف'), 'retail');
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
@@ -187,6 +191,10 @@ test('a gathering table is share; a sip of coffee is not', () => {
   assert.equal(demoteReason('Golden Quartet Offer 8 Mix'), 'share');
   assert.equal(demoteReason('وجبة 2 طاجن'), 'share');
   assert.equal(demoteReason('طاجن جمبري'), null);
+  assert.equal(demoteReason('مفطح شهبار'), 'share');
+  /* A Japanese bento is one lunch, not a tray. Gold Sushi 12752 is 99–168. */
+  assert.equal(demoteReason('بينتو اوفر'), null);
+  assert.equal(demoteReason('Bento Lunch Offer'), null);
 });
 
 test('a party single is one burger; a party box is still a tray', () => {
@@ -221,6 +229,8 @@ test('display trims the scraper residue and never returns nothing', () => {
   assert.equal(displayItemName('امبيريال كبير ٢٢حبة_١٠٧٠٠٢٢'), 'امبيريال كبير ٢٢حبة');
   assert.equal(displayItemName('عرض باسكوالي 79 ريال'), 'عرض باسكوالي 79 ريال');
   assert.equal(displayItemName('٢ بيتزا كبيرة بـ ٣٩ ريال'), '٢ بيتزا كبيرة بـ ٣٩ ريال');
+  assert.equal(displayItemName('.فانيلا'), 'فانيلا');
+  assert.equal(displayItemName('...'), '...');
 });
 
 test('pin and getPlace rank the same representative item', () => {

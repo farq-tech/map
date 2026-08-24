@@ -102,6 +102,9 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'الرباعي',
   /* Two tajines is a table. "وجبة 2 طاجن" (حمام عبده 1389 gap 67). */
   '[0-9]+\\s*طاجن',
+  /* Whole lamb for a table. "مفطح شهبار" (1059 gap 59) is 139–198.
+   * A Japanese bento is one lunch and stays out. */
+  'مفطح',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
@@ -181,6 +184,8 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'lotion',
   'eucerin',
   'blender\\s*bottle',
+  /* 100 sachets of sweetener is a shelf box (الوزن المثالي 28737 gap 16). */
+  '[0-9]+\\s*ظرف',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
@@ -267,6 +272,7 @@ function displayItemName(name) {
     .replace(/([\u0600-\u06FF])[0-9]{5,}/g, '$1')
     .replace(/\s*\b0[0-9]{4,}\b\s*/g, ' ')
     .replace(/\s{2,}/g, ' ')
+    .replace(/^[.\s,،_\-–—]+/, '')
     .replace(/\s*[-–—]\s*$/, '')
     .replace(/\s*[,،()（）]+\s*$/, '')
     .trim();

@@ -18,6 +18,7 @@ export function displayItemName(name: unknown): string {
 		.replace(/([\u0600-\u06FF])[0-9]{5,}/g, "$1")
 		.replace(/\s*\b0[0-9]{4,}\b\s*/g, " ")
 		.replace(/\s{2,}/g, " ")
+		.replace(/^[.\s,،_\-–—]+/, "")
 		.replace(/\s*[-–—]\s*$/, "")
 		.replace(/\s*[,،()（）]+\s*$/, "")
 		.trim();

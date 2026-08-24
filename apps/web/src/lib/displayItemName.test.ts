@@ -34,5 +34,7 @@ describe("displayItemName — scraper residue", () => {
 			"٢ بيتزا كبيرة بـ ٣٩ ريال",
 		);
 		expect(displayItemName("كوب حراري")).toBe("كوب حراري");
+		expect(displayItemName(".فانيلا")).toBe("فانيلا");
+		expect(displayItemName("...")).toBe("...");
 	});
 });
