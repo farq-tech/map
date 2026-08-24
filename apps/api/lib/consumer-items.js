@@ -128,6 +128,13 @@ const SHARE_PATTERN_WITHOUT_SIZE = SHARE_TERM_SOURCES.filter(
   (t) => t !== 'كيلو' && t !== 'جالون',
 ).join('|');
 const SHARE_RE_WITHOUT_SIZE = new RegExp(SHARE_PATTERN_WITHOUT_SIZE, 'i');
+/** "فويل بارتي سنجل" is one burger; "بارتي بوكس" is still a tray. */
+const SINGLE_SERVE_RE = /سنجل|single/;
+const SINGLE_SERVE_SQL = 'سنجل|single';
+const SHARE_PATTERN_WITHOUT_PARTY = SHARE_TERM_SOURCES.filter(
+  (t) => t !== 'بارتي' && t !== 'party',
+).join('|');
+const SHARE_RE_WITHOUT_PARTY = new RegExp(SHARE_PATTERN_WITHOUT_PARTY, 'i');
 
 /** The same patterns the SQL uses, so the server and its query cannot disagree. */
 function shareItemPattern() {
@@ -143,12 +150,13 @@ function isShareItem(name) {
   const norm = normalizeArabic(name);
   if (!norm || !SHARE_RE.test(norm)) return false;
   if (PERSONAL_SIZE_RE.test(norm) && !SHARE_RE_WITHOUT_SIZE.test(norm)) return false;
+  if (SINGLE_SERVE_RE.test(norm) && !SHARE_RE_WITHOUT_PARTY.test(norm)) return false;
   return true;
 }
 
 function shareMatchSql(nameExpr) {
   const norm = normalizedNameSql(nameExpr);
-  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${PERSONAL_SIZE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_SIZE}'))`;
+  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${PERSONAL_SIZE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_SIZE}') AND (NOT (${norm} ~ '${SINGLE_SERVE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_PARTY}'))`;
 }
 
 /** True when the item reads as packaged retail rather than something cooked to order. */

@@ -98,6 +98,13 @@ test('a meal for one is dinner, and for 69SR is a price, not a table', () => {
   assert.equal(demoteReason('بيتزا لثلاثة أشخاص'), 'share');
 });
 
+test('a party single is one burger; a party box is still a tray', () => {
+  assert.equal(demoteReason('فويل بارتي سنجل'), null);
+  assert.equal(demoteReason('فويل بارتي سنجل Foil In Party Single'), null);
+  assert.equal(demoteReason('بارتي بوكس 8 سبيشال'), 'share');
+  assert.equal(demoteReason('Party Box 8 Special'), 'share');
+});
+
 test('the reason travels with the item so the interface can name it', () => {
   assert.equal(demoteReason('بوكس المشاركة'), 'share');
   assert.equal(demoteReason('Laperva Ultra Creatine 300 جرام'), 'retail');
