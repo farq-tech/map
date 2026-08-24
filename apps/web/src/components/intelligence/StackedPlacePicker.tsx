@@ -44,7 +44,7 @@ export default function StackedPlacePicker({
 }) {
 	const n = localizeDigitString(String(rows.length), isRTL);
 	return (
-		<div className="flex min-h-0 flex-1 flex-col" data-testid="map-coordinate-stack">
+		<div className="flex min-h-0 flex-1 flex-col text-start" dir={isRTL ? "rtl" : "ltr"} data-testid="map-coordinate-stack">
 			<div className="flex items-start justify-between gap-3 border-b border-[#e6eef0] px-5 py-4">
 				<div className="min-w-0">
 					<h2 className="text-[16px] font-bold text-brand-900">

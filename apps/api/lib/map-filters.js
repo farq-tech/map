@@ -76,8 +76,8 @@ function isBiggestSavings(place) {
   return Boolean(place.cheapest_provider);
 }
 
-function matchesFilter(place, filter) {
-  const f = norm(filter);
+function matchesOneFilter(place, token) {
+  const f = norm(token);
   if (!f || f === 'all') return true;
   if (f === 'biggest' || f === 'biggest_savings' || f === 'savings') {
     return isBiggestSavings(place);
@@ -90,6 +90,14 @@ function matchesFilter(place, filter) {
     return Boolean(place.cheapest_provider);
   }
   return true;
+}
+
+function matchesFilter(place, filter) {
+  const raw = norm(filter);
+  if (!raw || raw === 'all') return true;
+  const parts = raw.split(/[+,]/).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return true;
+  return parts.every((token) => matchesOneFilter(place, token));
 }
 
 module.exports = {

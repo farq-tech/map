@@ -110,6 +110,7 @@ const PIN_FIELDS = Object.freeze([
   'product_name',
   'cheapest_price',
   'expensive_price',
+  'provider_count',
 ]);
 const MAP_PIN_CAP = 400;
 const MAP_PIN_CAP_MAX = 800;
@@ -255,6 +256,10 @@ function toSlimPinFeature(f) {
       product_name: diff.product_name || null,
       cheapest_price: observedPrice(diff.cheapest_price),
       expensive_price: observedPrice(diff.expensive_price),
+      provider_count:
+        f.provider_count != null && Number.isFinite(Number(f.provider_count))
+          ? Number(f.provider_count)
+          : null,
     },
   };
 }

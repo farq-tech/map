@@ -1,4 +1,4 @@
-import type { MapValueFilter } from "../../lib/mapFilters";
+import type { MapFilterFlags } from "../../lib/mapFilters";
 import type { MapSort, MapViewMode } from "../../routes/map";
 
 export default function FarqViewSortBar({
@@ -10,7 +10,7 @@ export default function FarqViewSortBar({
 	nearReady,
 	cheapReady,
 	hideViewToggle = false,
-	valueFilter = "all",
+	filterFlags = { biggest: false, multi: false },
 	onFilter,
 }: {
 	view: MapViewMode;
@@ -22,8 +22,8 @@ export default function FarqViewSortBar({
 	cheapReady: boolean;
 	/** On the phone the list is the sheet; there is no "view" to toggle. */
 	hideViewToggle?: boolean;
-	valueFilter?: MapValueFilter;
-	onFilter?: (filter: MapValueFilter) => void;
+	filterFlags?: MapFilterFlags;
+	onFilter?: (key: "biggest" | "multi") => void;
 }) {
 	return (
 		<div className="farq-view-sort" data-testid="farq-view-sort">
@@ -121,19 +121,19 @@ export default function FarqViewSortBar({
 					<>
 						<button
 							type="button"
-							aria-pressed={valueFilter === "biggest"}
+							aria-pressed={filterFlags.biggest}
 							data-testid="farq-filter-biggest"
-							className={`farq-map-chip ${valueFilter === "biggest" ? "is-on" : ""}`}
-							onClick={() => onFilter(valueFilter === "biggest" ? "all" : "biggest")}
+							className={`farq-map-chip ${filterFlags.biggest ? "is-on" : ""}`}
+							onClick={() => onFilter("biggest")}
 						>
 							{isRTL ? "فرق يستحق" : "Worthwhile"}
 						</button>
 						<button
 							type="button"
-							aria-pressed={valueFilter === "multi"}
+							aria-pressed={filterFlags.multi}
 							data-testid="farq-filter-multi"
-							className={`farq-map-chip ${valueFilter === "multi" ? "is-on" : ""}`}
-							onClick={() => onFilter(valueFilter === "multi" ? "all" : "multi")}
+							className={`farq-map-chip ${filterFlags.multi ? "is-on" : ""}`}
+							onClick={() => onFilter("multi")}
 						>
 							{isRTL ? "٣+ تطبيقات" : "3+ apps"}
 						</button>

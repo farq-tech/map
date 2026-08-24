@@ -59,6 +59,11 @@ describe("camera in the URL", () => {
 		expect(encodeCameraBbox([46.660001, 24.7, 46.69, 24.730049])).toBe("46.6600,24.7000,46.6900,24.7300");
 	});
 
+	it("keeps worthwhile and 3+ apps on together", () => {
+		expect(parseMapSearch({ filter: "biggest,multi" }).filter).toBe("biggest,multi");
+		expect(parseMapSearch({ filter: "biggest+multi" }).filter).toBe("biggest,multi");
+	});
+
 	it("parseMapSearch carries b and z through", () => {
 		const s = parseMapSearch({ b: "46.66,24.70,46.69,24.73", z: "15.2" });
 		expect(s.b).toBe("46.6600,24.7000,46.6900,24.7300");

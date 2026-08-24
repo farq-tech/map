@@ -11,13 +11,53 @@ const GROCERY_TERMS = /grocery|بقالة|سوبرماركت|supermarket|تمو�
 export type MapValueFilter = "all" | "biggest" | "multi";
 
 export function parseMapFilter(raw: unknown): MapValueFilter | undefined {
+	const flags = parseMapFilters(raw);
+	if (flags.biggest && flags.multi) return undefined;
+	if (flags.biggest) return "biggest";
+	if (flags.multi) return "multi";
 	const v = String(raw || "")
 		.trim()
 		.toLowerCase();
-	if (v === "biggest" || v === "biggest_savings" || v === "savings") return "biggest";
-	if (v === "multi" || v === "multi_provider" || v === "providers") return "multi";
 	if (v === "all") return "all";
 	return undefined;
+}
+
+export type MapFilterFlags = {
+	biggest: boolean;
+	multi: boolean;
+};
+
+export function parseMapFilters(raw: unknown): MapFilterFlags {
+	const parts = String(raw || "")
+		.trim()
+		.toLowerCase()
+		.split(/[+,]/)
+		.map((part) => part.trim())
+		.filter(Boolean);
+	return {
+		biggest: parts.some(
+			(part) => part === "biggest" || part === "biggest_savings" || part === "savings",
+		),
+		multi: parts.some(
+			(part) => part === "multi" || part === "multi_provider" || part === "providers",
+		),
+	};
+}
+
+export function encodeMapFilters(flags: MapFilterFlags): string | undefined {
+	const parts: string[] = [];
+	if (flags.biggest) parts.push("biggest");
+	if (flags.multi) parts.push("multi");
+	return parts.length ? parts.join(",") : undefined;
+}
+
+export function toggleMapFilter(
+	raw: unknown,
+	key: "biggest" | "multi",
+): string | undefined {
+	const flags = parseMapFilters(raw);
+	flags[key] = !flags[key];
+	return encodeMapFilters(flags);
 }
 
 export function isGroceryIdentity(props: {

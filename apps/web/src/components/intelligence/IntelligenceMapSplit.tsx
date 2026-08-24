@@ -74,8 +74,9 @@ import {
 	isBiggestSavingsPin,
 	isGroceryIdentity,
 	isMultiProviderPin,
-	parseMapFilter,
-	type MapValueFilter,
+	encodeMapFilters,
+	parseMapFilters,
+	toggleMapFilter,
 } from "../../lib/mapFilters";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
@@ -242,6 +243,7 @@ export default function IntelligenceMapSplit({
 	});
 	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
 	const [placesFetching, setPlacesFetching] = useState(false);
+	const [placesError, setPlacesError] = useState(false);
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
 	/* The city's أحياء; `?neighborhood=` is one of their ids and scopes list, headline and map alike. */
@@ -262,7 +264,7 @@ export default function IntelligenceMapSplit({
 	const city = search.city || "";
 	const placeId = search.place || "";
 	const q = search.q || "";
-	const valueFilter = parseMapFilter(search.filter) || "all";
+	const filterFlags = parseMapFilters(search.filter);
 	const grocerySector =
 		search.sector === "grocery" ||
 		search.sector === "shopping" ||
@@ -394,6 +396,7 @@ export default function IntelligenceMapSplit({
 				cityStatusRef.current = "ready";
 				setCityPlaces(body);
 				setPlacesFetching(false);
+				setPlacesError(false);
 				setSearchHere(false);
 			})
 			.catch(() => {
@@ -430,7 +433,7 @@ export default function IntelligenceMapSplit({
 			q: query,
 			category: categoryId || undefined,
 			sector: grocerySector ? "grocery" : search.sector || undefined,
-			filter: valueFilter !== "all" ? valueFilter : undefined,
+			filter: search.filter || undefined,
 			layer: "comparison",
 			limit: pinFetchCapForZoom(zoom),
 			fields: "pin",
@@ -440,15 +443,19 @@ export default function IntelligenceMapSplit({
 				if (controller.signal.aborted) return;
 				setPlaces(body);
 				setPlacesFetching(false);
+				setPlacesError(false);
 				setScanHint(null);
 			})
 			.catch(() => {
 				if (controller.signal.aborted) return;
-				setPlaces(null);
 				setPlacesFetching(false);
 				setScanHint(null);
+				if (cityStatusRef.current !== "ready") {
+					setPlaces(null);
+					setPlacesError(true);
+				}
 			});
-	}, [q, categoryId, meta, grocerySector, valueFilter, search.sector]);
+	}, [q, categoryId, meta, grocerySector, search.filter, search.sector]);
 	fetchPlacesRef.current = fetchPlaces;
 
 	const onViewChange = useCallback(
@@ -784,16 +791,16 @@ export default function IntelligenceMapSplit({
 				if (categoryIsGapped && (f.properties.category_gaps || {})[categoryId] == null) return false;
 				if (minGapFilter != null && (amount == null || amount < minGapFilter)) return false;
 				if (grocerySector && !isGroceryIdentity(f.properties)) return false;
-				if (valueFilter === "biggest" && !isBiggestSavingsPin({
+				if (filterFlags.biggest && !isBiggestSavingsPin({
 					...f.properties,
 					gap: amount,
 				})) return false;
-				if (valueFilter === "multi" && !isMultiProviderPin(f.properties)) return false;
+				if (filterFlags.multi && !isMultiProviderPin(f.properties)) return false;
 				if (gapsOnly) return hasGap;
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, valueFilter]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, filterFlags]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
@@ -891,27 +898,29 @@ export default function IntelligenceMapSplit({
 
 	const topSavings = opportunityList;
 
-	const displayPlaces = useMemo(() => {
-		if (!visiblePlaces) return visiblePlaces;
-		/* The GPU draws every opportunity and clusters them itself; the cap was a DOM limit. */
-		let features = visiblePlaces.features;
-		if (!cityPlaces) {
-			const ids = new Set(topSavings.map((row) => row.placeId));
-			if (livePlaceId) ids.add(livePlaceId);
-			if (stackPick) {
-				for (const member of stackPick.members) ids.add(member.placeId);
-			}
-			features = visiblePlaces.features.filter((f) =>
-				ids.has(String(f.properties.place_id || "")),
-			);
+	const mapDrawFeatures = useMemo(() => {
+		if (!visiblePlaces) return null;
+		/* City read model: GPU draws every opportunity. Viewport mode stays capped. */
+		if (cityPlaces) return visiblePlaces.features;
+		const ids = new Set(topSavings.map((row) => row.placeId));
+		if (livePlaceId) ids.add(livePlaceId);
+		if (stackPick) {
+			for (const member of stackPick.members) ids.add(member.placeId);
 		}
-		const stacked = stackSameCoordinateFeatures(features);
+		return visiblePlaces.features.filter((f) =>
+			ids.has(String(f.properties.place_id || "")),
+		);
+	}, [visiblePlaces, cityPlaces, livePlaceId, stackPick, cityPlaces ? null : topSavings]);
+
+	const displayPlaces = useMemo(() => {
+		if (!visiblePlaces || !mapDrawFeatures) return visiblePlaces;
+		const stacked = stackSameCoordinateFeatures(mapDrawFeatures);
 		return {
 			...visiblePlaces,
 			count: stacked.length,
 			features: stacked,
 		};
-	}, [visiblePlaces, topSavings, livePlaceId, cityPlaces, stackPick]);
+	}, [visiblePlaces, mapDrawFeatures]);
 
 	const selectedCoordinateStack = useMemo(
 		() => (livePlaceId && visiblePlaces ? stackAtPlaceId(visiblePlaces.features, livePlaceId) : null),
@@ -1107,7 +1116,10 @@ export default function IntelligenceMapSplit({
 		(next: FilterRailId) => {
 			setRail(next);
 			if (next === "gaps") {
-				patchSearch({ sort: "gap", filter: "biggest" });
+				patchSearch({
+					sort: "gap",
+					filter: encodeMapFilters({ ...parseMapFilters(search.filter), biggest: true }),
+				});
 				return;
 			}
 			if (next === "cheapest") {
@@ -1115,7 +1127,9 @@ export default function IntelligenceMapSplit({
 				return;
 			}
 			if (next === "multi") {
-				patchSearch({ filter: "multi" });
+				patchSearch({
+					filter: encodeMapFilters({ ...parseMapFilters(search.filter), multi: true }),
+				});
 				return;
 			}
 			if (next === "grocery") {
@@ -1126,7 +1140,7 @@ export default function IntelligenceMapSplit({
 				applyCategory("");
 			}
 		},
-		[applyCategory, patchSearch],
+		[applyCategory, patchSearch, search.filter],
 	);
 
 	const toggleLayer = useCallback((id: MapLayerId) => {
@@ -1208,7 +1222,7 @@ export default function IntelligenceMapSplit({
 			);
 		const focus = points.slice(0, LIST_CAP);
 		const firstId = String(focus[0]?.properties?.place_id || "");
-		const key = `${needle}|${points.length}|${firstId}`;
+		const key = `${needle}|${search.filter || ""}|${points.length}|${firstId}`;
 		if (lastSearchFocusRef.current === key) return;
 		lastSearchFocusRef.current = key;
 		if (!focus.length) {
@@ -1236,7 +1250,7 @@ export default function IntelligenceMapSplit({
 			bounds,
 		});
 		setSheetSnap(points.length > 6 ? "full" : "half");
-	}, [q, visiblePlaces, focusAroundPlace]);
+	}, [q, search.filter, visiblePlaces, focusAroundPlace]);
 
 	/* The copilot proposes; the app executes — only with ids and bounds it was given. */
 	const applyCopilotAction = useCallback(
@@ -1373,13 +1387,12 @@ export default function IntelligenceMapSplit({
 	);
 
 	const applyFilter = useCallback(
-		(next: MapValueFilter) => {
-			const filter = next === "all" || !next ? undefined : next;
-			patchSearch({ filter });
+		(next: "biggest" | "multi") => {
+			patchSearch({ filter: toggleMapFilter(search.filter, next) });
 			if (next === "biggest") setRail("gaps");
 			if (next === "multi") setRail("multi");
 		},
-		[patchSearch],
+		[patchSearch, search.filter],
 	);
 
 	const applyExploreRadius = useCallback(
@@ -1557,7 +1570,7 @@ export default function IntelligenceMapSplit({
 					onView={applyView}
 					sort={sort}
 					onSort={applySort}
-					valueFilter={valueFilter}
+					filterFlags={filterFlags}
 					onFilter={applyFilter}
 					legendOpen={legendOpen}
 					onLegendOpenChange={setLegendOpen}
@@ -1670,7 +1683,7 @@ export default function IntelligenceMapSplit({
 						onView={applyView}
 						sort={sort}
 						onSort={applySort}
-						valueFilter={valueFilter}
+						filterFlags={filterFlags}
 						onFilter={applyFilter}
 						isRTL={isRTL}
 						nearReady={nearReady}
@@ -1797,6 +1810,32 @@ export default function IntelligenceMapSplit({
 						/>
 					</Suspense>
 					</div>
+					{placesError && !visiblePlaces ? (
+						<div
+							role="alert"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-places-error"
+						>
+							<p>
+								{isRTL
+									? "تعذّر تحميل الفرص في هذا النطاق. حاول مرة ثانية."
+									: "Could not load opportunities in this view. Try again."}
+							</p>
+							<button
+								type="button"
+								onClick={() => {
+									setPlacesError(false);
+									const v = viewRef.current;
+									if (v) fetchPlaces(v.bbox, v.zoom);
+									else setRetryTick((n) => n + 1);
+								}}
+								aria-label={isRTL ? "إعادة المحاولة" : "Retry"}
+							>
+								{isRTL ? "إعادة" : "Retry"}
+							</button>
+						</div>
+					) : null}
 					{offline ? (
 						<div
 							role="status"

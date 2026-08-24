@@ -40,6 +40,17 @@ describe('map filters — biggest-savings floors', () => {
     assert.equal(matchesFilter({ provider_count: 2 }, 'multi'), false);
     assert.equal(matchesFilter({ provider_count: 3 }, 'multi'), true);
   });
+
+  it('ANDs worthwhile and 3+ apps when both are on', () => {
+    const worth = {
+      difference_amount: 18,
+      cheapest_price: 39,
+      cheapest_provider: 'jahez',
+      provider_count: 3,
+    };
+    assert.equal(matchesFilter(worth, 'biggest,multi'), true);
+    assert.equal(matchesFilter({ ...worth, provider_count: 2 }, 'biggest+multi'), false);
+  });
 });
 
 describe('map filters — grocery sector is identity, not a pin mint', () => {

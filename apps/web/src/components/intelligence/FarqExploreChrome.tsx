@@ -21,7 +21,7 @@ import {
 } from "react";
 import { localizeCity } from "../../lib/cityNames";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
-import type { MapValueFilter } from "../../lib/mapFilters";
+import type { MapFilterFlags } from "../../lib/mapFilters";
 import type { MapSort, MapViewMode } from "../../routes/map";
 import type {
 	CityDistricts,
@@ -125,7 +125,7 @@ export default function FarqExploreChrome({
 	onView,
 	sort,
 	onSort,
-	valueFilter = "all",
+	filterFlags = { biggest: false, multi: false },
 	searchActive = false,
 	onFilter,
 	legendOpen,
@@ -192,10 +192,10 @@ export default function FarqExploreChrome({
 	onView: (view: MapViewMode) => void;
 	sort: MapSort;
 	onSort: (sort: MapSort) => void;
-	valueFilter?: MapValueFilter;
+	filterFlags?: MapFilterFlags;
 	/** True when the person submitted a search — empty then means no match, not "no gaps in Riyadh". */
 	searchActive?: boolean;
-	onFilter?: (filter: MapValueFilter) => void;
+	onFilter?: (key: "biggest" | "multi") => void;
 	legendOpen: boolean;
 	onLegendOpenChange: (open: boolean) => void;
 	/** The city's أحياء for the picker under the search; null when the city has no boundaries. */
@@ -408,7 +408,7 @@ export default function FarqExploreChrome({
 						onView={onView}
 						sort={sort}
 						onSort={onSort}
-						valueFilter={valueFilter}
+						filterFlags={filterFlags}
 						onFilter={onFilter}
 						isRTL={isRTL}
 						nearReady={nearReady}

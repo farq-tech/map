@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
 	BIGGEST_SAVINGS_MIN_GAP,
 	BIGGEST_SAVINGS_MIN_PRICE,
+	encodeMapFilters,
 	isBiggestSavingsPin,
 	isGroceryIdentity,
 	isMultiProviderPin,
 	parseMapFilter,
+	parseMapFilters,
+	toggleMapFilter,
 } from "./mapFilters";
 
 describe("map filters — client floors match the API", () => {
@@ -18,6 +21,9 @@ describe("map filters — client floors match the API", () => {
 		expect(parseMapFilter("biggest")).toBe("biggest");
 		expect(parseMapFilter("multi")).toBe("multi");
 		expect(parseMapFilter("near")).toBeUndefined();
+		expect(parseMapFilters("biggest,multi")).toEqual({ biggest: true, multi: true });
+		expect(toggleMapFilter("biggest", "multi")).toBe("biggest,multi");
+		expect(encodeMapFilters({ biggest: false, multi: false })).toBeUndefined();
 	});
 
 	it("does not treat restaurant names as grocery storefronts", () => {

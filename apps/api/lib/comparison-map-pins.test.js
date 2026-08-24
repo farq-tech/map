@@ -22,6 +22,7 @@ function place(i, opts = {}) {
     lat: opts.lat ?? 24.7 + i * 0.001,
     lng: opts.lng ?? 46.6 + i * 0.001,
     has_difference: opts.has_difference !== false,
+    provider_count: opts.provider_count ?? 3,
     image_url: 'https://example.test/photo.jpg',
     menu: { href: `/merchant/restaurant/${i}` },
     difference: {
@@ -95,6 +96,7 @@ describe('fields=pin slim mapper', () => {
     assert.equal(feature.properties.product_name, 'وجبة');
     assert.equal(feature.properties.cheapest_price, 20);
     assert.equal(feature.properties.expensive_price, 32);
+    assert.equal(feature.properties.provider_count, 3);
     assert.equal(feature.properties.image_url, undefined);
     assert.equal(feature.properties.difference, undefined);
     assert.equal(feature.properties.menu, undefined);
