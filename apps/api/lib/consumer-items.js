@@ -198,6 +198,9 @@ const RETAIL_TERM_SOURCES = Object.freeze([
    * 7769 pinned "مج معدني" gap 5. Bare مج matches مجبوس / مجانا. Bare
    * معدني matches مياه معدنية. */
   'مج\\s*معدني',
+  /* Same merch without "معدني". Tim Hortons 10061 still minted
+   * "مج يحمل شعار تيم هورتنز لون أسود" after the metal-mug rule. */
+  'مج\\s*يحمل\\s*شعار',
   'metal\\s*mug',
 ]);
 
