@@ -13,11 +13,16 @@ import {
 	GPU_ICON_PX,
 	PRICE_CIRCLE_FILL,
 	PRICE_CIRCLE_TEXT,
+	PRICE_TILE_CLUSTERS,
+	PRICE_TILE_ICONS,
+	PRICE_TILE_NEIGHBOR_DIM,
+	PRICE_TILE_POINTS,
 	cheapestProviderId,
 	hashPriceTileCollection,
 	nextClusterZoom,
 	pinGapAmount,
 	gpuIconId,
+	setPriceTileNeighborDim,
 	toPriceTileCollection,
 } from "./farqPriceTiles";
 
@@ -140,5 +145,28 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		expect(nextClusterZoom(11, 11)).toBe(12.2);
 		expect(nextClusterZoom(12, 16)).toBeLessThanOrEqual(15);
 		expect(nextClusterZoom(13, null)).toBe(14.2);
+	});
+
+	it("dims GPU neighbor layers when a place is selected", () => {
+		const paints = new Map<string, number>();
+		const map = {
+			getLayer: (id: string) => ({ id }),
+			setPaintProperty: (id: string, prop: string, value: number) => {
+				paints.set(`${id}:${prop}`, value);
+			},
+		};
+		setPriceTileNeighborDim(map, true);
+		expect(paints.get(`${PRICE_TILE_POINTS}:icon-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		expect(paints.get(`${PRICE_TILE_CLUSTERS}:text-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		expect(paints.get(`${PRICE_TILE_ICONS}:icon-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		setPriceTileNeighborDim(map, false);
+		expect(paints.get(`${PRICE_TILE_POINTS}:icon-opacity`)).toBe(1);
+		expect(paints.get(`${PRICE_TILE_ICONS}:text-opacity`)).toBe(1);
 	});
 });

@@ -41,6 +41,13 @@ export const PRICE_TILE_SOURCE = "farq-price-tiles";
 export const PRICE_TILE_POINTS = "farq-price-points";
 export const PRICE_TILE_CLUSTERS = "farq-price-clusters";
 export const PRICE_TILE_ICONS = "farq-price-icons";
+/** Neighbors stay readable but yield the pixel to the selected HTML pin. */
+export const PRICE_TILE_NEIGHBOR_DIM = 0.4;
+const PRICE_TILE_DIM_LAYERS = [
+	PRICE_TILE_POINTS,
+	PRICE_TILE_CLUSTERS,
+	PRICE_TILE_ICONS,
+] as const;
 
 /** Mint disc, dark Farq teal number — never white on mint. */
 export const PRICE_CIRCLE_FILL = FARQ_MINT;
@@ -560,4 +567,21 @@ export function syncPriceTileData(
 
 export function resetPriceTileHash(map?: MapboxMap): void {
 	if (map) lastTileHash.delete(map);
+}
+
+/** HTML-only opacity rules never reach GPU symbols — dim those layers instead. */
+export function setPriceTileNeighborDim(
+	map: Pick<MapboxMap, "getLayer" | "setPaintProperty">,
+	dimmed: boolean,
+): void {
+	const opacity = dimmed ? PRICE_TILE_NEIGHBOR_DIM : 1;
+	for (const id of PRICE_TILE_DIM_LAYERS) {
+		if (!map.getLayer(id)) continue;
+		try {
+			map.setPaintProperty(id, "icon-opacity", opacity);
+			map.setPaintProperty(id, "text-opacity", opacity);
+		} catch {
+			/* style mid-swap */
+		}
+	}
 }

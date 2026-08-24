@@ -49,6 +49,7 @@ import {
 } from "../../lib/farqMapPins";
 import {
 	ensurePriceTileLayers,
+	setPriceTileNeighborDim,
 	syncPriceTileData,
 } from "../../lib/farqPriceTiles";
 import {
@@ -677,11 +678,13 @@ export default function FarqMap({
 						containerRef.current?.closest(".farq-mapbox-root"),
 						containerRef.current?.closest(".farq-map-split"),
 					]);
+					setPriceTileNeighborDim(map, true);
 					selectedPlaceIdRef.current = id;
 					onSelectPlaceRef.current(id);
 					lastPinSigRef.current = "";
 					syncPinsRef.current();
 				});
+				setPriceTileNeighborDim(map, Boolean(selectedPlaceIdRef.current));
 				syncPinsRef.current();
 			} catch {
 				/* */
@@ -790,11 +793,13 @@ export default function FarqMap({
 						containerRef.current?.closest(".farq-mapbox-root"),
 						containerRef.current?.closest(".farq-map-split"),
 					]);
+					setPriceTileNeighborDim(map, true);
 					selectedPlaceIdRef.current = id;
 					onSelectPlaceRef.current(id);
 					lastPinSigRef.current = "";
 					syncPinsRef.current();
 				});
+				setPriceTileNeighborDim(map, Boolean(selectedPlaceIdRef.current));
 			} catch {
 				/* style not ready */
 			}
@@ -1121,6 +1126,8 @@ export default function FarqMap({
 			if (selectedPlaceId) root.setAttribute("data-sheet-open", "true");
 			else root.removeAttribute("data-sheet-open");
 		}
+		const map = mapRef.current;
+		if (map) setPriceTileNeighborDim(map, Boolean(selectedPlaceId));
 		for (const rec of pinMarkersRef.current.values()) {
 			if (rec.kind !== "place") continue;
 			setPinSelected(

@@ -1419,6 +1419,13 @@
 	flex-shrink: 0;
 }
 
+.farq-map-locate-error button.farq-map-locate-error-action {
+	width: auto;
+	min-width: 44px;
+	padding-inline: 0.7rem;
+	font-weight: 800;
+}
+
 .farq-map-split[dir="rtl"] .farq-map-locate-error {
 	text-align: right;
 	font-family: Tajawal, system-ui, sans-serif;

@@ -407,7 +407,18 @@ export default function IntelligenceMapSplit({
 				const v = viewRef.current;
 				if (v && !fetchedViewRef.current) fetchPlacesRef.current?.(v.bbox, v.zoom);
 			});
-		return () => controller.abort();
+		/* City cache is ~1.4s on a good day and 30s on timeout. Don't leave the
+		 * camera empty that whole time — viewport pins fill in, city wins later. */
+		const fallbackTimer = window.setTimeout(() => {
+			if (controller.signal.aborted) return;
+			if (cityStatusRef.current !== "loading") return;
+			const v = viewRef.current;
+			if (v && !fetchedViewRef.current) fetchPlacesRef.current?.(v.bbox, v.zoom);
+		}, 3500);
+		return () => {
+			controller.abort();
+			window.clearTimeout(fallbackTimer);
+		};
 	}, [city, retryTick]);
 
 	const fetchPlacesRef = useRef<((bbox: string, zoom: number) => void) | null>(null);
@@ -1824,6 +1835,7 @@ export default function IntelligenceMapSplit({
 							</p>
 							<button
 								type="button"
+								className="farq-map-locate-error-action"
 								onClick={() => {
 									setPlacesError(false);
 									const v = viewRef.current;
