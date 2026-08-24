@@ -58,6 +58,8 @@ const SHARE = [
   'ثنائي دبل كلاسيك برجر لحم',
   'Asl 2x Double Classic Beef Burgers',
   'Sandwich Duo',
+  'عرض مازة فيروزيات',
+  'Mazeh Fayrouziat Offers',
 ];
 
 const PERSONAL = [

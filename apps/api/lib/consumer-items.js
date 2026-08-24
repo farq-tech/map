@@ -140,6 +140,10 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'ثنائي\\s*دبل',
   '2x\\s*double',
   'sandwich\\s*duo',
+  /* A mezze spread, not a named promo. فيروزيات 10008 "عرض مازة" is
+   * 135–180 against hummus 25. Bare عرض stays out (الأبطال / المونديال). */
+  'مازه',
+  'mazeh',
 ]);
 
 /**
