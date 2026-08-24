@@ -35,6 +35,9 @@ const { CATEGORY_GROUPS, normalizeArabic } = require('./copilot-intent');
 const SHARE_TERM_SOURCES = Object.freeze([
   /* Arabic: containers and occasions that only make sense for a group */
   'بوكس',
+  /* Native "box" — "صندوق تجميع لفائف" was a mint 55 because only the
+   * loanword بوكس was in the list. Same container, same rule. */
+  'صندوق',
   /* Tray-of, not the adjective "Chinese". The following letter must be
    * Arabic — name_ar+' '+name_en would otherwise make "نودلز صينية
    * Chinese Noodles" look like a platter. */

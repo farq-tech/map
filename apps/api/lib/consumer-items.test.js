@@ -30,6 +30,8 @@ const SHARE = [
   'صينية كبسة',
   'Family Box',
   'Party Platter',
+  'صندوق تجميع لفائف',
+  'صندوق تجمع الأبطال',
 ];
 
 const PERSONAL = [
