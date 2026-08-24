@@ -244,15 +244,16 @@ function categoryCaseSql(expr) {
  */
 /**
  * Shared ranking for the one item a pin, list card, and getPlace sheet name.
- * A real gap beats a same-price row (share trays must not vanish behind a
- * 0-gap stew). Share/retail lose the tie among gaps; equal gaps take the
- * cheaper dish; item id is last so 1479 cannot be fries on the pin and
- * sambosa on the sheet.
+ * A displayable gap (≥ 1 ر.س, the pin's own floor) beats a same-price or
+ * halala-only row — share trays must not vanish behind a stew the map
+ * would not number. Share/retail lose the tie among those gaps; equal
+ * gaps take the cheaper dish; item id is last so 1479 cannot be fries
+ * on the pin and sambosa on the sheet.
  */
 const ITEM_NAME_SQL = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,'')";
 
 function representativeSpreadOrderSql() {
-  return `(ips.dearest_price > ips.cheapest_price) DESC,
+  return `((ips.dearest_price - ips.cheapest_price) >= 1) DESC,
           (${shareMatchSql(ITEM_NAME_SQL)}
         OR ${normalizedNameSql(ITEM_NAME_SQL)} ~ '${retailItemPattern()}') ASC,
           (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST,

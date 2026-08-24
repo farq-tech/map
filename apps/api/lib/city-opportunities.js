@@ -185,7 +185,7 @@ scored AS (
      AND btrim(ips.cheapest_provider) <> ''
      AND ips.dearest_price IS NOT NULL
      AND ips.cheapest_price IS NOT NULL
-     AND ips.dearest_price > ips.cheapest_price
+     AND (ips.dearest_price - ips.cheapest_price) >= 1
      AND ips.dearest_price <= $2
 ),
 best AS (

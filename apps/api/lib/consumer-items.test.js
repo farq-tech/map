@@ -120,7 +120,7 @@ test('pin and getPlace rank the same representative item', () => {
   assert.match(sql, /cheapest_price ASC/);
   assert.match(sql, /canonical_item_id ASC/);
   assert.match(sql, /dearest_price - ips.cheapest_price/);
-  assert.match(sql, /dearest_price > ips.cheapest_price/);
+  assert.match(sql, /dearest_price - ips.cheapest_price\) >= 1/);
 });
 
 test('a category means the same thing everywhere it is asked for', () => {
