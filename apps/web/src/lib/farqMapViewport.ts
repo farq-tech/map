@@ -92,3 +92,37 @@ export function shouldOfferSearchHere(opts: {
 	if (!opts.userGesture || !opts.hasFetched) return false;
 	return viewMovedEnough(opts.fetched, opts.current);
 }
+
+/** Camera box for search results. Same-coordinate piles get a tiny pad, not a merge. */
+export function boundsFromPlaceFeatures(
+	features: Array<{
+		geometry?: { type?: string; coordinates?: unknown } | null;
+		properties?: { feature_type?: string } | null;
+	}>,
+): [number, number, number, number] | null {
+	let west = 180;
+	let south = 90;
+	let east = -180;
+	let north = -90;
+	let n = 0;
+	for (const feature of features) {
+		if (feature.properties?.feature_type === "cluster") continue;
+		if (feature.geometry?.type !== "Point") continue;
+		const coords = feature.geometry.coordinates;
+		if (!Array.isArray(coords) || coords.length < 2) continue;
+		const lng = Number(coords[0]);
+		const lat = Number(coords[1]);
+		if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+		west = Math.min(west, lng);
+		south = Math.min(south, lat);
+		east = Math.max(east, lng);
+		north = Math.max(north, lat);
+		n += 1;
+	}
+	if (!n) return null;
+	if (west === east || south === north) {
+		const pad = 0.002;
+		return [west - pad, south - pad, east + pad, north + pad];
+	}
+	return [west, south, east, north];
+}

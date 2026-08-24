@@ -41,6 +41,7 @@ import {
 	type OpportunityRow,
 } from "../../lib/farqOpportunities";
 import {
+	boundsFromPlaceFeatures,
 	shouldOfferSearchHere,
 	type MapViewChangeMeta,
 } from "../../lib/farqMapViewport";
@@ -191,6 +192,9 @@ export default function IntelligenceMapSplit({
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
+	const [offline, setOffline] = useState(
+		() => typeof navigator !== "undefined" && navigator.onLine === false,
+	);
 	const [loading, setLoading] = useState(true);
 	const [mapQuery, setMapQuery] = useState(search.q || "");
 	const viewRef = useRef<{ bbox: string; zoom: number } | null>(null);
@@ -199,6 +203,7 @@ export default function IntelligenceMapSplit({
 	const placesAbortRef = useRef<AbortController | null>(null);
 	const placesRef = useRef<IntelligenceMapPlaces | null>(null);
 	const lastFocusedPlaceRef = useRef<string>("");
+	const lastSearchFocusRef = useRef<string>("");
 	const pendingLocateRef = useRef(false);
 	const [livePlaceId, setLivePlaceId] = useState(search.place || "");
 	const [stackPick, setStackPick] = useState<CoordinateStack | null>(null);
@@ -321,6 +326,17 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		setMapQuery(search.q || "");
 	}, [search.q]);
+
+	useEffect(() => {
+		const on = () => setOffline(false);
+		const off = () => setOffline(true);
+		window.addEventListener("online", on);
+		window.addEventListener("offline", off);
+		return () => {
+			window.removeEventListener("online", on);
+			window.removeEventListener("offline", off);
+		};
+	}, []);
 
 	useEffect(() => {
 		setLivePlaceId(placeId);
@@ -769,7 +785,8 @@ export default function IntelligenceMapSplit({
 	const viewportSavings = useMemo(() => {
 		const rows: OpportunityRow[] = [];
 		/* A selected حي is the scope; the camera no longer clips what it lists. */
-		const clip = cityPlaces && !districtScope ? viewBbox : null;
+		const clip =
+			cityPlaces && !districtScope && !String(q || "").trim() ? viewBbox : null;
 		for (const f of visiblePlaces?.features || []) {
 			if (f.properties.feature_type === "cluster") continue;
 			const placeId = String(f.properties.place_id || "").trim();
@@ -845,7 +862,7 @@ export default function IntelligenceMapSplit({
 				? withObservedDistances(rows, userLocation.lat, userLocation.lng)
 				: rows;
 		return located;
-	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox, districtScope, categoryIsGapped, categoryId, activeCategoryLabel]);
+	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox, districtScope, categoryIsGapped, categoryId, activeCategoryLabel, q]);
 
 	const cheapestReady = useMemo(
 		() => viewportSavings.some((row) => row.cheapestPrice != null),
@@ -1058,6 +1075,8 @@ export default function IntelligenceMapSplit({
 			setScanHint("searching");
 			setDrawerOpen(false);
 			lastFocusedPlaceRef.current = "";
+			setStackPick(null);
+			setLivePlaceId("");
 			patchSearch({
 				category: nextId || undefined,
 				sector: nextId === "grocery" || nextId === "shopping" ? "grocery" : undefined,
@@ -1142,6 +1161,68 @@ export default function IntelligenceMapSplit({
 		setPinnedIds(null);
 		setMinGapFilter(null);
 	}, []);
+
+	const submitMapSearch = useCallback(
+		(text: string, source: "sheet" | "toolbar") => {
+			const needle = text.trim();
+			clearAsk();
+			setStackPick(null);
+			lastSearchFocusRef.current = "";
+			patchSearch({ q: needle || undefined, place: undefined });
+			track("search_submit", { has_query: Boolean(needle), source });
+		},
+		[clearAsk, patchSearch],
+	);
+
+	useEffect(() => {
+		const needle = String(q || "").trim();
+		if (!needle) {
+			lastSearchFocusRef.current = "";
+			return;
+		}
+		if (!visiblePlaces) return;
+		const points = visiblePlaces.features
+			.filter(
+				(feature) =>
+					feature.geometry?.type === "Point" &&
+					feature.properties?.feature_type !== "cluster",
+			)
+			.slice()
+			.sort(
+				(a, b) =>
+					(pinGapAmount(b.properties) || 0) - (pinGapAmount(a.properties) || 0),
+			);
+		const focus = points.slice(0, LIST_CAP);
+		const firstId = String(focus[0]?.properties?.place_id || "");
+		const key = `${needle}|${points.length}|${firstId}`;
+		if (lastSearchFocusRef.current === key) return;
+		lastSearchFocusRef.current = key;
+		if (!focus.length) {
+			setSheetSnap("half");
+			return;
+		}
+		if (focus.length === 1) {
+			const coords = focus[0].geometry.coordinates;
+			const lng = Array.isArray(coords) ? Number(coords[0]) : NaN;
+			const lat = Array.isArray(coords) ? Number(coords[1]) : NaN;
+			if (Number.isFinite(lng) && Number.isFinite(lat)) {
+				focusAroundPlace({ placeId: firstId, lng, lat });
+			}
+			return;
+		}
+		const bounds = boundsFromPlaceFeatures(focus);
+		if (!bounds) return;
+		setLivePlaceId("");
+		setStackPick(null);
+		setFocusRequest({
+			lat: (bounds[1] + bounds[3]) / 2,
+			lng: (bounds[0] + bounds[2]) / 2,
+			id: `search:${key}`,
+			kind: "bounds",
+			bounds,
+		});
+		setSheetSnap(points.length > 6 ? "full" : "half");
+	}, [q, visiblePlaces, focusAroundPlace]);
 
 	/* The copilot proposes; the app executes — only with ids and bounds it was given. */
 	const applyCopilotAction = useCallback(
@@ -1377,12 +1458,8 @@ export default function IntelligenceMapSplit({
 					onToggleLanguage={toggleLanguage}
 					mapQuery={mapQuery}
 					onMapQueryChange={setMapQuery}
-					onSearchSubmit={(q) => {
-						clearAsk();
-						patchSearch({ q: q || undefined, place: undefined });
-						/* Whether someone searched, never what they typed. */
-						track("search_submit", { has_query: Boolean(q), source: "sheet" });
-					}}
+					onSearchSubmit={(text) => submitMapSearch(text, "sheet")}
+					searchActive={Boolean(String(q || "").trim())}
 					rail={rail}
 					onRail={applyRail}
 					categoryId={categoryId}
@@ -1556,11 +1633,7 @@ export default function IntelligenceMapSplit({
 								e.preventDefault();
 								const text = mapQuery.trim();
 								if (looksLikeQuestion(text)) askFarq(text);
-								else {
-									clearAsk();
-									patchSearch({ q: text || undefined, place: undefined });
-									track("search_submit", { has_query: Boolean(text), source: "toolbar" });
-								}
+								else submitMapSearch(text, "toolbar");
 							}}
 						>
 							<Search className="size-4 shrink-0 text-[#5c6d6d]" />
@@ -1649,6 +1722,7 @@ export default function IntelligenceMapSplit({
 								topSavings.length === 0
 							}
 							groceryEmpty={grocerySector}
+							searchEmpty={Boolean(String(q || "").trim())}
 							countLabel={
 								topSavings.length
 									? isRTL
@@ -1709,6 +1783,20 @@ export default function IntelligenceMapSplit({
 						/>
 					</Suspense>
 					</div>
+					{offline ? (
+						<div
+							role="status"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-offline"
+						>
+							<p>
+								{isRTL
+									? "ما في اتصال — الأسعار الحية تحتاج إنترنت."
+									: "You're offline — live prices need a connection."}
+							</p>
+						</div>
+					) : null}
 					{locationError ? (
 						<div
 							role="alert"
@@ -2050,10 +2138,14 @@ export default function IntelligenceMapSplit({
 								</ul>
 							</div>
 						) : sourcePlaces != null && !placesFetching ? (
-							<p className="text-[14px] font-extrabold text-brand-900">
-								{isRTL
-									? "ما رصدنا فرق يستحق حولك بعد"
-									: "No worthwhile gap observed around you yet"}
+							<p className="text-[14px] font-extrabold text-brand-900" data-testid={q ? "intelligence-map-search-empty" : "intelligence-map-empty"}>
+								{q
+									? isRTL
+										? "ما لقينا مكان بهذا الاسم في الرصد"
+										: "No observed place matches this search"
+									: isRTL
+										? "ما رصدنا فرق يستحق حولك بعد"
+										: "No worthwhile gap observed around you yet"}
 							</p>
 						) : null}
 						</div>

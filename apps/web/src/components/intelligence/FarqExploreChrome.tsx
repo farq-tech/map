@@ -126,6 +126,7 @@ export default function FarqExploreChrome({
 	sort,
 	onSort,
 	valueFilter = "all",
+	searchActive = false,
 	onFilter,
 	legendOpen,
 	onLegendOpenChange,
@@ -192,6 +193,8 @@ export default function FarqExploreChrome({
 	sort: MapSort;
 	onSort: (sort: MapSort) => void;
 	valueFilter?: MapValueFilter;
+	/** True when the person submitted a search — empty then means no match, not "no gaps in Riyadh". */
+	searchActive?: boolean;
 	onFilter?: (filter: MapValueFilter) => void;
 	legendOpen: boolean;
 	onLegendOpenChange: (open: boolean) => void;
@@ -458,6 +461,19 @@ export default function FarqExploreChrome({
 						<Link to="/grocery" search={{ q: undefined }} className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
 							{isRTL ? "افتح مقارنة البقالة" : "Open grocery compare"}
 						</Link>
+					</div>
+				) : emptyViewport && searchActive ? (
+					<div className="space-y-3 px-2 py-4" data-testid="intelligence-map-search-empty">
+						<p className="text-[14px] font-extrabold text-brand-900">
+							{isRTL
+								? "ما لقينا مكان بهذا الاسم في الرصد"
+								: "No observed place matches this search"}
+						</p>
+						<p className="text-[12px] font-bold text-[#5c6d6d]">
+							{isRTL
+								? "جرّب اسم المطعم أو الصنف، أو امسح البحث لتشوف الفرص حولك."
+								: "Try the restaurant or dish name, or clear search to see gaps around you."}
+						</p>
 					</div>
 				) : emptyViewport ? (
 					<div className="space-y-3 px-2 py-4" data-testid="intelligence-map-empty">

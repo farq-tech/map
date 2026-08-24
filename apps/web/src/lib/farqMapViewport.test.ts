@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	boundsFromPlaceFeatures,
 	lngLatInBbox,
 	parseMapBbox,
 	shouldOfferSearchHere,
@@ -83,5 +84,23 @@ describe("farqMapViewport — search-here gating", () => {
 				current: { bbox: fetched.bbox, zoom: 14.2 },
 			}),
 		).toBe(true);
+	});
+});
+
+describe("bounds from search hits", () => {
+	it("fits distinct pins and pads a same-coordinate pile", () => {
+		const spread = boundsFromPlaceFeatures([
+			{ geometry: { type: "Point", coordinates: [46.67, 24.68] } },
+			{ geometry: { type: "Point", coordinates: [46.69, 24.70] } },
+		]);
+		expect(spread).toEqual([46.67, 24.68, 46.69, 24.70]);
+		const pile = boundsFromPlaceFeatures([
+			{ geometry: { type: "Point", coordinates: [46.6779465, 24.6852364] } },
+			{ geometry: { type: "Point", coordinates: [46.6779465, 24.6852364] } },
+		]);
+		expect(pile).not.toBeNull();
+		if (!pile) return;
+		expect(pile[0]).toBeLessThan(46.6779465);
+		expect(pile[2]).toBeGreaterThan(46.6779465);
 	});
 });
