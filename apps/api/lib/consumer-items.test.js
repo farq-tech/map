@@ -46,6 +46,10 @@ const PERSONAL = [
   'مشكل بقلاوة فستق',
   'وجبة 2 طاجن سعره 2272',
   'وعاء ارز مع نوعين من البروتين',
+  'نودلز صينية',
+  'شوربة صينية',
+  'Chinese Noodles',
+  'كبة بالصينية',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -139,6 +143,18 @@ test('an unobserved delivery fee is missing, never zero', () => {
   }
   assert.equal(deliveryAdjustedGap({}), null);
   assert.equal(deliveryAdjustedGap({ cheapestPrice: 40, dearestPrice: 70, cheapestFee: -1, dearestFee: 5 }), null);
+});
+
+test('SQL translate maps taa marbuta like JS, and صينية is a tray only with a following word', () => {
+  const sql = normalizedNameSql('n');
+  assert.match(sql, /'ااااهي'/);
+  assert.equal(sql.includes("'اااهي'"), false);
+  assert.equal(demoteReason('صينية النخبة'), 'share');
+  assert.equal(demoteReason('سفرة المطانيخ'), 'share');
+  assert.equal(demoteReason('وليمة بوكيس'), 'share');
+  assert.equal(demoteReason('ضيافة كاس العالم'), 'share');
+  assert.equal(demoteReason('عرض العزيمة مندي'), 'share');
+  assert.equal(demoteReason('نودلز صينية'), null);
 });
 
 test('the SQL fragments carry the same rules as the JS, and quote safely', () => {

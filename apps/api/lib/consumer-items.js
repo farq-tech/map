@@ -35,7 +35,9 @@ const { CATEGORY_GROUPS, normalizeArabic } = require('./copilot-intent');
 const SHARE_TERM_SOURCES = Object.freeze([
   /* Arabic: containers and occasions that only make sense for a group */
   'بوكس',
-  'صينيه',
+  /* Tray-of, not the adjective "Chinese": "صينية كبسة" is a platter,
+   * "نودلز صينية" is a bowl of noodles. A following word is required. */
+  'صينيه\\s+',
   'باكيت',
   'كرتون',
   'درزن',
@@ -198,7 +200,10 @@ function displayItemName(name) {
  * normalised form) would miss the way the source actually spells things.
  */
 function normalizedNameSql(expr) {
-  return `translate(translate(lower(${expr}), 'أإآٱةىًٌٍَُِّْـ', 'اااهي'), '٠١٢٣٤٥٦٧٨٩', '0123456789')`;
+  /* Six letters → six letters: أإآٱ→ا, ة→ه, ى→ي. A shorter dest mapped
+   * ة to ي and deleted ى, so SQL missed every ة-spelling the JS caught
+   * (صينية, سفرة, وليمة) and the pin stayed mint while the sheet said share. */
+  return `translate(translate(lower(${expr}), 'أإآٱةىًٌٍَُِّْـ', 'ااااهي'), '٠١٢٣٤٥٦٧٨٩', '0123456789')`;
 }
 
 /**
