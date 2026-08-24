@@ -891,7 +891,7 @@ export default function IntelligenceMapSplit({
 		(stack: CoordinateStack) => {
 			setLivePlaceId("");
 			setStackPick(stack);
-			setSheetSnap("half");
+			setSheetSnap(stack.members.length > 6 ? "full" : "half");
 			setComparePanelHidden(false);
 			lastFocusedPlaceRef.current = "";
 			patchSearch({ place: undefined });
