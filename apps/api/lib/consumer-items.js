@@ -60,6 +60,19 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'دلو',
   'سطل',
   'باكج',
+  /* Same loanword without the alef. "بكج كاس العالم" (3940 gap 56) and
+   * "بكج اللمة" (37692) stayed mint because only باكج was listed. */
+  'بكج',
+  /* A gathering table, not a sip of coffee. "اللمه" catches كومبو/عرض/سبيشل
+   * اللمة; "(^|\\s)لمه\\s+" catches "لمة السراة 5" / "لمة الأصدقاء".
+   * Bare لمه would also hit "والمة قهوة" (بيت التحميص 1280) — a pour, not a
+   * table — so the article or a word boundary is required. كومبو on its own
+   * stays out. */
+  'اللمه',
+  '(^|\\s)لمه\\s+',
+  /* "تجمع شواء النار" — five Fire Grill branches, mint 43. للتجمع is the
+   * same gathering; صندوق already covered those pins. */
+  'تجمع',
   /* "تريو كبير كومبو" — 25 items, average gap 21.7 SAR against 5.5 city-wide.
    * A trio is three plates; كومبو and ميكس on their own are not, and stay out. */
   'تريو',

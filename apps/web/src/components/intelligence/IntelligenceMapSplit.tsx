@@ -52,6 +52,7 @@ import { localizeDigitString } from "../../lib/formatPrice";
 import { viewportStats } from "../../lib/farqViewportStats";
 import { getProviderLabel } from "../../lib/platformLogos";
 import { readSafeAreaInsetBottom, sheetHeightPx } from "./FarqBottomSheet";
+import { groceryCompareSearch } from "../../lib/grocerySearch";
 import { livePlaceDetail } from "../../lib/mapPlaceContract";
 import { providerTintClass } from "../../lib/providerTint";
 import {
@@ -765,7 +766,7 @@ export default function IntelligenceMapSplit({
 	const groceryCta = categoryId === "grocery" || categoryId === "shopping";
 	const compareTo = groceryCta ? "/grocery" : "/";
 	const compareSearch = groceryCta
-		? { q: focusedPlaceDetail?.name || q || undefined }
+		? groceryCompareSearch()
 		: {
 				category:
 					detail?.farq_signal?.consumer?.category ||

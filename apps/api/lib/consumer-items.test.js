@@ -33,6 +33,13 @@ const SHARE = [
   'Party Platter',
   'صندوق تجميع لفائف',
   'صندوق تجمع الأبطال',
+  'كومبو اللمة',
+  'عرض اللمة',
+  'لمة السراة 5',
+  'لمة الأصدقاء',
+  'بكج اللمة',
+  'بكج كاس العالم',
+  'تجمع شواء النار',
 ];
 
 const PERSONAL = [
@@ -53,6 +60,7 @@ const PERSONAL = [
   'شوربة صينية',
   'Chinese Noodles',
   'كبة بالصينية',
+  'والمة قهوة سعودية مختصة سريعة التحضير',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -103,6 +111,21 @@ test('a meal for one is dinner, and for 69SR is a price, not a table', () => {
   assert.equal(demoteReason('Any 2 Pizza + 1Ltr Drink for 69SR'), null);
   assert.equal(demoteReason('ثمن جالون'), null);
   assert.equal(demoteReason('بيتزا لثلاثة أشخاص'), 'share');
+});
+
+test('a gathering table is share; a sip of coffee is not', () => {
+  assert.equal(demoteReason('كومبو اللمة'), 'share');
+  assert.equal(demoteReason('عرض اللمة'), 'share');
+  assert.equal(demoteReason('عرض اللمه'), 'share');
+  assert.equal(demoteReason('لمة السراة 5'), 'share');
+  assert.equal(demoteReason('لمة الأصدقاء'), 'share');
+  assert.equal(demoteReason('سبيشل اللمة'), 'share');
+  assert.equal(demoteReason('بكج اللمة'), 'share');
+  assert.equal(demoteReason('بكج كاس العالم'), 'share');
+  assert.equal(demoteReason('تجمع شواء النار'), 'share');
+  /* "والمة" is a pour. The letters لمه sit inside it; the article / boundary do not. */
+  assert.equal(demoteReason('والمة قهوة سعودية مختصة سريعة التحضير'), null);
+  assert.equal(demoteReason('قهوة لاتيه'), null);
 });
 
 test('a party single is one burger; a party box is still a tray', () => {

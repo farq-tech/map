@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	itemNameMatchesPin,
 	livePlaceDetail,
 	normalizeDifference,
 	normalizePlaceDetail,
@@ -129,5 +130,17 @@ describe("map place contract — nested + lean Railway pins", () => {
 				cheapest_provider_id: "hungerstation",
 			})?.product_name,
 		).toBe("مربعة");
+	});
+
+	it("treats name_ar / name_en as the same dish as the pin", () => {
+		expect(
+			itemNameMatchesPin(
+				{ name: "Gathering Combo", name_ar: "كومبو اللمة", name_en: null },
+				"كومبو اللمة",
+			),
+		).toBe(true);
+		expect(
+			itemNameMatchesPin({ name: "مربعة", name_ar: null, name_en: null }, "دجاج على الفحم"),
+		).toBe(false);
 	});
 });

@@ -28,7 +28,7 @@ import {
 	selectedPlaceFilterMissCopy,
 	type SelectedPlaceFilterMiss,
 } from "../../lib/mapFilters";
-import { pinSheetObservedItem } from "../../lib/mapPlaceContract";
+import { itemNameMatchesPin, pinSheetObservedItem } from "../../lib/mapPlaceContract";
 import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
@@ -247,8 +247,8 @@ function ComparedItemsSection({
 		const raw = data?.items ?? [];
 		if (!pin) return raw;
 		return [...raw].sort((a, b) => {
-			const aPin = displayItemName(a.name) === pin;
-			const bPin = displayItemName(b.name) === pin;
+			const aPin = itemNameMatchesPin(a, pin);
+			const bPin = itemNameMatchesPin(b, pin);
 			if (aPin === bPin) return 0;
 			return aPin ? -1 : 1;
 		});

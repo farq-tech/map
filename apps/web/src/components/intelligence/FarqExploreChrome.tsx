@@ -20,6 +20,7 @@ import {
 	type ReactNode,
 } from "react";
 import { localizeCity } from "../../lib/cityNames";
+import { groceryCompareSearch } from "../../lib/grocerySearch";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
 import type { MapFilterFlags } from "../../lib/mapFilters";
 import type { MapSort, MapViewMode } from "../../routes/map";
@@ -458,7 +459,7 @@ export default function FarqExploreChrome({
 								? "ما نخترع إحداثيات لمتجر بقالة. قارن السعر على مستوى المنتج."
 								: "We do not invent grocery storefront coordinates. Compare at the product level."}
 						</p>
-						<Link to="/grocery" search={{ q: undefined }} className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
+						<Link to="/grocery" search={groceryCompareSearch()} className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
 							{isRTL ? "افتح مقارنة البقالة" : "Open grocery compare"}
 						</Link>
 					</div>

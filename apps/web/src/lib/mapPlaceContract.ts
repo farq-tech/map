@@ -150,6 +150,24 @@ export function pinSheetObservedItem(
 	);
 }
 
+/**
+ * Pin, city, getPlace, and the first compared row must name the same dish.
+ * The API matches name / name_ar / name_en; the sheet used to match `name` only.
+ */
+export function itemNameMatchesPin(
+	item:
+		| { name?: string | null; name_ar?: string | null; name_en?: string | null }
+		| null
+		| undefined,
+	representativeName: string | null | undefined,
+): boolean {
+	const pin = displayItemName(representativeName);
+	if (!pin) return false;
+	return [item?.name, item?.name_ar, item?.name_en].some(
+		(n) => displayItemName(n) === pin,
+	);
+}
+
 /** Drop a previous restaurant's payload the instant the selection changes. */
 export function livePlaceDetail<T extends { place_id?: string | null }>(
 	detail: T | null | undefined,
