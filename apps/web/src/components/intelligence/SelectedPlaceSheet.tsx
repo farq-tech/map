@@ -124,6 +124,33 @@ export function formatItemPrice(value: number): string {
 	return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+export type ComparedItemCaution = "outlier" | "over_cap" | "share" | "retail";
+
+/** Why a proof-table row must not wear the mint badge the pin's number wears. */
+export function comparedItemCaution(item: {
+	price_outlier?: boolean;
+	over_cap?: boolean;
+	demote_reason?: string | null;
+}): ComparedItemCaution | null {
+	if (item.price_outlier) return "outlier";
+	if (item.over_cap) return "over_cap";
+	if (item.demote_reason === "share" || item.demote_reason === "retail") {
+		return item.demote_reason;
+	}
+	return null;
+}
+
+export function comparedItemCautionLabel(
+	kind: ComparedItemCaution | null,
+	isRTL: boolean,
+): string | null {
+	if (kind === "outlier") return isRTL ? "سعر شاذ — غير مؤكد" : "Suspect price";
+	if (kind === "over_cap") {
+		return isRTL ? "فوق ٢٠٠ ر.س — مو رقم الخريطة" : "Over 200 SAR — not the map number";
+	}
+	return placeDemoteCopy(kind, isRTL);
+}
+
 export type ItemPriceCell = {
 	providerId: string;
 	price: number;
@@ -334,22 +361,25 @@ function ComparedItemRow({
 	isRTL: boolean;
 }) {
 	const cells = itemPriceCells(item.prices);
-	/* A spread the ranking layer rejects must not look like the ones it trusts. */
-	const suspect = item.price_outlier === true;
+	const caution = comparedItemCaution(item);
+	const cautionLabel = comparedItemCautionLabel(caution, isRTL);
 	return (
-		<li className={`border-t border-[#eef3f3] px-4 py-3 first:border-t-0 ${suspect ? "opacity-70" : ""}`}>
+		<li className={`border-t border-[#eef3f3] px-4 py-3 first:border-t-0 ${caution ? "opacity-70" : ""}`}>
 			<div className="flex items-start justify-between gap-2">
 				<p className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-brand-900">
 					{displayItemName(item.name) || item.name}
-					{suspect ? (
-						<span className="ms-1.5 whitespace-nowrap rounded bg-[#f1e4d4] px-1 py-0.5 text-[10px] font-bold text-[#8a5a1a]">
-							{isRTL ? "سعر شاذ — غير مؤكد" : "Suspect price"}
+					{cautionLabel ? (
+						<span
+							className="ms-1.5 whitespace-nowrap rounded bg-[#f1e4d4] px-1 py-0.5 text-[10px] font-bold text-[#8a5a1a]"
+							data-testid="intelligence-map-compared-item-caution"
+						>
+							{cautionLabel}
 						</span>
 					) : null}
 				</p>
 				{item.gap > 0 ? (
 					<span
-						className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${suspect ? "bg-[#f1e4d4] text-[#8a5a1a]" : "bg-mint-500 text-brand-900"}`}
+						className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${caution ? "bg-[#f1e4d4] text-[#8a5a1a]" : "bg-mint-500 text-brand-900"}`}
 						dir="ltr"
 					>
 						{`+${formatItemPrice(item.gap)} ${isRTL ? "ر.س" : "SAR"}`}

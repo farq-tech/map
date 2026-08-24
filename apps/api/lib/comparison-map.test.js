@@ -103,10 +103,19 @@ test('rowToPlaceItem drops rows that are not a comparison and rows without a nam
 });
 
 test('sortPlaceItems puts the biggest observed gap first and the same-price items last', () => {
-  const rows = [SAME_PRICE_ROW, { ...ITEM_ROW, item_id: '2', prices: { ninja: 10, toyou: 12 } }, ITEM_ROW].map(
-    rowToPlaceItem,
-  );
-  const sorted = sortPlaceItems(rows);
+  const personal = rowToPlaceItem({
+    ...ITEM_ROW,
+    name_ar: 'اكلير شوكولاتة',
+    name_en: 'Chocolate Eclair',
+  });
+  const small = rowToPlaceItem({
+    item_id: '2',
+    name_ar: 'اكلير فانيلا',
+    name_en: 'Vanilla Eclair',
+    prices: { ninja: 10, toyou: 12 },
+  });
+  const same = rowToPlaceItem(SAME_PRICE_ROW);
+  const sorted = sortPlaceItems([same, small, personal]);
   assert.deepEqual(
     sorted.map((i) => i.gap),
     [90, 2, 0],
@@ -224,6 +233,29 @@ test('the proof table leads with the pin dish and parks over-cap rows', () => {
   assert.deepEqual(
     sortPlaceItems([overCap, pinItem], 'سجنتشر 30قطعة').map((i) => i.item_id),
     ['136422', '136421'],
+  );
+  const snackBox = rowToPlaceItem({
+    item_id: '15821',
+    name_ar: 'Snack Box',
+    name_en: 'Snack Box',
+    prices: { jahez: 46, hungerstation: 64 },
+  });
+  const gathering = rowToPlaceItem({
+    item_id: '15822',
+    name_ar: 'بوكس اللمة',
+    name_en: 'Hero Hunger Buster',
+    prices: { jahez: 97, hungerstation: 128 },
+  });
+  const stroganoff = rowToPlaceItem({
+    item_id: '15823',
+    name_ar: 'بيف ستروجانوف مع الأرز',
+    prices: { jahez: 29, hungerstation: 42 },
+  });
+  assert.equal(gathering.demote_reason, 'share');
+  assert.equal(stroganoff.demote_reason, null);
+  assert.deepEqual(
+    sortPlaceItems([gathering, stroganoff, snackBox], 'Snack Box').map((i) => i.item_id),
+    ['15821', '15823', '15822'],
   );
 });
 

@@ -597,6 +597,9 @@ export type IntelligenceMapPlaceItem = {
 	typical_price: number | null;
 	/** The ranking layer rejects spreads at 2x or more as scrape errors; this row is one. */
 	price_outlier?: boolean;
+	/** Dearest price is above the 200 SAR consumer cap — not the map number. */
+	over_cap?: boolean;
+	demote_reason?: "share" | "retail" | null;
 	prices: Record<string, number>;
 };
 

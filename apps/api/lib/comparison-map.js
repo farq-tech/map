@@ -943,6 +943,9 @@ function rowToPlaceItem(row) {
      */
     price_outlier: cheapest > 0 && dearest >= cheapest * PRICE_OUTLIER_RATIO,
     over_cap: dearest > CONSUMER_PRICE_CAP_SAR,
+    demote_reason:
+      demoteReason(`${row.name_ar || ''} ${row.name_en || ''}`) ||
+      demoteReason(name),
     prices,
   };
 }
@@ -968,8 +971,8 @@ function sortPlaceItems(items, representativeName) {
     const bPin = itemNameMatches(b, representativeName);
     if (aPin !== bPin) return aPin ? -1 : 1;
     return (
-      Number(Boolean(a.price_outlier || a.over_cap)) -
-        Number(Boolean(b.price_outlier || b.over_cap)) ||
+      Number(Boolean(a.price_outlier || a.over_cap || a.demote_reason)) -
+        Number(Boolean(b.price_outlier || b.over_cap || b.demote_reason)) ||
       Number(b.gap > 0) - Number(a.gap > 0) ||
       b.gap - a.gap ||
       a.name.localeCompare(b.name, 'ar')
