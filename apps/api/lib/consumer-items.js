@@ -144,6 +144,13 @@ const SHARE_TERM_SOURCES = Object.freeze([
    * 135–180 against hummus 25. Bare عرض stays out (الأبطال / المونديال). */
   'مازه',
   'mazeh',
+  /* Two plates. ذا رد باستا كب 6112 "باستا وسباغيتي" / "Pizza & Spaghetti"
+   * is 70–107 against one بولو نيز 31–48. Bare باستا is وايت صوص;
+   * bare سباغيتي is a single bowl. */
+  'باستا\\s*وسباغيت',
+  'باستا\\s*وسباقيت',
+  'pizza\\s*&\\s*spaghetti',
+  'pasta\\s*&\\s*spaghetti',
 ]);
 
 /**

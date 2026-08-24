@@ -60,6 +60,8 @@ const SHARE = [
   'Sandwich Duo',
   'عرض مازة فيروزيات',
   'Mazeh Fayrouziat Offers',
+  'باستا وسباغيتي',
+  'Pizza & Spaghetti',
 ];
 
 const PERSONAL = [
@@ -109,6 +111,9 @@ const PERSONAL = [
   'باستا كاجون روبيان ودجاج',
   'ثنائية الصباح المثالية',
   'جديد وجبة شخص واحد دينيس مع روبيان',
+  'سباقيتي بولونيز',
+  'باستا وايت صوص روبيان',
+  'جولي سباغيتي',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -196,6 +201,10 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('مكرملة قشطية'), null);
   assert.equal(demoteReason('أصابع بقلاوة كاجو'), null);
   assert.equal(demoteReason('باستا كاجون روبيان ودجاج'), null);
+  assert.equal(demoteReason('باستا وسباغيتي'), 'share');
+  assert.equal(demoteReason('Pizza & Spaghetti'), 'share');
+  assert.equal(demoteReason('سباقيتي بولونيز'), null);
+  assert.equal(demoteReason('باستا وايت صوص روبيان'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
