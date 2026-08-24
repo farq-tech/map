@@ -215,6 +215,17 @@ test('getPlace memo keeps an observed payload for five minutes and drops it afte
   resetPlaceCache();
 });
 
+test('rowToPlaceItem trims سعره N so 81 riyals is not read as 250', () => {
+  const item = rowToPlaceItem({
+    item_id: '1',
+    name_ar: 'بون بون تشوكليت القهوة  سعره 250 ',
+    name_en: null,
+    prices: { hungerstation: 109, jahez: 190 },
+  });
+  assert.equal(item.name, 'بون بون تشوكليت القهوة');
+  assert.equal(item.gap, 81);
+});
+
 test('lean gap is the rounded observed difference — city pins and getPlace share it', () => {
   assert.equal(
     observedGapRiyals({ difference_amount: 81, cheapest_provider_id: 'hungerstation' }),

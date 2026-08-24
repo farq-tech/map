@@ -45,6 +45,24 @@ export function encodeCameraBbox(b: CameraBbox): string {
 	return b.map((v) => v.toFixed(4)).join(",");
 }
 
+function filterQuery(raw: unknown): unknown {
+	if (Array.isArray(raw)) {
+		return raw.filter((part): part is string => typeof part === "string").join(",");
+	}
+	return raw;
+}
+
+/** Camera in the URL is a share of a restaurant, not a live GPS trail. DNT skips it. */
+export function shouldPersistCameraToUrl(search: Pick<MapSearch, "place">): boolean {
+	if (typeof navigator !== "undefined") {
+		const dnt =
+			navigator.doNotTrack === "1" ||
+			(globalThis as { doNotTrack?: string }).doNotTrack === "1";
+		if (dnt) return false;
+	}
+	return Boolean(String(search.place || "").trim());
+}
+
 function trim(v: unknown, max: number): string | undefined {
 	if (typeof v !== "string") return undefined;
 	const t = v.trim().slice(0, max);
@@ -88,7 +106,7 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		q: trim(s.q, 200),
 		place: trim(s.place, 80),
 		sector: trim(s.sector, 24),
-		filter: encodeMapFilters(parseMapFilters(s.filter)),
+		filter: encodeMapFilters(parseMapFilters(filterQuery(s.filter))),
 		view: parseMapView(s.view),
 		sort: parseMapSort(s.sort),
 		b: parseCameraBbox(s.b) ? encodeCameraBbox(parseCameraBbox(s.b) as CameraBbox) : undefined,

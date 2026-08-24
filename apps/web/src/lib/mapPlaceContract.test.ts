@@ -73,6 +73,18 @@ describe("map place contract — nested + lean Railway pins", () => {
 		});
 		expect(coated?.gap).toBe(81);
 		expect(
+			normalizeDifference({
+				difference: {
+					difference_amount: 81,
+					cheapest_provider_id: "hungerstation",
+					expensive_provider_id: "jahez",
+					cheapest_price: 109,
+					expensive_price: 190,
+					product_name: "بون بون تشوكليت القهوة  سعره 250 ",
+				},
+			})?.product_name,
+		).toBe("بون بون تشوكليت القهوة");
+		expect(
 			normalizePlaceDetail({
 				place_id: "6254",
 				gap: 81,

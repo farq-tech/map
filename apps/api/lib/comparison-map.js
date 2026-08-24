@@ -12,6 +12,7 @@
 'use strict';
 
 const { comparisonQuery } = require('./comparison-pool');
+const { displayItemName } = require('./consumer-items');
 const {
   BIGGEST_SAVINGS_MIN_GAP,
   BIGGEST_SAVINGS_MIN_PRICE,
@@ -167,7 +168,7 @@ function toPlacePin(p) {
             p.dearest_price != null && Number.isFinite(Number(p.dearest_price))
               ? Number(p.dearest_price)
               : null,
-          product_name: p.product_name || null,
+          product_name: displayItemName(p.product_name) || null,
         }
       : null,
   };
@@ -897,8 +898,8 @@ function rowToPlaceItem(row) {
   if (codes.length < 2) return null;
   const cheapest = Math.min(...codes.map((c) => prices[c]));
   const dearest = Math.max(...codes.map((c) => prices[c]));
-  const nameAr = String(row.name_ar || '').trim() || null;
-  const nameEn = String(row.name_en || '').trim() || null;
+  const nameAr = displayItemName(row.name_ar) || null;
+  const nameEn = displayItemName(row.name_en) || null;
   const name = nameAr || nameEn;
   if (!name) return null;
   return {

@@ -9,6 +9,7 @@ import {
 	resolveMapSort,
 	resolveMapView,
 	resumeMapSessionCamera,
+	shouldPersistCameraToUrl,
 	writeMapReturn,
 } from "./map";
 import { resetSafeStorageProbeForTests } from "../lib/safeStorage";
@@ -132,6 +133,23 @@ describe("camera in the URL", () => {
 		} finally {
 			if (descriptor) Object.defineProperty(window, "sessionStorage", descriptor);
 			resetSafeStorageProbeForTests();
+		}
+	});
+
+	it("accepts combined filters as a space list or a repeated query param", () => {
+		expect(parseMapSearch({ filter: "biggest multi" }).filter).toBe("biggest,multi");
+		expect(parseMapSearch({ filter: ["biggest", "multi"] }).filter).toBe("biggest,multi");
+	});
+
+	it("writes a camera to the URL only for a shared place, never under DNT", () => {
+		expect(shouldPersistCameraToUrl({})).toBe(false);
+		expect(shouldPersistCameraToUrl({ place: "6254" })).toBe(true);
+		const previous = navigator.doNotTrack;
+		Object.defineProperty(navigator, "doNotTrack", { configurable: true, value: "1" });
+		try {
+			expect(shouldPersistCameraToUrl({ place: "6254" })).toBe(false);
+		} finally {
+			Object.defineProperty(navigator, "doNotTrack", { configurable: true, value: previous });
 		}
 	});
 

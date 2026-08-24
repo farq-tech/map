@@ -21,6 +21,7 @@ import {
 	navigationUrl,
 	type NavigationDestination,
 } from "../../lib/farqNavigation";
+import { displayItemName } from "../../lib/displayItemName";
 import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
@@ -320,7 +321,7 @@ function ComparedItemRow({
 		<li className={`border-t border-[#eef3f3] px-4 py-3 first:border-t-0 ${suspect ? "opacity-70" : ""}`}>
 			<div className="flex items-start justify-between gap-2">
 				<p className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-brand-900">
-					{item.name}
+					{displayItemName(item.name) || item.name}
 					{suspect ? (
 						<span className="ms-1.5 whitespace-nowrap rounded bg-[#f1e4d4] px-1 py-0.5 text-[10px] font-bold text-[#8a5a1a]">
 							{isRTL ? "سعر شاذ — غير مؤكد" : "Suspect price"}
@@ -442,7 +443,7 @@ export default function SelectedPlaceSheet({
 		observed_at?: string | null;
 	} | null;
 	const mealName =
-		difference?.product_name || feature?.product_name || null;
+		displayItemName(difference?.product_name || feature?.product_name) || null;
 	const gapAmount = Number(
 		difference?.difference_amount ?? feature?.gap,
 	);

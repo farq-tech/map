@@ -73,7 +73,7 @@ import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, resumeMapSessionCamera, writeMapReturn } from "../../routes/map";
+import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, resumeMapSessionCamera, shouldPersistCameraToUrl, writeMapReturn } from "../../routes/map";
 import {
 	isBiggestSavingsPin,
 	isGroceryIdentity,
@@ -311,6 +311,7 @@ export default function IntelligenceMapSplit({
 		(bbox: [number, number, number, number], zoom: number) => {
 			window.clearTimeout(cameraUrlTimerRef.current);
 			cameraUrlTimerRef.current = window.setTimeout(() => {
+				if (!shouldPersistCameraToUrl({ place: search.place })) return;
 				const b = encodeCameraBbox(bbox);
 				const z = Math.round(zoom * 100) / 100;
 				void navigate({
@@ -320,7 +321,7 @@ export default function IntelligenceMapSplit({
 				});
 			}, 400);
 		},
-		[navigate, pathname],
+		[navigate, pathname, search.place],
 	);
 	useEffect(() => () => window.clearTimeout(cameraUrlTimerRef.current), []);
 
@@ -846,10 +847,13 @@ export default function IntelligenceMapSplit({
 			...sourcePlaces,
 			features: sourcePlaces.features.filter((f) => {
 				const isCluster = f.properties.feature_type === "cluster";
+				const id = String(f.properties.place_id || "");
+				const selected = Boolean(id && (id === String(livePlaceId || "") || id === String(placeId || "")));
 				const amount = pinGapAmount(f.properties);
 				const hasGap = isCluster
 					? Number(f.properties.difference_count || 0) > 0
 					: Boolean(f.properties.has_difference) || amount != null;
+				if (selected && !isCluster) return true;
 				if (!layers.opportunities && hasGap) return false;
 				if (pinnedIds && !pinnedIds.has(String(f.properties.place_id || ""))) return false;
 				if (districtScope && String(f.properties.district_id || "") !== districtScope) return false;
@@ -865,7 +869,7 @@ export default function IntelligenceMapSplit({
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, filterFlags]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, filterFlags, livePlaceId, placeId]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {

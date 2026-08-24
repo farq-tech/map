@@ -6,6 +6,8 @@
  * Never invents a gap. Missing evidence stays missing.
  */
 
+import { displayItemName } from "./displayItemName";
+
 export type ObservedDifference = {
 	difference_amount: number | null;
 	cheapest_provider_id: string | null;
@@ -62,8 +64,9 @@ export function normalizeDifference(
 		finite(nested?.expensive_price) ??
 		finite(props.expensive_price) ??
 		finite(props.dearest_price);
-	const product =
-		text(nested?.product_name) ?? text(props.product_name);
+	const product = displayItemName(
+		text(nested?.product_name) ?? text(props.product_name) ?? "",
+	) || null;
 	const hasEvidence = Boolean(cheapest) || (amount != null && amount > 0);
 	if (!hasEvidence) return null;
 	return {

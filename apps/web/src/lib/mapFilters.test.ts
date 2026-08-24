@@ -23,6 +23,11 @@ describe("map filters — client floors match the API", () => {
 		expect(parseMapFilter("multi")).toBe("multi");
 		expect(parseMapFilter("near")).toBeUndefined();
 		expect(parseMapFilters("biggest,multi")).toEqual({ biggest: true, multi: true });
+		expect(parseMapFilters("biggest multi")).toEqual({ biggest: true, multi: true });
+		expect(parseMapFilters("biggest_savings+multi_provider")).toEqual({
+			biggest: true,
+			multi: true,
+		});
 		expect(toggleMapFilter("biggest", "multi")).toBe("biggest,multi");
 		expect(encodeMapFilters({ biggest: false, multi: false })).toBeUndefined();
 	});
@@ -50,6 +55,15 @@ describe("map filters — client floors match the API", () => {
 		).toBe(true);
 		expect(isMultiProviderPin({ provider_count: 2 })).toBe(false);
 		expect(isMultiProviderPin({ provider_count: 3 })).toBe(true);
+		/* كوتد 6254: 81 SAR on 2 apps — worthwhile yes, combined 3+ apps no. */
+		expect(
+			isBiggestSavingsPin({
+				gap: 81,
+				cheapest_price: 109,
+				cheapest_provider_id: "hungerstation",
+			}),
+		).toBe(true);
+		expect(isMultiProviderPin({ provider_count: 2 })).toBe(false);
 	});
 
 	it("keeps the filter rail on a bookmarked URL after refresh", () => {

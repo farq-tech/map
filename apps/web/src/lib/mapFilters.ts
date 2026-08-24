@@ -31,7 +31,7 @@ export function parseMapFilters(raw: unknown): MapFilterFlags {
 	const parts = String(raw || "")
 		.trim()
 		.toLowerCase()
-		.split(/[+,]/)
+		.split(/[+,\s]+/)
 		.map((part) => part.trim())
 		.filter(Boolean);
 	return {
