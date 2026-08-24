@@ -35,9 +35,10 @@ const { CATEGORY_GROUPS, normalizeArabic } = require('./copilot-intent');
 const SHARE_TERM_SOURCES = Object.freeze([
   /* Arabic: containers and occasions that only make sense for a group */
   'بوكس',
-  /* Tray-of, not the adjective "Chinese": "صينية كبسة" is a platter,
-   * "نودلز صينية" is a bowl of noodles. A following word is required. */
-  'صينيه\\s+',
+  /* Tray-of, not the adjective "Chinese". The following letter must be
+   * Arabic — name_ar+' '+name_en would otherwise make "نودلز صينية
+   * Chinese Noodles" look like a platter. */
+  'صينيه\\s+[ء-ي]',
   'باكيت',
   'كرتون',
   'درزن',
@@ -243,13 +244,16 @@ function categoryCaseSql(expr) {
  */
 /**
  * Shared ranking for the one item a pin, list card, and getPlace sheet name.
- * Share/retail lose the tie; equal gaps take the cheaper dish; item id is last
- * so 1479 cannot be fries on the pin and sambosa on the sheet.
+ * A real gap beats a same-price row (share trays must not vanish behind a
+ * 0-gap stew). Share/retail lose the tie among gaps; equal gaps take the
+ * cheaper dish; item id is last so 1479 cannot be fries on the pin and
+ * sambosa on the sheet.
  */
 const ITEM_NAME_SQL = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,'')";
 
 function representativeSpreadOrderSql() {
-  return `(${shareMatchSql(ITEM_NAME_SQL)}
+  return `(ips.dearest_price > ips.cheapest_price) DESC,
+          (${shareMatchSql(ITEM_NAME_SQL)}
         OR ${normalizedNameSql(ITEM_NAME_SQL)} ~ '${retailItemPattern()}') ASC,
           (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST,
           ips.cheapest_price ASC NULLS LAST,

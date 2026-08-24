@@ -120,6 +120,7 @@ test('pin and getPlace rank the same representative item', () => {
   assert.match(sql, /cheapest_price ASC/);
   assert.match(sql, /canonical_item_id ASC/);
   assert.match(sql, /dearest_price - ips.cheapest_price/);
+  assert.match(sql, /dearest_price > ips.cheapest_price/);
 });
 
 test('a category means the same thing everywhere it is asked for', () => {
@@ -155,6 +156,7 @@ test('SQL translate maps taa marbuta like JS, and صينية is a tray only with
   assert.equal(demoteReason('ضيافة كاس العالم'), 'share');
   assert.equal(demoteReason('عرض العزيمة مندي'), 'share');
   assert.equal(demoteReason('نودلز صينية'), null);
+  assert.equal(demoteReason('نودلز صينية Chinese Noodles'), null);
 });
 
 test('the SQL fragments carry the same rules as the JS, and quote safely', () => {

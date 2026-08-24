@@ -425,6 +425,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
+       AND ips.dearest_price > ips.cheapest_price
      ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
@@ -686,6 +687,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
+       AND ips.dearest_price > ips.cheapest_price
      ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
