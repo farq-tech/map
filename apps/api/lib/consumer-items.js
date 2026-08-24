@@ -89,6 +89,11 @@ const SHARE_TERM_SOURCES = Object.freeze([
    * is an outing pack; a burger meal at the same place is 7. Bare كيس
    * stays out — كيس قهوة / كيس مكسرات are retail, "30 كيس" is a count. */
   'كيسه\\s*الطلعه',
+  /* Three plates, same as تريو. "وجبة الهاتريك" (ووك 555 gap 60) and
+   * Papa Johns / Maestro hat-trick combos were mint. */
+  'هاتريك',
+  /* A table of two. "طاجن السعاده للمتزوجين" (السماك 1530 gap 65). */
+  'للمتزوجين',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
@@ -108,6 +113,7 @@ const SHARE_TERM_SOURCES = Object.freeze([
   /* "for 2" is a table; "Meal For 1" / "for 69SR" are a single plate and a price. */
   'for\\s*[2-9]([^0-9]|$)',
   'serves',
+  'hat\\s*-?\\s*trick',
 ]);
 
 /**

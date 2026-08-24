@@ -45,6 +45,8 @@ const SHARE = [
   'كومبو الثنائي الكبير',
   'وجبة صب واي الثلاثية',
   'كيسة الطلعة',
+  'وجبة الهاتريك',
+  'طاجن السعاده للمتزوجين',
 ];
 
 const PERSONAL = [
@@ -168,6 +170,10 @@ test('a gathering table is share; a sip of coffee is not', () => {
   /* A bag of coffee or nuts is a shelf SKU, not this picnic pouch. */
   assert.equal(demoteReason('كيس قهوة فرنسية'), 'retail');
   assert.equal(demoteReason('كيس مكسرات مشكل مملح عادي (٢٥٠جم'), 'retail');
+  assert.equal(demoteReason('وجبة الهاتريك'), 'share');
+  assert.equal(demoteReason('هاتريك كومبو'), 'share');
+  assert.equal(demoteReason('Hat-Trick Combo'), 'share');
+  assert.equal(demoteReason('طاجن السعاده للمتزوجين'), 'share');
 });
 
 test('a party single is one burger; a party box is still a tray', () => {
