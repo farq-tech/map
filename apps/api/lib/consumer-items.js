@@ -94,6 +94,9 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'هاتريك',
   /* A table of two. "طاجن السعاده للمتزوجين" (السماك 1530 gap 65). */
   'للمتزوجين',
+  /* A group meal. Papa Johns 3974 "وجبة جماعية" / "Group Meal" was mint 26
+   * after الهاتريك was demoted. Bare "group" would hit grouper. */
+  'جماعي',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
@@ -114,6 +117,7 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'for\\s*[2-9]([^0-9]|$)',
   'serves',
   'hat\\s*-?\\s*trick',
+  'group\\s*meal',
 ]);
 
 /**

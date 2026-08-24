@@ -47,6 +47,7 @@ const SHARE = [
   'كيسة الطلعة',
   'وجبة الهاتريك',
   'طاجن السعاده للمتزوجين',
+  'وجبة جماعية',
 ];
 
 const PERSONAL = [
@@ -75,6 +76,7 @@ const PERSONAL = [
   'إفطار كلوب ساندويش (توست الحبوب',
   'إسبريسو شيكر',
   'ستيك شيكر',
+  'Grouper Fillet',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -174,6 +176,10 @@ test('a gathering table is share; a sip of coffee is not', () => {
   assert.equal(demoteReason('هاتريك كومبو'), 'share');
   assert.equal(demoteReason('Hat-Trick Combo'), 'share');
   assert.equal(demoteReason('طاجن السعاده للمتزوجين'), 'share');
+  assert.equal(demoteReason('وجبة جماعية'), 'share');
+  assert.equal(demoteReason('Group Meal'), 'share');
+  /* Bare "group" is the fish. */
+  assert.equal(demoteReason('Grouper Fillet'), null);
 });
 
 test('a party single is one burger; a party box is still a tray', () => {
