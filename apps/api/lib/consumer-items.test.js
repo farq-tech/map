@@ -51,6 +51,13 @@ const SHARE = [
   'عرض الرباعي الذهبي 8 مكس',
   'وجبة 2 طاجن',
   'مفطح شهبار',
+  'كومبو ثلاثة أنواع من الپاستا',
+  'The Pasta Cup Trio ( World Cup Offer',
+  'أفضل ثنائي',
+  'The Hottest Duo',
+  'ثنائي دبل كلاسيك برجر لحم',
+  'Asl 2x Double Classic Beef Burgers',
+  'Sandwich Duo',
 ];
 
 const PERSONAL = [
@@ -83,6 +90,8 @@ const PERSONAL = [
   'Bento Lunch Offer',
   'عرض المونديال',
   'World Cup Offer',
+  'عرض الأبطال',
+  'Alabtal offer',
   'وجبة ماد ماكس',
   'مجبوس لحم',
   'مياه معدنيه',
@@ -96,6 +105,8 @@ const PERSONAL = [
   'مكرملة قشطية',
   'أصابع بقلاوة كاجو',
   'باستا كاجون روبيان ودجاج',
+  'ثنائية الصباح المثالية',
+  'جديد وجبة شخص واحد دينيس مع روبيان',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -143,6 +154,8 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   /* A World Cup pasta promo is a named offer, not a proven table. */
   assert.equal(demoteReason('عرض المونديال'), null);
   assert.equal(demoteReason('World Cup Offer'), null);
+  assert.equal(demoteReason('عرض الأبطال'), null);
+  assert.equal(demoteReason('Alabtal offer'), null);
   assert.equal(demoteReason('وجبة ماد ماكس'), null);
   assert.equal(demoteReason('مج معدني يحمل شعار تيم هورتنز ( مع غطاء'), 'retail');
   assert.equal(demoteReason('Metal Mug'), 'retail');

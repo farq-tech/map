@@ -127,6 +127,19 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'hat\\s*-?\\s*trick',
   'group\\s*meal',
   'quartet',
+  /* Three plates. "كومبو ثلاثة أنواع من الپاستا" / "The Pasta Cup Trio"
+   * (ذا رد باستا كب 6112 gap 42). Bare كومبو and World Cup Offer stay out —
+   * عرض المونديال and عرض الأبطال are named promos, not proven tables. */
+  'ثلاثه\\s*انواع',
+  'trio',
+  /* The duo leftover after the trio. Article-less ثنائي is a double burger
+   * name ("ثنائي دبل") AND "أفضل ثنائي"; bare ثنائي would also hit
+   * "ثنائية الصباح" (one breakfast). */
+  'افضل ثنائي',
+  'hottest\\s*duo',
+  'ثنائي\\s*دبل',
+  '2x\\s*double',
+  'sandwich\\s*duo',
 ]);
 
 /**
