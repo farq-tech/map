@@ -225,6 +225,13 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'ايزو\\s*تربيل',
   'potassium\\s*salt',
   'iso\\s*triple',
+  /* Protein coconut balls: Arabic name has no لابيرفا. Bare كرات is
+   * falafel; bare عالية البروتين is a meal claim. */
+  'كرات\\s*عاليه\\s*البروتين',
+  'protein\\s*coconut\\s*balls',
+  /* The gym brand itself. Leftover bars/gummies at الوزن المثالي. */
+  'لابيرفا',
+  'laperva',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');

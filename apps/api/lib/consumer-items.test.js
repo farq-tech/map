@@ -168,6 +168,9 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('Laperva Iso Triple Zero Vanilla 50G'), 'retail');
   assert.equal(demoteReason('كرانشي البيكان واللوز مع الكراميل المملح'), null);
   assert.equal(demoteReason('وعاء ارز مع نوعين من البروتين'), null);
+  assert.equal(demoteReason('كرات عالية البروتين بجوز الهند واللوز مع محلي, 63 جرام'), 'retail');
+  assert.equal(demoteReason('Laperva Protein Coconut Balls 63G'), 'retail');
+  assert.equal(demoteReason('لابيرفا دو بنكهة اللوز والكاجو بروتين بار, 1بار'), 'retail');
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
