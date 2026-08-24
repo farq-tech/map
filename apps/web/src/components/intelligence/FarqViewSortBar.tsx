@@ -1,3 +1,4 @@
+import type { MapValueFilter } from "../../lib/mapFilters";
 import type { MapSort, MapViewMode } from "../../routes/map";
 
 export default function FarqViewSortBar({
@@ -9,6 +10,8 @@ export default function FarqViewSortBar({
 	nearReady,
 	cheapReady,
 	hideViewToggle = false,
+	valueFilter = "all",
+	onFilter,
 }: {
 	view: MapViewMode;
 	onView: (view: MapViewMode) => void;
@@ -19,6 +22,8 @@ export default function FarqViewSortBar({
 	cheapReady: boolean;
 	/** On the phone the list is the sheet; there is no "view" to toggle. */
 	hideViewToggle?: boolean;
+	valueFilter?: MapValueFilter;
+	onFilter?: (filter: MapValueFilter) => void;
 }) {
 	return (
 		<div className="farq-view-sort" data-testid="farq-view-sort">
@@ -112,6 +117,28 @@ export default function FarqViewSortBar({
 				>
 					{isRTL ? "الأعلى نسبة" : "Best %"}
 				</button>
+				{onFilter ? (
+					<>
+						<button
+							type="button"
+							aria-pressed={valueFilter === "biggest"}
+							data-testid="farq-filter-biggest"
+							className={`farq-map-chip ${valueFilter === "biggest" ? "is-on" : ""}`}
+							onClick={() => onFilter(valueFilter === "biggest" ? "all" : "biggest")}
+						>
+							{isRTL ? "فرق يستحق" : "Worthwhile"}
+						</button>
+						<button
+							type="button"
+							aria-pressed={valueFilter === "multi"}
+							data-testid="farq-filter-multi"
+							className={`farq-map-chip ${valueFilter === "multi" ? "is-on" : ""}`}
+							onClick={() => onFilter(valueFilter === "multi" ? "all" : "multi")}
+						>
+							{isRTL ? "٣+ تطبيقات" : "3+ apps"}
+						</button>
+					</>
+				) : null}
 			</div>
 		</div>
 	);

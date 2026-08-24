@@ -21,6 +21,7 @@ import {
 } from "react";
 import { localizeCity } from "../../lib/cityNames";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
+import type { MapValueFilter } from "../../lib/mapFilters";
 import type { MapSort, MapViewMode } from "../../routes/map";
 import type {
 	CityDistricts,
@@ -124,6 +125,8 @@ export default function FarqExploreChrome({
 	onView,
 	sort,
 	onSort,
+	valueFilter = "all",
+	onFilter,
 	legendOpen,
 	onLegendOpenChange,
 	districts = null,
@@ -188,6 +191,8 @@ export default function FarqExploreChrome({
 	onView: (view: MapViewMode) => void;
 	sort: MapSort;
 	onSort: (sort: MapSort) => void;
+	valueFilter?: MapValueFilter;
+	onFilter?: (filter: MapValueFilter) => void;
 	legendOpen: boolean;
 	onLegendOpenChange: (open: boolean) => void;
 	/** The city's أحياء for the picker under the search; null when the city has no boundaries. */
@@ -400,6 +405,8 @@ export default function FarqExploreChrome({
 						onView={onView}
 						sort={sort}
 						onSort={onSort}
+						valueFilter={valueFilter}
+						onFilter={onFilter}
 						isRTL={isRTL}
 						nearReady={nearReady}
 						cheapReady={cheapestReady}

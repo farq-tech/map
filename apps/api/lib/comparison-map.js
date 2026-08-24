@@ -1036,26 +1036,30 @@ async function qualityHealth() {
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
         GROUP BY 1, 2
        HAVING count(*) > 1
-        ORDER BY n DESC
-        LIMIT 20`,
+        ORDER BY n DESC`,
     ),
   ]);
   const s = summary[0] || {};
   const groups = Number(groupCount[0]?.groups) || 0;
+  const looks = { same_name: 0, distinct_names: 0 };
   const examples = dupes.map((row) => {
     const names = Array.isArray(row.names) ? row.names.map((n) => String(n)) : [];
     const ids = Array.isArray(row.restaurant_ids)
       ? row.restaurant_ids.map((id) => String(id))
       : [];
+    const look = classifyDupeNames(names);
+    if (look === 'same_name') looks.same_name += 1;
+    else looks.distinct_names += 1;
     return {
       lat: Number(row.latitude),
       lng: Number(row.longitude),
       count: Number(row.n) || ids.length,
       restaurant_ids: ids,
       names,
-      look: classifyDupeNames(names),
+      look,
     };
   });
+  const exampleRows = examples.slice(0, 20);
   const issues = [];
   if (Number(s.missing_coords) > 0) {
     issues.push({ code: 'missing_coords', count: Number(s.missing_coords) });
@@ -1089,8 +1093,9 @@ async function qualityHealth() {
       outside_ksa: Number(s.outside_ksa) || 0,
       valid_coords: Number(s.valid_coords) || 0,
       duplicate_coordinate_groups: groups,
+      duplicate_looks: looks,
     },
-    duplicate_coordinate_examples: examples,
+    duplicate_coordinate_examples: exampleRows,
     issues,
   };
 }

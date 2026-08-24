@@ -487,6 +487,7 @@ export default function FarqMap({
 	 * texture is σ 14–26 RGB — and mint over an arid city reads as vegetation. */
 	const basemap = basemapProp ?? "standard";
 	const [missingToken] = useState(() => !token);
+	const [mapError, setMapError] = useState<string | null>(null);
 	const [mapReady, setMapReady] = useState(false);
 	const [introDone, setIntroDone] = useState(false);
 
@@ -597,22 +598,36 @@ export default function FarqMap({
 			? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
 			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
 
-		const map = new mapboxgl.Map({
-			container: containerRef.current,
-			style: mapboxStyleUrl("standard"),
-			center: skipGlobe ? landing.center : [20, 18],
-			zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
-			pitch: skipGlobe ? landing.pitch : 0,
-			bearing: skipGlobe ? landing.bearing : 0,
-			projection: skipGlobe ? "mercator" : "globe",
-			attributionControl: { compact: true } as unknown as boolean,
-			maxPitch: 75,
-			accessToken: token,
-			cooperativeGestures: false,
-			dragPan: true,
-			language: isRtlRef.current ? "ar" : "en",
-		});
+		let map: MapboxMap;
+		try {
+			map = new mapboxgl.Map({
+				container: containerRef.current,
+				style: mapboxStyleUrl("standard"),
+				center: skipGlobe ? landing.center : [20, 18],
+				zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
+				pitch: skipGlobe ? landing.pitch : 0,
+				bearing: skipGlobe ? landing.bearing : 0,
+				projection: skipGlobe ? "mercator" : "globe",
+				attributionControl: { compact: true } as unknown as boolean,
+				maxPitch: 75,
+				accessToken: token,
+				cooperativeGestures: false,
+				dragPan: true,
+				language: isRtlRef.current ? "ar" : "en",
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setMapError(message || "map_init_failed");
+			return;
+		}
 		mapRef.current = map;
+		map.on("error", (event) => {
+			const message = String(
+				(event && "error" in event && (event as { error?: { message?: string } }).error?.message) ||
+					"",
+			);
+			if (/webgl/i.test(message)) setMapError(message);
+		});
 		if (import.meta.env.DEV) {
 			/* Dev-only handle for browser QA scripts (camera, layers). Never shipped. */
 			(window as unknown as { __farqMap?: MapboxMap }).__farqMap = map;
@@ -1206,6 +1221,19 @@ export default function FarqMap({
 				{isRTL
 					? "أضف VITE_MAPBOX_ACCESS_TOKEN في Frontend/.env.local ثم أعد تشغيل Vite."
 					: "Add VITE_MAPBOX_ACCESS_TOKEN to Frontend/.env.local and restart Vite."}
+			</div>
+		);
+	}
+
+	if (mapError) {
+		return (
+			<div
+				className="flex h-full items-center justify-center bg-brand-900 px-6 text-center text-sm text-white/80"
+				data-testid="intelligence-map-webgl-error"
+			>
+				{isRTL
+					? "الخريطة تحتاج WebGL على هذا الجهاز. قائمة الفرص ما زالت تشتغل."
+					: "The street map needs WebGL on this device. The opportunity list still works."}
 			</div>
 		);
 	}

@@ -27,6 +27,22 @@ function RootLayout() {
 	);
 }
 
+function MapCrash({ error }: { error: Error }) {
+	return (
+		<div className="flex min-h-dvh flex-col items-center justify-center bg-brand-900 px-6 text-center text-white">
+			<p className="text-lg font-extrabold text-mint-500">تعذر فتح الخريطة</p>
+			<p className="mt-2 max-w-md text-sm text-white/70">
+				The map page crashed. The comparison API is still the source of truth — retry, or open grocery compare.
+			</p>
+			<p className="mt-2 max-w-lg text-xs text-white/40">{error.message}</p>
+			<div className="mt-6 flex gap-4 text-sm text-mint-500">
+				<a href="/map">Retry /map</a>
+				<a href="/grocery">Grocery</a>
+			</div>
+		</div>
+	);
+}
+
 function MapRoute() {
 	const search = mapRoute.useSearch();
 	return (
@@ -54,6 +70,7 @@ const indexRoute = createRoute({
 	path: "/",
 	validateSearch: parseMapSearch,
 	component: IndexRoute,
+	errorComponent: MapCrash,
 });
 
 const mapRoute = createRoute({
@@ -61,6 +78,7 @@ const mapRoute = createRoute({
 	path: "/map",
 	validateSearch: parseMapSearch,
 	component: MapRoute,
+	errorComponent: MapCrash,
 });
 
 const groceryRoute = createRoute({

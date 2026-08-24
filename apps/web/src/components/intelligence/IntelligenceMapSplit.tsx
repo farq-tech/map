@@ -74,6 +74,7 @@ import {
 	isGroceryIdentity,
 	isMultiProviderPin,
 	parseMapFilter,
+	type MapValueFilter,
 } from "../../lib/mapFilters";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
@@ -1224,6 +1225,16 @@ export default function IntelligenceMapSplit({
 		[locateUser, nearReady, patchSearch],
 	);
 
+	const applyFilter = useCallback(
+		(next: MapValueFilter) => {
+			const filter = next === "all" || !next ? undefined : next;
+			patchSearch({ filter });
+			if (next === "biggest") setRail("gaps");
+			if (next === "multi") setRail("multi");
+		},
+		[patchSearch],
+	);
+
 	const applyExploreRadius = useCallback(
 		(next: ExploreRadius) => {
 			setExploreRadius(next);
@@ -1386,6 +1397,8 @@ export default function IntelligenceMapSplit({
 					onView={applyView}
 					sort={sort}
 					onSort={applySort}
+					valueFilter={valueFilter}
+					onFilter={applyFilter}
 					legendOpen={legendOpen}
 					onLegendOpenChange={setLegendOpen}
 					districts={cityDistricts}
@@ -1501,6 +1514,8 @@ export default function IntelligenceMapSplit({
 						onView={applyView}
 						sort={sort}
 						onSort={applySort}
+						valueFilter={valueFilter}
+						onFilter={applyFilter}
 						isRTL={isRTL}
 						nearReady={nearReady}
 						cheapReady={cheapestReady}
