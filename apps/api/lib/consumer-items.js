@@ -202,6 +202,13 @@ const RETAIL_TERM_SOURCES = Object.freeze([
    * "مج يحمل شعار تيم هورتنز لون أسود" after the metal-mug rule. */
   'مج\\s*يحمل\\s*شعار',
   'metal\\s*mug',
+  /* Diet jam on a supplement pin (الوزن المثالي 28737). Bare بدون سكر is
+   * Coca-Cola at الحمراء البخاري 4788. Bare مربى is a peach topping
+   * (5593) and a cheese-jam sandwich (8085). */
+  'مربي\\s*بدون\\s*سكر',
+  'بدون\\s*سكر\\s*مضاف',
+  'diet\\s*jelly',
+  'no\\s*sugar\\s*added',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
