@@ -80,6 +80,11 @@ const SHARE_TERM_SOURCES = Object.freeze([
   /* "تريو كبير كومبو" — 25 items, average gap 21.7 SAR against 5.5 city-wide.
    * A trio is three plates; كومبو and ميكس on their own are not, and stay out. */
   'تريو',
+  /* The Arabic duo / triple. "كومبو الثنائي الكبير" (بيتزا هت 8045 gap 65)
+   * and "وجبة صب واي الثلاثية" stayed mint because only the loanword تريو
+   * was listed. كومبو on its own still stays out. */
+  'الثنائي',
+  'الثلاثي',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
@@ -135,6 +140,15 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'كيس\\s*قهوه',
   'حبوب\\s*(ال)?قهوه',
   'ارابيكا',
+  /* Same shelf bag after coffee was demoted. سعد الدين 2172 pinned
+   * "كيس مكسرات" 11. Bare مكسرات is a garnish. */
+  'كيس\\s*مكسرات',
+  /* A blender bottle, not Caribou "إسبريسو شيكر" or Steak شيك. الوزن
+   * المثالي 28737 was a mint 60 shaker. Lotion on the same menu is a tub. */
+  'شيكر\\s*بلندر',
+  'بلندر\\s*بوتل',
+  'لوشن',
+  'يوسيرين',
   'creatine',
   'vitamin',
   'supplement',
@@ -144,6 +158,9 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'lifree',
   'arabica',
   'coffee\\s*beans',
+  'lotion',
+  'eucerin',
+  'blender\\s*bottle',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');

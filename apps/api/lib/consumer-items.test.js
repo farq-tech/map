@@ -42,6 +42,8 @@ const SHARE = [
   'تجمع شواء النار',
   'عرض الجمعات',
   'جمعات جيلاتو ( لتر',
+  'كومبو الثنائي الكبير',
+  'وجبة صب واي الثلاثية',
 ];
 
 const PERSONAL = [
@@ -68,6 +70,8 @@ const PERSONAL = [
   'بن بندت',
   'بون بون تشوكليت القهوة',
   'إفطار كلوب ساندويش (توست الحبوب',
+  'إسبريسو شيكر',
+  'ستيك شيكر',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -102,6 +106,11 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('بن بندت'), null);
   assert.equal(demoteReason('بن كولومبي – 250 جرام'), null);
   assert.equal(demoteReason('إفطار كلوب ساندويش (توست الحبوب'), null);
+  assert.equal(demoteReason('كيس مكسرات مشكل مملح عادي (٢٥٠جم'), 'retail');
+  assert.equal(demoteReason('لابيرفا شيكر بلندر بوتل ستانلس ستيل, أسود'), 'retail');
+  assert.equal(demoteReason('يوسيرين لوشن الأصلي العلاجي, 500 مل'), 'retail');
+  assert.equal(demoteReason('إسبريسو شيكر'), null);
+  assert.equal(demoteReason('ستيك شيكر'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
@@ -150,6 +159,10 @@ test('a gathering table is share; a sip of coffee is not', () => {
   assert.equal(demoteReason('كباب الجمعة'), null);
   assert.equal(demoteReason('مقلوبة جمعة الدجاج'), null);
   assert.equal(demoteReason('جمعة النورماني'), null);
+  assert.equal(demoteReason('كومبو الثنائي الكبير'), 'share');
+  assert.equal(demoteReason('وجبة الثنائي'), 'share');
+  assert.equal(demoteReason('وجبة صب واي الثلاثية'), 'share');
+  assert.equal(demoteReason('عرض الكريب الثلاثي'), 'share');
 });
 
 test('a party single is one burger; a party box is still a tray', () => {
