@@ -448,7 +448,7 @@ export default function FarqExploreChrome({
 								? "ما نخترع إحداثيات لمتجر بقالة. قارن السعر على مستوى المنتج."
 								: "We do not invent grocery storefront coordinates. Compare at the product level."}
 						</p>
-						<Link to="/grocery" className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
+						<Link to="/grocery" search={{ q: undefined }} className="farq-map-empty-cta inline-block" data-testid="intelligence-map-grocery-cta">
 							{isRTL ? "افتح مقارنة البقالة" : "Open grocery compare"}
 						</Link>
 					</div>
