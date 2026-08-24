@@ -121,3 +121,12 @@ export function normalizePlacesBody<T extends { features?: MapPlaceFeature[] }>(
 		features: body.features.map((feature) => normalizePlaceFeature(feature)),
 	};
 }
+
+/** Drop a previous restaurant's payload the instant the selection changes. */
+export function livePlaceDetail<T extends { place_id?: string | null }>(
+	detail: T | null | undefined,
+	placeId: string | null | undefined,
+): T | null {
+	if (!detail || !placeId) return null;
+	return String(detail.place_id || "") === String(placeId) ? detail : null;
+}

@@ -19,10 +19,27 @@ export type SheetSnap = "peek" | "half" | "full";
 const ORDER: SheetSnap[] = ["peek", "half", "full"];
 
 /** Heights in CSS px the camera can rely on (matched in farq-mapbox.css). */
-export function sheetHeightPx(snap: SheetSnap, viewportHeight: number): number {
-	if (snap === "peek") return 148;
-	if (snap === "half") return Math.round(viewportHeight * 0.52);
-	return Math.round(viewportHeight * 0.9);
+export function sheetHeightPx(
+	snap: SheetSnap,
+	viewportHeight: number,
+	safeAreaBottom = 0,
+): number {
+	const safe = Number.isFinite(safeAreaBottom) ? Math.max(0, safeAreaBottom) : 0;
+	if (snap === "peek") return 148 + safe;
+	if (snap === "half") return Math.round(viewportHeight * 0.52) + safe;
+	return Math.round(viewportHeight * 0.9) + safe;
+}
+
+/** iOS home-indicator inset. env() is not readable as a raw custom property. */
+export function readSafeAreaInsetBottom(): number {
+	if (typeof document === "undefined") return 0;
+	const probe = document.createElement("div");
+	probe.style.cssText =
+		"position:absolute;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom,0px)";
+	document.body.appendChild(probe);
+	const px = Number.parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+	probe.remove();
+	return px;
 }
 
 export function stepSnap(snap: SheetSnap, direction: 1 | -1): SheetSnap {

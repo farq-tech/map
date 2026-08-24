@@ -48,7 +48,8 @@ import {
 import { localizeDigitString } from "../../lib/formatPrice";
 import { viewportStats } from "../../lib/farqViewportStats";
 import { getProviderLabel } from "../../lib/platformLogos";
-import { sheetHeightPx } from "./FarqBottomSheet";
+import { readSafeAreaInsetBottom, sheetHeightPx } from "./FarqBottomSheet";
+import { livePlaceDetail } from "../../lib/mapPlaceContract";
 import { providerTintClass } from "../../lib/providerTint";
 import {
 	IntelligenceService,
@@ -576,25 +577,35 @@ export default function IntelligenceMapSplit({
 		return () => controller.abort();
 	}, [neighborhoodId, categoryId]);
 
+	const focusedPlaceId = livePlaceId || placeId;
+	const focusedPlaceDetail = livePlaceDetail(placeDetail, focusedPlaceId);
+
 	useEffect(() => {
-		if (!placeId) {
+		if (!focusedPlaceId) {
 			setPlaceDetail(null);
 			lastFocusedPlaceRef.current = "";
 			return;
 		}
+		setPlaceDetail((cur) =>
+			String(cur?.place_id || "") === String(focusedPlaceId) ? cur : null,
+		);
 		const controller = new AbortController();
-		void IntelligenceService.mapPlace(placeId, controller.signal)
-			.then(setPlaceDetail)
-			.catch(() => setPlaceDetail(null));
+		void IntelligenceService.mapPlace(focusedPlaceId, controller.signal)
+			.then((body) => {
+				if (!controller.signal.aborted) setPlaceDetail(body);
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) setPlaceDetail(null);
+			});
 		return () => controller.abort();
-	}, [placeId]);
+	}, [focusedPlaceId]);
 
 	useEffect(() => {
 		if (!placeId) return;
 		if (placeDetail && placeDetail.place_id !== placeId) return;
 		if (lastFocusedPlaceRef.current === placeId) return;
-		const lat = Number(placeDetail?.lat);
-		const lng = Number(placeDetail?.lng);
+		const lat = Number(focusedPlaceDetail?.lat ?? placeDetail?.lat);
+		const lng = Number(focusedPlaceDetail?.lng ?? placeDetail?.lng);
 		if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 		/* Deep link / refresh / share: the URL named a place the camera has not met. */
 		lastFocusedPlaceRef.current = placeId;
@@ -706,12 +717,12 @@ export default function IntelligenceMapSplit({
 	const groceryCta = categoryId === "grocery" || categoryId === "shopping";
 	const compareTo = groceryCta ? "/grocery" : "/";
 	const compareSearch = groceryCta
-		? { q: placeDetail?.name || q || undefined }
+		? { q: focusedPlaceDetail?.name || q || undefined }
 		: {
 				category:
 					detail?.farq_signal?.consumer?.category ||
 					(categoryId === "burgers" ? "burger" : categoryId),
-				q: placeDetail?.compare?.q || placeDetail?.name || detail?.farq_signal?.consumer?.q || q,
+				q: focusedPlaceDetail?.compare?.q || focusedPlaceDetail?.name || detail?.farq_signal?.consumer?.q || q,
 				vertical: "restaurant" as const,
 			};
 
@@ -776,8 +787,8 @@ export default function IntelligenceMapSplit({
 		(f) => String(f.properties.place_id) === String(livePlaceId),
 	);
 	const selectedRestaurantId =
-		placeDetail?.restaurant_id ||
-		placeDetail?.menu?.id ||
+		focusedPlaceDetail?.restaurant_id ||
+		focusedPlaceDetail?.menu?.id ||
 		selectedPlaceFeature?.properties.restaurant_id ||
 		selectedPlaceFeature?.properties.menu?.id ||
 		(/^\d+$/.test(livePlaceId) ? livePlaceId : "");
@@ -1080,9 +1091,11 @@ export default function IntelligenceMapSplit({
 			</>
 		);
 	}, [stats, cityPlaces, isRTL, districtScope, selectedDistrict, districtName, clearDistrict, freshness]);
+	const safeAreaBottom = useMemo(() => readSafeAreaInsetBottom(), []);
 	const sheetInset = sheetHeightPx(
 		sheetSnap,
 		typeof window !== "undefined" ? window.innerHeight : 800,
+		safeAreaBottom,
 	);
 
 	const locateUser = useCallback(() => {
@@ -1544,7 +1557,7 @@ export default function IntelligenceMapSplit({
 								) : null}
 							<SelectedPlaceSheet
 								variant="panel"
-								placeDetail={placeDetail}
+								placeDetail={focusedPlaceDetail}
 								feature={selectedPlaceFeature?.properties}
 								selectedCategory={selectedCategory}
 								selectedRestaurantId={selectedRestaurantId}
@@ -1795,7 +1808,7 @@ export default function IntelligenceMapSplit({
 							userLocation={userLocation}
 						userHeading={userHeading}
 							showUserLocation={showUserDot}
-							placeDetail={placeDetail}
+							placeDetail={focusedPlaceDetail}
 							isRTL={isRTL}
 							onSelectPlace={(id) => {
 								const feature = displayPlaces?.features.find(
@@ -2107,7 +2120,7 @@ export default function IntelligenceMapSplit({
 						) : null}
 					<SelectedPlaceSheet
 						variant="panel"
-						placeDetail={placeDetail}
+						placeDetail={focusedPlaceDetail}
 						feature={selectedPlaceFeature?.properties}
 						selectedCategory={selectedCategory}
 						selectedRestaurantId={selectedRestaurantId}

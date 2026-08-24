@@ -74,7 +74,6 @@ import {
 	type MapboxBasemap,
 	mapboxStyleUrl,
 	RIYADH_LNG_LAT, ensureRtlTextPlugin } from "../../lib/mapboxAccess";
-import { createFarqSearchBox } from "../../lib/mapboxSearch";
 import type {
 	IntelligenceMapNeighborhoods,
 	IntelligenceMapPlaceDetail,
@@ -720,13 +719,20 @@ export default function FarqMap({
 				);
 			}
 			if (!hideAddressSearch && !mobileChrome) {
-				try {
-					const box = createFarqSearchBox({ token, isRTL: isRtlRef.current });
-					searchRef.current = box;
-					map.addControl(box, "top-right");
-				} catch {
-					/* Search Box optional if the token lacks Search scope */
-				}
+				/* 2 MB Search Box — desktop chrome only. Phones use the in-app search. */
+				void import("../../lib/mapboxSearch").then(({ createFarqSearchBox }) => {
+					if (searchRef.current || !mapRef.current) return;
+					try {
+						const box = createFarqSearchBox({
+							token,
+							isRTL: isRtlRef.current,
+						});
+						searchRef.current = box;
+						map.addControl(box, "top-right");
+					} catch {
+						/* Search Box optional if the token lacks Search scope */
+					}
+				});
 			}
 
 			try {

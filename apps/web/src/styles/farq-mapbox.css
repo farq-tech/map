@@ -2317,17 +2317,17 @@
 @media (max-width: 1023px) {
 	.farq-map-split,
 	.farq-explore-chrome {
-		--farq-sheet-h: 148px;
+		--farq-sheet-h: calc(148px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.farq-map-split[data-sheet-snap="half"],
 	.farq-explore-chrome[data-snap="half"] {
-		--farq-sheet-h: 52dvh;
+		--farq-sheet-h: calc(52dvh + env(safe-area-inset-bottom, 0px));
 	}
 
 	.farq-map-split[data-sheet-snap="full"],
 	.farq-explore-chrome[data-snap="full"] {
-		--farq-sheet-h: 90dvh;
+		--farq-sheet-h: calc(90dvh + env(safe-area-inset-bottom, 0px));
 	}
 
 	.farq-explore-chrome > .farq-sheet {
@@ -2343,6 +2343,7 @@
 		border-radius: 22px 22px 0 0;
 		box-shadow: 0 -10px 34px rgba(4, 52, 52, 0.18);
 		padding-bottom: env(safe-area-inset-bottom, 0px);
+		box-sizing: border-box;
 		pointer-events: auto;
 		transition:
 			height 260ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -2440,15 +2441,16 @@
 		gap: 6px;
 	}
 
-	/* Everything that floats above the map moves up with the sheet. */
-	.farq-explore-chrome > .farq-map-tools--mobile {
-		bottom: calc(var(--farq-sheet-h) + 12px + env(safe-area-inset-bottom, 0px));
+	/* Sheet height already includes the home-indicator inset. */
+	.farq-explore-chrome > .farq-map-tools--mobile,
+	.farq-map-split .farq-map-tools--mobile {
+		bottom: calc(var(--farq-sheet-h) + 12px);
 		transition: bottom 260ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	/* Denied-location copy lived at 5.6rem — under the 148px peek sheet. */
 	.farq-map-split .farq-map-locate-error {
-		bottom: calc(var(--farq-sheet-h) + 12px + env(safe-area-inset-bottom, 0px));
+		bottom: calc(var(--farq-sheet-h) + 12px);
 		z-index: 545;
 		inset-inline-end: 4.25rem;
 		margin-inline: 0;
@@ -2457,7 +2459,7 @@
 	/* Mapbox's own attribution and logo must stay visible above the sheet. */
 	.farq-map-split .mapboxgl-ctrl-bottom-left,
 	.farq-map-split .mapboxgl-ctrl-bottom-right {
-		bottom: calc(var(--farq-sheet-h) + env(safe-area-inset-bottom, 0px));
+		bottom: var(--farq-sheet-h);
 		transition: bottom 260ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
 

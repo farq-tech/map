@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	livePlaceDetail,
 	normalizeDifference,
 	normalizePlaceFeature,
 	observedGapAmount,
@@ -54,5 +55,12 @@ describe("map place contract — nested + lean Railway pins", () => {
 		});
 		expect(feature.properties.restaurant_id).toBe("1381");
 		expect(feature.properties.difference).toMatchObject({ difference_amount: 1, cheapest_provider_id: "jahez" });
+	});
+
+	it("does not keep the previous restaurant's prices on a new selection", () => {
+		const previous = { place_id: "1381", name: "بابا عنتر" };
+		expect(livePlaceDetail(previous, "6411")).toBeNull();
+		expect(livePlaceDetail(previous, "1381")).toBe(previous);
+		expect(livePlaceDetail(previous, "")).toBeNull();
 	});
 });
