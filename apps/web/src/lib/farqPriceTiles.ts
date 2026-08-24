@@ -337,6 +337,17 @@ const TIER_EXPR: ExpressionSpecification = ["coalesce", ["get", "tier"], "faint"
 const GAP_EXPR: ExpressionSpecification = ["coalesce", ["get", "gap"], 0];
 /** Biggest gap first: lower sort keys are placed first, so negate the gap. */
 const SORT_BY_GAP: ExpressionSpecification = ["-", 0, GAP_EXPR];
+/** A stacked food-court pin is N restaurants, not 1 Mapbox point. */
+export function placeCountForStack(stackCount: unknown): number {
+	const n = Number(stackCount);
+	return Number.isFinite(n) && n > 1 ? n : 1;
+}
+const PLACE_COUNT_EXPR: ExpressionSpecification = [
+	"case",
+	[">", ["coalesce", ["get", "stack_count"], 0], 1],
+	["get", "stack_count"],
+	1,
+];
 
 export function ensurePriceTileLayers(
 	map: MapboxMap,
@@ -357,6 +368,8 @@ export function ensurePriceTileLayers(
 		clusterProperties: {
 			/* the biggest observed gap inside the cluster — never a sum, never invented */
 			max_gap: ["max", GAP_EXPR],
+			/* restaurants after stacking + filters, not raw GeoJSON point_count */
+			place_count: ["+", PLACE_COUNT_EXPR],
 		},
 	});
 
@@ -371,7 +384,7 @@ export function ensurePriceTileLayers(
 		layout: {
 			"icon-image": [
 				"step",
-				["get", "point_count"],
+				["coalesce", ["get", "place_count"], ["get", "point_count"]],
 				`${GPU_DISC_PREFIX}cluster-sm`,
 				CLUSTER_STEP_MD,
 				`${GPU_DISC_PREFIX}cluster-md`,
@@ -386,7 +399,10 @@ export function ensurePriceTileLayers(
 				{ "font-scale": 1 },
 				"\n",
 				{},
-				["to-string", ["get", "point_count"]],
+				[
+					"to-string",
+					["coalesce", ["get", "place_count"], ["get", "point_count"]],
+				],
 				{ "font-scale": 0.68 },
 			],
 			"text-font": TEXT_FONT,
@@ -550,6 +566,8 @@ export function ensurePriceTileLayers(
 	void preloadPlatformAtlas(map);
 }
 
+const pendingTileData = new WeakMap<MapboxMap, GeoJSON.FeatureCollection>();
+
 export function syncPriceTileData(
 	map: MapboxMap,
 	places: GeoJSON.FeatureCollection | null | undefined,
@@ -562,6 +580,21 @@ export function syncPriceTileData(
 	const hash = hashPriceTileCollection(collection);
 	if (lastTileHash.get(map) === hash) return;
 	lastTileHash.set(map, hash);
+	/* A 4k-feature city swap on the same frame as the first tap stutters. */
+	if (
+		collection.features.length > 800 &&
+		typeof requestAnimationFrame === "function"
+	) {
+		pendingTileData.set(map, collection);
+		requestAnimationFrame(() => {
+			const next = pendingTileData.get(map);
+			if (!next) return;
+			pendingTileData.delete(map);
+			const live = map.getSource(PRICE_TILE_SOURCE) as GeoJSONSource | undefined;
+			if (live && "setData" in live) live.setData(next);
+		});
+		return;
+	}
 	src.setData(collection);
 }
 

@@ -24,6 +24,7 @@ import {
 	gpuIconId,
 	setPriceTileNeighborDim,
 	toPriceTileCollection,
+	placeCountForStack,
 } from "./farqPriceTiles";
 
 const point = (
@@ -145,6 +146,31 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		expect(nextClusterZoom(11, 11)).toBe(12.2);
 		expect(nextClusterZoom(12, 16)).toBeLessThanOrEqual(15);
 		expect(nextClusterZoom(13, null)).toBe(14.2);
+	});
+
+	it("counts a food-court stack as N restaurants inside a cluster", () => {
+		expect(placeCountForStack(27)).toBe(27);
+		expect(placeCountForStack(1)).toBe(1);
+		expect(placeCountForStack(0)).toBe(1);
+		expect(placeCountForStack(null)).toBe(1);
+		const stacked = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [
+				{
+					type: "Feature",
+					geometry: { type: "Point", coordinates: [46.6779465, 24.6852364] },
+					properties: {
+						feature_type: "place",
+						place_id: "689",
+						gap: 22,
+						stack_count: 3,
+					},
+				},
+			],
+		});
+		expect(placeCountForStack(stacked.features[0]?.properties?.stack_count)).toBe(
+			3,
+		);
 	});
 
 	it("dims GPU neighbor layers when a place is selected", () => {

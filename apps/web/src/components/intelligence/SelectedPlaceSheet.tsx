@@ -836,13 +836,18 @@ export default function SelectedPlaceSheet({
 					className="flex items-center gap-3 px-4 pb-1 pt-4"
 					data-testid="intelligence-map-place-cover"
 				>
-					{imageUrl ? (
-						<img
-							src={imageUrl}
-							alt=""
-							className="size-14 shrink-0 rounded-2xl bg-brand-900 object-cover"
-						/>
-					) : null}
+					<div
+						className="size-14 shrink-0 overflow-hidden rounded-2xl bg-[#e6eef0]"
+						data-testid="intelligence-map-place-photo"
+					>
+						{imageUrl ? (
+							<img
+								src={imageUrl}
+								alt=""
+								className="size-14 object-cover"
+							/>
+						) : null}
+					</div>
 					<div className="min-w-0 flex-1">
 						<p className="text-[11px] font-bold text-[#5c6d6d]">
 							{isRTL ? "فرق مرصود" : "Observed gap"}

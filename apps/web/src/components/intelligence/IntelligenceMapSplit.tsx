@@ -42,6 +42,7 @@ import {
 } from "../../lib/farqOpportunities";
 import {
 	boundsFromPlaceFeatures,
+	lngLatInBbox,
 	pointFromPlaceCollection,
 	shouldOfferSearchHere,
 	type MapViewChangeMeta,
@@ -635,13 +636,26 @@ export default function IntelligenceMapSplit({
 		setStackPick(null);
 		setComparePanelHidden(false);
 		setSheetSnap("half");
+		const saved = parseCameraBbox(search.b);
+		if (
+			saved &&
+			lngLatInBbox(point.lng, point.lat, {
+				west: saved[0],
+				south: saved[1],
+				east: saved[2],
+				north: saved[3],
+			})
+		) {
+			/* Refresh already restored this scene — don't easeTo a second time. */
+			return;
+		}
 		setFocusRequest({
 			lat: point.lat,
 			lng: point.lng,
 			id: `deeplink:${placeId}`,
 			kind: "select",
 		});
-	}, [placeId, placeDetail, focusedPlaceDetail, cityPlaces, places]);
+	}, [placeId, placeDetail, focusedPlaceDetail, cityPlaces, places, search.b]);
 
 	useEffect(() => {
 		if (!pendingLocateRef.current || !userLocation) return;
