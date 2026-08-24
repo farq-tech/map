@@ -209,6 +209,10 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'بدون\\s*سكر\\s*مضاف',
   'diet\\s*jelly',
   'no\\s*sugar\\s*added',
+  /* Gym-brand shaker, not Caribou espresso شيكر. After the jam was
+   * demoted, الوزن المثالي 28737 pinned "بودي بيلدر شيكر". */
+  'بودي بيلدر',
+  'body\\s*builder',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');

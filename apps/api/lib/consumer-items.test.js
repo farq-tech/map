@@ -149,6 +149,9 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('Coca Cola Zero Sugar'), null);
   assert.equal(demoteReason('مربى الخوخ'), null);
   assert.equal(demoteReason('8 ساندوتش جبنة مربى'), null);
+  assert.equal(demoteReason('بودي بيلدر شيكر أصفر شفاف - 700 مل'), 'retail');
+  assert.equal(demoteReason('Body Builder Shaker Black & Yellow 700Ml'), 'retail');
+  assert.equal(demoteReason('إسبريسو شيكر'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
