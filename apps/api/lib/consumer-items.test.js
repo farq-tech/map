@@ -48,6 +48,8 @@ const SHARE = [
   'وجبة الهاتريك',
   'طاجن السعاده للمتزوجين',
   'وجبة جماعية',
+  'عرض الرباعي الذهبي 8 مكس',
+  'وجبة 2 طاجن',
 ];
 
 const PERSONAL = [
@@ -62,7 +64,6 @@ const PERSONAL = [
   'موس كيك بندق',
   'دجاج بروستد',
   'مشكل بقلاوة فستق',
-  'وجبة 2 طاجن سعره 2272',
   'وعاء ارز مع نوعين من البروتين',
   'نودلز صينية',
   'شوربة صينية',
@@ -120,7 +121,8 @@ test('packaged retail is demoted, but only on measured evidence', () => {
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
   assert.equal(demoteReason('بون بون تشوكليت القهوة سعره 250'), null);
-  assert.equal(demoteReason('وجبة 2 طاجن سعره 2272'), null);
+  /* Two tajines is a table; the calorie tail is not why. */
+  assert.equal(demoteReason('وجبة 2 طاجن سعره 2272'), 'share');
   assert.equal(shareItemPattern().includes('سعره'), false);
   assert.equal(retailItemPattern().includes('سعره'), false);
 });
@@ -180,6 +182,11 @@ test('a gathering table is share; a sip of coffee is not', () => {
   assert.equal(demoteReason('Group Meal'), 'share');
   /* Bare "group" is the fish. */
   assert.equal(demoteReason('Grouper Fillet'), null);
+  assert.equal(demoteReason('عرض الرباعي الذهبي 8 مكس'), 'share');
+  assert.equal(demoteReason('عرض الكريب الرباعي'), 'share');
+  assert.equal(demoteReason('Golden Quartet Offer 8 Mix'), 'share');
+  assert.equal(demoteReason('وجبة 2 طاجن'), 'share');
+  assert.equal(demoteReason('طاجن جمبري'), null);
 });
 
 test('a party single is one burger; a party box is still a tray', () => {

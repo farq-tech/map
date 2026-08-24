@@ -97,6 +97,11 @@ const SHARE_TERM_SOURCES = Object.freeze([
   /* A group meal. Papa Johns 3974 "وجبة جماعية" / "Group Meal" was mint 26
    * after الهاتريك was demoted. Bare "group" would hit grouper. */
   'جماعي',
+  /* Four plates, same as الثنائي / الثلاثي. "عرض الرباعي الذهبي"
+   * (كوفتا 12605 gap 56) and "عرض الكريب الرباعي" were mint. */
+  'الرباعي',
+  /* Two tajines is a table. "وجبة 2 طاجن" (حمام عبده 1389 gap 67). */
+  '[0-9]+\\s*طاجن',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
@@ -118,6 +123,7 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'serves',
   'hat\\s*-?\\s*trick',
   'group\\s*meal',
+  'quartet',
 ]);
 
 /**
