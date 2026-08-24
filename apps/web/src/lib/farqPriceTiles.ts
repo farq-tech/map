@@ -82,12 +82,21 @@ export function nextClusterZoom(
 	currentZoom: number,
 	expansionZoom: number | null | undefined,
 	cap = CLUSTER_BREAK_ZOOM + 0.5,
+	counts?: { placeCount?: number; pointCount?: number },
 ): number {
 	const current = Number(currentZoom);
 	const expansion = Number(expansionZoom);
 	const now = Number.isFinite(current) ? current : 0;
 	const want = Number.isFinite(expansion) ? expansion : now + 1.2;
-	return Math.min(Math.max(want, now + 1.2), cap);
+	let next = Math.min(Math.max(want, now + 1.2), cap);
+	const places = Number(counts?.placeCount);
+	const points = Number(counts?.pointCount);
+	/* Displayed count is stacked restaurants; Mapbox expansion uses features.
+	 * A 2-feature cluster labeled 30 would otherwise stop one step in. */
+	if (Number.isFinite(places) && Number.isFinite(points) && points > 0 && places > points) {
+		next = Math.min(cap, Math.max(next, CLUSTER_BREAK_ZOOM));
+	}
+	return next;
 }
 export const CLUSTER_RADIUS_PX = 64;
 /** A thumb needs more room than a cursor: on coarse pointers clusters merge sooner. */
@@ -533,12 +542,17 @@ export function ensurePriceTileLayers(
 		const hit = map.queryRenderedFeatures(ev.point, {
 			layers: [PRICE_TILE_CLUSTERS],
 		});
-		const clusterId = hit[0]?.properties?.cluster_id;
+		const props = hit[0]?.properties as
+			| { cluster_id?: unknown; place_count?: unknown; point_count?: unknown }
+			| undefined;
+		const clusterId = props?.cluster_id;
 		const src = map.getSource(PRICE_TILE_SOURCE) as GeoJSONSource | undefined;
 		if (clusterId == null || !src || !("getClusterExpansionZoom" in src)) {
 			return;
 		}
 		const center = ev.lngLat;
+		const placeCount = Number(props?.place_count);
+		const pointCount = Number(props?.point_count);
 		src.getClusterExpansionZoom(Number(clusterId), (err, zoom) => {
 			if (err) return;
 			let current = 12;
@@ -549,7 +563,10 @@ export function ensurePriceTileLayers(
 			}
 			map.easeTo({
 				center,
-				zoom: nextClusterZoom(current, zoom),
+				zoom: nextClusterZoom(current, zoom, undefined, {
+					placeCount,
+					pointCount,
+				}),
 				duration: 650,
 				essential: true,
 			});
@@ -580,19 +597,23 @@ export function syncPriceTileData(
 	const hash = hashPriceTileCollection(collection);
 	if (lastTileHash.get(map) === hash) return;
 	lastTileHash.set(map, hash);
-	/* A 4k-feature city swap on the same frame as the first tap stutters. */
-	if (
-		collection.features.length > 800 &&
-		typeof requestAnimationFrame === "function"
-	) {
+	/* A 4k-feature city swap on the same frame as the first tap stutters.
+	 * Idle (not rAF) lets the tap handler run first; skip if a newer hash won. */
+	if (collection.features.length > 800) {
 		pendingTileData.set(map, collection);
-		requestAnimationFrame(() => {
+		const flush = () => {
 			const next = pendingTileData.get(map);
 			if (!next) return;
 			pendingTileData.delete(map);
+			if (hashPriceTileCollection(next) !== lastTileHash.get(map)) return;
 			const live = map.getSource(PRICE_TILE_SOURCE) as GeoJSONSource | undefined;
 			if (live && "setData" in live) live.setData(next);
-		});
+		};
+		const ric = (
+			globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
+		).requestIdleCallback;
+		if (typeof ric === "function") ric(flush, { timeout: 120 });
+		else window.setTimeout(flush, 0);
 		return;
 	}
 	src.setData(collection);

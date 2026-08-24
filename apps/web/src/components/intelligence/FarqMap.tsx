@@ -551,6 +551,11 @@ export default function FarqMap({
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
 		try {
+			map.setLanguage(isRTL ? "ar" : "en");
+		} catch {
+			/* classic styles without Mapbox vector sources keep local names */
+		}
+		try {
 			setDistrictLocale(map, isRTL);
 		} catch {
 			/* style mid-swap */
@@ -594,9 +599,17 @@ export default function FarqMap({
 		 * crowds the Arabic labels into each other, and costs a phone GPU frames
 		 * for a view no decision needs. Tilt stays one gesture away for anyone
 		 * who wants it, and a saved camera is restored exactly as it was left. */
-		const landing = initialCamera && !mapSession.introStarted
-			? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
-			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
+		const restored = mapSession.camera;
+		const landing = restored
+			? {
+					center: restored.center,
+					zoom: restored.zoom,
+					pitch: Math.min(restored.pitch, 36),
+					bearing: restored.bearing,
+				}
+			: initialCamera
+				? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
+				: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
 
 		let map: MapboxMap;
 		try {
@@ -824,15 +837,15 @@ export default function FarqMap({
 				reportView();
 			};
 
-			if (mapSession.introStarted && mapSession.camera) {
-				landQuietly(mapSession.camera);
-			} else if (mapSession.introStarted) {
-				landQuietly({
-					center: RIYADH_LNG_LAT,
-					zoom: 12.15,
-					pitch: 0,
-					bearing: 0,
-				});
+			if (mapSession.introStarted) {
+				landQuietly(
+					restored || {
+						center: landing.center,
+						zoom: landing.zoom,
+						pitch: landing.pitch,
+						bearing: landing.bearing,
+					},
+				);
 			} else if (skipGlobe) {
 				mapSession.introStarted = true;
 				map.jumpTo(landing);

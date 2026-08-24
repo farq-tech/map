@@ -94,3 +94,35 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		z: parseCameraZoom(s.z),
 	};
 }
+
+const MAP_RETURN_KEY = "farq-map-return";
+
+/** Last map scene so merchant "Back to map" restores camera, place, and filters. */
+export function writeMapReturn(search: MapSearch): void {
+	if (typeof sessionStorage === "undefined") return;
+	try {
+		sessionStorage.setItem(MAP_RETURN_KEY, JSON.stringify(parseMapSearch({ ...search })));
+	} catch {
+		/* private mode */
+	}
+}
+
+export function readMapReturn(): MapSearch {
+	if (typeof sessionStorage === "undefined") return {};
+	try {
+		const raw = JSON.parse(sessionStorage.getItem(MAP_RETURN_KEY) || "{}") as unknown;
+		if (!raw || typeof raw !== "object") return {};
+		return parseMapSearch(raw as Record<string, unknown>);
+	} catch {
+		return {};
+	}
+}
+
+export function mapReturnSearch(placeId?: string): MapSearch {
+	const saved = readMapReturn();
+	const place = String(placeId || saved.place || "").trim();
+	return parseMapSearch({
+		...saved,
+		...(place ? { place } : {}),
+	});
+}

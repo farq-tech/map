@@ -1,11 +1,14 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
 	encodeCameraBbox,
+	mapReturnSearch,
 	parseCameraBbox,
 	parseCameraZoom,
 	parseMapSearch,
 	resolveMapSort,
 	resolveMapView,
+	writeMapReturn,
 } from "./map";
 
 describe("map search — shared list/map world", () => {
@@ -68,5 +71,24 @@ describe("camera in the URL", () => {
 		const s = parseMapSearch({ b: "46.66,24.70,46.69,24.73", z: "15.2" });
 		expect(s.b).toBe("46.6600,24.7000,46.6900,24.7300");
 		expect(s.z).toBe(15.2);
+	});
+
+	it("restores camera and filters when returning from merchant", () => {
+		sessionStorage.clear();
+		writeMapReturn({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+		expect(mapReturnSearch("1381")).toMatchObject({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+		expect(mapReturnSearch("689").place).toBe("689");
 	});
 });

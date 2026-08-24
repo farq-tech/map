@@ -21,6 +21,7 @@ import {
 	navigationUrl,
 	type NavigationDestination,
 } from "../../lib/farqNavigation";
+import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
 	IntelligenceService,
@@ -837,8 +838,9 @@ export default function SelectedPlaceSheet({
 					data-testid="intelligence-map-place-cover"
 				>
 					<div
-						className="size-14 shrink-0 overflow-hidden rounded-2xl bg-[#e6eef0]"
+						className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#e6eef0] text-[22px] font-extrabold text-brand-900"
 						data-testid="intelligence-map-place-photo"
+						data-kind={imageUrl ? "photo" : "initials"}
 					>
 						{imageUrl ? (
 							<img
@@ -846,7 +848,9 @@ export default function SelectedPlaceSheet({
 								alt=""
 								className="size-14 object-cover"
 							/>
-						) : null}
+						) : (
+							<span aria-hidden>{restaurantPinInitial(restaurantName)}</span>
+						)}
 					</div>
 					<div className="min-w-0 flex-1">
 						<p className="text-[11px] font-bold text-[#5c6d6d]">

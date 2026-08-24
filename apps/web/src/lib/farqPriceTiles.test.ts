@@ -148,6 +148,11 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		expect(nextClusterZoom(13, null)).toBe(14.2);
 	});
 
+	it("opens stacked clusters to street zoom so members appear", () => {
+		expect(nextClusterZoom(12, 13, undefined, { placeCount: 30, pointCount: 2 })).toBe(14);
+		expect(nextClusterZoom(12, 13, undefined, { placeCount: 4, pointCount: 4 })).toBe(13.2);
+	});
+
 	it("counts a food-court stack as N restaurants inside a cluster", () => {
 		expect(placeCountForStack(27)).toBe(27);
 		expect(placeCountForStack(1)).toBe(1);

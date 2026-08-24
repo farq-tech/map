@@ -73,7 +73,7 @@ import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
+import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, writeMapReturn } from "../../routes/map";
 import {
 	isBiggestSavingsPin,
 	isGroceryIdentity,
@@ -334,6 +334,10 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		setMapQuery(search.q || "");
 	}, [search.q]);
+
+	useEffect(() => {
+		writeMapReturn(search);
+	}, [search]);
 
 	useEffect(() => {
 		const on = () => setOffline(false);
@@ -770,6 +774,7 @@ export default function IntelligenceMapSplit({
 		}) => {
 			const restaurantId = String(opts.restaurantId || "").trim();
 			if (!restaurantId) return;
+			writeMapReturn(search);
 			void navigate({
 				to: "/merchant/$type/$id",
 				params: { type: "restaurant", id: restaurantId },
@@ -779,7 +784,7 @@ export default function IntelligenceMapSplit({
 				},
 			});
 		},
-		[navigate],
+		[navigate, search],
 	);
 
 	/**
