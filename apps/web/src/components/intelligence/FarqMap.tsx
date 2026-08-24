@@ -69,6 +69,7 @@ import {
 } from "../../lib/farqPriceTiles";
 import type { CityDistricts } from "../../services/intelligenceService";
 import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
+import { resolveLandingCamera } from "../../lib/farqMapCamera";
 import {
 	getMapboxAccessToken,
 	type MapboxBasemap,
@@ -602,22 +603,12 @@ export default function FarqMap({
 		 * crowds the Arabic labels into each other, and costs a phone GPU frames
 		 * for a view no decision needs. Tilt stays one gesture away for anyone
 		 * who wants it, and a saved camera is restored exactly as it was left. */
-		const restored = resumeSessionCamera ? mapSession.camera : null;
-		const landing = initialCamera
-			? {
-					center: initialCamera.center,
-					zoom: initialCamera.zoom,
-					pitch: restored ? Math.min(restored.pitch, 36) : 0,
-					bearing: restored ? restored.bearing : 0,
-				}
-			: restored
-				? {
-						center: restored.center,
-						zoom: restored.zoom,
-						pitch: Math.min(restored.pitch, 36),
-						bearing: restored.bearing,
-					}
-				: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
+		const landing = resolveLandingCamera({
+			initialCamera,
+			session: mapSession.camera,
+			resumeSession: resumeSessionCamera,
+			fallback: { center: RIYADH_LNG_LAT, zoom: 12.15 },
+		});
 
 		let map: MapboxMap;
 		try {
@@ -846,14 +837,7 @@ export default function FarqMap({
 			};
 
 			if (mapSession.introStarted) {
-				landQuietly(
-					restored || {
-						center: landing.center,
-						zoom: landing.zoom,
-						pitch: landing.pitch,
-						bearing: landing.bearing,
-					},
-				);
+				landQuietly(landing);
 			} else if (skipGlobe) {
 				mapSession.introStarted = true;
 				map.jumpTo(landing);

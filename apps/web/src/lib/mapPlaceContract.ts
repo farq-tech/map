@@ -130,3 +130,15 @@ export function livePlaceDetail<T extends { place_id?: string | null }>(
 	if (!detail || !placeId) return null;
 	return String(detail.place_id || "") === String(placeId) ? detail : null;
 }
+
+/** City pins already carry lean `gap`; getPlace used to ship only nested difference. */
+export function normalizePlaceDetail<T extends Record<string, unknown>>(
+	detail: T | null | undefined,
+): T | null {
+	if (!detail) return null;
+	const gap = observedGapAmount(detail);
+	if (gap == null) return detail;
+	const existing = finite(detail.gap);
+	if (existing != null && existing > 0) return detail;
+	return { ...detail, gap };
+}

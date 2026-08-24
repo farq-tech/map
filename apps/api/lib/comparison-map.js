@@ -734,6 +734,7 @@ async function getPlace(placeId) {
     lat: pin.lat,
     lng: pin.lng,
     difference: pin.difference,
+    gap: observedGapRiyals(pin.difference),
     menu: pin.menu,
     compare: pin.menu,
     image_url: place.image_url,

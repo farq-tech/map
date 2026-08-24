@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	livePlaceDetail,
 	normalizeDifference,
+	normalizePlaceDetail,
 	normalizePlaceFeature,
 	observedGapAmount,
 } from "./mapPlaceContract";
@@ -62,5 +63,22 @@ describe("map place contract — nested + lean Railway pins", () => {
 		expect(livePlaceDetail(previous, "6411")).toBeNull();
 		expect(livePlaceDetail(previous, "1381")).toBe(previous);
 		expect(livePlaceDetail(previous, "")).toBeNull();
+	});
+
+	it("fills lean gap on getPlace from the observed nested difference", () => {
+		const coated = normalizePlaceDetail({
+			place_id: "6254",
+			name: "كوتد",
+			difference: { difference_amount: 81, cheapest_provider_id: "hungerstation" },
+		});
+		expect(coated?.gap).toBe(81);
+		expect(
+			normalizePlaceDetail({
+				place_id: "6254",
+				gap: 81,
+				difference: { difference_amount: 81, cheapest_provider_id: "hungerstation" },
+			})?.gap,
+		).toBe(81);
+		expect(normalizePlaceDetail({ place_id: "99999999" })?.gap).toBeUndefined();
 	});
 });

@@ -44,6 +44,29 @@ export function parseMapFilters(raw: unknown): MapFilterFlags {
 	};
 }
 
+/** Drawer rail that matches a bookmarked filter/sort so refresh does not look like "all restaurants". */
+export type MapRailHint = "gaps" | "restaurants" | "grocery" | "cheapest" | "multi";
+
+export function railFromMapSearch(search: {
+	filter?: string;
+	sort?: string;
+	category?: string;
+	sector?: string;
+}): MapRailHint {
+	if (
+		search.sector === "grocery" ||
+		search.category === "grocery" ||
+		search.category === "shopping"
+	) {
+		return "grocery";
+	}
+	if (search.sort === "cheap") return "cheapest";
+	const flags = parseMapFilters(search.filter);
+	if (flags.biggest) return "gaps";
+	if (flags.multi) return "multi";
+	return "restaurants";
+}
+
 export function encodeMapFilters(flags: MapFilterFlags): string | undefined {
 	const parts: string[] = [];
 	if (flags.biggest) parts.push("biggest");

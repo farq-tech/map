@@ -4,7 +4,7 @@
  * place_ids or invent demand / lat-lon.
  */
 import { fetchApi } from "../lib/api";
-import { normalizePlacesBody } from "../lib/mapPlaceContract";
+import { normalizePlaceDetail, normalizePlacesBody } from "../lib/mapPlaceContract";
 
 export type IntelligenceConfidence =
 	| "HIGH"
@@ -563,6 +563,8 @@ export type IntelligenceMapPlaceDetail = {
 		note_en?: string;
 	};
 	image_url?: string | null;
+	/** Lean gap — same riyals as city pins. Nested `difference` remains the evidence. */
+	gap?: number | null;
 };
 
 /** One app's row for a restaurant. delivery_fee is observed on a minority of rows — optional evidence, never a requirement. */
@@ -818,7 +820,10 @@ export const IntelligenceService = {
 			{ signal },
 			{ timeoutMs: 12_000 },
 		);
-		return env.data;
+		const detail = normalizePlaceDetail(
+			env.data as unknown as Record<string, unknown>,
+		);
+		return (detail || env.data) as IntelligenceMapPlaceDetail;
 	},
 
 	/** The proof table for one restaurant: every compared item, priced on every app that lists it. */

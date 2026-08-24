@@ -81,6 +81,7 @@ import {
 	encodeMapFilters,
 	parseMapFilters,
 	toggleMapFilter,
+	railFromMapSearch,
 } from "../../lib/mapFilters";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
@@ -232,7 +233,7 @@ export default function IntelligenceMapSplit({
 		useState<IntelligenceMapNeighborhoods | null>(null);
 	const [exploreRadius, setExploreRadius] = useState<ExploreRadius>("hawally");
 	const pendingRadiusRef = useRef<ExploreRadius | null>(null);
-	const [rail, setRail] = useState<FilterRailId>("restaurants");
+	const [rail, setRail] = useState<FilterRailId>(() => railFromMapSearch(search));
 	const [sheetSnap, setSheetSnap] = useState<SheetSnap>("peek");
 	const [comparePanelHidden, setComparePanelHidden] = useState(false);
 	const [searchFocused, setSearchFocused] = useState(false);
@@ -338,6 +339,10 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		writeMapReturn(search);
 	}, [search]);
+
+	useEffect(() => {
+		setRail(railFromMapSearch(search));
+	}, [search.filter, search.sort, search.category, search.sector]);
 
 	useEffect(() => {
 		const on = () => setOffline(false);

@@ -102,12 +102,12 @@ describe("camera in the URL", () => {
 			filter: "biggest,multi",
 			category: "burgers",
 		});
-		expect(mapReturnSearch("689")).toEqual({
+		expect(mapReturnSearch("6254")).toEqual({
 			neighborhood: undefined,
 			category: undefined,
 			city: undefined,
 			q: undefined,
-			place: "689",
+			place: "6254",
 			sector: undefined,
 			filter: undefined,
 			view: undefined,
@@ -133,6 +133,19 @@ describe("camera in the URL", () => {
 			if (descriptor) Object.defineProperty(window, "sessionStorage", descriptor);
 			resetSafeStorageProbeForTests();
 		}
+	});
+
+	it("keeps worthwhile and 3+ apps when the camera is written on refresh", () => {
+		const prev = parseMapSearch({
+			filter: "biggest,multi",
+			place: "6254",
+			b: "46.8000,24.6700,46.8100,24.6800",
+			z: "15.1",
+		});
+		const after = parseMapSearch({ ...prev, b: "46.8010,24.6710,46.8110,24.6810", z: 15.2 });
+		expect(after.filter).toBe("biggest,multi");
+		expect(after.place).toBe("6254");
+		expect(after.z).toBe(15.2);
 	});
 
 	it("resumes a session camera only when the URL already frames the scene", () => {

@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const {
   PLACE_ITEMS_CAP,
   getPlaceItems,
+  observedGapRiyals,
   rowToPlaceItem,
   rowToPlaceProvider,
   sortPlaceItems,
@@ -212,4 +213,13 @@ test('getPlace memo keeps an observed payload for five minutes and drops it afte
   writePlaceCache('999', null);
   assert.equal(readPlaceCache('999'), null);
   resetPlaceCache();
+});
+
+test('lean gap is the rounded observed difference — city pins and getPlace share it', () => {
+  assert.equal(
+    observedGapRiyals({ difference_amount: 81, cheapest_provider_id: 'hungerstation' }),
+    81,
+  );
+  assert.equal(observedGapRiyals({ difference_amount: 1 }), 1);
+  assert.equal(observedGapRiyals(null), null);
 });

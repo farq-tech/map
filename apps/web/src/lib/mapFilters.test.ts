@@ -8,6 +8,7 @@ import {
 	isMultiProviderPin,
 	parseMapFilter,
 	parseMapFilters,
+	railFromMapSearch,
 	toggleMapFilter,
 } from "./mapFilters";
 
@@ -49,5 +50,12 @@ describe("map filters — client floors match the API", () => {
 		).toBe(true);
 		expect(isMultiProviderPin({ provider_count: 2 })).toBe(false);
 		expect(isMultiProviderPin({ provider_count: 3 })).toBe(true);
+	});
+
+	it("keeps the filter rail on a bookmarked URL after refresh", () => {
+		expect(railFromMapSearch({ filter: "biggest,multi" })).toBe("gaps");
+		expect(railFromMapSearch({ filter: "multi" })).toBe("multi");
+		expect(railFromMapSearch({ sort: "cheap", filter: "biggest" })).toBe("cheapest");
+		expect(railFromMapSearch({})).toBe("restaurants");
 	});
 });
