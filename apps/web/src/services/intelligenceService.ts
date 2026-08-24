@@ -565,6 +565,7 @@ export type IntelligenceMapPlaceDetail = {
 	image_url?: string | null;
 	/** Lean gap — same riyals as city pins. Nested `difference` remains the evidence. */
 	gap?: number | null;
+	demote_reason?: "share" | "retail" | null;
 };
 
 /** One app's row for a restaurant. delivery_fee is observed on a minority of rows — optional evidence, never a requirement. */

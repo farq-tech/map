@@ -193,6 +193,40 @@ test('a spread the ranking layer rejects is marked, kept, and ranked below the t
   );
 });
 
+test('the proof table leads with the pin dish and parks over-cap rows', () => {
+  const { rowToPlaceItem, sortPlaceItems } = require('./comparison-map');
+  const snack = rowToPlaceItem({
+    item_id: '15101',
+    name_ar: 'سناكات فيفا 26',
+    prices: { jahez: 64, hungerstation: 65 },
+  });
+  const cake = rowToPlaceItem({
+    item_id: '15102',
+    name_ar: 'برونو',
+    prices: { jahez: 96.8, hungerstation: 121 },
+  });
+  const overCap = rowToPlaceItem({
+    item_id: '136421',
+    name_ar: 'ميني سميد',
+    prices: { jahez: 87.5, hungerstation: 250 },
+  });
+  const pinItem = rowToPlaceItem({
+    item_id: '136422',
+    name_ar: 'سجنتشر 30قطعة',
+    prices: { jahez: 90, hungerstation: 150 },
+  });
+  assert.equal(snack.over_cap, false);
+  assert.equal(overCap.over_cap, true);
+  assert.deepEqual(
+    sortPlaceItems([cake, snack], 'سناكات فيفا 26').map((i) => i.item_id),
+    ['15101', '15102'],
+  );
+  assert.deepEqual(
+    sortPlaceItems([overCap, pinItem], 'سجنتشر 30قطعة').map((i) => i.item_id),
+    ['136422', '136421'],
+  );
+});
+
 test('duplicate coordinates are labelled, never merged', () => {
   assert.equal(classifyDupeNames(['ماكدونالدز', 'ماكدونالدز']), 'same_name');
   assert.equal(classifyDupeNames(['ماكدونالدز', 'ستاربكس']), 'distinct_names');

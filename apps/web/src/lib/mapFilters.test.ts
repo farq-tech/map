@@ -8,6 +8,7 @@ import {
 	isMultiProviderPin,
 	parseMapFilter,
 	parseMapFilters,
+	placeDemoteCopy,
 	railFromMapSearch,
 	selectedPlaceFilterMissCopy,
 	selectedPlaceFilterMisses,
@@ -117,6 +118,9 @@ describe("map filters — client floors match the API", () => {
 		expect(selectedPlaceFilterMissCopy(["biggest"], false)).toBe(
 			"Shown because you opened it — gap under 10 SAR",
 		);
+		expect(placeDemoteCopy("share", true)).toBe("طلب مشاركة");
+		expect(placeDemoteCopy("retail", false)).toBe("Packaged product");
+		expect(placeDemoteCopy(null, true)).toBeNull();
 	});
 
 	it("keeps the filter rail on a bookmarked URL after refresh", () => {

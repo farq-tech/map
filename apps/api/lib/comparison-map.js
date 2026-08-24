@@ -12,7 +12,11 @@
 'use strict';
 
 const { comparisonQuery } = require('./comparison-pool');
-const { displayItemName, representativeSpreadOrderSql } = require('./consumer-items');
+const {
+  demoteReason,
+  displayItemName,
+  representativeSpreadOrderSql,
+} = require('./consumer-items');
 const {
   BIGGEST_SAVINGS_MIN_GAP,
   BIGGEST_SAVINGS_MIN_PRICE,
@@ -382,6 +386,8 @@ function rowToPlace(row) {
         ? Number(row.dearest_price)
         : null,
     product_name: row.product_name || null,
+    item_name_ar: row.item_name_ar ? String(row.item_name_ar) : null,
+    item_name_en: row.item_name_en ? String(row.item_name_en) : null,
     image_url: row.branch_image_url || null,
     has_difference: Boolean(row.cheapest_provider),
   };
@@ -401,7 +407,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        s.cheapest_price,
        s.dearest_price,
        s.difference_amount,
-       s.product_name
+       s.product_name,
+       s.item_name_ar,
+       s.item_name_en
   FROM comparison.discovery_cards dc
   LEFT JOIN LATERAL (
     SELECT ips.cheapest_provider,
@@ -409,7 +417,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
            ips.cheapest_price,
            ips.dearest_price,
            (ips.dearest_price - ips.cheapest_price) AS difference_amount,
-           COALESCE(ips.name_ar, ips.name_en) AS product_name
+           COALESCE(ips.name_ar, ips.name_en) AS product_name,
+           ips.name_ar AS item_name_ar,
+           ips.name_en AS item_name_en
       FROM comparison.item_price_spread ips
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
@@ -658,7 +668,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        s.cheapest_price,
        s.dearest_price,
        s.difference_amount,
-       s.product_name
+       s.product_name,
+       s.item_name_ar,
+       s.item_name_en
   FROM comparison.discovery_cards dc
   LEFT JOIN LATERAL (
     SELECT ips.cheapest_provider,
@@ -666,7 +678,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
            ips.cheapest_price,
            ips.dearest_price,
            (ips.dearest_price - ips.cheapest_price) AS difference_amount,
-           COALESCE(ips.name_ar, ips.name_en) AS product_name
+           COALESCE(ips.name_ar, ips.name_en) AS product_name,
+           ips.name_ar AS item_name_ar,
+           ips.name_en AS item_name_en
       FROM comparison.item_price_spread ips
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
@@ -739,6 +753,9 @@ async function getPlace(placeId) {
     menu: pin.menu,
     compare: pin.menu,
     image_url: place.image_url,
+    demote_reason:
+      demoteReason(`${place.item_name_ar || ''} ${place.item_name_en || ''}`) ||
+      demoteReason(place.product_name),
     source: 'comparison.discovery_cards',
   });
 }
@@ -925,6 +942,7 @@ function rowToPlaceItem(row) {
      * would be the worst of the three options.
      */
     price_outlier: cheapest > 0 && dearest >= cheapest * PRICE_OUTLIER_RATIO,
+    over_cap: dearest > CONSUMER_PRICE_CAP_SAR,
     prices,
   };
 }
@@ -936,14 +954,27 @@ const PRICE_OUTLIER_RATIO = 2;
  * Biggest observed gap first; suspect spreads sit below the numbers the rest of
  * the product stands behind, and the same-price items stay at the bottom.
  */
-function sortPlaceItems(items) {
-  return items.slice().sort(
-    (a, b) =>
-      Number(Boolean(a.price_outlier)) - Number(Boolean(b.price_outlier)) ||
+function itemNameMatches(item, representativeName) {
+  const pin = displayItemName(representativeName);
+  if (!pin) return false;
+  return [item?.name, item?.name_ar, item?.name_en].some(
+    (n) => displayItemName(n) === pin,
+  );
+}
+
+function sortPlaceItems(items, representativeName) {
+  return items.slice().sort((a, b) => {
+    const aPin = itemNameMatches(a, representativeName);
+    const bPin = itemNameMatches(b, representativeName);
+    if (aPin !== bPin) return aPin ? -1 : 1;
+    return (
+      Number(Boolean(a.price_outlier || a.over_cap)) -
+        Number(Boolean(b.price_outlier || b.over_cap)) ||
       Number(b.gap > 0) - Number(a.gap > 0) ||
       b.gap - a.gap ||
-      a.name.localeCompare(b.name, 'ar'),
-  );
+      a.name.localeCompare(b.name, 'ar')
+    );
+  });
 }
 
 function rowToPlaceProvider(row) {
@@ -992,7 +1023,12 @@ async function getPlaceItems(placeId, opts = {}) {
     const item = rowToPlaceItem(row);
     if (item) items.push(item);
   }
-  const sorted = sortPlaceItems(items);
+  let representativeName = opts.representativeName || null;
+  if (!representativeName && typeof opts.__query !== 'function' && readEnabled()) {
+    const pin = await getPlace(placeId);
+    representativeName = pin?.difference?.product_name || null;
+  }
+  const sorted = sortPlaceItems(items, representativeName);
 
   return {
     place_id: String(head.place_id),

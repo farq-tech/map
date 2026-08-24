@@ -163,3 +163,12 @@ export function selectedPlaceFilterMissCopy(
 		? "ظاهر لأنك فتحته — أقل من ٣ تطبيقات"
 		: "Shown because you opened it — fewer than 3 apps";
 }
+
+export function placeDemoteCopy(
+	reason: "share" | "retail" | string | null | undefined,
+	isRTL: boolean,
+): string | null {
+	if (reason === "share") return isRTL ? "طلب مشاركة" : "Sharing item";
+	if (reason === "retail") return isRTL ? "منتج معبأ" : "Packaged product";
+	return null;
+}

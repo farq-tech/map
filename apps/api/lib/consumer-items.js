@@ -113,9 +113,16 @@ const RETAIL_TERM_SOURCES = Object.freeze([
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
+const SHARE_PATTERN_WITHOUT_KILO = SHARE_TERM_SOURCES.filter((t) => t !== 'كيلو').join(
+  '|',
+);
 const RETAIL_PATTERN = RETAIL_TERM_SOURCES.join('|');
 const SHARE_RE = new RegExp(SHARE_PATTERN, 'i');
+const SHARE_RE_WITHOUT_KILO = new RegExp(SHARE_PATTERN_WITHOUT_KILO, 'i');
 const RETAIL_RE = new RegExp(RETAIL_PATTERN, 'i');
+/** Half a kilo of knafeh is a normal dessert, not a party tray. */
+const HALF_KILO_RE = /½\s*كيلو|نصف\s*كيلو|[12]\s*\/\s*[12]\s*كيلو/;
+const HALF_KILO_SQL = "نصف\\s*كيلو|[12]/[12]\\s*كيلو|½\\s*كيلو";
 
 /** The same patterns the SQL uses, so the server and its query cannot disagree. */
 function shareItemPattern() {
@@ -129,7 +136,14 @@ function retailItemPattern() {
 /** True when the item reads as something bought for a group rather than for one person. */
 function isShareItem(name) {
   const norm = normalizeArabic(name);
-  return norm ? SHARE_RE.test(norm) : false;
+  if (!norm || !SHARE_RE.test(norm)) return false;
+  if (HALF_KILO_RE.test(norm) && !SHARE_RE_WITHOUT_KILO.test(norm)) return false;
+  return true;
+}
+
+function shareMatchSql(nameExpr) {
+  const norm = normalizedNameSql(nameExpr);
+  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${HALF_KILO_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_KILO}'))`;
 }
 
 /** True when the item reads as packaged retail rather than something cooked to order. */
@@ -230,7 +244,7 @@ function categoryCaseSql(expr) {
 const ITEM_NAME_SQL = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,'')";
 
 function representativeSpreadOrderSql() {
-  return `(${normalizedNameSql(ITEM_NAME_SQL)} ~ '${shareItemPattern()}'
+  return `(${shareMatchSql(ITEM_NAME_SQL)}
         OR ${normalizedNameSql(ITEM_NAME_SQL)} ~ '${retailItemPattern()}') ASC,
           (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST,
           ips.cheapest_price ASC NULLS LAST,
@@ -266,4 +280,5 @@ module.exports = {
   representativeSpreadOrderSql,
   retailItemPattern,
   shareItemPattern,
+  shareMatchSql,
 };

@@ -3,6 +3,7 @@ import { localizeDigitString } from "../../lib/formatPrice";
 import { formatObservedDistance } from "../../lib/farqOpportunities";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
 import { getProviderLabel } from "../../lib/platformLogos";
+import { placeDemoteCopy } from "../../lib/mapFilters";
 
 function ProviderPriceLine({
 	kind,
@@ -58,6 +59,7 @@ export function FarqOpportunityCard({
 	onSelect: (row: OpportunityRow) => void;
 }) {
 	const gap = localizeDigitString(String(Math.round(row.amount)), isRTL);
+	const demoteLabel = placeDemoteCopy(row.demoteReason, isRTL);
 	const title =
 		row.productName || row.name || (isRTL ? "فرصة مرصودة" : "Observed opportunity");
 	const distance = formatObservedDistance(row.distanceMeters, isRTL);
@@ -101,16 +103,8 @@ export function FarqOpportunityCard({
 							: `${row.categoryLabel}: ${row.categoryGap} SAR`}
 					</span>
 				) : null}
-				{row.demoteReason ? (
-					<span className="farq-opportunity-tag">
-						{row.demoteReason === "share"
-							? isRTL
-								? "طلب مشاركة"
-								: "Sharing item"
-							: isRTL
-								? "منتج معبأ"
-								: "Packaged product"}
-					</span>
+				{demoteLabel ? (
+					<span className="farq-opportunity-tag">{demoteLabel}</span>
 				) : null}
 				{row.comparisons ? (
 					<span>

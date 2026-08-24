@@ -38,7 +38,7 @@ const {
   displayItemName,
   normalizedNameSql,
   retailItemPattern,
-  shareItemPattern,
+  shareMatchSql,
 } = require('./consumer-items');
 const {
   MIN_AREA_COMPARISONS,
@@ -48,7 +48,7 @@ const {
 } = require('./opportunity-aggregate');
 
 /** Bump when the shape of a feature changes, so a cached client refetches. */
-const READ_MODEL_VERSION = 5;
+const READ_MODEL_VERSION = 6;
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 
@@ -177,7 +177,7 @@ scored AS (
          ips.dearest_price,
          (ips.dearest_price - ips.cheapest_price) AS gap,
          COALESCE(ips.name_ar, ips.name_en) AS product_name,
-         ${normalizedNameSql(ITEM_NAME_EXPR)} ~ '${shareItemPattern()}' AS is_share,
+         ${shareMatchSql(ITEM_NAME_EXPR)} AS is_share,
          ${normalizedNameSql(ITEM_NAME_EXPR)} ~ '${retailItemPattern()}' AS is_retail,
          ${categoryCaseSql(ITEM_NAME_EXPR)} AS category
     FROM comparison.item_price_spread ips

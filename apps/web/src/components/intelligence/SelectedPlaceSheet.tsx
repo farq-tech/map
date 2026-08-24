@@ -8,6 +8,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
 import {
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 	type PointerEvent as ReactPointerEvent,
@@ -23,6 +24,7 @@ import {
 } from "../../lib/farqNavigation";
 import { displayItemName } from "../../lib/displayItemName";
 import {
+	placeDemoteCopy,
 	selectedPlaceFilterMissCopy,
 	type SelectedPlaceFilterMiss,
 } from "../../lib/mapFilters";
@@ -167,9 +169,11 @@ const COMPARED_ITEMS_PREVIEW = 30;
 function ComparedItemsSection({
 	placeId,
 	isRTL,
+	pinItemName,
 }: {
 	placeId: string;
 	isRTL: boolean;
+	pinItemName?: string | null;
 }) {
 	const [open, setOpen] = useState(false);
 	const [showAll, setShowAll] = useState(false);
@@ -211,7 +215,17 @@ function ComparedItemsSection({
 		};
 	}, [open, placeId]);
 
-	const items = data?.items ?? [];
+	const pin = displayItemName(pinItemName);
+	const items = useMemo(() => {
+		const raw = data?.items ?? [];
+		if (!pin) return raw;
+		return [...raw].sort((a, b) => {
+			const aPin = displayItemName(a.name) === pin;
+			const bPin = displayItemName(b.name) === pin;
+			if (aPin === bPin) return 0;
+			return aPin ? -1 : 1;
+		});
+	}, [data, pin]);
 	const shown = showAll ? items : items.slice(0, COMPARED_ITEMS_PREVIEW);
 	const feeEvidence = (data?.providers ?? []).filter(
 		(p) => p.delivery_fee != null,
@@ -459,6 +473,10 @@ export default function SelectedPlaceSheet({
 		isRTL,
 	);
 	const filterMissNote = selectedPlaceFilterMissCopy(filterMisses, isRTL);
+	const demoteNote = placeDemoteCopy(
+		feature?.demote_reason || placeDetail?.demote_reason,
+		isRTL,
+	);
 	const categoryLabel = [
 		placeDetail?.subcategory ||
 			placeDetail?.category ||
@@ -900,6 +918,14 @@ export default function SelectedPlaceSheet({
 										{filterMissNote}
 									</p>
 								) : null}
+								{demoteNote ? (
+									<p
+										className="text-center text-[11.5px] font-bold text-mint-500"
+										data-testid="intelligence-map-place-demote"
+									>
+										{demoteNote}
+									</p>
+								) : null}
 							</div>
 
 							<div className="h-px w-full bg-white/15" />
@@ -1022,7 +1048,11 @@ export default function SelectedPlaceSheet({
 
 					{/* The claim above is checkable only if the evidence is here. */}
 					{placeKey ? (
-						<ComparedItemsSection placeId={placeKey} isRTL={isRTL} />
+						<ComparedItemsSection
+							placeId={placeKey}
+							isRTL={isRTL}
+							pinItemName={mealName}
+						/>
 					) : null}
 				</div>
 			</div>
