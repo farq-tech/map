@@ -25,7 +25,7 @@ export function sheetHeightPx(
 	safeAreaBottom = 0,
 ): number {
 	const safe = Number.isFinite(safeAreaBottom) ? Math.max(0, safeAreaBottom) : 0;
-	if (snap === "peek") return 148 + safe;
+	if (snap === "peek") return 188 + safe;
 	if (snap === "half") return Math.round(viewportHeight * 0.52) + safe;
 	return Math.round(viewportHeight * 0.9) + safe;
 }

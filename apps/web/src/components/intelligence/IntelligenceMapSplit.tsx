@@ -42,9 +42,11 @@ import {
 } from "../../lib/farqOpportunities";
 import {
 	boundsFromPlaceFeatures,
+	pointFromPlaceCollection,
 	shouldOfferSearchHere,
 	type MapViewChangeMeta,
 } from "../../lib/farqMapViewport";
+import { ApiRequestError } from "../../lib/api";
 import { localizeDigitString } from "../../lib/formatPrice";
 import { viewportStats } from "../../lib/farqViewportStats";
 import { getProviderLabel } from "../../lib/platformLogos";
@@ -245,6 +247,8 @@ export default function IntelligenceMapSplit({
 	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
 	const [placesFetching, setPlacesFetching] = useState(false);
 	const [placesError, setPlacesError] = useState(false);
+	const [placeError, setPlaceError] = useState<null | "missing" | "failed">(null);
+	const [placeRetryTick, setPlaceRetryTick] = useState(0);
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
 	/* The city's أحياء; `?neighborhood=` is one of their ids and scopes list, headline and map alike. */
@@ -583,43 +587,61 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		if (!focusedPlaceId) {
 			setPlaceDetail(null);
+			setPlaceError(null);
 			lastFocusedPlaceRef.current = "";
 			return;
 		}
 		setPlaceDetail((cur) =>
 			String(cur?.place_id || "") === String(focusedPlaceId) ? cur : null,
 		);
+		setPlaceError(null);
 		const controller = new AbortController();
 		void IntelligenceService.mapPlace(focusedPlaceId, controller.signal)
 			.then((body) => {
-				if (!controller.signal.aborted) setPlaceDetail(body);
+				if (controller.signal.aborted) return;
+				setPlaceDetail(body);
+				setPlaceError(null);
 			})
-			.catch(() => {
-				if (!controller.signal.aborted) setPlaceDetail(null);
+			.catch((err) => {
+				if (controller.signal.aborted) return;
+				setPlaceDetail(null);
+				setPlaceError(
+					err instanceof ApiRequestError && err.status === 404
+						? "missing"
+						: "failed",
+				);
 			});
 		return () => controller.abort();
-	}, [focusedPlaceId]);
+	}, [focusedPlaceId, placeRetryTick]);
 
 	useEffect(() => {
 		if (!placeId) return;
 		if (placeDetail && placeDetail.place_id !== placeId) return;
 		if (lastFocusedPlaceRef.current === placeId) return;
-		const lat = Number(focusedPlaceDetail?.lat ?? placeDetail?.lat);
-		const lng = Number(focusedPlaceDetail?.lng ?? placeDetail?.lng);
-		if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-		/* Deep link / refresh / share: the URL named a place the camera has not met. */
+		const detailLat = Number(focusedPlaceDetail?.lat ?? placeDetail?.lat);
+		const detailLng = Number(focusedPlaceDetail?.lng ?? placeDetail?.lng);
+		const fromDetail =
+			Number.isFinite(detailLat) && Number.isFinite(detailLng)
+				? { lat: detailLat, lng: detailLng }
+				: null;
+		const point =
+			fromDetail ||
+			pointFromPlaceCollection(cityPlaces, placeId) ||
+			pointFromPlaceCollection(places, placeId);
+		if (!point) return;
+		/* Deep link / refresh / share: fly as soon as any observed coord exists. */
 		lastFocusedPlaceRef.current = placeId;
 		setLivePlaceId(placeId);
 		setStackPick(null);
 		setComparePanelHidden(false);
 		setSheetSnap("half");
 		setFocusRequest({
-			lat,
-			lng,
+			lat: point.lat,
+			lng: point.lng,
 			id: `deeplink:${placeId}`,
 			kind: "select",
 		});
-	}, [placeId, placeDetail]);
+	}, [placeId, placeDetail, focusedPlaceDetail, cityPlaces, places]);
 
 	useEffect(() => {
 		if (!pendingLocateRef.current || !userLocation) return;
@@ -792,6 +814,10 @@ export default function IntelligenceMapSplit({
 		selectedPlaceFeature?.properties.restaurant_id ||
 		selectedPlaceFeature?.properties.menu?.id ||
 		(/^\d+$/.test(livePlaceId) ? livePlaceId : "");
+	const placeChromeOpen = Boolean(
+		(livePlaceId && !(placeError === "missing" && !selectedPlaceFeature)) ||
+			stackPick,
+	);
 
 	const showUserDot = locationPinKind === "gps" || locationPinKind === "manual";
 	placesRef.current = sourcePlaces;
@@ -1494,7 +1520,7 @@ export default function IntelligenceMapSplit({
 			}`}
 			data-testid="intelligence-map-split"
 			data-view={view}
-			data-sheet-open={(livePlaceId || stackPick) && !comparePanelHidden ? "true" : undefined}
+			data-sheet-open={placeChromeOpen && !comparePanelHidden ? "true" : undefined}
 			data-sheet-snap={sheetSnap}
 			data-panel-collapsed={comparePanelHidden ? "true" : undefined}
 			data-legend-open={legendOpen ? "true" : undefined}
@@ -1546,7 +1572,7 @@ export default function IntelligenceMapSplit({
 								onSelect={focusAroundPlace}
 								onClose={closePlace}
 							/>
-						) : livePlaceId ? (
+						) : placeChromeOpen && livePlaceId ? (
 							<div className="flex min-h-0 flex-1 flex-col">
 								{selectedCoordinateStack ? (
 									<CoordinateStackBanner
@@ -1587,7 +1613,7 @@ export default function IntelligenceMapSplit({
 					onFocusPlace={focusAroundPlace}
 					showHereHint={showUserDot}
 					leftUserLocation={leftUserLocation}
-					placeSelected={Boolean(livePlaceId || stackPick)}
+					placeSelected={placeChromeOpen}
 					cheapestReady={cheapestReady}
 					nearReady={nearReady}
 					view={view}
@@ -1828,7 +1854,7 @@ export default function IntelligenceMapSplit({
 							}}
 							onSelectNeighborhood={selectDistrict}
 							onViewChange={onViewChange}
-							sheetOpen={Boolean(livePlaceId || stackPick) && !comparePanelHidden}
+							sheetOpen={placeChromeOpen && !comparePanelHidden}
 							onMapInteraction={onMapInteraction}
 							onLeftUserLocation={setLeftUserLocation}
 						/>
@@ -1859,6 +1885,47 @@ export default function IntelligenceMapSplit({
 							>
 								{isRTL ? "إعادة" : "Retry"}
 							</button>
+						</div>
+					) : null}
+					{placeError ? (
+						<div
+							role="alert"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-place-error"
+						>
+							<p>
+								{placeError === "missing"
+									? isRTL
+										? "هذا المكان غير موجود في الرصد."
+										: "This place is not in the observed layer."
+									: isRTL
+										? "تعذّر تحميل تفاصيل المكان. حاول مرة ثانية."
+										: "Could not load this place. Try again."}
+							</p>
+							{placeError === "failed" ? (
+								<button
+									type="button"
+									className="farq-map-locate-error-action"
+									onClick={() => setPlaceRetryTick((n) => n + 1)}
+									aria-label={isRTL ? "إعادة المحاولة" : "Retry"}
+								>
+									{isRTL ? "إعادة" : "Retry"}
+								</button>
+							) : (
+								<button
+									type="button"
+									className="farq-map-locate-error-action"
+									onClick={() => {
+										setPlaceError(null);
+										setLivePlaceId("");
+										patchSearch({ place: undefined });
+									}}
+									aria-label={isRTL ? "إغلاق" : "Dismiss"}
+								>
+									{isRTL ? "حسناً" : "OK"}
+								</button>
+							)}
 						</div>
 					) : null}
 					{offline ? (
@@ -1911,7 +1978,7 @@ export default function IntelligenceMapSplit({
 				{comparePanelHidden ? (
 					<button
 						type="button"
-						className={`farq-map-panel-tab inline-flex ${livePlaceId || stackPick ? "" : "hidden lg:inline-flex"}`}
+						className={`farq-map-panel-tab inline-flex ${placeChromeOpen ? "" : "hidden lg:inline-flex"}`}
 						data-testid="intelligence-map-panel-tab"
 						aria-label={isRTL ? "إظهار المقارنة" : "Show comparison"}
 						onClick={() => setComparePanelHidden(false)}
@@ -2100,7 +2167,7 @@ export default function IntelligenceMapSplit({
 			<aside
 				className={`farq-map-compare-aside hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
 					comparePanelHidden ? "" : "lg:flex"
-				} ${livePlaceId || stackPick ? "farq-place-panel-host" : ""}`}
+				} ${placeChromeOpen ? "farq-place-panel-host" : ""}`}
 			>
 				{stackPick ? (
 					<StackedPlacePicker
@@ -2109,7 +2176,7 @@ export default function IntelligenceMapSplit({
 						onSelect={focusAroundPlace}
 						onClose={closePlace}
 					/>
-				) : livePlaceId ? (
+				) : placeChromeOpen && livePlaceId ? (
 					<div className="flex min-h-0 flex-1 flex-col">
 						{selectedCoordinateStack ? (
 							<CoordinateStackBanner

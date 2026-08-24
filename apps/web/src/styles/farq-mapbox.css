@@ -1577,9 +1577,9 @@
 
 .farq-sort-rail {
 	display: flex;
-	flex-wrap: nowrap;
+	flex-wrap: wrap;
 	gap: 0.35rem;
-	overflow-x: auto;
+	overflow-x: visible;
 	-webkit-overflow-scrolling: touch;
 }
 
@@ -2317,7 +2317,7 @@
 @media (max-width: 1023px) {
 	.farq-map-split,
 	.farq-explore-chrome {
-		--farq-sheet-h: calc(148px + env(safe-area-inset-bottom, 0px));
+		--farq-sheet-h: calc(188px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.farq-map-split[data-sheet-snap="half"],
@@ -2461,6 +2461,19 @@
 	.farq-map-split .mapboxgl-ctrl-bottom-right {
 		bottom: var(--farq-sheet-h);
 		transition: bottom 260ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	/* Attribution sat on the locate FAB on a 360px Android. Keep it on the start edge. */
+	.farq-map-split .mapboxgl-ctrl-bottom-right {
+		inset-inline-end: auto;
+		inset-inline-start: 0.45rem;
+		right: auto;
+		left: max(0.45rem, env(safe-area-inset-left, 0px));
+	}
+
+	.farq-map-split[dir="rtl"] .mapboxgl-ctrl-bottom-right {
+		left: auto;
+		right: max(0.45rem, env(safe-area-inset-right, 0px));
 	}
 
 	/* The old floating column and its reopen tab are retired on the phone. */

@@ -3,6 +3,7 @@ import {
 	boundsFromPlaceFeatures,
 	lngLatInBbox,
 	parseMapBbox,
+	pointFromPlaceCollection,
 	shouldOfferSearchHere,
 	viewMovedEnough,
 } from "./farqMapViewport";
@@ -102,5 +103,22 @@ describe("bounds from search hits", () => {
 		if (!pile) return;
 		expect(pile[0]).toBeLessThan(46.6779465);
 		expect(pile[2]).toBeGreaterThan(46.6779465);
+	});
+
+	it("reads a deep-link coordinate from the city collection only", () => {
+		const city = {
+			features: [
+				{
+					geometry: { type: "Point" as const, coordinates: [46.6215488247467, 24.4855703069545] },
+					properties: { place_id: "1381" },
+				},
+			],
+		};
+		expect(pointFromPlaceCollection(city, "1381")).toEqual({
+			lat: 24.4855703069545,
+			lng: 46.6215488247467,
+		});
+		expect(pointFromPlaceCollection(city, "999")).toBeNull();
+		expect(pointFromPlaceCollection(city, "")).toBeNull();
 	});
 });

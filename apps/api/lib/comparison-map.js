@@ -682,10 +682,34 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
  LIMIT 1
 `;
 
+const PLACE_CACHE_TTL_MS = 5 * 60 * 1000;
+const placeCache = new Map();
+
+function readPlaceCache(id, now = Date.now()) {
+  const hit = placeCache.get(id);
+  if (!hit) return undefined;
+  if (now - hit.at >= PLACE_CACHE_TTL_MS) {
+    placeCache.delete(id);
+    return undefined;
+  }
+  return hit.value;
+}
+
+function writePlaceCache(id, value) {
+  placeCache.set(id, { at: Date.now(), value });
+  return value;
+}
+
+function resetPlaceCache() {
+  placeCache.clear();
+}
+
 async function getPlace(placeId) {
   if (!readEnabled()) return null;
   const id = String(placeId || '').trim();
   if (!/^\d+$/.test(id)) return null;
+  const cached = readPlaceCache(id);
+  if (cached !== undefined) return cached;
   const rows = await comparisonQuery(GET_SQL, [
     id,
     KSA.latMin,
@@ -694,9 +718,9 @@ async function getPlace(placeId) {
     KSA.lngMax,
   ]);
   const place = rows[0] ? rowToPlace(rows[0]) : null;
-  if (!place) return null;
+  if (!place) return writePlaceCache(id, null);
   const pin = toPlacePin(place);
-  return {
+  return writePlaceCache(id, {
     place_id: pin.place_id,
     restaurant_id: pin.restaurant_id,
     name: pin.name,
@@ -714,7 +738,7 @@ async function getPlace(placeId) {
     compare: pin.menu,
     image_url: place.image_url,
     source: 'comparison.discovery_cards',
-  };
+  });
 }
 
 /**
@@ -1373,6 +1397,10 @@ module.exports = {
   toFeature,
   queryPlaces,
   getPlace,
+  readPlaceCache,
+  writePlaceCache,
+  resetPlaceCache,
+  PLACE_CACHE_TTL_MS,
   PLACE_ITEMS_CAP,
   rowToPlaceItem,
   rowToPlaceProvider,

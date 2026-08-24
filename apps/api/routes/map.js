@@ -160,11 +160,13 @@ function createMapRouter() {
     asyncHandler(async (req, res) => {
       const place = await comparisonMap.getPlace(req.params.placeId);
       if (!place) {
+        res.setHeader('Cache-Control', 'public, max-age=60');
         return res.status(404).json({
           error: 'not_found',
           place_id: req.params.placeId,
         });
       }
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
       res.json(place);
     })
   );

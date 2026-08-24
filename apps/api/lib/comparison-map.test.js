@@ -196,3 +196,20 @@ test('duplicate coordinates are labelled, never merged', () => {
   assert.equal(classifyDupeNames(['ماكدونالدز', 'ماكدونالدز']), 'same_name');
   assert.equal(classifyDupeNames(['ماكدونالدز', 'ستاربكس']), 'distinct_names');
 });
+
+test('getPlace memo keeps an observed payload for five minutes and drops it after', () => {
+  const {
+    readPlaceCache,
+    writePlaceCache,
+    resetPlaceCache,
+    PLACE_CACHE_TTL_MS,
+  } = require('./comparison-map');
+  resetPlaceCache();
+  const body = { place_id: '1381', lat: 24.4855703069545, lng: 46.6215488247467 };
+  writePlaceCache('1381', body);
+  assert.equal(readPlaceCache('1381'), body);
+  assert.equal(readPlaceCache('1381', Date.now() + PLACE_CACHE_TTL_MS + 1), undefined);
+  writePlaceCache('999', null);
+  assert.equal(readPlaceCache('999'), null);
+  resetPlaceCache();
+});

@@ -126,3 +126,29 @@ export function boundsFromPlaceFeatures(
 	}
 	return [west, south, east, north];
 }
+
+/** Observed pin coordinates from a collection — never invented, never guessed. */
+export function pointFromPlaceCollection(
+	collection:
+		| { features?: Array<{
+				geometry?: { type?: string; coordinates?: unknown } | null;
+				properties?: { place_id?: unknown } | null;
+		  }> }
+		| null
+		| undefined,
+	placeId: string,
+): { lat: number; lng: number } | null {
+	const want = String(placeId || "").trim();
+	if (!want) return null;
+	for (const feature of collection?.features || []) {
+		if (String(feature.properties?.place_id || "") !== want) continue;
+		if (feature.geometry?.type !== "Point") continue;
+		const coords = feature.geometry.coordinates;
+		if (!Array.isArray(coords) || coords.length < 2) continue;
+		const lng = Number(coords[0]);
+		const lat = Number(coords[1]);
+		if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+		return { lat, lng };
+	}
+	return null;
+}
