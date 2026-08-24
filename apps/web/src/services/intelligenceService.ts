@@ -4,6 +4,7 @@
  * place_ids or invent demand / lat-lon.
  */
 import { fetchApi } from "../lib/api";
+import { normalizePlaceDetail, normalizePlacesBody } from "../lib/mapPlaceContract";
 
 export type IntelligenceConfidence =
 	| "HIGH"
@@ -356,6 +357,13 @@ export type IntelligenceMapPlaceProperties = {
 		expensive_provider_id?: string | null;
 		product_name?: string | null;
 	} | null;
+	/** Exact same lat/lng pile — one drawn pin, every identity kept. Never a merge. */
+	stack_count?: number;
+	stack_key?: string;
+	stack_place_ids?: string[];
+	stack_names?: string[];
+	stack_gaps?: Array<number | null>;
+	never_merged?: boolean;
 };
 
 /** Approved opportunity tiers (2026-08-20): Hero ≥36 · Strong 15–35 · Regular 5–14 · Faint <5. */
@@ -555,6 +563,9 @@ export type IntelligenceMapPlaceDetail = {
 		note_en?: string;
 	};
 	image_url?: string | null;
+	/** Lean gap — same riyals as city pins. Nested `difference` remains the evidence. */
+	gap?: number | null;
+	demote_reason?: "share" | "retail" | null;
 };
 
 /** One app's row for a restaurant. delivery_fee is observed on a minority of rows — optional evidence, never a requirement. */
@@ -586,6 +597,9 @@ export type IntelligenceMapPlaceItem = {
 	typical_price: number | null;
 	/** The ranking layer rejects spreads at 2x or more as scrape errors; this row is one. */
 	price_outlier?: boolean;
+	/** Dearest price is above the 200 SAR consumer cap — not the map number. */
+	over_cap?: boolean;
+	demote_reason?: "share" | "retail" | null;
 	prices: Record<string, number>;
 };
 
@@ -754,6 +768,8 @@ export const IntelligenceService = {
 			zoom?: number;
 			q?: string;
 			category?: string;
+			sector?: string;
+			filter?: string;
 			layer?: "difference" | "places" | "all_food" | "comparison";
 			limit?: number;
 			fields?: "pin" | "full";
@@ -765,6 +781,8 @@ export const IntelligenceService = {
 		if (opts.zoom != null) qs.set("zoom", String(opts.zoom));
 		if (opts.q) qs.set("q", opts.q);
 		if (opts.category) qs.set("category", opts.category);
+		if (opts.sector) qs.set("sector", opts.sector);
+		if (opts.filter) qs.set("filter", opts.filter);
 		if (opts.layer) qs.set("layer", opts.layer);
 		qs.set("fields", opts.fields ?? "pin");
 		qs.set("limit", String(opts.limit ?? 400));
@@ -773,7 +791,7 @@ export const IntelligenceService = {
 			{ signal: opts.signal },
 			{ timeoutMs: 15_000 },
 		);
-		return env.data;
+		return normalizePlacesBody(env.data);
 	},
 
 	/** The city's أحياء: official polygons with how many opportunities each holds and the biggest. */
@@ -806,7 +824,10 @@ export const IntelligenceService = {
 			{ signal },
 			{ timeoutMs: 12_000 },
 		);
-		return env.data;
+		const detail = normalizePlaceDetail(
+			env.data as unknown as Record<string, unknown>,
+		);
+		return (detail || env.data) as IntelligenceMapPlaceDetail;
 	},
 
 	/** The proof table for one restaurant: every compared item, priced on every app that lists it. */

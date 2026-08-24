@@ -1,5 +1,10 @@
+import { encodeMapFilters, parseMapFilters } from "../lib/mapFilters";
+import type { MapValueFilter } from "../lib/mapFilters";
+import { safeGet, safeSet } from "../lib/safeStorage";
+
 export type MapViewMode = "list" | "map";
 export type MapSort = "gap" | "near" | "cheap" | "value";
+export type { MapValueFilter };
 
 export type MapSearch = {
 	neighborhood?: string;
@@ -7,6 +12,8 @@ export type MapSearch = {
 	city?: string;
 	q?: string;
 	place?: string;
+	sector?: string;
+	filter?: string;
 	view?: MapViewMode;
 	sort?: MapSort;
 	/** Camera: bbox "west,south,east,north" (4 decimals) and zoom — so a link restores the scene. */
@@ -36,6 +43,24 @@ export function parseCameraZoom(raw: unknown): number | undefined {
 /** Compact, stable encoding for replaceState on every idle move. */
 export function encodeCameraBbox(b: CameraBbox): string {
 	return b.map((v) => v.toFixed(4)).join(",");
+}
+
+function filterQuery(raw: unknown): unknown {
+	if (Array.isArray(raw)) {
+		return raw.filter((part): part is string => typeof part === "string").join(",");
+	}
+	return raw;
+}
+
+/** Camera in the URL is a share of a restaurant, not a live GPS trail. DNT skips it. */
+export function shouldPersistCameraToUrl(search: Pick<MapSearch, "place">): boolean {
+	if (typeof navigator !== "undefined") {
+		const dnt =
+			navigator.doNotTrack === "1" ||
+			(globalThis as { doNotTrack?: string }).doNotTrack === "1";
+		if (dnt) return false;
+	}
+	return Boolean(String(search.place || "").trim());
 }
 
 function trim(v: unknown, max: number): string | undefined {
@@ -80,9 +105,50 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		city: trim(s.city, 40),
 		q: trim(s.q, 200),
 		place: trim(s.place, 80),
+		sector: trim(s.sector, 24),
+		filter: encodeMapFilters(parseMapFilters(filterQuery(s.filter))),
 		view: parseMapView(s.view),
 		sort: parseMapSort(s.sort),
 		b: parseCameraBbox(s.b) ? encodeCameraBbox(parseCameraBbox(s.b) as CameraBbox) : undefined,
 		z: parseCameraZoom(s.z),
 	};
+}
+
+const MAP_RETURN_KEY = "farq-map-return";
+
+/** Last map scene so merchant "Back to map" restores camera, place, and filters. */
+export function writeMapReturn(search: MapSearch): void {
+	safeSet("sessionStorage", MAP_RETURN_KEY, JSON.stringify(parseMapSearch({ ...search })));
+}
+
+export function readMapReturn(): MapSearch {
+	try {
+		const raw = JSON.parse(safeGet("sessionStorage", MAP_RETURN_KEY) || "{}") as unknown;
+		if (!raw || typeof raw !== "object") return {};
+		return parseMapSearch(raw as Record<string, unknown>);
+	} catch {
+		return {};
+	}
+}
+
+export function mapReturnSearch(placeId?: string): MapSearch {
+	const saved = readMapReturn();
+	const want = String(placeId || "").trim();
+	const savedPlace = String(saved.place || "").trim();
+	/* Another restaurant's camera/filters would open the wrong scene. */
+	if (want && savedPlace && want !== savedPlace) {
+		return parseMapSearch({ place: want });
+	}
+	const place = want || savedPlace;
+	return parseMapSearch({
+		...saved,
+		...(place ? { place } : {}),
+	});
+}
+
+/** Session camera belongs to the last pan — a bare ?place= link must fly itself. */
+export function resumeMapSessionCamera(search: Pick<MapSearch, "place" | "b" | "z">): boolean {
+	const hasCamera = Boolean(parseCameraBbox(search.b) && parseCameraZoom(search.z));
+	if (hasCamera) return true;
+	return !String(search.place || "").trim();
 }

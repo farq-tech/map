@@ -35,7 +35,13 @@ const { CATEGORY_GROUPS, normalizeArabic } = require('./copilot-intent');
 const SHARE_TERM_SOURCES = Object.freeze([
   /* Arabic: containers and occasions that only make sense for a group */
   'بوكس',
-  'صينيه',
+  /* Native "box" — "صندوق تجميع لفائف" was a mint 55 because only the
+   * loanword بوكس was in the list. Same container, same rule. */
+  'صندوق',
+  /* Tray-of, not the adjective "Chinese". The following letter must be
+   * Arabic — name_ar+' '+name_en would otherwise make "نودلز صينية
+   * Chinese Noodles" look like a platter. */
+  'صينيه\\s+[ء-ي]',
   'باكيت',
   'كرتون',
   'درزن',
@@ -54,14 +60,56 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'دلو',
   'سطل',
   'باكج',
+  /* Same loanword without the alef. "بكج كاس العالم" (3940 gap 56) and
+   * "بكج اللمة" (37692) stayed mint because only باكج was listed. */
+  'بكج',
+  /* A gathering table, not a sip of coffee. "اللمه" catches كومبو/عرض/سبيشل
+   * اللمة; "(^|\\s)لمه\\s+" catches "لمة السراة 5" / "لمة الأصدقاء".
+   * Bare لمه would also hit "والمة قهوة" (بيت التحميص 1280) — a pour, not a
+   * table — so the article or a word boundary is required. كومبو on its own
+   * stays out. */
+  'اللمه',
+  '(^|\\s)لمه\\s+',
+  /* "تجمع شواء النار" — five Fire Grill branches, mint 43. للتجمع is the
+   * same gathering; صندوق already covered those pins. */
+  'تجمع',
+  /* Plural gatherings, not Friday. "عرض الجمعات" (سلطان 3403 gap 59) and
+   * "جمعات جيلاتو" (3940) were mint. "كباب الجمعة" / "جمعة النورماني" are
+   * a weekday special and must stay dinner — ة→ه makes them الجمعه. */
+  'جمعات',
   /* "تريو كبير كومبو" — 25 items, average gap 21.7 SAR against 5.5 city-wide.
    * A trio is three plates; كومبو and ميكس on their own are not, and stay out. */
   'تريو',
+  /* The Arabic duo / triple. "كومبو الثنائي الكبير" (بيتزا هت 8045 gap 65)
+   * and "وجبة صب واي الثلاثية" stayed mint because only the loanword تريو
+   * was listed. كومبو on its own still stays out. */
+  'الثنائي',
+  'الثلاثي',
+  /* Picnic pouch, not a bag of beans. "كيسة الطلعة" (تريب 1837 gap 70)
+   * is an outing pack; a burger meal at the same place is 7. Bare كيس
+   * stays out — كيس قهوة / كيس مكسرات are retail, "30 كيس" is a count. */
+  'كيسه\\s*الطلعه',
+  /* Three plates, same as تريو. "وجبة الهاتريك" (ووك 555 gap 60) and
+   * Papa Johns / Maestro hat-trick combos were mint. */
+  'هاتريك',
+  /* A table of two. "طاجن السعاده للمتزوجين" (السماك 1530 gap 65). */
+  'للمتزوجين',
+  /* A group meal. Papa Johns 3974 "وجبة جماعية" / "Group Meal" was mint 26
+   * after الهاتريك was demoted. Bare "group" would hit grouper. */
+  'جماعي',
+  /* Four plates, same as الثنائي / الثلاثي. "عرض الرباعي الذهبي"
+   * (كوفتا 12605 gap 56) and "عرض الكريب الرباعي" were mint. */
+  'الرباعي',
+  /* Two tajines is a table. "وجبة 2 طاجن" (حمام عبده 1389 gap 67). */
+  '[0-9]+\\s*طاجن',
+  /* Whole lamb for a table. "مفطح شهبار" (1059 gap 59) is 139–198.
+   * A Japanese bento is one lunch and stays out. */
+  'مفطح',
   /* "24 قطعة" · "12 عبوة" · "30 كيس" · "5 أشخاص" */
   '[0-9]+\\s*(قطعه|قطع|حبه|حبات|كيس|اكياس|عبوه|عبوات|شخص|اشخاص|سيخ|اسياخ)',
   /* "لـ 5 أشخاص" and the spelled-out forms */
   'ل\\s*[0-9]+\\s*(اشخاص|شخص)',
-  'لثلاثه|لاربعه|لخمسه|لسته',
+  'لشخصين|لثلاثه|لاربعه|لخمسه|لسته',
   /* English */
   'box',
   'platter',
@@ -73,9 +121,36 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'bucket',
   'feast',
   'catering',
-  'combo for',
-  'for [0-9]+',
+  /* "for 2" is a table; "Meal For 1" / "for 69SR" are a single plate and a price. */
+  'for\\s*[2-9]([^0-9]|$)',
   'serves',
+  'hat\\s*-?\\s*trick',
+  'group\\s*meal',
+  'quartet',
+  /* Three plates. "كومبو ثلاثة أنواع من الپاستا" / "The Pasta Cup Trio"
+   * (ذا رد باستا كب 6112 gap 42). Bare كومبو and World Cup Offer stay out —
+   * عرض المونديال and عرض الأبطال are named promos, not proven tables. */
+  'ثلاثه\\s*انواع',
+  'trio',
+  /* The duo leftover after the trio. Article-less ثنائي is a double burger
+   * name ("ثنائي دبل") AND "أفضل ثنائي"; bare ثنائي would also hit
+   * "ثنائية الصباح" (one breakfast). */
+  'افضل ثنائي',
+  'hottest\\s*duo',
+  'ثنائي\\s*دبل',
+  '2x\\s*double',
+  'sandwich\\s*duo',
+  /* A mezze spread, not a named promo. فيروزيات 10008 "عرض مازة" is
+   * 135–180 against hummus 25. Bare عرض stays out (الأبطال / المونديال). */
+  'مازه',
+  'mazeh',
+  /* Two plates. ذا رد باستا كب 6112 "باستا وسباغيتي" / "Pizza & Spaghetti"
+   * is 70–107 against one بولو نيز 31–48. Bare باستا is وايت صوص;
+   * bare سباغيتي is a single bowl. */
+  'باستا\\s*وسباغيت',
+  'باستا\\s*وسباقيت',
+  'pizza\\s*&\\s*spaghetti',
+  'pasta\\s*&\\s*spaghetti',
 ]);
 
 /**
@@ -90,7 +165,12 @@ const SHARE_TERM_SOURCES = Object.freeze([
  * calorie count, and excluding it would have thrown away an eighth of the
  * data. `بروتين` catches "وعاء أرز مع نوعين من البروتين", a rice bowl, and
  * a bare `mg` catches "MG shrimp bowl", so both are required to follow a
- * number instead. Guessing a lexicon is how a map starts lying quietly.
+ * number instead. A bare `جرام` does the same to "رامب أسترالي 250 جرام",
+ * a steak, so the gram weight stays out — creatine still matches `كرياتين`.
+ * `سلس` is incontinence pads on a food pin (صيدلية 18928), not a sharing meal.
+ * Bagged coffee is a shelf SKU, not a cup: `كيس قهوة` (سعد الدين 2172 gap 15)
+ * and `حبوب قهوة` (جديل 7613). Bare `قهوة` is a latte and `بن` is ابن / بن بندت.
+ * Bare `حبوب` is Kudu grain toast (3679) and stays dinner.
  */
 const RETAIL_TERM_SOURCES = Object.freeze([
   'كرياتين',
@@ -102,20 +182,109 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'اقراص',
   'بي سي ايه ايه',
   'واي بروتين',
-  '[0-9]+\\s*(جرام|غرام)',
   '[0-9]+\\s*(ملجم|ملغم|mg)',
+  'سلس',
+  'كيس\\s*قهوه',
+  'حبوب\\s*(ال)?قهوه',
+  'ارابيكا',
+  /* Same shelf bag after coffee was demoted. سعد الدين 2172 pinned
+   * "كيس مكسرات" 11. Bare مكسرات is a garnish. */
+  'كيس\\s*مكسرات',
+  /* A blender bottle, not Caribou "إسبريسو شيكر" or Steak شيك. الوزن
+   * المثالي 28737 was a mint 60 shaker. Lotion on the same menu is a tub. */
+  'شيكر\\s*بلندر',
+  'بلندر\\s*بوتل',
+  'لوشن',
+  'يوسيرين',
   'creatine',
   'vitamin',
   'supplement',
   'bcaa',
   'whey',
   'pre-workout',
+  'lifree',
+  'arabica',
+  'coffee\\s*beans',
+  'lotion',
+  'eucerin',
+  'blender\\s*bottle',
+  /* 100 sachets of sweetener is a shelf box (الوزن المثالي 28737 gap 16). */
+  '[0-9]+\\s*ظرف',
+  /* A tin of beans, not a cup. Tim Hortons 10061 "علبة قهوة مميزة" was mint 7.
+   * Bare علبة stays out — it is a juice cup. */
+  'علبه\\s*قهوه',
+  /* Supplement-shop honey (الوزن المثالي 28737). Bare عسل is knafeh syrup. */
+  'تعزيز المناعه',
+  'ستيفيا',
+  'immune',
+  'stevia',
+  /* A branded metal mug, not مجبوس and not mineral water. Tim Hortons
+   * 7769 pinned "مج معدني" gap 5. Bare مج matches مجبوس / مجانا. Bare
+   * معدني matches مياه معدنية. */
+  'مج\\s*معدني',
+  /* Same merch without "معدني". Tim Hortons 10061 still minted
+   * "مج يحمل شعار تيم هورتنز لون أسود" after the metal-mug rule. */
+  'مج\\s*يحمل\\s*شعار',
+  'metal\\s*mug',
+  /* Diet jam on a supplement pin (الوزن المثالي 28737). Bare بدون سكر is
+   * Coca-Cola at الحمراء البخاري 4788. Bare مربى is a peach topping
+   * (5593) and a cheese-jam sandwich (8085). */
+  'مربي\\s*بدون\\s*سكر',
+  'بدون\\s*سكر\\s*مضاف',
+  'diet\\s*jelly',
+  'no\\s*sugar\\s*added',
+  /* Gym-brand shaker, not Caribou espresso شيكر. After the jam was
+   * demoted, الوزن المثالي 28737 pinned "بودي بيلدر شيكر". */
+  'بودي بيلدر',
+  'body\\s*builder',
+  /* Supplement nut pack (الوزن المثالي 28737). Bare مكسرات is knafeh
+   * garnish and فتة / حمص بالمكسرات. */
+  'اوبتي تيكت',
+  'هيلث بيرفكت نتس',
+  'opti\\s*tect',
+  'perfect\\s*nuts',
+  /* Supplement-shop potassium salt and iso whey (الوزن المثالي 28737).
+   * Bare ملح is salted caramel; bare بروتين is a rice bowl. */
+  'ملح\\s*بوتاسيوم',
+  'ايزو\\s*تربيل',
+  'potassium\\s*salt',
+  'iso\\s*triple',
+  /* Protein coconut balls: Arabic name has no لابيرفا. Bare كرات is
+   * falafel; bare عالية البروتين is a meal claim. */
+  'كرات\\s*عاليه\\s*البروتين',
+  'protein\\s*coconut\\s*balls',
+  /* The gym brand itself. Leftover bars/gummies at الوزن المثالي. */
+  'لابيرفا',
+  'laperva',
+  /* Nut-shop packs (سعد الدين 2181, الرفاعي 4808). Bare مكسرات is
+   * knafeh garnish; bare مكرمل is قشطية / بيكان dessert; bare برازيل
+   * is Gloria Jean's coffee. */
+  'مكسرات\\s*مكرمله',
+  'مكسرات\\s*برازيليه',
+  'كاجو\\s*مقلي',
+  'caramelized\\s*nuts',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
 const RETAIL_PATTERN = RETAIL_TERM_SOURCES.join('|');
 const SHARE_RE = new RegExp(SHARE_PATTERN, 'i');
 const RETAIL_RE = new RegExp(RETAIL_PATTERN, 'i');
+/** Half a kilo of dessert, or an eighth-gallon pint, is one person's order. */
+const PERSONAL_SIZE_RE =
+  /½\s*كيلو|نصف\s*كيلو|نص\s*كيلو|[12]\s*\/\s*[12]\s*كيلو|half\s+(a\s+)?kilo|ثمن\s*جالون/;
+const PERSONAL_SIZE_SQL =
+  "نصف\\s*كيلو|نص\\s*كيلو|[12]/[12]\\s*كيلو|½\\s*كيلو|half\\s+(a\\s+)?kilo|ثمن\\s*جالون";
+const SHARE_PATTERN_WITHOUT_SIZE = SHARE_TERM_SOURCES.filter(
+  (t) => t !== 'كيلو' && t !== 'جالون',
+).join('|');
+const SHARE_RE_WITHOUT_SIZE = new RegExp(SHARE_PATTERN_WITHOUT_SIZE, 'i');
+/** "فويل بارتي سنجل" is one burger; "بارتي بوكس" is still a tray. */
+const SINGLE_SERVE_RE = /سنجل|single/;
+const SINGLE_SERVE_SQL = 'سنجل|single';
+const SHARE_PATTERN_WITHOUT_PARTY = SHARE_TERM_SOURCES.filter(
+  (t) => t !== 'بارتي' && t !== 'party',
+).join('|');
+const SHARE_RE_WITHOUT_PARTY = new RegExp(SHARE_PATTERN_WITHOUT_PARTY, 'i');
 
 /** The same patterns the SQL uses, so the server and its query cannot disagree. */
 function shareItemPattern() {
@@ -129,7 +298,15 @@ function retailItemPattern() {
 /** True when the item reads as something bought for a group rather than for one person. */
 function isShareItem(name) {
   const norm = normalizeArabic(name);
-  return norm ? SHARE_RE.test(norm) : false;
+  if (!norm || !SHARE_RE.test(norm)) return false;
+  if (PERSONAL_SIZE_RE.test(norm) && !SHARE_RE_WITHOUT_SIZE.test(norm)) return false;
+  if (SINGLE_SERVE_RE.test(norm) && !SHARE_RE_WITHOUT_PARTY.test(norm)) return false;
+  return true;
+}
+
+function shareMatchSql(nameExpr) {
+  const norm = normalizedNameSql(nameExpr);
+  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${PERSONAL_SIZE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_SIZE}') AND (NOT (${norm} ~ '${SINGLE_SERVE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_PARTY}'))`;
 }
 
 /** True when the item reads as packaged retail rather than something cooked to order. */
@@ -144,8 +321,9 @@ function isRetailItem(name) {
  * "بوكس مشاركة" instead of silently ranking something down.
  */
 function demoteReason(name) {
-  if (isShareItem(name)) return 'share';
+  /* A tub of creatine sold as "30 كيس" is packaged retail, not a dinner tray. */
   if (isRetailItem(name)) return 'retail';
+  if (isShareItem(name)) return 'share';
   return null;
 }
 
@@ -160,11 +338,20 @@ function displayItemName(name) {
   const raw = String(name || '').trim();
   if (!raw) return '';
   const trimmed = raw
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
     .replace(/\s*[-–—]?\s*(سعره|سعرة|سعرات)\s*[٠-٩0-9]+\s*/g, ' ')
-    .replace(/\s*\bcal\s*[0-9]+\s*/gi, ' ')
-    .replace(/\s*\b[0-9]{6,}\b\s*/g, ' ')
+    .replace(
+      /\s*[\(（]?\s*(?:k\s*)?cal(?:ories)?\s*[:：]?\s*[٠-٩0-9]+\s*[\)）]?\s*/gi,
+      ' ',
+    )
+    .replace(/_[٠-٩0-9]{5,}/g, '')
+    .replace(/\s*[-–—]?\s*[٠-٩0-9]{6,}(?=$|[\s,،)）])/g, ' ')
+    .replace(/([\u0600-\u06FF])[0-9]{5,}/g, '$1')
+    .replace(/\s*\b0[0-9]{4,}\b\s*/g, ' ')
     .replace(/\s{2,}/g, ' ')
-    .replace(/\s*[,،-]\s*$/, '')
+    .replace(/^[.\s,،_\-–—]+/, '')
+    .replace(/\s*[-–—]\s*$/, '')
+    .replace(/\s*[,،()（）]+\s*$/, '')
     .trim();
   return trimmed || raw;
 }
@@ -176,7 +363,10 @@ function displayItemName(name) {
  * normalised form) would miss the way the source actually spells things.
  */
 function normalizedNameSql(expr) {
-  return `translate(translate(lower(${expr}), 'أإآٱةىًٌٍَُِّْـ', 'اااهي'), '٠١٢٣٤٥٦٧٨٩', '0123456789')`;
+  /* Six letters → six letters: أإآٱ→ا, ة→ه, ى→ي. A shorter dest mapped
+   * ة to ي and deleted ى, so SQL missed every ة-spelling the JS caught
+   * (صينية, سفرة, وليمة) and the pin stayed mint while the sheet said share. */
+  return `translate(translate(lower(${expr}), 'أإآٱةىًٌٍَُِّْـ', 'ااااهي'), '٠١٢٣٤٥٦٧٨٩', '0123456789')`;
 }
 
 /**
@@ -214,6 +404,25 @@ function categoryCaseSql(expr) {
  * moment the crawler records both, the honest number appears by itself —
  * and so that nobody is tempted to fill the gap with an average.
  */
+/**
+ * Shared ranking for the one item a pin, list card, and getPlace sheet name.
+ * A displayable gap (≥ 1 ر.س, the pin's own floor) beats a same-price or
+ * halala-only row — share trays must not vanish behind a stew the map
+ * would not number. Share/retail lose the tie among those gaps; equal
+ * gaps take the cheaper dish; item id is last so 1479 cannot be fries
+ * on the pin and sambosa on the sheet.
+ */
+const ITEM_NAME_SQL = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,'')";
+
+function representativeSpreadOrderSql() {
+  return `((ips.dearest_price - ips.cheapest_price) >= 1) DESC,
+          (${shareMatchSql(ITEM_NAME_SQL)}
+        OR ${normalizedNameSql(ITEM_NAME_SQL)} ~ '${retailItemPattern()}') ASC,
+          (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST,
+          ips.cheapest_price ASC NULLS LAST,
+          ips.canonical_item_id ASC`;
+}
+
 function deliveryAdjustedGap({ cheapestPrice, dearestPrice, cheapestFee, dearestFee } = {}) {
   /* An unobserved fee is missing, not zero — Number(null) is 0, which would
    * quietly turn "we don't know" into "delivery is free". */
@@ -240,6 +449,8 @@ module.exports = {
   isRetailItem,
   isShareItem,
   normalizedNameSql,
+  representativeSpreadOrderSql,
   retailItemPattern,
   shareItemPattern,
+  shareMatchSql,
 };

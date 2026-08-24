@@ -13,11 +13,18 @@ import {
 	GPU_ICON_PX,
 	PRICE_CIRCLE_FILL,
 	PRICE_CIRCLE_TEXT,
+	PRICE_TILE_CLUSTERS,
+	PRICE_TILE_ICONS,
+	PRICE_TILE_NEIGHBOR_DIM,
+	PRICE_TILE_POINTS,
 	cheapestProviderId,
 	hashPriceTileCollection,
+	nextClusterZoom,
 	pinGapAmount,
 	gpuIconId,
+	setPriceTileNeighborDim,
 	toPriceTileCollection,
+	placeCountForStack,
 } from "./farqPriceTiles";
 
 const point = (
@@ -90,6 +97,55 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		});
 	});
 
+	it("trims scraper residue on GPU labels without inventing a name", () => {
+		const tiles = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [
+				{
+					type: "Feature",
+					geometry: { type: "Point", coordinates: [46.8, 24.67] },
+					properties: {
+						feature_type: "place",
+						place_id: "1479",
+						name: "هارا",
+						product_name: "سمبوسة البطاطس (Cal: 236)",
+						gap: 2,
+						cheapest_provider_id: "jahez",
+					},
+				},
+			],
+		});
+		expect(tiles.features[0]?.properties?.product_name).toBe("سمبوسة البطاطس");
+	});
+
+	it("hides a same-coordinate stack when any member is selected", () => {
+		const stacked = {
+			type: "Feature" as const,
+			geometry: { type: "Point" as const, coordinates: [46.6779465, 24.6852364] },
+			properties: {
+				feature_type: "place",
+				place_id: "689",
+				name: "تيمبو باستا",
+				gap: 22,
+				stack_count: 3,
+				stack_place_ids: ["689", "451", "1288"],
+			},
+		};
+		const open = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [stacked],
+		});
+		expect(open.features[0]?.properties).toMatchObject({
+			place_id: "689",
+			stack_count: 3,
+		});
+		const hidden = toPriceTileCollection(
+			{ type: "FeatureCollection", features: [stacked] },
+			"1288",
+		);
+		expect(hidden.features).toHaveLength(0);
+	});
+
 	it("hashes a collection so unchanged data skips setData", () => {
 		const a = toPriceTileCollection({
 			type: "FeatureCollection",
@@ -105,5 +161,64 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		});
 		expect(hashPriceTileCollection(a)).toBe(hashPriceTileCollection(b));
 		expect(hashPriceTileCollection(a)).not.toBe(hashPriceTileCollection(c));
+	});
+
+	it("steps a cluster tap in even when expansion equals the current zoom", () => {
+		expect(nextClusterZoom(11, 11)).toBe(12.2);
+		expect(nextClusterZoom(12, 16)).toBeLessThanOrEqual(15);
+		expect(nextClusterZoom(13, null)).toBe(14.2);
+	});
+
+	it("opens stacked clusters to street zoom so members appear", () => {
+		expect(nextClusterZoom(12, 13, undefined, { placeCount: 30, pointCount: 2 })).toBe(14);
+		expect(nextClusterZoom(12, 13, undefined, { placeCount: 4, pointCount: 4 })).toBe(13.2);
+	});
+
+	it("counts a food-court stack as N restaurants inside a cluster", () => {
+		expect(placeCountForStack(27)).toBe(27);
+		expect(placeCountForStack(1)).toBe(1);
+		expect(placeCountForStack(0)).toBe(1);
+		expect(placeCountForStack(null)).toBe(1);
+		const stacked = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [
+				{
+					type: "Feature",
+					geometry: { type: "Point", coordinates: [46.6779465, 24.6852364] },
+					properties: {
+						feature_type: "place",
+						place_id: "689",
+						gap: 22,
+						stack_count: 3,
+					},
+				},
+			],
+		});
+		expect(placeCountForStack(stacked.features[0]?.properties?.stack_count)).toBe(
+			3,
+		);
+	});
+
+	it("dims GPU neighbor layers when a place is selected", () => {
+		const paints = new Map<string, number>();
+		const map = {
+			getLayer: (id: string) => ({ id }),
+			setPaintProperty: (id: string, prop: string, value: number) => {
+				paints.set(`${id}:${prop}`, value);
+			},
+		};
+		setPriceTileNeighborDim(map, true);
+		expect(paints.get(`${PRICE_TILE_POINTS}:icon-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		expect(paints.get(`${PRICE_TILE_CLUSTERS}:text-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		expect(paints.get(`${PRICE_TILE_ICONS}:icon-opacity`)).toBe(
+			PRICE_TILE_NEIGHBOR_DIM,
+		);
+		setPriceTileNeighborDim(map, false);
+		expect(paints.get(`${PRICE_TILE_POINTS}:icon-opacity`)).toBe(1);
+		expect(paints.get(`${PRICE_TILE_ICONS}:text-opacity`)).toBe(1);
 	});
 });

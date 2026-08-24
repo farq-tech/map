@@ -70,6 +70,12 @@ export function safeSet(
 	}
 }
 
+export function resetSafeStorageProbeForTests(): void {
+	(Object.keys(probeCache) as StorageKind[]).forEach((k) => {
+		delete probeCache[k];
+	});
+}
+
 export function safeRemove(kind: StorageKind, key: string): void {
 	const s = getStore(kind);
 	if (!s) return;

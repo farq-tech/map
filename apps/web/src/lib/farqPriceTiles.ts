@@ -36,11 +36,19 @@ import {
 	PLATFORM_LOGOS,
 	type PlatformKey,
 } from "./platformLogos";
+import { displayItemName } from "./displayItemName";
 
 export const PRICE_TILE_SOURCE = "farq-price-tiles";
 export const PRICE_TILE_POINTS = "farq-price-points";
 export const PRICE_TILE_CLUSTERS = "farq-price-clusters";
 export const PRICE_TILE_ICONS = "farq-price-icons";
+/** Neighbors stay readable but yield the pixel to the selected HTML pin. */
+export const PRICE_TILE_NEIGHBOR_DIM = 0.4;
+const PRICE_TILE_DIM_LAYERS = [
+	PRICE_TILE_POINTS,
+	PRICE_TILE_CLUSTERS,
+	PRICE_TILE_ICONS,
+] as const;
 
 /** Mint disc, dark Farq teal number — never white on mint. */
 export const PRICE_CIRCLE_FILL = FARQ_MINT;
@@ -69,6 +77,28 @@ export const CLUSTER_DISC_PX = { sm: 40, md: 48, lg: 56 } as const;
 export const CLUSTER_STEP_MD = 12;
 export const CLUSTER_STEP_LG = 40;
 export const CLUSTER_MAX_ZOOM = CLUSTER_BREAK_ZOOM - 1;
+
+/** A tap that would land on the same zoom is a no-op on a phone. Always step in. */
+export function nextClusterZoom(
+	currentZoom: number,
+	expansionZoom: number | null | undefined,
+	cap = CLUSTER_BREAK_ZOOM + 0.5,
+	counts?: { placeCount?: number; pointCount?: number },
+): number {
+	const current = Number(currentZoom);
+	const expansion = Number(expansionZoom);
+	const now = Number.isFinite(current) ? current : 0;
+	const want = Number.isFinite(expansion) ? expansion : now + 1.2;
+	let next = Math.min(Math.max(want, now + 1.2), cap);
+	const places = Number(counts?.placeCount);
+	const points = Number(counts?.pointCount);
+	/* Displayed count is stacked restaurants; Mapbox expansion uses features.
+	 * A 2-feature cluster labeled 30 would otherwise stop one step in. */
+	if (Number.isFinite(places) && Number.isFinite(points) && points > 0 && places > points) {
+		next = Math.min(cap, Math.max(next, CLUSTER_BREAK_ZOOM));
+	}
+	return next;
+}
 export const CLUSTER_RADIUS_PX = 64;
 /** A thumb needs more room than a cursor: on coarse pointers clusters merge sooner. */
 export const CLUSTER_RADIUS_COARSE_PX = 84;
@@ -148,16 +178,22 @@ export function toPriceTileCollection(
 			difference?: unknown;
 			cheapest_provider_id?: unknown;
 			product_name?: unknown;
+			stack_count?: unknown;
+			stack_place_ids?: unknown;
 		};
 		if (props.feature_type === "cluster") continue;
 		const placeId = String(props.place_id || "").trim();
 		if (!placeId) continue;
-		if (selected && placeId === selected) continue;
+		const stackIds = Array.isArray(props.stack_place_ids)
+			? props.stack_place_ids.map(String)
+			: [];
+		if (selected && (placeId === selected || stackIds.includes(selected))) continue;
 		const gap = pinGapAmount(props);
 		const tier =
 			(typeof props.tier === "string" ? (props.tier as OpportunityTier) : null) ||
 			tierForGap(gap);
-		const product = mapSafeText(props.product_name);
+		const product = mapSafeText(displayItemName(props.product_name));
+		const stackCount = Number(props.stack_count);
 		features.push({
 			type: "Feature",
 			id: Number.isFinite(Number(placeId)) ? Number(placeId) : undefined,
@@ -169,6 +205,7 @@ export function toPriceTileCollection(
 				gap: gap != null ? Math.round(gap) : 0,
 				tier: tier || "faint",
 				icon: gpuIconId(cheapestProviderId(props)),
+				stack_count: Number.isFinite(stackCount) && stackCount > 1 ? stackCount : 0,
 			},
 		});
 	}
@@ -188,9 +225,10 @@ export function hashPriceTileCollection(
 			tier?: string;
 			icon?: string;
 			product_name?: string;
+			stack_count?: unknown;
 		};
 		parts.push(
-			`${props.place_id || ""}|${props.gap ?? 0}|${props.tier || ""}|${props.icon || ""}|${props.product_name || ""}|${lng}|${lat}`,
+			`${props.place_id || ""}|${props.gap ?? 0}|${props.tier || ""}|${props.icon || ""}|${props.product_name || ""}|${props.stack_count || 0}|${lng}|${lat}`,
 		);
 	}
 	parts.sort();
@@ -309,6 +347,17 @@ const TIER_EXPR: ExpressionSpecification = ["coalesce", ["get", "tier"], "faint"
 const GAP_EXPR: ExpressionSpecification = ["coalesce", ["get", "gap"], 0];
 /** Biggest gap first: lower sort keys are placed first, so negate the gap. */
 const SORT_BY_GAP: ExpressionSpecification = ["-", 0, GAP_EXPR];
+/** A stacked food-court pin is N restaurants, not 1 Mapbox point. */
+export function placeCountForStack(stackCount: unknown): number {
+	const n = Number(stackCount);
+	return Number.isFinite(n) && n > 1 ? n : 1;
+}
+const PLACE_COUNT_EXPR: ExpressionSpecification = [
+	"case",
+	[">", ["coalesce", ["get", "stack_count"], 0], 1],
+	["get", "stack_count"],
+	1,
+];
 
 export function ensurePriceTileLayers(
 	map: MapboxMap,
@@ -329,6 +378,8 @@ export function ensurePriceTileLayers(
 		clusterProperties: {
 			/* the biggest observed gap inside the cluster — never a sum, never invented */
 			max_gap: ["max", GAP_EXPR],
+			/* restaurants after stacking + filters, not raw GeoJSON point_count */
+			place_count: ["+", PLACE_COUNT_EXPR],
 		},
 	});
 
@@ -343,7 +394,7 @@ export function ensurePriceTileLayers(
 		layout: {
 			"icon-image": [
 				"step",
-				["get", "point_count"],
+				["coalesce", ["get", "place_count"], ["get", "point_count"]],
 				`${GPU_DISC_PREFIX}cluster-sm`,
 				CLUSTER_STEP_MD,
 				`${GPU_DISC_PREFIX}cluster-md`,
@@ -358,7 +409,10 @@ export function ensurePriceTileLayers(
 				{ "font-scale": 1 },
 				"\n",
 				{},
-				["to-string", ["get", "point_count"]],
+				[
+					"to-string",
+					["coalesce", ["get", "place_count"], ["get", "point_count"]],
+				],
 				{ "font-scale": 0.68 },
 			],
 			"text-font": TEXT_FONT,
@@ -434,6 +488,16 @@ export function ensurePriceTileLayers(
 			"icon-padding": 2,
 			"text-field": [
 				"case",
+				[">", ["coalesce", ["get", "stack_count"], 0], 1],
+				[
+					"format",
+					["to-string", ["get", "gap"]],
+					{ "font-scale": 1.15 },
+					"\n×",
+					{},
+					["to-string", ["get", "stack_count"]],
+					{ "font-scale": 0.95 },
+				],
 				["==", TIER_EXPR, "faint"],
 				["get", "product_name"],
 				[
@@ -479,17 +543,33 @@ export function ensurePriceTileLayers(
 		const hit = map.queryRenderedFeatures(ev.point, {
 			layers: [PRICE_TILE_CLUSTERS],
 		});
-		const clusterId = hit[0]?.properties?.cluster_id;
+		const props = hit[0]?.properties as
+			| { cluster_id?: unknown; place_count?: unknown; point_count?: unknown }
+			| undefined;
+		const clusterId = props?.cluster_id;
 		const src = map.getSource(PRICE_TILE_SOURCE) as GeoJSONSource | undefined;
 		if (clusterId == null || !src || !("getClusterExpansionZoom" in src)) {
 			return;
 		}
+		const center = ev.lngLat;
+		const placeCount = Number(props?.place_count);
+		const pointCount = Number(props?.point_count);
 		src.getClusterExpansionZoom(Number(clusterId), (err, zoom) => {
-			if (err || zoom == null) return;
+			if (err) return;
+			let current = 12;
+			try {
+				current = map.getZoom();
+			} catch {
+				return;
+			}
 			map.easeTo({
-				center: ev.lngLat,
-				zoom: Math.min(zoom, CLUSTER_BREAK_ZOOM + 0.5),
+				center,
+				zoom: nextClusterZoom(current, zoom, undefined, {
+					placeCount,
+					pointCount,
+				}),
 				duration: 650,
+				essential: true,
 			});
 		});
 	});
@@ -504,6 +584,8 @@ export function ensurePriceTileLayers(
 	void preloadPlatformAtlas(map);
 }
 
+const pendingTileData = new WeakMap<MapboxMap, GeoJSON.FeatureCollection>();
+
 export function syncPriceTileData(
 	map: MapboxMap,
 	places: GeoJSON.FeatureCollection | null | undefined,
@@ -516,9 +598,45 @@ export function syncPriceTileData(
 	const hash = hashPriceTileCollection(collection);
 	if (lastTileHash.get(map) === hash) return;
 	lastTileHash.set(map, hash);
+	/* A 4k-feature city swap on the same frame as the first tap stutters.
+	 * Idle (not rAF) lets the tap handler run first; skip if a newer hash won. */
+	if (collection.features.length > 800) {
+		pendingTileData.set(map, collection);
+		const flush = () => {
+			const next = pendingTileData.get(map);
+			if (!next) return;
+			pendingTileData.delete(map);
+			if (hashPriceTileCollection(next) !== lastTileHash.get(map)) return;
+			const live = map.getSource(PRICE_TILE_SOURCE) as GeoJSONSource | undefined;
+			if (live && "setData" in live) live.setData(next);
+		};
+		const ric = (
+			globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
+		).requestIdleCallback;
+		if (typeof ric === "function") ric(flush, { timeout: 120 });
+		else window.setTimeout(flush, 0);
+		return;
+	}
 	src.setData(collection);
 }
 
 export function resetPriceTileHash(map?: MapboxMap): void {
 	if (map) lastTileHash.delete(map);
+}
+
+/** HTML-only opacity rules never reach GPU symbols — dim those layers instead. */
+export function setPriceTileNeighborDim(
+	map: Pick<MapboxMap, "getLayer" | "setPaintProperty">,
+	dimmed: boolean,
+): void {
+	const opacity = dimmed ? PRICE_TILE_NEIGHBOR_DIM : 1;
+	for (const id of PRICE_TILE_DIM_LAYERS) {
+		if (!map.getLayer(id)) continue;
+		try {
+			map.setPaintProperty(id, "icon-opacity", opacity);
+			map.setPaintProperty(id, "text-opacity", opacity);
+		} catch {
+			/* style mid-swap */
+		}
+	}
 }

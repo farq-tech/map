@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+	comparedItemCaution,
+	comparedItemCautionLabel,
 	formatItemPrice,
 	itemPriceCells,
 } from "./SelectedPlaceSheet";
@@ -32,5 +34,18 @@ describe("compared items — the proof table's pure shaping", () => {
 		expect(formatItemPrice(105)).toBe("105");
 		expect(formatItemPrice(10.5)).toBe("10.50");
 		expect(formatItemPrice(7.5)).toBe("7.50");
+	});
+
+	it("over-cap and share rows do not wear the mint badge", () => {
+		expect(comparedItemCaution({ over_cap: true })).toBe("over_cap");
+		expect(comparedItemCautionLabel("over_cap", true)).toBe(
+			"فوق ٢٠٠ ر.س — مو رقم الخريطة",
+		);
+		expect(comparedItemCaution({ demote_reason: "share" })).toBe("share");
+		expect(comparedItemCautionLabel("share", true)).toBe("طلب مشاركة");
+		expect(comparedItemCaution({ price_outlier: true, over_cap: true })).toBe(
+			"outlier",
+		);
+		expect(comparedItemCaution({})).toBeNull();
 	});
 });

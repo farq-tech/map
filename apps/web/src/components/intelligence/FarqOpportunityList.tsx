@@ -3,6 +3,7 @@ import { localizeDigitString } from "../../lib/formatPrice";
 import { formatObservedDistance } from "../../lib/farqOpportunities";
 import type { OpportunityRow } from "../../lib/farqOpportunities";
 import { getProviderLabel } from "../../lib/platformLogos";
+import { placeDemoteCopy } from "../../lib/mapFilters";
 
 function ProviderPriceLine({
 	kind,
@@ -58,6 +59,7 @@ export function FarqOpportunityCard({
 	onSelect: (row: OpportunityRow) => void;
 }) {
 	const gap = localizeDigitString(String(Math.round(row.amount)), isRTL);
+	const demoteLabel = placeDemoteCopy(row.demoteReason, isRTL);
 	const title =
 		row.productName || row.name || (isRTL ? "فرصة مرصودة" : "Observed opportunity");
 	const distance = formatObservedDistance(row.distanceMeters, isRTL);
@@ -101,16 +103,8 @@ export function FarqOpportunityCard({
 							: `${row.categoryLabel}: ${row.categoryGap} SAR`}
 					</span>
 				) : null}
-				{row.demoteReason ? (
-					<span className="farq-opportunity-tag">
-						{row.demoteReason === "share"
-							? isRTL
-								? "طلب مشاركة"
-								: "Sharing item"
-							: isRTL
-								? "منتج معبأ"
-								: "Packaged product"}
-					</span>
+				{demoteLabel ? (
+					<span className="farq-opportunity-tag">{demoteLabel}</span>
 				) : null}
 				{row.comparisons ? (
 					<span>
@@ -138,6 +132,8 @@ export default function FarqOpportunityList({
 	selectedPlaceId,
 	onSelect,
 	empty,
+	groceryEmpty = false,
+	searchEmpty = false,
 	countLabel,
 }: {
 	rows: OpportunityRow[];
@@ -145,6 +141,8 @@ export default function FarqOpportunityList({
 	selectedPlaceId?: string;
 	onSelect: (row: OpportunityRow) => void;
 	empty: boolean;
+	groceryEmpty?: boolean;
+	searchEmpty?: boolean;
 	countLabel?: string;
 }) {
 	const listRef = useRef<HTMLDivElement | null>(null);
@@ -171,12 +169,24 @@ export default function FarqOpportunityList({
 			{empty ? (
 				<div
 					className="farq-opportunity-empty"
-					data-testid="intelligence-map-empty"
+					data-testid={
+						searchEmpty && !groceryEmpty
+							? "intelligence-map-search-empty"
+							: "intelligence-map-empty"
+					}
 				>
 					<p className="text-[16px] font-extrabold text-brand-900">
-						{isRTL
-							? "ما رصدنا فرق يستحق حولك بعد"
-							: "No worthwhile gap observed around you yet"}
+						{groceryEmpty
+							? isRTL
+								? "البقالة مقارنة منتجات — مو فروع على الخريطة"
+								: "Grocery is a product compare — not storefront pins"
+							: searchEmpty
+								? isRTL
+									? "ما لقينا مكان بهذا الاسم في الرصد"
+									: "No observed place matches this search"
+							: isRTL
+								? "ما رصدنا فرق يستحق حولك بعد"
+								: "No worthwhile gap observed around you yet"}
 					</p>
 				</div>
 			) : (

@@ -41,13 +41,19 @@ import {
 	type OpportunityRow,
 } from "../../lib/farqOpportunities";
 import {
+	boundsFromPlaceFeatures,
+	lngLatInBbox,
+	pointFromPlaceCollection,
 	shouldOfferSearchHere,
 	type MapViewChangeMeta,
 } from "../../lib/farqMapViewport";
+import { ApiRequestError } from "../../lib/api";
 import { localizeDigitString } from "../../lib/formatPrice";
 import { viewportStats } from "../../lib/farqViewportStats";
 import { getProviderLabel } from "../../lib/platformLogos";
-import { sheetHeightPx } from "./FarqBottomSheet";
+import { readSafeAreaInsetBottom, sheetHeightPx } from "./FarqBottomSheet";
+import { groceryCompareSearch } from "../../lib/grocerySearch";
+import { livePlaceDetail } from "../../lib/mapPlaceContract";
 import { providerTintClass } from "../../lib/providerTint";
 import {
 	IntelligenceService,
@@ -68,7 +74,18 @@ import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
+import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView, resumeMapSessionCamera, shouldPersistCameraToUrl, writeMapReturn } from "../../routes/map";
+import {
+	isBiggestSavingsPin,
+	isGroceryIdentity,
+	isMultiProviderPin,
+	encodeMapFilters,
+	parseMapFilters,
+	selectedPlaceFilterMisses,
+	toggleMapFilter,
+	railFromMapSearch,
+} from "../../lib/mapFilters";
+import { displayItemName } from "../../lib/displayItemName";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
 import FarqExploreChrome, {
@@ -81,6 +98,13 @@ import FarqExploreChrome, {
 import FarqViewSortBar from "./FarqViewSortBar";
 import FarqOpportunityList, { FarqOpportunityCard } from "./FarqOpportunityList";
 import SelectedPlaceSheet from "./SelectedPlaceSheet";
+import StackedPlacePicker, { CoordinateStackBanner } from "./StackedPlacePicker";
+import {
+	stackAtPlaceId,
+	stackFromFeature,
+	stackSameCoordinateFeatures,
+	type CoordinateStack,
+} from "../../lib/stackSameCoordinates";
 import "../../styles/farq-mapbox.css";
 
 function categorySearchQuery(
@@ -177,6 +201,9 @@ export default function IntelligenceMapSplit({
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
+	const [offline, setOffline] = useState(
+		() => typeof navigator !== "undefined" && navigator.onLine === false,
+	);
 	const [loading, setLoading] = useState(true);
 	const [mapQuery, setMapQuery] = useState(search.q || "");
 	const viewRef = useRef<{ bbox: string; zoom: number } | null>(null);
@@ -185,8 +212,10 @@ export default function IntelligenceMapSplit({
 	const placesAbortRef = useRef<AbortController | null>(null);
 	const placesRef = useRef<IntelligenceMapPlaces | null>(null);
 	const lastFocusedPlaceRef = useRef<string>("");
+	const lastSearchFocusRef = useRef<string>("");
 	const pendingLocateRef = useRef(false);
 	const [livePlaceId, setLivePlaceId] = useState(search.place || "");
+	const [stackPick, setStackPick] = useState<CoordinateStack | null>(null);
 	const [searchHere, setSearchHere] = useState(false);
 	const [focusRequest, setFocusRequest] = useState<{
 		lat: number;
@@ -207,7 +236,7 @@ export default function IntelligenceMapSplit({
 		useState<IntelligenceMapNeighborhoods | null>(null);
 	const [exploreRadius, setExploreRadius] = useState<ExploreRadius>("hawally");
 	const pendingRadiusRef = useRef<ExploreRadius | null>(null);
-	const [rail, setRail] = useState<FilterRailId>("restaurants");
+	const [rail, setRail] = useState<FilterRailId>(() => railFromMapSearch(search));
 	const [sheetSnap, setSheetSnap] = useState<SheetSnap>("peek");
 	const [comparePanelHidden, setComparePanelHidden] = useState(false);
 	const [searchFocused, setSearchFocused] = useState(false);
@@ -222,6 +251,9 @@ export default function IntelligenceMapSplit({
 	});
 	const [scanHint, setScanHint] = useState<"searching" | "ready" | null>(null);
 	const [placesFetching, setPlacesFetching] = useState(false);
+	const [placesError, setPlacesError] = useState(false);
+	const [placeError, setPlaceError] = useState<null | "missing" | "failed">(null);
+	const [placeRetryTick, setPlaceRetryTick] = useState(0);
 	/* Whole-city read model: loaded once per city, filtered and ranked on the client. */
 	const [cityPlaces, setCityPlaces] = useState<CityOpportunities | null>(null);
 	/* The city's أحياء; `?neighborhood=` is one of their ids and scopes list, headline and map alike. */
@@ -242,6 +274,12 @@ export default function IntelligenceMapSplit({
 	const city = search.city || "";
 	const placeId = search.place || "";
 	const q = search.q || "";
+	const filterFlags = parseMapFilters(search.filter);
+	const grocerySector =
+		search.sector === "grocery" ||
+		search.sector === "shopping" ||
+		categoryId === "grocery" ||
+		categoryId === "shopping";
 	const pathname = useRouterState({ select: (s) => s.location.pathname });
 	const view = resolveMapView(search, pathname);
 	const sort = resolveMapSort(search);
@@ -257,6 +295,8 @@ export default function IntelligenceMapSplit({
 					city: "city" in next ? next.city : prev.city,
 					q: "q" in next ? next.q : prev.q,
 					place: "place" in next ? next.place : prev.place,
+					sector: "sector" in next ? next.sector : prev.sector,
+					filter: "filter" in next ? next.filter : prev.filter,
 					view: "view" in next ? next.view : prev.view,
 					sort: "sort" in next ? next.sort : prev.sort,
 					b: "b" in next ? next.b : prev.b,
@@ -274,6 +314,7 @@ export default function IntelligenceMapSplit({
 		(bbox: [number, number, number, number], zoom: number) => {
 			window.clearTimeout(cameraUrlTimerRef.current);
 			cameraUrlTimerRef.current = window.setTimeout(() => {
+				if (!shouldPersistCameraToUrl({ place: search.place })) return;
 				const b = encodeCameraBbox(bbox);
 				const z = Math.round(zoom * 100) / 100;
 				void navigate({
@@ -283,7 +324,7 @@ export default function IntelligenceMapSplit({
 				});
 			}, 400);
 		},
-		[navigate, pathname],
+		[navigate, pathname, search.place],
 	);
 	useEffect(() => () => window.clearTimeout(cameraUrlTimerRef.current), []);
 
@@ -298,6 +339,25 @@ export default function IntelligenceMapSplit({
 	useEffect(() => {
 		setMapQuery(search.q || "");
 	}, [search.q]);
+
+	useEffect(() => {
+		writeMapReturn(search);
+	}, [search]);
+
+	useEffect(() => {
+		setRail(railFromMapSearch(search));
+	}, [search.filter, search.sort, search.category, search.sector]);
+
+	useEffect(() => {
+		const on = () => setOffline(false);
+		const off = () => setOffline(true);
+		window.addEventListener("online", on);
+		window.addEventListener("offline", off);
+		return () => {
+			window.removeEventListener("online", on);
+			window.removeEventListener("offline", off);
+		};
+	}, []);
 
 	useEffect(() => {
 		setLivePlaceId(placeId);
@@ -355,6 +415,7 @@ export default function IntelligenceMapSplit({
 				cityStatusRef.current = "ready";
 				setCityPlaces(body);
 				setPlacesFetching(false);
+				setPlacesError(false);
 				setSearchHere(false);
 			})
 			.catch(() => {
@@ -365,7 +426,18 @@ export default function IntelligenceMapSplit({
 				const v = viewRef.current;
 				if (v && !fetchedViewRef.current) fetchPlacesRef.current?.(v.bbox, v.zoom);
 			});
-		return () => controller.abort();
+		/* City cache is ~1.4s on a good day and 30s on timeout. Don't leave the
+		 * camera empty that whole time — viewport pins fill in, city wins later. */
+		const fallbackTimer = window.setTimeout(() => {
+			if (controller.signal.aborted) return;
+			if (cityStatusRef.current !== "loading") return;
+			const v = viewRef.current;
+			if (v && !fetchedViewRef.current) fetchPlacesRef.current?.(v.bbox, v.zoom);
+		}, 3500);
+		return () => {
+			controller.abort();
+			window.clearTimeout(fallbackTimer);
+		};
 	}, [city, retryTick]);
 
 	const fetchPlacesRef = useRef<((bbox: string, zoom: number) => void) | null>(null);
@@ -390,6 +462,8 @@ export default function IntelligenceMapSplit({
 			zoom,
 			q: query,
 			category: categoryId || undefined,
+			sector: grocerySector ? "grocery" : search.sector || undefined,
+			filter: search.filter || undefined,
 			layer: "comparison",
 			limit: pinFetchCapForZoom(zoom),
 			fields: "pin",
@@ -399,15 +473,19 @@ export default function IntelligenceMapSplit({
 				if (controller.signal.aborted) return;
 				setPlaces(body);
 				setPlacesFetching(false);
+				setPlacesError(false);
 				setScanHint(null);
 			})
 			.catch(() => {
 				if (controller.signal.aborted) return;
-				setPlaces(null);
 				setPlacesFetching(false);
 				setScanHint(null);
+				if (cityStatusRef.current !== "ready") {
+					setPlaces(null);
+					setPlacesError(true);
+				}
 			});
-	}, [q, categoryId, meta]);
+	}, [q, categoryId, meta, grocerySector, search.filter, search.sector]);
 	fetchPlacesRef.current = fetchPlaces;
 
 	const onViewChange = useCallback(
@@ -517,25 +595,80 @@ export default function IntelligenceMapSplit({
 		return () => controller.abort();
 	}, [neighborhoodId, categoryId]);
 
+	const focusedPlaceId = livePlaceId || placeId;
+	const focusedPlaceDetail = livePlaceDetail(placeDetail, focusedPlaceId);
+
 	useEffect(() => {
-		if (!placeId) {
+		if (!focusedPlaceId) {
 			setPlaceDetail(null);
+			setPlaceError(null);
 			lastFocusedPlaceRef.current = "";
 			return;
 		}
+		setPlaceDetail((cur) =>
+			String(cur?.place_id || "") === String(focusedPlaceId) ? cur : null,
+		);
+		setPlaceError(null);
 		const controller = new AbortController();
-		void IntelligenceService.mapPlace(placeId, controller.signal)
-			.then(setPlaceDetail)
-			.catch(() => setPlaceDetail(null));
+		void IntelligenceService.mapPlace(focusedPlaceId, controller.signal)
+			.then((body) => {
+				if (controller.signal.aborted) return;
+				setPlaceDetail(body);
+				setPlaceError(null);
+			})
+			.catch((err) => {
+				if (controller.signal.aborted) return;
+				setPlaceDetail(null);
+				setPlaceError(
+					err instanceof ApiRequestError && err.status === 404
+						? "missing"
+						: "failed",
+				);
+			});
 		return () => controller.abort();
-	}, [placeId]);
+	}, [focusedPlaceId, placeRetryTick]);
 
 	useEffect(() => {
-		if (!placeDetail || !placeId) return;
-		if (placeDetail.place_id !== placeId) return;
+		if (!placeId) return;
+		if (placeDetail && placeDetail.place_id !== placeId) return;
+		if (lastFocusedPlaceRef.current === placeId) return;
+		const detailLat = Number(focusedPlaceDetail?.lat ?? placeDetail?.lat);
+		const detailLng = Number(focusedPlaceDetail?.lng ?? placeDetail?.lng);
+		const fromDetail =
+			Number.isFinite(detailLat) && Number.isFinite(detailLng)
+				? { lat: detailLat, lng: detailLng }
+				: null;
+		const point =
+			fromDetail ||
+			pointFromPlaceCollection(cityPlaces, placeId) ||
+			pointFromPlaceCollection(places, placeId);
+		if (!point) return;
+		/* Deep link / refresh / share: fly as soon as any observed coord exists. */
 		lastFocusedPlaceRef.current = placeId;
-		/* Pin click must not wait for this network + camera. List focus sets focusRequest itself. */
-	}, [placeDetail, placeId]);
+		setLivePlaceId(placeId);
+		setStackPick(null);
+		setComparePanelHidden(false);
+		setSheetSnap("half");
+		const saved = parseCameraBbox(search.b);
+		if (
+			saved &&
+			lngLatInBbox(point.lng, point.lat, {
+				west: saved[0],
+				south: saved[1],
+				east: saved[2],
+				north: saved[3],
+			})
+		) {
+			/* Refresh already restored this scene — don't easeTo a second time. */
+			return;
+		}
+		setFocusRequest({
+			lat: point.lat,
+			lng: point.lng,
+			id: `deeplink:${placeId}`,
+			kind: "select",
+		});
+	}, [placeId, placeDetail, focusedPlaceDetail, cityPlaces, places, search.b]);
 
 	useEffect(() => {
 		if (!pendingLocateRef.current || !userLocation) return;
@@ -633,12 +766,12 @@ export default function IntelligenceMapSplit({
 	const groceryCta = categoryId === "grocery" || categoryId === "shopping";
 	const compareTo = groceryCta ? "/grocery" : "/";
 	const compareSearch = groceryCta
-		? { q: placeDetail?.name || q || undefined }
+		? groceryCompareSearch()
 		: {
 				category:
 					detail?.farq_signal?.consumer?.category ||
 					(categoryId === "burgers" ? "burger" : categoryId),
-				q: placeDetail?.compare?.q || placeDetail?.name || detail?.farq_signal?.consumer?.q || q,
+				q: focusedPlaceDetail?.compare?.q || focusedPlaceDetail?.name || detail?.farq_signal?.consumer?.q || q,
 				vertical: "restaurant" as const,
 			};
 
@@ -650,16 +783,10 @@ export default function IntelligenceMapSplit({
 		}) => {
 			const restaurantId = String(opts.restaurantId || "").trim();
 			if (!restaurantId) return;
-			void navigate({
-				to: "/merchant/$type/$id",
-				params: { type: "restaurant", id: restaurantId },
-				search: {
-					...(opts.name ? { name: opts.name } : {}),
-					...(opts.image ? { image: String(opts.image) } : {}),
-				},
-			});
+			/* Compare is a Link; this only stamps the scene Back to map will restore. */
+			writeMapReturn({ ...search, place: restaurantId });
 		},
-		[navigate],
+		[search],
 	);
 
 	/**
@@ -702,12 +829,39 @@ export default function IntelligenceMapSplit({
 	const selectedPlaceFeature = sourcePlaces?.features.find(
 		(f) => String(f.properties.place_id) === String(livePlaceId),
 	);
+	const selectedFilterMisses = useMemo(
+		() =>
+			selectedPlaceFilterMisses(
+				{
+					gap:
+						pinGapAmount(selectedPlaceFeature?.properties) ??
+						focusedPlaceDetail?.gap ??
+						focusedPlaceDetail?.difference?.difference_amount,
+					cheapest_price:
+						selectedPlaceFeature?.properties.cheapest_price ??
+						focusedPlaceDetail?.difference?.cheapest_price,
+					cheapest_provider_id:
+						selectedPlaceFeature?.properties.cheapest_provider_id ??
+						focusedPlaceDetail?.difference?.cheapest_provider_id,
+					has_difference: selectedPlaceFeature?.properties.has_difference,
+					provider_count:
+						selectedPlaceFeature?.properties.provider_count ??
+						focusedPlaceDetail?.provider_count,
+				},
+				filterFlags,
+			),
+		[selectedPlaceFeature, focusedPlaceDetail, filterFlags],
+	);
 	const selectedRestaurantId =
-		placeDetail?.restaurant_id ||
-		placeDetail?.menu?.id ||
+		focusedPlaceDetail?.restaurant_id ||
+		focusedPlaceDetail?.menu?.id ||
 		selectedPlaceFeature?.properties.restaurant_id ||
 		selectedPlaceFeature?.properties.menu?.id ||
 		(/^\d+$/.test(livePlaceId) ? livePlaceId : "");
+	const placeChromeOpen = Boolean(
+		(livePlaceId && !(placeError === "missing" && !selectedPlaceFeature)) ||
+			stackPick,
+	);
 
 	const showUserDot = locationPinKind === "gps" || locationPinKind === "manual";
 	placesRef.current = sourcePlaces;
@@ -719,26 +873,36 @@ export default function IntelligenceMapSplit({
 			...sourcePlaces,
 			features: sourcePlaces.features.filter((f) => {
 				const isCluster = f.properties.feature_type === "cluster";
+				const id = String(f.properties.place_id || "");
+				const selected = Boolean(id && (id === String(livePlaceId || "") || id === String(placeId || "")));
 				const amount = pinGapAmount(f.properties);
 				const hasGap = isCluster
 					? Number(f.properties.difference_count || 0) > 0
 					: Boolean(f.properties.has_difference) || amount != null;
+				if (selected && !isCluster) return true;
 				if (!layers.opportunities && hasGap) return false;
 				if (pinnedIds && !pinnedIds.has(String(f.properties.place_id || ""))) return false;
 				if (districtScope && String(f.properties.district_id || "") !== districtScope) return false;
 				if (categoryIsGapped && (f.properties.category_gaps || {})[categoryId] == null) return false;
 				if (minGapFilter != null && (amount == null || amount < minGapFilter)) return false;
+				if (grocerySector && !isGroceryIdentity(f.properties)) return false;
+				if (filterFlags.biggest && !isBiggestSavingsPin({
+					...f.properties,
+					gap: amount,
+				})) return false;
+				if (filterFlags.multi && !isMultiProviderPin(f.properties)) return false;
 				if (gapsOnly) return hasGap;
 				return true;
 			}),
 		};
-	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId]);
+	}, [sourcePlaces, layers.opportunities, pinnedIds, minGapFilter, districtScope, categoryIsGapped, categoryId, grocerySector, filterFlags, livePlaceId, placeId]);
 
 	/* The list and the headline describe what the camera shows, not the whole city. */
 	const viewportSavings = useMemo(() => {
 		const rows: OpportunityRow[] = [];
 		/* A selected حي is the scope; the camera no longer clips what it lists. */
-		const clip = cityPlaces && !districtScope ? viewBbox : null;
+		const clip =
+			cityPlaces && !districtScope && !String(q || "").trim() ? viewBbox : null;
 		for (const f of visiblePlaces?.features || []) {
 			if (f.properties.feature_type === "cluster") continue;
 			const placeId = String(f.properties.place_id || "").trim();
@@ -769,11 +933,11 @@ export default function IntelligenceMapSplit({
 					(diff && "expensive_price" in diff ? diff.expensive_price : NaN),
 			);
 			const product =
-				String(
+				displayItemName(
 					f.properties.product_name ||
 						(diff && "product_name" in diff ? diff.product_name : "") ||
 						"",
-				).trim() || null;
+				) || null;
 			rows.push({
 				placeId,
 				name: String(f.properties.name || "").trim(),
@@ -814,7 +978,7 @@ export default function IntelligenceMapSplit({
 				? withObservedDistances(rows, userLocation.lat, userLocation.lng)
 				: rows;
 		return located;
-	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox, districtScope, categoryIsGapped, categoryId, activeCategoryLabel]);
+	}, [visiblePlaces, showUserDot, userLocation, cityPlaces, viewBbox, districtScope, categoryIsGapped, categoryId, activeCategoryLabel, q]);
 
 	const cheapestReady = useMemo(
 		() => viewportSavings.some((row) => row.cheapestPrice != null),
@@ -829,20 +993,65 @@ export default function IntelligenceMapSplit({
 
 	const topSavings = opportunityList;
 
-	const displayPlaces = useMemo(() => {
-		if (!visiblePlaces) return visiblePlaces;
-		/* The GPU draws every opportunity and clusters them itself; the cap was a DOM limit. */
-		if (cityPlaces) return visiblePlaces;
+	const mapDrawFeatures = useMemo(() => {
+		if (!visiblePlaces) return null;
+		/* City read model: GPU draws every opportunity. Viewport mode stays capped. */
+		if (cityPlaces) return visiblePlaces.features;
 		const ids = new Set(topSavings.map((row) => row.placeId));
 		if (livePlaceId) ids.add(livePlaceId);
+		if (stackPick) {
+			for (const member of stackPick.members) ids.add(member.placeId);
+		}
+		return visiblePlaces.features.filter((f) =>
+			ids.has(String(f.properties.place_id || "")),
+		);
+	}, [visiblePlaces, cityPlaces, livePlaceId, stackPick, cityPlaces ? null : topSavings]);
+
+	const displayPlaces = useMemo(() => {
+		if (!visiblePlaces || !mapDrawFeatures) return visiblePlaces;
+		const stacked = stackSameCoordinateFeatures(mapDrawFeatures);
 		return {
 			...visiblePlaces,
-			count: topSavings.length,
-			features: visiblePlaces.features.filter((f) =>
-				ids.has(String(f.properties.place_id || "")),
-			),
+			count: stacked.length,
+			features: stacked,
 		};
-	}, [visiblePlaces, topSavings, livePlaceId, cityPlaces]);
+	}, [visiblePlaces, mapDrawFeatures]);
+
+	const selectedCoordinateStack = useMemo(
+		() => (livePlaceId && visiblePlaces ? stackAtPlaceId(visiblePlaces.features, livePlaceId) : null),
+		[livePlaceId, visiblePlaces],
+	);
+
+	const openCoordinateStack = useCallback(
+		(stack: CoordinateStack) => {
+			setLivePlaceId("");
+			setStackPick(stack);
+			setSheetSnap(stack.members.length > 6 ? "full" : "half");
+			setComparePanelHidden(false);
+			lastFocusedPlaceRef.current = "";
+			patchSearch({ place: undefined });
+			track("place_select", { source: "stack" });
+		},
+		[patchSearch],
+	);
+
+	const stackRows = useMemo(() => {
+		if (!stackPick) return [];
+		const byId = new Map(viewportSavings.map((row) => [row.placeId, row]));
+		return stackPick.members
+			.map((member) => {
+				const found = byId.get(member.placeId);
+				if (found) return found;
+				return {
+					placeId: member.placeId,
+					name: member.name,
+					amount: member.gap || 0,
+					lat: member.lat,
+					lng: member.lng,
+				};
+			})
+			.sort((a, b) => b.amount - a.amount || a.placeId.localeCompare(b.placeId));
+	}, [stackPick, viewportSavings]);
 
 	const selectedCityLabel = useMemo(() => {
 		const match = (meta?.geo_readiness?.ncp_ready_cities || []).find(
@@ -955,9 +1164,11 @@ export default function IntelligenceMapSplit({
 			</>
 		);
 	}, [stats, cityPlaces, isRTL, districtScope, selectedDistrict, districtName, clearDistrict, freshness]);
+	const safeAreaBottom = useMemo(() => readSafeAreaInsetBottom(), []);
 	const sheetInset = sheetHeightPx(
 		sheetSnap,
 		typeof window !== "undefined" ? window.innerHeight : 800,
+		safeAreaBottom,
 	);
 
 	const locateUser = useCallback(() => {
@@ -984,8 +1195,12 @@ export default function IntelligenceMapSplit({
 			setScanHint("searching");
 			setDrawerOpen(false);
 			lastFocusedPlaceRef.current = "";
+			setStackPick(null);
+			setLivePlaceId("");
 			patchSearch({
 				category: nextId || undefined,
+				sector: nextId === "grocery" || nextId === "shopping" ? "grocery" : undefined,
+				filter: undefined,
 				place: undefined,
 				q: undefined,
 			});
@@ -998,11 +1213,20 @@ export default function IntelligenceMapSplit({
 		(next: FilterRailId) => {
 			setRail(next);
 			if (next === "gaps") {
-				patchSearch({ sort: "gap" });
+				patchSearch({
+					sort: "gap",
+					filter: encodeMapFilters({ ...parseMapFilters(search.filter), biggest: true }),
+				});
 				return;
 			}
 			if (next === "cheapest") {
 				patchSearch({ sort: "cheap" });
+				return;
+			}
+			if (next === "multi") {
+				patchSearch({
+					filter: encodeMapFilters({ ...parseMapFilters(search.filter), multi: true }),
+				});
 				return;
 			}
 			if (next === "grocery") {
@@ -1013,7 +1237,7 @@ export default function IntelligenceMapSplit({
 				applyCategory("");
 			}
 		},
-		[applyCategory, patchSearch],
+		[applyCategory, patchSearch, search.filter],
 	);
 
 	const toggleLayer = useCallback((id: MapLayerId) => {
@@ -1038,6 +1262,7 @@ export default function IntelligenceMapSplit({
 	const focusAroundPlace = useCallback(
 		(row: { placeId: string; lat: number; lng: number }) => {
 			lastFocusedPlaceRef.current = row.placeId;
+			setStackPick(null);
 			setLivePlaceId(row.placeId);
 			setSheetSnap("half");
 			setFocusRequest({
@@ -1061,6 +1286,68 @@ export default function IntelligenceMapSplit({
 		setPinnedIds(null);
 		setMinGapFilter(null);
 	}, []);
+
+	const submitMapSearch = useCallback(
+		(text: string, source: "sheet" | "toolbar") => {
+			const needle = text.trim();
+			clearAsk();
+			setStackPick(null);
+			lastSearchFocusRef.current = "";
+			patchSearch({ q: needle || undefined, place: undefined });
+			track("search_submit", { has_query: Boolean(needle), source });
+		},
+		[clearAsk, patchSearch],
+	);
+
+	useEffect(() => {
+		const needle = String(q || "").trim();
+		if (!needle) {
+			lastSearchFocusRef.current = "";
+			return;
+		}
+		if (!visiblePlaces) return;
+		const points = visiblePlaces.features
+			.filter(
+				(feature) =>
+					feature.geometry?.type === "Point" &&
+					feature.properties?.feature_type !== "cluster",
+			)
+			.slice()
+			.sort(
+				(a, b) =>
+					(pinGapAmount(b.properties) || 0) - (pinGapAmount(a.properties) || 0),
+			);
+		const focus = points.slice(0, LIST_CAP);
+		const firstId = String(focus[0]?.properties?.place_id || "");
+		const key = `${needle}|${search.filter || ""}|${points.length}|${firstId}`;
+		if (lastSearchFocusRef.current === key) return;
+		lastSearchFocusRef.current = key;
+		if (!focus.length) {
+			setSheetSnap("half");
+			return;
+		}
+		if (focus.length === 1) {
+			const coords = focus[0].geometry.coordinates;
+			const lng = Array.isArray(coords) ? Number(coords[0]) : NaN;
+			const lat = Array.isArray(coords) ? Number(coords[1]) : NaN;
+			if (Number.isFinite(lng) && Number.isFinite(lat)) {
+				focusAroundPlace({ placeId: firstId, lng, lat });
+			}
+			return;
+		}
+		const bounds = boundsFromPlaceFeatures(focus);
+		if (!bounds) return;
+		setLivePlaceId("");
+		setStackPick(null);
+		setFocusRequest({
+			lat: (bounds[1] + bounds[3]) / 2,
+			lng: (bounds[0] + bounds[2]) / 2,
+			id: `search:${key}`,
+			kind: "bounds",
+			bounds,
+		});
+		setSheetSnap(points.length > 6 ? "full" : "half");
+	}, [q, search.filter, visiblePlaces, focusAroundPlace]);
 
 	/* The copilot proposes; the app executes — only with ids and bounds it was given. */
 	const applyCopilotAction = useCallback(
@@ -1196,6 +1483,15 @@ export default function IntelligenceMapSplit({
 		[locateUser, nearReady, patchSearch],
 	);
 
+	const applyFilter = useCallback(
+		(next: "biggest" | "multi") => {
+			patchSearch({ filter: toggleMapFilter(search.filter, next) });
+			if (next === "biggest") setRail("gaps");
+			if (next === "multi") setRail("multi");
+		},
+		[patchSearch, search.filter],
+	);
+
 	const applyExploreRadius = useCallback(
 		(next: ExploreRadius) => {
 			setExploreRadius(next);
@@ -1223,6 +1519,7 @@ export default function IntelligenceMapSplit({
 
 	const closePlace = useCallback(() => {
 		setLivePlaceId("");
+		setStackPick(null);
 		patchSearch({ place: undefined });
 	}, [patchSearch]);
 	const stepOpportunity = useCallback(
@@ -1270,7 +1567,7 @@ export default function IntelligenceMapSplit({
 			}`}
 			data-testid="intelligence-map-split"
 			data-view={view}
-			data-sheet-open={livePlaceId && !comparePanelHidden ? "true" : undefined}
+			data-sheet-open={placeChromeOpen && !comparePanelHidden ? "true" : undefined}
 			data-sheet-snap={sheetSnap}
 			data-panel-collapsed={comparePanelHidden ? "true" : undefined}
 			data-legend-open={legendOpen ? "true" : undefined}
@@ -1285,12 +1582,8 @@ export default function IntelligenceMapSplit({
 					onToggleLanguage={toggleLanguage}
 					mapQuery={mapQuery}
 					onMapQueryChange={setMapQuery}
-					onSearchSubmit={(q) => {
-						clearAsk();
-						patchSearch({ q: q || undefined, place: undefined });
-						/* Whether someone searched, never what they typed. */
-						track("search_submit", { has_query: Boolean(q), source: "sheet" });
-					}}
+					onSearchSubmit={(text) => submitMapSearch(text, "sheet")}
+					searchActive={Boolean(String(q || "").trim())}
 					rail={rail}
 					onRail={applyRail}
 					categoryId={categoryId}
@@ -1319,13 +1612,29 @@ export default function IntelligenceMapSplit({
 					onAsk={askFarq}
 					onCloseAsk={clearAsk}
 					selectedPanel={
-						livePlaceId ? (
+						stackPick ? (
+							<StackedPlacePicker
+								rows={stackRows}
+								isRTL={isRTL}
+								onSelect={focusAroundPlace}
+								onClose={closePlace}
+							/>
+						) : placeChromeOpen && livePlaceId ? (
+							<div className="flex min-h-0 flex-1 flex-col">
+								{selectedCoordinateStack ? (
+									<CoordinateStackBanner
+										count={selectedCoordinateStack.members.length}
+										isRTL={isRTL}
+										onOpen={() => openCoordinateStack(selectedCoordinateStack)}
+									/>
+								) : null}
 							<SelectedPlaceSheet
 								variant="panel"
-								placeDetail={placeDetail}
+								placeDetail={focusedPlaceDetail}
 								feature={selectedPlaceFeature?.properties}
 								selectedCategory={selectedCategory}
 								selectedRestaurantId={selectedRestaurantId}
+								filterMisses={selectedFilterMisses}
 								isRTL={isRTL}
 								onClose={closePlace}
 								onHide={() => setSheetSnap("peek")}
@@ -1335,6 +1644,7 @@ export default function IntelligenceMapSplit({
 								onPrevOpportunity={() => stepOpportunity(-1)}
 								onNextOpportunity={() => stepOpportunity(1)}
 							/>
+							</div>
 						) : null
 					}
 					sheetSnap={sheetSnap}
@@ -1351,13 +1661,15 @@ export default function IntelligenceMapSplit({
 					onFocusPlace={focusAroundPlace}
 					showHereHint={showUserDot}
 					leftUserLocation={leftUserLocation}
-					placeSelected={Boolean(livePlaceId)}
+					placeSelected={placeChromeOpen}
 					cheapestReady={cheapestReady}
 					nearReady={nearReady}
 					view={view}
 					onView={applyView}
 					sort={sort}
 					onSort={applySort}
+					filterFlags={filterFlags}
+					onFilter={applyFilter}
 					legendOpen={legendOpen}
 					onLegendOpenChange={setLegendOpen}
 					districts={cityDistricts}
@@ -1446,11 +1758,7 @@ export default function IntelligenceMapSplit({
 								e.preventDefault();
 								const text = mapQuery.trim();
 								if (looksLikeQuestion(text)) askFarq(text);
-								else {
-									clearAsk();
-									patchSearch({ q: text || undefined, place: undefined });
-									track("search_submit", { has_query: Boolean(text), source: "toolbar" });
-								}
+								else submitMapSearch(text, "toolbar");
 							}}
 						>
 							<Search className="size-4 shrink-0 text-[#5c6d6d]" />
@@ -1473,6 +1781,8 @@ export default function IntelligenceMapSplit({
 						onView={applyView}
 						sort={sort}
 						onSort={applySort}
+						filterFlags={filterFlags}
+						onFilter={applyFilter}
 						isRTL={isRTL}
 						nearReady={nearReady}
 						cheapReady={cheapestReady}
@@ -1536,6 +1846,8 @@ export default function IntelligenceMapSplit({
 								!placesFetching &&
 								topSavings.length === 0
 							}
+							groceryEmpty={grocerySector}
+							searchEmpty={Boolean(String(q || "").trim())}
 							countLabel={
 								topSavings.length
 									? isRTL
@@ -1562,6 +1874,7 @@ export default function IntelligenceMapSplit({
 							districtLens={districtLens}
 							bottomInset={sheetInset}
 							initialCamera={initialCamera}
+							resumeSessionCamera={resumeMapSessionCamera(search)}
 							neighborhoods={hoods}
 							gisNeighborhoods={gisHoodsOn ? overlayHoods : null}
 							selectedPlaceId={livePlaceId}
@@ -1570,9 +1883,18 @@ export default function IntelligenceMapSplit({
 							userLocation={userLocation}
 						userHeading={userHeading}
 							showUserLocation={showUserDot}
-							placeDetail={placeDetail}
+							placeDetail={focusedPlaceDetail}
 							isRTL={isRTL}
 							onSelectPlace={(id) => {
+								const feature = displayPlaces?.features.find(
+									(row) => String(row.properties.place_id || "") === id,
+								);
+								const stack = stackFromFeature(feature);
+								if (stack) {
+									openCoordinateStack(stack);
+									return;
+								}
+								setStackPick(null);
 								setLivePlaceId(id);
 								setSheetSnap("half");
 								lastFocusedPlaceRef.current = id;
@@ -1581,12 +1903,94 @@ export default function IntelligenceMapSplit({
 							}}
 							onSelectNeighborhood={selectDistrict}
 							onViewChange={onViewChange}
-							sheetOpen={Boolean(livePlaceId) && !comparePanelHidden}
+							sheetOpen={placeChromeOpen && !comparePanelHidden}
 							onMapInteraction={onMapInteraction}
 							onLeftUserLocation={setLeftUserLocation}
 						/>
 					</Suspense>
 					</div>
+					{placesError && !visiblePlaces ? (
+						<div
+							role="alert"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-places-error"
+						>
+							<p>
+								{isRTL
+									? "تعذّر تحميل الفرص في هذا النطاق. حاول مرة ثانية."
+									: "Could not load opportunities in this view. Try again."}
+							</p>
+							<button
+								type="button"
+								className="farq-map-locate-error-action"
+								onClick={() => {
+									setPlacesError(false);
+									const v = viewRef.current;
+									if (v) fetchPlaces(v.bbox, v.zoom);
+									else setRetryTick((n) => n + 1);
+								}}
+								aria-label={isRTL ? "إعادة المحاولة" : "Retry"}
+							>
+								{isRTL ? "إعادة" : "Retry"}
+							</button>
+						</div>
+					) : null}
+					{placeError ? (
+						<div
+							role="alert"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-place-error"
+						>
+							<p>
+								{placeError === "missing"
+									? isRTL
+										? "هذا المكان غير موجود في الرصد."
+										: "This place is not in the observed layer."
+									: isRTL
+										? "تعذّر تحميل تفاصيل المكان. حاول مرة ثانية."
+										: "Could not load this place. Try again."}
+							</p>
+							{placeError === "failed" ? (
+								<button
+									type="button"
+									className="farq-map-locate-error-action"
+									onClick={() => setPlaceRetryTick((n) => n + 1)}
+									aria-label={isRTL ? "إعادة المحاولة" : "Retry"}
+								>
+									{isRTL ? "إعادة" : "Retry"}
+								</button>
+							) : (
+								<button
+									type="button"
+									className="farq-map-locate-error-action"
+									onClick={() => {
+										setPlaceError(null);
+										setLivePlaceId("");
+										patchSearch({ place: undefined });
+									}}
+									aria-label={isRTL ? "إغلاق" : "Dismiss"}
+								>
+									{isRTL ? "حسناً" : "OK"}
+								</button>
+							)}
+						</div>
+					) : null}
+					{offline ? (
+						<div
+							role="status"
+							aria-live="polite"
+							className="farq-map-locate-error"
+							data-testid="intelligence-map-offline"
+						>
+							<p>
+								{isRTL
+									? "ما في اتصال — الأسعار الحية تحتاج إنترنت."
+									: "You're offline — live prices need a connection."}
+							</p>
+						</div>
+					) : null}
 					{locationError ? (
 						<div
 							role="alert"
@@ -1604,7 +2008,7 @@ export default function IntelligenceMapSplit({
 							</button>
 						</div>
 					) : null}
-					{searchHere && !livePlaceId && view === "map" ? (
+					{searchHere && !livePlaceId && !stackPick && view === "map" ? (
 						<button
 							type="button"
 							className="farq-search-here"
@@ -1623,7 +2027,7 @@ export default function IntelligenceMapSplit({
 				{comparePanelHidden ? (
 					<button
 						type="button"
-						className={`farq-map-panel-tab inline-flex ${livePlaceId ? "" : "hidden lg:inline-flex"}`}
+						className={`farq-map-panel-tab inline-flex ${placeChromeOpen ? "" : "hidden lg:inline-flex"}`}
 						data-testid="intelligence-map-panel-tab"
 						aria-label={isRTL ? "إظهار المقارنة" : "Show comparison"}
 						onClick={() => setComparePanelHidden(false)}
@@ -1812,20 +2216,37 @@ export default function IntelligenceMapSplit({
 			<aside
 				className={`farq-map-compare-aside hidden w-full flex-col overflow-hidden border-s border-[#e6eef0] bg-white lg:w-[27rem] lg:shrink-0 lg:rounded-none ${
 					comparePanelHidden ? "" : "lg:flex"
-				} ${livePlaceId ? "farq-place-panel-host" : ""}`}
+				} ${placeChromeOpen ? "farq-place-panel-host" : ""}`}
 			>
-				{livePlaceId ? (
+				{stackPick ? (
+					<StackedPlacePicker
+						rows={stackRows}
+						isRTL={isRTL}
+						onSelect={focusAroundPlace}
+						onClose={closePlace}
+					/>
+				) : placeChromeOpen && livePlaceId ? (
+					<div className="flex min-h-0 flex-1 flex-col">
+						{selectedCoordinateStack ? (
+							<CoordinateStackBanner
+								count={selectedCoordinateStack.members.length}
+								isRTL={isRTL}
+								onOpen={() => openCoordinateStack(selectedCoordinateStack)}
+							/>
+						) : null}
 					<SelectedPlaceSheet
 						variant="panel"
-						placeDetail={placeDetail}
+						placeDetail={focusedPlaceDetail}
 						feature={selectedPlaceFeature?.properties}
 						selectedCategory={selectedCategory}
 						selectedRestaurantId={selectedRestaurantId}
+						filterMisses={selectedFilterMisses}
 						isRTL={isRTL}
 						onClose={closePlace}
 						onHide={() => setComparePanelHidden(true)}
 						onOpenMenu={openRestaurantMenu}
 					/>
+					</div>
 				) : (
 					<>
 					<div className="flex items-center justify-between border-b border-[#e6eef0] px-5 py-4">
@@ -1912,10 +2333,14 @@ export default function IntelligenceMapSplit({
 								</ul>
 							</div>
 						) : sourcePlaces != null && !placesFetching ? (
-							<p className="text-[14px] font-extrabold text-brand-900">
-								{isRTL
-									? "ما رصدنا فرق يستحق حولك بعد"
-									: "No worthwhile gap observed around you yet"}
+							<p className="text-[14px] font-extrabold text-brand-900" data-testid={q ? "intelligence-map-search-empty" : "intelligence-map-empty"}>
+								{q
+									? isRTL
+										? "ما لقينا مكان بهذا الاسم في الرصد"
+										: "No observed place matches this search"
+									: isRTL
+										? "ما رصدنا فرق يستحق حولك بعد"
+										: "No worthwhile gap observed around you yet"}
 							</p>
 						) : null}
 						</div>
@@ -2015,8 +2440,8 @@ export default function IntelligenceMapSplit({
 								data-testid="intelligence-map-compare"
 							>
 								{isRTL
-									? "شف الفرق وقارن الأسعار في فرق"
-									: "See the gap and compare on Farq"}
+									? "قارن البقالة على مستوى المنتج"
+									: "Compare grocery at the product level"}
 							</Link>
 						</Button>
 					) : (
@@ -2037,9 +2462,13 @@ export default function IntelligenceMapSplit({
 						</Button>
 					)}
 					<p className="mt-2 text-[11px] text-[#5c6d6d]">
-						{isRTL
-							? "يفتح المقارنة الكاملة على فرق."
-							: "Opens the full comparison on Farq."}
+						{groceryCta
+							? isRTL
+								? "مقارنة البقالة على مستوى المنتج — بدون إحداثيات مخترعة لفروع."
+								: "Grocery compare is product-level — no invented storefront pins."
+							: isRTL
+								? "يفتح المقارنة الكاملة على فرق."
+								: "Opens the full comparison on Farq."}
 					</p>
 				</div>
 					</>

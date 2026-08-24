@@ -8,6 +8,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronLeft, ChevronRight, MapPin, X } from "lucide-react";
 import {
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 	type PointerEvent as ReactPointerEvent,
@@ -21,6 +22,14 @@ import {
 	navigationUrl,
 	type NavigationDestination,
 } from "../../lib/farqNavigation";
+import { displayItemName } from "../../lib/displayItemName";
+import {
+	placeDemoteCopy,
+	selectedPlaceFilterMissCopy,
+	type SelectedPlaceFilterMiss,
+} from "../../lib/mapFilters";
+import { itemNameMatchesPin, pinSheetObservedItem } from "../../lib/mapPlaceContract";
+import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
 	IntelligenceService,
@@ -115,6 +124,33 @@ export function formatItemPrice(value: number): string {
 	return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
+export type ComparedItemCaution = "outlier" | "over_cap" | "share" | "retail";
+
+/** Why a proof-table row must not wear the mint badge the pin's number wears. */
+export function comparedItemCaution(item: {
+	price_outlier?: boolean;
+	over_cap?: boolean;
+	demote_reason?: string | null;
+}): ComparedItemCaution | null {
+	if (item.price_outlier) return "outlier";
+	if (item.over_cap) return "over_cap";
+	if (item.demote_reason === "share" || item.demote_reason === "retail") {
+		return item.demote_reason;
+	}
+	return null;
+}
+
+export function comparedItemCautionLabel(
+	kind: ComparedItemCaution | null,
+	isRTL: boolean,
+): string | null {
+	if (kind === "outlier") return isRTL ? "سعر شاذ — غير مؤكد" : "Suspect price";
+	if (kind === "over_cap") {
+		return isRTL ? "فوق ٢٠٠ ر.س — مو رقم الخريطة" : "Over 200 SAR — not the map number";
+	}
+	return placeDemoteCopy(kind, isRTL);
+}
+
 export type ItemPriceCell = {
 	providerId: string;
 	price: number;
@@ -160,9 +196,11 @@ const COMPARED_ITEMS_PREVIEW = 30;
 function ComparedItemsSection({
 	placeId,
 	isRTL,
+	pinItemName,
 }: {
 	placeId: string;
 	isRTL: boolean;
+	pinItemName?: string | null;
 }) {
 	const [open, setOpen] = useState(false);
 	const [showAll, setShowAll] = useState(false);
@@ -204,7 +242,17 @@ function ComparedItemsSection({
 		};
 	}, [open, placeId]);
 
-	const items = data?.items ?? [];
+	const pin = displayItemName(pinItemName);
+	const items = useMemo(() => {
+		const raw = data?.items ?? [];
+		if (!pin) return raw;
+		return [...raw].sort((a, b) => {
+			const aPin = itemNameMatchesPin(a, pin);
+			const bPin = itemNameMatchesPin(b, pin);
+			if (aPin === bPin) return 0;
+			return aPin ? -1 : 1;
+		});
+	}, [data, pin]);
 	const shown = showAll ? items : items.slice(0, COMPARED_ITEMS_PREVIEW);
 	const feeEvidence = (data?.providers ?? []).filter(
 		(p) => p.delivery_fee != null,
@@ -313,22 +361,25 @@ function ComparedItemRow({
 	isRTL: boolean;
 }) {
 	const cells = itemPriceCells(item.prices);
-	/* A spread the ranking layer rejects must not look like the ones it trusts. */
-	const suspect = item.price_outlier === true;
+	const caution = comparedItemCaution(item);
+	const cautionLabel = comparedItemCautionLabel(caution, isRTL);
 	return (
-		<li className={`border-t border-[#eef3f3] px-4 py-3 first:border-t-0 ${suspect ? "opacity-70" : ""}`}>
+		<li className={`border-t border-[#eef3f3] px-4 py-3 first:border-t-0 ${caution ? "opacity-70" : ""}`}>
 			<div className="flex items-start justify-between gap-2">
 				<p className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-brand-900">
-					{item.name}
-					{suspect ? (
-						<span className="ms-1.5 whitespace-nowrap rounded bg-[#f1e4d4] px-1 py-0.5 text-[10px] font-bold text-[#8a5a1a]">
-							{isRTL ? "سعر شاذ — غير مؤكد" : "Suspect price"}
+					{displayItemName(item.name) || item.name}
+					{cautionLabel ? (
+						<span
+							className="ms-1.5 whitespace-nowrap rounded bg-[#f1e4d4] px-1 py-0.5 text-[10px] font-bold text-[#8a5a1a]"
+							data-testid="intelligence-map-compared-item-caution"
+						>
+							{cautionLabel}
 						</span>
 					) : null}
 				</p>
 				{item.gap > 0 ? (
 					<span
-						className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${suspect ? "bg-[#f1e4d4] text-[#8a5a1a]" : "bg-mint-500 text-brand-900"}`}
+						className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${caution ? "bg-[#f1e4d4] text-[#8a5a1a]" : "bg-mint-500 text-brand-900"}`}
 						dir="ltr"
 					>
 						{`+${formatItemPrice(item.gap)} ${isRTL ? "ر.س" : "SAR"}`}
@@ -387,6 +438,7 @@ export default function SelectedPlaceSheet({
 	feature,
 	selectedCategory,
 	selectedRestaurantId,
+	filterMisses,
 	isRTL,
 	variant,
 	onClose,
@@ -401,6 +453,7 @@ export default function SelectedPlaceSheet({
 	feature?: IntelligenceMapPlaceProperties | null;
 	selectedCategory?: IntelligenceCategory | null;
 	selectedRestaurantId?: string;
+	filterMisses?: SelectedPlaceFilterMiss[];
 	isRTL: boolean;
 	variant: "sheet" | "panel" | "popup";
 	onClose: () => void;
@@ -429,39 +482,31 @@ export default function SelectedPlaceSheet({
 		feature?.name ||
 		(isRTL ? "مطعم" : "Restaurant");
 	const restaurantNameEn = placeDetail?.name_en;
-	const difference = (placeDetail?.difference ||
-		feature?.difference ||
-		null) as {
-		product_name?: string | null;
-		cheapest_provider_id?: string | null;
-		expensive_provider_id?: string | null;
-		cheapest_price?: number | null;
-		expensive_price?: number | null;
-		difference_amount?: number | null;
-		observed_at?: string | null;
-	} | null;
-	const mealName =
-		difference?.product_name || feature?.product_name || null;
-	const gapAmount = Number(
-		difference?.difference_amount ?? feature?.gap,
+	const difference = pinSheetObservedItem(
+		(feature || null) as Record<string, unknown> | null,
+		(placeDetail?.difference || null) as Record<string, unknown> | null,
 	);
+	const mealName = difference?.product_name || null;
+	const gapAmount = Number(difference?.difference_amount);
 	const hasGap = Number.isFinite(gapAmount) && gapAmount > 0;
-	const cheap = Number(
-		difference?.cheapest_price ?? feature?.cheapest_price,
-	);
-	const expensive = Number(
-		difference?.expensive_price ?? feature?.expensive_price,
-	);
-	const cheapProvider =
-		difference?.cheapest_provider_id || feature?.cheapest_provider_id;
-	const expensiveProvider =
-		difference?.expensive_provider_id || feature?.expensive_provider_id;
+	const cheap = Number(difference?.cheapest_price);
+	const expensive = Number(difference?.expensive_price);
+	const cheapProvider = difference?.cheapest_provider_id;
+	const expensiveProvider = difference?.expensive_provider_id;
 	const hasPrices =
 		Number.isFinite(cheap) && Number.isFinite(expensive) && expensive > 0;
 	const cheapPct = hasPrices
 		? Math.max(8, Math.min(92, (cheap / expensive) * 100))
 		: 0;
-	const fresh = freshnessFromObserved(difference?.observed_at, isRTL);
+	const fresh = freshnessFromObserved(
+		placeDetail?.difference?.observed_at,
+		isRTL,
+	);
+	const filterMissNote = selectedPlaceFilterMissCopy(filterMisses, isRTL);
+	const demoteNote = placeDemoteCopy(
+		feature?.demote_reason || placeDetail?.demote_reason,
+		isRTL,
+	);
 	const categoryLabel = [
 		placeDetail?.subcategory ||
 			placeDetail?.category ||
@@ -836,13 +881,21 @@ export default function SelectedPlaceSheet({
 					className="flex items-center gap-3 px-4 pb-1 pt-4"
 					data-testid="intelligence-map-place-cover"
 				>
-					{imageUrl ? (
-						<img
-							src={imageUrl}
-							alt=""
-							className="size-14 shrink-0 rounded-2xl bg-brand-900 object-cover"
-						/>
-					) : null}
+					<div
+						className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#e6eef0] text-[22px] font-extrabold text-brand-900"
+						data-testid="intelligence-map-place-photo"
+						data-kind={imageUrl ? "photo" : "initials"}
+					>
+						{imageUrl ? (
+							<img
+								src={imageUrl}
+								alt=""
+								className="size-14 object-cover"
+							/>
+						) : (
+							<span aria-hidden>{restaurantPinInitial(restaurantName)}</span>
+						)}
+					</div>
 					<div className="min-w-0 flex-1">
 						<p className="text-[11px] font-bold text-[#5c6d6d]">
 							{isRTL ? "فرق مرصود" : "Observed gap"}
@@ -887,6 +940,22 @@ export default function SelectedPlaceSheet({
 											? "ما رصدنا فرق يستحق هنا بعد"
 											: "No worthwhile gap observed here yet"}
 								</p>
+								{filterMissNote ? (
+									<p
+										className="text-center text-[11.5px] font-bold text-mint-500"
+										data-testid="intelligence-map-filter-miss"
+									>
+										{filterMissNote}
+									</p>
+								) : null}
+								{demoteNote ? (
+									<p
+										className="text-center text-[11.5px] font-bold text-mint-500"
+										data-testid="intelligence-map-place-demote"
+									>
+										{demoteNote}
+									</p>
+								) : null}
 							</div>
 
 							<div className="h-px w-full bg-white/15" />
@@ -1009,7 +1078,11 @@ export default function SelectedPlaceSheet({
 
 					{/* The claim above is checkable only if the evidence is here. */}
 					{placeKey ? (
-						<ComparedItemsSection placeId={placeKey} isRTL={isRTL} />
+						<ComparedItemsSection
+							placeId={placeKey}
+							isRTL={isRTL}
+							pinItemName={mealName}
+						/>
 					) : null}
 				</div>
 			</div>

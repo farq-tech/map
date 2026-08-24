@@ -38,7 +38,7 @@ const {
   displayItemName,
   normalizedNameSql,
   retailItemPattern,
-  shareItemPattern,
+  shareMatchSql,
 } = require('./consumer-items');
 const {
   MIN_AREA_COMPARISONS,
@@ -48,7 +48,7 @@ const {
 } = require('./opportunity-aggregate');
 
 /** Bump when the shape of a feature changes, so a cached client refetches. */
-const READ_MODEL_VERSION = 4;
+const READ_MODEL_VERSION = 33;
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 
@@ -177,7 +177,7 @@ scored AS (
          ips.dearest_price,
          (ips.dearest_price - ips.cheapest_price) AS gap,
          COALESCE(ips.name_ar, ips.name_en) AS product_name,
-         ${normalizedNameSql(ITEM_NAME_EXPR)} ~ '${shareItemPattern()}' AS is_share,
+         ${shareMatchSql(ITEM_NAME_EXPR)} AS is_share,
          ${normalizedNameSql(ITEM_NAME_EXPR)} ~ '${retailItemPattern()}' AS is_retail,
          ${categoryCaseSql(ITEM_NAME_EXPR)} AS category
     FROM comparison.item_price_spread ips
@@ -185,13 +185,14 @@ scored AS (
      AND btrim(ips.cheapest_provider) <> ''
      AND ips.dearest_price IS NOT NULL
      AND ips.cheapest_price IS NOT NULL
-     AND ips.dearest_price > ips.cheapest_price
+     AND (ips.dearest_price - ips.cheapest_price) >= 1
      AND ips.dearest_price <= $2
 ),
 best AS (
   SELECT DISTINCT ON (canonical_restaurant_id) *
     FROM scored
-   ORDER BY canonical_restaurant_id, (is_share OR is_retail) ASC, gap DESC
+   ORDER BY canonical_restaurant_id, (is_share OR is_retail) ASC, gap DESC,
+            cheapest_price ASC, canonical_item_id ASC
 ),
 per_category AS (
   SELECT DISTINCT ON (canonical_restaurant_id, category)
@@ -303,10 +304,10 @@ function rowToFeature(row) {
   /* The row already knows why it was demoted; recomputing from the name keeps
    * the reason available when a caller builds a feature without the SQL. */
   const reason = hasGap
-    ? row.is_share === true
-      ? 'share'
-      : row.is_retail === true
-        ? 'retail'
+    ? row.is_retail === true
+      ? 'retail'
+      : row.is_share === true
+        ? 'share'
         : row.is_share === undefined
           ? demoteReason(productName)
           : null

@@ -49,6 +49,7 @@ import {
 } from "../../lib/farqMapPins";
 import {
 	ensurePriceTileLayers,
+	setPriceTileNeighborDim,
 	syncPriceTileData,
 } from "../../lib/farqPriceTiles";
 import {
@@ -68,12 +69,12 @@ import {
 } from "../../lib/farqPriceTiles";
 import type { CityDistricts } from "../../services/intelligenceService";
 import type { MapViewChangeMeta } from "../../lib/farqMapViewport";
+import { resolveLandingCamera } from "../../lib/farqMapCamera";
 import {
 	getMapboxAccessToken,
 	type MapboxBasemap,
 	mapboxStyleUrl,
 	RIYADH_LNG_LAT, ensureRtlTextPlugin } from "../../lib/mapboxAccess";
-import { createFarqSearchBox } from "../../lib/mapboxSearch";
 import type {
 	IntelligenceMapNeighborhoods,
 	IntelligenceMapPlaceDetail,
@@ -396,6 +397,7 @@ export default function FarqMap({
 	onViewChange,
 	bottomInset = 0,
 	initialCamera = null,
+	resumeSessionCamera = true,
 	districts = null,
 	districtLens = "gap",
 	hideAddressSearch = false,
@@ -434,6 +436,8 @@ export default function FarqMap({
 	bottomInset?: number;
 	/** A link's camera; used once, on the first landing, instead of the city default. */
 	initialCamera?: { center: [number, number]; zoom: number } | null;
+	/** False for a bare ?place= deeplink so the last pan does not steal the first frame. */
+	resumeSessionCamera?: boolean;
 	/** The city's أحياء with their counts; when present they are the field and the H3 cells stay hidden. */
 	districts?: CityDistricts | null;
 	/** What the district colour means: how many opportunities, or which app wins. */
@@ -487,6 +491,7 @@ export default function FarqMap({
 	 * texture is σ 14–26 RGB — and mint over an arid city reads as vegetation. */
 	const basemap = basemapProp ?? "standard";
 	const [missingToken] = useState(() => !token);
+	const [mapError, setMapError] = useState<string | null>(null);
 	const [mapReady, setMapReady] = useState(false);
 	const [introDone, setIntroDone] = useState(false);
 
@@ -550,6 +555,11 @@ export default function FarqMap({
 		const map = mapRef.current;
 		if (!map || !mapReady) return;
 		try {
+			map.setLanguage(isRTL ? "ar" : "en");
+		} catch {
+			/* classic styles without Mapbox vector sources keep local names */
+		}
+		try {
 			setDistrictLocale(map, isRTL);
 		} catch {
 			/* style mid-swap */
@@ -593,26 +603,43 @@ export default function FarqMap({
 		 * crowds the Arabic labels into each other, and costs a phone GPU frames
 		 * for a view no decision needs. Tilt stays one gesture away for anyone
 		 * who wants it, and a saved camera is restored exactly as it was left. */
-		const landing = initialCamera && !mapSession.introStarted
-			? { center: initialCamera.center, zoom: initialCamera.zoom, pitch: 0, bearing: 0 }
-			: { center: RIYADH_LNG_LAT, zoom: 12.15, pitch: 0, bearing: 0 };
-
-		const map = new mapboxgl.Map({
-			container: containerRef.current,
-			style: mapboxStyleUrl("standard"),
-			center: skipGlobe ? landing.center : [20, 18],
-			zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
-			pitch: skipGlobe ? landing.pitch : 0,
-			bearing: skipGlobe ? landing.bearing : 0,
-			projection: skipGlobe ? "mercator" : "globe",
-			attributionControl: { compact: true } as unknown as boolean,
-			maxPitch: 75,
-			accessToken: token,
-			cooperativeGestures: false,
-			dragPan: true,
-			language: isRtlRef.current ? "ar" : "en",
+		const landing = resolveLandingCamera({
+			initialCamera,
+			session: mapSession.camera,
+			resumeSession: resumeSessionCamera,
+			fallback: { center: RIYADH_LNG_LAT, zoom: 12.15 },
 		});
+
+		let map: MapboxMap;
+		try {
+			map = new mapboxgl.Map({
+				container: containerRef.current,
+				style: mapboxStyleUrl("standard"),
+				center: skipGlobe ? landing.center : [20, 18],
+				zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
+				pitch: skipGlobe ? landing.pitch : 0,
+				bearing: skipGlobe ? landing.bearing : 0,
+				projection: skipGlobe ? "mercator" : "globe",
+				attributionControl: { compact: true } as unknown as boolean,
+				maxPitch: 75,
+				accessToken: token,
+				cooperativeGestures: false,
+				dragPan: true,
+				language: isRtlRef.current ? "ar" : "en",
+			});
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			setMapError(message || "map_init_failed");
+			return;
+		}
 		mapRef.current = map;
+		map.on("error", (event) => {
+			const message = String(
+				(event && "error" in event && (event as { error?: { message?: string } }).error?.message) ||
+					"",
+			);
+			if (/webgl/i.test(message)) setMapError(message);
+		});
 		if (import.meta.env.DEV) {
 			/* Dev-only handle for browser QA scripts (camera, layers). Never shipped. */
 			(window as unknown as { __farqMap?: MapboxMap }).__farqMap = map;
@@ -662,11 +689,13 @@ export default function FarqMap({
 						containerRef.current?.closest(".farq-mapbox-root"),
 						containerRef.current?.closest(".farq-map-split"),
 					]);
+					setPriceTileNeighborDim(map, true);
 					selectedPlaceIdRef.current = id;
 					onSelectPlaceRef.current(id);
 					lastPinSigRef.current = "";
 					syncPinsRef.current();
 				});
+				setPriceTileNeighborDim(map, Boolean(selectedPlaceIdRef.current));
 				syncPinsRef.current();
 			} catch {
 				/* */
@@ -702,13 +731,20 @@ export default function FarqMap({
 				);
 			}
 			if (!hideAddressSearch && !mobileChrome) {
-				try {
-					const box = createFarqSearchBox({ token, isRTL: isRtlRef.current });
-					searchRef.current = box;
-					map.addControl(box, "top-right");
-				} catch {
-					/* Search Box optional if the token lacks Search scope */
-				}
+				/* 2 MB Search Box — desktop chrome only. Phones use the in-app search. */
+				void import("../../lib/mapboxSearch").then(({ createFarqSearchBox }) => {
+					if (searchRef.current || !mapRef.current) return;
+					try {
+						const box = createFarqSearchBox({
+							token,
+							isRTL: isRtlRef.current,
+						});
+						searchRef.current = box;
+						map.addControl(box, "top-right");
+					} catch {
+						/* Search Box optional if the token lacks Search scope */
+					}
+				});
 			}
 
 			try {
@@ -775,11 +811,13 @@ export default function FarqMap({
 						containerRef.current?.closest(".farq-mapbox-root"),
 						containerRef.current?.closest(".farq-map-split"),
 					]);
+					setPriceTileNeighborDim(map, true);
 					selectedPlaceIdRef.current = id;
 					onSelectPlaceRef.current(id);
 					lastPinSigRef.current = "";
 					syncPinsRef.current();
 				});
+				setPriceTileNeighborDim(map, Boolean(selectedPlaceIdRef.current));
 			} catch {
 				/* style not ready */
 			}
@@ -798,15 +836,8 @@ export default function FarqMap({
 				reportView();
 			};
 
-			if (mapSession.introStarted && mapSession.camera) {
-				landQuietly(mapSession.camera);
-			} else if (mapSession.introStarted) {
-				landQuietly({
-					center: RIYADH_LNG_LAT,
-					zoom: 12.15,
-					pitch: 0,
-					bearing: 0,
-				});
+			if (mapSession.introStarted) {
+				landQuietly(landing);
 			} else if (skipGlobe) {
 				mapSession.introStarted = true;
 				map.jumpTo(landing);
@@ -987,11 +1018,18 @@ export default function FarqMap({
 
 			const selectedFeature = selectedId
 				? placesData.features.find((feature) => {
-						const placeId = String(
-							(feature.properties as { place_id?: string } | null)
-								?.place_id || "",
-						).trim();
-						return placeId === selectedId && feature.geometry.type === "Point";
+						const props = (feature.properties || {}) as {
+							place_id?: string;
+							stack_place_ids?: unknown;
+						};
+						const placeId = String(props.place_id || "").trim();
+						const stackIds = Array.isArray(props.stack_place_ids)
+							? props.stack_place_ids.map(String)
+							: [];
+						return (
+							feature.geometry.type === "Point" &&
+							(placeId === selectedId || stackIds.includes(selectedId))
+						);
 					})
 				: undefined;
 
@@ -1099,6 +1137,8 @@ export default function FarqMap({
 			if (selectedPlaceId) root.setAttribute("data-sheet-open", "true");
 			else root.removeAttribute("data-sheet-open");
 		}
+		const map = mapRef.current;
+		if (map) setPriceTileNeighborDim(map, Boolean(selectedPlaceId));
 		for (const rec of pinMarkersRef.current.values()) {
 			if (rec.kind !== "place") continue;
 			setPinSelected(
@@ -1206,6 +1246,19 @@ export default function FarqMap({
 				{isRTL
 					? "أضف VITE_MAPBOX_ACCESS_TOKEN في Frontend/.env.local ثم أعد تشغيل Vite."
 					: "Add VITE_MAPBOX_ACCESS_TOKEN to Frontend/.env.local and restart Vite."}
+			</div>
+		);
+	}
+
+	if (mapError) {
+		return (
+			<div
+				className="flex h-full items-center justify-center bg-brand-900 px-6 text-center text-sm text-white/80"
+				data-testid="intelligence-map-webgl-error"
+			>
+				{isRTL
+					? "الخريطة تحتاج WebGL على هذا الجهاز. قائمة الفرص ما زالت تشتغل."
+					: "The street map needs WebGL on this device. The opportunity list still works."}
 			</div>
 		);
 	}

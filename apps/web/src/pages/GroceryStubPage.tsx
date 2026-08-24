@@ -16,8 +16,8 @@ export default function GroceryStubPage() {
 				</h1>
 				<p className="mt-3 text-sm text-[#9bb0b0]">
 					{isRTL
-						? "هذه معاينة المستثمر لخريطة فرق. مقارنة البقالة الكاملة ليست ضمن هذا المستودع."
-						: "This investor preview is the Farq map. Full grocery compare is not in this repo."}
+						? "مقارنة البقالة في فرق على مستوى المنتج بين المتاجر — ليست فروع نخترع لها إحداثيات على الخريطة."
+						: "Farq grocery compare is product-level across stores — we do not invent storefront coordinates on the map."}
 				</p>
 				{search.q ? (
 					<p className="mt-2 text-mint-500">{search.q}</p>

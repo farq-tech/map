@@ -12,9 +12,11 @@ const assert = require('node:assert/strict');
 const {
   PLACE_ITEMS_CAP,
   getPlaceItems,
+  observedGapRiyals,
   rowToPlaceItem,
   rowToPlaceProvider,
   sortPlaceItems,
+  classifyDupeNames,
 } = require('./comparison-map');
 
 const HEAD = {
@@ -101,10 +103,19 @@ test('rowToPlaceItem drops rows that are not a comparison and rows without a nam
 });
 
 test('sortPlaceItems puts the biggest observed gap first and the same-price items last', () => {
-  const rows = [SAME_PRICE_ROW, { ...ITEM_ROW, item_id: '2', prices: { ninja: 10, toyou: 12 } }, ITEM_ROW].map(
-    rowToPlaceItem,
-  );
-  const sorted = sortPlaceItems(rows);
+  const personal = rowToPlaceItem({
+    ...ITEM_ROW,
+    name_ar: 'اكلير شوكولاتة',
+    name_en: 'Chocolate Eclair',
+  });
+  const small = rowToPlaceItem({
+    item_id: '2',
+    name_ar: 'اكلير فانيلا',
+    name_en: 'Vanilla Eclair',
+    prices: { ninja: 10, toyou: 12 },
+  });
+  const same = rowToPlaceItem(SAME_PRICE_ROW);
+  const sorted = sortPlaceItems([same, small, personal]);
   assert.deepEqual(
     sorted.map((i) => i.gap),
     [90, 2, 0],
@@ -189,4 +200,103 @@ test('a spread the ranking layer rejects is marked, kept, and ranked below the t
     ['2', '1'],
     'the trusted gap leads, the suspect one follows',
   );
+});
+
+test('the proof table leads with the pin dish and parks over-cap rows', () => {
+  const { rowToPlaceItem, sortPlaceItems } = require('./comparison-map');
+  const snack = rowToPlaceItem({
+    item_id: '15101',
+    name_ar: 'سناكات فيفا 26',
+    prices: { jahez: 64, hungerstation: 65 },
+  });
+  const cake = rowToPlaceItem({
+    item_id: '15102',
+    name_ar: 'برونو',
+    prices: { jahez: 96.8, hungerstation: 121 },
+  });
+  const overCap = rowToPlaceItem({
+    item_id: '136421',
+    name_ar: 'ميني سميد',
+    prices: { jahez: 87.5, hungerstation: 250 },
+  });
+  const pinItem = rowToPlaceItem({
+    item_id: '136422',
+    name_ar: 'سجنتشر 30قطعة',
+    prices: { jahez: 90, hungerstation: 150 },
+  });
+  assert.equal(snack.over_cap, false);
+  assert.equal(overCap.over_cap, true);
+  assert.deepEqual(
+    sortPlaceItems([cake, snack], 'سناكات فيفا 26').map((i) => i.item_id),
+    ['15101', '15102'],
+  );
+  assert.deepEqual(
+    sortPlaceItems([overCap, pinItem], 'سجنتشر 30قطعة').map((i) => i.item_id),
+    ['136422', '136421'],
+  );
+  const snackBox = rowToPlaceItem({
+    item_id: '15821',
+    name_ar: 'Snack Box',
+    name_en: 'Snack Box',
+    prices: { jahez: 46, hungerstation: 64 },
+  });
+  const gathering = rowToPlaceItem({
+    item_id: '15822',
+    name_ar: 'بوكس اللمة',
+    name_en: 'Hero Hunger Buster',
+    prices: { jahez: 97, hungerstation: 128 },
+  });
+  const stroganoff = rowToPlaceItem({
+    item_id: '15823',
+    name_ar: 'بيف ستروجانوف مع الأرز',
+    prices: { jahez: 29, hungerstation: 42 },
+  });
+  assert.equal(gathering.demote_reason, 'share');
+  assert.equal(stroganoff.demote_reason, null);
+  assert.deepEqual(
+    sortPlaceItems([gathering, stroganoff, snackBox], 'Snack Box').map((i) => i.item_id),
+    ['15821', '15823', '15822'],
+  );
+});
+
+test('duplicate coordinates are labelled, never merged', () => {
+  assert.equal(classifyDupeNames(['ماكدونالدز', 'ماكدونالدز']), 'same_name');
+  assert.equal(classifyDupeNames(['ماكدونالدز', 'ستاربكس']), 'distinct_names');
+});
+
+test('getPlace memo keeps an observed payload for five minutes and drops it after', () => {
+  const {
+    readPlaceCache,
+    writePlaceCache,
+    resetPlaceCache,
+    PLACE_CACHE_TTL_MS,
+  } = require('./comparison-map');
+  resetPlaceCache();
+  const body = { place_id: '1381', lat: 24.4855703069545, lng: 46.6215488247467 };
+  writePlaceCache('1381', body);
+  assert.equal(readPlaceCache('1381'), body);
+  assert.equal(readPlaceCache('1381', Date.now() + PLACE_CACHE_TTL_MS + 1), undefined);
+  writePlaceCache('999', null);
+  assert.equal(readPlaceCache('999'), null);
+  resetPlaceCache();
+});
+
+test('rowToPlaceItem trims سعره N so 81 riyals is not read as 250', () => {
+  const item = rowToPlaceItem({
+    item_id: '1',
+    name_ar: 'بون بون تشوكليت القهوة  سعره 250 ',
+    name_en: null,
+    prices: { hungerstation: 109, jahez: 190 },
+  });
+  assert.equal(item.name, 'بون بون تشوكليت القهوة');
+  assert.equal(item.gap, 81);
+});
+
+test('lean gap is the rounded observed difference — city pins and getPlace share it', () => {
+  assert.equal(
+    observedGapRiyals({ difference_amount: 81, cheapest_provider_id: 'hungerstation' }),
+    81,
+  );
+  assert.equal(observedGapRiyals({ difference_amount: 1 }), 1);
+  assert.equal(observedGapRiyals(null), null);
 });

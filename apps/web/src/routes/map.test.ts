@@ -1,12 +1,18 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
 	encodeCameraBbox,
+	mapReturnSearch,
 	parseCameraBbox,
 	parseCameraZoom,
 	parseMapSearch,
 	resolveMapSort,
 	resolveMapView,
+	resumeMapSessionCamera,
+	shouldPersistCameraToUrl,
+	writeMapReturn,
 } from "./map";
+import { resetSafeStorageProbeForTests } from "../lib/safeStorage";
 
 describe("map search — shared list/map world", () => {
 	it("parses view and sort without dropping place/q", () => {
@@ -23,6 +29,8 @@ describe("map search — shared list/map world", () => {
 			city: "Riyadh",
 			q: "برجر",
 			place: "123",
+			sector: undefined,
+			filter: undefined,
 			view: "list",
 			sort: "cheap",
 		});
@@ -57,9 +65,116 @@ describe("camera in the URL", () => {
 		expect(encodeCameraBbox([46.660001, 24.7, 46.69, 24.730049])).toBe("46.6600,24.7000,46.6900,24.7300");
 	});
 
+	it("keeps worthwhile and 3+ apps on together", () => {
+		expect(parseMapSearch({ filter: "biggest,multi" }).filter).toBe("biggest,multi");
+		expect(parseMapSearch({ filter: "biggest+multi" }).filter).toBe("biggest,multi");
+	});
+
 	it("parseMapSearch carries b and z through", () => {
 		const s = parseMapSearch({ b: "46.66,24.70,46.69,24.73", z: "15.2" });
 		expect(s.b).toBe("46.6600,24.7000,46.6900,24.7300");
 		expect(s.z).toBe(15.2);
+	});
+
+	it("restores camera and filters when returning from merchant", () => {
+		sessionStorage.clear();
+		writeMapReturn({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+		expect(mapReturnSearch("1381")).toMatchObject({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+	});
+
+	it("drops another restaurant's camera instead of opening the wrong scene", () => {
+		sessionStorage.clear();
+		writeMapReturn({
+			place: "1381",
+			b: "46.6600,24.7000,46.6900,24.7300",
+			z: 15.2,
+			filter: "biggest,multi",
+			category: "burgers",
+		});
+		expect(mapReturnSearch("6254")).toEqual({
+			neighborhood: undefined,
+			category: undefined,
+			city: undefined,
+			q: undefined,
+			place: "6254",
+			sector: undefined,
+			filter: undefined,
+			view: undefined,
+			sort: undefined,
+			b: undefined,
+			z: undefined,
+		});
+	});
+
+	it("returns only the merchant place when sessionStorage throws", () => {
+		const descriptor = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+		Object.defineProperty(window, "sessionStorage", {
+			configurable: true,
+			get() {
+				throw new Error("storage blocked");
+			},
+		});
+		try {
+			expect(() => writeMapReturn({ place: "1381", z: 15 })).not.toThrow();
+			expect(mapReturnSearch("1381")).toMatchObject({ place: "1381" });
+			expect(mapReturnSearch("1381").b).toBeUndefined();
+		} finally {
+			if (descriptor) Object.defineProperty(window, "sessionStorage", descriptor);
+			resetSafeStorageProbeForTests();
+		}
+	});
+
+	it("accepts combined filters as a space list or a repeated query param", () => {
+		expect(parseMapSearch({ filter: "biggest multi" }).filter).toBe("biggest,multi");
+		expect(parseMapSearch({ filter: ["biggest", "multi"] }).filter).toBe("biggest,multi");
+	});
+
+	it("writes a camera to the URL only for a shared place, never under DNT", () => {
+		expect(shouldPersistCameraToUrl({})).toBe(false);
+		expect(shouldPersistCameraToUrl({ place: "6254" })).toBe(true);
+		const previous = navigator.doNotTrack;
+		Object.defineProperty(navigator, "doNotTrack", { configurable: true, value: "1" });
+		try {
+			expect(shouldPersistCameraToUrl({ place: "6254" })).toBe(false);
+		} finally {
+			Object.defineProperty(navigator, "doNotTrack", { configurable: true, value: previous });
+		}
+	});
+
+	it("keeps worthwhile and 3+ apps when the camera is written on refresh", () => {
+		const prev = parseMapSearch({
+			filter: "biggest,multi",
+			place: "6254",
+			b: "46.8000,24.6700,46.8100,24.6800",
+			z: "15.1",
+		});
+		const after = parseMapSearch({ ...prev, b: "46.8010,24.6710,46.8110,24.6810", z: 15.2 });
+		expect(after.filter).toBe("biggest,multi");
+		expect(after.place).toBe("6254");
+		expect(after.z).toBe(15.2);
+	});
+
+	it("resumes a session camera only when the URL already frames the scene", () => {
+		expect(resumeMapSessionCamera({})).toBe(true);
+		expect(resumeMapSessionCamera({ place: "1381" })).toBe(false);
+		expect(
+			resumeMapSessionCamera({
+				place: "1381",
+				b: "46.6600,24.7000,46.6900,24.7300",
+				z: 15.2,
+			}),
+		).toBe(true);
 	});
 });

@@ -12,6 +12,18 @@
 'use strict';
 
 const { comparisonQuery } = require('./comparison-pool');
+const {
+  demoteReason,
+  displayItemName,
+  representativeSpreadOrderSql,
+} = require('./consumer-items');
+const {
+  BIGGEST_SAVINGS_MIN_GAP,
+  BIGGEST_SAVINGS_MIN_PRICE,
+  matchesCategory,
+  matchesFilter,
+  matchesSector,
+} = require('./map-filters');
 
 function readEnabled() {
   const v = process.env.SUPABASE_COMPARISON_READ_ENABLED;
@@ -103,6 +115,7 @@ const PIN_FIELDS = Object.freeze([
   'product_name',
   'cheapest_price',
   'expensive_price',
+  'provider_count',
 ]);
 const MAP_PIN_CAP = 400;
 const MAP_PIN_CAP_MAX = 800;
@@ -159,7 +172,7 @@ function toPlacePin(p) {
             p.dearest_price != null && Number.isFinite(Number(p.dearest_price))
               ? Number(p.dearest_price)
               : null,
-          product_name: p.product_name || null,
+          product_name: displayItemName(p.product_name) || null,
         }
       : null,
   };
@@ -248,6 +261,10 @@ function toSlimPinFeature(f) {
       product_name: diff.product_name || null,
       cheapest_price: observedPrice(diff.cheapest_price),
       expensive_price: observedPrice(diff.expensive_price),
+      provider_count:
+        f.provider_count != null && Number.isFinite(Number(f.provider_count))
+          ? Number(f.provider_count)
+          : null,
     },
   };
 }
@@ -369,6 +386,8 @@ function rowToPlace(row) {
         ? Number(row.dearest_price)
         : null,
     product_name: row.product_name || null,
+    item_name_ar: row.item_name_ar ? String(row.item_name_ar) : null,
+    item_name_en: row.item_name_en ? String(row.item_name_en) : null,
     image_url: row.branch_image_url || null,
     has_difference: Boolean(row.cheapest_provider),
   };
@@ -388,7 +407,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        s.cheapest_price,
        s.dearest_price,
        s.difference_amount,
-       s.product_name
+       s.product_name,
+       s.item_name_ar,
+       s.item_name_en
   FROM comparison.discovery_cards dc
   LEFT JOIN LATERAL (
     SELECT ips.cheapest_provider,
@@ -396,13 +417,16 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
            ips.cheapest_price,
            ips.dearest_price,
            (ips.dearest_price - ips.cheapest_price) AS difference_amount,
-           COALESCE(ips.name_ar, ips.name_en) AS product_name
+           COALESCE(ips.name_ar, ips.name_en) AS product_name,
+           ips.name_ar AS item_name_ar,
+           ips.name_en AS item_name_en
       FROM comparison.item_price_spread ips
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
-     ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
+       AND (ips.dearest_price - ips.cheapest_price) >= 1
+     ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
  WHERE dc.latitude IS NOT NULL
@@ -584,6 +608,9 @@ async function queryPlaces(opts = {}) {
     const place = rowToPlace(row);
     if (!place) continue;
     if (!matchesQuery(place, q)) continue;
+    if (!matchesCategory(place, opts.category)) continue;
+    if (!matchesSector(place, opts.sector, opts.category)) continue;
+    if (!matchesFilter(place, opts.filter)) continue;
     pool.push(toPlacePin(place));
   }
 
@@ -609,6 +636,9 @@ async function queryPlaces(opts = {}) {
     bbox,
     zoom: Number.isFinite(zoom) ? zoom : null,
     q: q || null,
+    category: opts.category || null,
+    sector: opts.sector || null,
+    filter: opts.filter || null,
     default_view: RIYADH_VIEW,
     coverage: {
       ...coverage,
@@ -639,7 +669,9 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        s.cheapest_price,
        s.dearest_price,
        s.difference_amount,
-       s.product_name
+       s.product_name,
+       s.item_name_ar,
+       s.item_name_en
   FROM comparison.discovery_cards dc
   LEFT JOIN LATERAL (
     SELECT ips.cheapest_provider,
@@ -647,13 +679,16 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
            ips.cheapest_price,
            ips.dearest_price,
            (ips.dearest_price - ips.cheapest_price) AS difference_amount,
-           COALESCE(ips.name_ar, ips.name_en) AS product_name
+           COALESCE(ips.name_ar, ips.name_en) AS product_name,
+           ips.name_ar AS item_name_ar,
+           ips.name_en AS item_name_en
       FROM comparison.item_price_spread ips
      WHERE ips.canonical_restaurant_id = dc.canonical_restaurant_id
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
-     ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
+       AND (ips.dearest_price - ips.cheapest_price) >= 1
+     ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
  WHERE dc.canonical_restaurant_id = $1::bigint
@@ -664,10 +699,34 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
  LIMIT 1
 `;
 
+const PLACE_CACHE_TTL_MS = 5 * 60 * 1000;
+const placeCache = new Map();
+
+function readPlaceCache(id, now = Date.now()) {
+  const hit = placeCache.get(id);
+  if (!hit) return undefined;
+  if (now - hit.at >= PLACE_CACHE_TTL_MS) {
+    placeCache.delete(id);
+    return undefined;
+  }
+  return hit.value;
+}
+
+function writePlaceCache(id, value) {
+  placeCache.set(id, { at: Date.now(), value });
+  return value;
+}
+
+function resetPlaceCache() {
+  placeCache.clear();
+}
+
 async function getPlace(placeId) {
   if (!readEnabled()) return null;
   const id = String(placeId || '').trim();
   if (!/^\d+$/.test(id)) return null;
+  const cached = readPlaceCache(id);
+  if (cached !== undefined) return cached;
   const rows = await comparisonQuery(GET_SQL, [
     id,
     KSA.latMin,
@@ -676,9 +735,9 @@ async function getPlace(placeId) {
     KSA.lngMax,
   ]);
   const place = rows[0] ? rowToPlace(rows[0]) : null;
-  if (!place) return null;
+  if (!place) return writePlaceCache(id, null);
   const pin = toPlacePin(place);
-  return {
+  return writePlaceCache(id, {
     place_id: pin.place_id,
     restaurant_id: pin.restaurant_id,
     name: pin.name,
@@ -692,11 +751,15 @@ async function getPlace(placeId) {
     lat: pin.lat,
     lng: pin.lng,
     difference: pin.difference,
+    gap: observedGapRiyals(pin.difference),
     menu: pin.menu,
     compare: pin.menu,
     image_url: place.image_url,
+    demote_reason:
+      demoteReason(`${place.item_name_ar || ''} ${place.item_name_en || ''}`) ||
+      demoteReason(place.product_name),
     source: 'comparison.discovery_cards',
-  };
+  });
 }
 
 /**
@@ -854,8 +917,8 @@ function rowToPlaceItem(row) {
   if (codes.length < 2) return null;
   const cheapest = Math.min(...codes.map((c) => prices[c]));
   const dearest = Math.max(...codes.map((c) => prices[c]));
-  const nameAr = String(row.name_ar || '').trim() || null;
-  const nameEn = String(row.name_en || '').trim() || null;
+  const nameAr = displayItemName(row.name_ar) || null;
+  const nameEn = displayItemName(row.name_en) || null;
   const name = nameAr || nameEn;
   if (!name) return null;
   return {
@@ -881,6 +944,10 @@ function rowToPlaceItem(row) {
      * would be the worst of the three options.
      */
     price_outlier: cheapest > 0 && dearest >= cheapest * PRICE_OUTLIER_RATIO,
+    over_cap: dearest > CONSUMER_PRICE_CAP_SAR,
+    demote_reason:
+      demoteReason(`${row.name_ar || ''} ${row.name_en || ''}`) ||
+      demoteReason(name),
     prices,
   };
 }
@@ -892,14 +959,27 @@ const PRICE_OUTLIER_RATIO = 2;
  * Biggest observed gap first; suspect spreads sit below the numbers the rest of
  * the product stands behind, and the same-price items stay at the bottom.
  */
-function sortPlaceItems(items) {
-  return items.slice().sort(
-    (a, b) =>
-      Number(Boolean(a.price_outlier)) - Number(Boolean(b.price_outlier)) ||
+function itemNameMatches(item, representativeName) {
+  const pin = displayItemName(representativeName);
+  if (!pin) return false;
+  return [item?.name, item?.name_ar, item?.name_en].some(
+    (n) => displayItemName(n) === pin,
+  );
+}
+
+function sortPlaceItems(items, representativeName) {
+  return items.slice().sort((a, b) => {
+    const aPin = itemNameMatches(a, representativeName);
+    const bPin = itemNameMatches(b, representativeName);
+    if (aPin !== bPin) return aPin ? -1 : 1;
+    return (
+      Number(Boolean(a.price_outlier || a.over_cap || a.demote_reason)) -
+        Number(Boolean(b.price_outlier || b.over_cap || b.demote_reason)) ||
       Number(b.gap > 0) - Number(a.gap > 0) ||
       b.gap - a.gap ||
-      a.name.localeCompare(b.name, 'ar'),
-  );
+      a.name.localeCompare(b.name, 'ar')
+    );
+  });
 }
 
 function rowToPlaceProvider(row) {
@@ -948,7 +1028,12 @@ async function getPlaceItems(placeId, opts = {}) {
     const item = rowToPlaceItem(row);
     if (item) items.push(item);
   }
-  const sorted = sortPlaceItems(items);
+  let representativeName = opts.representativeName || null;
+  if (!representativeName && typeof opts.__query !== 'function' && readEnabled()) {
+    const pin = await getPlace(placeId);
+    representativeName = pin?.difference?.product_name || null;
+  }
+  const sorted = sortPlaceItems(items, representativeName);
 
   return {
     place_id: String(head.place_id),
@@ -967,6 +1052,123 @@ async function getPlaceItems(placeId, opts = {}) {
     generated_at: metaRows[0]?.generated_at
       ? new Date(metaRows[0].generated_at).toISOString()
       : null,
+  };
+}
+
+function classifyDupeNames(names) {
+  const unique = new Set(
+    (names || []).map((n) => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim()).filter(Boolean),
+  );
+  if (unique.size <= 1) return 'same_name';
+  return 'distinct_names';
+}
+
+/**
+ * Read-only quality report. Duplicate coordinates are listed with ids and
+ * names so a human can decide. This never merges on proximity.
+ */
+async function qualityHealth() {
+  if (!readEnabled()) {
+    return { ok: false, source: 'comparison.discovery_cards', issues: [] };
+  }
+  const [summary, groupCount, dupes] = await Promise.all([
+    comparisonQuery(
+      `SELECT
+         count(*)::int AS total,
+         count(*) FILTER (WHERE latitude IS NULL OR longitude IS NULL)::int AS missing_coords,
+         count(*) FILTER (WHERE latitude = 0 AND longitude = 0)::int AS zero_coords,
+         count(*) FILTER (
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+             AND (latitude NOT BETWEEN $1 AND $2 OR longitude NOT BETWEEN $3 AND $4)
+         )::int AS outside_ksa,
+         count(*) FILTER (
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+             AND latitude BETWEEN $1 AND $2 AND longitude BETWEEN $3 AND $4
+         )::int AS valid_coords
+       FROM comparison.discovery_cards`,
+      [KSA.latMin, KSA.latMax, KSA.lngMin, KSA.lngMax],
+    ),
+    comparisonQuery(
+      `SELECT count(*)::int AS groups
+         FROM (
+           SELECT 1
+             FROM comparison.discovery_cards
+            WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+            GROUP BY latitude, longitude
+           HAVING count(*) > 1
+         ) t`,
+    ),
+    comparisonQuery(
+      `SELECT latitude,
+              longitude,
+              count(*)::int AS n,
+              array_agg(canonical_restaurant_id::text ORDER BY canonical_restaurant_id) AS restaurant_ids,
+              array_agg(COALESCE(canonical_name_ar, canonical_name_en) ORDER BY canonical_restaurant_id) AS names
+         FROM comparison.discovery_cards
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        GROUP BY 1, 2
+       HAVING count(*) > 1
+        ORDER BY n DESC`,
+    ),
+  ]);
+  const s = summary[0] || {};
+  const groups = Number(groupCount[0]?.groups) || 0;
+  const looks = { same_name: 0, distinct_names: 0 };
+  const examples = dupes.map((row) => {
+    const names = Array.isArray(row.names) ? row.names.map((n) => String(n)) : [];
+    const ids = Array.isArray(row.restaurant_ids)
+      ? row.restaurant_ids.map((id) => String(id))
+      : [];
+    const look = classifyDupeNames(names);
+    if (look === 'same_name') looks.same_name += 1;
+    else looks.distinct_names += 1;
+    return {
+      lat: Number(row.latitude),
+      lng: Number(row.longitude),
+      count: Number(row.n) || ids.length,
+      restaurant_ids: ids,
+      names,
+      look,
+    };
+  });
+  const exampleRows = examples.slice(0, 20);
+  const issues = [];
+  if (Number(s.missing_coords) > 0) {
+    issues.push({ code: 'missing_coords', count: Number(s.missing_coords) });
+  }
+  if (Number(s.zero_coords) > 0) {
+    issues.push({ code: 'zero_coords', count: Number(s.zero_coords) });
+  }
+  if (Number(s.outside_ksa) > 0) {
+    issues.push({ code: 'outside_supported_geography', count: Number(s.outside_ksa) });
+  }
+  if (groups > 0) {
+    issues.push({
+      code: 'duplicate_coordinates',
+      count: groups,
+      note: 'Same lat/lng on more than one discovery card — reported only, never merged by proximity.',
+    });
+  }
+  return {
+    ok: Number(s.valid_coords) > 0,
+    source: 'comparison.discovery_cards',
+    never_merge_on_proximity: true,
+    biggest_savings: {
+      min_gap_sar: BIGGEST_SAVINGS_MIN_GAP,
+      min_price_sar: BIGGEST_SAVINGS_MIN_PRICE,
+      reused_from: 'comparison-read biggest-savings floors',
+    },
+    summary: {
+      total: Number(s.total) || 0,
+      missing_coords: Number(s.missing_coords) || 0,
+      zero_coords: Number(s.zero_coords) || 0,
+      outside_ksa: Number(s.outside_ksa) || 0,
+      valid_coords: Number(s.valid_coords) || 0,
+      duplicate_coordinate_groups: groups,
+      duplicate_looks: looks,
+    },
+    duplicate_coordinate_examples: exampleRows,
+    issues,
   };
 }
 
@@ -1238,11 +1440,17 @@ module.exports = {
   toFeature,
   queryPlaces,
   getPlace,
+  readPlaceCache,
+  writePlaceCache,
+  resetPlaceCache,
+  PLACE_CACHE_TTL_MS,
   PLACE_ITEMS_CAP,
   rowToPlaceItem,
   rowToPlaceProvider,
   sortPlaceItems,
   getPlaceItems,
   mapHealth,
+  qualityHealth,
+  classifyDupeNames,
   __resetCoverageCacheForTests,
 };

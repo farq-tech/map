@@ -5,13 +5,14 @@ const express = require('express');
 const comparisonMap = require('../lib/comparison-map');
 const { asyncHandler } = require('../lib/async-handler');
 const cityOpportunities = require('../lib/city-opportunities');
+const { SECTORS } = require('../lib/map-filters');
 
 const CATEGORIES = [
-  { category_id: 'burgers', category_name: 'Burgers', category_name_ar: 'برجر' },
-  { category_id: 'pizza', category_name: 'Pizza', category_name_ar: 'بيتزا' },
-  { category_id: 'coffee', category_name: 'Coffee', category_name_ar: 'قهوة' },
-  { category_id: 'shawarma', category_name: 'Shawarma', category_name_ar: 'شاورما' },
-  { category_id: 'grocery', category_name: 'Grocery', category_name_ar: 'بقالة' },
+  { category_id: 'burgers', category_name: 'Burgers', category_name_ar: 'برجر', sector_id: 'restaurant' },
+  { category_id: 'pizza', category_name: 'Pizza', category_name_ar: 'بيتزا', sector_id: 'restaurant' },
+  { category_id: 'coffee', category_name: 'Coffee', category_name_ar: 'قهوة', sector_id: 'restaurant' },
+  { category_id: 'shawarma', category_name: 'Shawarma', category_name_ar: 'شاورما', sector_id: 'restaurant' },
+  { category_id: 'grocery', category_name: 'Grocery', category_name_ar: 'بقالة', sector_id: 'grocery' },
 ];
 
 function emptyCollection() {
@@ -38,11 +39,37 @@ function createMapRouter() {
     })
   );
 
+  router.get(
+    '/map/quality',
+    asyncHandler(async (_req, res) => {
+      const quality = await comparisonMap.qualityHealth();
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      res.json(quality);
+    })
+  );
+
   router.get('/meta', (_req, res) => {
     res.json({
       neighborhoods: [],
       categories: CATEGORIES,
-      category_groups: [],
+      category_groups: [
+        {
+          ...SECTORS.restaurant,
+          category_count: CATEGORIES.filter((c) => c.sector_id === 'restaurant').length,
+          categories: CATEGORIES.filter((c) => c.sector_id === 'restaurant'),
+        },
+        {
+          ...SECTORS.grocery,
+          category_count: 1,
+          categories: CATEGORIES.filter((c) => c.sector_id === 'grocery'),
+        },
+      ],
+      sectors: Object.values(SECTORS),
+      filters: [
+        { filter_id: 'all', filter_name: 'All places', filter_name_ar: 'كل الأماكن' },
+        { filter_id: 'biggest', filter_name: 'Biggest savings', filter_name_ar: 'أكبر الفروقات' },
+        { filter_id: 'multi', filter_name: '3+ apps', filter_name_ar: '٣+ تطبيقات' },
+      ],
       category_count: CATEGORIES.length,
       quick_categories: CATEGORIES.slice(0, 4),
       cities: ['Riyadh'],
@@ -57,6 +84,9 @@ function createMapRouter() {
         bbox: req.query.bbox,
         zoom: req.query.zoom,
         q: req.query.q,
+        category: req.query.category,
+        sector: req.query.sector,
+        filter: req.query.filter,
         layer: 'comparison',
         limit: req.query.limit,
         fields: req.query.fields,
@@ -130,11 +160,13 @@ function createMapRouter() {
     asyncHandler(async (req, res) => {
       const place = await comparisonMap.getPlace(req.params.placeId);
       if (!place) {
+        res.setHeader('Cache-Control', 'public, max-age=60');
         return res.status(404).json({
           error: 'not_found',
           place_id: req.params.placeId,
         });
       }
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
       res.json(place);
     })
   );
