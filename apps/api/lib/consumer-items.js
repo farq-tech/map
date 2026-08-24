@@ -116,6 +116,9 @@ const SHARE_TERM_SOURCES = Object.freeze([
  * number instead. A bare `جرام` does the same to "رامب أسترالي 250 جرام",
  * a steak, so the gram weight stays out — creatine still matches `كرياتين`.
  * `سلس` is incontinence pads on a food pin (صيدلية 18928), not a sharing meal.
+ * Bagged coffee is a shelf SKU, not a cup: `كيس قهوة` (سعد الدين 2172 gap 15)
+ * and `حبوب قهوة` (جديل 7613). Bare `قهوة` is a latte and `بن` is ابن / بن بندت.
+ * Bare `حبوب` is Kudu grain toast (3679) and stays dinner.
  */
 const RETAIL_TERM_SOURCES = Object.freeze([
   'كرياتين',
@@ -129,6 +132,9 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'واي بروتين',
   '[0-9]+\\s*(ملجم|ملغم|mg)',
   'سلس',
+  'كيس\\s*قهوه',
+  'حبوب\\s*(ال)?قهوه',
+  'ارابيكا',
   'creatine',
   'vitamin',
   'supplement',
@@ -136,6 +142,8 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'whey',
   'pre-workout',
   'lifree',
+  'arabica',
+  'coffee\\s*beans',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');

@@ -65,6 +65,9 @@ const PERSONAL = [
   'والمة قهوة سعودية مختصة سريعة التحضير',
   'كباب الجمعة',
   'مقلوبة جمعة الدجاج',
+  'بن بندت',
+  'بون بون تشوكليت القهوة',
+  'إفطار كلوب ساندويش (توست الحبوب',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -89,6 +92,16 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(isRetailItem('رامب أسترالي 250 جرام'), false);
   assert.equal(demoteReason('رامب أسترالي 250 جرام'), null);
   assert.equal(demoteReason('ليفري كلوت مقاس كبير للسلس الغزير 32حبة'), 'retail');
+  /* A bag of beans is a shelf SKU. A latte, بن بندت, and grain toast are dinner. */
+  assert.equal(demoteReason('كيس قهوة فرنسية'), 'retail');
+  assert.equal(demoteReason('كيس حبوب قهوة ٢٥٠ غرام'), 'retail');
+  assert.equal(demoteReason('مزيج أرابيكا المطحون 250 جرام'), 'retail');
+  assert.equal(demoteReason('Ethiopia Arabica 250g'), 'retail');
+  assert.equal(demoteReason('قهوة لاتيه'), null);
+  assert.equal(demoteReason('بون بون تشوكليت القهوة'), null);
+  assert.equal(demoteReason('بن بندت'), null);
+  assert.equal(demoteReason('بن كولومبي – 250 جرام'), null);
+  assert.equal(demoteReason('إفطار كلوب ساندويش (توست الحبوب'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
