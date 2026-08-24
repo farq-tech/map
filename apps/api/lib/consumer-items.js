@@ -93,7 +93,9 @@ const SHARE_TERM_SOURCES = Object.freeze([
  * calorie count, and excluding it would have thrown away an eighth of the
  * data. `بروتين` catches "وعاء أرز مع نوعين من البروتين", a rice bowl, and
  * a bare `mg` catches "MG shrimp bowl", so both are required to follow a
- * number instead. Guessing a lexicon is how a map starts lying quietly.
+ * number instead. A bare `جرام` does the same to "رامب أسترالي 250 جرام",
+ * a steak, so the gram weight stays out — creatine still matches `كرياتين`.
+ * `سلس` is incontinence pads on a food pin (صيدلية 18928), not a sharing meal.
  */
 const RETAIL_TERM_SOURCES = Object.freeze([
   'كرياتين',
@@ -105,14 +107,15 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'اقراص',
   'بي سي ايه ايه',
   'واي بروتين',
-  '[0-9]+\\s*(جرام|غرام)',
   '[0-9]+\\s*(ملجم|ملغم|mg)',
+  'سلس',
   'creatine',
   'vitamin',
   'supplement',
   'bcaa',
   'whey',
   'pre-workout',
+  'lifree',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
@@ -171,8 +174,9 @@ function isRetailItem(name) {
  * "بوكس مشاركة" instead of silently ranking something down.
  */
 function demoteReason(name) {
-  if (isShareItem(name)) return 'share';
+  /* A tub of creatine sold as "30 كيس" is packaged retail, not a dinner tray. */
   if (isRetailItem(name)) return 'retail';
+  if (isShareItem(name)) return 'share';
   return null;
 }
 

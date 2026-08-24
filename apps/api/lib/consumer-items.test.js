@@ -70,6 +70,10 @@ test('packaged retail is demoted, but only on measured evidence', () => {
    * a bare `بروتين` matches a rice bowl. Both must stay food. */
   assert.equal(isRetailItem('ام جي صحن شريمب mg shrimp bowl'), false);
   assert.equal(isRetailItem('وعاء ارز مع نوعين من البروتين'), false);
+  /* A 250g steak is dinner. The gram weight alone used to call it a tub. */
+  assert.equal(isRetailItem('رامب أسترالي 250 جرام'), false);
+  assert.equal(demoteReason('رامب أسترالي 250 جرام'), null);
+  assert.equal(demoteReason('ليفري كلوت مقاس كبير للسلس الغزير 32حبة'), 'retail');
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {

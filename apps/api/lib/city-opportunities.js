@@ -48,7 +48,7 @@ const {
 } = require('./opportunity-aggregate');
 
 /** Bump when the shape of a feature changes, so a cached client refetches. */
-const READ_MODEL_VERSION = 9;
+const READ_MODEL_VERSION = 10;
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 
@@ -304,10 +304,10 @@ function rowToFeature(row) {
   /* The row already knows why it was demoted; recomputing from the name keeps
    * the reason available when a caller builds a feature without the SQL. */
   const reason = hasGap
-    ? row.is_share === true
-      ? 'share'
-      : row.is_retail === true
-        ? 'retail'
+    ? row.is_retail === true
+      ? 'retail'
+      : row.is_share === true
+        ? 'share'
         : row.is_share === undefined
           ? demoteReason(productName)
           : null
