@@ -219,6 +219,12 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'هيلث بيرفكت نتس',
   'opti\\s*tect',
   'perfect\\s*nuts',
+  /* Supplement-shop potassium salt and iso whey (الوزن المثالي 28737).
+   * Bare ملح is salted caramel; bare بروتين is a rice bowl. */
+  'ملح\\s*بوتاسيوم',
+  'ايزو\\s*تربيل',
+  'potassium\\s*salt',
+  'iso\\s*triple',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
