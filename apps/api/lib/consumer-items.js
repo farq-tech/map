@@ -232,6 +232,13 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   /* The gym brand itself. Leftover bars/gummies at الوزن المثالي. */
   'لابيرفا',
   'laperva',
+  /* Nut-shop packs (سعد الدين 2181, الرفاعي 4808). Bare مكسرات is
+   * knafeh garnish; bare مكرمل is قشطية / بيكان dessert; bare برازيل
+   * is Gloria Jean's coffee. */
+  'مكسرات\\s*مكرمله',
+  'مكسرات\\s*برازيليه',
+  'كاجو\\s*مقلي',
+  'caramelized\\s*nuts',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');

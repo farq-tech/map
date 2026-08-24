@@ -93,6 +93,9 @@ const PERSONAL = [
   'حمص باللحم والمكسرات',
   'اوزي بالمكسرات',
   'كرانشي البيكان واللوز مع الكراميل المملح',
+  'مكرملة قشطية',
+  'أصابع بقلاوة كاجو',
+  'باستا كاجون روبيان ودجاج',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -171,6 +174,13 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('كرات عالية البروتين بجوز الهند واللوز مع محلي, 63 جرام'), 'retail');
   assert.equal(demoteReason('Laperva Protein Coconut Balls 63G'), 'retail');
   assert.equal(demoteReason('لابيرفا دو بنكهة اللوز والكاجو بروتين بار, 1بار'), 'retail');
+  assert.equal(demoteReason('مكسرات مكرملة مشكل كبير'), 'retail');
+  assert.equal(demoteReason('Big Mixed Caramelized Nuts'), 'retail');
+  assert.equal(demoteReason('مكسرات برازيلية'), 'retail');
+  assert.equal(demoteReason('كاجو مقلى'), 'retail');
+  assert.equal(demoteReason('مكرملة قشطية'), null);
+  assert.equal(demoteReason('أصابع بقلاوة كاجو'), null);
+  assert.equal(demoteReason('باستا كاجون روبيان ودجاج'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {
