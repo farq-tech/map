@@ -40,6 +40,8 @@ const SHARE = [
   'بكج اللمة',
   'بكج كاس العالم',
   'تجمع شواء النار',
+  'عرض الجمعات',
+  'جمعات جيلاتو ( لتر',
 ];
 
 const PERSONAL = [
@@ -61,6 +63,8 @@ const PERSONAL = [
   'Chinese Noodles',
   'كبة بالصينية',
   'والمة قهوة سعودية مختصة سريعة التحضير',
+  'كباب الجمعة',
+  'مقلوبة جمعة الدجاج',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -123,9 +127,16 @@ test('a gathering table is share; a sip of coffee is not', () => {
   assert.equal(demoteReason('بكج اللمة'), 'share');
   assert.equal(demoteReason('بكج كاس العالم'), 'share');
   assert.equal(demoteReason('تجمع شواء النار'), 'share');
+  assert.equal(demoteReason('عرض الجمعات'), 'share');
+  assert.equal(demoteReason('جمعات جيلاتو ( لتر'), 'share');
+  assert.equal(demoteReason('تراميسو كلاسيك للجمعات'), 'share');
   /* "والمة" is a pour. The letters لمه sit inside it; the article / boundary do not. */
   assert.equal(demoteReason('والمة قهوة سعودية مختصة سريعة التحضير'), null);
   assert.equal(demoteReason('قهوة لاتيه'), null);
+  /* Friday is a weekday special, not a table. */
+  assert.equal(demoteReason('كباب الجمعة'), null);
+  assert.equal(demoteReason('مقلوبة جمعة الدجاج'), null);
+  assert.equal(demoteReason('جمعة النورماني'), null);
 });
 
 test('a party single is one burger; a party box is still a tray', () => {

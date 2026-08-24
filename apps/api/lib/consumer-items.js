@@ -73,6 +73,10 @@ const SHARE_TERM_SOURCES = Object.freeze([
   /* "تجمع شواء النار" — five Fire Grill branches, mint 43. للتجمع is the
    * same gathering; صندوق already covered those pins. */
   'تجمع',
+  /* Plural gatherings, not Friday. "عرض الجمعات" (سلطان 3403 gap 59) and
+   * "جمعات جيلاتو" (3940) were mint. "كباب الجمعة" / "جمعة النورماني" are
+   * a weekday special and must stay dinner — ة→ه makes them الجمعه. */
+  'جمعات',
   /* "تريو كبير كومبو" — 25 items, average gap 21.7 SAR against 5.5 city-wide.
    * A trio is three plates; كومبو and ميكس on their own are not, and stay out. */
   'تريو',
