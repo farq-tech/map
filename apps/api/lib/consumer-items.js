@@ -76,8 +76,8 @@ const SHARE_TERM_SOURCES = Object.freeze([
   'bucket',
   'feast',
   'catering',
-  'combo for',
-  'for [0-9]+',
+  /* "for 2" is a table; "Meal For 1" / "for 69SR" are a single plate and a price. */
+  'for\\s*[2-9]([^0-9]|$)',
   'serves',
 ]);
 
@@ -116,16 +116,18 @@ const RETAIL_TERM_SOURCES = Object.freeze([
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
-const SHARE_PATTERN_WITHOUT_KILO = SHARE_TERM_SOURCES.filter((t) => t !== 'كيلو').join(
-  '|',
-);
 const RETAIL_PATTERN = RETAIL_TERM_SOURCES.join('|');
 const SHARE_RE = new RegExp(SHARE_PATTERN, 'i');
-const SHARE_RE_WITHOUT_KILO = new RegExp(SHARE_PATTERN_WITHOUT_KILO, 'i');
 const RETAIL_RE = new RegExp(RETAIL_PATTERN, 'i');
-/** Half a kilo of knafeh is a normal dessert, not a party tray. */
-const HALF_KILO_RE = /½\s*كيلو|نصف\s*كيلو|[12]\s*\/\s*[12]\s*كيلو/;
-const HALF_KILO_SQL = "نصف\\s*كيلو|[12]/[12]\\s*كيلو|½\\s*كيلو";
+/** Half a kilo of dessert, or an eighth-gallon pint, is one person's order. */
+const PERSONAL_SIZE_RE =
+  /½\s*كيلو|نصف\s*كيلو|نص\s*كيلو|[12]\s*\/\s*[12]\s*كيلو|half\s+(a\s+)?kilo|ثمن\s*جالون/;
+const PERSONAL_SIZE_SQL =
+  "نصف\\s*كيلو|نص\\s*كيلو|[12]/[12]\\s*كيلو|½\\s*كيلو|half\\s+(a\\s+)?kilo|ثمن\\s*جالون";
+const SHARE_PATTERN_WITHOUT_SIZE = SHARE_TERM_SOURCES.filter(
+  (t) => t !== 'كيلو' && t !== 'جالون',
+).join('|');
+const SHARE_RE_WITHOUT_SIZE = new RegExp(SHARE_PATTERN_WITHOUT_SIZE, 'i');
 
 /** The same patterns the SQL uses, so the server and its query cannot disagree. */
 function shareItemPattern() {
@@ -140,13 +142,13 @@ function retailItemPattern() {
 function isShareItem(name) {
   const norm = normalizeArabic(name);
   if (!norm || !SHARE_RE.test(norm)) return false;
-  if (HALF_KILO_RE.test(norm) && !SHARE_RE_WITHOUT_KILO.test(norm)) return false;
+  if (PERSONAL_SIZE_RE.test(norm) && !SHARE_RE_WITHOUT_SIZE.test(norm)) return false;
   return true;
 }
 
 function shareMatchSql(nameExpr) {
   const norm = normalizedNameSql(nameExpr);
-  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${HALF_KILO_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_KILO}'))`;
+  return `(${norm} ~ '${SHARE_PATTERN}' AND (NOT (${norm} ~ '${PERSONAL_SIZE_SQL}') OR ${norm} ~ '${SHARE_PATTERN_WITHOUT_SIZE}'))`;
 }
 
 /** True when the item reads as packaged retail rather than something cooked to order. */

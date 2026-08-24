@@ -83,8 +83,19 @@ test('half a kilo of knafeh is a dessert, not a party tray', () => {
   assert.equal(demoteReason('كنافة نابلسية خشنة ١/٢ كيلو'), null);
   assert.equal(demoteReason('كنافة نابلسية خشنة 1/2 كيلو'), null);
   assert.equal(demoteReason('نصف كيلو كنافة'), null);
+  assert.equal(demoteReason('بسبوسة لوز نص كيلو'), null);
+  assert.equal(demoteReason('Half A Kilo Of Almond Basbousa'), null);
   assert.equal(demoteReason('كيلو مشويات مشكل'), 'share');
   assert.equal(demoteReason('مشكل كبة Soma S Mix Grape Leaves Box'), 'share');
+});
+
+test('a meal for one is dinner, and for 69SR is a price, not a table', () => {
+  assert.equal(demoteReason('وجبة شخص واحد Meal For 1'), null);
+  assert.equal(demoteReason('كومبو النودلز لشخص واحد Noodles Combo For 1'), null);
+  assert.equal(demoteReason('Meal For 2'), 'share');
+  assert.equal(demoteReason('Any 2 Pizza + 1Ltr Drink for 69SR'), null);
+  assert.equal(demoteReason('ثمن جالون'), null);
+  assert.equal(demoteReason('بيتزا لثلاثة أشخاص'), 'share');
 });
 
 test('the reason travels with the item so the interface can name it', () => {
