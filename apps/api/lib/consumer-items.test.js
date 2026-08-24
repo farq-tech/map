@@ -84,6 +84,8 @@ const PERSONAL = [
   'عرض المونديال',
   'World Cup Offer',
   'وجبة ماد ماكس',
+  'مجبوس لحم',
+  'مياه معدنيه',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -132,6 +134,11 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('عرض المونديال'), null);
   assert.equal(demoteReason('World Cup Offer'), null);
   assert.equal(demoteReason('وجبة ماد ماكس'), null);
+  assert.equal(demoteReason('مج معدني يحمل شعار تيم هورتنز ( مع غطاء'), 'retail');
+  assert.equal(demoteReason('Metal Mug'), 'retail');
+  assert.equal(demoteReason('مجبوس لحم'), null);
+  assert.equal(demoteReason('مياه معدنيه'), null);
+  assert.equal(demoteReason('بيستاشيو لاتيه حجم كبير'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {

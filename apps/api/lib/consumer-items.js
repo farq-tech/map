@@ -194,6 +194,11 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'ستيفيا',
   'immune',
   'stevia',
+  /* A branded metal mug, not مجبوس and not mineral water. Tim Hortons
+   * 7769 pinned "مج معدني" gap 5. Bare مج matches مجبوس / مجانا. Bare
+   * معدني matches مياه معدنية. */
+  'مج\\s*معدني',
+  'metal\\s*mug',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
