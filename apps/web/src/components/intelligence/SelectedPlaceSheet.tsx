@@ -22,6 +22,7 @@ import {
 	type NavigationDestination,
 } from "../../lib/farqNavigation";
 import { displayItemName } from "../../lib/displayItemName";
+import type { SelectedPlaceFilterMiss } from "../../lib/mapFilters";
 import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
@@ -57,6 +58,28 @@ function freshnessFromObserved(
 		return { kind: "week", label: isRTL ? "هذا الأسبوع" : "This week" };
 	}
 	return { kind: "older", label: isRTL ? "قديم" : "Older" };
+}
+
+function filterMissCopy(
+	misses: SelectedPlaceFilterMiss[] | undefined,
+	isRTL: boolean,
+): string | null {
+	if (!misses?.length) return null;
+	const biggest = misses.includes("biggest");
+	const multi = misses.includes("multi");
+	if (biggest && multi) {
+		return isRTL
+			? "ظاهر لأنك فتحته — خارج فلتر الفرق و٣ تطبيقات"
+			: "Shown because you opened it — outside these filters";
+	}
+	if (biggest) {
+		return isRTL
+			? "ظاهر لأنك فتحته — الفرق أقل من ١٠ ر.س"
+			: "Shown because you opened it — gap under 10 SAR";
+	}
+	return isRTL
+		? "ظاهر لأنك فتحته — أقل من ٣ تطبيقات"
+		: "Shown because you opened it — fewer than 3 apps";
 }
 
 function observedImageUrl(
@@ -389,6 +412,7 @@ export default function SelectedPlaceSheet({
 	feature,
 	selectedCategory,
 	selectedRestaurantId,
+	filterMisses,
 	isRTL,
 	variant,
 	onClose,
@@ -403,6 +427,7 @@ export default function SelectedPlaceSheet({
 	feature?: IntelligenceMapPlaceProperties | null;
 	selectedCategory?: IntelligenceCategory | null;
 	selectedRestaurantId?: string;
+	filterMisses?: SelectedPlaceFilterMiss[];
 	isRTL: boolean;
 	variant: "sheet" | "panel" | "popup";
 	onClose: () => void;
@@ -464,6 +489,7 @@ export default function SelectedPlaceSheet({
 		? Math.max(8, Math.min(92, (cheap / expensive) * 100))
 		: 0;
 	const fresh = freshnessFromObserved(difference?.observed_at, isRTL);
+	const filterMissNote = filterMissCopy(filterMisses, isRTL);
 	const categoryLabel = [
 		placeDetail?.subcategory ||
 			placeDetail?.category ||
@@ -897,6 +923,14 @@ export default function SelectedPlaceSheet({
 											? "ما رصدنا فرق يستحق هنا بعد"
 											: "No worthwhile gap observed here yet"}
 								</p>
+								{filterMissNote ? (
+									<p
+										className="text-center text-[11.5px] font-bold text-mint-500"
+										data-testid="intelligence-map-filter-miss"
+									>
+										{filterMissNote}
+									</p>
+								) : null}
 							</div>
 
 							<div className="h-px w-full bg-white/15" />

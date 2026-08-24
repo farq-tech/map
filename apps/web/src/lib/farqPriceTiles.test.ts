@@ -97,6 +97,27 @@ describe("GPU price tiles — slim fields + hash skip", () => {
 		});
 	});
 
+	it("trims scraper residue on GPU labels without inventing a name", () => {
+		const tiles = toPriceTileCollection({
+			type: "FeatureCollection",
+			features: [
+				{
+					type: "Feature",
+					geometry: { type: "Point", coordinates: [46.8, 24.67] },
+					properties: {
+						feature_type: "place",
+						place_id: "1479",
+						name: "هارا",
+						product_name: "سمبوسة البطاطس (Cal: 236)",
+						gap: 2,
+						cheapest_provider_id: "jahez",
+					},
+				},
+			],
+		});
+		expect(tiles.features[0]?.properties?.product_name).toBe("سمبوسة البطاطس");
+	});
+
 	it("hides a same-coordinate stack when any member is selected", () => {
 		const stacked = {
 			type: "Feature" as const,

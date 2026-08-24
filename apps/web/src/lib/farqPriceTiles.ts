@@ -36,6 +36,7 @@ import {
 	PLATFORM_LOGOS,
 	type PlatformKey,
 } from "./platformLogos";
+import { displayItemName } from "./displayItemName";
 
 export const PRICE_TILE_SOURCE = "farq-price-tiles";
 export const PRICE_TILE_POINTS = "farq-price-points";
@@ -191,7 +192,7 @@ export function toPriceTileCollection(
 		const tier =
 			(typeof props.tier === "string" ? (props.tier as OpportunityTier) : null) ||
 			tierForGap(gap);
-		const product = mapSafeText(props.product_name);
+		const product = mapSafeText(displayItemName(props.product_name));
 		const stackCount = Number(props.stack_count);
 		features.push({
 			type: "Feature",

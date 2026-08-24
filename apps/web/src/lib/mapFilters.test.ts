@@ -9,6 +9,7 @@ import {
 	parseMapFilter,
 	parseMapFilters,
 	railFromMapSearch,
+	selectedPlaceFilterMisses,
 	toggleMapFilter,
 } from "./mapFilters";
 
@@ -64,6 +65,45 @@ describe("map filters — client floors match the API", () => {
 			}),
 		).toBe(true);
 		expect(isMultiProviderPin({ provider_count: 2 })).toBe(false);
+	});
+
+	it("names the filters a deeplinked pin fails so the sheet can stay honest", () => {
+		/* 6254 كوتد: 81 SAR on 2 apps — worthwhile yes, 3+ apps no. */
+		expect(
+			selectedPlaceFilterMisses(
+				{
+					gap: 81,
+					cheapest_price: 109,
+					cheapest_provider_id: "hungerstation",
+					provider_count: 2,
+				},
+				{ biggest: true, multi: true },
+			),
+		).toEqual(["multi"]);
+		/* 1381 بابا عنتر: 1 SAR on 3 apps — worthwhile no, 3+ apps yes. */
+		expect(
+			selectedPlaceFilterMisses(
+				{
+					gap: 1,
+					cheapest_price: 10,
+					cheapest_provider_id: "hungerstation",
+					has_difference: true,
+					provider_count: 3,
+				},
+				{ biggest: true, multi: true },
+			),
+		).toEqual(["biggest"]);
+		expect(
+			selectedPlaceFilterMisses(
+				{
+					gap: 81,
+					cheapest_price: 109,
+					cheapest_provider_id: "hungerstation",
+					provider_count: 2,
+				},
+				{ biggest: false, multi: false },
+			),
+		).toEqual([]);
 	});
 
 	it("keeps the filter rail on a bookmarked URL after refresh", () => {

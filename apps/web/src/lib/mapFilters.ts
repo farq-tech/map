@@ -121,3 +121,23 @@ export function isMultiProviderPin(props: {
 } | null | undefined): boolean {
 	return Number(props?.provider_count) >= 3;
 }
+
+/** Filters the selected pin failed — it stays on the map because it was opened. */
+export type SelectedPlaceFilterMiss = "biggest" | "multi";
+
+export function selectedPlaceFilterMisses(
+	props: {
+		gap?: unknown;
+		difference_amount?: unknown;
+		cheapest_price?: unknown;
+		cheapest_provider_id?: unknown;
+		has_difference?: unknown;
+		provider_count?: unknown;
+	} | null | undefined,
+	flags: MapFilterFlags,
+): SelectedPlaceFilterMiss[] {
+	const missed: SelectedPlaceFilterMiss[] = [];
+	if (flags.biggest && !isBiggestSavingsPin(props)) missed.push("biggest");
+	if (flags.multi && !isMultiProviderPin(props)) missed.push("multi");
+	return missed;
+}

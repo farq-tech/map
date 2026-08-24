@@ -80,6 +80,7 @@ import {
 	isMultiProviderPin,
 	encodeMapFilters,
 	parseMapFilters,
+	selectedPlaceFilterMisses,
 	toggleMapFilter,
 	railFromMapSearch,
 } from "../../lib/mapFilters";
@@ -825,6 +826,29 @@ export default function IntelligenceMapSplit({
 
 	const selectedPlaceFeature = sourcePlaces?.features.find(
 		(f) => String(f.properties.place_id) === String(livePlaceId),
+	);
+	const selectedFilterMisses = useMemo(
+		() =>
+			selectedPlaceFilterMisses(
+				{
+					gap:
+						pinGapAmount(selectedPlaceFeature?.properties) ??
+						focusedPlaceDetail?.gap ??
+						focusedPlaceDetail?.difference?.difference_amount,
+					cheapest_price:
+						selectedPlaceFeature?.properties.cheapest_price ??
+						focusedPlaceDetail?.difference?.cheapest_price,
+					cheapest_provider_id:
+						selectedPlaceFeature?.properties.cheapest_provider_id ??
+						focusedPlaceDetail?.difference?.cheapest_provider_id,
+					has_difference: selectedPlaceFeature?.properties.has_difference,
+					provider_count:
+						selectedPlaceFeature?.properties.provider_count ??
+						focusedPlaceDetail?.provider_count,
+				},
+				filterFlags,
+			),
+		[selectedPlaceFeature, focusedPlaceDetail, filterFlags],
 	);
 	const selectedRestaurantId =
 		focusedPlaceDetail?.restaurant_id ||
@@ -1608,6 +1632,7 @@ export default function IntelligenceMapSplit({
 								feature={selectedPlaceFeature?.properties}
 								selectedCategory={selectedCategory}
 								selectedRestaurantId={selectedRestaurantId}
+								filterMisses={selectedFilterMisses}
 								isRTL={isRTL}
 								onClose={closePlace}
 								onHide={() => setSheetSnap("peek")}
@@ -2213,6 +2238,7 @@ export default function IntelligenceMapSplit({
 						feature={selectedPlaceFeature?.properties}
 						selectedCategory={selectedCategory}
 						selectedRestaurantId={selectedRestaurantId}
+						filterMisses={selectedFilterMisses}
 						isRTL={isRTL}
 						onClose={closePlace}
 						onHide={() => setComparePanelHidden(true)}

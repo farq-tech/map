@@ -90,6 +90,15 @@ test('display trims the scraper residue and never returns nothing', () => {
   /* A name that is only residue keeps its original rather than becoming blank. */
   assert.equal(displayItemName('03003641'), '03003641');
   assert.equal(displayItemName(null), '');
+  assert.equal(displayItemName('سمبوسة البطاطس (Cal: 236)'), 'سمبوسة البطاطس');
+  assert.equal(displayItemName('معمول كحيله كبير 00608'), 'معمول كحيله كبير');
+  assert.equal(displayItemName('معمول الاصيله صغير00751'), 'معمول الاصيله صغير');
+  assert.equal(displayItemName('ترافل هنوفريان - ١٢٣٤٥٧'), 'ترافل هنوفريان');
+  assert.equal(displayItemName('بديع بقلاوة بيكان كبير ١٠٧٠٠٢٤٣'), 'بديع بقلاوة بيكان كبير');
+  assert.equal(displayItemName('\u200fوجبة برجر كريسبي'), 'وجبة برجر كريسبي');
+  assert.equal(displayItemName('امبيريال كبير ٢٢حبة_١٠٧٠٠٢٢'), 'امبيريال كبير ٢٢حبة');
+  assert.equal(displayItemName('عرض باسكوالي 79 ريال'), 'عرض باسكوالي 79 ريال');
+  assert.equal(displayItemName('٢ بيتزا كبيرة بـ ٣٩ ريال'), '٢ بيتزا كبيرة بـ ٣٩ ريال');
 });
 
 test('a category means the same thing everywhere it is asked for', () => {
