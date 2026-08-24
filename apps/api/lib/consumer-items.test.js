@@ -81,6 +81,9 @@ const PERSONAL = [
   'Grouper Fillet',
   'بينتو اوفر',
   'Bento Lunch Offer',
+  'عرض المونديال',
+  'World Cup Offer',
+  'وجبة ماد ماكس',
 ];
 
 test('a share box is recognised however it is spelled', () => {
@@ -121,6 +124,14 @@ test('packaged retail is demoted, but only on measured evidence', () => {
   assert.equal(demoteReason('إسبريسو شيكر'), null);
   assert.equal(demoteReason('ستيك شيكر'), null);
   assert.equal(demoteReason('لابيرفا سويتشيس محلى سكر غامق, 100 ظرف'), 'retail');
+  assert.equal(demoteReason('بيو بروتيكشن عسل الأكاسيا, 400 جرام, تعزيز المناعة'), 'retail');
+  assert.equal(demoteReason('لابيرفا بيرفكت ستيفيا, 300 جرام'), 'retail');
+  assert.equal(demoteReason('علبة قهوة مميزة'), 'retail');
+  assert.equal(demoteReason('علبة عصير'), null);
+  /* A World Cup pasta promo is a named offer, not a proven table. */
+  assert.equal(demoteReason('عرض المونديال'), null);
+  assert.equal(demoteReason('World Cup Offer'), null);
+  assert.equal(demoteReason('وجبة ماد ماكس'), null);
 });
 
 test('«سعره N» is a calorie count, not a price — demoting it would have cost 18% of the data', () => {

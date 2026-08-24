@@ -186,6 +186,14 @@ const RETAIL_TERM_SOURCES = Object.freeze([
   'blender\\s*bottle',
   /* 100 sachets of sweetener is a shelf box (الوزن المثالي 28737 gap 16). */
   '[0-9]+\\s*ظرف',
+  /* A tin of beans, not a cup. Tim Hortons 10061 "علبة قهوة مميزة" was mint 7.
+   * Bare علبة stays out — it is a juice cup. */
+  'علبه\\s*قهوه',
+  /* Supplement-shop honey (الوزن المثالي 28737). Bare عسل is knafeh syrup. */
+  'تعزيز المناعه',
+  'ستيفيا',
+  'immune',
+  'stevia',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
