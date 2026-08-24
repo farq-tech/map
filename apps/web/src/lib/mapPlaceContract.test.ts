@@ -5,6 +5,7 @@ import {
 	normalizePlaceDetail,
 	normalizePlaceFeature,
 	observedGapAmount,
+	pinSheetObservedItem,
 } from "./mapPlaceContract";
 
 describe("map place contract — nested + lean Railway pins", () => {
@@ -92,5 +93,41 @@ describe("map place contract — nested + lean Railway pins", () => {
 			})?.gap,
 		).toBe(81);
 		expect(normalizePlaceDetail({ place_id: "99999999" })?.gap).toBeUndefined();
+	});
+
+	it("keeps 1479's pin fries instead of getPlace sambosa at the same 2 SAR gap", () => {
+		const shown = pinSheetObservedItem(
+			{
+				product_name: "البطاطس المقلية (Cal: 390)",
+				gap: 2,
+				cheapest_price: 16,
+				expensive_price: 18,
+				cheapest_provider_id: "hungerstation",
+				expensive_provider_id: "jahez",
+			},
+			{
+				product_name: "سمبوسة البطاطس (Cal: 236)",
+				difference_amount: 2,
+				cheapest_price: 36,
+				expensive_price: 38,
+				cheapest_provider_id: "jahez",
+				expensive_provider_id: "hungerstation",
+			},
+		);
+		expect(shown).toMatchObject({
+			product_name: "البطاطس المقلية",
+			difference_amount: 2,
+			cheapest_price: 16,
+			expensive_price: 18,
+		});
+		expect(
+			pinSheetObservedItem(null, {
+				product_name: "مربعة",
+				difference_amount: 1,
+				cheapest_price: 10,
+				expensive_price: 11,
+				cheapest_provider_id: "hungerstation",
+			})?.product_name,
+		).toBe("مربعة");
 	});
 });

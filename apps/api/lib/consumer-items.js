@@ -222,6 +222,21 @@ function categoryCaseSql(expr) {
  * moment the crawler records both, the honest number appears by itself —
  * and so that nobody is tempted to fill the gap with an average.
  */
+/**
+ * Shared ranking for the one item a pin, list card, and getPlace sheet name.
+ * Share/retail lose the tie; equal gaps take the cheaper dish; item id is last
+ * so 1479 cannot be fries on the pin and sambosa on the sheet.
+ */
+const ITEM_NAME_SQL = "coalesce(ips.name_ar,'') || ' ' || coalesce(ips.name_en,'')";
+
+function representativeSpreadOrderSql() {
+  return `(${normalizedNameSql(ITEM_NAME_SQL)} ~ '${shareItemPattern()}'
+        OR ${normalizedNameSql(ITEM_NAME_SQL)} ~ '${retailItemPattern()}') ASC,
+          (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST,
+          ips.cheapest_price ASC NULLS LAST,
+          ips.canonical_item_id ASC`;
+}
+
 function deliveryAdjustedGap({ cheapestPrice, dearestPrice, cheapestFee, dearestFee } = {}) {
   /* An unobserved fee is missing, not zero — Number(null) is 0, which would
    * quietly turn "we don't know" into "delivery is free". */
@@ -248,6 +263,7 @@ module.exports = {
   isRetailItem,
   isShareItem,
   normalizedNameSql,
+  representativeSpreadOrderSql,
   retailItemPattern,
   shareItemPattern,
 };

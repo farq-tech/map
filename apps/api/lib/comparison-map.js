@@ -12,7 +12,7 @@
 'use strict';
 
 const { comparisonQuery } = require('./comparison-pool');
-const { displayItemName } = require('./consumer-items');
+const { displayItemName, representativeSpreadOrderSql } = require('./consumer-items');
 const {
   BIGGEST_SAVINGS_MIN_GAP,
   BIGGEST_SAVINGS_MIN_PRICE,
@@ -415,7 +415,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
-     ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
+     ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
  WHERE dc.latitude IS NOT NULL
@@ -672,7 +672,7 @@ SELECT dc.canonical_restaurant_id::text AS restaurant_id,
        AND ips.cheapest_provider IS NOT NULL
        AND btrim(ips.cheapest_provider) <> ''
        AND ips.dearest_price <= ${CONSUMER_PRICE_CAP_SAR}
-     ORDER BY (ips.dearest_price - ips.cheapest_price) DESC NULLS LAST
+     ORDER BY ${representativeSpreadOrderSql()}
      LIMIT 1
   ) s ON true
  WHERE dc.canonical_restaurant_id = $1::bigint

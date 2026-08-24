@@ -48,7 +48,7 @@ const {
 } = require('./opportunity-aggregate');
 
 /** Bump when the shape of a feature changes, so a cached client refetches. */
-const READ_MODEL_VERSION = 4;
+const READ_MODEL_VERSION = 5;
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
 
@@ -191,7 +191,8 @@ scored AS (
 best AS (
   SELECT DISTINCT ON (canonical_restaurant_id) *
     FROM scored
-   ORDER BY canonical_restaurant_id, (is_share OR is_retail) ASC, gap DESC
+   ORDER BY canonical_restaurant_id, (is_share OR is_retail) ASC, gap DESC,
+            cheapest_price ASC, canonical_item_id ASC
 ),
 per_category AS (
   SELECT DISTINCT ON (canonical_restaurant_id, category)

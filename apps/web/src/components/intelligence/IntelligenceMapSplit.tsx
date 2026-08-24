@@ -84,6 +84,7 @@ import {
 	toggleMapFilter,
 	railFromMapSearch,
 } from "../../lib/mapFilters";
+import { displayItemName } from "../../lib/displayItemName";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
 import FarqExploreChrome, {
@@ -931,11 +932,11 @@ export default function IntelligenceMapSplit({
 					(diff && "expensive_price" in diff ? diff.expensive_price : NaN),
 			);
 			const product =
-				String(
+				displayItemName(
 					f.properties.product_name ||
 						(diff && "product_name" in diff ? diff.product_name : "") ||
 						"",
-				).trim() || null;
+				) || null;
 			rows.push({
 				placeId,
 				name: String(f.properties.name || "").trim(),

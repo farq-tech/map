@@ -22,7 +22,11 @@ import {
 	type NavigationDestination,
 } from "../../lib/farqNavigation";
 import { displayItemName } from "../../lib/displayItemName";
-import type { SelectedPlaceFilterMiss } from "../../lib/mapFilters";
+import {
+	selectedPlaceFilterMissCopy,
+	type SelectedPlaceFilterMiss,
+} from "../../lib/mapFilters";
+import { pinSheetObservedItem } from "../../lib/mapPlaceContract";
 import { restaurantPinInitial } from "../../lib/farqMapPins";
 import { getProviderLabel, getProviderLogo } from "../../lib/platformLogos";
 import {
@@ -58,28 +62,6 @@ function freshnessFromObserved(
 		return { kind: "week", label: isRTL ? "هذا الأسبوع" : "This week" };
 	}
 	return { kind: "older", label: isRTL ? "قديم" : "Older" };
-}
-
-function filterMissCopy(
-	misses: SelectedPlaceFilterMiss[] | undefined,
-	isRTL: boolean,
-): string | null {
-	if (!misses?.length) return null;
-	const biggest = misses.includes("biggest");
-	const multi = misses.includes("multi");
-	if (biggest && multi) {
-		return isRTL
-			? "ظاهر لأنك فتحته — خارج فلتر الفرق و٣ تطبيقات"
-			: "Shown because you opened it — outside these filters";
-	}
-	if (biggest) {
-		return isRTL
-			? "ظاهر لأنك فتحته — الفرق أقل من ١٠ ر.س"
-			: "Shown because you opened it — gap under 10 SAR";
-	}
-	return isRTL
-		? "ظاهر لأنك فتحته — أقل من ٣ تطبيقات"
-		: "Shown because you opened it — fewer than 3 apps";
 }
 
 function observedImageUrl(
@@ -456,40 +438,27 @@ export default function SelectedPlaceSheet({
 		feature?.name ||
 		(isRTL ? "مطعم" : "Restaurant");
 	const restaurantNameEn = placeDetail?.name_en;
-	const difference = (placeDetail?.difference ||
-		feature?.difference ||
-		null) as {
-		product_name?: string | null;
-		cheapest_provider_id?: string | null;
-		expensive_provider_id?: string | null;
-		cheapest_price?: number | null;
-		expensive_price?: number | null;
-		difference_amount?: number | null;
-		observed_at?: string | null;
-	} | null;
-	const mealName =
-		displayItemName(difference?.product_name || feature?.product_name) || null;
-	const gapAmount = Number(
-		difference?.difference_amount ?? feature?.gap,
+	const difference = pinSheetObservedItem(
+		(feature || null) as Record<string, unknown> | null,
+		(placeDetail?.difference || null) as Record<string, unknown> | null,
 	);
+	const mealName = difference?.product_name || null;
+	const gapAmount = Number(difference?.difference_amount);
 	const hasGap = Number.isFinite(gapAmount) && gapAmount > 0;
-	const cheap = Number(
-		difference?.cheapest_price ?? feature?.cheapest_price,
-	);
-	const expensive = Number(
-		difference?.expensive_price ?? feature?.expensive_price,
-	);
-	const cheapProvider =
-		difference?.cheapest_provider_id || feature?.cheapest_provider_id;
-	const expensiveProvider =
-		difference?.expensive_provider_id || feature?.expensive_provider_id;
+	const cheap = Number(difference?.cheapest_price);
+	const expensive = Number(difference?.expensive_price);
+	const cheapProvider = difference?.cheapest_provider_id;
+	const expensiveProvider = difference?.expensive_provider_id;
 	const hasPrices =
 		Number.isFinite(cheap) && Number.isFinite(expensive) && expensive > 0;
 	const cheapPct = hasPrices
 		? Math.max(8, Math.min(92, (cheap / expensive) * 100))
 		: 0;
-	const fresh = freshnessFromObserved(difference?.observed_at, isRTL);
-	const filterMissNote = filterMissCopy(filterMisses, isRTL);
+	const fresh = freshnessFromObserved(
+		placeDetail?.difference?.observed_at,
+		isRTL,
+	);
+	const filterMissNote = selectedPlaceFilterMissCopy(filterMisses, isRTL);
 	const categoryLabel = [
 		placeDetail?.subcategory ||
 			placeDetail?.category ||

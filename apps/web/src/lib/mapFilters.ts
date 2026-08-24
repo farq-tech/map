@@ -141,3 +141,25 @@ export function selectedPlaceFilterMisses(
 	if (flags.multi && !isMultiProviderPin(props)) missed.push("multi");
 	return missed;
 }
+
+export function selectedPlaceFilterMissCopy(
+	misses: SelectedPlaceFilterMiss[] | undefined,
+	isRTL: boolean,
+): string | null {
+	if (!misses?.length) return null;
+	const biggest = misses.includes("biggest");
+	const multi = misses.includes("multi");
+	if (biggest && multi) {
+		return isRTL
+			? "ظاهر لأنك فتحته — خارج فلتر الفرق و٣ تطبيقات"
+			: "Shown because you opened it — outside these filters";
+	}
+	if (biggest) {
+		return isRTL
+			? "ظاهر لأنك فتحته — الفرق أقل من ١٠ ر.س"
+			: "Shown because you opened it — gap under 10 SAR";
+	}
+	return isRTL
+		? "ظاهر لأنك فتحته — أقل من ٣ تطبيقات"
+		: "Shown because you opened it — fewer than 3 apps";
+}

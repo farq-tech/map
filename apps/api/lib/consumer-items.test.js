@@ -8,6 +8,7 @@ const {
   deliveryAdjustedGap,
   demoteReason,
   displayItemName,
+  representativeSpreadOrderSql,
   isRetailItem,
   isShareItem,
   normalizedNameSql,
@@ -99,6 +100,14 @@ test('display trims the scraper residue and never returns nothing', () => {
   assert.equal(displayItemName('امبيريال كبير ٢٢حبة_١٠٧٠٠٢٢'), 'امبيريال كبير ٢٢حبة');
   assert.equal(displayItemName('عرض باسكوالي 79 ريال'), 'عرض باسكوالي 79 ريال');
   assert.equal(displayItemName('٢ بيتزا كبيرة بـ ٣٩ ريال'), '٢ بيتزا كبيرة بـ ٣٩ ريال');
+});
+
+test('pin and getPlace rank the same representative item', () => {
+  const sql = representativeSpreadOrderSql();
+  assert.match(sql, /shareItemPattern|بوكس|is_share/i);
+  assert.match(sql, /cheapest_price ASC/);
+  assert.match(sql, /canonical_item_id ASC/);
+  assert.match(sql, /dearest_price - ips.cheapest_price/);
 });
 
 test('a category means the same thing everywhere it is asked for', () => {

@@ -9,6 +9,7 @@ import {
 	parseMapFilter,
 	parseMapFilters,
 	railFromMapSearch,
+	selectedPlaceFilterMissCopy,
 	selectedPlaceFilterMisses,
 	toggleMapFilter,
 } from "./mapFilters";
@@ -104,6 +105,18 @@ describe("map filters — client floors match the API", () => {
 				{ biggest: false, multi: false },
 			),
 		).toEqual([]);
+		expect(selectedPlaceFilterMissCopy(["biggest"], true)).toBe(
+			"ظاهر لأنك فتحته — الفرق أقل من ١٠ ر.س",
+		);
+		expect(selectedPlaceFilterMissCopy(["multi"], true)).toBe(
+			"ظاهر لأنك فتحته — أقل من ٣ تطبيقات",
+		);
+		expect(selectedPlaceFilterMissCopy(["biggest", "multi"], true)).toBe(
+			"ظاهر لأنك فتحته — خارج فلتر الفرق و٣ تطبيقات",
+		);
+		expect(selectedPlaceFilterMissCopy(["biggest"], false)).toBe(
+			"Shown because you opened it — gap under 10 SAR",
+		);
 	});
 
 	it("keeps the filter rail on a bookmarked URL after refresh", () => {

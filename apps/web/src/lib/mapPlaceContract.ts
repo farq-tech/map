@@ -125,6 +125,31 @@ export function normalizePlacesBody<T extends { features?: MapPlaceFeature[] }>(
 	};
 }
 
+/**
+ * The pin already committed to a dish. The sheet must not swap it for getPlace's
+ * other same-gap item (1479 fries 16→18 vs sambosa 36→38).
+ */
+export function pinSheetObservedItem(
+	feature: Record<string, unknown> | null | undefined,
+	placeDifference: Record<string, unknown> | null | undefined,
+): ObservedDifference | null {
+	const fromPin = normalizeDifference(feature);
+	if (
+		fromPin?.product_name &&
+		fromPin.cheapest_price != null &&
+		fromPin.expensive_price != null
+	) {
+		return fromPin;
+	}
+	if (!placeDifference) return fromPin;
+	return (
+		normalizeDifference({
+			difference: placeDifference,
+			...placeDifference,
+		}) || fromPin
+	);
+}
+
 /** Drop a previous restaurant's payload the instant the selection changes. */
 export function livePlaceDetail<T extends { place_id?: string | null }>(
 	detail: T | null | undefined,
