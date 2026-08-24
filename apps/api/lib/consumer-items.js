@@ -213,6 +213,12 @@ const RETAIL_TERM_SOURCES = Object.freeze([
    * demoted, الوزن المثالي 28737 pinned "بودي بيلدر شيكر". */
   'بودي بيلدر',
   'body\\s*builder',
+  /* Supplement nut pack (الوزن المثالي 28737). Bare مكسرات is knafeh
+   * garnish and فتة / حمص بالمكسرات. */
+  'اوبتي تيكت',
+  'هيلث بيرفكت نتس',
+  'opti\\s*tect',
+  'perfect\\s*nuts',
 ]);
 
 const SHARE_PATTERN = SHARE_TERM_SOURCES.join('|');
