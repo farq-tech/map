@@ -1,5 +1,7 @@
 export type MapViewMode = "list" | "map";
 export type MapSort = "gap" | "near" | "cheap" | "value";
+export type MapProduct = "outdoor" | "restaurants";
+export type OutdoorLayerId = "around" | "tracks" | "places" | "trips";
 
 export type MapSearch = {
 	neighborhood?: string;
@@ -12,7 +14,30 @@ export type MapSearch = {
 	/** Camera: bbox "west,south,east,north" (4 decimals) and zoom — so a link restores the scene. */
 	b?: string;
 	z?: number;
+	/** Outdoor map layer chip — never a five-tab destination. */
+	layer?: OutdoorLayerId;
+	/** Saved or in-progress trip id (client store). */
+	trip?: string;
 };
+
+/** Stay on the product surface that opened the map. */
+export function mapStayPath(pathname: string): "/" | "/map" | "/compare" {
+	if (pathname === "/compare") return "/compare";
+	if (pathname === "/") return "/";
+	return "/map";
+}
+
+export function resolveMapProduct(pathname: string): MapProduct {
+	return pathname === "/compare" ? "restaurants" : "outdoor";
+}
+
+export function parseOutdoorLayer(raw: unknown): OutdoorLayerId | undefined {
+	const v = String(raw || "")
+		.trim()
+		.toLowerCase();
+	if (v === "around" || v === "tracks" || v === "places" || v === "trips") return v;
+	return undefined;
+}
 
 export type CameraBbox = [number, number, number, number];
 
@@ -60,13 +85,13 @@ export function parseMapSort(raw: unknown): MapSort | undefined {
 	return undefined;
 }
 
-/** `/map` defaults to map; `/` defaults to list. Explicit `view=` always wins. */
+/** Outdoor `/` and `/map` open on the map. Restaurant `/compare` keeps the old list default. */
 export function resolveMapView(
 	search: Pick<MapSearch, "view">,
 	pathname: string,
 ): MapViewMode {
 	if (search.view) return search.view;
-	return pathname === "/map" ? "map" : "list";
+	return pathname === "/compare" ? "list" : "map";
 }
 
 export function resolveMapSort(search: Pick<MapSearch, "sort">): MapSort {
@@ -84,5 +109,7 @@ export function parseMapSearch(s: Record<string, unknown>): MapSearch {
 		sort: parseMapSort(s.sort),
 		b: parseCameraBbox(s.b) ? encodeCameraBbox(parseCameraBbox(s.b) as CameraBbox) : undefined,
 		z: parseCameraZoom(s.z),
+		layer: parseOutdoorLayer(s.layer),
+		trip: trim(s.trip, 80),
 	};
 }

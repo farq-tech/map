@@ -31,6 +31,8 @@ type LocationContextType = {
 	showLocationModal: boolean;
 	showMapModal: boolean;
 	userLocation: { lat: number; lng: number } | null;
+	/** Horizontal accuracy in metres when the device reported one. */
+	userAccuracy: number | null;
 	/** Degrees clockwise from north when the device reports one, else null. */
 	userHeading: number | null;
 	locationAddress: string | null;
@@ -117,6 +119,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 		lat: number;
 		lng: number;
 	} | null>(null);
+	const [userAccuracy, setUserAccuracy] = useState<number | null>(null);
 	/** Only ever set from a fix that actually carried one. */
 	const [userHeading, setUserHeading] = useState<number | null>(null);
 	const [locationAddress, setLocationAddress] = useState<string | null>(null);
@@ -141,8 +144,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 		watchIdRef.current = null;
 	}, []);
 
-	const applyGps = useCallback((lat: number, lng: number, heading?: number | null) => {
+	const applyGps = useCallback((lat: number, lng: number, heading?: number | null, accuracy?: number | null) => {
 		setUserLocation({ lat, lng });
+		setUserAccuracy(
+			typeof accuracy === "number" && Number.isFinite(accuracy) ? accuracy : null,
+		);
 		/* Only when the device actually reported one. Geolocation returns null
 		 * while stationary, and turning that into a direction would point the
 		 * user's car somewhere it is not facing. */
@@ -159,7 +165,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 		if (watchIdRef.current != null) return;
 		watchIdRef.current = navigator.geolocation.watchPosition(
 			(pos) => {
-				applyGps(pos.coords.latitude, pos.coords.longitude, pos.coords.heading);
+				applyGps(
+					pos.coords.latitude,
+					pos.coords.longitude,
+					pos.coords.heading,
+					pos.coords.accuracy,
+				);
 			},
 			(err) => {
 				if (err.code === 1) {
@@ -193,7 +204,12 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 		/* Must run in the same turn as the tap — iOS Safari ignores delayed prompts. */
 		navigator.geolocation.getCurrentPosition(
 			(pos) => {
-				applyGps(pos.coords.latitude, pos.coords.longitude, pos.coords.heading);
+				applyGps(
+					pos.coords.latitude,
+					pos.coords.longitude,
+					pos.coords.heading,
+					pos.coords.accuracy,
+				);
 				setIsLocating(false);
 				startWatch();
 			},
@@ -221,6 +237,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 			showLocationModal: false,
 			showMapModal,
 			userLocation,
+			userAccuracy,
 			userHeading,
 			locationAddress,
 			isManualLocation,
@@ -246,6 +263,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 			hasLocationPermission,
 			showMapModal,
 			userLocation,
+			userAccuracy,
+			userHeading,
 			locationAddress,
 			isManualLocation,
 			locationPinKind,

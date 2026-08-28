@@ -144,7 +144,7 @@ export default function MerchantPage() {
 		<div className="min-h-screen bg-brand-900 text-white">
 			<Header />
 			<main className="mx-auto max-w-2xl px-4 py-6">
-				<Link to="/map" className="mb-4 inline-flex items-center gap-2 text-sm text-mint-500">
+				<Link to="/compare" className="mb-4 inline-flex items-center gap-2 text-sm text-mint-500">
 					<ArrowRight className={`h-4 w-4 ${isRTL ? "" : "rotate-180"}`} />
 					{isRTL ? "رجوع للخريطة" : "Back to map"}
 				</Link>
@@ -228,7 +228,7 @@ export default function MerchantPage() {
 				</section>
 				<div className="mt-8">
 					<Button asChild variant="primary" className="w-full text-mint-500">
-						<Link to="/map" search={{ place: id }}>
+						<Link to="/compare" search={{ place: id }}>
 							{isRTL ? "عرض على الخريطة" : "Show on map"}
 						</Link>
 					</Button>

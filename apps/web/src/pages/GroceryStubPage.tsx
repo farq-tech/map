@@ -22,7 +22,7 @@ export default function GroceryStubPage() {
 				{search.q ? (
 					<p className="mt-2 text-mint-500">{search.q}</p>
 				) : null}
-				<Link to="/map" className="mt-6 inline-block text-mint-500 underline">
+				<Link to="/compare" className="mt-6 inline-block text-mint-500 underline">
 					{isRTL ? "العودة للخريطة" : "Back to the map"}
 				</Link>
 			</main>

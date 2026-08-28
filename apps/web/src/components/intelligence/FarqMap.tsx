@@ -26,9 +26,17 @@ import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import { localizeDigitString } from "../../lib/formatPrice";
 import { getProviderLabel } from "../../lib/platformLogos";
 import {
+	shouldEnableTerrain,
 	shouldShow3dObjects,
 	shouldSkipGlobeIntro,
 } from "../../lib/farqMapDevice";
+import {
+	ensureSaryLayers,
+	setSaryTerrain,
+	syncSaryData,
+} from "../../lib/sary/mapLayers";
+import { buildPradoMarker, updatePradoMarker } from "../../lib/sary/pradoMarker";
+import type { OutdoorLayerId } from "../../routes/map";
 import {
 	AURA_VIEWPORT_IDLE_MS,
 	BUBBLE_CLEAR_CHANGE,
@@ -174,9 +182,9 @@ type PinRec = {
  * Mapbox DEM terrain (`mapbox-dem` + setTerrain) paints a city-wide diagonal
  * hatch on Safari / WebKit and freezes the canvas. 3D buildings stay.
  */
-function applyBasemap(map: MapboxMap, isRTL: boolean) {
+function applyBasemap(map: MapboxMap, isRTL: boolean, outdoor = false) {
 	try {
-		map.setConfigProperty("basemap", "lightPreset", "dusk");
+		map.setConfigProperty("basemap", "lightPreset", outdoor ? "day" : "dusk");
 	} catch {
 		/* classic styles ignore Standard config */
 	}
@@ -208,10 +216,12 @@ function applyBasemap(map: MapboxMap, isRTL: boolean) {
 	} catch {
 		/* classic styles without Mapbox vector sources keep local names */
 	}
-	try {
-		map.setTerrain(null);
-	} catch {
-		/* */
+	if (!outdoor) {
+		try {
+			map.setTerrain(null);
+		} catch {
+			/* */
+		}
 	}
 }
 
@@ -403,6 +413,14 @@ export default function FarqMap({
 	gisNeighborhoods = null,
 	onMapInteraction,
 	onLeftUserLocation,
+	mode = "comparison",
+	followMode = false,
+	tracks = null,
+	userTrack = null,
+	vehicleMode = "dot",
+	vehicleMotion = "idle",
+	outdoorLayer = "around",
+	onBreakFollow,
 }: {
 	places: IntelligenceMapPlaces | null;
 	/** Accepted for IntelligenceMapSplit compatibility — not painted as a mosaic. */
@@ -442,6 +460,14 @@ export default function FarqMap({
 	sheetOpen?: boolean;
 	onMapInteraction?: (phase: "start" | "end") => void;
 	onLeftUserLocation?: (left: boolean) => void;
+	mode?: "comparison" | "outdoor";
+	followMode?: boolean;
+	tracks?: GeoJSON.FeatureCollection | null;
+	userTrack?: GeoJSON.FeatureCollection | null;
+	vehicleMode?: "dot" | "prado";
+	vehicleMotion?: "idle" | "moving";
+	outdoorLayer?: OutdoorLayerId;
+	onBreakFollow?: () => void;
 }) {
 	const token = getMapboxAccessToken();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -474,11 +500,19 @@ export default function FarqMap({
 	const onSelectPlaceRef = useRef(onSelectPlace);
 	const onMapInteractionRef = useRef(onMapInteraction);
 	const onLeftUserLocationRef = useRef(onLeftUserLocation);
+	const onBreakFollowRef = useRef(onBreakFollow);
 	const userLocationRef = useRef(userLocation);
+	const modeRef = useRef(mode);
+	const followModeRef = useRef(followMode);
+	const vehicleModeRef = useRef(vehicleMode);
+	const vehicleMotionRef = useRef(vehicleMotion);
+	const outdoorLayerRef = useRef(outdoorLayer);
+	const tracksRef = useRef(tracks);
+	const userTrackRef = useRef(userTrack);
+	const pradoMarkerRef = useRef<mapboxgl.Marker | null>(null);
 	const isRtlRef = useRef(isRTL);
 	const selectedPlaceIdRef = useRef(selectedPlaceId);
 	const gisNeighborhoodsRef = useRef(gisNeighborhoods);
-	const appliedStyleRef = useRef<MapboxBasemap>("standard");
 	const lastPinSigRef = useRef("");
 	const placeDetailRef = useRef(placeDetail);
 	const syncPinsRef = useRef<() => void>(() => {});
@@ -486,6 +520,7 @@ export default function FarqMap({
 	 * whole step of the opportunity ramp was ΔE ~6 against imagery whose own
 	 * texture is σ 14–26 RGB — and mint over an arid city reads as vegetation. */
 	const basemap = basemapProp ?? "standard";
+	const appliedStyleRef = useRef<MapboxBasemap>(basemap);
 	const [missingToken] = useState(() => !token);
 	const [mapReady, setMapReady] = useState(false);
 	const [introDone, setIntroDone] = useState(false);
@@ -494,7 +529,15 @@ export default function FarqMap({
 	onSelectPlaceRef.current = onSelectPlace;
 	onMapInteractionRef.current = onMapInteraction;
 	onLeftUserLocationRef.current = onLeftUserLocation;
+	onBreakFollowRef.current = onBreakFollow;
 	userLocationRef.current = userLocation;
+	modeRef.current = mode;
+	followModeRef.current = followMode;
+	vehicleModeRef.current = vehicleMode;
+	vehicleMotionRef.current = vehicleMotion;
+	outdoorLayerRef.current = outdoorLayer;
+	tracksRef.current = tracks;
+	userTrackRef.current = userTrack;
 	isRtlRef.current = isRTL;
 	selectedPlaceIdRef.current = selectedPlaceId;
 	gisNeighborhoodsRef.current = gisNeighborhoods;
@@ -599,7 +642,7 @@ export default function FarqMap({
 
 		const map = new mapboxgl.Map({
 			container: containerRef.current,
-			style: mapboxStyleUrl("standard"),
+			style: mapboxStyleUrl(basemap),
 			center: skipGlobe ? landing.center : [20, 18],
 			zoom: skipGlobe ? landing.zoom : reduced ? 11.6 : 1.55,
 			pitch: skipGlobe ? landing.pitch : 0,
@@ -638,9 +681,23 @@ export default function FarqMap({
 		let unbindDistrictClick: () => void = () => {};
 		let unbindDistrictHover: () => void = () => {};
 		map.on("style.load", () => {
-			applyBasemap(map, isRtlRef.current);
+			applyBasemap(map, isRtlRef.current, modeRef.current === "outdoor");
+			if (modeRef.current === "outdoor") {
+				try {
+					ensureSaryLayers(map, (id) => onSelectPlaceRef.current(id));
+					setSaryTerrain(map, shouldEnableTerrain({ outdoor: true }));
+					syncSaryData(map, {
+						places: { type: "FeatureCollection", features: [] },
+						tracks: tracksRef.current || { type: "FeatureCollection", features: [] },
+						myTrack: userTrackRef.current || { type: "FeatureCollection", features: [] },
+						layer: outdoorLayerRef.current,
+					});
+				} catch {
+					/* */
+				}
+			}
 			try {
-				syncFieldRef.current(map);
+				if (modeRef.current === "comparison") syncFieldRef.current(map);
 			} catch {
 				/* added again once the style settles */
 			}
@@ -657,17 +714,19 @@ export default function FarqMap({
 				/* style mid-swap */
 			}
 			try {
-				ensurePriceTileLayers(map, (id) => {
-					applyInstantPinSelection(pinMarkersRef.current, id, [
-						containerRef.current?.closest(".farq-mapbox-root"),
-						containerRef.current?.closest(".farq-map-split"),
-					]);
-					selectedPlaceIdRef.current = id;
-					onSelectPlaceRef.current(id);
-					lastPinSigRef.current = "";
+				if (modeRef.current === "comparison") {
+					ensurePriceTileLayers(map, (id) => {
+						applyInstantPinSelection(pinMarkersRef.current, id, [
+							containerRef.current?.closest(".farq-mapbox-root"),
+							containerRef.current?.closest(".farq-map-split"),
+						]);
+						selectedPlaceIdRef.current = id;
+						onSelectPlaceRef.current(id);
+						lastPinSigRef.current = "";
+						syncPinsRef.current();
+					});
 					syncPinsRef.current();
-				});
-				syncPinsRef.current();
+				}
 			} catch {
 				/* */
 			}
@@ -770,16 +829,18 @@ export default function FarqMap({
 				/* */
 			}
 			try {
-				ensurePriceTileLayers(map, (id) => {
-					applyInstantPinSelection(pinMarkersRef.current, id, [
-						containerRef.current?.closest(".farq-mapbox-root"),
-						containerRef.current?.closest(".farq-map-split"),
-					]);
-					selectedPlaceIdRef.current = id;
-					onSelectPlaceRef.current(id);
-					lastPinSigRef.current = "";
-					syncPinsRef.current();
-				});
+				if (modeRef.current === "comparison") {
+					ensurePriceTileLayers(map, (id) => {
+						applyInstantPinSelection(pinMarkersRef.current, id, [
+							containerRef.current?.closest(".farq-mapbox-root"),
+							containerRef.current?.closest(".farq-map-split"),
+						]);
+						selectedPlaceIdRef.current = id;
+						onSelectPlaceRef.current(id);
+						lastPinSigRef.current = "";
+						syncPinsRef.current();
+					});
+				}
 			} catch {
 				/* style not ready */
 			}
@@ -889,6 +950,7 @@ export default function FarqMap({
 			if (!introDoneRef.current) return;
 			/* Only a finger or a wheel is an interaction; our own easeTo must not collapse the sheet. */
 			if (!isUserEvent(ev)) return;
+			if (followModeRef.current) onBreakFollowRef.current?.();
 			onMapInteractionRef.current?.("start");
 		};
 		const onInteractEnd = () => {
@@ -955,6 +1017,8 @@ export default function FarqMap({
 			persistCamera(map);
 			ro.disconnect();
 			userMarkerRef.current?.remove();
+			pradoMarkerRef.current?.remove();
+			pradoMarkerRef.current = null;
 			clearPinMarkers(pinMarkersRef.current);
 			searchRef.current = null;
 			setMapReady(false);
@@ -972,6 +1036,7 @@ export default function FarqMap({
 
 		const syncPins = () => {
 			if (mapRef.current !== map) return;
+			if (modeRef.current === "outdoor") return;
 			let zoom = 12;
 			try {
 				zoom = map.getZoom();
@@ -1112,7 +1177,68 @@ export default function FarqMap({
 
 	useEffect(() => {
 		const map = mapRef.current;
+		if (!map || !mapReady) return;
+		if (mode !== "outdoor") return;
+		try {
+			ensureSaryLayers(map, (id) => onSelectPlaceRef.current(id));
+			syncSaryData(map, {
+				places: placesData,
+				tracks: tracks || { type: "FeatureCollection", features: [] },
+				myTrack: userTrack || { type: "FeatureCollection", features: [] },
+				layer: outdoorLayer,
+			});
+		} catch {
+			/* style mid-swap */
+		}
+	}, [mode, mapReady, placesData, tracks, userTrack, outdoorLayer]);
+
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map || !introDone || !followMode || !userLocation) return;
+		try {
+			map.easeTo({
+				center: [userLocation.lng, userLocation.lat],
+				duration: reducedMotionRef.current ? 0 : 420,
+				essential: true,
+				pitch: map.getPitch(),
+				bearing: typeof userHeading === "number" ? userHeading : map.getBearing(),
+			});
+		} catch {
+			/* */
+		}
+	}, [followMode, userLocation, userHeading, introDone]);
+
+	useEffect(() => {
+		const map = mapRef.current;
 		if (!map || !introDoneRef.current) return;
+		if (vehicleMode === "prado" && showUserLocation && userLocation) {
+			userMarkerRef.current?.remove();
+			userMarkerRef.current = null;
+			let z = 14;
+			try {
+				z = map.getZoom();
+			} catch {
+				/* */
+			}
+			if (!pradoMarkerRef.current) {
+				pradoMarkerRef.current = new mapboxgl.Marker({
+					element: buildPradoMarker(),
+					anchor: "center",
+				})
+					.setLngLat([userLocation.lng, userLocation.lat])
+					.addTo(map);
+			} else {
+				pradoMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+			}
+			updatePradoMarker(pradoMarkerRef.current.getElement(), {
+				heading: userHeading,
+				simplified: z < 13,
+				motion: vehicleMotion,
+			});
+			return;
+		}
+		pradoMarkerRef.current?.remove();
+		pradoMarkerRef.current = null;
 		if (!showUserLocation || !userLocation) {
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
@@ -1128,7 +1254,15 @@ export default function FarqMap({
 			updateUserMarker(userMarkerRef.current.getElement(), userMarkerState());
 			userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
 		}
-	}, [showUserLocation, userLocation, userMarkerState, avatarVersion]);
+	}, [
+		showUserLocation,
+		userLocation,
+		userHeading,
+		userMarkerState,
+		avatarVersion,
+		vehicleMode,
+		vehicleMotion,
+	]);
 
 	/* The photo lives in this browser and is changed from a control elsewhere in
 	 * the tree, so the marker listens rather than being handed it. */

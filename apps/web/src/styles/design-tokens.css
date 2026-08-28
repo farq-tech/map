@@ -38,6 +38,15 @@
 	--amber-600: 230 175 40;
 	--amber-700: 199 145 30;
 
+	/* سَرى البارق — Figma sand/stone/sky/sage/earth (beside Farq mint/brand) */
+	--sand-50: 250 246 239;
+	--sand-500: 196 168 120;
+	--sand-900: 58 44 28;
+	--stone-500: 120 110 98;
+	--sky-500: 126 182 201;
+	--sage-500: 134 181 106;
+	--earth-500: 232 132 44;
+
 	/* Neutrals aligned to Farq green-ink family (not cool gray) */
 	--neutral-50: 255 255 255;
 	--neutral-100: 243 248 245;

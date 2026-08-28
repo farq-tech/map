@@ -68,7 +68,7 @@ import FarqWordmark from "../FarqWordmark";
 import { ProviderLogoMark } from "../ProviderLogoMark";
 import { Button } from "../ui/Button";
 import type { MapSearch, MapSort, MapViewMode } from "../../routes/map";
-import { encodeCameraBbox, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
+import { encodeCameraBbox, mapStayPath, parseCameraBbox, resolveMapSort, resolveMapView } from "../../routes/map";
 import FarqAnswerCard, { rowToOpportunity } from "./FarqAnswerCard";
 import { askCopilot, looksLikeQuestion, readSessionId, type CopilotAction, type CopilotResponse, type CopilotRow } from "../../lib/farqAsk";
 import FarqExploreChrome, {
@@ -249,7 +249,7 @@ export default function IntelligenceMapSplit({
 	const patchSearch = useCallback(
 		(next: Partial<MapSearch>) => {
 			void navigate({
-				to: pathname === "/" ? "/" : "/map",
+				to: mapStayPath(pathname),
 				search: (prev: MapSearch) => ({
 					neighborhood:
 						"neighborhood" in next ? next.neighborhood : prev.neighborhood,
@@ -277,7 +277,7 @@ export default function IntelligenceMapSplit({
 				const b = encodeCameraBbox(bbox);
 				const z = Math.round(zoom * 100) / 100;
 				void navigate({
-					to: pathname === "/" ? "/" : "/map",
+					to: mapStayPath(pathname),
 					replace: true,
 					search: (prev: MapSearch) => (prev.b === b && prev.z === z ? prev : { ...prev, b, z }),
 				});

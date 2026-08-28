@@ -55,6 +55,11 @@ const EVENTS_COPY = [
   'locate_click',
   'open_menu_click',
   'lens_change',
+  'gps_start',
+  'gps_error',
+  'gps_stop',
+  'trip_save_fail',
+  'outdoor_data_fail',
 ];
 
 test('the server allowlist matches the copy checked in here', () => {

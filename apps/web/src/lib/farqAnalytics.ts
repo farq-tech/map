@@ -38,6 +38,11 @@ export const ANALYTICS_EVENTS = [
 	"locate_click",
 	"open_menu_click",
 	"lens_change",
+	"gps_start",
+	"gps_error",
+	"gps_stop",
+	"trip_save_fail",
+	"outdoor_data_fail",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

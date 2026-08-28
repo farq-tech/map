@@ -14,6 +14,7 @@ const compression = require('compression');
 const createMapRouter = require('./routes/map');
 const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
+const createOutdoorRouter = require('./routes/outdoor');
 const { warmCityCache } = require('./lib/city-opportunities');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
 
@@ -121,6 +122,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/intelligence', createMapRouter());
+app.use('/api/outdoor', createOutdoorRouter());
 app.use('/api/copilot', createCopilotRouter());
 app.use('/api/analytics', createAnalyticsRouter());
 
@@ -202,6 +204,7 @@ if (FARQ_API_ORIGIN) {
   app.use('/api', async (req, res, next) => {
     if (
       req.path.startsWith('/intelligence') ||
+      req.path.startsWith('/outdoor') ||
       req.path.startsWith('/restaurant/') ||
       req.path.startsWith('/comparison/')
     ) {

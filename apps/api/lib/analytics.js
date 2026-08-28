@@ -39,6 +39,11 @@ const ALLOWED_EVENT_TYPES = Object.freeze([
   'locate_click',
   'open_menu_click',
   'lens_change',
+  'gps_start',
+  'gps_error',
+  'gps_stop',
+  'trip_save_fail',
+  'outdoor_data_fail',
 ]);
 
 const ALLOWED_TYPE_SET = new Set(ALLOWED_EVENT_TYPES);
@@ -64,6 +69,11 @@ const META_KEYS_BY_TYPE = Object.freeze({
   locate_click: ['source'],
   open_menu_click: ['source', 'rank'],
   lens_change: ['lens', 'source'],
+  gps_start: ['source'],
+  gps_error: ['source'],
+  gps_stop: ['source'],
+  trip_save_fail: ['source'],
+  outdoor_data_fail: ['source'],
 });
 
 const MAX_EVENTS_PER_REQUEST = 20;

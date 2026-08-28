@@ -31,7 +31,7 @@ function MapRoute() {
 	const search = mapRoute.useSearch();
 	return (
 		<Suspense fallback={<RouteFallback />}>
-			<MapPage search={search} />
+			<MapPage search={search} product="outdoor" />
 		</Suspense>
 	);
 }
@@ -40,7 +40,16 @@ function IndexRoute() {
 	const search = indexRoute.useSearch();
 	return (
 		<Suspense fallback={<RouteFallback />}>
-			<MapPage search={search} />
+			<MapPage search={search} product="outdoor" />
+		</Suspense>
+	);
+}
+
+function CompareRoute() {
+	const search = compareRoute.useSearch();
+	return (
+		<Suspense fallback={<RouteFallback />}>
+			<MapPage search={search} product="restaurants" />
 		</Suspense>
 	);
 }
@@ -61,6 +70,13 @@ const mapRoute = createRoute({
 	path: "/map",
 	validateSearch: parseMapSearch,
 	component: MapRoute,
+});
+
+const compareRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/compare",
+	validateSearch: parseMapSearch,
+	component: CompareRoute,
 });
 
 const groceryRoute = createRoute({
@@ -109,6 +125,7 @@ const merchantRoute = createRoute({
 const routeTree = rootRoute.addChildren([
 	indexRoute,
 	mapRoute,
+	compareRoute,
 	groceryRoute,
 	merchantRoute,
 ]);

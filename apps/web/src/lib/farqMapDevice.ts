@@ -1,6 +1,9 @@
 /**
  * Map chrome / camera device gates. iPhone + Safari + coarse pointers
- * skip globe intro and Standard 3D objects. Terrain stays off everywhere.
+ * skip globe intro and Standard 3D objects.
+ *
+ * Comparison map: terrain stays off (Safari hatch). Outdoor product may
+ * enable Mapbox DEM except on WebKit, where the hatch bug still wins.
  */
 
 export function isCoarsePointerDevice(): boolean {
@@ -33,4 +36,13 @@ export function shouldSkipGlobeIntro(opts?: {
 	const coarse = opts?.coarsePointer ?? isCoarsePointerDevice();
 	const safari = opts?.iphoneOrSafari ?? isIPhoneOrSafari();
 	return coarse || safari;
+}
+
+export function shouldEnableTerrain(opts?: {
+	outdoor?: boolean;
+	iphoneOrSafari?: boolean;
+}): boolean {
+	if (!opts?.outdoor) return false;
+	const safari = opts.iphoneOrSafari ?? isIPhoneOrSafari();
+	return !safari;
 }

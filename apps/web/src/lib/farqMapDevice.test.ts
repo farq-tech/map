@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	shouldEnableTerrain,
 	shouldShow3dObjects,
 	shouldSkipGlobeIntro,
 } from "./farqMapDevice";
@@ -24,5 +25,11 @@ describe("map device gates", () => {
 				iphoneOrSafari: false,
 			}),
 		).toBe(false);
+	});
+
+	it("enables outdoor terrain only off WebKit", () => {
+		expect(shouldEnableTerrain({ outdoor: false })).toBe(false);
+		expect(shouldEnableTerrain({ outdoor: true, iphoneOrSafari: true })).toBe(false);
+		expect(shouldEnableTerrain({ outdoor: true, iphoneOrSafari: false })).toBe(true);
 	});
 });

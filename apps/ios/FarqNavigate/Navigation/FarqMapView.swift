@@ -111,63 +111,20 @@ struct FarqMapView: View {
                 .slot(.middle)
             }
 
-            /* Bearing from the course while moving; Mapbox leaves it alone when
-             * the device reports none, which is the honest behaviour — a parked
-             * car pointing north is a claim nobody made.
+            /* Where you are, and nothing more.
              *
-             * The car appears only once a photo does. Drawing one under someone
-             * who might be walking is a guess about how they are travelling,
-             * and this map does not guess — without a photo the marker stays
-             * the pulsing dot it has always been: a position, undecorated. */
-            if let avatar = profile.avatar {
-                Puck2D(bearing: .course)
-                    .bearingImage(FarqVehicle.cachedCar(hex: profile.vehicleColor.hex))
-                    .topImage(FarqVehicle.noTopImage)
-                    .shadowImage(FarqVehicle.vehicleShadow())
-                    /* A car is a thing of a fixed size on a road, not a fixed
-                     * size on a screen: drawn at one scale it is a toy at city
-                     * zoom and a bus at street zoom. This keeps it roughly the
-                     * size of the lane it is in. */
-                    .scale(
-                        Exp(.interpolate) {
-                            Exp(.linear)
-                            Exp(.zoom)
-                            10; 0.32
-                            14; 0.55
-                            17; 0.9
-                        }
-                    )
-                    .showsAccuracyRing(false)
-
-                /* The portrait rides as its own symbol rather than the puck's
-                 * top image. The puck lies flat on the map, so under a tilted
-                 * navigation camera the photo flattened into an ellipse — a
-                 * face squashed into the asphalt. A symbol stays upright. */
-                if let userLocation {
-                    PointAnnotationGroup {
-                        PointAnnotation(coordinate: userLocation)
-                            .image(.init(
-                                image: FarqVehicle.cachedAvatarPin(avatar),
-                                name: "farq-user-avatar"
-                            ))
-                            .iconAnchor(.bottom)
-                            /* The pin floats over the car by design — it is a
-                             * marker with a tail, not a correction. `iconOffset`
-                             * is applied in the symbol's own space, so it holds
-                             * through zoom, pitch and rotation; the coordinate
-                             * it is anchored to is the same one the car uses. */
-                            .iconOffset(x: 0, y: -14)
-                            .iconEmissiveStrength(1)
-                    }
-                    .layerId("farq-user-avatar-layer")
-                    .iconAllowOverlap(true)
-                    .iconIgnorePlacement(true)
-                    .slot(.top)
-                }
-            } else {
-                Puck2D(bearing: .course)
-                    .showsAccuracyRing(true)
-            }
+             * This was a car with your photo above it, and it is a plain puck
+             * now because a car is a claim: it says you are driving, which the
+             * map does not know, and it points somewhere, which a stationary
+             * phone cannot tell it. The dot says the one thing that is true —
+             * this is where you are — and says it at every zoom without
+             * competing with the prices, which are the point of the screen.
+             *
+             * Bearing still comes from the course while moving; Mapbox leaves
+             * it alone when the device reports none, which is the honest
+             * behaviour rather than pointing north by default. */
+            Puck2D(bearing: .course)
+                .showsAccuracyRing(true)
         }
         /* The web's basemap: dusk, with every label the basemap wants to add
          * turned off. Farq's own labels are the point of the picture, and
