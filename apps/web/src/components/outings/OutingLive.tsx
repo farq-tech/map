@@ -31,7 +31,7 @@ import { refreshPushSubscription } from "../../lib/outings/push";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import { memberColors } from "../../lib/outings/carColors";
 import { DRIVE_IDLE, drivingOn, nextDriveState, type DrivePref, type DriveState } from "../../lib/outings/driving";
-import { edgeSpot, spreadOnEdges, type EdgeSpot, type Insets } from "../../lib/outings/edgeArrows";
+import { avoidRect, edgeSpot, spreadOnEdges, type EdgeSpot, type Insets } from "../../lib/outings/edgeArrows";
 import { lightPresetAt, type LightPreset } from "../../lib/outings/sun";
 import { Trails } from "../../lib/outings/trail";
 import { removeTrailLayer, setTrailData } from "../../lib/outings/trailLayer";
@@ -644,7 +644,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			const s = edgeSpot(p, v, insets, EDGE_CHIP);
 			if (s) spots.push({ ...s, id: r.member.user_id });
 		}
-		setArrows(spreadOnEdges(spots, v, insets, EDGE_CHIP));
+		/* Never cover my own car's «أنت» chip: slide arrows along the edge past it. */
+		const mine = m.getContainer().querySelector<HTMLElement>('[data-testid="sary-my-car"]')?.getBoundingClientRect();
+		const keepClear = mine && mine.width ? { left: mine.left - box.left, top: mine.top - box.top, right: mine.right - box.left, bottom: mine.bottom - box.top } : null;
+		setArrows(avoidRect(spreadOnEdges(spots, v, insets, EDGE_CHIP), keepClear, v, insets, EDGE_CHIP));
 	};
 	const updateArrowsRef = useRef(updateArrows);
 	updateArrowsRef.current = updateArrows;

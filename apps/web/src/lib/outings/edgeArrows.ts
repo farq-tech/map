@@ -87,3 +87,62 @@ export function spreadOnEdges<T extends EdgeSpot>(spots: T[], view: Size, insets
 	}
 	return out;
 }
+
+export type Rect = { left: number; top: number; right: number; bottom: number };
+
+function overlaps(a: Rect, b: Rect): boolean {
+	return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function chipRect(s: { x: number; y: number }, chip: Size): Rect {
+	return { left: s.x - chip.w / 2, top: s.y - chip.h / 2, right: s.x + chip.w / 2, bottom: s.y + chip.h / 2 };
+}
+
+/**
+ * A chip must never cover something that has to stay readable — above all my
+ * own car's «أنت» name chip, which can sit right at the edge of the map area.
+ * Slide each chip that would cover `keepClear` along its own edge, to the
+ * nearer side that still fits; chips it would then land on are pushed on in
+ * the same direction. If neither side fits, it stays where it was.
+ */
+export function avoidRect<T extends EdgeSpot>(spots: T[], keepClear: Rect | null, view: Size, insets: Insets, chip: Size, gap = 4): T[] {
+	if (!keepClear) return spots;
+	const r = safeRect(view, insets);
+	const out = spots.map((s) => ({ ...s }));
+	const clear: Rect = { left: keepClear.left - gap, top: keepClear.top - gap, right: keepClear.right + gap, bottom: keepClear.bottom + gap };
+	for (const s of out) {
+		if (!overlaps(chipRect(s, chip), clear)) continue;
+		const vertical = s.edge === "left" || s.edge === "right";
+		const key = vertical ? "y" : "x";
+		const half = vertical ? chip.h / 2 : chip.w / 2;
+		const lo = (vertical ? r.top : r.left) + half + EDGE_MARGIN;
+		const hi = (vertical ? r.bottom : r.right) - half - EDGE_MARGIN;
+		const before = (vertical ? clear.top : clear.left) - half;
+		const after = (vertical ? clear.bottom : clear.right) + half;
+		const options = [before, after].filter((v) => v >= lo && v <= hi).sort((a, b) => Math.abs(a - s[key]) - Math.abs(b - s[key]));
+		const step = (vertical ? chip.h : chip.w) + gap;
+		/* Try the nearer side first; take it only if the neighbours it pushes still fit. */
+		for (const target of options) {
+			const dir = Math.sign(target - s[key]) || 1;
+			/* Neighbours not clearly behind the new spot, nearest first in the direction of travel. */
+			const ahead = out.filter((o) => o !== s && o.edge === s.edge && dir * (o[key] - target) > -step).sort((a, b) => dir * (a[key] - b[key]));
+			const moves: Array<[T, number]> = [];
+			let prev = target;
+			let fits = true;
+			for (const o of ahead) {
+				const next = dir * Math.max(dir * o[key], dir * prev + step);
+				if (next < lo || next > hi) {
+					fits = false;
+					break;
+				}
+				moves.push([o, next]);
+				prev = next;
+			}
+			if (!fits) continue;
+			s[key] = target;
+			for (const [o, v] of moves) o[key] = v;
+			break;
+		}
+	}
+	return out;
+}

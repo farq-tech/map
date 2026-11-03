@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { edgeSpot, screenAngle, spreadOnEdges, type Insets } from "./edgeArrows";
+import { avoidRect, edgeSpot, screenAngle, spreadOnEdges, type Insets } from "./edgeArrows";
 import { TRAIL_GAP_MS, TRAIL_MS, trailOpacity, Trails } from "./trail";
 import { lightPresetAt, solarElevationDeg, sunsetUtc } from "./sun";
 import { DRIVE_HOLD_MS, DRIVE_IDLE, drivingOn, nextDriveState } from "./driving";
@@ -167,5 +167,42 @@ describe("driving mode", () => {
 		expect(drivingOn("on", DRIVE_IDLE)).toBe(true);
 		expect(drivingOn("off", { moving: true, slowSince: null })).toBe(false);
 		expect(drivingOn("auto", { moving: true, slowSince: null })).toBe(true);
+	});
+});
+
+describe("edge arrows keep my own name chip clear", () => {
+	const view = { w: 390, h: 844 };
+	const insets: Insets = { top: 100, right: 70, bottom: 200, left: 0 };
+	const chip = { w: 120, h: 40 };
+	const hit = (a: { x: number; y: number }, r: { left: number; top: number; right: number; bottom: number }) =>
+		a.x - chip.w / 2 < r.right && a.x + chip.w / 2 > r.left && a.y - chip.h / 2 < r.bottom && a.y + chip.h / 2 > r.top;
+
+	it("slides a chip off «أنت» along its edge, to the nearer side", () => {
+		/* My label sits at the bottom edge, where a friend behind me would get a chip. */
+		const me = { left: 140, top: 600, right: 200, bottom: 630 };
+		const spot = edgeSpot({ x: 170, y: 900 }, view, insets, chip)!;
+		expect(spot.edge).toBe("bottom");
+		expect(hit(spot, me)).toBe(true);
+		const [moved] = avoidRect([{ ...spot, id: "b" }], me, view, insets, chip);
+		expect(hit(moved, me)).toBe(false);
+		expect(moved.edge).toBe("bottom");
+		expect(moved.y).toBe(spot.y);
+		expect(moved.angle).toBe(spot.angle); // still points at the friend
+	});
+
+	it("pushes a neighbour on instead of stacking two chips", () => {
+		const me = { left: 140, top: 600, right: 200, bottom: 630 };
+		const wide: Insets = { ...insets, right: 0 };
+		const a = { ...edgeSpot({ x: 170, y: 900 }, view, wide, chip)!, id: "a" };
+		const b = { ...a, x: 120, id: "b" };
+		const out = avoidRect([a, b], me, view, wide, chip);
+		expect(out.every((s) => !hit(s, me))).toBe(true);
+		expect(Math.abs(out[0].x - out[1].x)).toBeGreaterThanOrEqual(chip.w);
+	});
+
+	it("leaves chips alone when nothing is covered or there is no label", () => {
+		const s = { ...edgeSpot({ x: 20, y: 900 }, view, insets, chip)!, id: "c" };
+		expect(avoidRect([s], null, view, insets, chip)).toEqual([s]);
+		expect(avoidRect([s], { left: 300, top: 120, right: 320, bottom: 140 }, view, insets, chip)[0]).toEqual(s);
 	});
 });
