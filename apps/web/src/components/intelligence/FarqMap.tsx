@@ -1223,7 +1223,10 @@ export default function FarqMap({
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map || !introDoneRef.current) return;
-		if (vehicleMode === "prado" && showUserLocation && userLocation && ensureVehicleLayer(map, vehicleColorHex(loadVehicleColor()))) {
+		const car3d = vehicleMode === "prado" && showUserLocation && userLocation ? ensureVehicleLayer(map, vehicleColorHex(loadVehicleColor())) : null;
+		/* Observable state for QA scripts: which vehicle the map is drawing. */
+		map.getContainer().dataset.vehicle = car3d === null ? "none" : car3d ? "model" : "fallback";
+		if (car3d && userLocation) {
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
 			/* Keep the last real heading while parked; never invent one. */

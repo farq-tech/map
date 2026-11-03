@@ -11,6 +11,15 @@ describe("3D vehicle layer", () => {
 		expect(vehicleRotation(null)).toEqual([0, 0, 180]);
 	});
 
+	it("keeps ~44 px on screen, then true size", async () => {
+		const { vehicleScaleAt } = await import("./vehicleLayer");
+		const px = (z: number) => (4.9 * vehicleScaleAt(z)) / (156543.03 * Math.cos((25 * Math.PI) / 180) / 2 ** z);
+		expect(px(10)).toBeCloseTo(44, 0);
+		expect(px(15)).toBeCloseTo(44, 0);
+		expect(vehicleScaleAt(21)).toBe(1);
+		expect(vehicleScaleAt(15)).toBeGreaterThan(vehicleScaleAt(16) * 1.9);
+	});
+
 	it("draws nothing without a real position", () => {
 		expect(vehicleFeature(null).features).toHaveLength(0);
 		expect(vehicleFeature({ lng: 46.6, lat: 24.7 }).features[0].geometry).toEqual({ type: "Point", coordinates: [46.6, 24.7] });
@@ -33,7 +42,7 @@ describe("3D vehicle layer", () => {
 		const models = new Set<string>();
 		const map = {
 			addModel: (id: string) => { models.add(id); added.push(`model:${id}`); },
-			hasModel: (id: string) => models.has(id),
+			on: vi.fn(),
 			getSource: (id: string) => (sources.has(id) ? {} : undefined),
 			addSource: (id: string) => { sources.add(id); added.push(`source:${id}`); },
 			getLayer: (id: string) => (layers.has(id) ? {} : undefined),

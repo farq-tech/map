@@ -22,19 +22,30 @@ export function modelIdFor(hex: string): string {
 	return `sary-suv-${hex.replace(/[^0-9a-f]/gi, "").toLowerCase()}`;
 }
 
-/** Scale per zoom: constant ~55 px until true size takes over (exponential base 2 = one zoom, half the scale). */
+/** On-screen length the car keeps until its true size (≈4.9 m) is larger. */
+export const VEHICLE_SCREEN_PX = 44;
+const CAR_LENGTH_M = 4.9;
+/* Metres per CSS pixel at zoom 0 around Saudi latitudes (cos 25°). */
+const MPP_Z0 = 156543.03 * Math.cos((25 * Math.PI) / 180);
+
+export function vehicleScaleAt(zoom: number): number {
+	return Math.max(1, (VEHICLE_SCREEN_PX * (MPP_Z0 / 2 ** zoom)) / CAR_LENGTH_M);
+}
+
+/**
+ * model-scale by zoom. Mapbox's exponential interpolation bends the *curve*
+ * between two stops, it does not halve a value per zoom — so the halving is
+ * written out as one linear stop per zoom level. Model units are metres
+ * (scale 1 = true size, checked against parked cars in the imagery).
+ */
 export const VEHICLE_SCALE: unknown = [
 	"interpolate",
-	["exponential", 2],
+	["linear"],
 	["zoom"],
-	8,
-	["literal", [3136, 3136, 3136]],
-	15,
-	["literal", [49, 49, 49]],
-	20,
-	["literal", [1.6, 1.6, 1.6]],
-	22,
-	["literal", [1, 1, 1]],
+	...Array.from({ length: 19 }, (_, i) => 4 + i).flatMap((z) => {
+		const v = Math.round(vehicleScaleAt(z) * 100) / 100;
+		return [z, ["literal", [v, v, v]]];
+	}),
 ];
 
 export function vehicleRotation(heading: number | null): [number, number, number] {
@@ -62,13 +73,22 @@ export function canDrawModels(map: MapboxMap): boolean {
  */
 export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 	if (!canDrawModels(map)) return false;
-	const m = map as unknown as {
-		addModel: (id: string, url: string) => void;
-		hasModel?: (id: string) => boolean;
-	};
+	const m = map as unknown as { addModel: (id: string, url: string) => void };
 	const id = modelIdFor(bodyHex);
 	try {
-		if (!m.hasModel || !m.hasModel(id)) m.addModel(id, suvModelUrl(bodyHex));
+		/* map.hasModel() throws on import-based styles (Standard, 3.28), so we
+		 * remember what we added, and forget it whenever the style is replaced. */
+		let added = addedModels.get(map);
+		if (!added) {
+			added = new Set();
+			addedModels.set(map, added);
+			const set = added;
+			map.on("style.load", () => set.clear());
+		}
+		if (!added.has(id)) {
+			m.addModel(id, suvModelUrl(bodyHex));
+			added.add(id);
+		}
 		if (!map.getSource(VEHICLE_SOURCE)) {
 			map.addSource(VEHICLE_SOURCE, { type: "geojson", data: vehicleFeature(null) });
 		}
@@ -92,10 +112,18 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 			map.setLayoutProperty(VEHICLE_LAYER, "model-id", id);
 		}
 		return true;
-	} catch {
+	} catch (e) {
+		/* Say why once; the caller falls back to the 2D marker. */
+		if (!warned) {
+			warned = true;
+			console.warn("[sary-vehicle] 3D car unavailable:", e instanceof Error ? e.message : e);
+		}
 		return false;
 	}
 }
+
+let warned = false;
+const addedModels = new WeakMap<MapboxMap, Set<string>>();
 
 export function setVehicle(map: MapboxMap, pos: { lng: number; lat: number } | null, heading: number | null): void {
 	const src = map.getSource(VEHICLE_SOURCE) as { setData?: (d: GeoJSON.FeatureCollection) => void } | undefined;
