@@ -46,8 +46,8 @@ export type AvatarError = "not-an-image" | "too-large" | "unreadable";
 
 /** Colours a car can be, because "any colour" is a colour picker nobody uses. */
 export const VEHICLE_COLORS = [
-	{ id: "navy", hex: "#1b2a4a", nameAr: "كحلي", nameEn: "Navy" },
 	{ id: "white", hex: "#e8eef0", nameAr: "أبيض", nameEn: "White" },
+	{ id: "navy", hex: "#1b2a4a", nameAr: "كحلي", nameEn: "Navy" },
 	{ id: "silver", hex: "#9aa5ad", nameAr: "فضي", nameEn: "Silver" },
 	{ id: "black", hex: "#15191c", nameAr: "أسود", nameEn: "Black" },
 	{ id: "mint", hex: "#83f1b1", nameAr: "نعناعي", nameEn: "Mint" },
@@ -182,7 +182,7 @@ export function clearAvatar(): void {
 export function loadVehicleColor(): VehicleColorId {
 	const s = safeStorage();
 	const stored = s?.getItem(VEHICLE_KEY);
-	return (VEHICLE_COLORS.find((c) => c.id === stored)?.id || "navy") as VehicleColorId;
+	return (VEHICLE_COLORS.find((c) => c.id === stored)?.id || "white") as VehicleColorId;
 }
 
 export function saveVehicleColor(id: VehicleColorId): void {

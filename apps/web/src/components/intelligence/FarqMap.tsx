@@ -36,7 +36,7 @@ import {
 	setSaryTerrain,
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
-import { ensureVehicleLayer, removeVehicle, setVehicle } from "../../lib/sary/vehicleLayer";
+import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle } from "../../lib/sary/vehicleLayer";
 import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
@@ -517,6 +517,7 @@ export default function FarqMap({
 	/* The 3D car: where it is drawn now (tweened toward each real fix) and its last real heading. */
 	const vehicleShownRef = useRef<{ lng: number; lat: number } | null>(null);
 	const vehicleHeadingRef = useRef<number | null>(null);
+	const vehicleAnchorRef = useRef<{ lng: number; lat: number } | null>(null);
 	const vehicleRafRef = useRef(0);
 	const isRtlRef = useRef(isRTL);
 	const selectedPlaceIdRef = useRef(selectedPlaceId);
@@ -1230,7 +1231,19 @@ export default function FarqMap({
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
 			/* Keep the last real heading while parked; never invent one. */
-			if (typeof userHeading === "number" && Number.isFinite(userHeading)) vehicleHeadingRef.current = userHeading;
+			if (typeof userHeading === "number" && Number.isFinite(userHeading)) {
+				vehicleHeadingRef.current = userHeading;
+				vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
+			} else {
+				/* Some phones report no course. Take it from real movement instead:
+				 * two real fixes far enough apart that GPS jitter cannot fake it. */
+				const a = vehicleAnchorRef.current;
+				if (!a) vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
+				else if (distanceMeters(a, userLocation) >= 12) {
+					vehicleHeadingRef.current = bearingBetween(a, userLocation);
+					vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
+				}
+			}
 			const from = vehicleShownRef.current;
 			const to = { lng: userLocation.lng, lat: userLocation.lat };
 			cancelAnimationFrame(vehicleRafRef.current);

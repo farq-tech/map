@@ -108,14 +108,14 @@ describe("keeping the photo on this device", () => {
 	});
 
 	it("defaults the car colour and remembers a chosen one", () => {
-		expect(loadVehicleColor()).toBe("navy");
+		expect(loadVehicleColor()).toBe("white");
 		saveVehicleColor("mint");
 		expect(loadVehicleColor()).toBe("mint");
 	});
 
 	it("falls back to the default when the stored colour is unknown", () => {
 		localStorage.setItem("farq.map.vehicle.v1", "chartreuse");
-		expect(loadVehicleColor()).toBe("navy");
+		expect(loadVehicleColor()).toBe("white");
 	});
 });
 
@@ -126,8 +126,8 @@ describe("the car", () => {
 	});
 
 	it("falls back to a real colour for an unknown id", () => {
-		expect(vehicleColorHex("chartreuse")).toBe("#1b2a4a");
-		expect(vehicleColorHex(null)).toBe("#1b2a4a");
+		expect(vehicleColorHex("chartreuse")).toBe("#e8eef0");
+		expect(vehicleColorHex(null)).toBe("#e8eef0");
 	});
 
 	it("is drawn top-down, because the map is flat", () => {

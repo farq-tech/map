@@ -11,11 +11,11 @@ describe("3D vehicle layer", () => {
 		expect(vehicleRotation(null)).toEqual([0, 0, 180]);
 	});
 
-	it("keeps ~44 px on screen, then true size", async () => {
+	it("keeps ~36 px on screen, then true size", async () => {
 		const { vehicleScaleAt } = await import("./vehicleLayer");
 		const px = (z: number) => (4.9 * vehicleScaleAt(z)) / (156543.03 * Math.cos((25 * Math.PI) / 180) / 2 ** z);
-		expect(px(10)).toBeCloseTo(44, 0);
-		expect(px(15)).toBeCloseTo(44, 0);
+		expect(px(10)).toBeCloseTo(36, 0);
+		expect(px(15)).toBeCloseTo(36, 0);
 		expect(vehicleScaleAt(21)).toBe(1);
 		expect(vehicleScaleAt(15)).toBeGreaterThan(vehicleScaleAt(16) * 1.9);
 	});
@@ -53,5 +53,24 @@ describe("3D vehicle layer", () => {
 		expect(ensureVehicleLayer(map, "#e8eef0")).toBe(true);
 		expect(added).toEqual(["model:sary-suv-e8eef0", "source:sary-vehicle", "layer:model"]);
 		expect(layers.has(VEHICLE_LAYER)).toBe(true);
+	});
+});
+
+describe("heading from real movement", () => {
+	it("reads compass bearings between two fixes", async () => {
+		const { bearingBetween, distanceMeters } = await import("./vehicleLayer");
+		const a = { lng: 46.67, lat: 24.78 };
+		expect(bearingBetween(a, { lng: 46.67, lat: 24.781 })).toBeCloseTo(0, 0);
+		expect(bearingBetween(a, { lng: 46.671, lat: 24.78 })).toBeCloseTo(90, 0);
+		expect(bearingBetween(a, { lng: 46.67, lat: 24.779 })).toBeCloseTo(180, 0);
+		expect(bearingBetween(a, { lng: 46.669, lat: 24.78 })).toBeCloseTo(270, 0);
+		expect(distanceMeters(a, { lng: 46.67, lat: 24.781 })).toBeGreaterThan(105);
+		expect(distanceMeters(a, { lng: 46.67, lat: 24.781 })).toBeLessThan(118);
+	});
+
+	it("keeps an enlarged car low so it does not rise over buildings", async () => {
+		const { vehicleHeightScale } = await import("./vehicleLayer");
+		expect(vehicleHeightScale(1)).toBe(1);
+		expect(vehicleHeightScale(20)).toBeLessThan(6);
 	});
 });
