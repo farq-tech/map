@@ -38,6 +38,8 @@ export type ParticipantView = {
 	color: string;
 	/** The short line they put over their car, if any. */
 	note: string | null;
+	/** «رسالة صوتية من سعد» while their push-to-talk clip is news; "playing" while it plays. */
+	voice?: { label: string; playing: boolean } | null;
 };
 
 type Rec = {
@@ -59,22 +61,24 @@ type Rec = {
 /* Layer-id safe key for a participant's car. */
 const carKey = (userId: string) => `peer-${userId.replace(/[^0-9a-z]/gi, "")}`;
 
-function build(view: ParticipantView, onTap: (id: string) => void): HTMLElement {
+function build(view: ParticipantView, onTap: (id: string) => void, onVoiceTap?: (id: string) => void): HTMLElement {
 	const el = document.createElement("button");
 	el.type = "button";
 	el.className = "sary-peer";
 	el.dataset.testid = "sary-peer";
 	el.dataset.user = view.userId;
-	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__note" hidden></span><span class="sary-peer__name" dir="auto"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
+	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__note" hidden></span><span class="sary-peer__voice" data-testid="sary-peer-voice" hidden></span><span class="sary-peer__name" dir="auto"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
 	el.addEventListener("click", (e) => {
 		e.stopPropagation();
+		/* The voice chip plays the clip; the rest of the marker opens the person. */
+		if (onVoiceTap && (e.target as HTMLElement | null)?.closest?.(".sary-peer__voice")) return onVoiceTap(view.userId);
 		onTap(view.userId);
 	});
 	return el;
 }
 
 function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
-	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected, v.color, v.note ?? ""].join("|");
+	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected, v.color, v.note ?? "", v.voice?.label ?? "", v.voice?.playing ? 1 : 0].join("|");
 	if (el.dataset.sig === sig) return sig;
 	el.dataset.sig = sig;
 	el.dataset.freshness = v.freshness;
@@ -100,7 +104,12 @@ function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
 	note.hidden = !v.note;
 	note.textContent = v.note || "";
 	note.dir = isRTL ? "rtl" : "ltr";
-	el.setAttribute("aria-label", v.note ? `${v.name}: ${v.note}` : v.name);
+	const voice = el.querySelector<HTMLElement>(".sary-peer__voice")!;
+	voice.hidden = !v.voice;
+	voice.textContent = v.voice ? `${v.voice.playing ? "🔊" : "▶"} ${v.voice.label}` : "";
+	voice.classList.toggle("is-playing", Boolean(v.voice?.playing));
+	voice.dir = isRTL ? "rtl" : "ltr";
+	el.setAttribute("aria-label", [v.name, v.note, v.voice?.label].filter(Boolean).join(": "));
 	label.dir = isRTL ? "rtl" : "ltr";
 	const arrow = el.querySelector<HTMLElement>(".sary-peer__arrow")!;
 	if (v.heading == null || v.freshness !== "live" || v.approximate) {
@@ -121,6 +130,7 @@ export class ParticipantMarkers {
 		private onTap: (id: string) => void,
 		private reducedMotion = () => false,
 		private isRTL = true,
+		private onVoiceTap?: (id: string) => void,
 	) {}
 
 	sync(views: ParticipantView[]): void {
@@ -133,7 +143,7 @@ export class ParticipantMarkers {
 			const target = v.approximate ? raw : snapToRoad(this.map, raw, snapRadius(v.accuracyM));
 			let rec = this.recs.get(v.userId);
 			if (!rec) {
-				const el = build(v, this.onTap);
+				const el = build(v, this.onTap, this.onVoiceTap);
 				/* Anchored at the bottom so a note bubble grows upward, never over the car. */
 				const marker = new mapboxgl.Marker({ element: el, anchor: "bottom", offset: [0, 22] }).setLngLat(target).addTo(this.map);
 				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null };

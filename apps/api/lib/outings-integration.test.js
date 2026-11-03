@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '005_sary_trip_summary.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -342,4 +342,113 @@ test('twenty members in one outing, two outings isolated', { skip, timeout: 60_0
   assert.equal(snap.positions.length, 20);
   for (const s of sockets) s.ws.close();
   spy.close();
+});
+
+test('voice clips (memory only) and opt-in trip summaries (totals only)', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(URL_);
+  await migrate(pool);
+  const outings = setupOutings({ pool, autoMigrate: false, limits: { identityPerHour: 100, invitePer10Min: 100, clipsPer5Min: 5 }, config: { minFixIntervalMs: 0, persistEveryMs: 0 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  const base = `http://127.0.0.1:${port}/api/outings`;
+  const call = async (method, path, token, body) => {
+    const res = await fetch(base + path, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const upload = (token, outingId, buf, { type = 'audio/mp4', ms = '3200' } = {}) =>
+    fetch(`${base}/${outingId}/clips`, {
+      method: 'POST',
+      headers: { 'content-type': type, 'x-clip-duration-ms': ms, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: buf,
+    }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const mp4 = (n = 2000) => Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypM4A '), Buffer.alloc(n, 7)]);
+
+  const a = (await call('POST', '/me', null, { display_name: 'سعد' })).body;
+  const b = (await call('POST', '/me', null, { display_name: 'فهد' })).body;
+  const c = (await call('POST', '/me', null, { display_name: 'غريب' })).body;
+  const o = (await call('POST', '/', a.token, { name: 'طلعة الصوت' })).body;
+  await call('POST', '/invites/join', b.token, { token: o.invite.token });
+  await call('POST', `/${o.outing_id}/status`, a.token, { action: 'start' });
+
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+  const got = [];
+  ws.on('message', (d) => got.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.on('open', r));
+  ws.send(JSON.stringify({ type: 'auth', token: b.token, outing_id: o.outing_id }));
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const hit = got.find(pred);
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  await until((m) => m.type === 'ready');
+
+  /* --- push-to-talk --- */
+  const sent = await upload(a.token, o.outing_id, mp4());
+  assert.equal(sent.status, 201);
+  assert.equal(sent.body.clip.mime, 'audio/mp4', 'type comes from the bytes');
+  const ev = await until((m) => m.type === 'voice_clip');
+  assert.equal(ev.clip.user_id, a.user.id);
+  assert.equal(ev.clip.duration_ms, 3200);
+  assert.ok(new Date(ev.clip.expires_at) - Date.now() <= 10 * 60_000);
+  const fetched = await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${b.token}` } });
+  assert.equal(fetched.status, 200);
+  assert.equal(fetched.headers.get('content-type'), 'audio/mp4');
+  assert.equal(fetched.headers.get('cache-control'), 'no-store');
+  assert.equal(Buffer.from(await fetched.arrayBuffer()).length, mp4().length, 'recipient gets the bytes');
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${c.token}` } })).status, 404, 'outsider cannot fetch a clip');
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`)).status, 401, 'no token, no clip');
+  assert.equal((await call('GET', `/${o.outing_id}`, b.token)).body.voice_clips.length, 1, 'polling clients see it in the snapshot');
+
+  assert.equal((await upload(c.token, o.outing_id, mp4())).status, 404, 'outsider cannot post');
+  assert.equal((await upload(a.token, o.outing_id, mp4())).body.error, 'too_frequent', 'one clip at a time');
+  assert.equal((await upload(a.token, o.outing_id, Buffer.from('<script>x</script>'.repeat(30)), { type: 'audio/mp4' })).status, 415, 'not audio');
+  assert.equal((await upload(a.token, o.outing_id, mp4(), { ms: '60000' })).body.error, 'invalid_clip_duration', 'max 15 s');
+  assert.equal((await upload(a.token, o.outing_id, mp4(500 * 1024))).status, 413, 'size cap');
+  assert.equal((await upload(a.token, o.outing_id, mp4())).status, 429, 'rate limited per person');
+  const stored = await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea' AND column_name <> 'token_hash'`);
+  assert.equal(stored.rows[0].n, 0, 'no table can hold audio');
+
+  /* --- summaries: only after the end, only totals, only for members --- */
+  const summary = { distance_m: 18_400, duration_s: 2, moving_s: 1 };
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary })).body.error, 'outing_not_ended');
+  await new Promise((r) => setTimeout(r, 1_100));
+  await call('POST', `/${o.outing_id}/status`, a.token, { action: 'end' });
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${b.token}` } })).status, 404, 'ending drops clips');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { distance_m: 18_400, duration_s: 9_999, moving_s: 10 } })).body.error, 'implausible_summary', 'longer than the outing ran');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { ...summary, points: [[46.6, 24.7]] } })).body.error, 'invalid_summary', 'no points accepted');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, c.token, { summary })).status, 404, 'outsider cannot share');
+  const ok = await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { distance_m: 400, duration_s: 2, moving_s: 1 } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.summary.distance_m, 400);
+  const cols = (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'sary' AND table_name = 'trip_summaries' ORDER BY 1`)).rows.map((r) => r.column_name);
+  assert.deepEqual(cols, ['distance_m', 'duration_s', 'moving_s', 'outing_id', 'shared_at', 'user_id'], 'totals only — no coordinates');
+
+  /* B did not tap «شارك ملخصي»: nothing of theirs exists. */
+  const hist = await call('GET', '/', b.token);
+  const row = hist.body.history.find((h) => h.id === o.outing_id);
+  assert.deepEqual(row.summaries.map((s) => [s.display_name, s.distance_m, s.duration_s]), [['سعد', 400, 2]]);
+  assert.equal((await call('GET', '/', c.token)).body.history.length, 0, 'outsiders see no history');
+  assert.equal((await call('GET', `/${o.outing_id}`, b.token)).body.summaries.length, 1);
+
+  assert.equal((await call('DELETE', `/${o.outing_id}/summary`, a.token)).body.withdrawn, true);
+  assert.equal((await call('GET', '/', b.token)).body.history.find((h) => h.id === o.outing_id).summaries.length, 0, 'withdrawn = deleted');
+  ws.close();
 });

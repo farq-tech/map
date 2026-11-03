@@ -6,6 +6,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import {
+	loadIdentity,
 	inviteUrl,
 	loadInviteToken,
 	loadShareMode,
@@ -41,6 +42,9 @@ import type { IntelligenceMapPlaces } from "../../services/intelligenceService";
 import FarqBottomSheet, { sheetHeightPx, type SheetSnap } from "../intelligence/FarqBottomSheet";
 import { liveStateLabel, statusLabel } from "./labels";
 import { useLiveOuting } from "./useLiveOuting";
+import { PushToTalk, useVoiceInbox, VoiceBanner } from "./PushToTalk";
+import { NearestServices } from "./NearestServices";
+import { TripSummaryCard, useMyTrip } from "./TripSummary";
 import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
@@ -65,7 +69,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const isRTL = language === "ar";
 	const navigate = useNavigate();
 	const reducedMotion = usePrefersReducedMotion();
-	const { userLocation, userHeading, userFixAt, userAccuracy, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
+	const { userLocation, userHeading, userFixAt, userAccuracy, userSpeed: userSpeedForGroup, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
 	const [mode, setMode] = useState<ShareMode>(() => loadShareMode());
 	const live = useLiveOuting(outingId, mode);
 	const { view, liveState, closed, loadError, canSend, lastRefusal, visible, held, gpsState } = live;
@@ -87,6 +91,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [noteError, setNoteError] = useState<string | null>(null);
 	const [noteAlert, setNoteAlert] = useState<{ userId: string; name: string; text: string; color: string } | null>(null);
 	const [follow, setFollow] = useState(false);
+	const [nearest, setNearest] = useState(false);
 	const fittedRef = useRef(false);
 
 	useEffect(() => {
@@ -120,6 +125,16 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const liveNote = (m: { note?: { text: string; at: string } | null } | undefined) =>
 		m?.note && now - new Date(m.note.at).getTime() < NOTE_TTL_MS ? m.note.text : null;
 	const myNote = me ? liveNote(view?.members.get(me.user_id)) : null;
+
+	/* This phone's own trip totals, kept here unless shared at the end. */
+	useMyTrip(outingId, outing?.status === "active");
+
+	/* Push-to-talk clips from the others: chip over their car, auto-play after one tap. */
+	const inbox = useVoiceInbox(view, me?.user_id, (id) => ({ name: view?.members.get(id)?.display_name || "", color: colors.get(id) || "#e8eef0" }));
+	const voiceRef = useRef(inbox);
+	voiceRef.current = inbox;
+	const voiceSig = [...inbox.chips.values()].map((c) => `${c.clip.id}:${c.state}`).join(",");
+	const newestVoice = [...inbox.chips.values()].sort((a, b) => new Date(b.clip.at).getTime() - new Date(a.clip.at).getTime())[0] || null;
 
 	/* Someone put a line over their car: say it out loud on everyone else's screen. */
 	const seenNotesRef = useRef<Map<string, string> | null>(null);
@@ -211,7 +226,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			fitWithRef.current(id);
 			setPanel("members");
 			setSnap("half");
-		}, () => reducedMotion, isRTL);
+		}, () => reducedMotion, isRTL, (id) => {
+			const chip = voiceRef.current.chips.get(id);
+			if (chip) voiceRef.current.play(chip.clip);
+		});
 		markersRef.current = layer;
 		return () => {
 			layer.destroy();
@@ -241,9 +259,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				selected: r.member.user_id === selected,
 				color: colors.get(r.member.user_id) || "#e8eef0",
 				note: liveNote(r.member),
+				voice: (() => {
+					const chip = voiceRef.current.chips.get(r.member.user_id);
+					if (!chip) return null;
+					return { label: isRTL ? `رسالة صوتية من ${r.member.display_name}` : `Voice message from ${r.member.display_name}`, playing: chip.state === "playing" };
+				})(),
 			}));
 		layer.sync(views);
-	}, [rows, selected, map, colors]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [rows, selected, map, colors, voiceSig]);
 
 	const groupBounds = (only?: string): [number, number, number, number] | null => {
 		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position && (!only || r.member.user_id === only)).map((r) => r.position!);
@@ -410,6 +434,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				<section className="sary-o-card" role="status">
 					<h2>{outing?.name || (isRTL ? "طلعة مشتركة" : "Shared outing")}</h2>
 					<p data-testid="outing-closed-reason">{text}</p>
+					{terminal === "outing_ended" ? <TripSummaryCard outingId={outingId} isRTL={isRTL} meId={me?.user_id || loadIdentity()?.user.id} /> : null}
 					{loadError && !terminal ? (
 						<button type="button" className="sary-o-primary" onClick={() => void live.reload()}>
 							{isRTL ? "إعادة المحاولة" : "Retry"}
@@ -523,7 +548,20 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						{isRTL ? "رسالة" : "Message"}
 					</button>
 				) : null}
+				<button type="button" className="sary-fab" onClick={() => setNearest(true)} data-testid="outing-nearest-open">
+					{isRTL ? "أقرب محطة" : "Nearest fuel"}
+				</button>
 			</div>
+
+			{outing && outing.status !== "ended" ? (
+				<PushToTalk outingId={outingId} isRTL={isRTL} onSent={setToast} />
+			) : null}
+
+			{newestVoice ? (
+				<div className={`sary-o-voice-wrap${noteAlert ? " is-below" : ""}`}>
+					<VoiceBanner chip={newestVoice} isRTL={isRTL} onPlay={() => inbox.play(newestVoice.clip)} />
+				</div>
+			) : null}
 
 			<FarqBottomSheet
 				snap={snap}
@@ -915,6 +953,22 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					<strong>{noteAlert.name}</strong>
 					<span>{noteAlert.text}</span>
 				</button>
+			) : null}
+
+			{nearest ? (
+				<NearestServices
+					people={[
+						...rows.filter((r) => r.position).map((r) => ({ lat: r.position!.lat, lng: r.position!.lng, heading: r.position!.heading, speed: r.position!.speed })),
+						...(locationPinKind === "gps" && userLocation ? [{ lat: userLocation.lat, lng: userLocation.lng, heading: userHeading, speed: userSpeedForGroup }] : []),
+					]}
+					isRTL={isRTL}
+					busy={busy}
+					onClose={() => setNearest(false)}
+					onShare={(text) => {
+						setNearest(false);
+						void sendNote(text);
+					}}
+				/>
 			) : null}
 
 			{toast ? (

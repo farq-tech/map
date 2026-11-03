@@ -71,6 +71,12 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			members.set(e.user_id, { ...m, note: e.note });
 			return withMembers(v, members);
 		}
+		case "voice_clip": {
+			if (!v.members.has(e.clip.user_id)) return v;
+			const clips = (v.snapshot.voice_clips || []).filter((c) => c.id !== e.clip.id);
+			clips.push(e.clip);
+			return { ...v, snapshot: { ...v.snapshot, voice_clips: clips.slice(-30) } };
+		}
 		case "member_joined": {
 			const members = new Map(v.members);
 			members.set(e.member.user_id, { ...e.member, joined_at: new Date().toISOString(), online: false });
@@ -88,7 +94,10 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			members.delete(e.user_id);
 			const positions = new Map(v.positions);
 			positions.delete(e.user_id);
-			return withMembers(v, members, positions);
+			const next = withMembers(v, members, positions);
+			/* Their voice leaves with them (the server dropped the clips too). */
+			const voice_clips = v.snapshot.voice_clips?.filter((c) => c.user_id !== e.user_id);
+			return { ...next, snapshot: { ...next.snapshot, voice_clips } };
 		}
 		case "member_sharing": {
 			const m = v.members.get(e.user_id);
@@ -112,7 +121,8 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			const outing = { ...v.snapshot.outing, status: e.status };
 			/* Paused or ended: the server deleted every fix; so do we. */
 			const positions = e.status === "active" ? v.positions : new Map<string, Position>();
-			return { ...v, positions, snapshot: { ...v.snapshot, outing } };
+			const voice_clips = e.status === "ended" ? [] : v.snapshot.voice_clips;
+			return { ...v, positions, snapshot: { ...v.snapshot, outing, voice_clips } };
 		}
 		default:
 			return v;

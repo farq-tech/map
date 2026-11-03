@@ -7,6 +7,8 @@
 import { API_BASE_URL } from "../api";
 import { safeGet, safeRemove, safeSet } from "../safeStorage";
 import type { ShareMode } from "./policy";
+import type { ClipMeta } from "./voice";
+import type { TripTotals } from "./trip";
 
 const IDENTITY_KEY = "sary.outings.identity.v1";
 const INVITES_KEY = "sary.outings.invites.v1";
@@ -66,8 +68,15 @@ export type OutingSnapshot = {
 	members: Member[];
 	positions: Position[];
 	invite: { active: boolean; expires_at: string | null } | null;
+	/** Push-to-talk clips still held (10 min, memory only on the server). */
+	voice_clips?: ClipMeta[];
+	/** Once ended: the totals people chose to share («شارك ملخصي»). */
+	summaries?: SharedSummary[];
 	server_now: string;
 };
+
+/** One person's opt-in totals — never a point. */
+export type SharedSummary = TripTotals & { user_id: string; display_name: string; shared_at: string };
 
 export type OutingSummary = {
 	id: string;
@@ -79,6 +88,7 @@ export type OutingSummary = {
 	created_at: string;
 	started_at: string | null;
 	ended_at: string | null;
+	summaries?: SharedSummary[];
 };
 
 export type InvitePreview = {
@@ -222,6 +232,47 @@ export const OutingsApi = {
 	},
 	note: (id: string, text: string) => call<{ note: MemberNote | null }>("POST", `/${id}/note`, { text }),
 	setSharing: (id: string, sharing: boolean) => call<{ sharing: boolean }>("PATCH", `/${id}/me`, { sharing }),
+	/** Push-to-talk: the recording itself is the body; its length rides in a header. */
+	async uploadClip(id: string, blob: Blob, durationMs: number): Promise<ClipMeta> {
+		const ident = loadIdentity();
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 20_000);
+		let res: Response;
+		try {
+			res = await fetch(`${API_BASE_URL}/api/outings/${id}/clips`, {
+				method: "POST",
+				signal: controller.signal,
+				headers: {
+					accept: "application/json",
+					"content-type": blob.type || "application/octet-stream",
+					"x-clip-duration-ms": String(Math.round(durationMs)),
+					...(ident ? { authorization: `Bearer ${ident.token}` } : {}),
+				},
+				body: blob,
+			});
+		} catch {
+			throw new OutingApiError(controller.signal.aborted ? "timeout" : "network", 0);
+		} finally {
+			clearTimeout(timer);
+		}
+		const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; clip?: ClipMeta } | null;
+		if (!res.ok || !json?.clip) throw new OutingApiError(json?.error || `http_${res.status}`, res.status);
+		return json.clip;
+	},
+	/** A clip's bytes, with the member's token; gone after its ten minutes. */
+	async fetchClip(url: string): Promise<Blob> {
+		const ident = loadIdentity();
+		let res: Response;
+		try {
+			res = await fetch(`${API_BASE_URL}${url}`, { headers: ident ? { authorization: `Bearer ${ident.token}` } : {} });
+		} catch {
+			throw new OutingApiError("network", 0);
+		}
+		if (!res.ok) throw new OutingApiError(res.status === 404 ? "clip_gone" : `http_${res.status}`, res.status);
+		return res.blob();
+	},
+	shareSummary: (id: string, summary: TripTotals) => call<{ summary: SharedSummary }>("PUT", `/${id}/summary`, { summary }),
+	withdrawSummary: (id: string) => call<{ withdrawn: boolean }>("DELETE", `/${id}/summary`),
 	leave: (id: string) => call<{ ended: boolean }>("POST", `/${id}/leave`),
 	removeMember: (id: string, userId: string) => call("DELETE", `/${id}/members/${userId}`),
 	previewInvite: (token: string) => call<{ invite: InvitePreview }>("POST", "/invites/preview", { token }, { auth: false }),
@@ -249,6 +300,14 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		timeout: "الشبكة بطيئة. أعد المحاولة.",
 		outings_unconfigured: "الطلعات المشتركة غير مفعّلة على الخادم.",
 		unauthorized: "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
+		too_large: "المقطع الصوتي أكبر من المسموح.",
+		invalid_clip: "تعذّر قراءة التسجيل. أعد المحاولة.",
+		invalid_clip_duration: "المقطع قصير جدًا أو أطول من ١٥ ثانية.",
+		clip_gone: "انتهت صلاحية الرسالة الصوتية (١٠ دقائق).",
+		outing_not_ended: "الملخص يُشارك بعد انتهاء الطلعة.",
+		summary_window_closed: "مضى أكثر من أسبوع على الطلعة.",
+		implausible_summary: "الملخص غير منطقي، لم يُرسل.",
+		invalid_summary: "الملخص غير صالح.",
 	};
 	const en: Record<string, string> = {
 		invite_invalid: "This invite link is not valid.",
@@ -269,6 +328,14 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		timeout: "The network is slow. Try again.",
 		outings_unconfigured: "Shared outings are not enabled on the server.",
 		unauthorized: "Your session on this device ended. Enter your name again.",
+		too_large: "That voice clip is too large.",
+		invalid_clip: "Could not read the recording. Try again.",
+		invalid_clip_duration: "Too short, or longer than 15 seconds.",
+		clip_gone: "That voice message expired (10 minutes).",
+		outing_not_ended: "Summaries are shared after the outing ends.",
+		summary_window_closed: "The outing ended more than a week ago.",
+		implausible_summary: "That summary does not add up; not sent.",
+		invalid_summary: "That summary is not valid.",
 	};
 	return (isRTL ? ar : en)[code] || (isRTL ? "حدث خطأ. أعد المحاولة." : "Something went wrong. Try again.");
 }

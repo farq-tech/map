@@ -13,6 +13,7 @@
 import { API_BASE_URL } from "../api";
 import { OutingApiError, OutingsApi, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position } from "./api";
 import type { DeviceFix, ShareMode } from "./policy";
+import type { ClipMeta } from "./voice";
 
 export type LiveState = "connecting" | "live" | "polling" | "offline" | "closed";
 
@@ -26,6 +27,7 @@ export type LiveEvent =
 	| { type: "owner_changed"; owner_id: string }
 	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null }
 	| { type: "member_note"; user_id: string; note: MemberNote | null }
+	| { type: "voice_clip"; clip: ClipMeta }
 	| { type: "outing_status"; status: OutingSnapshot["outing"]["status"] };
 
 export type ClosedReason = "outing_ended" | "removed" | "left" | "not_a_member" | "unauthorized" | "replaced";

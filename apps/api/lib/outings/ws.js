@@ -13,7 +13,8 @@
  *   → { type: 'heartbeat', gps }         (no coordinates; "I am still here")
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
  *   → { type: 'note', id, text }         ← { type: 'note_ack', id, ok, note }  (everyone: member_note)
- *   ← position · presence · member_* · outing_status · owner_changed · closed
+ *   ← position · presence · member_* · voice_clip · outing_status · owner_changed · closed
+ *   (voice clips themselves go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  */
 
 const { WebSocketServer } = require('ws');
