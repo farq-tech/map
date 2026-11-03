@@ -11,8 +11,9 @@
  */
 
 import { API_BASE_URL } from "../api";
-import { OutingApiError, OutingsApi, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position } from "./api";
+import { OutingApiError, OutingsApi, type Battery, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position, type Rally, type Sos } from "./api";
 import type { DeviceFix, ShareMode } from "./policy";
+import type { ClipMeta } from "./voice";
 
 export type LiveState = "connecting" | "live" | "polling" | "offline" | "closed";
 
@@ -24,13 +25,27 @@ export type LiveEvent =
 	| { type: "member_left"; user_id: string; reason: "left" | "removed" }
 	| { type: "member_sharing"; user_id: string; sharing: boolean }
 	| { type: "owner_changed"; owner_id: string }
-	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null }
+	| { type: "member_role"; user_id: string; co_leader: boolean }
+	| { type: "outing_lock"; join_locked: boolean }
+	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null; battery?: Battery | null }
 	| { type: "member_note"; user_id: string; note: MemberNote | null }
+	| { type: "sos"; user_id: string; sos: Sos | null }
+	| { type: "rally"; rally: Rally | null }
+	| { type: "voice_clip"; clip: ClipMeta }
 	| { type: "outing_status"; status: OutingSnapshot["outing"]["status"] };
 
 export type ClosedReason = "outing_ended" | "removed" | "left" | "not_a_member" | "unauthorized" | "replaced";
 
 export type AckReason = string | undefined;
+
+/** Counts and timings only, for the opt-in field diagnostics — never a coordinate. */
+export type ChannelDiagEvent =
+	| { kind: "send"; transport: "ws" | "http" }
+	| { kind: "ack"; transport: "ws" | "http"; ok: boolean; reason: AckReason; latencyMs: number | null }
+	| { kind: "drop"; reason: "too_old" };
+
+/** What this phone's Battery Status API says, sent with the heartbeat only when it exists. */
+export type BatteryReading = { level: number; charging: boolean };
 
 type Handlers = {
 	onSnapshot: (s: OutingSnapshot) => void;
@@ -38,12 +53,13 @@ type Handlers = {
 	onState: (s: LiveState) => void;
 	onClosed: (reason: ClosedReason) => void;
 	onAck?: (ok: boolean, reason: AckReason) => void;
+	onDiag?: (e: ChannelDiagEvent) => void;
 };
 
 type Deps = {
 	WebSocketImpl?: typeof WebSocket;
 	poll?: (id: string) => Promise<OutingSnapshot>;
-	beat?: (id: string, gps: GpsState) => Promise<unknown>;
+	beat?: (id: string, gps: GpsState, battery?: BatteryReading | null) => Promise<unknown>;
 	post?: (id: string, fix: unknown) => Promise<unknown>;
 	now?: () => number;
 	setTimeout?: typeof setTimeout;
@@ -114,6 +130,8 @@ export class LiveChannel {
 	private lastFrameAt = 0;
 	private pending: { fix: DeviceFix; mode: ShareMode } | null = null;
 	private seq = 0;
+	/** seq → send time, for ack latency. Bounded: acks for very old frames are not news. */
+	private inflight = new Map<number, number>();
 	private away = false;
 	private wasPolling = false;
 	private deps: Required<Deps>;
@@ -171,10 +189,10 @@ export class LiveChannel {
 	}
 
 	/** "Still here", with no coordinates — kept apart from fixes so others can tell no-GPS from no-network. */
-	heartbeat(gps: GpsState): void {
+	heartbeat(gps: GpsState, battery: BatteryReading | null = null): void {
 		if (this.stopped) return;
-		if (this.state === "live") this.sendFrame({ type: "heartbeat", gps });
-		else if (this.state === "polling") this.deps.beat(this.outingId, gps).catch(() => undefined);
+		if (this.state === "live") this.sendFrame(battery ? { type: "heartbeat", gps, battery } : { type: "heartbeat", gps });
+		else if (this.state === "polling") this.deps.beat(this.outingId, gps, battery).catch(() => undefined);
 	}
 
 	setAway(away: boolean): void {
@@ -247,19 +265,32 @@ export class LiveChannel {
 		const fix = wireFix(p.fix, p.mode, this.deps.now());
 		if (fix.age_ms > 55_000) {
 			this.pending = null; // too old to be worth sending
+			this.h.onDiag?.({ kind: "drop", reason: "too_old" });
 			return;
 		}
 		if (this.state === "live") {
 			this.seq += 1;
-			if (this.sendFrame({ type: "position", id: this.seq, fix })) this.pending = null;
+			if (this.sendFrame({ type: "position", id: this.seq, fix })) {
+				this.pending = null;
+				this.inflight.set(this.seq, this.deps.now());
+				if (this.inflight.size > 32) this.inflight.delete(this.inflight.keys().next().value as number);
+				this.h.onDiag?.({ kind: "send", transport: "ws" });
+			}
 			return;
 		}
 		if (this.state === "polling") {
 			this.pending = null;
+			const sentAt = this.deps.now();
+			this.h.onDiag?.({ kind: "send", transport: "http" });
 			this.deps.post(this.outingId, fix).then(
-				() => this.h.onAck?.(true, undefined),
+				() => {
+					this.h.onDiag?.({ kind: "ack", transport: "http", ok: true, reason: undefined, latencyMs: this.deps.now() - sentAt });
+					this.h.onAck?.(true, undefined);
+				},
 				(e: unknown) => {
 					const code = e instanceof OutingApiError ? e.code : "network";
+					/* A network failure is no answer at all: it stays unacknowledged, not refused. */
+					if (code !== "network") this.h.onDiag?.({ kind: "ack", transport: "http", ok: false, reason: code, latencyMs: this.deps.now() - sentAt });
 					if (code === "not_a_member") return this.terminal("not_a_member");
 					this.h.onAck?.(false, code);
 				},
@@ -314,7 +345,19 @@ export class LiveChannel {
 				this.schedulePing();
 				return;
 			}
-			if (msg.type === "ack") return this.h.onAck?.(msg.ok === true, msg.reason as AckReason);
+			if (msg.type === "ack") {
+				const id = typeof msg.id === "number" ? msg.id : null;
+				const sentAt = id != null ? this.inflight.get(id) : undefined;
+				if (id != null) this.inflight.delete(id);
+				this.h.onDiag?.({
+					kind: "ack",
+					transport: "ws",
+					ok: msg.ok === true,
+					reason: msg.reason as AckReason,
+					latencyMs: sentAt != null ? this.deps.now() - sentAt : null,
+				});
+				return this.h.onAck?.(msg.ok === true, msg.reason as AckReason);
+			}
 			if (msg.type === "pong" || msg.type === "error") return;
 			if (msg.type === "closed") return; // the close code follows
 			this.h.onEvent(msg as unknown as LiveEvent);
@@ -322,6 +365,7 @@ export class LiveChannel {
 		ws.onclose = (ev: CloseEvent) => {
 			if (this.ws !== ws) return;
 			this.ws = null;
+			this.inflight.clear();
 			if (this.pingTimer) this.deps.clearTimeout(this.pingTimer);
 			const reason = TERMINAL_CODES[ev.code];
 			if (reason) return this.terminal(reason);

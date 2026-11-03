@@ -10,13 +10,15 @@
  * then
  *   → { type: 'position', id, fix }      ← { type: 'ack', id, ok, reason? }
  *   → { type: 'presence', away }
- *   → { type: 'heartbeat', gps }         (no coordinates; "I am still here")
+ *   → { type: 'heartbeat', gps, battery? } (no coordinates; "I am still here"; battery only where the phone can tell)
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
  *   → { type: 'note', id, text }         ← { type: 'note_ack', id, ok, note }  (everyone: member_note)
- *   ← position · presence · member_* · outing_status · owner_changed · closed
+ *   ← position · presence · member_* · sos · rally · voice_clip · outing_status · owner_changed · closed
+ *   (voice clips themselves go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  */
 
 const { WebSocketServer } = require('ws');
+const { battery } = require('./validate');
 
 const PATH = '/api/outings/live';
 const AUTH_TIMEOUT_MS = 5_000;
@@ -83,7 +85,7 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
         }
         if (!conn.userId || !conn.outingId) return;
         hub.touch(conn.outingId, conn.userId);
-        if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps);
+        if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps, battery(msg.battery));
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
         if (msg.type === 'note') {

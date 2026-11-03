@@ -7,11 +7,15 @@
 import { API_BASE_URL } from "../api";
 import { safeGet, safeRemove, safeSet } from "../safeStorage";
 import type { ShareMode } from "./policy";
+import { wakePreference } from "./wakeLock";
+import type { ClipMeta } from "./voice";
+import type { TripTotals } from "./trip";
 
 const IDENTITY_KEY = "sary.outings.identity.v1";
 const INVITES_KEY = "sary.outings.invites.v1";
 const MODE_KEY = "sary.outings.mode.v1";
 const WAKE_KEY = "sary.outings.wake.v1";
+const GAP_KEY = "sary.outings.gapKm.v1";
 
 export type Identity = { token: string; user: PublicUser };
 export type PublicUser = { id: string; display_name: string; avatar: string | null; phone?: string | null };
@@ -24,6 +28,8 @@ export type Member = {
 	/** Optional, shown only to fellow members (E.164, e.g. +9665…). */
 	phone?: string | null;
 	role: "owner" | "member";
+	/** «مساعد»: may start/pause/resume and manage the invite link. */
+	co_leader?: boolean;
 	sharing: boolean;
 	joined_at: string;
 	online?: boolean;
@@ -34,9 +40,21 @@ export type Member = {
 	gps?: GpsState | null;
 	/** A short line they put over their car («بوقف عند المحطة»); gone after 15 min. */
 	note?: MemberNote | null;
+	/** Battery Status API reading from their heartbeat; null where the phone cannot tell (iOS). */
+	battery?: Battery | null;
+	/** An active call for help, until they say «أنا بخير». */
+	sos?: Sos | null;
 };
 
 export type MemberNote = { text: string; at: string };
+
+export type Battery = { level: number; charging: boolean; at: string };
+
+/** The sender's last real fix at the moment of the SOS, with that fix's own time. */
+export type SosFix = { lat: number; lng: number; accuracy: number | null; recorded_at: string };
+export type Sos = { at: string; fix: SosFix | null };
+
+export type Rally = { lat: number; lng: number; label: string | null; set_at: string | null; set_by: string | null };
 
 export type GpsState = "ok" | "weak" | "unavailable" | "denied";
 
@@ -58,16 +76,27 @@ export type OutingSnapshot = {
 		name: string;
 		status: OutingStatus;
 		owner_id: string;
+		/** «قفل الانضمام»: invite links admit nobody new. */
+		join_locked?: boolean;
 		created_at: string;
 		started_at: string | null;
 		ended_at: string | null;
+		/** The owner's meeting pin («نقطة التجمع»), if any. */
+		rally?: Rally | null;
 	};
-	me: { user_id: string; role: "owner" | "member"; sharing: boolean };
+	me: { user_id: string; role: "owner" | "member"; co_leader?: boolean; can_lead?: boolean; sharing: boolean };
 	members: Member[];
 	positions: Position[];
 	invite: { active: boolean; expires_at: string | null } | null;
+	/** Push-to-talk clips still held (10 min, memory only on the server). */
+	voice_clips?: ClipMeta[];
+	/** Once ended: the totals people chose to share («شارك ملخصي»). */
+	summaries?: SharedSummary[];
 	server_now: string;
 };
+
+/** One person's opt-in totals — never a point. */
+export type SharedSummary = TripTotals & { user_id: string; display_name: string; shared_at: string };
 
 export type OutingSummary = {
 	id: string;
@@ -79,6 +108,7 @@ export type OutingSummary = {
 	created_at: string;
 	started_at: string | null;
 	ended_at: string | null;
+	summaries?: SharedSummary[];
 };
 
 export type InvitePreview = {
@@ -88,7 +118,10 @@ export type InvitePreview = {
 	owner_name: string;
 	member_count: number;
 	expires_at: string;
+	join_locked?: boolean;
 };
+
+export type RecoveryStatus = { active: boolean; created_at: string | null };
 
 export class OutingApiError extends Error {
 	constructor(
@@ -149,12 +182,23 @@ export function saveShareMode(mode: ShareMode): void {
 	safeSet("localStorage", MODE_KEY, mode);
 }
 
+/** Keep-the-screen-on during an outing: on unless this device saved "off". */
 export function loadWakeLock(): boolean {
-	return safeGet("localStorage", WAKE_KEY) === "1";
+	return wakePreference(safeGet("localStorage", WAKE_KEY));
 }
 
 export function saveWakeLock(on: boolean): void {
 	safeSet("localStorage", WAKE_KEY, on ? "1" : "0");
+}
+
+/** Gap alert distance in km; 0 = off. Default 3. */
+export function loadGapKm(): number {
+	const n = Number(safeGet("localStorage", GAP_KEY));
+	return safeGet("localStorage", GAP_KEY) != null && Number.isFinite(n) && n >= 0 && n <= 50 ? n : 3;
+}
+
+export function saveGapKm(km: number): void {
+	safeSet("localStorage", GAP_KEY, String(km));
 }
 
 async function call<T>(method: string, path: string, body?: unknown, { auth = true, timeoutMs = 12_000 } = {}): Promise<T> {
@@ -199,6 +243,16 @@ export const OutingsApi = {
 		if (cur) saveIdentity({ ...cur, user: r.user });
 		return r.user;
 	},
+	recoveryStatus: () => call<{ user: PublicUser; recovery: RecoveryStatus }>("GET", "/me").then((r) => r.recovery),
+	/** A new recovery code, shown once. Replaces any earlier one. */
+	createRecoveryCode: () => call<{ recovery: { code: string; created_at: string } }>("POST", "/me/recovery").then((r) => r.recovery),
+	/** Redeem a recovery code on this device: the old device's key stops working. */
+	async recover(code: string): Promise<Identity> {
+		const r = await call<{ user: PublicUser; token: string }>("POST", "/me/recover", { code }, { auth: false });
+		const id = { token: r.token, user: r.user };
+		saveIdentity(id);
+		return id;
+	},
 	list: () => call<{ current: OutingSummary[]; history: OutingSummary[] }>("GET", ""),
 	async create(name: string): Promise<{ outing_id: string; invite: { token: string; expires_at: string } }> {
 		const r = await call<{ outing_id: string; invite: { token: string; expires_at: string } }>("POST", "", { name });
@@ -207,8 +261,11 @@ export const OutingsApi = {
 	},
 	get: (id: string) => call<OutingSnapshot>("GET", `/${id}`),
 	poll: (id: string) => call<OutingSnapshot>("GET", `/${id}/live`),
-	heartbeat: (id: string, gps: GpsState) => call<{ ok: true }>("POST", `/${id}/heartbeat`, { gps }, { timeoutMs: 8_000 }),
+	heartbeat: (id: string, gps: GpsState, battery?: { level: number; charging: boolean } | null) =>
+		call<{ ok: true }>("POST", `/${id}/heartbeat`, battery ? { gps, battery } : { gps }, { timeoutMs: 8_000 }),
 	sendPosition: (id: string, fix: unknown) => call<{ ok: true }>("POST", `/${id}/positions`, { fix }, { timeoutMs: 8_000 }),
+	/** Opt-in field-test aggregates: numbers only, re-validated by the server. */
+	sendDiagnostics: (id: string, report: unknown) => call<{ ok: true }>("POST", `/${id}/diagnostics`, { report }),
 	setStatus: (id: string, action: "start" | "pause" | "resume" | "end") =>
 		call<{ outing: OutingSnapshot["outing"] }>("POST", `/${id}/status`, { action }),
 	async rotateInvite(id: string, ttl_hours?: number): Promise<{ token: string; expires_at: string }> {
@@ -221,9 +278,57 @@ export const OutingsApi = {
 		saveInviteToken(id, null);
 	},
 	note: (id: string, text: string) => call<{ note: MemberNote | null }>("POST", `/${id}/note`, { text }),
+	sos: (id: string, fix: unknown | null) => call<{ sos: Sos }>("POST", `/${id}/sos`, { fix }),
+	cancelSos: (id: string) => call<{ sos: null }>("DELETE", `/${id}/sos`),
+	setRally: (id: string, rally: { lat: number; lng: number; label?: string | null }) => call<{ rally: Rally }>("PUT", `/${id}/rally`, rally),
+	clearRally: (id: string) => call<{ rally: null }>("DELETE", `/${id}/rally`),
 	setSharing: (id: string, sharing: boolean) => call<{ sharing: boolean }>("PATCH", `/${id}/me`, { sharing }),
+	/** Push-to-talk: the recording itself is the body; its length rides in a header. */
+	async uploadClip(id: string, blob: Blob, durationMs: number): Promise<ClipMeta> {
+		const ident = loadIdentity();
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), 20_000);
+		let res: Response;
+		try {
+			res = await fetch(`${API_BASE_URL}/api/outings/${id}/clips`, {
+				method: "POST",
+				signal: controller.signal,
+				headers: {
+					accept: "application/json",
+					"content-type": blob.type || "application/octet-stream",
+					"x-clip-duration-ms": String(Math.round(durationMs)),
+					...(ident ? { authorization: `Bearer ${ident.token}` } : {}),
+				},
+				body: blob,
+			});
+		} catch {
+			throw new OutingApiError(controller.signal.aborted ? "timeout" : "network", 0);
+		} finally {
+			clearTimeout(timer);
+		}
+		const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; clip?: ClipMeta } | null;
+		if (!res.ok || !json?.clip) throw new OutingApiError(json?.error || `http_${res.status}`, res.status);
+		return json.clip;
+	},
+	/** A clip's bytes, with the member's token; gone after its ten minutes. */
+	async fetchClip(url: string): Promise<Blob> {
+		const ident = loadIdentity();
+		let res: Response;
+		try {
+			res = await fetch(`${API_BASE_URL}${url}`, { headers: ident ? { authorization: `Bearer ${ident.token}` } : {} });
+		} catch {
+			throw new OutingApiError("network", 0);
+		}
+		if (!res.ok) throw new OutingApiError(res.status === 404 ? "clip_gone" : `http_${res.status}`, res.status);
+		return res.blob();
+	},
+	shareSummary: (id: string, summary: TripTotals) => call<{ summary: SharedSummary }>("PUT", `/${id}/summary`, { summary }),
+	withdrawSummary: (id: string) => call<{ withdrawn: boolean }>("DELETE", `/${id}/summary`),
 	leave: (id: string) => call<{ ended: boolean }>("POST", `/${id}/leave`),
 	removeMember: (id: string, userId: string) => call("DELETE", `/${id}/members/${userId}`),
+	setCoLeader: (id: string, userId: string, co_leader: boolean) =>
+		call<{ user_id: string; co_leader: boolean }>("POST", `/${id}/members/${userId}/co-leader`, { co_leader }),
+	setJoinLock: (id: string, locked: boolean) => call<{ join_locked: boolean }>("POST", `/${id}/lock`, { locked }),
 	previewInvite: (token: string) => call<{ invite: InvitePreview }>("POST", "/invites/preview", { token }, { auth: false }),
 	join: (token: string) => call<{ outing_id: string; already: boolean }>("POST", "/invites/join", { token }),
 };
@@ -239,16 +344,30 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		removed_from_outing: "أزالك صاحب الطلعة منها، فلا يمكنك الانضمام مرة ثانية.",
 		not_a_member: "لست عضوًا في هذه الطلعة.",
 		owner_only: "هذا الإجراء لصاحب الطلعة فقط.",
+		leader_only: "هذا الإجراء لصاحب الطلعة أو مساعده فقط.",
+		join_locked: "قفل صاحب الطلعة الانضمام، فلا يمكن لأحد جديد الدخول الآن.",
+		recovery_invalid: "رمز الاسترجاع غير صحيح أو استُخدم من قبل.",
 		invalid_name: "اكتب اسمًا يظهر لأصحابك.",
 		invalid_outing_name: "اكتب اسمًا للطلعة.",
 		rate_limited: "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
 		too_frequent: "انتظر ثانيتين ثم أرسل.",
 		invalid_note: "اكتب عبارة قصيرة.",
 		invalid_phone: "اكتب رقم جوال صحيح، مثل 05XXXXXXXX.",
+		invalid_rally: "تعذّر تحديد نقطة التجمع. حرّك الخريطة وأعد المحاولة.",
+		sos_fix_stale: "آخر موقع لك قديم جدًا؛ أُرسل النداء بدون موقع.",
+		invalid_fix: "تعذّر قراءة موقعك.",
 		network: "لا يوجد اتصال بالإنترنت.",
 		timeout: "الشبكة بطيئة. أعد المحاولة.",
 		outings_unconfigured: "الطلعات المشتركة غير مفعّلة على الخادم.",
 		unauthorized: "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
+		too_large: "المقطع الصوتي أكبر من المسموح.",
+		invalid_clip: "تعذّر قراءة التسجيل. أعد المحاولة.",
+		invalid_clip_duration: "المقطع قصير جدًا أو أطول من ١٥ ثانية.",
+		clip_gone: "انتهت صلاحية الرسالة الصوتية (١٠ دقائق).",
+		outing_not_ended: "الملخص يُشارك بعد انتهاء الطلعة.",
+		summary_window_closed: "مضى أكثر من أسبوع على الطلعة.",
+		implausible_summary: "الملخص غير منطقي، لم يُرسل.",
+		invalid_summary: "الملخص غير صالح.",
 	};
 	const en: Record<string, string> = {
 		invite_invalid: "This invite link is not valid.",
@@ -259,16 +378,30 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		removed_from_outing: "You were removed from this outing and cannot rejoin.",
 		not_a_member: "You are not a member of this outing.",
 		owner_only: "Only the outing owner can do that.",
+		leader_only: "Only the owner or a co-leader can do that.",
+		join_locked: "The owner locked joining; nobody new can join right now.",
+		recovery_invalid: "That recovery code is wrong or was already used.",
 		invalid_name: "Enter a name your friends will see.",
 		invalid_outing_name: "Name the outing.",
 		rate_limited: "Too many attempts. Wait a moment.",
 		too_frequent: "Wait a couple of seconds, then send.",
 		invalid_note: "Write a short line.",
 		invalid_phone: "Enter a valid phone number, e.g. +9665XXXXXXXX.",
+		invalid_rally: "Could not set the rally point. Move the map and try again.",
+		sos_fix_stale: "Your last position is too old; the alert went out without it.",
+		invalid_fix: "Could not read your position.",
 		network: "You are offline.",
 		timeout: "The network is slow. Try again.",
 		outings_unconfigured: "Shared outings are not enabled on the server.",
 		unauthorized: "Your session on this device ended. Enter your name again.",
+		too_large: "That voice clip is too large.",
+		invalid_clip: "Could not read the recording. Try again.",
+		invalid_clip_duration: "Too short, or longer than 15 seconds.",
+		clip_gone: "That voice message expired (10 minutes).",
+		outing_not_ended: "Summaries are shared after the outing ends.",
+		summary_window_closed: "The outing ended more than a week ago.",
+		implausible_summary: "That summary does not add up; not sent.",
+		invalid_summary: "That summary is not valid.",
 	};
 	return (isRTL ? ar : en)[code] || (isRTL ? "حدث خطأ. أعد المحاولة." : "Something went wrong. Try again.");
 }

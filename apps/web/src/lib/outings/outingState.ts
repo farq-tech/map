@@ -61,7 +61,8 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			const m = v.members.get(e.user_id);
 			if (!m) return v;
 			const members = new Map(v.members);
-			members.set(e.user_id, { ...m, last_seen_at: e.last_seen_at, gps: e.gps, online: true });
+			/* Older servers send no battery field: keep what we had rather than blanking it. */
+			members.set(e.user_id, { ...m, last_seen_at: e.last_seen_at, gps: e.gps, online: true, ...(e.battery !== undefined ? { battery: e.battery } : {}) });
 			return withMembers(v, members);
 		}
 		case "member_note": {
@@ -70,6 +71,21 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			const members = new Map(v.members);
 			members.set(e.user_id, { ...m, note: e.note });
 			return withMembers(v, members);
+		}
+		case "sos": {
+			const m = v.members.get(e.user_id);
+			if (!m) return v;
+			const members = new Map(v.members);
+			members.set(e.user_id, { ...m, sos: e.sos });
+			return withMembers(v, members);
+		}
+		case "rally":
+			return { ...v, snapshot: { ...v.snapshot, outing: { ...v.snapshot.outing, rally: e.rally } } };
+		case "voice_clip": {
+			if (!v.members.has(e.clip.user_id)) return v;
+			const clips = (v.snapshot.voice_clips || []).filter((c) => c.id !== e.clip.id);
+			clips.push(e.clip);
+			return { ...v, snapshot: { ...v.snapshot, voice_clips: clips.slice(-30) } };
 		}
 		case "member_joined": {
 			const members = new Map(v.members);
@@ -88,7 +104,10 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			members.delete(e.user_id);
 			const positions = new Map(v.positions);
 			positions.delete(e.user_id);
-			return withMembers(v, members, positions);
+			const next = withMembers(v, members, positions);
+			/* Their voice leaves with them (the server dropped the clips too). */
+			const voice_clips = v.snapshot.voice_clips?.filter((c) => c.user_id !== e.user_id);
+			return { ...next, snapshot: { ...next.snapshot, voice_clips } };
 		}
 		case "member_sharing": {
 			const m = v.members.get(e.user_id);
@@ -103,16 +122,36 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 		}
 		case "owner_changed": {
 			const members = new Map(v.members);
-			for (const [id, m] of members) members.set(id, { ...m, role: id === e.owner_id ? "owner" : "member" });
+			for (const [id, m] of members)
+				members.set(id, { ...m, role: id === e.owner_id ? "owner" : "member", co_leader: id === e.owner_id ? false : m.co_leader });
 			const next = withMembers(v, members);
-			const me = { ...v.snapshot.me, role: e.owner_id === v.snapshot.me.user_id ? ("owner" as const) : ("member" as const) };
+			const iAmOwner = e.owner_id === v.snapshot.me.user_id;
+			const me = {
+				...v.snapshot.me,
+				role: iAmOwner ? ("owner" as const) : ("member" as const),
+				co_leader: iAmOwner ? false : v.snapshot.me.co_leader,
+				can_lead: iAmOwner || Boolean(v.snapshot.me.co_leader),
+			};
 			return { ...next, snapshot: { ...next.snapshot, me, outing: { ...next.snapshot.outing, owner_id: e.owner_id } } };
 		}
+		case "member_role": {
+			const m = v.members.get(e.user_id);
+			const members = new Map(v.members);
+			if (m) members.set(e.user_id, { ...m, co_leader: e.co_leader });
+			const next = withMembers(v, members);
+			if (e.user_id !== v.snapshot.me.user_id) return next;
+			/* Server checks every leader action anyway; this only shows/hides the controls. */
+			const me = { ...v.snapshot.me, co_leader: e.co_leader, can_lead: v.snapshot.me.role === "owner" || e.co_leader };
+			return { ...next, snapshot: { ...next.snapshot, me } };
+		}
+		case "outing_lock":
+			return { ...v, snapshot: { ...v.snapshot, outing: { ...v.snapshot.outing, join_locked: e.join_locked } } };
 		case "outing_status": {
 			const outing = { ...v.snapshot.outing, status: e.status };
 			/* Paused or ended: the server deleted every fix; so do we. */
 			const positions = e.status === "active" ? v.positions : new Map<string, Position>();
-			return { ...v, positions, snapshot: { ...v.snapshot, outing } };
+			const voice_clips = e.status === "ended" ? [] : v.snapshot.voice_clips;
+			return { ...v, positions, snapshot: { ...v.snapshot, outing, voice_clips } };
 		}
 		default:
 			return v;

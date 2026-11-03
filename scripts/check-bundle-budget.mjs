@@ -25,7 +25,18 @@ try {
 const sizes = files.map((f) => ({ f, gz: gzipSync(readFileSync(join(dir, f))).length, raw: statSync(join(dir, f)).size }));
 const kb = (n) => `${Math.round(n / 1024)} KB`;
 const mapbox = sizes.filter((s) => /farq-mapbox|mapbox/.test(s.f)).reduce((a, s) => a + s.gz, 0);
-const entry = sizes.filter((s) => /^index-/.test(s.f)).reduce((a, s) => a + s.gz, 0);
+/* The entry is what index.html itself loads (script + modulepreload) — not every
+ * chunk whose name happens to start with "index-" (e.g. a lazy dependency's
+ * index-esm-*.js, which used to be counted here by mistake). */
+let entryFiles;
+try {
+  const html = readFileSync(join(dir, '..', 'index.html'), 'utf8');
+  entryFiles = new Set([...html.matchAll(/assets\/([^"']+\.js)/g)].map((m) => m[1]));
+} catch {
+  entryFiles = null;
+}
+const isEntry = (f) => (entryFiles && entryFiles.size ? entryFiles.has(f) : /^index-/.test(f));
+const entry = sizes.filter((s) => isEntry(s.f)).reduce((a, s) => a + s.gz, 0);
 const total = sizes.reduce((a, s) => a + s.gz, 0);
 
 const rows = [

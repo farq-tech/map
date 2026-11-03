@@ -60,3 +60,15 @@ test('phone numbers are normalised to E.164, Saudi forms included', () => {
   assert.equal(v.phone('call me'), undefined);
   assert.equal(v.phone('123'), undefined);
 });
+
+test('battery and rally inputs', () => {
+  assert.deepEqual(v.battery({ level: 0.123, charging: false }), { level: 0.12, charging: false });
+  assert.equal(v.battery({ level: 1.2, charging: false }), null);
+  assert.equal(v.battery({ level: 0.5 }), null, 'charging state is required, never assumed');
+  assert.equal(v.battery(undefined), null);
+  assert.deepEqual(v.rally({ lat: 24.1234567, lng: 46.7654321, label: ' عند‮ الشجرة ' }), { lat: 24.123457, lng: 46.765432, label: 'عند الشجرة' });
+  assert.equal(v.rally({ lat: 0, lng: 0 }), null);
+  assert.equal(v.rally({ lat: 'x', lng: 1 }), null);
+  assert.equal(v.fix({ lat: 24, lng: 46, age_ms: 5 * 60_000 }).reason, 'stale', 'a live fix stays strict');
+  assert.equal(v.fix({ lat: 24, lng: 46, age_ms: 5 * 60_000 }, Date.now(), { maxAgeMs: v.SOS_FIX_MAX_AGE_MS }).ok, true);
+});

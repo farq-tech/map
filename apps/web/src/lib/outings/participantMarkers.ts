@@ -16,7 +16,7 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import { haversineMeters } from "../sary/domain";
 import { lerp, tweenMs, type LngLat } from "./motion";
 import { initials, type Freshness } from "./policy";
-import { snapRadius, snapToRoad } from "../sary/roadSnap";
+import { matchOnMap, RoadMatcher, snapRadius } from "../sary/roadSnap";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, setVehicleOpacity, vehicleIds } from "../sary/vehicleLayer";
 
 export type ParticipantView = {
@@ -38,6 +38,8 @@ export type ParticipantView = {
 	color: string;
 	/** The short line they put over their car, if any. */
 	note: string | null;
+	/** «رسالة صوتية من سعد» while their push-to-talk clip is news; "playing" while it plays. */
+	voice?: { label: string; playing: boolean } | null;
 };
 
 type Rec = {
@@ -54,27 +56,31 @@ type Rec = {
 	heading: number | null;
 	onCarClick: (() => void) | null;
 	anchor: LngLat;
+	/** Keeps this car on the same street from fix to fix (display only). */
+	matcher: RoadMatcher;
 };
 
 /* Layer-id safe key for a participant's car. */
 const carKey = (userId: string) => `peer-${userId.replace(/[^0-9a-z]/gi, "")}`;
 
-function build(view: ParticipantView, onTap: (id: string) => void): HTMLElement {
+function build(view: ParticipantView, onTap: (id: string) => void, onVoiceTap?: (id: string) => void): HTMLElement {
 	const el = document.createElement("button");
 	el.type = "button";
 	el.className = "sary-peer";
 	el.dataset.testid = "sary-peer";
 	el.dataset.user = view.userId;
-	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__note" hidden></span><span class="sary-peer__name" dir="auto"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
+	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__note" hidden></span><span class="sary-peer__voice" data-testid="sary-peer-voice" hidden></span><span class="sary-peer__name" dir="auto"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
 	el.addEventListener("click", (e) => {
 		e.stopPropagation();
+		/* The voice chip plays the clip; the rest of the marker opens the person. */
+		if (onVoiceTap && (e.target as HTMLElement | null)?.closest?.(".sary-peer__voice")) return onVoiceTap(view.userId);
 		onTap(view.userId);
 	});
 	return el;
 }
 
 function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
-	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected, v.color, v.note ?? ""].join("|");
+	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected, v.color, v.note ?? "", v.voice?.label ?? "", v.voice?.playing ? 1 : 0].join("|");
 	if (el.dataset.sig === sig) return sig;
 	el.dataset.sig = sig;
 	el.dataset.freshness = v.freshness;
@@ -100,7 +106,12 @@ function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
 	note.hidden = !v.note;
 	note.textContent = v.note || "";
 	note.dir = isRTL ? "rtl" : "ltr";
-	el.setAttribute("aria-label", v.note ? `${v.name}: ${v.note}` : v.name);
+	const voice = el.querySelector<HTMLElement>(".sary-peer__voice")!;
+	voice.hidden = !v.voice;
+	voice.textContent = v.voice ? `${v.voice.playing ? "🔊" : "▶"} ${v.voice.label}` : "";
+	voice.classList.toggle("is-playing", Boolean(v.voice?.playing));
+	voice.dir = isRTL ? "rtl" : "ltr";
+	el.setAttribute("aria-label", [v.name, v.note, v.voice?.label].filter(Boolean).join(": "));
 	label.dir = isRTL ? "rtl" : "ltr";
 	const arrow = el.querySelector<HTMLElement>(".sary-peer__arrow")!;
 	if (v.heading == null || v.freshness !== "live" || v.approximate) {
@@ -121,6 +132,7 @@ export class ParticipantMarkers {
 		private onTap: (id: string) => void,
 		private reducedMotion = () => false,
 		private isRTL = true,
+		private onVoiceTap?: (id: string) => void,
 	) {}
 
 	sync(views: ParticipantView[]): void {
@@ -129,14 +141,19 @@ export class ParticipantMarkers {
 		for (const v of views) {
 			seen.add(v.userId);
 			const raw = { lng: v.lng, lat: v.lat };
-			/* A confident fix in town is drawn on the street; an approximate one stays a ring where measured. */
-			const target = v.approximate ? raw : snapToRoad(this.map, raw, snapRadius(v.accuracyM));
 			let rec = this.recs.get(v.userId);
+			/* Course for matching: the reported one, or real movement since the last anchor. */
+			const course = v.heading != null ? v.heading : rec && distanceMeters(rec.anchor, raw) >= 12 ? bearingBetween(rec.anchor, raw) : null;
+			const matcher = rec?.matcher ?? new RoadMatcher();
+			/* A confident fix in town is drawn on the street it drives along; an approximate one stays a ring where measured. */
+			const matched = v.approximate ? null : matchOnMap(this.map, matcher, raw, course, snapRadius(v.accuracyM));
+			if (v.approximate) matcher.reset();
+			const target = matched ? matched.point : raw;
 			if (!rec) {
-				const el = build(v, this.onTap);
+				const el = build(v, this.onTap, this.onVoiceTap);
 				/* Anchored at the bottom so a note bubble grows upward, never over the car. */
 				const marker = new mapboxgl.Marker({ element: el, anchor: "bottom", offset: [0, 22] }).setLngLat(target).addTo(this.map);
-				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null };
+				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null, matcher };
 				this.recs.set(v.userId, rec);
 			} else if (target.lng !== rec.to.lng || target.lat !== rec.to.lat) {
 				const gap = v.at - rec.lastAt;
@@ -159,6 +176,8 @@ export class ParticipantMarkers {
 				rec.heading = bearingBetween(rec.anchor, raw);
 				rec.anchor = raw;
 			}
+			/* Moving along a matched road: the car points down the road. */
+			if (course != null && matched?.heading != null) rec.heading = matched.heading;
 			{
 				/* Style reloads drop layers; ensuring again is cheap and idempotent. */
 				const car = this.drawCar(v);

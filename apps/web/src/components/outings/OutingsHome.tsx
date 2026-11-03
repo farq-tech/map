@@ -15,6 +15,9 @@ import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
 import ProfileForm from "./ProfileForm";
+import { RecoverySave } from "./Recovery";
+import { SummaryList } from "./TripSummary";
+import { hasTrip } from "../../lib/outings/tripStore";
 import "../../styles/outings.css";
 
 /** /outings — start an outing, rejoin a current one, look back at past ones. */
@@ -196,6 +199,8 @@ export default function OutingsHome() {
 
 					{error ? <p className="sary-o-error" role="alert">{error}</p> : null}
 
+					<RecoverySave isRTL={isRTL} />
+
 					<section className="sary-o-card" data-testid="outing-current">
 						<h2>{isRTL ? "طلعاتك الحالية" : "Current outings"}</h2>
 						{current.length ? (
@@ -208,14 +213,14 @@ export default function OutingsHome() {
 					<section className="sary-o-card" data-testid="outing-history">
 						<h2>{isRTL ? "الطلعات السابقة" : "Past outings"}</h2>
 						{history.length ? (
-							<OutingRows rows={history} isRTL={isRTL} />
+							<OutingRows rows={history} isRTL={isRTL} onSummary={open} meId={identity?.user.id} />
 						) : (
 							<p className="sary-o-note">{isRTL ? "لا طلعات سابقة بعد." : "No past outings yet."}</p>
 						)}
 						<p className="sary-o-note">
 							{isRTL
-								? "السجل يحفظ الاسم والتاريخ والمشاركين فقط — لا نحفظ مسار أحد ولا مواقعه."
-								: "History keeps name, date and members only — never anyone's route or positions."}
+								? "السجل يحفظ الاسم والتاريخ والمشاركين فقط — لا نحفظ مسار أحد ولا مواقعه. الملخص (المسافة والوقت) يظهر فقط لمن اختار مشاركته."
+								: "History keeps name, date and members only — never anyone's route or positions. A summary (distance and time) appears only if its owner chose to share it."}
 						</p>
 					</section>
 				</>
@@ -232,7 +237,7 @@ function StatusChip({ status, isRTL }: { status: OutingSummary["status"]; isRTL:
 	);
 }
 
-function OutingRows({ rows, isRTL, onOpen }: { rows: OutingSummary[]; isRTL: boolean; onOpen?: (id: string) => void }) {
+function OutingRows({ rows, isRTL, onOpen, onSummary, meId }: { rows: OutingSummary[]; isRTL: boolean; onOpen?: (id: string) => void; onSummary?: (id: string) => void; meId?: string }) {
 	return (
 		<ul className="sary-o-rows">
 			{rows.map((r) => {
@@ -260,7 +265,15 @@ function OutingRows({ rows, isRTL, onOpen }: { rows: OutingSummary[]; isRTL: boo
 								{body}
 							</button>
 						) : (
-							<div className="sary-o-row-card is-static">{body}</div>
+							<div className="sary-o-row-card is-static">
+								{body}
+								{r.summaries?.length ? <SummaryList rows={r.summaries} isRTL={isRTL} meId={meId} /> : null}
+								{onSummary && r.status === "ended" && r.my_status === "active" && !r.summaries?.some((x) => x.user_id === meId) && hasTrip(r.id) ? (
+									<button type="button" className="sary-o-link-btn" onClick={() => onSummary(r.id)} data-testid="outing-history-summary">
+										{isRTL ? "ملخصك جاهز على جوالك — شاركه؟" : "Your summary is on this phone — share it?"}
+									</button>
+								) : null}
+							</div>
 						)}
 					</li>
 				);

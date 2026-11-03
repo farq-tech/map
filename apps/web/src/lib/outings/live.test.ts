@@ -74,6 +74,47 @@ function channel(extra: Partial<ConstructorParameters<typeof LiveChannel>[3]> = 
 }
 
 describe("LiveChannel", () => {
+	it("reports send attempts and ack latency for the field test, matched by frame id", () => {
+		let t = 1_000;
+		const diagEvents: unknown[] = [];
+		const { ch, h } = channel({ now: () => t });
+		(h as unknown as { onDiag: (e: unknown) => void }).onDiag = (e) => diagEvents.push(e);
+		/* Handlers are captured by reference: attach onDiag on the same object the channel holds. */
+		ch.start();
+		const ws = FakeSocket.all[0];
+		ws.open();
+		ws.push({ type: "ready", snapshot: snap() });
+		const fix = { lat: 24.7, lng: 46.7, accuracy: 5, heading: null, speed: 10, at: t };
+		ch.sendFix(fix, "balanced");
+		ch.sendFix({ ...fix, at: t + 1 }, "balanced");
+		const ids = ws.sent.filter((m) => (m as { type: string }).type === "position").map((m) => (m as { id: number }).id);
+		expect(ids).toEqual([1, 2]);
+		t += 340;
+		ws.push({ type: "ack", id: 2, ok: true });
+		t += 60;
+		ws.push({ type: "ack", id: 1, ok: false, reason: "stale_fix" });
+		ws.push({ type: "ack", id: 99, ok: true });
+		expect(diagEvents).toEqual([
+			{ kind: "send", transport: "ws" },
+			{ kind: "send", transport: "ws" },
+			{ kind: "ack", transport: "ws", ok: true, reason: undefined, latencyMs: 340 },
+			{ kind: "ack", transport: "ws", ok: false, reason: "stale_fix", latencyMs: 400 },
+			{ kind: "ack", transport: "ws", ok: true, reason: undefined, latencyMs: null },
+		]);
+		ch.stop();
+	});
+
+	it("reports a fix too old to send as dropped", () => {
+		const t = 100_000;
+		const diagEvents: unknown[] = [];
+		const { ch, h } = channel({ now: () => t });
+		(h as unknown as { onDiag: (e: unknown) => void }).onDiag = (e) => diagEvents.push(e);
+		ch.start();
+		ch.sendFix({ lat: 24.7, lng: 46.7, accuracy: 5, heading: null, speed: 10, at: t - 60_000 }, "balanced");
+		expect(diagEvents).toEqual([{ kind: "drop", reason: "too_old" }]);
+		ch.stop();
+	});
+
 	it("authenticates in the first frame, never in the URL", () => {
 		const { ch } = channel();
 		ch.start();
@@ -227,5 +268,32 @@ describe("outing state reducer", () => {
 		const v = applyEvent(fromSnapshot(snap()), { type: "member_link", user_id: "a", last_seen_at: "2026-11-03T10:00:00Z", gps: "unavailable" });
 		expect(v.members.get("a")!.gps).toBe("unavailable");
 		expect(v.positions.size).toBe(0);
+	});
+});
+
+describe("co-leader and join lock", () => {
+	it("making me «مساعد» turns on the leader controls; taking it back turns them off", () => {
+		let v = fromSnapshot(snap());
+		expect(v.snapshot.me.can_lead).toBeFalsy();
+		v = applyEvent(v, { type: "member_role", user_id: "me", co_leader: true });
+		expect(v.snapshot.me).toMatchObject({ co_leader: true, can_lead: true });
+		expect(v.members.get("me")!.co_leader).toBe(true);
+		v = applyEvent(v, { type: "member_role", user_id: "me", co_leader: false });
+		expect(v.snapshot.me.can_lead).toBe(false);
+	});
+	it("someone else's role change leaves my controls alone", () => {
+		const v = applyEvent(fromSnapshot(snap()), { type: "member_role", user_id: "a", co_leader: true });
+		expect(v.snapshot.me.can_lead).toBeFalsy();
+		expect(v.members.get("a")!.co_leader).toBe(true);
+	});
+	it("a co-leader who inherits the outing is owner, no longer flagged co-leader", () => {
+		let v = applyEvent(fromSnapshot(snap()), { type: "member_role", user_id: "me", co_leader: true });
+		v = applyEvent(v, { type: "owner_changed", owner_id: "me" });
+		expect(v.snapshot.me).toMatchObject({ role: "owner", co_leader: false, can_lead: true });
+		expect(v.members.get("me")!.co_leader).toBe(false);
+	});
+	it("the lock is reflected on the outing", () => {
+		const v = applyEvent(fromSnapshot(snap()), { type: "outing_lock", join_locked: true });
+		expect(v.snapshot.outing.join_locked).toBe(true);
 	});
 });
