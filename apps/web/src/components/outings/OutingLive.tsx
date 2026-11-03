@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, MessageCircle, Navigation, Phone } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Navigation, Navigation2, Phone } from "lucide-react";
 import type { Map as MapboxMap } from "mapbox-gl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -30,6 +30,11 @@ import { createWakeKeeper } from "../../lib/outings/wakeLock";
 import { refreshPushSubscription } from "../../lib/outings/push";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import { memberColors } from "../../lib/outings/carColors";
+import { DRIVE_IDLE, drivingOn, nextDriveState, type DrivePref, type DriveState } from "../../lib/outings/driving";
+import { edgeSpot, spreadOnEdges, type EdgeSpot, type Insets } from "../../lib/outings/edgeArrows";
+import { lightPresetAt, type LightPreset } from "../../lib/outings/sun";
+import { Trails } from "../../lib/outings/trail";
+import { removeTrailLayer, setTrailData } from "../../lib/outings/trailLayer";
 import {
 	accuracyGrade,
 	bearingDeg,
@@ -97,7 +102,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [now, setNow] = useState(() => Date.now());
 	const [map, setMap] = useState<MapboxMap | null>(null);
-	const [focus, setFocus] = useState<{ lat: number; lng: number; id: string; zoom?: number; kind?: "select" | "locate" | "bounds"; bounds?: [number, number, number, number] | null; topInset?: number; maxZoom?: number } | null>(null);
+	const [focus, setFocus] = useState<{ lat: number; lng: number; id: string; zoom?: number; kind?: "select" | "locate" | "bounds"; bounds?: [number, number, number, number] | null; topInset?: number; leftInset?: number; rightInset?: number; maxZoom?: number } | null>(null);
 	const markersRef = useRef<ParticipantMarkers | null>(null);
 	const fitWithRef = useRef<(id: string) => void>(() => undefined);
 	const [composing, setComposing] = useState(false);
@@ -503,11 +508,19 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	/* How far down the screen our own bars reach, plus room for a name and a note over a car. */
 	const topInset = () => {
 		let bottom = 0;
-		for (const el of document.querySelectorAll(".sary-o-bar, .sary-o-share, .sary-o-warn")) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
+		for (const el of document.querySelectorAll(".sary-o-bar")) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
 		return Math.round(bottom + 70);
 	};
+	/* The floating buttons cover a strip on one side: frame cars clear of it. */
+	const sideInsets = () => {
+		const el = document.querySelector(".sary-o-fabs");
+		if (!el || window.innerWidth >= 1024) return {};
+		const r = el.getBoundingClientRect();
+		const w = window.innerWidth;
+		return r.left < w / 2 ? { leftInset: Math.round(r.right + 24) } : { rightInset: Math.round(w - r.left + 24) };
+	};
 	const frame = (b: [number, number, number, number], id: string) =>
-		setFocus({ lat: (b[1] + b[3]) / 2, lng: (b[0] + b[2]) / 2, id, kind: "bounds", bounds: b, topInset: topInset(), maxZoom: 17.5 });
+		setFocus({ lat: (b[1] + b[3]) / 2, lng: (b[0] + b[2]) / 2, id, kind: "bounds", bounds: b, topInset: topInset(), maxZoom: 17.5, ...sideInsets() });
 
 	const fitGroup = () => {
 		const b = groupBounds();
@@ -559,6 +572,137 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		if (out) fitGroup();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [rows, userLocation, keepGroup, follow, map]);
+
+	const colorsRef = useRef(colors);
+	colorsRef.current = colors;
+
+	/* --- short trail: the last 2 minutes of each friend's real fixes, in memory only --- */
+	const trailsRef = useRef<Trails>(new Trails());
+	const outingStatus = outing?.status;
+	useEffect(() => {
+		const trails = trailsRef.current;
+		const t = Date.now();
+		if (outingStatus !== "active") {
+			/* Paused, ended, not started: nobody is moving on our map. */
+			trails.clearAll();
+		} else {
+			const keep: string[] = [];
+			for (const r of rows) {
+				if (!r.member.sharing || !r.position || r.ageMs == null) {
+					trails.clear(r.member.user_id);
+					continue;
+				}
+				keep.push(r.member.user_id);
+				trails.add(
+					r.member.user_id,
+					{ lng: r.position.lng, lat: r.position.lat, at: t - r.ageMs, approximate: accuracyGrade(r.position.accuracy) === "poor" },
+					t,
+				);
+			}
+			trails.retain(keep);
+			trails.prune(t);
+		}
+		if (map) setTrailData(map, trails.features(t, (id) => colors.get(id) || "#e8eef0"));
+	}, [rows, outingStatus, map, colors]);
+
+	useEffect(() => {
+		if (!map) return;
+		const trails = trailsRef.current;
+		/* A style reload drops our layer: put the line back from memory. */
+		const again = () => setTrailData(map, trails.features(Date.now(), (id) => colorsRef.current.get(id) || "#e8eef0"));
+		map.on("style.load", again);
+		return () => {
+			map.off("style.load", again);
+			trails.clearAll();
+			removeTrailLayer(map);
+		};
+	}, [map]);
+	/* --- off-screen arrows: a chip on the edge for each friend outside the visible map --- */
+	const [arrows, setArrows] = useState<Array<EdgeSpot & { id: string }>>([]);
+	const rowsRef = useRef(rows);
+	rowsRef.current = rows;
+	const snapRef = useRef(snap);
+	snapRef.current = snap;
+	const updateArrows = () => {
+		const m = map;
+		if (!m) return;
+		const box = m.getContainer().getBoundingClientRect();
+		const v = { w: box.width, h: box.height };
+		if (!v.w || !v.h) return;
+		const insets = visibleInsets(box, isRTL, snapRef.current);
+		const center = m.getCenter();
+		const spots: Array<EdgeSpot & { id: string }> = [];
+		for (const r of rowsRef.current) {
+			if (!r.position || !r.member.sharing) continue;
+			const at = markersRef.current?.shownPosition(r.member.user_id) || r.position;
+			let p = m.project([at.lng, at.lat]);
+			if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > v.w * 20 || Math.abs(p.y) > v.h * 20) {
+				/* Beyond the horizon of a tilted map: aim by compass, far away. */
+				const a = ((bearingDeg(center, at) - m.getBearing()) * Math.PI) / 180;
+				p = { x: v.w / 2 + Math.sin(a) * v.w * 10, y: v.h / 2 - Math.cos(a) * v.h * 10 } as typeof p;
+			}
+			const s = edgeSpot(p, v, insets, EDGE_CHIP);
+			if (s) spots.push({ ...s, id: r.member.user_id });
+		}
+		setArrows(spreadOnEdges(spots, v, insets, EDGE_CHIP));
+	};
+	const updateArrowsRef = useRef(updateArrows);
+	updateArrowsRef.current = updateArrows;
+	useEffect(() => {
+		if (!map) return;
+		let raf = 0;
+		const on = () => {
+			if (raf) return;
+			raf = requestAnimationFrame(() => {
+				raf = 0;
+				updateArrowsRef.current();
+			});
+		};
+		map.on("move", on);
+		map.on("resize", on);
+		on();
+		return () => {
+			cancelAnimationFrame(raf);
+			map.off("move", on);
+			map.off("resize", on);
+		};
+	}, [map]);
+	useEffect(() => {
+		updateArrowsRef.current();
+	}, [rows, snap, map]);
+
+	/* --- driving mode: bigger targets and text while moving (or when chosen) --- */
+	const [drivePref, setDrivePref] = useState<DrivePref>(() => loadPref(DRIVE_KEY, "auto"));
+	const [driveState, setDriveState] = useState<DriveState>(DRIVE_IDLE);
+	useEffect(() => {
+		setDriveState((s) => nextDriveState(s, locationPinKind === "gps" ? userSpeed : null, Date.now()));
+	}, [userSpeed, userFixAt, now, locationPinKind]);
+	const driving = drivingOn(drivePref, driveState);
+
+	/* --- night look after sunset, from the clock and where we are (no network) --- */
+	const [nightPref, setNightPref] = useState<DrivePref>(() => loadPref(NIGHT_KEY, "auto"));
+	/* Where "we" are for the sun: my GPS, else any car (`here` above is my GPS only, for safety). */
+	const sunAt = here || rows.find((r) => r.position)?.position || null;
+	const light: LightPreset =
+		nightPref === "on" ? "night" : nightPref === "off" || !sunAt ? "day" : lightPresetAt(new Date(now), sunAt.lat, sunAt.lng);
+	useEffect(() => {
+		if (!map) return;
+		const apply = () => {
+			try {
+				map.setConfigProperty("basemap", "lightPreset", light);
+			} catch {
+				/* classic styles have no light presets */
+			}
+		};
+		apply();
+		/* FarqMap resets the light on every style load; ours runs after it. */
+		map.on("style.load", apply);
+		return () => {
+			map.off("style.load", apply);
+		};
+	}, [map, light]);
+
+	const [statusOpen, setStatusOpen] = useState(false);
 
 	const locateMe = () => {
 		requestLocation();
@@ -732,14 +876,20 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 
 	const selectedRow = rows.find((r) => r.member.user_id === selected) || null;
 	void locationError;
+	const gpsKind: "denied" | "unavailable" | "held" | null =
+		hasLocationPermission === false || gpsState === "denied" ? "denied" : canSend && gpsState === "unavailable" ? "unavailable" : canSend && held ? "held" : null;
 	const gpsProblem =
-		hasLocationPermission === false || gpsState === "denied"
+		gpsKind === "denied"
 			? isRTL ? "الموقع غير مسموح — أصحابك لا يرون موقعك. فعّله من إعدادات المتصفح." : "Location is denied — friends cannot see you. Allow it in browser settings."
-			: canSend && gpsState === "unavailable"
+			: gpsKind === "unavailable"
 				? isRTL ? "لا توجد قراءة GPS حديثة — أصحابك يرون آخر موقع معروف لك مع وقته." : "No recent GPS fix — friends see your last known position with its time."
-				: canSend && held
+				: gpsKind === "held"
 					? isRTL ? "قراءة GPS غير منطقية أو ضعيفة — لم نرسلها، بانتظار قراءة تؤكدها." : "GPS reading looked wrong or weak — held back until the next one confirms it."
 					: null;
+	const gpsShort =
+		gpsKind === "denied" ? (isRTL ? "الموقع غير مسموح" : "Location off") : gpsKind === "unavailable" ? (isRTL ? "لا GPS" : "No GPS") : gpsKind === "held" ? (isRTL ? "GPS ضعيف" : "Weak GPS") : null;
+	const offline = !gpsProblem && liveState === "offline";
+	const offlineText = isRTL ? "لا يوجد إنترنت — نعرض آخر المواقع المعروفة مع وقتها." : "Offline — showing last known positions with their time.";
 
 	const sharingLine = (() => {
 		if (!outing || !me) return "";
@@ -765,7 +915,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const invite = view?.snapshot.invite;
 
 	return (
-		<div className="sary-o-live" dir={isRTL ? "rtl" : "ltr"} data-testid="outing-live" data-snap={snap}>
+		<div
+			className="sary-o-live"
+			dir={isRTL ? "rtl" : "ltr"}
+			data-testid="outing-live"
+			data-snap={snap}
+			data-drive={driving ? "1" : "0"}
+			data-light={light}
+			data-night={light === "night" ? "1" : "0"}
+		>
 			<div className="sary-o-map">
 				<Suspense fallback={<div className="sary-map-fallback" />}>
 					<FarqMap
@@ -796,29 +954,97 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				</Suspense>
 			</div>
 
-			<header className="sary-o-bar">
-				<button type="button" className="sary-o-round" onClick={() => void navigate({ to: "/outings" })} aria-label={isRTL ? "رجوع" : "Back"}>
-					{isRTL ? <ChevronRight className="size-5" aria-hidden /> : <ChevronLeft className="size-5" aria-hidden />}
-				</button>
-				<div className="sary-o-title">
-					<strong data-testid="outing-title">{outing?.name || "…"}</strong>
-					<span>
-						{outing ? statusLabel(outing.status, isRTL) : ""} · <span data-testid="outing-link-state" data-state={liveState}>{liveStateLabel(liveState, isRTL)}</span>
-					</span>
+			<header className={`sary-o-bar${gpsProblem || offline ? " has-warn" : ""}${statusOpen ? " is-open" : ""}`}>
+				<div className="sary-o-bar-row">
+					<button type="button" className="sary-o-round" onClick={() => void navigate({ to: "/outings" })} aria-label={isRTL ? "رجوع" : "Back"}>
+						{isRTL ? <ChevronRight className="size-5" aria-hidden /> : <ChevronLeft className="size-5" aria-hidden />}
+					</button>
+					<div className="sary-o-title">
+						<div className="sary-o-title-row">
+							<strong data-testid="outing-title">{outing?.name || "…"}</strong>
+							<span className="sary-o-title-meta">
+								{outing ? statusLabel(outing.status, isRTL) : ""} · <span data-testid="outing-link-state" data-state={liveState}>{liveStateLabel(liveState, isRTL)}</span>
+							</span>
+						</div>
+						{/* One line for everything that used to stack: sharing, GPS, connection. Tap for the details. */}
+						<button
+							type="button"
+							className={`sary-o-status${canSend ? " is-on" : ""}`}
+							aria-expanded={statusOpen}
+							aria-controls="outing-status-detail"
+							onClick={() => setStatusOpen((o) => !o)}
+							data-testid="outing-status-line"
+						>
+							<span className="sary-o-dot" aria-hidden="true" />
+							<span className="sary-o-status-text" role="status" data-testid="outing-sharing-indicator" data-on={canSend ? "1" : "0"}>
+								{sharingLine}
+							</span>
+							{gpsProblem ? (
+								<span className="sary-o-badge" role="alert" data-testid="outing-gps-warning" data-kind={gpsKind || undefined}>
+									⚠ {gpsShort}
+									<span className="sary-o-sr">{` — ${gpsProblem}`}</span>
+								</span>
+							) : offline ? (
+								<span className="sary-o-badge" role="alert" data-testid="outing-offline-warning">
+									{isRTL ? "بلا إنترنت" : "Offline"}
+									<span className="sary-o-sr">{` — ${offlineText}`}</span>
+								</span>
+							) : null}
+							<ChevronDown className="sary-o-status-chev size-4" aria-hidden />
+						</button>
+					</div>
+				</div>
+				<div className="sary-o-detail" id="outing-status-detail" hidden={!statusOpen} data-testid="outing-status-detail">
+					<p>
+						{isRTL ? "الطلعة" : "Outing"}: {outing ? statusLabel(outing.status, isRTL) : "…"} · {isRTL ? "الاتصال" : "Link"}: {liveStateLabel(liveState, isRTL)}
+					</p>
+					{gpsProblem ? (
+						<p className="is-warn" data-testid="outing-gps-detail">
+							{gpsProblem}{" "}
+							<button type="button" onClick={requestLocation}>{isRTL ? "تفعيل" : "Enable"}</button>
+						</p>
+					) : offline ? (
+						<p className="is-warn">{offlineText}</p>
+					) : null}
 				</div>
 			</header>
 
-			<div className={`sary-o-share${canSend ? " is-on" : ""}`} role="status" data-testid="outing-sharing-indicator" data-on={canSend ? "1" : "0"}>
-				<span className="sary-o-dot" aria-hidden="true" />
-				{sharingLine}
-			</div>
-			{gpsProblem ? (
-				<div className="sary-o-warn" role="alert" data-testid="outing-gps-warning">
-					{gpsProblem}{" "}
-					<button type="button" onClick={requestLocation}>{isRTL ? "تفعيل" : "Enable"}</button>
+			{arrows.length ? (
+				<div className="sary-o-edges" aria-label={isRTL ? "أصحابك خارج الشاشة" : "Friends off screen"}>
+					{arrows.map((a) => {
+						const r = rows.find((x) => x.member.user_id === a.id);
+						if (!r) return null;
+						const tag = r.fresh === "live" ? "" : r.fresh === "recent" ? (isRTL ? "آخر موقع" : "last known") : isRTL ? "انقطع" : "lost";
+						return (
+							<button
+								key={a.id}
+								type="button"
+								className="sary-o-edge"
+								data-edge={a.edge}
+								data-fresh={r.fresh || "lost"}
+								data-testid="outing-edge-arrow"
+								data-user={a.id}
+								style={{ left: `${a.x}px`, top: `${a.y}px`, "--car": colors.get(a.id) || "#e8eef0" } as React.CSSProperties}
+								onClick={() => {
+									setSelected(a.id);
+									fitWith(a.id);
+								}}
+								aria-label={`${r.member.display_name}${r.distanceM != null ? ` · ${formatDistance(r.distanceM, isRTL)}` : ""}${tag ? ` · ${tag}` : ""}`}
+							>
+								<i className="sary-o-edge-arrow" aria-hidden="true">
+									<Navigation2 style={{ transform: `rotate(${Math.round(a.angle)}deg)` }} />
+								</i>
+								<span className="sary-o-edge-text">
+									<b dir="auto">{r.member.display_name}</b>
+									<small>
+										{r.distanceM != null ? formatDistance(r.distanceM, isRTL) : ""}
+										{tag ? `${r.distanceM != null ? " · " : ""}${tag}` : ""}
+									</small>
+								</span>
+							</button>
+						);
+					})}
 				</div>
-			) : liveState === "offline" ? (
-				<div className="sary-o-warn" role="alert">{isRTL ? "لا يوجد إنترنت — نعرض آخر المواقع المعروفة مع وقتها." : "Offline — showing last known positions with their time."}</div>
 			) : null}
 
 			<div className="sary-o-fabs">
@@ -1104,6 +1330,35 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										: isRTL ? "أسرع من المتوازن — دقة أعلى واستهلاك أكثر للبطارية والبيانات." : "Faster than balanced — more precise, more battery and data."}
 							</p>
 						</div>
+						{(
+							[
+								[DRIVE_KEY, isRTL ? "وضع القيادة (أزرار وخط أكبر)" : "Driving mode (bigger buttons and text)", drivePref, setDrivePref, "drive", isRTL ? ["تلقائي", "دائمًا", "إيقاف"] : ["Auto", "Always", "Off"], isRTL ? "تلقائي: يعمل وأنت تتحرك فوق ١١ كم/س." : "Auto: on while moving above 11 km/h."],
+								[NIGHT_KEY, isRTL ? "المظهر الليلي" : "Night look", nightPref, setNightPref, "night", isRTL ? ["تلقائي", "ليلي", "نهاري"] : ["Auto", "Night", "Day"], isRTL ? "تلقائي: يتحول بعد الغروب حسب موقعك ووقتك، بدون إنترنت." : "Auto: switches after sunset from your place and time, no network."],
+							] as const
+						).map(([key, label, value, set, id, names, hint]) => (
+							<div key={id} className="sary-o-modes" role="radiogroup" aria-label={label} data-testid={`outing-${id}`}>
+								<span className="sary-o-modes-label">{label}</span>
+								<div className="sary-o-seg">
+									{(["auto", "on", "off"] as DrivePref[]).map((v, i) => (
+										<button
+											key={v}
+											type="button"
+											role="radio"
+											aria-checked={value === v}
+											className={value === v ? "is-on" : undefined}
+											onClick={() => {
+												set(v);
+												savePref(key, v);
+											}}
+											data-testid={`outing-${id}-${v}`}
+										>
+											{names[i]}
+										</button>
+									))}
+								</div>
+								<p className="sary-o-note">{hint}</p>
+							</div>
+						))}
 						<label className="sary-o-switch">
 							<input
 								type="checkbox"
@@ -1435,6 +1690,42 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 }
 
 const NOTE_TTL_MS = 15 * 60_000;
+
+/** Size of an off-screen chip (kept in step with .sary-o-edge in outings.css). */
+const EDGE_CHIP = { w: 136, h: 38 };
+
+/** The part of the map not covered by our own top bar and the sheet. */
+function visibleInsets(box: DOMRect, isRTL: boolean, snap: SheetSnap): Insets {
+	let top = 0;
+	for (const el of document.querySelectorAll(".sary-o-bar")) top = Math.max(top, el.getBoundingClientRect().bottom - box.top);
+	top += 6;
+	if (window.innerWidth >= 1024) {
+		/* Desktop: the sheet is a card on the inline-end side. */
+		const side = 440;
+		return { top, bottom: 0, left: isRTL ? side : 0, right: isRTL ? 0 : side };
+	}
+	return { top, bottom: sheetHeightPx(snap, window.innerHeight), left: 0, right: 0 };
+}
+
+const DRIVE_KEY = "sary.outings.drive.v1";
+const NIGHT_KEY = "sary.outings.night.v1";
+
+function loadPref(key: string, fallback: DrivePref): DrivePref {
+	try {
+		const v = localStorage.getItem(key);
+		return v === "auto" || v === "on" || v === "off" ? v : fallback;
+	} catch {
+		return fallback;
+	}
+}
+
+function savePref(key: string, v: DrivePref): void {
+	try {
+		localStorage.setItem(key, v);
+	} catch {
+		/* private mode: the choice lasts this visit */
+	}
+}
 const NOTE_PRESETS_AR = ["بوقف عند المحطة ⛽", "انتظروني", "وقفت، تعالوا", "عندي عطل", "تمام، ماشي"];
 const NOTE_PRESETS_EN = ["Stopping for fuel ⛽", "Wait for me", "Stopped — come over", "Car trouble", "All good, moving"];
 

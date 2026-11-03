@@ -236,23 +236,148 @@
 	color: #f0b7a4;
 }
 
-.sary-o-share {
-	position: absolute;
-	top: calc(72px + env(safe-area-inset-top));
-	inset-inline: 12px;
-	z-index: 7;
+/* One status line under the title: sharing, GPS and connection in a single row; tap for detail. */
+.sary-o-bar {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	transition: background-color 240ms ease;
+}
+
+.sary-o-bar.has-warn {
+	border-color: rgba(240, 120, 90, 0.55);
+}
+
+.sary-o-bar-row {
 	display: flex;
 	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.sary-o-title {
+	flex: 1 1 auto;
+	gap: 2px;
+}
+
+.sary-o-title-row {
+	display: flex;
+	align-items: baseline;
 	gap: 8px;
-	padding: 8px 12px;
-	border-radius: 12px;
-	background: rgba(28, 24, 20, 0.86);
+	min-width: 0;
+}
+
+.sary-o-title-row strong {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.sary-o-title .sary-o-title-meta {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+
+.sary-o-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+	min-height: 28px;
+	padding: 0;
+	border: 0;
+	background: transparent;
 	color: #d4c6ae;
+	font: inherit;
+	font-size: 0.82rem;
+	text-align: start;
+	cursor: pointer;
+}
+
+.sary-o-status.is-on {
+	color: #f4efe6;
+}
+
+.sary-o-status-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sary-o-badge {
+	flex: 0 0 auto;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: rgba(150, 52, 32, 0.95);
+	color: #fde6dd;
+	font-size: 0.75rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.sary-o-status-chev {
+	flex: 0 0 auto;
+	opacity: 0.7;
+	transition: transform 200ms ease;
+}
+
+.sary-o-bar.is-open .sary-o-status-chev {
+	transform: rotate(180deg);
+}
+
+/* Read by screen readers (and by innerText), not shown. */
+.sary-o-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+.sary-o-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(244, 239, 230, 0.12);
+	color: #e8dfd0;
 	font-size: 0.85rem;
 }
 
-.sary-o-share.is-on {
-	color: #f4efe6;
+.sary-o-detail[hidden] {
+	display: none;
+}
+
+.sary-o-detail p {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+}
+
+.sary-o-detail .is-warn {
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: rgba(120, 44, 28, 0.92);
+	color: #fde6dd;
+}
+
+.sary-o-detail .is-warn button {
+	min-height: 32px;
+	border: 0;
+	background: transparent;
+	color: #fff;
+	text-decoration: underline;
+	font: inherit;
+	font-weight: 700;
 }
 
 .sary-o-dot {
@@ -263,14 +388,17 @@
 	background: #8a7f70;
 }
 
-.sary-o-share.is-on .sary-o-dot {
+.sary-o-status.is-on .sary-o-dot {
 	background: #e8842c;
+}
+
+.sary-o-status.is-on .sary-o-dot {
 	box-shadow: 0 0 0 0 rgba(232, 132, 44, 0.6);
 	animation: sary-o-pulse 1.8s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.sary-o-share.is-on .sary-o-dot {
+	.sary-o-status.is-on .sary-o-dot {
 		animation: none;
 	}
 }
@@ -281,24 +409,142 @@
 	}
 }
 
-.sary-o-warn {
+/* Off-screen friends: a chip on the edge in their car colour, pointing at them. */
+.sary-o-edges {
 	position: absolute;
-	top: calc(116px + env(safe-area-inset-top));
-	inset-inline: 12px;
-	z-index: 7;
-	padding: 8px 12px;
-	border-radius: 12px;
-	background: rgba(120, 44, 28, 0.92);
-	color: #fde6dd;
-	font-size: 0.85rem;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
 }
 
-.sary-o-warn button {
-	border: 0;
-	background: transparent;
-	color: #fff;
-	text-decoration: underline;
+.sary-o-edge {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 136px;
+	height: 38px;
+	padding: 0 8px;
+	border: 2px solid var(--car, #e8eef0);
+	border-radius: 999px;
+	background: rgba(28, 24, 20, 0.92);
+	color: #f4efe6;
 	font: inherit;
+	text-align: start;
+	transform: translate(-50%, -50%);
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+/* Not live: said in words in the chip, and drawn dashed — never like a live car. */
+.sary-o-edge[data-fresh="recent"],
+.sary-o-edge[data-fresh="lost"] {
+	border-style: dashed;
+	opacity: 0.85;
+}
+
+.sary-o-edge-arrow {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--car, #e8eef0);
+	color: #1c1814;
+}
+
+.sary-o-edge-arrow svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
+	stroke: currentColor;
+}
+
+.sary-o-edge-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.15;
+}
+
+.sary-o-edge-text b {
+	font-size: 0.8rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sary-o-edge-text small {
+	color: #d4c6ae;
+	font-size: 0.7rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ---- driving mode: read at a glance, hit with a thumb on a bumpy track ---- */
+.sary-o-live[data-drive="1"] .sary-o-title strong {
+	font-size: 1.2rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-status {
+	min-height: 36px;
+	font-size: 1rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-round {
+	width: 52px;
+	height: 52px;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-fabs .sary-fab {
+	min-height: 54px;
+	min-width: 76px;
+	font-size: 1.05rem;
+	font-weight: 700;
+	border-radius: 18px;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-member {
+	min-height: 64px;
+	font-size: 1.05rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-layer-chip {
+	min-height: 52px;
+	font-size: 1rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-edge {
+	transform: translate(-50%, -50%) scale(1.15);
+}
+
+.sary-o-live[data-drive="1"] .sary-peer__name b {
+	font-size: 1.05em;
+}
+
+/* ---- night: darker chrome so the screen does not glare in the desert dark ---- */
+.sary-o-live[data-night="1"] .sary-o-bar,
+.sary-o-live[data-night="1"] .sary-fab,
+.sary-o-live[data-night="1"] .sary-o-edge {
+	background: rgba(8, 8, 10, 0.92);
+	color: #d9d2c5;
+}
+
+.sary-o-live[data-night="1"] .farq-sheet {
+	background: #0d0c0b;
+	color: #d9d2c5;
+}
+
+.sary-o-live[data-night="1"] .sary-o-title span,
+.sary-o-live[data-night="1"] .sary-o-status {
+	color: #b9ae9c;
+}
+
+.sary-o-live[data-night="1"] .sary-o-status.is-on {
+	color: #e6dfd3;
 }
 
 .sary-o-fabs {
@@ -657,9 +903,7 @@
 }
 
 @media (min-width: 1024px) {
-	.sary-o-bar,
-	.sary-o-share,
-	.sary-o-warn {
+	.sary-o-bar {
 		inset-inline-end: auto;
 		width: min(420px, 40vw);
 	}
@@ -1252,4 +1496,8 @@
 	justify-content: space-between;
 	gap: 8px;
 	font-size: 0.9rem;
+
+/* Half-open sheet while driving: the button column must still clear the top bar. */
+.sary-o-live[data-drive="1"][data-snap="half"] .sary-o-fabs .sary-fab {
+	min-height: 46px;
 }
