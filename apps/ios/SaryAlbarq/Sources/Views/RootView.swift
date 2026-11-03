@@ -14,7 +14,7 @@ struct RootView: View {
             }
         }
         .sheet(item: Binding(get: { model.pendingInvite.map(InviteToken.init) }, set: { model.pendingInvite = $0?.id })) { inv in
-            JoinView(token: inv.id)
+            JoinView(token: inv.id).rtl()
         }
         .alert("تنبيه", isPresented: Binding(get: { model.errorText != nil }, set: { if !$0 { model.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
@@ -70,5 +70,13 @@ struct OnboardingView: View {
             }
             .navigationTitle("مرحبًا")
         }
+    }
+}
+
+extension View {
+    /// Sheets and dialogs are new presentations and do not reliably inherit the
+    /// root's layout direction, so every presented screen asks for RTL itself.
+    func rtl() -> some View {
+        environment(\.layoutDirection, .rightToLeft).environment(\.locale, Locale(identifier: "ar"))
     }
 }

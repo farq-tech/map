@@ -19,6 +19,7 @@ struct OutingsListView: View {
                     Section("طلعاتك الآن") {
                         ForEach(model.current) { o in
                             Button { model.open(o.id) } label: { OutingRow(o: o) }
+                                .buttonStyle(.plain)
                         }
                     }
                 }
@@ -43,9 +44,9 @@ struct OutingsListView: View {
             }
             .refreshable { await model.refresh() }
             .task { await model.refresh() }
-            .sheet(isPresented: $creating) { CreateOutingView() }
-            .sheet(isPresented: $joining) { PasteInviteView() }
-            .sheet(isPresented: $editingProfile) { ProfileView() }
+            .sheet(isPresented: $creating) { CreateOutingView().rtl() }
+            .sheet(isPresented: $joining) { PasteInviteView().rtl() }
+            .sheet(isPresented: $editingProfile) { ProfileView().rtl() }
         }
     }
 }

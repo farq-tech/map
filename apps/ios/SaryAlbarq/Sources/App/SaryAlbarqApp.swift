@@ -27,6 +27,8 @@ struct SaryAlbarqApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
+        UIView.appearance().semanticContentAttribute = .forceRightToLeft
         /* A relaunch for a significant location change (`launchOptions[.location]`) needs no
          * special path: AppModel resumes the share it finds recorded, and nothing else. */
         return true

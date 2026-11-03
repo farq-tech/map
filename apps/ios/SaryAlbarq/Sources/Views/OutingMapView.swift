@@ -66,9 +66,12 @@ struct OutingMapView: UIViewRepresentable {
                 m.addAnnotation(CarAnnotation(item))
             }
         }
-        if c.lastFit != fitToken || (!c.didInitialFit && !cars.isEmpty) {
+        /* Fit on request, and on its own whenever someone new appears — until you move the map yourself. */
+        let newIds = ids.subtracting(c.fittedIds)
+        if c.lastFit != fitToken || (!newIds.isEmpty && !c.userMoved) {
+            if c.lastFit != fitToken { c.userMoved = false }
             c.lastFit = fitToken
-            c.didInitialFit = !cars.isEmpty
+            c.fittedIds = ids
             fit(m)
         }
         if let f = focus, f.token != c.lastFocus, let car = cars.first(where: { $0.id == f.id }) {
@@ -89,13 +92,21 @@ struct OutingMapView: UIViewRepresentable {
             let mp = MKMapPoint(p)
             rect = rect.union(MKMapRect(x: mp.x, y: mp.y, width: 0.1, height: 0.1))
         }
-        m.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 140, left: 60, bottom: 260, right: 60), animated: true)
+        /* Clear of the header (top) and the controls + members panel (bottom). */
+        m.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 170, left: 90, bottom: 360, right: 90), animated: true)
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         var lastFit = -1
-        var didInitialFit = false
+        var fittedIds: Set<String> = []
+        var userMoved = false
         var lastFocus = -1
+
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            /* A pan or pinch by the person (not our own setRegion) stops automatic fitting. */
+            let touching = mapView.subviews.first?.gestureRecognizers?.contains { $0.state == .began || $0.state == .changed } ?? false
+            if touching { userMoved = true }
+        }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let a = annotation as? CarAnnotation else { return nil }
@@ -144,7 +155,8 @@ final class CarAnnotationView: MKAnnotationView {
             addSubview(h.view)
             host = h
         }
-        displayPriority = item.isMe ? .required : (item.freshness == .live ? .defaultHigh : .defaultLow)
+        /* Every car always shows: MapKit must never hide a friend because two labels overlap. */
+        displayPriority = .required
         zPriority = item.isMe ? .max : (item.freshness == .live ? .defaultSelected : .defaultUnselected)
         accessibilityLabel = "\(item.name)، \(ArabicFormat.freshnessLabel(item.freshness))"
         isAccessibilityElement = true
@@ -191,13 +203,10 @@ struct CarMarker: View {
                 }
             }
             .frame(width: 44, height: 44)
-            .opacity(faded ? 0.6 : 1)
-            HStack(spacing: 4) {
-                Text(item.isMe ? "أنت" : item.name).font(.system(size: 12, weight: .bold))
-                if item.freshness != .live {
-                    Text("· \(ArabicFormat.freshnessLabel(item.freshness)) \(item.ageText)").font(.system(size: 10))
-                }
-            }
+            .opacity(item.freshness == .recent ? 0.65 : item.freshness == .lost ? 0.85 : 1)
+            /* One Text, so the bidi order is the reading order: «نورة · انقطع · قبل ٥ د». */
+            (Text(item.isMe ? "أنت" : item.name).font(.system(size: 12, weight: .bold))
+                + Text(item.freshness == .live ? "" : " · \(ArabicFormat.freshnessLabel(item.freshness)) · \(item.ageText)").font(.system(size: 10)))
             .lineLimit(1)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Color.black.opacity(0.65), in: Capsule())

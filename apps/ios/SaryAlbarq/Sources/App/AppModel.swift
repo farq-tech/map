@@ -126,6 +126,10 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ outingId: String) {
+        if isDemo {
+            if outingId == DemoData.outingId { openDemoSession() }
+            return
+        }
         guard let id = identity else { return }
         if session?.id == outingId { return }
         session?.close()
@@ -158,6 +162,12 @@ final class AppModel: ObservableObject {
     }
 
     private func openDemo() {
+        current = [OutingSummary(id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, role: "owner", my_status: "active", member_count: 4, created_at: nil, started_at: nil, ended_at: nil)]
+        history = [OutingSummary(id: "demo-old", name: "كشتة نفود الثويرات", status: .ended, role: "member", my_status: "active", member_count: 6, created_at: nil, started_at: nil, ended_at: nil)]
+        openDemoSession()
+    }
+
+    private func openDemoSession() {
         let s = OutingSession(id: DemoData.outingId, api: api, token: "", location: location, demo: DemoData.view())
         session = s
         s.open()

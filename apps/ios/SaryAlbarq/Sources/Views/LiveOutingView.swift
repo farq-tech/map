@@ -37,8 +37,9 @@ struct LiveOutingView: View {
                 Task { await session.beginSharing() }
             }
             .presentationDetents([.large])
+            .rtl()
         }
-        .sheet(isPresented: $showNote) { NoteSheet(session: session) }
+        .sheet(isPresented: $showNote) { NoteSheet(session: session).rtl() }
         .alert("تنبيه", isPresented: Binding(get: { session.errorText != nil }, set: { if !$0 { session.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
         } message: { Text(session.errorText ?? "") }
@@ -63,8 +64,11 @@ struct LiveOutingView: View {
             if isMe {
                 /* Your own car comes from your own GPS — the freshest truth there is. */
                 guard let f = location.lastFix else { continue }
+                /* iOS sends no new fix while you stand still, so your own fix's age says nothing
+                 * about staleness. Only a GPS that has really gone quiet greys you out. */
                 let age = Date().timeIntervalSince1970 * 1000 - f.atMs
-                out.append(CarItem(id: m.user_id, coordinate: CLLocationCoordinate2D(latitude: f.lat, longitude: f.lng), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name, freshness: Policy.freshness(fixAgeMs: age, speedMps: f.speed, lastSeenAgeMs: 0), ageText: ArabicFormat.ago(age), heading: Policy.trustedHeading(f.heading, speed: f.speed), note: m.note?.text, isMe: true))
+                let mine: Policy.Freshness = location.gpsState == .denied ? .lost : (age > 5 * 60_000 && session.isSharingNow ? .recent : .live)
+                out.append(CarItem(id: m.user_id, coordinate: CLLocationCoordinate2D(latitude: f.lat, longitude: f.lng), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name, freshness: mine, ageText: ArabicFormat.ago(age), heading: Policy.trustedHeading(f.heading, speed: f.speed), note: m.note?.text, isMe: true))
                 continue
             }
             guard let p = v.positions[m.user_id], let fr = v.freshness(of: m.user_id) else { continue }
@@ -76,7 +80,7 @@ struct LiveOutingView: View {
     @ViewBuilder private func header(_ v: OutingView?) -> some View {
         HStack(spacing: 10) {
             Button { if session.isSharingNow { confirmBack = true } else { model.closeSession() } } label: {
-                Image(systemName: "chevron.forward").font(.headline).padding(10).background(.thinMaterial, in: Circle())
+                Image(systemName: "chevron.backward").font(.headline).padding(10).background(.thinMaterial, in: Circle())
             }
             .accessibilityLabel("رجوع")
             .accessibilityIdentifier("live.back")
