@@ -54,6 +54,7 @@ export default function SaryExploreChrome({
 	showRecenter,
 	locating,
 	onToggleLanguage,
+	onOffline,
 }: {
 	isRTL: boolean;
 	query: string;
@@ -75,6 +76,8 @@ export default function SaryExploreChrome({
 	showRecenter?: boolean;
 	locating?: boolean;
 	onToggleLanguage?: () => void;
+	/** Opens «حفظ المنطقة دون اتصال». */
+	onOffline?: () => void;
 }) {
 	const outing = useCurrentOuting();
 	return (
@@ -156,6 +159,17 @@ export default function SaryExploreChrome({
 						data-testid="sary-lang"
 					>
 						{isRTL ? "EN" : "ع"}
+					</button>
+				) : null}
+				{onOffline ? (
+					<button
+						type="button"
+						className="sary-fab"
+						onClick={onOffline}
+						aria-label={isRTL ? "حفظ المنطقة للاستخدام دون اتصال" : "Save this area for offline"}
+						data-testid="sary-offline-open"
+					>
+						{isRTL ? "دون اتصال" : "Offline"}
 					</button>
 				) : null}
 				<button

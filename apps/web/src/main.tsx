@@ -182,6 +182,13 @@ declare module "@tanstack/react-router" {
 	}
 }
 
+/* «حفظ المنطقة دون اتصال» reads what the map loaded from resource timing; the default 250 entries fill up in seconds. */
+try {
+	performance.setResourceTimingBufferSize(2000);
+} catch {
+	/* older browsers: the offline save just sees fewer of the map's files */
+}
+
 const el = document.getElementById("root");
 if (!el) throw new Error("root missing");
 ReactDOM.createRoot(el).render(<RouterProvider router={router} />);
