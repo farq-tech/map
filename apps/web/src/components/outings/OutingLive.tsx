@@ -103,6 +103,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const me = view?.snapshot.me;
 	const outing = view?.snapshot.outing;
 	const isOwner = me?.role === "owner";
+	/* Owner or «مساعد». Only shows the controls; the server checks every action. */
+	const canLead = Boolean(me?.can_lead ?? isOwner);
 
 	useSaryChrome();
 	usePageMeta({
@@ -533,22 +535,22 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				header={header}
 				rail={
 					<>
-					{isOwner && outing?.status === "created" ? (
+					{canLead && outing?.status === "created" ? (
 						<div className="sary-o-stage" data-testid="outing-stage">
 							<p>{isRTL ? "شارك الرابط مع أصحابك ثم ابدأ" : "Share the link with your friends, then start"}</p>
 							<button type="button" className="sary-o-primary" disabled={busy} onClick={() => void run(() => OutingsApi.setStatus(outingId, "start"))} data-testid="outing-start">
 								{isRTL ? "ابدأ الطلعة" : "Start the outing"}
 							</button>
 						</div>
-					) : !isOwner && outing?.status === "created" ? (
+					) : !canLead && outing?.status === "created" ? (
 						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار صاحب الطلعة ليبدأ" : "Waiting for the owner to start"}</p>
 					) : outing?.status === "paused" ? (
 						<p className="sary-o-stage-line" data-testid="outing-stage">
-							{isOwner ? (isRTL ? "أوقفت الطلعة مؤقتًا — المشاركة متوقفة للجميع" : "You paused the outing — sharing is off for everyone") : isRTL ? "صاحب الطلعة أوقفها مؤقتًا" : "The owner paused the outing"}
+							{canLead ? (isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "The outing is paused — sharing is off for everyone") : isRTL ? "صاحب الطلعة أوقفها مؤقتًا" : "The owner paused the outing"}
 						</p>
 					) : null}
 					<div className="sary-o-tabs" role="tablist">
-						{(["members", ...(isOwner ? ["invite"] : []), "settings"] as OutingPanel[]).map((p) => (
+						{(["members", ...(canLead ? ["invite"] : []), "settings"] as OutingPanel[]).map((p) => (
 							<button
 								key={p}
 								type="button"
@@ -580,6 +582,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							isRTL={isRTL}
 							isOwner={isOwner}
 							busy={busy}
+							onCoLeader={(on) => void run(() => OutingsApi.setCoLeader(outingId, selectedRow.member.user_id, on))}
 							onBack={() => setSelected(null)}
 							onFocus={() => fitWith(selectedRow.member.user_id)}
 							onRemove={() => setConfirm({ kind: "remove", userId: selectedRow.member.user_id, name: selectedRow.member.display_name })}
@@ -589,7 +592,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							<li className="sary-o-member is-me">
 								<Face name={me ? view?.members.get(me.user_id)?.display_name || "" : ""} avatar={me ? view?.members.get(me.user_id)?.avatar || null : null} color={myColor} />
 								<div>
-									<strong>{isRTL ? "أنت" : "You"}{isOwner ? (isRTL ? " · صاحب الطلعة" : " · owner") : ""}</strong>
+									<strong>
+										{isRTL ? "أنت" : "You"}
+										{isOwner ? (isRTL ? " · صاحب الطلعة" : " · owner") : me?.co_leader ? (isRTL ? " · مساعد" : " · co-leader") : ""}
+									</strong>
 									<span>{sharingLine}</span>
 								</div>
 							</li>
@@ -603,7 +609,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										<div>
 											<strong>
 												{r.member.display_name}
-												{r.member.role === "owner" ? (isRTL ? " · صاحب الطلعة" : " · owner") : ""}
+												{roleSuffix(r.member, isRTL)}
 											</strong>
 											<span>{memberLine(r, isRTL)}</span>
 										</div>
@@ -625,8 +631,13 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					)
 				) : null}
 
-				{panel === "invite" && isOwner ? (
+				{panel === "invite" && canLead ? (
 					<div className="sary-o-panel" data-testid="outing-invite-panel">
+						{outing?.join_locked ? (
+							<p className="sary-o-note" data-testid="outing-invite-locked">
+								{isRTL ? "الانضمام مقفل — الرابط لا يُدخل أحدًا جديدًا حتى يفتحه صاحب الطلعة." : "Joining is locked — the link admits nobody new until the owner unlocks it."}
+							</p>
+						) : null}
 						{inviteToken && invite?.active ? (
 							<>
 								<p className="sary-o-note">
@@ -640,7 +651,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										className="sary-o-primary"
 										onClick={async () => {
 											const url = inviteUrl(inviteToken);
-											const text = isRTL ? `انضم لطلعتي «${outing?.name}» على سَرى البارق` : `Join my outing “${outing?.name}” on Sary Albarq`;
+											/* WhatsApp builds its card from the link (static meta on /outings/join); the token stays in the fragment. */
+											const text = isRTL ? "انضم لطلعتي على سَرى البارق" : "Join my outing on Sary Albarq";
 											const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
 											if (nav.share) {
 												try {
@@ -759,7 +771,28 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								: "Sharing runs only while this screen is open; locking the phone or leaving stops it."}
 						</p>
 
-						{isOwner ? (
+						{isOwner && (outing?.status === "active" || outing?.status === "paused") ? (
+							<>
+								<label className="sary-o-switch">
+									<input
+										type="checkbox"
+										checked={Boolean(outing?.join_locked)}
+										disabled={busy}
+										onChange={(e) => {
+											const on = e.target.checked;
+											void run(() => OutingsApi.setJoinLock(outingId, on));
+										}}
+										data-testid="outing-lock-toggle"
+									/>
+									<span>{isRTL ? "قفل الانضمام" : "Lock joining"}</span>
+								</label>
+								<p className="sary-o-note">
+									{isRTL ? "بعد القفل لا يدخل أحد جديد حتى برابط صحيح؛ الموجودون يبقون." : "Once locked, nobody new can join even with a valid link; members stay."}
+								</p>
+							</>
+						) : null}
+
+						{canLead ? (
 							<div className="sary-o-row">
 								{outing?.status === "active" ? (
 									<button type="button" className="sary-o-secondary" disabled={busy} onClick={() => void run(() => OutingsApi.setStatus(outingId, "pause"))} data-testid="outing-pause">
@@ -771,9 +804,11 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										{isRTL ? "استئناف الطلعة" : "Resume outing"}
 									</button>
 								) : null}
-								<button type="button" className="sary-o-danger" disabled={busy} onClick={() => setConfirm({ kind: "end" })} data-testid="outing-end">
-									{isRTL ? "إنهاء الطلعة" : "End outing"}
-								</button>
+								{isOwner ? (
+									<button type="button" className="sary-o-danger" disabled={busy} onClick={() => setConfirm({ kind: "end" })} data-testid="outing-end">
+										{isRTL ? "إنهاء الطلعة" : "End outing"}
+									</button>
+								) : null}
 							</div>
 						) : null}
 						<button
@@ -1058,6 +1093,12 @@ function MyPhone({ current, isRTL, onSaved }: { current: string | null; isRTL: b
 	);
 }
 
+function roleSuffix(m: { role: "owner" | "member"; co_leader?: boolean }, isRTL: boolean): string {
+	if (m.role === "owner") return isRTL ? " · صاحب الطلعة" : " · owner";
+	if (m.co_leader) return isRTL ? " · مساعد" : " · co-leader";
+	return "";
+}
+
 function MemberCard({
 	row,
 	isRTL,
@@ -1066,6 +1107,7 @@ function MemberCard({
 	onBack,
 	onFocus,
 	onRemove,
+	onCoLeader,
 }: {
 	row: Row;
 	isRTL: boolean;
@@ -1074,6 +1116,7 @@ function MemberCard({
 	onBack: () => void;
 	onFocus: () => void;
 	onRemove: () => void;
+	onCoLeader: (on: boolean) => void;
 }) {
 	const p = row.position;
 	return (
@@ -1085,7 +1128,10 @@ function MemberCard({
 			<div className="sary-o-member is-card">
 				<Face name={row.member.display_name} avatar={row.member.avatar} fresh={row.fresh} />
 				<div>
-					<strong>{row.member.display_name}</strong>
+					<strong>
+						{row.member.display_name}
+						{roleSuffix(row.member, isRTL)}
+					</strong>
 					<span>{memberLine(row, isRTL)}</span>
 				</div>
 				<StatusPill row={row} isRTL={isRTL} />
@@ -1155,6 +1201,18 @@ function MemberCard({
 						<Navigation className="size-4" aria-hidden />
 						{isRTL ? "اتجه إليه" : "Directions"}
 					</a>
+				) : null}
+				{isOwner && row.member.role !== "owner" ? (
+					<button
+						type="button"
+						className="sary-o-secondary"
+						disabled={busy}
+						onClick={() => onCoLeader(!row.member.co_leader)}
+						data-testid="outing-member-coleader"
+						data-on={row.member.co_leader ? "1" : "0"}
+					>
+						{row.member.co_leader ? (isRTL ? "إلغاء المساعد" : "Remove co-leader") : isRTL ? "اجعله مساعدًا" : "Make co-leader"}
+					</button>
 				) : null}
 				{isOwner && row.member.role !== "owner" ? (
 					<button type="button" className="sary-o-danger" disabled={busy} onClick={onRemove} data-testid="outing-member-remove">

@@ -24,6 +24,8 @@ export type Member = {
 	/** Optional, shown only to fellow members (E.164, e.g. +9665…). */
 	phone?: string | null;
 	role: "owner" | "member";
+	/** «مساعد»: may start/pause/resume and manage the invite link. */
+	co_leader?: boolean;
 	sharing: boolean;
 	joined_at: string;
 	online?: boolean;
@@ -58,11 +60,13 @@ export type OutingSnapshot = {
 		name: string;
 		status: OutingStatus;
 		owner_id: string;
+		/** «قفل الانضمام»: invite links admit nobody new. */
+		join_locked?: boolean;
 		created_at: string;
 		started_at: string | null;
 		ended_at: string | null;
 	};
-	me: { user_id: string; role: "owner" | "member"; sharing: boolean };
+	me: { user_id: string; role: "owner" | "member"; co_leader?: boolean; can_lead?: boolean; sharing: boolean };
 	members: Member[];
 	positions: Position[];
 	invite: { active: boolean; expires_at: string | null } | null;
@@ -88,7 +92,10 @@ export type InvitePreview = {
 	owner_name: string;
 	member_count: number;
 	expires_at: string;
+	join_locked?: boolean;
 };
+
+export type RecoveryStatus = { active: boolean; created_at: string | null };
 
 export class OutingApiError extends Error {
 	constructor(
@@ -199,6 +206,16 @@ export const OutingsApi = {
 		if (cur) saveIdentity({ ...cur, user: r.user });
 		return r.user;
 	},
+	recoveryStatus: () => call<{ user: PublicUser; recovery: RecoveryStatus }>("GET", "/me").then((r) => r.recovery),
+	/** A new recovery code, shown once. Replaces any earlier one. */
+	createRecoveryCode: () => call<{ recovery: { code: string; created_at: string } }>("POST", "/me/recovery").then((r) => r.recovery),
+	/** Redeem a recovery code on this device: the old device's key stops working. */
+	async recover(code: string): Promise<Identity> {
+		const r = await call<{ user: PublicUser; token: string }>("POST", "/me/recover", { code }, { auth: false });
+		const id = { token: r.token, user: r.user };
+		saveIdentity(id);
+		return id;
+	},
 	list: () => call<{ current: OutingSummary[]; history: OutingSummary[] }>("GET", ""),
 	async create(name: string): Promise<{ outing_id: string; invite: { token: string; expires_at: string } }> {
 		const r = await call<{ outing_id: string; invite: { token: string; expires_at: string } }>("POST", "", { name });
@@ -224,6 +241,9 @@ export const OutingsApi = {
 	setSharing: (id: string, sharing: boolean) => call<{ sharing: boolean }>("PATCH", `/${id}/me`, { sharing }),
 	leave: (id: string) => call<{ ended: boolean }>("POST", `/${id}/leave`),
 	removeMember: (id: string, userId: string) => call("DELETE", `/${id}/members/${userId}`),
+	setCoLeader: (id: string, userId: string, co_leader: boolean) =>
+		call<{ user_id: string; co_leader: boolean }>("POST", `/${id}/members/${userId}/co-leader`, { co_leader }),
+	setJoinLock: (id: string, locked: boolean) => call<{ join_locked: boolean }>("POST", `/${id}/lock`, { locked }),
 	previewInvite: (token: string) => call<{ invite: InvitePreview }>("POST", "/invites/preview", { token }, { auth: false }),
 	join: (token: string) => call<{ outing_id: string; already: boolean }>("POST", "/invites/join", { token }),
 };
@@ -239,6 +259,9 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		removed_from_outing: "أزالك صاحب الطلعة منها، فلا يمكنك الانضمام مرة ثانية.",
 		not_a_member: "لست عضوًا في هذه الطلعة.",
 		owner_only: "هذا الإجراء لصاحب الطلعة فقط.",
+		leader_only: "هذا الإجراء لصاحب الطلعة أو مساعده فقط.",
+		join_locked: "قفل صاحب الطلعة الانضمام، فلا يمكن لأحد جديد الدخول الآن.",
+		recovery_invalid: "رمز الاسترجاع غير صحيح أو استُخدم من قبل.",
 		invalid_name: "اكتب اسمًا يظهر لأصحابك.",
 		invalid_outing_name: "اكتب اسمًا للطلعة.",
 		rate_limited: "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
@@ -259,6 +282,9 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		removed_from_outing: "You were removed from this outing and cannot rejoin.",
 		not_a_member: "You are not a member of this outing.",
 		owner_only: "Only the outing owner can do that.",
+		leader_only: "Only the owner or a co-leader can do that.",
+		join_locked: "The owner locked joining; nobody new can join right now.",
+		recovery_invalid: "That recovery code is wrong or was already used.",
 		invalid_name: "Enter a name your friends will see.",
 		invalid_outing_name: "Name the outing.",
 		rate_limited: "Too many attempts. Wait a moment.",

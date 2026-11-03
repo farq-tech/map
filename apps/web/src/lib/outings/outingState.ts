@@ -103,11 +103,30 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 		}
 		case "owner_changed": {
 			const members = new Map(v.members);
-			for (const [id, m] of members) members.set(id, { ...m, role: id === e.owner_id ? "owner" : "member" });
+			for (const [id, m] of members)
+				members.set(id, { ...m, role: id === e.owner_id ? "owner" : "member", co_leader: id === e.owner_id ? false : m.co_leader });
 			const next = withMembers(v, members);
-			const me = { ...v.snapshot.me, role: e.owner_id === v.snapshot.me.user_id ? ("owner" as const) : ("member" as const) };
+			const iAmOwner = e.owner_id === v.snapshot.me.user_id;
+			const me = {
+				...v.snapshot.me,
+				role: iAmOwner ? ("owner" as const) : ("member" as const),
+				co_leader: iAmOwner ? false : v.snapshot.me.co_leader,
+				can_lead: iAmOwner || Boolean(v.snapshot.me.co_leader),
+			};
 			return { ...next, snapshot: { ...next.snapshot, me, outing: { ...next.snapshot.outing, owner_id: e.owner_id } } };
 		}
+		case "member_role": {
+			const m = v.members.get(e.user_id);
+			const members = new Map(v.members);
+			if (m) members.set(e.user_id, { ...m, co_leader: e.co_leader });
+			const next = withMembers(v, members);
+			if (e.user_id !== v.snapshot.me.user_id) return next;
+			/* Server checks every leader action anyway; this only shows/hides the controls. */
+			const me = { ...v.snapshot.me, co_leader: e.co_leader, can_lead: v.snapshot.me.role === "owner" || e.co_leader };
+			return { ...next, snapshot: { ...next.snapshot, me } };
+		}
+		case "outing_lock":
+			return { ...v, snapshot: { ...v.snapshot, outing: { ...v.snapshot.outing, join_locked: e.join_locked } } };
 		case "outing_status": {
 			const outing = { ...v.snapshot.outing, status: e.status };
 			/* Paused or ended: the server deleted every fix; so do we. */
