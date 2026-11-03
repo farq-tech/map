@@ -976,3 +976,13 @@
 	flex: 1 1 0;
 	justify-content: center;
 }
+
+/* Field test tools («وضع الاختبار الميداني») */
+.sary-o-field {
+	display: grid;
+	gap: 6px;
+	margin-block: 4px 10px;
+}
+.sary-o-field .sary-o-row {
+	flex-wrap: wrap;
+}

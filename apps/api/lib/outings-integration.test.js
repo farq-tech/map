@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -267,6 +267,21 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const history = await api('GET', '/', B);
   assert.equal(history.body.current.length, 0);
   assert.equal(history.body.history[0].name, 'طلعة الثمامة');
+
+  /* --- field-test diagnostics: members of the (ended) outing only, numbers only --- */
+  const sample = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../../../docs/field-test/sample-diagnostics.json'), 'utf8'));
+  const dirty = { ...sample, lat: 24.7, display_name: 'خويي سعد', token: B, app: { ...sample.app, platform: 'android' } };
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, B, { report: dirty })).status, 201);
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, A, { report: sample })).status, 404, 'a member who left cannot send');
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, C, { report: sample })).status, 404, 'a stranger cannot send');
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, B, { report: { schema: 'x' } })).body.error, 'unsupported_schema');
+  const diagRows = await pool.query('SELECT * FROM sary.field_diagnostics');
+  assert.equal(diagRows.rows.length, 1);
+  const row = diagRows.rows[0];
+  assert.deepEqual(Object.keys(row).sort(), ['browser', 'id', 'outing_ref', 'platform', 'received_at', 'report']);
+  const storedRow = JSON.stringify(row);
+  for (const secret of [outingId, bId, B, 'خويي', '24.7']) assert.ok(!storedRow.includes(secret), `stored row leaks ${secret}`);
+  assert.equal(row.report.sends.attempts, sample.sends.attempts);
 });
 
 test('twenty members in one outing, two outings isolated', { skip, timeout: 60_000 }, async (t) => {

@@ -94,16 +94,26 @@ export const MAX_PLAUSIBLE_MPS = 55;
 export class FixFilter {
 	private trusted: DeviceFix | null = null;
 	private suspect: DeviceFix | null = null;
+	/** Why the last `accept` returned null (for the field diagnostics); null after an accept. */
+	lastReject: "accuracy" | "out_of_order" | "glitch" | null = null;
 
 	accept(fix: DeviceFix): DeviceFix | null {
-		if (fix.accuracy != null && fix.accuracy > SEND_MAX_ACCURACY_M) return null;
-		if (this.trusted && fix.at <= this.trusted.at) return null;
+		this.lastReject = null;
+		if (fix.accuracy != null && fix.accuracy > SEND_MAX_ACCURACY_M) {
+			this.lastReject = "accuracy";
+			return null;
+		}
+		if (this.trusted && fix.at <= this.trusted.at) {
+			this.lastReject = "out_of_order";
+			return null;
+		}
 		/* No reference, or the reference is too old to judge a jump by. */
 		if (!this.trusted || fix.at - this.trusted.at > 120_000) return this.trust(fix);
 		if (impliedSpeedMps(this.trusted, fix) <= MAX_PLAUSIBLE_MPS) return this.trust(fix);
 		/* Implausible from the trusted fix — but if it agrees with the previous suspect, the jump was real. */
 		if (this.suspect && impliedSpeedMps(this.suspect, fix) <= MAX_PLAUSIBLE_MPS) return this.trust(fix);
 		this.suspect = fix;
+		this.lastReject = "glitch";
 		return null;
 	}
 

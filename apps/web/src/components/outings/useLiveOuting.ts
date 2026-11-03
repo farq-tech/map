@@ -4,6 +4,8 @@ import { loadIdentity, OutingApiError, OutingsApi, type GpsState, type OutingSna
 import { LiveChannel, type ClosedReason, type LiveState } from "../../lib/outings/live";
 import { clearCachedView, loadCachedView, saveCachedView } from "../../lib/outings/lastKnown";
 import { applyEvent, mergeSnapshot, type OutingView } from "../../lib/outings/outingState";
+import { diag } from "../../lib/outings/fieldDiagnostics";
+import type { FieldDiag } from "./useFieldDiagnostics";
 import {
 	FixFilter,
 	heartbeatMs,
@@ -20,7 +22,7 @@ import {
  * sharing is on, the page is visible and the fix is real GPS — sending my fix.
  * Unmounting stops all of it: no fix leaves this device off this screen.
  */
-export function useLiveOuting(outingId: string, mode: ShareMode) {
+export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: FieldDiag) {
 	const {
 		userLocation,
 		userAccuracy,
@@ -43,6 +45,10 @@ export function useLiveOuting(outingId: string, mode: ShareMode) {
 	const channelRef = useRef<LiveChannel | null>(null);
 	const lastSentRef = useRef<{ fix: DeviceFix; sentAt: number } | null>(null);
 	const filterRef = useRef(new FixFilter());
+	/* Field-test recorder (opt-in); a ref so the channel handlers always see the current one. */
+	const diagRef = fieldDiag?.ref;
+	const diagOn = fieldDiag?.on ?? false;
+	const lastSeenFixAtRef = useRef<number | null>(null);
 
 	const onSnapshot = useCallback((s: OutingSnapshot) => setView((prev) => mergeSnapshot(prev, s)), []);
 
@@ -71,6 +77,14 @@ export function useLiveOuting(outingId: string, mode: ShareMode) {
 				channelRef.current = null;
 			},
 			onAck: (ok, reason) => setLastRefusal(ok ? null : reason || "refused"),
+			onDiag: (e) => {
+				const s = diagRef?.current;
+				if (!s) return;
+				const now = Date.now();
+				if (e.kind === "send") diag.sendAttempt(s, e.transport, now);
+				else if (e.kind === "ack") diag.ack(s, e.ok, e.reason, e.latencyMs, now);
+				else diag.fixRejected(s, e.reason);
+			},
 		});
 		channelRef.current = ch;
 		ch.start();
@@ -109,6 +123,12 @@ export function useLiveOuting(outingId: string, mode: ShareMode) {
 		return () => document.removeEventListener("visibilitychange", onVis);
 	}, [requestLocation]);
 
+	/* Field test: time in each link state (the recorder may start after the channel). */
+	useEffect(() => {
+		const s = diagRef?.current;
+		if (s) diag.link(s, liveState, Date.now());
+	}, [liveState, diagOn, diagRef]);
+
 	const status = view?.snapshot.outing.status;
 	const sharing = view?.snapshot.me.sharing ?? false;
 	const canSend = status === "active" && sharing && visible && !closed && locationPinKind === "gps";
@@ -123,14 +143,25 @@ export function useLiveOuting(outingId: string, mode: ShareMode) {
 			speed: userSpeed,
 			at: userFixAt,
 		};
+		/* The effect also reruns on a mode change: only a new device fix counts as "seen". */
+		const ds = diagRef?.current ?? null;
+		const isNewFix = lastSeenFixAtRef.current !== userFixAt;
+		lastSeenFixAtRef.current = userFixAt;
+		if (ds && isNewFix) diag.fixSeen(ds, userAccuracy, Date.now());
 		const fix = filterRef.current.accept(raw);
 		setHeld(!fix);
+		if (ds && isNewFix) {
+			const why = filterRef.current.lastReject;
+			if (fix) diag.fixAccepted(ds);
+			else if (why) diag.fixRejected(ds, why);
+		}
 		if (!fix) return; // glitch held back until the next fix agrees, or too inaccurate to send
 		const now = Date.now();
 		if (!shouldSend(fix, lastSentRef.current, mode, now)) return;
 		lastSentRef.current = { fix, sentAt: now };
+		if (ds) diag.fixSent(ds);
 		channelRef.current?.sendFix(fix, mode);
-	}, [canSend, userLocation, userAccuracy, userHeading, userSpeed, userFixAt, mode]);
+	}, [canSend, userLocation, userAccuracy, userHeading, userSpeed, userFixAt, mode, diagRef]);
 
 	/* Parked: a still phone may not fire the watch, so ask for a fresh real fix. Never re-send an old one. */
 	useEffect(() => {

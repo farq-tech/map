@@ -41,6 +41,8 @@ import type { IntelligenceMapPlaces } from "../../services/intelligenceService";
 import FarqBottomSheet, { sheetHeightPx, type SheetSnap } from "../intelligence/FarqBottomSheet";
 import { liveStateLabel, statusLabel } from "./labels";
 import { useLiveOuting } from "./useLiveOuting";
+import { downloadReport, useFieldDiagnostics } from "./useFieldDiagnostics";
+import { diag, exportFileName } from "../../lib/outings/fieldDiagnostics";
 import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
@@ -67,7 +69,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const reducedMotion = usePrefersReducedMotion();
 	const { userLocation, userHeading, userFixAt, userAccuracy, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
 	const [mode, setMode] = useState<ShareMode>(() => loadShareMode());
-	const live = useLiveOuting(outingId, mode);
+	const field = useFieldDiagnostics(outingId, mode);
+	const live = useLiveOuting(outingId, mode, field.fieldDiag);
 	const { view, liveState, closed, loadError, canSend, lastRefusal, visible, held, gpsState } = live;
 	const [panel, setPanel] = useState<OutingPanel>(initialPanel || "members");
 	const [snap, setSnap] = useState<SheetSnap>(initialPanel === "invite" ? "half" : "peek");
@@ -202,6 +205,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		}
 		return out.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
 	}, [view, me?.user_id, now, userLocation, locationPinKind]);
+
+	/* Field test: how the others look on this screen (counts only), sampled on the 5 s clock. */
+	useEffect(() => {
+		const s = field.fieldDiag.ref.current;
+		if (!s || !visible) return;
+		const c = { live: 0, recent: 0, lost: 0 };
+		for (const r of rows) if (r.fresh) c[r.fresh] += 1;
+		diag.peers(s, c, Date.now());
+	}, [rows, visible, field.fieldDiag.ref, field.on]);
 
 	/* Participant markers on the map. */
 	useEffect(() => {
@@ -366,18 +378,78 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		if (!wake || !canSend || !visible || !nav.wakeLock) return;
 		let sentinel: { release: () => Promise<void> } | null = null;
 		let cancelled = false;
+		const diagState = () => field.fieldDiag.ref.current;
 		nav.wakeLock.request("screen").then(
 			(s) => {
 				if (cancelled) void s.release();
-				else sentinel = s;
+				else {
+					sentinel = s;
+					const d = diagState();
+					if (d) diag.wake(d, "acquired");
+					/* The system can take the lock back (low battery, tab hidden): that is a loss we did not ask for. */
+					(s as unknown as EventTarget).addEventListener?.("release", () => {
+						const d2 = diagState();
+						if (!cancelled && d2) diag.wake(d2, "lost");
+					});
+				}
 			},
-			() => undefined,
+			() => {
+				const d = diagState();
+				if (d) diag.wake(d, "failed");
+			},
 		);
 		return () => {
 			cancelled = true;
 			void sentinel?.release();
 		};
-	}, [wake, canSend, visible]);
+	}, [wake, canSend, visible, field.fieldDiag.ref]);
+
+	/* Field test: export to a file on this device; sending numbers to the server is a separate choice. */
+	const [fieldMsg, setFieldMsg] = useState<string | null>(null);
+	const exportField = () => {
+		const r = field.report();
+		if (!r) return;
+		downloadReport(r, exportFileName());
+		setFieldMsg(isRTL ? "حُفظ الملف على جهازك." : "Saved to this device.");
+	};
+	const sendField = async () => {
+		const r = field.report();
+		if (!r) return;
+		try {
+			await OutingsApi.sendDiagnostics(outingId, r);
+			setFieldMsg(isRTL ? "أُرسلت الأرقام (بلا مواقع ولا أسماء). شكرًا!" : "Numbers sent (no locations, no names). Thanks!");
+		} catch (e) {
+			setFieldMsg(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
+		}
+	};
+	const fieldTools = (
+		<div className="sary-o-field" data-testid="outing-field-tools">
+			<div className="sary-o-row">
+				<button type="button" className="sary-o-secondary" onClick={exportField} data-testid="outing-field-export">
+					{isRTL ? "تصدير ملف الاختبار (JSON)" : "Export test file (JSON)"}
+				</button>
+				<button type="button" className="sary-o-secondary" onClick={() => void sendField()} data-testid="outing-field-send">
+					{isRTL ? "إرسال الأرقام للمطوّرين" : "Send numbers to developers"}
+				</button>
+				<button
+					type="button"
+					className="sary-o-secondary"
+					onClick={() => {
+						field.clear();
+						setFieldMsg(isRTL ? "مُسحت بيانات الاختبار من هذا الجهاز." : "Test data wiped from this device.");
+					}}
+					data-testid="outing-field-clear"
+				>
+					{isRTL ? "مسح" : "Wipe"}
+				</button>
+			</div>
+			{fieldMsg ? (
+				<p className="sary-o-note" role="status" data-testid="outing-field-msg">
+					{fieldMsg}
+				</p>
+			) : null}
+		</div>
+	);
 
 	const run = async (fn: () => Promise<unknown>) => {
 		setBusy(true);
@@ -418,6 +490,14 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					<button type="button" className="sary-o-secondary" onClick={() => void navigate({ to: "/outings" })}>
 						{isRTL ? "طلعاتي" : "My outings"}
 					</button>
+					{field.hasData ? (
+						<>
+							<p className="sary-o-note">
+								{isRTL ? "سُجّلت بيانات «وضع الاختبار الميداني» لهذه الطلعة على جهازك." : "Field-test data for this outing is on this device."}
+							</p>
+							{fieldTools}
+						</>
+					) : null}
 				</section>
 			</main>
 		);
@@ -758,6 +838,17 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								? "المشاركة تعمل والتطبيق مفتوح على هذه الشاشة فقط؛ إذا أُغلقت الشاشة أو خرجت منها يتوقف الإرسال."
 								: "Sharing runs only while this screen is open; locking the phone or leaving stops it."}
 						</p>
+
+						<label className="sary-o-switch">
+							<input type="checkbox" checked={field.on} onChange={(e) => field.toggle(e.target.checked)} data-testid="outing-field-toggle" />
+							<span>{isRTL ? "وضع الاختبار الميداني" : "Field test mode"}</span>
+						</label>
+						<p className="sary-o-note">
+							{isRTL
+								? "يسجّل على جهازك فقط: عدد الإرسالات وزمن التأكيد وإعادة الاتصال ودقة GPS والبطارية — بلا مواقع ولا أسماء. تصدّره ملفًا في النهاية، والإرسال للمطوّرين اختياري."
+								: "Records on this device only: sends, ack times, reconnects, GPS accuracy, battery — no locations, no names. Export a file at the end; sending to developers is optional."}
+						</p>
+						{field.on || field.hasData ? fieldTools : null}
 
 						{isOwner ? (
 							<div className="sary-o-row">
