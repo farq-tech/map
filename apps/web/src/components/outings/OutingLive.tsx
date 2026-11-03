@@ -1741,9 +1741,11 @@ function visibleInsets(box: DOMRect, isRTL: boolean, snap: SheetSnap): Insets {
 		const side = 440;
 		return { top, bottom: 0, left: isRTL ? side : 0, right: isRTL ? 0 : side };
 	}
-	/* The «طوارئ» / «اضغط وتكلم» row floats just above the sheet: not map either. */
+	/* The «طوارئ» / «اضغط وتكلم» row floats just above the sheet, and with the sheet
+	 * open the button row lies across the screen above it: not map either. */
 	let bottom = sheetHeightPx(snap, window.innerHeight);
-	for (const el of document.querySelectorAll(".sary-sos-btn, .sary-o-ptt")) {
+	const rows = snap === "peek" ? ".sary-sos-btn, .sary-o-ptt" : ".sary-sos-btn, .sary-o-ptt, .sary-o-fabs";
+	for (const el of document.querySelectorAll(rows)) {
 		const r = el.getBoundingClientRect();
 		if (r.width && r.height && r.top < box.bottom) bottom = Math.max(bottom, box.bottom - r.top + 6);
 	}

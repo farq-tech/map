@@ -1501,6 +1501,8 @@
 /* Half-open sheet while driving: the button column must still clear the top bar. */
 .sary-o-live[data-drive="1"][data-snap="half"] .sary-o-fabs .sary-fab {
 	min-height: 46px;
+	min-width: 0;
+	font-size: 0.98rem;
 }
 
 /* ---- integration: one alert lane under the top bar ----
@@ -1577,9 +1579,22 @@
 	white-space: nowrap;
 }
 
-/* ---- integration: with the sheet open, the side column keeps only «موقعي» and «المجموعة» ----
- * Four tall buttons above a half sheet reach the alert lane on a short phone
- * (iPhone 14: 664 px). «رسالة» and «أقرب محطة» come back with the sheet lowered. */
-.sary-o-live:not([data-snap="peek"]) .sary-o-fabs .sary-fab:nth-child(n + 3) {
-	display: none;
+/* ---- integration: with the sheet open, the four buttons lie in one row ----
+ * Stacked, four tall buttons above a half sheet reach the alert lane on a short
+ * phone (iPhone 14: 664 px). One row keeps them all. */
+.sary-o-live:not([data-snap="peek"]) .sary-o-fabs {
+	/* The row sits above «طوارئ» and «اضغط وتكلم», which keep the sheet's edge. */
+	bottom: calc(var(--sary-sheet-h) + 44px + 72px + env(safe-area-inset-bottom, 0px)) !important;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	max-width: calc(100vw - 24px);
+}
+
+.sary-o-live:not([data-snap="peek"]) .sary-o-fabs .sary-fab {
+	min-height: 40px;
+	min-width: 0;
+	padding: 0 10px;
+	white-space: nowrap;
 }
