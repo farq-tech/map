@@ -39,6 +39,9 @@ function createOutingsRouter({ service, hub, limits = {} }) {
   const identityLimit = createRateLimiter({ limit: limits.identityPerHour ?? 10, windowMs: 60 * 60_000 });
   const inviteLimit = createRateLimiter({ limit: limits.invitePer10Min ?? 30, windowMs: 10 * 60_000 });
   const writeLimit = createRateLimiter({ limit: 120, windowMs: 60_000 });
+  /* Recovery codes carry 100 bits, so guessing is hopeless anyway; this keeps it that way cheaply. */
+  const recoverLimit = createRateLimiter({ limit: limits.recoverPer15Min ?? 5, windowMs: 15 * 60_000 });
+  const recoveryCodeLimit = createRateLimiter({ limit: 10, windowMs: 60 * 60_000 });
 
   const auth = asyncHandler(async (req, res, next) => {
     const m = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
@@ -54,7 +57,23 @@ function createOutingsRouter({ service, hub, limits = {} }) {
     res.status(201).json({ ok: true, user, token });
   }));
 
-  router.get('/me', auth, (req, res) => res.json({ ok: true, user: req.user }));
+  router.get('/me', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, user: req.user, recovery: await service.recoveryStatus(req.user) });
+  }));
+
+  /* «احفظ رمز الاسترجاع»: a new code, shown once. Replaces any earlier one. */
+  router.post('/me/recovery', auth, asyncHandler(async (req, res) => {
+    if (!recoveryCodeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await service.createRecoveryCode(req.user);
+    res.status(201).json({ ok: true, recovery: r });
+  }));
+
+  /* A new device redeems the code (in the body, never the URL) for a new token. */
+  router.post('/me/recover', asyncHandler(async (req, res) => {
+    if (!recoverLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const { user, token } = await service.recover(req.body?.code);
+    res.json({ ok: true, user, token });
+  }));
 
   router.patch('/me', auth, asyncHandler(async (req, res) => {
     const user = await service.updateProfile(req.user, req.body || {});
@@ -132,6 +151,14 @@ function createOutingsRouter({ service, hub, limits = {} }) {
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.leave(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/members/:userId/co-leader', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setCoLeader(req.user, req.params.id, req.params.userId, req.body?.co_leader)) });
+  }));
+
+  router.post('/:id/lock', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setJoinLock(req.user, req.params.id, req.body?.locked)) });
   }));
 
   router.delete('/:id/members/:userId', auth, asyncHandler(async (req, res) => {

@@ -135,6 +135,23 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     }
   }
 
+  /** Every socket of this person, in every room — their device token was revoked. */
+  function dropUser(userId, reason = 'unauthorized') {
+    for (const [oid, room] of [...rooms]) {
+      for (const c of [...room]) {
+        if (c.userId !== userId) continue;
+        send(c, { type: 'closed', reason });
+        leaveSilently(c);
+        try {
+          c.ws.close(4401, reason);
+        } catch {
+          /* */
+        }
+      }
+      pollers.get(oid)?.delete(userId);
+    }
+  }
+
   function leaveSilently(conn) {
     const room = rooms.get(conn.outingId);
     if (!room) return;
@@ -181,7 +198,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return { rooms: rooms.size, sockets };
   }
 
-  return { join, leave, emit, connectionsOf, touch, heartbeat, linkState, kick, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
+  return { join, leave, emit, connectionsOf, touch, heartbeat, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
 }
 
 module.exports = { createHub };
