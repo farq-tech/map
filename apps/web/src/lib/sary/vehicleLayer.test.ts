@@ -51,7 +51,7 @@ describe("3D vehicle layer", () => {
 		} as never;
 		expect(ensureVehicleLayer(map, "#e8eef0")).toBe(true);
 		expect(ensureVehicleLayer(map, "#e8eef0")).toBe(true);
-		expect(added).toEqual(["model:sary-suv-e8eef0", "source:sary-vehicle", "layer:model"]);
+		expect(added).toEqual(["model:sary-suv-e8eef0", "source:sary-vehicle", "layer:circle", "layer:model"]);
 		expect(layers.has(VEHICLE_LAYER)).toBe(true);
 	});
 });
