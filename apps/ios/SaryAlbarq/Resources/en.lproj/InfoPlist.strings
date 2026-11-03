@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Sary Albarq";
+"NSLocationWhenInUseUsageDescription" = "Sary Albarq shows your position on the outing map, and shares it with that outing's members only when you choose \"Share my location\".";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Optional: lets the app continue sharing your location with your outing's members if iOS closes it during the outing. Your location is only shared in an outing where you started sharing yourself, and it stops when you stop or the outing ends.";

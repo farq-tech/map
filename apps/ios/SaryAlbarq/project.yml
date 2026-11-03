@@ -1,0 +1,102 @@
+# Sary Albarq (سَرى البارق) — native iOS client for shared outings.
+# Generate the Xcode project with `xcodegen generate` (the generated
+# SaryAlbarq.xcodeproj is committed too, so Xcode alone is enough).
+name: SaryAlbarq
+options:
+  bundleIdPrefix: sa.sary
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: ar
+  createIntermediateGroups: true
+# Explicit base settings: these are what XcodeGen's presets would add, spelled
+# out so the project generates the same with any XcodeGen install.
+settings:
+  base:
+    SDKROOT: iphoneos
+    SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    PRODUCT_NAME: $(TARGET_NAME)
+    ALWAYS_SEARCH_USER_PATHS: NO
+    CLANG_ENABLE_MODULES: YES
+    CLANG_ENABLE_OBJC_ARC: YES
+    ENABLE_STRICT_OBJC_MSGSEND: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    TARGETED_DEVICE_FAMILY: "1"
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # OWNER: set your Apple Team ID here (or in Xcode → Signing) before a device build.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+  configs:
+    Debug:
+      DEBUG_INFORMATION_FORMAT: dwarf
+      ENABLE_TESTABILITY: YES
+      ONLY_ACTIVE_ARCH: YES
+      GCC_OPTIMIZATION_LEVEL: "0"
+      SWIFT_OPTIMIZATION_LEVEL: -Onone
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      GCC_PREPROCESSOR_DEFINITIONS: ["DEBUG=1", "$(inherited)"]
+    Release:
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      SWIFT_COMPILATION_MODE: wholemodule
+      SWIFT_OPTIMIZATION_LEVEL: -O
+      VALIDATE_PRODUCT: YES
+targets:
+  SaryAlbarq:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - Resources
+    settings:
+      base:
+        # OWNER: change if you register a different App ID.
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq
+        PRODUCT_NAME: SaryAlbarq
+        INFOPLIST_FILE: Sources/App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Sources/App/SaryAlbarq.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+  SaryAlbarqTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: SaryAlbarq
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.tests
+        # Xcode 27's XCTest is built for iOS 17; the app itself still runs on 16.
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/SaryAlbarq.app/SaryAlbarq
+        BUNDLE_LOADER: $(TEST_HOST)
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
+  SaryAlbarqUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: SaryAlbarq
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.uitests
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        TEST_TARGET_NAME: SaryAlbarq
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks"]
+schemes:
+  SaryAlbarq:
+    build:
+      targets:
+        SaryAlbarq: all
+        SaryAlbarqTests: [test]
+        SaryAlbarqUITests: [test]
+    test:
+      targets: [SaryAlbarqTests, SaryAlbarqUITests]
+      gatherCoverageData: false
+    run:
+      config: Debug

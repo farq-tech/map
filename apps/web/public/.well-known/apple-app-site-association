@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID_PLACEHOLDER.sa.sary.albarq"],
+        "components": [
+          {
+            "/": "/outings/join",
+            "comment": "Invite links. The token is in the #fragment, which iOS passes to the app untouched. OWNER: replace TEAMID_PLACEHOLDER with your 10-character Apple Team ID (and the bundle id if you change it) — see apps/ios/README.md."
+          }
+        ]
+      }
+    ]
+  }
+}

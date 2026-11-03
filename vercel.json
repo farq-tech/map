@@ -4,6 +4,17 @@
 	"installCommand": "npm install",
 	"buildCommand": "npm run build",
 	"outputDirectory": "apps/web/dist",
+	"headers": [
+		{
+			"source": "/.well-known/apple-app-site-association",
+			"headers": [
+				{
+					"key": "Content-Type",
+					"value": "application/json"
+				}
+			]
+		}
+	],
 	"rewrites": [
 		{
 			"source": "/api/comparison/restaurants/:id/catalog",
