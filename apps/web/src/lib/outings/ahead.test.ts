@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { angleDiff, coarseBbox, groupMotion, rankAlong, shareLine } from "./ahead";
+import { angleDiff, coarseBbox, groupMotion, NEAR_BOX, needWider, rankAlong, shareLine } from "./ahead";
 
 const O = { lat: 25.2, lng: 46.6 };
 const km = (dLatKm: number, dLngKm: number) => ({ lat: O.lat + dLatKm / 111.195, lng: O.lng + dLngKm / (111.195 * Math.cos((O.lat * Math.PI) / 180)) });
@@ -50,5 +50,21 @@ describe("nearest along the way", () => {
 		const line = shareLine(r, true, (m) => `${Math.round(m / 1000)} كم`);
 		expect(line).toBe("⛽ قدامنا — 12 كم قدّام");
 		expect([...line].length).toBeLessThanOrEqual(80);
+	});
+});
+
+describe("near box first, wide only when needed", () => {
+	it("the near box keeps the group well inside it", () => {
+		const p = { lat: 24.7136, lng: 46.6753 };
+		const [w, s, e, n] = coarseBbox(p, NEAR_BOX.grid, NEAR_BOX.half);
+		expect(e - w).toBeCloseTo(0.25);
+		expect(Math.min(p.lng - w, e - p.lng, p.lat - s, n - p.lat)).toBeGreaterThanOrEqual(0.0625);
+	});
+	it("looks wider when fewer than three answers lie ahead", () => {
+		const one = rankAlong(O, 0, [{ id: "a", kind: "fuel", name: "x", ...km(5, 0) }, { id: "b", kind: "fuel", name: "y", ...km(-5, 0) }]);
+		expect(needWider(one, 0)).toBe(true);
+		const three = rankAlong(O, 0, [1, 2, 3].map((i) => ({ id: String(i), kind: "fuel", name: null, ...km(i * 3, 0) })));
+		expect(needWider(three, 0)).toBe(false);
+		expect(needWider(one, null)).toBe(true);
 	});
 });

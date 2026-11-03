@@ -94,3 +94,15 @@ test('without fuel.geojson there are simply no fuel features', () => {
   if (fs.existsSync(path.join(__dirname, '../data/outdoor/fuel.geojson'))) return;
   assert.equal(outdoor.queryFeatures({ types: 'fuel' }).count, 0);
 });
+
+test('a box over the cap keeps the features nearest its centre', () => {
+  outdoor.__reset();
+  const all = outdoor.queryFeatures({ bbox: '46.2,24.2,47.2,25.2', types: 'fuel,well,spring', limit: 1000 });
+  if (!all.truncated) return; // no dense data loaded: nothing to cap
+  assert.equal(all.count, 400);
+  const c = { lng: 46.7, lat: 24.7 };
+  const d = (f) => Math.hypot(f.properties.lng - c.lng, f.properties.lat - c.lat);
+  const far = Math.max(...all.features.map(d));
+  const inner = outdoor.queryFeatures({ bbox: '46.6,24.6,46.8,24.8', types: 'fuel,well,spring', limit: 1000 });
+  for (const f of inner.features) if (d(f) < far * 0.9) assert.ok(all.features.some((g) => g.id === f.id), 'a near feature is never dropped for a far one');
+});

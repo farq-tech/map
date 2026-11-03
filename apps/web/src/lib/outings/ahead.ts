@@ -82,12 +82,26 @@ export function rankAlong(origin: LatLng, heading: number | null, items: Candida
 	return ranked.slice(0, limit);
 }
 
-/** A coarse, cacheable box around a point: centre snapped to 0.25°, ±0.5°. */
-export function coarseBbox(p: LatLng): [number, number, number, number] {
-	const snap = (v: number) => Math.round(v * 4) / 4;
+/**
+ * A coarse, cacheable box around a point: centre snapped to `grid` degrees,
+ * ±`half`. The default (0.25°, ±0.5°) is the wide look; NEAR_BOX is the
+ * first, tighter one — a city like Riyadh has hundreds of stations.
+ */
+export function coarseBbox(p: LatLng, grid = 0.25, half = 0.5): [number, number, number, number] {
+	const snap = (v: number) => Math.round(v / grid) * grid;
 	const lat = snap(p.lat);
 	const lng = snap(p.lng);
-	return [lng - 0.5, lat - 0.5, lng + 0.5, lat + 0.5];
+	const r = (v: number) => Math.round(v * 1000) / 1000;
+	return [r(lng - half), r(lat - half), r(lng + half), r(lat + half)];
+}
+
+/** ~14 km grid, ±0.125°: the group is always ≥ ~7 km inside it. */
+export const NEAR_BOX = { grid: 0.125, half: 0.125 } as const;
+
+/** Enough answers from the near box, or look wider? */
+export function needWider(ranked: Ranked[], heading: number | null, want = 3): boolean {
+	const useful = heading == null ? ranked : ranked.filter((r) => r.ahead);
+	return useful.length < want;
 }
 
 /** The line that goes over your car when you share it («⛽ محطة … — ١٢ كم قدّام»). */
