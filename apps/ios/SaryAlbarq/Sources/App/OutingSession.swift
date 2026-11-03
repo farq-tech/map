@@ -35,6 +35,8 @@ final class OutingSession: ObservableObject, Identifiable {
     private var channel: LiveChannel?
     private var lastSent: Policy.LastSent?
     private var timers: [Timer] = []
+    /// No need to re-render ages while the screen is off.
+    private var visible = true
 
     static let modeKey = "sary.outings.mode.v1"
     static let activeShareKey = "sary.outings.activeShare.v1"
@@ -54,9 +56,16 @@ final class OutingSession: ObservableObject, Identifiable {
     // MARK: lifecycle
 
     func open() {
-        location.watchForeground()
+        /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
+        Task {
+            _ = await location.requestWhenInUse()
+            location.watchForeground()
+        }
         let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick &+= 1 }
+            Task { @MainActor in
+                guard let self, self.visible else { return }
+                self.tick &+= 1
+            }
         }
         timers.append(t)
         guard !isDemo else { return }
@@ -98,6 +107,7 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func foreground(_ active: Bool) {
+        visible = active
         channel?.setAway(!active)
         if active { channel?.reconnectNow() }
     }
@@ -278,10 +288,13 @@ final class OutingSession: ObservableObject, Identifiable {
         closed(.left)
     }
 
-    /// The invite link: the one this device created, or (owner only) a fresh one.
-    func inviteURL() async -> URL? {
-        if let t = InviteTokenStore.load(id) { return InviteLink.url(for: t) }
-        guard view?.snapshot.me.role == "owner" else { return nil }
+    /// The invite link this device created, if any. The server keeps only its hash.
+    func storedInviteURL() -> URL? {
+        InviteTokenStore.load(id).map(InviteLink.url(for:))
+    }
+
+    /// Owner only: a new link. This revokes every earlier link, so it is never automatic.
+    func newInviteURL() async -> URL? {
         do {
             let inv = try await api.rotateInvite(id)
             InviteTokenStore.save(id, inv.token)

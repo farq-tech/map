@@ -11,6 +11,7 @@ struct LiveOutingView: View {
     @State private var showNote = false
     @State private var showMenu = false
     @State private var inviteURL: URL?
+    @State private var confirmBack = false
 
     var body: some View {
         let v = session.view
@@ -41,7 +42,15 @@ struct LiveOutingView: View {
         .alert("تنبيه", isPresented: Binding(get: { session.errorText != nil }, set: { if !$0 { session.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
         } message: { Text(session.errorText ?? "") }
-        .task { inviteURL = await session.inviteURL() }
+        .onAppear { inviteURL = session.storedInviteURL() }
+        .confirmationDialog("أنت تشارك موقعك الآن", isPresented: $confirmBack, titleVisibility: .visible) {
+            Button("أوقف المشاركة وارجع", role: .destructive) {
+                Task { await session.stopSharing(); model.closeSession() }
+            }
+            Button("ابقَ في الطلعة", role: .cancel) {}
+        } message: {
+            Text("الرجوع إلى قائمة الطلعات يوقف مشاركة موقعك. لتبقى المشاركة والشاشة مقفلة، اقفل الشاشة وأنت هنا.")
+        }
     }
 
     private func cars(_ v: OutingView?) -> [CarItem] {
@@ -66,7 +75,7 @@ struct LiveOutingView: View {
 
     @ViewBuilder private func header(_ v: OutingView?) -> some View {
         HStack(spacing: 10) {
-            Button { model.closeSession() } label: {
+            Button { if session.isSharingNow { confirmBack = true } else { model.closeSession() } } label: {
                 Image(systemName: "chevron.forward").font(.headline).padding(10).background(.thinMaterial, in: Circle())
             }
             .accessibilityLabel("رجوع")
@@ -99,6 +108,9 @@ struct LiveOutingView: View {
                     Text("دقيقة").tag(ShareMode.precise)
                     Text("متوازنة").tag(ShareMode.balanced)
                     Text("موفّرة للبطارية").tag(ShareMode.saver)
+                }
+                if v?.snapshot.me.role == "owner", v?.status != .ended {
+                    Button("رابط دعوة جديد (يلغي القديم)") { Task { if let u = await session.newInviteURL() { inviteURL = u } } }
                 }
                 if v?.status != .ended { Button("مغادرة الطلعة", role: .destructive) { Task { await session.leave() } } }
             } label: {
