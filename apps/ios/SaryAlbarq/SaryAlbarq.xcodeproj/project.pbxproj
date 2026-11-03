@@ -11,6 +11,7 @@
 		071B934F70A195F66BAC9EEF /* ServerRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */; };
 		091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22577D3538F441C2B397A087 /* LocationTuning.swift */; };
 		0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */; };
+		1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */; };
 		1CA61098FF2C6466AC156AEF /* CarColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF000A053D67AA53866613C3 /* CarColors.swift */; };
 		1E02895EB7B6FDE875ADFE62 /* InviteLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0CAF1A6CC3BA3345CE20B5 /* InviteLink.swift */; };
 		260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */; };
@@ -24,13 +25,17 @@
 		771CF1A9EC8865D34CE4F02E /* OutingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */; };
 		85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */; };
 		871618BA2834A861C00B7131 /* OutingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AC37E1EA85F7EC642D4ACE /* OutingState.swift */; };
+		8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */; };
+		98F511391CA39ED1A4D0CC3F /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 522D9BD5ED742287300C4BD0 /* MapboxMaps */; };
 		B275E968D9BFEA4C9D1F4634 /* LiveOutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9A4FF7DE76BCDC7321AB65 /* LiveOutingView.swift */; };
 		B55007BB4AC745A6F82825ED /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D1F55DF995866060A02C7E28 /* InfoPlist.strings */; };
 		C9C19B349BAB334D88BDBB89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5AF5AA15881B17850C98CA71 /* Assets.xcassets */; };
 		CCD5E96D3DFDB929798B6340 /* OutingsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E66886D840B423246AD77BEB /* OutingsListView.swift */; };
 		CD1803F06895A058CDE03F6B /* LocationSharer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13815A9D77BC92625010C184 /* LocationSharer.swift */; };
-		CD74E5DE0E5CA0738FBF39C1 /* OutingMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 802DFDFAE2D59C80BD757E9D /* OutingMapView.swift */; };
+		DECB2C60519D02E59632BF87 /* SuvModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D00282D218E5D04013AD73 /* SuvModel.swift */; };
 		E3BB0F9928FD1FA15AED4E9C /* Policy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376AED911A9C2A29F5F4EFD0 /* Policy.swift */; };
+		EE133A4EEAB990C0B47A68C7 /* Vehicle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A85914500826197C7FB0F /* Vehicle.swift */; };
+		EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */; };
 		F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 978DED85B9A53695F514416B /* Models.swift */; };
 		FC646E6DE766A24056CC8873 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B545614818C7F89DCDD20D /* RootView.swift */; };
 /* End PBXBuildFile section */
@@ -62,15 +67,20 @@
 		22D142BEE2D2FB9BA3700CFB /* SaryAlbarq.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SaryAlbarq.entitlements; sourceTree = "<group>"; };
 		30AC37E1EA85F7EC642D4ACE /* OutingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingState.swift; sourceTree = "<group>"; };
 		318D0930455B81369FEEE9E0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoadSnap.swift; sourceTree = "<group>"; };
 		376AED911A9C2A29F5F4EFD0 /* Policy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Policy.swift; sourceTree = "<group>"; };
 		3965FB1AEE0F3BE181A0450F /* SaryAlbarqTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3DD3067CF341A79F279CD980 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		52B545614818C7F89DCDD20D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingMapboxView.swift; sourceTree = "<group>"; };
 		5A9A4FF7DE76BCDC7321AB65 /* LiveOutingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingView.swift; sourceTree = "<group>"; };
 		5AF5AA15881B17850C98CA71 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5E17D73842E97F9B08A394E6 /* SaryAlbarq.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SaryAlbarq.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		61D00282D218E5D04013AD73 /* SuvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuvModel.swift; sourceTree = "<group>"; };
 		6E24003749BC3726C3407B3A /* SaryAlbarqUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqUITests.swift; sourceTree = "<group>"; };
 		77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		802DFDFAE2D59C80BD757E9D /* OutingMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingMapView.swift; sourceTree = "<group>"; };
+		7A2A85914500826197C7FB0F /* Vehicle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vehicle.swift; sourceTree = "<group>"; };
+		7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapPortTests.swift; sourceTree = "<group>"; };
 		8B2B0A0909BDD5E63CA7FC11 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		978DED85B9A53695F514416B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		A44C2A050B84465EA50A992A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -86,6 +96,17 @@
 		EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRules.swift; sourceTree = "<group>"; };
 		FF000A053D67AA53866613C3 /* CarColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		003D6C1B9874448F4E61D28A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				98F511391CA39ED1A4D0CC3F /* MapboxMaps in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		028F6CF2C8E769BC0F270D1D /* Net */ = {
@@ -106,15 +127,35 @@
 			path = Location;
 			sourceTree = "<group>";
 		};
+		1428C2F85B3DD5A92FBF8EF9 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */,
+				35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */,
+				61D00282D218E5D04013AD73 /* SuvModel.swift */,
+				7A2A85914500826197C7FB0F /* Vehicle.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
 		335AC24D73CD1E9D6723E6BC = {
 			isa = PBXGroup;
 			children = (
+				36A0F5FA64D8DB846BB2E8E4 /* Config */,
 				849883FB983546B1003A7E47 /* Resources */,
 				3F9C07B7902141E4BA18E95C /* Sources */,
 				502C2E6652D6C490D65D52B4 /* Tests */,
 				A8E79051213FADBD889D7AB2 /* UITests */,
 				AF0812172F6B23688AE14662 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		36A0F5FA64D8DB846BB2E8E4 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				3DD3067CF341A79F279CD980 /* Base.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		3F6AA727A2C5DC0D415E2721 /* App */ = {
@@ -135,6 +176,7 @@
 				3F6AA727A2C5DC0D415E2721 /* App */,
 				D5B3281AE32852B968F9D0AE /* Core */,
 				12B3C3B994B8ADE6016E391A /* Location */,
+				1428C2F85B3DD5A92FBF8EF9 /* Map */,
 				028F6CF2C8E769BC0F270D1D /* Net */,
 				54952AD5E8E0707CE1904899 /* Views */,
 			);
@@ -145,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
+				7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */,
 				B7375A05885429491947FFF5 /* OutingStateTests.swift */,
 				DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */,
 				DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */,
@@ -156,7 +199,6 @@
 			isa = PBXGroup;
 			children = (
 				5A9A4FF7DE76BCDC7321AB65 /* LiveOutingView.swift */,
-				802DFDFAE2D59C80BD757E9D /* OutingMapView.swift */,
 				E66886D840B423246AD77BEB /* OutingsListView.swift */,
 				52B545614818C7F89DCDD20D /* RootView.swift */,
 			);
@@ -214,6 +256,7 @@
 			buildPhases = (
 				F7CE37992E98AFCB185F50F9 /* Sources */,
 				86FF7C92958D9BF4682ED1DC /* Resources */,
+				003D6C1B9874448F4E61D28A /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -221,6 +264,7 @@
 			);
 			name = SaryAlbarq;
 			packageProductDependencies = (
+				522D9BD5ED742287300C4BD0 /* MapboxMaps */,
 			);
 			productName = SaryAlbarq;
 			productReference = 5E17D73842E97F9B08A394E6 /* SaryAlbarq.app */;
@@ -296,6 +340,9 @@
 			);
 			mainGroup = 335AC24D73CD1E9D6723E6BC;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0BFA02F11172E312275C0441 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AF0812172F6B23688AE14662 /* Products */;
 			projectDirPath = "";
@@ -335,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
+				1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */,
 				2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */,
 				0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */,
 				85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */,
@@ -354,15 +402,18 @@
 				CD1803F06895A058CDE03F6B /* LocationSharer.swift in Sources */,
 				091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */,
 				F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */,
-				CD74E5DE0E5CA0738FBF39C1 /* OutingMapView.swift in Sources */,
+				8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */,
 				771CF1A9EC8865D34CE4F02E /* OutingSession.swift in Sources */,
 				871618BA2834A861C00B7131 /* OutingState.swift in Sources */,
 				00DB1B5A251C9F87CE438139 /* OutingsAPI.swift in Sources */,
 				CCD5E96D3DFDB929798B6340 /* OutingsListView.swift in Sources */,
 				E3BB0F9928FD1FA15AED4E9C /* Policy.swift in Sources */,
+				EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */,
 				FC646E6DE766A24056CC8873 /* RootView.swift in Sources */,
 				6B71C341051934FE32A56BE3 /* SaryAlbarqApp.swift in Sources */,
 				071B934F70A195F66BAC9EEF /* ServerRules.swift in Sources */,
+				DECB2C60519D02E59632BF87 /* SuvModel.swift in Sources */,
+				EE133A4EEAB990C0B47A68C7 /* Vehicle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -412,7 +463,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1.0;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -427,6 +478,7 @@
 		};
 		42C98FF09AD2587CBA50A208 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/App/SaryAlbarq.entitlements;
@@ -444,6 +496,7 @@
 		};
 		59DB2284A1EA5F056E78E0F1 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/App/SaryAlbarq.entitlements;
@@ -464,7 +517,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -487,7 +539,7 @@
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -505,7 +557,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -520,7 +571,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -535,7 +585,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -586,6 +635,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0BFA02F11172E312275C0441 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 11.33.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		522D9BD5ED742287300C4BD0 /* MapboxMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0BFA02F11172E312275C0441 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
+			productName = MapboxMaps;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F7429672CC3462184D2EC936 /* Project object */;
 }
