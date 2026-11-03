@@ -6,6 +6,7 @@
  * The street comes from Mapbox Streets' own road lines, already on the phone
  * as vector tiles (a hidden probe layer keeps them loaded). Only drivable
  * roads count, never desert tracks or footpaths, and only within MAX_SNAP_M
+ * (60 m: city GPS under a roof drifts that far; no house is farther from a street)
  * — in open desert there is no street that close, so the car stays exactly
  * where GPS put it. This moves the drawing only: what is sent to the group
  * is always the real fix.
@@ -15,7 +16,7 @@ import type { Map as MapboxMap } from "mapbox-gl";
 
 export const ROAD_SOURCE = "sary-roads";
 export const ROAD_PROBE_LAYER = "sary-roads-probe";
-export const MAX_SNAP_M = 35;
+export const MAX_SNAP_M = 60;
 
 const DRIVABLE = [
 	"motorway",

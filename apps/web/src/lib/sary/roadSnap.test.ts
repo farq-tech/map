@@ -17,7 +17,7 @@ describe("drawing a car on the street", () => {
 	});
 
 	it("leaves a car alone when no street is near (open desert)", () => {
-		const p = { lng: 46.665, lat: 24.781 }; // ~110 m away
+		const p = { lng: 46.665, lat: 24.7808 }; // ~88 m away
 		expect(nearestOnLines(p, [street])).toBeNull();
 	});
 
@@ -28,5 +28,12 @@ describe("drawing a car on the street", () => {
 		];
 		const s = nearestOnLines({ lng: 46.665, lat: 24.78015 }, [street, north])!;
 		expect(s.lat).toBeCloseTo(24.7802, 6);
+	});
+});
+
+describe("a house set back from the street", () => {
+	it("still lands on the street ~50 m away", () => {
+		const s = nearestOnLines({ lng: 46.665, lat: 24.78045 }, [street]);
+		expect(s?.lat).toBeCloseTo(24.78, 6);
 	});
 });
