@@ -21,21 +21,27 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
    * are different states. outingId -> Map(userId -> { at, gps }) */
   const links = new Map();
 
-  function touch(outingId, userId, gps) {
+  function touch(outingId, userId, gps, battery) {
     if (!outingId || !userId) return;
     if (!links.has(outingId)) links.set(outingId, new Map());
     const m = links.get(outingId);
     const prev = m.get(userId);
-    const next = { at: now(), gps: gps || prev?.gps || null };
+    /* Battery keeps the time it was read: a reading that stops coming ages out on the client. */
+    const next = { at: now(), gps: gps || prev?.gps || null, battery: battery ? { ...battery, at: now() } : prev?.battery || null };
     m.set(userId, next);
     return { prev, next };
   }
 
-  /** A connection heartbeat (no coordinates) → everyone else learns we still hear this person. */
-  function heartbeat(outingId, userId, gps) {
+  /** A connection heartbeat (no coordinates) → everyone else learns we still hear this person.
+   * `battery` is an already-validated { level, charging } or null (not every phone can tell). */
+  function heartbeat(outingId, userId, gps, battery = null) {
     const g = gps === 'ok' || gps === 'weak' || gps === 'unavailable' || gps === 'denied' ? gps : null;
-    const { next } = touch(outingId, userId, g);
-    emit(outingId, { type: 'member_link', user_id: userId, last_seen_at: new Date(next.at).toISOString(), gps: next.gps }, { exceptUser: userId });
+    const { next } = touch(outingId, userId, g, battery);
+    emit(outingId, { type: 'member_link', user_id: userId, last_seen_at: new Date(next.at).toISOString(), gps: next.gps, battery: batteryOut(next.battery) }, { exceptUser: userId });
+  }
+
+  function batteryOut(b) {
+    return b ? { level: b.level, charging: b.charging, at: new Date(b.at).toISOString() } : null;
   }
 
   function linkState(outingId) {
@@ -198,7 +204,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return { rooms: rooms.size, sockets };
   }
 
-  return { join, leave, emit, connectionsOf, touch, heartbeat, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
+  return { join, leave, emit, connectionsOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
 }
 
 module.exports = { createHub };

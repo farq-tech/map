@@ -1,0 +1,414 @@
+/* Outing safety: SOS, rally point, battery. Red is kept for SOS alone. */
+
+/* ---- the «طوارئ» button: bottom-start corner, away from every other control ---- */
+
+.sary-sos-btn {
+	position: absolute;
+	z-index: 6;
+	inset-inline-start: 12px;
+	/* Always above the sheet, whatever its height: help must never be one swipe away. */
+	bottom: min(calc(var(--sary-sheet-h, 148px) + 20px + env(safe-area-inset-bottom, 0px)), calc(100dvh - 240px));
+	width: 64px;
+	height: 64px;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 3px solid #fff;
+	border-radius: 50%;
+	background: #c81e1e;
+	color: #fff;
+	font-weight: 800;
+	font-size: 0.95rem;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	cursor: pointer;
+}
+
+.sary-sos-btn > span:last-child {
+	position: relative;
+}
+
+.sary-sos-btn__ring {
+	position: absolute;
+	inset: -7px;
+	border-radius: 50%;
+	background: conic-gradient(#fff calc(var(--sary-sos-p) * 1turn), rgba(255, 255, 255, 0.25) 0turn);
+	mask: radial-gradient(circle, transparent 34px, #000 35px);
+	-webkit-mask: radial-gradient(circle, transparent 34px, #000 35px);
+	opacity: 0;
+}
+
+.sary-sos-btn[data-holding="1"] {
+	background: #a01212;
+}
+
+.sary-sos-btn[data-holding="1"] .sary-sos-btn__ring {
+	opacity: 1;
+	animation: sary-sos-fill 1s linear forwards;
+}
+
+@property --sary-sos-p {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@keyframes sary-sos-fill {
+	from {
+		--sary-sos-p: 0;
+	}
+	to {
+		--sary-sos-p: 1;
+	}
+}
+
+.sary-sos-btn:disabled {
+	opacity: 0.5;
+}
+
+.sary-sos-btn:focus-visible {
+	outline: 3px solid #ffd54a;
+	outline-offset: 3px;
+}
+
+/* ---- my SOS is out ---- */
+
+.sary-sos-mine,
+.sary-sos-strip {
+	position: fixed;
+	z-index: 66;
+	top: calc(12px + env(safe-area-inset-top, 0px));
+	inset-inline: 12px;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 0;
+	border-radius: 14px;
+	background: #c81e1e;
+	color: #fff;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+	text-align: start;
+	font: inherit;
+}
+
+.sary-sos-mine strong {
+	flex: 1;
+	font-size: 0.95rem;
+}
+
+.sary-sos-mine button {
+	flex: 0 0 auto;
+	min-height: 44px;
+	padding: 0 18px;
+	border: 0;
+	border-radius: 12px;
+	background: #fff;
+	color: #1d7a3a;
+	font-weight: 800;
+	font-size: 1rem;
+	cursor: pointer;
+}
+
+.sary-sos-strip {
+	z-index: 64;
+	cursor: pointer;
+	animation: sary-sos-blink 1.2s ease-in-out infinite;
+}
+
+.sary-sos-strip b {
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: #fff;
+	color: #c81e1e;
+}
+
+/* ---- the full-screen alert others see ---- */
+
+.sary-sos-alert {
+	position: fixed;
+	inset: 0;
+	z-index: 80;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+	background: #b3141499;
+	background: radial-gradient(circle at 50% 30%, #e02424, #8c0c0c);
+	color: #fff;
+	animation: sary-sos-in 200ms ease-out;
+}
+
+.sary-sos-alert__body {
+	width: 100%;
+	max-width: 420px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	text-align: center;
+}
+
+.sary-sos-alert__badge {
+	display: grid;
+	place-items: center;
+	width: 96px;
+	height: 96px;
+	border: 4px solid #fff;
+	border-radius: 50%;
+	font-size: 1.6rem;
+	font-weight: 900;
+	animation: sary-sos-pulse 1s ease-out infinite;
+}
+
+.sary-sos-alert h2 {
+	margin: 6px 0 0;
+	font-size: 1.6rem;
+	line-height: 1.3;
+}
+
+.sary-sos-alert p {
+	margin: 0;
+	font-size: 1.05rem;
+}
+
+.sary-sos-alert__age {
+	opacity: 0.85;
+	font-size: 0.9rem !important;
+}
+
+.sary-sos-alert__actions {
+	width: 100%;
+	display: grid;
+	gap: 10px;
+	margin-top: 14px;
+}
+
+.sary-sos-alert__actions > * {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 52px;
+	border: 2px solid #fff;
+	border-radius: 14px;
+	background: transparent;
+	color: #fff;
+	font: inherit;
+	font-weight: 700;
+	font-size: 1.05rem;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.sary-sos-alert__actions .sary-sos-alert__call {
+	background: #fff;
+	color: #b31414;
+	font-size: 1.2rem;
+}
+
+.sary-sos-alert__actions .is-quiet {
+	border-color: transparent;
+	opacity: 0.85;
+}
+
+@keyframes sary-sos-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes sary-sos-pulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+	}
+	100% {
+		box-shadow: 0 0 0 26px rgba(255, 255, 255, 0);
+	}
+}
+
+@keyframes sary-sos-blink {
+	50% {
+		background: #8c0c0c;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sary-sos-alert,
+	.sary-sos-alert__badge,
+	.sary-sos-strip,
+	.sary-sos-btn[data-holding="1"] .sary-sos-btn__ring {
+		animation: none;
+	}
+	.sary-sos-btn[data-holding="1"] .sary-sos-btn__ring {
+		background: #fff;
+		opacity: 0.6;
+	}
+}
+
+/* ---- map pins ---- */
+
+.sary-pin {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+.sary-pin__head {
+	display: grid;
+	place-items: center;
+	min-width: 36px;
+	height: 36px;
+	padding: 0 6px;
+	border: 3px solid #fff;
+	border-radius: 18px 18px 18px 4px;
+	background: #1f6feb;
+	color: #fff;
+	font-weight: 900;
+	font-size: 1.1rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.sary-pin[data-kind="sos"] .sary-pin__head {
+	background: #c81e1e;
+	font-size: 0.8rem;
+}
+
+.sary-pin__label {
+	max-width: 160px;
+	padding: 2px 8px;
+	border-radius: 8px;
+	background: rgba(28, 24, 20, 0.9);
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 700;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sary-pin__label:empty {
+	display: none;
+}
+
+/* ---- rally card + placer ---- */
+
+.sary-rally {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: 6px 12px;
+	margin-bottom: 10px;
+	padding: 10px 12px;
+	border: 1px solid rgba(31, 111, 235, 0.45);
+	border-radius: 14px;
+	background: rgba(31, 111, 235, 0.12);
+}
+
+.sary-rally[data-set="0"] {
+	grid-template-columns: auto 1fr auto;
+}
+
+.sary-rally__flag {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: #1f6feb;
+	color: #fff;
+	font-size: 1.1rem;
+}
+
+.sary-rally > div {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.sary-rally > div span {
+	font-size: 0.85rem;
+	opacity: 0.85;
+}
+
+.sary-rally__actions {
+	grid-column: 1 / -1;
+	display: flex !important;
+	flex-direction: row !important;
+	flex-wrap: wrap;
+	gap: 8px !important;
+}
+
+.sary-rally-cross {
+	position: fixed;
+	z-index: 8;
+	transform: translate(-50%, -100%);
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border: 3px solid #fff;
+	border-radius: 20px 20px 20px 4px;
+	background: #1f6feb;
+	color: #fff;
+	font-size: 1.2rem;
+	pointer-events: none;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.sary-rally-place {
+	position: fixed;
+	z-index: 62;
+	inset-inline: 12px;
+	bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+	padding: 14px;
+	border-radius: 16px;
+	background: rgba(28, 24, 20, 0.95);
+	color: #f4efe6;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.sary-rally-place p {
+	margin: 0 0 10px;
+}
+
+@media (min-width: 1024px) {
+	.sary-rally-place {
+		inset-inline: auto 24px;
+		width: 380px;
+	}
+}
+
+/* ---- battery ---- */
+
+.sary-batt {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	opacity: 0.85;
+	white-space: nowrap;
+}
+
+.sary-batt[data-low="1"] {
+	padding: 2px 6px;
+	border-radius: 8px;
+	background: #c81e1e;
+	color: #fff;
+	opacity: 1;
+	font-weight: 700;
+}
+
+.sary-o-pill[data-kind="sos"] {
+	background: #c81e1e;
+	color: #fff;
+	font-weight: 800;
+}

@@ -224,10 +224,18 @@ test('accounts, co-leaders and join lock', { skip, timeout: 60_000 }, async (t) 
   assert.equal((await api('DELETE', `/${outingId}/invites`, B)).body.revoked, 1, 'co-leader revokes');
   assert.equal((await api('DELETE', `/${outingId}/members/${cId}`, B)).status, 403, 'removing stays with the owner');
   assert.equal((await api('POST', `/${outingId}/lock`, B, { locked: true })).status, 403, 'locking stays with the owner');
+  /* Rally point (#24) uses the same leader rule: a co-leader may place it, a plain member may not. */
+  const rallyB = await api('PUT', `/${outingId}/rally`, B, { lat: 24.8, lng: 46.7, label: 'عند الطلح' });
+  assert.equal(rallyB.status, 200, 'co-leader sets the rally point');
+  assert.equal(rallyB.body.rally.set_by, bId);
+  assert.equal((await lc.next((m) => m.type === 'rally')).rally.label, 'عند الطلح', 'members hear it');
+  assert.equal((await api('PUT', `/${outingId}/rally`, C, { lat: 24.8, lng: 46.7 })).status, 403, 'members still cannot');
+  assert.equal((await api('DELETE', `/${outingId}/rally`, B)).status, 200, 'co-leader clears it');
 
   /* Taking it back: B is a member again, server-side, at once. */
   await api('POST', `/${outingId}/members/${bId}/co-leader`, A, { co_leader: false });
   assert.equal((await api('POST', `/${outingId}/status`, B, { action: 'pause' })).status, 403);
+  assert.equal((await api('PUT', `/${outingId}/rally`, B, { lat: 24.8, lng: 46.7 })).status, 403, 'no longer a leader: no rally point');
 
   /* ---------------- join lock ---------------- */
   const link = (await api('POST', `/${outingId}/invites`, A)).body.invite.token;

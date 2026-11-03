@@ -11,7 +11,7 @@
  */
 
 import { API_BASE_URL } from "../api";
-import { OutingApiError, OutingsApi, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position } from "./api";
+import { OutingApiError, OutingsApi, type Battery, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position, type Rally, type Sos } from "./api";
 import type { DeviceFix, ShareMode } from "./policy";
 
 export type LiveState = "connecting" | "live" | "polling" | "offline" | "closed";
@@ -26,8 +26,10 @@ export type LiveEvent =
 	| { type: "owner_changed"; owner_id: string }
 	| { type: "member_role"; user_id: string; co_leader: boolean }
 	| { type: "outing_lock"; join_locked: boolean }
-	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null }
+	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null; battery?: Battery | null }
 	| { type: "member_note"; user_id: string; note: MemberNote | null }
+	| { type: "sos"; user_id: string; sos: Sos | null }
+	| { type: "rally"; rally: Rally | null }
 	| { type: "outing_status"; status: OutingSnapshot["outing"]["status"] };
 
 export type ClosedReason = "outing_ended" | "removed" | "left" | "not_a_member" | "unauthorized" | "replaced";
@@ -39,6 +41,9 @@ export type ChannelDiagEvent =
 	| { kind: "send"; transport: "ws" | "http" }
 	| { kind: "ack"; transport: "ws" | "http"; ok: boolean; reason: AckReason; latencyMs: number | null }
 	| { kind: "drop"; reason: "too_old" };
+
+/** What this phone's Battery Status API says, sent with the heartbeat only when it exists. */
+export type BatteryReading = { level: number; charging: boolean };
 
 type Handlers = {
 	onSnapshot: (s: OutingSnapshot) => void;
@@ -52,7 +57,7 @@ type Handlers = {
 type Deps = {
 	WebSocketImpl?: typeof WebSocket;
 	poll?: (id: string) => Promise<OutingSnapshot>;
-	beat?: (id: string, gps: GpsState) => Promise<unknown>;
+	beat?: (id: string, gps: GpsState, battery?: BatteryReading | null) => Promise<unknown>;
 	post?: (id: string, fix: unknown) => Promise<unknown>;
 	now?: () => number;
 	setTimeout?: typeof setTimeout;
@@ -182,10 +187,10 @@ export class LiveChannel {
 	}
 
 	/** "Still here", with no coordinates — kept apart from fixes so others can tell no-GPS from no-network. */
-	heartbeat(gps: GpsState): void {
+	heartbeat(gps: GpsState, battery: BatteryReading | null = null): void {
 		if (this.stopped) return;
-		if (this.state === "live") this.sendFrame({ type: "heartbeat", gps });
-		else if (this.state === "polling") this.deps.beat(this.outingId, gps).catch(() => undefined);
+		if (this.state === "live") this.sendFrame(battery ? { type: "heartbeat", gps, battery } : { type: "heartbeat", gps });
+		else if (this.state === "polling") this.deps.beat(this.outingId, gps, battery).catch(() => undefined);
 	}
 
 	setAway(away: boolean): void {

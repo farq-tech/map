@@ -16,6 +16,7 @@ const express = require('express');
 const { asyncHandler } = require('../lib/async-handler');
 const { OutingError } = require('../lib/outings/service');
 const { createRateLimiter } = require('../lib/outings/rate-limit');
+const { battery } = require('../lib/outings/validate');
 
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -117,7 +118,7 @@ function createOutingsRouter({ service, hub, limits = {} }) {
   /* HTTP fallback heartbeat: "still here", no coordinates. */
   router.post('/:id/heartbeat', auth, asyncHandler(async (req, res) => {
     await service.requireMember(req.user, req.params.id);
-    hub?.heartbeat(req.params.id, req.user.id, req.body?.gps);
+    hub?.heartbeat(req.params.id, req.user.id, req.body?.gps, battery(req.body?.battery));
     res.json({ ok: true });
   }));
 
@@ -155,6 +156,25 @@ function createOutingsRouter({ service, hub, limits = {} }) {
 
   router.post('/:id/note', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.setNote(req.user, req.params.id, req.body?.text)) });
+  }));
+
+  /* SOS: raise/refresh with my last real fix (optional), cancel with «أنا بخير». */
+  router.post('/:id/sos', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.raiseSos(req.user, req.params.id, req.body?.fix ?? null)) });
+  }));
+
+  router.delete('/:id/sos', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.cancelSos(req.user, req.params.id)) });
+  }));
+
+  /* Rally point: owner only. PUT drops or moves it, DELETE clears it. */
+  router.put('/:id/rally', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.setRally(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.delete('/:id/rally', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setRally(req.user, req.params.id, null)) });
   }));
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {

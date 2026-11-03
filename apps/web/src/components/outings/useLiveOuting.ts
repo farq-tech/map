@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "../../contexts/LocationContext";
 import { loadIdentity, OutingApiError, OutingsApi, type GpsState, type OutingSnapshot } from "../../lib/outings/api";
-import { LiveChannel, type ClosedReason, type LiveState } from "../../lib/outings/live";
+import { LiveChannel, type BatteryReading, type ClosedReason, type LiveState } from "../../lib/outings/live";
+import { watchBattery } from "../../lib/outings/safety";
 import { clearCachedView, loadCachedView, saveCachedView } from "../../lib/outings/lastKnown";
 import { applyEvent, mergeSnapshot, type OutingView } from "../../lib/outings/outingState";
 import { diag } from "../../lib/outings/fieldDiagnostics";
@@ -188,9 +189,12 @@ export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: Fie
 					: "ok";
 	const gpsRef = useRef(gpsState);
 	gpsRef.current = gpsState;
+	/* Battery rides the same heartbeat, only where the phone can tell (not iOS). */
+	const batteryRef = useRef<BatteryReading | null>(null);
+	useEffect(() => watchBattery((b) => (batteryRef.current = b)), []);
 	useEffect(() => {
 		if (!visible || closed) return;
-		const beat = () => channelRef.current?.heartbeat(gpsRef.current);
+		const beat = () => channelRef.current?.heartbeat(gpsRef.current, batteryRef.current);
 		beat();
 		const t = window.setInterval(beat, LINK_HEARTBEAT_MS);
 		return () => window.clearInterval(t);

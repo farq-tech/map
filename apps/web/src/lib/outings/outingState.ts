@@ -61,7 +61,8 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			const m = v.members.get(e.user_id);
 			if (!m) return v;
 			const members = new Map(v.members);
-			members.set(e.user_id, { ...m, last_seen_at: e.last_seen_at, gps: e.gps, online: true });
+			/* Older servers send no battery field: keep what we had rather than blanking it. */
+			members.set(e.user_id, { ...m, last_seen_at: e.last_seen_at, gps: e.gps, online: true, ...(e.battery !== undefined ? { battery: e.battery } : {}) });
 			return withMembers(v, members);
 		}
 		case "member_note": {
@@ -71,6 +72,15 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			members.set(e.user_id, { ...m, note: e.note });
 			return withMembers(v, members);
 		}
+		case "sos": {
+			const m = v.members.get(e.user_id);
+			if (!m) return v;
+			const members = new Map(v.members);
+			members.set(e.user_id, { ...m, sos: e.sos });
+			return withMembers(v, members);
+		}
+		case "rally":
+			return { ...v, snapshot: { ...v.snapshot, outing: { ...v.snapshot.outing, rally: e.rally } } };
 		case "member_joined": {
 			const members = new Map(v.members);
 			members.set(e.member.user_id, { ...e.member, joined_at: new Date().toISOString(), online: false });
