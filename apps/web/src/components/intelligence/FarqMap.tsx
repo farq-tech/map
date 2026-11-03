@@ -37,7 +37,7 @@ import {
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, VEHICLE_LAYER } from "../../lib/sary/vehicleLayer";
-import { snapRadius, snapToRoad } from "../../lib/sary/roadSnap";
+import { matchOnMap, RoadMatcher, snapRadius } from "../../lib/sary/roadSnap";
 import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
@@ -538,6 +538,8 @@ export default function FarqMap({
 	const vehicleShownRef = useRef<{ lng: number; lat: number } | null>(null);
 	const vehicleHeadingRef = useRef<number | null>(null);
 	const vehicleAnchorRef = useRef<{ lng: number; lat: number } | null>(null);
+	/* Keeps our car on the same street from fix to fix (display only). */
+	const roadMatcherRef = useRef(new RoadMatcher());
 	const vehicleLabelRef = useRef<mapboxgl.Marker | null>(null);
 	const onVehicleTapRef = useRef(onVehicleTap);
 	onVehicleTapRef.current = onVehicleTap;
@@ -1283,8 +1285,11 @@ export default function FarqMap({
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
 			/* Keep the last real heading while parked; never invent one. */
+			/* The course of this fix, if it has one: reported, or from real movement. */
+			let course: number | null = null;
 			if (typeof userHeading === "number" && Number.isFinite(userHeading)) {
 				vehicleHeadingRef.current = userHeading;
+				course = userHeading;
 				vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 			} else {
 				/* Some phones report no course. Take it from real movement instead:
@@ -1293,12 +1298,17 @@ export default function FarqMap({
 				if (!a) vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 				else if (distanceMeters(a, userLocation) >= 12) {
 					vehicleHeadingRef.current = bearingBetween(a, userLocation);
+					course = vehicleHeadingRef.current;
 					vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 				}
 			}
 			const from = vehicleShownRef.current;
-			/* In town, on the street rather than inside the house beside it. */
-			const to = snapToRoad(map, { lng: userLocation.lng, lat: userLocation.lat }, snapRadius(userAccuracy));
+			/* In town, on the street it is driving along rather than inside the house beside it. */
+			const matched = matchOnMap(map, roadMatcherRef.current, { lng: userLocation.lng, lat: userLocation.lat }, course, snapRadius(userAccuracy));
+			const to = matched.point;
+			/* Moving along a matched road: point the car down the road, not a few degrees into the kerb. */
+			if (course != null && matched.heading != null) vehicleHeadingRef.current = matched.heading;
+			map.getContainer().dataset.road = matched.key ?? "";
 			cancelAnimationFrame(vehicleRafRef.current);
 			if (!from || reducedMotionRef.current) {
 				vehicleShownRef.current = to;
