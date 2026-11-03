@@ -955,3 +955,24 @@
 		width: 380px;
 	}
 }
+
+/* ---- phone ---- */
+
+.sary-o-myphone {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 4px 4px 10px;
+	color: #d4c6ae;
+	font-size: 0.9rem;
+}
+
+.sary-o-myphone-form {
+	padding: 4px 0 12px;
+}
+
+.sary-o-contact .sary-o-linkbtn {
+	flex: 1 1 0;
+	justify-content: center;
+}

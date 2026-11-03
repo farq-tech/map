@@ -20,7 +20,7 @@ export type LiveEvent =
 	| { type: "position"; position: Position }
 	| { type: "presence"; user_id: string; online: boolean; away: boolean }
 	| { type: "member_joined"; member: Member }
-	| { type: "member_updated"; member: Pick<Member, "user_id" | "display_name" | "avatar"> }
+	| { type: "member_updated"; member: Pick<Member, "user_id" | "display_name" | "avatar" | "phone"> }
 	| { type: "member_left"; user_id: string; reason: "left" | "removed" }
 	| { type: "member_sharing"; user_id: string; sharing: boolean }
 	| { type: "owner_changed"; owner_id: string }

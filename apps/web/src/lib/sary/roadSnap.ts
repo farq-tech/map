@@ -17,6 +17,18 @@ import type { Map as MapboxMap } from "mapbox-gl";
 export const ROAD_SOURCE = "sary-roads";
 export const ROAD_PROBE_LAYER = "sary-roads-probe";
 export const MAX_SNAP_M = 60;
+export const MIN_SNAP_M = 25;
+
+/**
+ * How far a fix may be moved to a street: as far as its own uncertainty
+ * reaches, between 25 m (a sharp fix only slides off a roof onto the street
+ * beside it) and 60 m (indoors, where GPS drifts that far). A sharp fix is
+ * never dragged onto a road it clearly is not on.
+ */
+export function snapRadius(accuracyM: number | null | undefined): number {
+	if (accuracyM == null || !Number.isFinite(accuracyM)) return 40;
+	return Math.max(MIN_SNAP_M, Math.min(MAX_SNAP_M, accuracyM * 1.5));
+}
 
 const DRIVABLE = [
 	"motorway",
@@ -90,8 +102,8 @@ export function nearestOnLines(p: LngLat, lines: number[][][], maxM = MAX_SNAP_M
 	return best;
 }
 
-/** p moved onto the nearest drivable street within MAX_SNAP_M, else p itself. */
-export function snapToRoad(map: MapboxMap, p: LngLat): LngLat {
+/** p moved onto the nearest drivable street within maxM, else p itself. */
+export function snapToRoad(map: MapboxMap, p: LngLat, maxM = MAX_SNAP_M): LngLat {
 	try {
 		if (!map.getSource(ROAD_SOURCE)) return p;
 		const feats = map.querySourceFeatures(ROAD_SOURCE, {
@@ -108,7 +120,7 @@ export function snapToRoad(map: MapboxMap, p: LngLat): LngLat {
 				if (line.some(([x, y]) => Math.abs(x - p.lng) < pad && Math.abs(y - p.lat) < pad)) lines.push(line);
 			}
 		}
-		return nearestOnLines(p, lines) || p;
+		return nearestOnLines(p, lines, maxM) || p;
 	} catch {
 		return p;
 	}

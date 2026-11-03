@@ -96,7 +96,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   /* ---------- identity ---------- */
 
   function publicUser(row) {
-    return { id: row.id, display_name: row.display_name, avatar: row.avatar || null };
+    return { id: row.id, display_name: row.display_name, avatar: row.avatar || null, phone: row.phone || null };
   }
 
   async function createUser({ display_name, avatar } = {}) {
@@ -107,7 +107,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const token = v.newSecret();
     const [row] = await q(
       `INSERT INTO sary.users (display_name, avatar, token_hash) VALUES ($1, $2, $3)
-       RETURNING id, display_name, avatar`,
+       RETURNING id, display_name, avatar, phone`,
       [name, av.value, v.digest(token)],
     );
     return { user: publicUser(row), token };
@@ -122,7 +122,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const [row] = await q(
       `UPDATE sary.users SET last_seen_at = now()
        WHERE token_hash = $1
-       RETURNING id, display_name, avatar`,
+       RETURNING id, display_name, avatar, phone`,
       [d],
     );
     if (!row) {
@@ -150,11 +150,17 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       params.push(av.value);
       sets.push(`avatar = $${params.length}`);
     }
+    if (patch.phone !== undefined) {
+      const ph = v.phone(patch.phone);
+      if (ph === undefined) throw err('invalid_phone');
+      params.push(ph);
+      sets.push(`phone = $${params.length}`);
+    }
     if (!sets.length) return user;
     params.push(user.id);
     const [row] = await q(
       `UPDATE sary.users SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, display_name, avatar`,
+       RETURNING id, display_name, avatar, phone`,
       params,
     );
     authCache.clear();
@@ -165,7 +171,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
        WHERE m.user_id = $1 AND m.status = 'active' AND o.status <> 'ended'`,
       [user.id],
     );
-    for (const r of rooms) hub.emit(r.outing_id, { type: 'member_updated', member: { user_id: next.id, display_name: next.display_name, avatar: next.avatar } });
+    for (const r of rooms) hub.emit(r.outing_id, { type: 'member_updated', member: { user_id: next.id, display_name: next.display_name, avatar: next.avatar, phone: next.phone } });
     return next;
   }
 
@@ -335,7 +341,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (!result.already) {
       hub.emit(result.outing_id, {
         type: 'member_joined',
-        member: { user_id: user.id, display_name: user.display_name, avatar: user.avatar, role: 'member', sharing: true },
+        member: { user_id: user.id, display_name: user.display_name, avatar: user.avatar, phone: user.phone || null, role: 'member', sharing: true },
       });
     }
     return result;
@@ -343,7 +349,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
 
   async function members(outingId) {
     return q(
-      `SELECT m.user_id, u.display_name, u.avatar, m.role, m.sharing, m.joined_at
+      `SELECT m.user_id, u.display_name, u.avatar, u.phone, m.role, m.sharing, m.joined_at
        FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
        WHERE m.outing_id = $1 AND m.status = 'active'
        ORDER BY m.role = 'owner' DESC, m.joined_at`,

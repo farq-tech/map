@@ -544,6 +544,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 						onSelectNeighborhood={() => undefined}
 						userLocation={userLocation}
 						userHeading={userHeading}
+						userAccuracy={userAccuracy}
 						showUserLocation={Boolean(userLocation)}
 						vehicleMode={phase === "tracking" || phase === "weak" || phase === "paused" || phase === "trip" ? "prado" : "dot"}
 						vehicleMotion={tripIsMoving(trip, now) ? "moving" : "idle"}

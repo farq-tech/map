@@ -196,8 +196,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 
 	const failLocate = useCallback((kind: GeoLocationErrorKind) => {
 		setIsLocating(false);
-		setHasLocationPermission(false);
+		/* Only a refusal means "not allowed". A slow or missing fix (indoors,
+		 * a parked refresh) keeps the permission: it is a weak signal, and
+		 * saying "denied" would tell friends something untrue. */
 		if (kind === "denied" || kind === "unsupported") {
+			setHasLocationPermission(false);
 			safeSet("localStorage", "locationPermission", "denied");
 		}
 		setErrorKind(kind);

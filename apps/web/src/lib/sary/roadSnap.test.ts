@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nearestOnLines } from "./roadSnap";
+import { nearestOnLines, snapRadius } from "./roadSnap";
 
 /* A street running east–west along latitude 24.78. */
 const street = [
@@ -35,5 +35,18 @@ describe("a house set back from the street", () => {
 	it("still lands on the street ~50 m away", () => {
 		const s = nearestOnLines({ lng: 46.665, lat: 24.78045 }, [street]);
 		expect(s?.lat).toBeCloseTo(24.78, 6);
+	});
+});
+
+describe("how far a car may be moved", () => {
+	it("follows the fix's own accuracy, 25–60 m", () => {
+		expect(snapRadius(5)).toBe(25);
+		expect(snapRadius(30)).toBe(45);
+		expect(snapRadius(65)).toBe(60);
+		expect(snapRadius(null)).toBe(40);
+	});
+
+	it("a sharp fix 50 m from a main road is not dragged onto it", () => {
+		expect(nearestOnLines({ lng: 46.665, lat: 24.78045 }, [street], snapRadius(5))).toBeNull();
 	});
 });

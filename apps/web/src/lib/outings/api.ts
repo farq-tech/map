@@ -14,13 +14,15 @@ const MODE_KEY = "sary.outings.mode.v1";
 const WAKE_KEY = "sary.outings.wake.v1";
 
 export type Identity = { token: string; user: PublicUser };
-export type PublicUser = { id: string; display_name: string; avatar: string | null };
+export type PublicUser = { id: string; display_name: string; avatar: string | null; phone?: string | null };
 export type OutingStatus = "created" | "active" | "paused" | "ended";
 
 export type Member = {
 	user_id: string;
 	display_name: string;
 	avatar: string | null;
+	/** Optional, shown only to fellow members (E.164, e.g. +9665…). */
+	phone?: string | null;
 	role: "owner" | "member";
 	sharing: boolean;
 	joined_at: string;
@@ -191,7 +193,7 @@ export const OutingsApi = {
 		saveIdentity(id);
 		return id;
 	},
-	async updateProfile(patch: { display_name?: string; avatar?: string | null }): Promise<PublicUser> {
+	async updateProfile(patch: { display_name?: string; avatar?: string | null; phone?: string | null }): Promise<PublicUser> {
 		const r = await call<{ user: PublicUser }>("PATCH", "/me", patch);
 		const cur = loadIdentity();
 		if (cur) saveIdentity({ ...cur, user: r.user });
@@ -242,6 +244,7 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		rate_limited: "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
 		too_frequent: "انتظر ثانيتين ثم أرسل.",
 		invalid_note: "اكتب عبارة قصيرة.",
+		invalid_phone: "اكتب رقم جوال صحيح، مثل 05XXXXXXXX.",
 		network: "لا يوجد اتصال بالإنترنت.",
 		timeout: "الشبكة بطيئة. أعد المحاولة.",
 		outings_unconfigured: "الطلعات المشتركة غير مفعّلة على الخادم.",
@@ -261,6 +264,7 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		rate_limited: "Too many attempts. Wait a moment.",
 		too_frequent: "Wait a couple of seconds, then send.",
 		invalid_note: "Write a short line.",
+		invalid_phone: "Enter a valid phone number, e.g. +9665XXXXXXXX.",
 		network: "You are offline.",
 		timeout: "The network is slow. Try again.",
 		outings_unconfigured: "Shared outings are not enabled on the server.",

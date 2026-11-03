@@ -16,7 +16,7 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import { haversineMeters } from "../sary/domain";
 import { lerp, tweenMs, type LngLat } from "./motion";
 import { initials, type Freshness } from "./policy";
-import { snapToRoad } from "../sary/roadSnap";
+import { snapRadius, snapToRoad } from "../sary/roadSnap";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, setVehicleOpacity, vehicleIds } from "../sary/vehicleLayer";
 
 export type ParticipantView = {
@@ -130,7 +130,7 @@ export class ParticipantMarkers {
 			seen.add(v.userId);
 			const raw = { lng: v.lng, lat: v.lat };
 			/* A confident fix in town is drawn on the street; an approximate one stays a ring where measured. */
-			const target = v.approximate ? raw : snapToRoad(this.map, raw);
+			const target = v.approximate ? raw : snapToRoad(this.map, raw, snapRadius(v.accuracyM));
 			let rec = this.recs.get(v.userId);
 			if (!rec) {
 				const el = build(v, this.onTap);

@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Navigation } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Navigation, Phone } from "lucide-react";
 import type { Map as MapboxMap } from "mapbox-gl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -65,7 +65,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const isRTL = language === "ar";
 	const navigate = useNavigate();
 	const reducedMotion = usePrefersReducedMotion();
-	const { userLocation, userHeading, userFixAt, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
+	const { userLocation, userHeading, userFixAt, userAccuracy, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
 	const [mode, setMode] = useState<ShareMode>(() => loadShareMode());
 	const live = useLiveOuting(outingId, mode);
 	const { view, liveState, closed, loadError, canSend, lastRefusal, visible, held, gpsState } = live;
@@ -79,8 +79,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [now, setNow] = useState(() => Date.now());
 	const [map, setMap] = useState<MapboxMap | null>(null);
-	const [focus, setFocus] = useState<{ lat: number; lng: number; id: string; zoom?: number; kind?: "select" | "locate" | "bounds"; bounds?: [number, number, number, number] | null } | null>(null);
+	const [focus, setFocus] = useState<{ lat: number; lng: number; id: string; zoom?: number; kind?: "select" | "locate" | "bounds"; bounds?: [number, number, number, number] | null; topInset?: number; maxZoom?: number } | null>(null);
 	const markersRef = useRef<ParticipantMarkers | null>(null);
+	const fitWithRef = useRef<(id: string) => void>(() => undefined);
 	const [composing, setComposing] = useState(false);
 	const [noteDraft, setNoteDraft] = useState("");
 	const [noteError, setNoteError] = useState<string | null>(null);
@@ -207,6 +208,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		if (!map) return;
 		const layer = new ParticipantMarkers(map, (id) => {
 			setSelected(id);
+			fitWithRef.current(id);
 			setPanel("members");
 			setSnap("half");
 		}, () => reducedMotion, isRTL);
@@ -243,8 +245,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		layer.sync(views);
 	}, [rows, selected, map, colors]);
 
-	const groupBounds = (): [number, number, number, number] | null => {
-		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position).map((r) => r.position!);
+	const groupBounds = (only?: string): [number, number, number, number] | null => {
+		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position && (!only || r.member.user_id === only)).map((r) => r.position!);
 		if (locationPinKind === "gps" && userLocation) pts.push(userLocation);
 		if (!pts.length) return null;
 		let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
@@ -254,19 +256,80 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			s = Math.min(s, p.lat);
 			n = Math.max(n, p.lat);
 		}
-		const pad = 0.002;
+		/* ~60 m around: enough to see the street, close enough that two cars side by side separate. */
+		const pad = 0.0006;
 		return [w - pad, s - pad, e + pad, n + pad];
 	};
+
+	/* "Keep everyone on screen": on by default, off once you move the map
+	 * yourself, back on with «المجموعة». */
+	const [keepGroup, setKeepGroup] = useState(true);
+	const keepGroupRef = useRef(keepGroup);
+	keepGroupRef.current = keepGroup;
+
+	/* How far down the screen our own bars reach, plus room for a name and a note over a car. */
+	const topInset = () => {
+		let bottom = 0;
+		for (const el of document.querySelectorAll(".sary-o-bar, .sary-o-share, .sary-o-warn")) bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
+		return Math.round(bottom + 70);
+	};
+	const frame = (b: [number, number, number, number], id: string) =>
+		setFocus({ lat: (b[1] + b[3]) / 2, lng: (b[0] + b[2]) / 2, id, kind: "bounds", bounds: b, topInset: topInset(), maxZoom: 17.5 });
 
 	const fitGroup = () => {
 		const b = groupBounds();
 		if (!b) return;
 		setFollow(false);
-		setFocus({ lat: (b[1] + b[3]) / 2, lng: (b[0] + b[2]) / 2, id: `group-${Date.now()}`, kind: "bounds", bounds: b });
+		setKeepGroup(true);
+		frame(b, `group-${Date.now()}`);
 	};
+
+	/* You and one friend, together on screen. */
+	const fitWith = (userId: string) => {
+		const b = groupBounds(userId);
+		if (!b) return;
+		setFollow(false);
+		setKeepGroup(false);
+		frame(b, `pair-${userId}-${Date.now()}`);
+	};
+
+	fitWithRef.current = fitWith;
+
+	/* A finger on the map means "let me look": stop reframing until asked. */
+	useEffect(() => {
+		if (!map) return;
+		const stop = (e: unknown) => {
+			if ((e as { originalEvent?: unknown }).originalEvent) setKeepGroup(false);
+		};
+		map.on("dragstart", stop);
+		map.on("zoomstart", stop);
+		map.on("rotatestart", stop);
+		return () => {
+			map.off("dragstart", stop);
+			map.off("zoomstart", stop);
+			map.off("rotatestart", stop);
+		};
+	}, [map]);
+
+	/* While keeping the group: if anyone (you included) drifts off screen, reframe. */
+	useEffect(() => {
+		if (!map || !keepGroup || follow || !fittedRef.current) return;
+		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position).map((r) => r.position!);
+		if (locationPinKind === "gps" && userLocation) pts.push(userLocation);
+		if (pts.length < 2) return;
+		const view = map.getBounds();
+		if (!view) return;
+		/* Inset the view a little so a car at the very edge counts as off screen. */
+		const w = view.getWest(), e = view.getEast(), s = view.getSouth(), n = view.getNorth();
+		const dx = (e - w) * 0.08, dy = (n - s) * 0.12;
+		const out = pts.some((p) => p.lng < w + dx || p.lng > e - dx || p.lat < s + dy || p.lat > n - dy);
+		if (out) fitGroup();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [rows, userLocation, keepGroup, follow, map]);
 
 	const locateMe = () => {
 		requestLocation();
+		setKeepGroup(false);
 		if (userLocation) {
 			setFollow(true);
 			setFocus({ lat: userLocation.lat, lng: userLocation.lng, id: `me-${Date.now()}`, kind: "locate", zoom: 14.5 });
@@ -408,6 +471,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						onSelectNeighborhood={() => undefined}
 						userLocation={locationPinKind === "gps" ? userLocation : null}
 						userHeading={userHeading}
+						userAccuracy={userAccuracy}
 						showUserLocation={locationPinKind === "gps" && Boolean(userLocation)}
 						followMode={follow}
 						vehicleMode={canSend ? "prado" : "dot"}
@@ -517,11 +581,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							isOwner={isOwner}
 							busy={busy}
 							onBack={() => setSelected(null)}
-							onFocus={() => {
-								if (!selectedRow.position) return;
-								setFollow(false);
-								setFocus({ lat: selectedRow.position.lat, lng: selectedRow.position.lng, id: `peer-${Date.now()}`, kind: "select", zoom: 15 });
-							}}
+							onFocus={() => fitWith(selectedRow.member.user_id)}
 							onRemove={() => setConfirm({ kind: "remove", userId: selectedRow.member.user_id, name: selectedRow.member.display_name })}
 						/>
 					) : (
@@ -532,6 +592,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 									<strong>{isRTL ? "أنت" : "You"}{isOwner ? (isRTL ? " · صاحب الطلعة" : " · owner") : ""}</strong>
 									<span>{sharingLine}</span>
 								</div>
+							</li>
+							<li>
+								<MyPhone current={me ? view?.members.get(me.user_id)?.phone || null : null} isRTL={isRTL} onSaved={(t) => setToast(t)} />
 							</li>
 							{rows.map((r) => (
 								<li key={r.member.user_id}>
@@ -916,6 +979,85 @@ function Face({ name, avatar, fresh, color }: { name: string; avatar: string | n
 	);
 }
 
+/** Your optional number, so friends in the outing can call or WhatsApp you. */
+function MyPhone({ current, isRTL, onSaved }: { current: string | null; isRTL: boolean; onSaved: (toast: string) => void }) {
+	const [open, setOpen] = useState(false);
+	const [value, setValue] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const save = async (phone: string) => {
+		setBusy(true);
+		setError(null);
+		try {
+			await OutingsApi.updateProfile({ phone });
+			setOpen(false);
+			onSaved(phone ? (isRTL ? "أصحابك يقدرون يتصلون عليك الآن ✓" : "Friends can call you now ✓") : isRTL ? "حُذف رقمك" : "Number removed");
+		} catch (e) {
+			setError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
+		} finally {
+			setBusy(false);
+		}
+	};
+	if (!open) {
+		return (
+			<div className="sary-o-myphone" data-testid="outing-my-phone">
+				<Phone className="size-4" aria-hidden />
+				<span dir="ltr">{current || (isRTL ? "لم تضف رقمك" : "No number added")}</span>
+				<button
+					type="button"
+					className="sary-o-link-btn"
+					onClick={() => {
+						setValue(current || "");
+						setOpen(true);
+					}}
+					data-testid="outing-my-phone-edit"
+				>
+					{current ? (isRTL ? "تعديل" : "Edit") : isRTL ? "أضف رقمك ليتصل بك أصحابك" : "Add your number so friends can call"}
+				</button>
+			</div>
+		);
+	}
+	return (
+		<form
+			className="sary-o-form sary-o-myphone-form"
+			onSubmit={(e) => {
+				e.preventDefault();
+				void save(value.trim());
+			}}
+		>
+			<label>
+				<span>{isRTL ? "رقم جوالك (يظهر لأعضاء طلعاتك فقط)" : "Your mobile (shown to your outing members only)"}</span>
+				<input
+					type="tel"
+					inputMode="tel"
+					autoComplete="tel"
+					dir="ltr"
+					value={value}
+					onChange={(e) => setValue(e.target.value)}
+					placeholder="05XXXXXXXX"
+					maxLength={20}
+					data-testid="outing-my-phone-input"
+					autoFocus
+				/>
+			</label>
+			{error ? <p className="sary-o-error" role="alert">{error}</p> : null}
+			<div className="sary-o-row">
+				<button type="submit" className="sary-o-primary" disabled={busy || !value.trim()} data-testid="outing-my-phone-save">
+					{isRTL ? "حفظ" : "Save"}
+				</button>
+				{current ? (
+					<button type="button" className="sary-o-secondary" disabled={busy} onClick={() => void save("")}>
+						{isRTL ? "احذف رقمي" : "Remove"}
+					</button>
+				) : null}
+				<button type="button" className="sary-o-secondary" onClick={() => setOpen(false)}>
+					{isRTL ? "إلغاء" : "Cancel"}
+				</button>
+			</div>
+		</form>
+	);
+}
+
 function MemberCard({
 	row,
 	isRTL,
@@ -976,9 +1118,31 @@ function MemberCard({
 					</>
 				) : null}
 			</dl>
+			{row.member.phone ? (
+				<div className="sary-o-row sary-o-contact">
+					<a className="sary-o-primary sary-o-linkbtn" href={`tel:${row.member.phone}`} data-testid="outing-member-call">
+						<Phone className="size-4" aria-hidden />
+						{isRTL ? "اتصال" : "Call"}
+					</a>
+					<a
+						className="sary-o-secondary sary-o-linkbtn"
+						href={`https://wa.me/${row.member.phone.replace(/^\+/, "")}`}
+						target="_blank"
+						rel="noopener noreferrer"
+						data-testid="outing-member-whatsapp"
+					>
+						<MessageCircle className="size-4" aria-hidden />
+						{isRTL ? "واتساب" : "WhatsApp"}
+					</a>
+				</div>
+			) : (
+				<p className="sary-o-note" data-testid="outing-member-no-phone">
+					{isRTL ? `لم يضف ${row.member.display_name} رقم جواله بعد.` : `${row.member.display_name} hasn't added a phone number.`}
+				</p>
+			)}
 			<div className="sary-o-row">
-				<button type="button" className="sary-o-primary" disabled={!p} onClick={onFocus} data-testid="outing-member-focus">
-					{isRTL ? "أظهره على الخريطة" : "Show on map"}
+				<button type="button" className="sary-o-secondary" disabled={!p} onClick={onFocus} data-testid="outing-member-focus">
+					{isRTL ? "أنا وياه على الخريطة" : "Both of us on the map"}
 				</button>
 				{p ? (
 					<a

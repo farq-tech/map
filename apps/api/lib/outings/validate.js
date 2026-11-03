@@ -41,6 +41,25 @@ function note(raw) {
   return cleanText(raw, NOTE_MAX);
 }
 
+/**
+ * An optional phone number in E.164 (+9665XXXXXXXX). Saudi local forms
+ * (05XXXXXXXX, 5XXXXXXXX, 9665XXXXXXXX, 009665…) are normalised; Arabic-Indic
+ * digits are accepted. '' or null clears it. Returns undefined when invalid.
+ */
+function phone(raw) {
+  if (raw === '' || raw === null) return null;
+  if (typeof raw !== 'string') return undefined;
+  let t = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[\s\-().]/g, '');
+  if (t.startsWith('00')) t = '+' + t.slice(2);
+  if (/^05\d{8}$/.test(t)) t = '+966' + t.slice(1);
+  else if (/^5\d{8}$/.test(t)) t = '+966' + t;
+  else if (/^9665\d{8}$/.test(t)) t = '+' + t;
+  return /^\+\d{8,15}$/.test(t) ? t : undefined;
+}
+
 function outingName(raw) {
   return cleanText(raw, OUTING_NAME_MAX);
 }
@@ -127,6 +146,7 @@ module.exports = {
   NOTE_MAX,
   displayName,
   note,
+  phone,
   outingName,
   avatar,
   fix,

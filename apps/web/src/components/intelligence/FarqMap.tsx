@@ -37,7 +37,7 @@ import {
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, VEHICLE_LAYER } from "../../lib/sary/vehicleLayer";
-import { snapToRoad } from "../../lib/sary/roadSnap";
+import { snapRadius, snapToRoad } from "../../lib/sary/roadSnap";
 import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
@@ -103,6 +103,10 @@ type CameraFocusRequest = {
 	kind?: "select" | "locate" | "cluster" | "bounds";
 	/** When set, the camera fits these bounds instead of centring on lat/lng. */
 	bounds?: [number, number, number, number] | null;
+	/** Screen px covered from the top by the page's own bars (bounds fits keep clear of them). */
+	topInset?: number;
+	/** Closest the bounds fit may zoom (default 15.5). */
+	maxZoom?: number;
 };
 
 function cameraPadding(
@@ -424,6 +428,7 @@ export default function FarqMap({
 	vehicleHex,
 	vehicleLabel,
 	vehicleNote,
+	userAccuracy = null,
 	onVehicleTap,
 	vehicleMotion = "idle",
 	outdoorLayer = "around",
@@ -473,6 +478,8 @@ export default function FarqMap({
 	tracks?: GeoJSON.FeatureCollection | null;
 	userTrack?: GeoJSON.FeatureCollection | null;
 	vehicleMode?: "dot" | "prado";
+	/** GPS accuracy of userLocation in metres: how far the car may be moved onto a street. */
+	userAccuracy?: number | null;
 	/** Body colour of your 3D car; defaults to the colour saved in your profile. */
 	vehicleHex?: string;
 	/** A name chip floated above your 3D car (shared outings: «أنت»). */
@@ -1291,7 +1298,7 @@ export default function FarqMap({
 			}
 			const from = vehicleShownRef.current;
 			/* In town, on the street rather than inside the house beside it. */
-			const to = snapToRoad(map, { lng: userLocation.lng, lat: userLocation.lat });
+			const to = snapToRoad(map, { lng: userLocation.lng, lat: userLocation.lat }, snapRadius(userAccuracy));
 			cancelAnimationFrame(vehicleRafRef.current);
 			if (!from || reducedMotionRef.current) {
 				vehicleShownRef.current = to;
@@ -1371,9 +1378,9 @@ export default function FarqMap({
 			const [w, s, e, n] = focusRequest.bounds;
 			const pad = cameraPadding("select", bottomInsetRef.current);
 			map.fitBounds([[w, s], [e, n]], {
-				padding: { top: pad.top, bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
+				padding: { top: Math.max(pad.top, focusRequest.topInset ?? 0), bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
 				duration: travel(900),
-				maxZoom: 15.5,
+				maxZoom: focusRequest.maxZoom ?? 15.5,
 				essential: true,
 			});
 			return;
