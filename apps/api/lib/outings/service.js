@@ -17,6 +17,7 @@
 const v = require('./validate');
 const { sanitizeDiagnostics, outingRef } = require('./diagnostics');
 const { createRateLimiter } = require('./rate-limit');
+const { pushPayloadFor } = require('./push');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -68,7 +69,11 @@ function noopEvents() {
   return { emit() {}, kick() {}, closeRoom() {}, onlineUsers: () => new Set(), awayUsers: () => new Set(), linkState: () => new Map() };
 }
 
-function createOutingsService({ pool, events = noopEvents(), config = {}, now = () => Date.now() } = {}) {
+function noopPush() {
+  return { enabled: false, notifyMembers: async () => ({ sent: 0, removed: 0, failed: 0, skipped: 0 }) };
+}
+
+function createOutingsService({ pool, events = noopEvents(), push = noopPush(), config = {}, now = () => Date.now() } = {}) {
   if (!pool) throw new Error('outings service needs a pool');
   const cfg = { ...defaultConfig(), ...config };
   const authCache = new Map(); // digest hex -> { user, at }
@@ -730,7 +735,10 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     else notes.delete(key);
     const payload = text ? { text, at: new Date(at).toISOString() } : null;
     /* Everyone, the sender's other devices included. */
-    hub.emit(outingId, { type: 'member_note', user_id: user.id, note: payload });
+    const event = { type: 'member_note', user_id: user.id, note: payload };
+    hub.emit(outingId, event);
+    /* …and a push to members whose screen is off. Best effort, never awaited. */
+    if (payload) void announce(outingId, user.id, event);
     return { note: payload };
   }
 
@@ -784,9 +792,12 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     /* A refresh without a fix keeps the one we had; a fix never moves backwards in time. */
     const keep = prev?.fix && (!fix || new Date(prev.fix.recorded_at) > new Date(fix.recorded_at));
     const next = { at: prev && now() - prev.updated_at <= SOS_TTL_MS ? prev.at : now(), updated_at: now(), fix: keep ? prev.fix : fix };
+    const refresh = Boolean(prev && now() - prev.updated_at <= SOS_TTL_MS);
     sosAlerts.set(key, next);
     const sos = sosOf(outingId, user.id);
-    hub.emit(outingId, { type: 'sos', user_id: user.id, sos });
+    /* `{type:'sos', user_id}` is what index.js auto-pushes (high urgency, even to viewers);
+     * a refresh with a newer fix is flagged so it updates maps without a second alarm. */
+    hub.emit(outingId, { type: 'sos', user_id: user.id, sos, ...(refresh ? { refresh: true } : {}) });
     return { sos };
   }
 
@@ -839,6 +850,33 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const rally = rallyOut(row);
     hub.emit(outingId, { type: 'rally', rally });
     return { rally };
+  }
+
+  /* ---------- push ---------- */
+
+  /** Push to every active member except the sender. Generic: any payload. */
+  function notifyMembers(outingId, exceptUserId, payload) {
+    return push.notifyMembers(outingId, exceptUserId, payload);
+  }
+
+  /** An outing event (member_note, sos, …) → a push, when that event type is pushed. */
+  async function announce(outingId, senderId, event) {
+    if (!push.enabled) return null;
+    try {
+      const [row] = await q(
+        `SELECT o.name AS outing_name, u.display_name AS sender_name
+         FROM sary.outings o LEFT JOIN sary.users u ON u.id = $2::uuid
+         WHERE o.id = $1`,
+        [outingId, v.isUuid(senderId) ? senderId : null],
+      );
+      if (!row) return null;
+      const payload = pushPayloadFor(event, { senderName: row.sender_name, outingName: row.outing_name });
+      if (!payload) return null;
+      return await notifyMembers(outingId, senderId || null, payload);
+    } catch (e) {
+      console.warn('[outings-push] announce', e.code || e.message);
+      return null;
+    }
   }
 
   async function setSharing(user, outingId, sharing) {
@@ -955,6 +993,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
 
   return {
     config: cfg,
+    push,
     setEvents(next) {
       hub = next || noopEvents();
     },
@@ -985,6 +1024,8 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     raiseSos,
     cancelSos,
     setRally,
+    notifyMembers,
+    announce,
     recordPosition,
     recordDiagnostics,
     sweep,

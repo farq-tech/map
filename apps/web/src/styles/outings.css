@@ -997,3 +997,44 @@
 	padding: 0 8px;
 	text-align: center;
 }
+
+/* ---- keep-screen-on hint + notifications row ---- */
+
+.sary-o-wake-hint {
+	max-width: calc(100vw - 32px);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 0.85rem;
+	text-align: center;
+}
+
+.sary-o-push {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	border: 1px solid rgba(244, 239, 230, 0.12);
+	border-radius: 14px;
+	padding: 10px 12px;
+}
+
+.sary-o-push-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	min-height: 44px;
+}
+
+.sary-o-push-head strong {
+	font-weight: 700;
+}
+
+.sary-o-push ol {
+	margin: 0;
+	padding-inline-start: 1.2em;
+	color: #d4c6ae;
+	font-size: 0.85rem;
+	display: grid;
+	gap: 2px;
+}

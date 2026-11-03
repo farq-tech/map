@@ -31,7 +31,8 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '007_sary_safety.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql']);
+  assert.deepEqual(applied, [...applied].sort(), 'applied in name order');
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -489,4 +490,169 @@ test('outing safety — SOS, battery, rally point', { skip, timeout: 60_000 }, a
   const row = (await pool.query('SELECT rally_lat, rally_lng FROM sary.outings WHERE id = $1', [id])).rows[0];
   assert.deepEqual(row, { rally_lat: null, rally_lng: null }, 'ending deletes the rally point');
   for (const s of [la, lb, lc]) s.ws.close();
+});
+
+test('web push: notes and SOS reach members whose screen is off', { skip, timeout: 60_000 }, async (t) => {
+  const crypto = require('crypto');
+  const pool = createPool(URL_);
+  await migrate(pool);
+  /* A fake push service: records what would be sent, answers 410 for "gone" endpoints. */
+  const inbox = [];
+  const sender = {
+    async send(sub, body, opts) {
+      if (sub.endpoint.includes('/gone')) throw Object.assign(new Error('gone'), { statusCode: 410 });
+      inbox.push({ endpoint: sub.endpoint, keys: sub.keys, payload: JSON.parse(body), opts });
+      return { statusCode: 201 };
+    },
+  };
+  const outings = setupOutings({
+    pool,
+    autoMigrate: false,
+    limits: { identityPerHour: 100, invitePer10Min: 100 },
+    push: { config: { enabled: true, publicKey: 'BTestPublicKey', privateKey: 'unused-by-fake' }, sender, maxPerUser: 2 },
+  });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  const api = async (method, path, token, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const keys = () => {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.generateKeys();
+    return { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
+  };
+  const sub = (name) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}-${crypto.randomUUID()}`, keys: keys() });
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = pred();
+      if (v) return v;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const gap = () => new Promise((r) => setTimeout(r, 2_100)); // one note per 2 s per person
+
+  const cfg = await api('GET', '/push/config');
+  assert.deepEqual(cfg.body, { ok: true, enabled: true, public_key: 'BTestPublicKey' });
+
+  const A = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const B = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const C = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+
+  /* --- subscribe: auth, validation, cap per person --- */
+  assert.equal((await api('POST', '/push/subscribe', null, { subscription: sub('x') })).status, 401);
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: { endpoint: 'https://evil.example.com/x', keys: keys() } })).status, 400);
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: { endpoint: 'https://fcm.googleapis.com/x', keys: { p256dh: 'AA', auth: 'BB' } } })).status, 400);
+  const b1 = sub('b-old'), b2 = sub('gone'), b3 = sub('b-new');
+  for (const s of [b1, b2, b3]) {
+    assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: s })).status, 201);
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  const bRows = (await pool.query('SELECT endpoint FROM sary.push_subscriptions WHERE user_id = $1', [B.user.id])).rows.map((r) => r.endpoint).sort();
+  assert.deepEqual(bRows, [b2.endpoint, b3.endpoint].sort(), 'capped at 2 per person, oldest dropped');
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: b3 })).status, 201, 'resubscribing is idempotent');
+  const a1 = sub('a');
+  assert.equal((await api('POST', '/push/subscribe', A.token, { subscription: a1 })).status, 201);
+  const c1 = sub('c');
+  assert.equal((await api('POST', '/push/subscribe', C.token, { subscription: c1 })).status, 201);
+
+  /* --- an outing with A and B; C is an outsider --- */
+  const o = (await api('POST', '/', A.token, { name: 'طلعة النفود' })).body;
+  assert.equal((await api('POST', '/invites/join', B.token, { token: o.invite.token })).status, 200);
+  assert.equal((await api('POST', `/${o.outing_id}/status`, A.token, { action: 'start' })).status, 200);
+
+  /* A note from A → B's phones, never A's own, never the outsider's. A 410 deletes that subscription. */
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'بوقف عند المحطة' })).status, 200);
+  const first = await until(() => inbox.find((m) => m.endpoint === b3.endpoint));
+  await settle();
+  assert.deepEqual(inbox.map((m) => m.endpoint), [b3.endpoint]);
+  assert.equal(first.payload.type, 'note');
+  assert.equal(first.payload.body, 'بوقف عند المحطة');
+  assert.equal(first.payload.title, 'أبو فهد · طلعة النفود');
+  assert.equal(first.payload.url, `/outings/${o.outing_id}`);
+  assert.deepEqual(first.keys, b3.keys);
+  const gone = await pool.query('SELECT 1 FROM sary.push_subscriptions WHERE endpoint = $1', [b2.endpoint]);
+  assert.equal(gone.rowCount, 0, '410 Gone → subscription deleted');
+  await gap();
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: '' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 1, 'clearing a note pushes nothing');
+
+  /* B has the outing on screen (socket, not away) → no push for a note; away → push again. */
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+  const got = [];
+  ws.on('message', (d) => got.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.on('open', r));
+  ws.send(JSON.stringify({ type: 'auth', token: B.token, outing_id: o.outing_id }));
+  await until(() => got.some((m) => m.type === 'ready'));
+  await gap();
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'وين صرتوا؟' })).status, 200);
+  await until(() => got.some((m) => m.type === 'member_note' && m.note?.text === 'وين صرتوا؟'));
+  await settle();
+  assert.equal(inbox.length, 0, 'a member looking at the outing gets the in-app alert, not a push');
+  ws.send(JSON.stringify({ type: 'presence', away: true }));
+  await settle();
+  await gap();
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'ردّوا' })).status, 200);
+  await until(() => inbox.length === 1);
+
+  /* SOS (any emitter of an `sos` event) is pushed with high urgency, even to someone watching. */
+  ws.send(JSON.stringify({ type: 'presence', away: false }));
+  await settle();
+  inbox.length = 0;
+  outings.hub.emit(o.outing_id, { type: 'sos', user_id: A.user.id, text: 'علقنا في الرمل' });
+  const sos = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(sos.endpoint, b3.endpoint);
+  assert.equal(sos.opts.urgency, 'high');
+  assert.match(sos.payload.title, /أبو فهد/);
+  assert.equal(sos.payload.body, 'علقنا في الرمل');
+  await settle();
+  assert.equal(inbox.length, 1, 'the sender is not pushed about their own SOS');
+
+  /* The real SOS route (#24) emits the shape that is auto-pushed: raise → alarm,
+   * refresh → no second alarm, «أنا بخير» → a quiet replacement with the same tag. */
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  const real = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(real.endpoint, b3.endpoint);
+  assert.equal(real.opts.urgency, 'high');
+  await new Promise((r) => setTimeout(r, 3_100));
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 1, 'refreshing an SOS does not ring again');
+  assert.equal((await api('DELETE', `/${o.outing_id}/sos`, A.token)).status, 200);
+  const clear = await until(() => inbox.find((m) => m.payload.type === 'sos_clear'));
+  assert.equal(clear.payload.tag, real.payload.tag);
+  assert.equal(clear.opts.urgency, 'normal');
+  ws.close();
+
+  /* Leaving stops pushes at once. */
+  assert.equal((await api('POST', `/${o.outing_id}/leave`, B.token)).status, 200);
+  await gap();
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'باقي أحد؟' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 0, 'former members get nothing');
+
+  /* Unsubscribe removes only my own row. */
+  assert.deepEqual((await api('DELETE', '/push/subscribe', C.token, { endpoint: a1.endpoint })).body, { ok: true, removed: 0 });
+  assert.deepEqual((await api('DELETE', '/push/subscribe', A.token, { endpoint: a1.endpoint })).body, { ok: true, removed: 1 });
 });

@@ -25,6 +25,8 @@ import { lastSeenAgeMs, positionAgeMs, serverNow } from "../../lib/outings/outin
 import { wireFix } from "../../lib/outings/live";
 import { PinMarkers, type MapPin } from "../../lib/outings/pinMarker";
 import { arrived, batteryFresh, batteryLow, GapWatcher, type GapAlert, type GapInput } from "../../lib/outings/safety";
+import { createWakeKeeper } from "../../lib/outings/wakeLock";
+import { refreshPushSubscription } from "../../lib/outings/push";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import { memberColors } from "../../lib/outings/carColors";
 import {
@@ -49,6 +51,7 @@ import { useLiveOuting } from "./useLiveOuting";
 import { downloadReport, useFieldDiagnostics } from "./useFieldDiagnostics";
 import { diag, exportFileName } from "../../lib/outings/fieldDiagnostics";
 import { BatteryBadge, MySosBanner, RallyCard, RallyPlacer, SosAlert, SosHoldButton, SosStrip, useAudioUnlock, useSiren, type SosAlertView } from "./OutingSafety";
+import { PushRow } from "./PushRow";
 import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
@@ -565,38 +568,43 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [rows, map, userLocation]);
 
-	/* Optional: keep the screen on, since sharing stops when the phone sleeps. */
+	/* Keep the screen on while the outing is active and I am sharing — sharing
+	 * stops when the phone sleeps. On by default; a saved "off" is respected.
+	 * Re-acquired whenever the page is visible again. */
 	const [wake, setWake] = useState(() => loadWakeLock());
+	const [wakeHeld, setWakeHeld] = useState(false);
+	const [wakeHint, setWakeHint] = useState(false);
+	const wakeRef = useRef<ReturnType<typeof createWakeKeeper> | null>(null);
+	const wakeHintShownRef = useRef(false);
 	useEffect(() => {
-		const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } };
-		if (!wake || !canSend || !visible || !nav.wakeLock) return;
-		let sentinel: { release: () => Promise<void> } | null = null;
-		let cancelled = false;
 		const diagState = () => field.fieldDiag.ref.current;
-		nav.wakeLock.request("screen").then(
-			(s) => {
-				if (cancelled) void s.release();
-				else {
-					sentinel = s;
-					const d = diagState();
-					if (d) diag.wake(d, "acquired");
-					/* The system can take the lock back (low battery, tab hidden): that is a loss we did not ask for. */
-					(s as unknown as EventTarget).addEventListener?.("release", () => {
-						const d2 = diagState();
-						if (!cancelled && d2) diag.wake(d2, "lost");
-					});
-				}
-			},
-			() => {
-				const d = diagState();
-				if (d) diag.wake(d, "failed");
-			},
-		);
+		const keeper = createWakeKeeper(navigator as never, document, setWakeHeld, (e) => {
+			const d = diagState();
+			if (d) diag.wake(d, e);
+		});
+		wakeRef.current = keeper;
 		return () => {
-			cancelled = true;
-			void sentinel?.release();
+			keeper.dispose();
+			wakeRef.current = null;
 		};
-	}, [wake, canSend, visible, field.fieldDiag.ref]);
+	}, []);
+	const wantWake = wake && canSend && outing?.status === "active";
+	useEffect(() => {
+		wakeRef.current?.set(wantWake);
+	}, [wantWake]);
+	useEffect(() => {
+		if (!wakeHeld || wakeHintShownRef.current) return;
+		wakeHintShownRef.current = true;
+		setWakeHint(true);
+		const t = window.setTimeout(() => setWakeHint(false), 6_000);
+		return () => window.clearTimeout(t);
+	}, [wakeHeld]);
+
+	/* If this device already allowed notifications, keep the server's copy of
+	 * its push subscription current (quietly, no prompt). */
+	useEffect(() => {
+		void refreshPushSubscription();
+	}, []);
 
 	/* Field test: export to a file on this device; sending numbers to the server is a separate choice. */
 	const [fieldMsg, setFieldMsg] = useState<string | null>(null);
@@ -1067,9 +1075,12 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 									saveWakeLock(e.target.checked);
 								}}
 							/>
-							<span>{isRTL ? "إبقاء الشاشة مضاءة أثناء المشاركة" : "Keep the screen on while sharing"}</span>
+							<span>{isRTL ? "إبقاء الشاشة مضاءة أثناء الطلعة" : "Keep the screen on during the outing"}</span>
 						</label>
-						<p className="sary-o-note">
+						<p className="sary-o-note" data-testid="outing-wake-note" data-held={wakeHeld ? "1" : "0"}>
+							{wakeHeld
+								? isRTL ? "الشاشة مضاءة الآن — وصّل الشاحن. " : "The screen is staying on — plug in the charger. "
+								: ""}
 							{isRTL
 								? "المشاركة تعمل والتطبيق مفتوح على هذه الشاشة فقط؛ إذا أُغلقت الشاشة أو خرجت منها يتوقف الإرسال."
 								: "Sharing runs only while this screen is open; locking the phone or leaving stops it."}
@@ -1100,6 +1111,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 									: "One alert each time: when someone is farther than this from the middle of the group, or stopped 10 min while the group moves."}
 							</p>
 						</div>
+						<PushRow isRTL={isRTL} />
 
 						<label className="sary-o-switch">
 							<input type="checkbox" checked={field.on} onChange={(e) => field.toggle(e.target.checked)} data-testid="outing-field-toggle" />
@@ -1354,6 +1366,11 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				/>
 			) : null}
 
+			{wakeHint && !toast ? (
+				<div className="sary-o-toast sary-o-wake-hint" role="status" data-testid="outing-wake-hint">
+					{isRTL ? "وصّل الشاحن — الشاشة تبقى مضاءة أثناء الطلعة" : "Plug in the charger — the screen stays on during the outing"}
+				</div>
+			) : null}
 			{toast ? (
 				<div className="sary-o-toast" role="status" data-testid="outing-toast">
 					{toast}
