@@ -105,6 +105,9 @@ type CameraFocusRequest = {
 	bounds?: [number, number, number, number] | null;
 	/** Screen px covered from the top by the page's own bars (bounds fits keep clear of them). */
 	topInset?: number;
+	/** Screen px covered by floating buttons on either side (bounds fit keeps clear of them). */
+	leftInset?: number;
+	rightInset?: number;
 	/** Closest the bounds fit may zoom (default 15.5). */
 	maxZoom?: number;
 };
@@ -1357,6 +1360,8 @@ export default function FarqMap({
 		vehicleLabel,
 		vehicleNote,
 		isRTL,
+		/* A parked phone sends no new fix: draw the car as soon as the intro ends. */
+		introDone,
 	]);
 
 	/* The photo lives in this browser and is changed from a control elsewhere in
@@ -1378,7 +1383,7 @@ export default function FarqMap({
 			const [w, s, e, n] = focusRequest.bounds;
 			const pad = cameraPadding("select", bottomInsetRef.current);
 			map.fitBounds([[w, s], [e, n]], {
-				padding: { top: Math.max(pad.top, focusRequest.topInset ?? 0), bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
+				padding: { top: Math.max(pad.top, focusRequest.topInset ?? 0), bottom: pad.bottom, left: Math.max(pad.left + 16, focusRequest.leftInset ?? 0), right: Math.max(pad.right + 16, focusRequest.rightInset ?? 0) },
 				duration: travel(900),
 				maxZoom: focusRequest.maxZoom ?? 15.5,
 				essential: true,
