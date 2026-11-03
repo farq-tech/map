@@ -7,6 +7,7 @@
 import { API_BASE_URL } from "../api";
 import { safeGet, safeRemove, safeSet } from "../safeStorage";
 import type { ShareMode } from "./policy";
+import { wakePreference } from "./wakeLock";
 
 const IDENTITY_KEY = "sary.outings.identity.v1";
 const INVITES_KEY = "sary.outings.invites.v1";
@@ -149,8 +150,9 @@ export function saveShareMode(mode: ShareMode): void {
 	safeSet("localStorage", MODE_KEY, mode);
 }
 
+/** Keep-the-screen-on during an outing: on unless this device saved "off". */
 export function loadWakeLock(): boolean {
-	return safeGet("localStorage", WAKE_KEY) === "1";
+	return wakePreference(safeGet("localStorage", WAKE_KEY));
 }
 
 export function saveWakeLock(on: boolean): void {

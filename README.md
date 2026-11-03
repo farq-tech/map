@@ -108,6 +108,13 @@ Friends on one off-road outing see each other on one map while the outing screen
 - Markers interpolate between real fixes (≤ 1 s), never extrapolate; jumps over 2 km snap.
 - The last known picture is kept in session storage through outages and wiped when the outing ends.
 
+**Notifications with the screen off** (`apps/api/lib/outings/push.js`, `migrations/006_sary_push_subscriptions.sql`, `apps/web/public/sw.js`)
+- Web Push for a note over a car and for an `sos` event — never positions. `notifyMembers(outingId, exceptUserId, payload)` sends to active members of an open outing except the sender; members looking at the outing right now get the in-app alert instead (SOS reaches them too).
+- Subscriptions belong to a device identity (max 5), are re-checked against membership at send time, deleted when the push service answers 404/410, and must point at a real browser push service (FCM, Mozilla, Apple, WNS).
+- `GET /api/outings/push/config` → `{ enabled, public_key }`; `POST|DELETE /api/outings/push/subscribe`. Off without `VAPID_*`.
+- «فعّل التنبيهات» in the outing settings. iPhone: Safari delivers web push only to the home-screen app (iOS 16.4+), so a Safari tab shows the «إضافة إلى الشاشة الرئيسية» steps; `manifest.webmanifest` + `sw.js` make that install work.
+- Keep the screen on: while the outing is active and I am sharing, the screen wake lock is requested automatically (a saved «off» is respected) and re-acquired whenever the page is visible again, with the hint «وصّل الشاحن — الشاشة تبقى مضاءة أثناء الطلعة».
+
 ```bash
 node apps/api/scripts/migrate-outings.js                                    # apply migrations by hand (boot does it too)
 SARY_TEST_DATABASE_URL=postgres://… npm test -w @farq/map-api                # integration tests against real Postgres (drops the sary schema!)
@@ -135,6 +142,7 @@ API:
 - `SARY_DATABASE_URL` — shared outings (read/write); falls back to the comparison/`DATABASE_URL`
 - `SARY_AUTO_MIGRATE` — `0` disables running `apps/api/migrations` at boot
 - `OUTING_*` — optional tuning, see `.env.example`
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — Web Push for outing notes/SOS (`npx web-push generate-vapid-keys`). Unset → push off. Private key: API only.
 
 Web, shared outings:
 
