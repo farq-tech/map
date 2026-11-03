@@ -30,7 +30,7 @@ const MESSAGES: Record<AvatarError | "quota", { ar: string; en: string }> = {
 
 export default function FarqVehicleCard({ isRTL }: { isRTL: boolean }) {
 	const [avatar, setAvatar] = useState<string | null>(null);
-	const [color, setColor] = useState<VehicleColorId>("navy");
+	const [color, setColor] = useState<VehicleColorId>("white");
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const inputRef = useRef<HTMLInputElement | null>(null);

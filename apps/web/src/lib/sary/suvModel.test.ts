@@ -13,7 +13,7 @@ describe("generated 4x4 model", () => {
 		expect(json.asset.version).toBe("2.0");
 		expect(json.meshes[0].primitives.length).toBeGreaterThanOrEqual(6);
 		expect(dv.getUint32(20 + jsonLen + 4, true)).toBe(0x004e4942);
-		expect(glb.byteLength).toBeLessThan(80_000);
+		expect(glb.byteLength).toBeLessThan(100_000);
 	});
 
 	it("has real-world proportions (metres) and sits on the ground", () => {

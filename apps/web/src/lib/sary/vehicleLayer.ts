@@ -14,6 +14,8 @@ import { suvModelUrl } from "./suvModel";
 
 export const VEHICLE_SOURCE = "sary-vehicle";
 export const VEHICLE_LAYER = "sary-vehicle-3d";
+/** The exact GPS point under the car, flat on the ground. */
+export const VEHICLE_SPOT_LAYER = "sary-vehicle-spot";
 
 /** Degrees added to a compass heading so the model's nose (+Z in glTF) points that way. */
 export const MODEL_HEADING_OFFSET = 180;
@@ -23,13 +25,22 @@ export function modelIdFor(hex: string): string {
 }
 
 /** On-screen length the car keeps until its true size (≈4.9 m) is larger. */
-export const VEHICLE_SCREEN_PX = 44;
+export const VEHICLE_SCREEN_PX = 36;
 const CAR_LENGTH_M = 4.9;
 /* Metres per CSS pixel at zoom 0 around Saudi latitudes (cos 25°). */
 const MPP_Z0 = 156543.03 * Math.cos((25 * Math.PI) / 180);
 
 export function vehicleScaleAt(zoom: number): number {
 	return Math.max(1, (VEHICLE_SCREEN_PX * (MPP_Z0 / 2 ** zoom)) / CAR_LENGTH_M);
+}
+
+/**
+ * Height grows much less than length and width. A car enlarged 20× to stay
+ * readable would otherwise stand 40 m tall, and on a tilted map it would rise
+ * over the buildings and look as if it sat somewhere other than its fix.
+ */
+export function vehicleHeightScale(s: number): number {
+	return Math.round((1 + (s - 1) * 0.25) * 100) / 100;
 }
 
 /**
@@ -92,6 +103,21 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 		if (!map.getSource(VEHICLE_SOURCE)) {
 			map.addSource(VEHICLE_SOURCE, { type: "geojson", data: vehicleFeature(null) });
 		}
+		if (!map.getLayer(VEHICLE_SPOT_LAYER)) {
+			map.addLayer({
+				id: VEHICLE_SPOT_LAYER,
+				type: "circle",
+				source: VEHICLE_SOURCE,
+				paint: {
+					"circle-radius": 6,
+					"circle-color": "#e8862e",
+					"circle-stroke-color": "#ffffff",
+					"circle-stroke-width": 2.5,
+					"circle-pitch-alignment": "map",
+					"circle-emissive-strength": 1,
+				},
+			} as unknown as Parameters<MapboxMap["addLayer"]>[0]);
+		}
 		if (!map.getLayer(VEHICLE_LAYER)) {
 			map.addLayer({
 				id: VEHICLE_LAYER,
@@ -136,8 +162,26 @@ export function setVehicle(map: MapboxMap, pos: { lng: number; lat: number } | n
 export function removeVehicle(map: MapboxMap): void {
 	try {
 		if (map.getLayer(VEHICLE_LAYER)) map.removeLayer(VEHICLE_LAYER);
+		if (map.getLayer(VEHICLE_SPOT_LAYER)) map.removeLayer(VEHICLE_SPOT_LAYER);
 		if (map.getSource(VEHICLE_SOURCE)) map.removeSource(VEHICLE_SOURCE);
 	} catch {
 		/* style swapped underneath us */
 	}
+}
+
+type LngLat = { lng: number; lat: number };
+
+export function distanceMeters(a: LngLat, b: LngLat): number {
+	const r = Math.PI / 180;
+	const x = (b.lng - a.lng) * r * Math.cos(((a.lat + b.lat) / 2) * r);
+	const y = (b.lat - a.lat) * r;
+	return Math.hypot(x, y) * 6_371_000;
+}
+
+/** Compass bearing from a to b, 0 = north, 90 = east. */
+export function bearingBetween(a: LngLat, b: LngLat): number {
+	const r = Math.PI / 180;
+	const x = (b.lng - a.lng) * Math.cos(((a.lat + b.lat) / 2) * r);
+	const y = b.lat - a.lat;
+	return ((Math.atan2(x, y) / r) % 360 + 360) % 360;
 }
