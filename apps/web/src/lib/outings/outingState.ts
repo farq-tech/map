@@ -64,6 +64,13 @@ export function applyEvent(v: OutingView, e: LiveEvent): OutingView {
 			members.set(e.user_id, { ...m, last_seen_at: e.last_seen_at, gps: e.gps, online: true });
 			return withMembers(v, members);
 		}
+		case "member_note": {
+			const m = v.members.get(e.user_id);
+			if (!m) return v;
+			const members = new Map(v.members);
+			members.set(e.user_id, { ...m, note: e.note });
+			return withMembers(v, members);
+		}
 		case "member_joined": {
 			const members = new Map(v.members);
 			members.set(e.member.user_id, { ...e.member, joined_at: new Date().toISOString(), online: false });

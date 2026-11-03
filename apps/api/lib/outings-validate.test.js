@@ -48,3 +48,15 @@ test('secrets are 256-bit base64url and stored as digests', () => {
   assert.equal(v.digest(a).length, 32);
   assert.equal(v.isSecretShaped('short'), false);
 });
+
+test('phone numbers are normalised to E.164, Saudi forms included', () => {
+  assert.equal(v.phone('0551234567'), '+966551234567');
+  assert.equal(v.phone('055 123 4567'), '+966551234567');
+  assert.equal(v.phone('٠٥٥١٢٣٤٥٦٧'), '+966551234567');
+  assert.equal(v.phone('551234567'), '+966551234567');
+  assert.equal(v.phone('00966551234567'), '+966551234567');
+  assert.equal(v.phone('+44 20 7946 0958'), '+442079460958');
+  assert.equal(v.phone(''), null);
+  assert.equal(v.phone('call me'), undefined);
+  assert.equal(v.phone('123'), undefined);
+});

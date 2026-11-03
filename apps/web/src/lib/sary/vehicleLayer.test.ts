@@ -11,11 +11,11 @@ describe("3D vehicle layer", () => {
 		expect(vehicleRotation(null)).toEqual([0, 0, 180]);
 	});
 
-	it("keeps ~36 px on screen, then true size", async () => {
+	it("keeps ~26 px on screen, then true size", async () => {
 		const { vehicleScaleAt } = await import("./vehicleLayer");
 		const px = (z: number) => (4.9 * vehicleScaleAt(z)) / (156543.03 * Math.cos((25 * Math.PI) / 180) / 2 ** z);
-		expect(px(10)).toBeCloseTo(36, 0);
-		expect(px(15)).toBeCloseTo(36, 0);
+		expect(px(10)).toBeCloseTo(26, 0);
+		expect(px(15)).toBeCloseTo(26, 0);
 		expect(vehicleScaleAt(21)).toBe(1);
 		expect(vehicleScaleAt(15)).toBeGreaterThan(vehicleScaleAt(16) * 1.9);
 	});
@@ -51,7 +51,7 @@ describe("3D vehicle layer", () => {
 		} as never;
 		expect(ensureVehicleLayer(map, "#e8eef0")).toBe(true);
 		expect(ensureVehicleLayer(map, "#e8eef0")).toBe(true);
-		expect(added).toEqual(["model:sary-suv-e8eef0", "source:sary-vehicle", "layer:circle", "layer:model"]);
+		expect(added).toEqual(["model:sary-suv-e8eef0", "source:sary-roads", "layer:line", "source:sary-vehicle", "layer:circle", "layer:model"]);
 		expect(layers.has(VEHICLE_LAYER)).toBe(true);
 	});
 });

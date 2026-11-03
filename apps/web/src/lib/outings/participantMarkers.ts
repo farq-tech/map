@@ -1,6 +1,10 @@
 /**
  * One DOM marker per participant, moved by requestAnimationFrame.
  *
+ * Where the map can draw models, each participant is a 3D car in their own
+ * colour with their name above it; the DOM marker is then only that name.
+ * Otherwise it is a face in a ring of their colour.
+ *
  * DOM markers rather than a symbol layer: an outing is capped at 50 people,
  * and a marker needs a face, a name, a heading arrow and a freshness state —
  * all cheap in CSS and awkward as sprites. The animation only interpolates
@@ -12,6 +16,8 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import { haversineMeters } from "../sary/domain";
 import { lerp, tweenMs, type LngLat } from "./motion";
 import { initials, type Freshness } from "./policy";
+import { snapRadius, snapToRoad } from "../sary/roadSnap";
+import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, setVehicleOpacity, vehicleIds } from "../sary/vehicleLayer";
 
 export type ParticipantView = {
 	userId: string;
@@ -28,6 +34,10 @@ export type ParticipantView = {
 	approximate: boolean;
 	weak: boolean;
 	selected: boolean;
+	/** This participant's car colour (same on every device). */
+	color: string;
+	/** The short line they put over their car, if any. */
+	note: string | null;
 };
 
 type Rec = {
@@ -40,7 +50,14 @@ type Rec = {
 	duration: number;
 	lastAt: number;
 	sig: string;
+	car: boolean;
+	heading: number | null;
+	onCarClick: (() => void) | null;
+	anchor: LngLat;
 };
+
+/* Layer-id safe key for a participant's car. */
+const carKey = (userId: string) => `peer-${userId.replace(/[^0-9a-z]/gi, "")}`;
 
 function build(view: ParticipantView, onTap: (id: string) => void): HTMLElement {
 	const el = document.createElement("button");
@@ -48,7 +65,7 @@ function build(view: ParticipantView, onTap: (id: string) => void): HTMLElement 
 	el.className = "sary-peer";
 	el.dataset.testid = "sary-peer";
 	el.dataset.user = view.userId;
-	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__name" dir="auto"></span>`;
+	el.innerHTML = `<span class="sary-peer__arrow" aria-hidden="true"></span><span class="sary-peer__face"></span><span class="sary-peer__note" hidden></span><span class="sary-peer__name" dir="auto"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
 	el.addEventListener("click", (e) => {
 		e.stopPropagation();
 		onTap(view.userId);
@@ -57,7 +74,7 @@ function build(view: ParticipantView, onTap: (id: string) => void): HTMLElement 
 }
 
 function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
-	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected].join("|");
+	const sig = [v.name, v.avatar ? v.avatar.length : 0, v.heading ?? "-", v.freshness, v.weak, v.approximate, v.selected, v.color, v.note ?? ""].join("|");
 	if (el.dataset.sig === sig) return sig;
 	el.dataset.sig = sig;
 	el.dataset.freshness = v.freshness;
@@ -65,6 +82,7 @@ function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
 	el.classList.toggle("is-approx", v.approximate);
 	el.classList.toggle("is-selected", v.selected);
 	el.setAttribute("aria-label", v.name);
+	el.style.setProperty("--peer-color", v.color);
 	const face = el.querySelector<HTMLElement>(".sary-peer__face")!;
 	if (v.avatar) {
 		face.textContent = "";
@@ -77,7 +95,12 @@ function paint(el: HTMLElement, v: ParticipantView, isRTL: boolean): string {
 	const tag =
 		v.freshness === "recent" ? (isRTL ? " · آخر موقع" : " · last known") : v.freshness === "lost" ? (isRTL ? " · انقطع" : " · lost") : v.approximate ? (isRTL ? " · تقريبي" : " · approx.") : "";
 	const label = el.querySelector<HTMLElement>(".sary-peer__name")!;
-	label.textContent = v.name + tag;
+	label.querySelector("b")!.textContent = v.name + tag;
+	const note = el.querySelector<HTMLElement>(".sary-peer__note")!;
+	note.hidden = !v.note;
+	note.textContent = v.note || "";
+	note.dir = isRTL ? "rtl" : "ltr";
+	el.setAttribute("aria-label", v.note ? `${v.name}: ${v.note}` : v.name);
 	label.dir = isRTL ? "rtl" : "ltr";
 	const arrow = el.querySelector<HTMLElement>(".sary-peer__arrow")!;
 	if (v.heading == null || v.freshness !== "live" || v.approximate) {
@@ -105,12 +128,15 @@ export class ParticipantMarkers {
 		const now = performance.now();
 		for (const v of views) {
 			seen.add(v.userId);
-			const target = { lng: v.lng, lat: v.lat };
+			const raw = { lng: v.lng, lat: v.lat };
+			/* A confident fix in town is drawn on the street; an approximate one stays a ring where measured. */
+			const target = v.approximate ? raw : snapToRoad(this.map, raw, snapRadius(v.accuracyM));
 			let rec = this.recs.get(v.userId);
 			if (!rec) {
 				const el = build(v, this.onTap);
-				const marker = new mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat(target).addTo(this.map);
-				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "" };
+				/* Anchored at the bottom so a note bubble grows upward, never over the car. */
+				const marker = new mapboxgl.Marker({ element: el, anchor: "bottom", offset: [0, 22] }).setLngLat(target).addTo(this.map);
+				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null };
 				this.recs.set(v.userId, rec);
 			} else if (target.lng !== rec.to.lng || target.lat !== rec.to.lat) {
 				const gap = v.at - rec.lastAt;
@@ -125,11 +151,41 @@ export class ParticipantMarkers {
 					rec.marker.setLngLat(target);
 				}
 			}
+			/* Direction: the reported course, else real movement ≥ 12 m; kept while parked. */
+			if (v.heading != null) {
+				rec.heading = v.heading;
+				rec.anchor = raw;
+			} else if (distanceMeters(rec.anchor, raw) >= 12) {
+				rec.heading = bearingBetween(rec.anchor, raw);
+				rec.anchor = raw;
+			}
+			{
+				/* Style reloads drop layers; ensuring again is cheap and idempotent. */
+				const car = this.drawCar(v);
+				if (car !== rec.car) {
+					if (!car) removeVehicle(this.map, carKey(v.userId));
+					rec.car = car;
+					rec.el.classList.toggle("is-car", car);
+					/* Over a car the name floats above it; otherwise the face sits on the point. */
+					rec.marker.setOffset(car ? [0, -22] : [0, 22]);
+					if (car && !rec.onCarClick) {
+						/* Tapping the car itself does what tapping the name does. */
+						const id = v.userId;
+						rec.onCarClick = () => this.onTap(id);
+						this.map.on("click", vehicleIds(carKey(id)).layer, rec.onCarClick);
+					}
+				}
+				if (car) {
+					setVehicle(this.map, rec.shown, rec.heading, carKey(v.userId));
+					setVehicleOpacity(this.map, carKey(v.userId), v.freshness === "live" ? 1 : v.freshness === "recent" ? 0.7 : 0.4);
+				}
+			}
 			rec.sig = paint(rec.el, v, this.isRTL);
 		}
 		for (const [id, rec] of this.recs) {
 			if (seen.has(id)) continue;
 			rec.marker.remove();
+			this.dropCar(id, rec);
 			this.recs.delete(id);
 		}
 		this.kick();
@@ -142,8 +198,23 @@ export class ParticipantMarkers {
 
 	destroy(): void {
 		cancelAnimationFrame(this.raf);
-		for (const rec of this.recs.values()) rec.marker.remove();
+		for (const [id, rec] of this.recs) {
+			rec.marker.remove();
+			this.dropCar(id, rec);
+		}
 		this.recs.clear();
+	}
+
+	private dropCar(id: string, rec: Rec) {
+		if (rec.onCarClick) this.map.off("click", vehicleIds(carKey(id)).layer, rec.onCarClick);
+		rec.onCarClick = null;
+		if (rec.car) removeVehicle(this.map, carKey(id));
+	}
+
+	private drawCar(v: ParticipantView): boolean {
+		/* An approximate fix stays a ring: a car there would claim a precision we do not have. */
+		if (v.approximate) return false;
+		return ensureVehicleLayer(this.map, v.color, carKey(v.userId), v.color);
 	}
 
 	private kick() {
@@ -152,7 +223,7 @@ export class ParticipantMarkers {
 			this.raf = 0;
 			const now = performance.now();
 			let moving = false;
-			for (const rec of this.recs.values()) {
+			for (const [id, rec] of this.recs) {
 				if (!rec.duration) continue;
 				const t = (now - rec.start) / rec.duration;
 				if (t >= 1) {
@@ -163,6 +234,13 @@ export class ParticipantMarkers {
 					moving = true;
 				}
 				rec.marker.setLngLat(rec.shown);
+				if (rec.car) {
+					try {
+						setVehicle(this.map, rec.shown, rec.heading, carKey(id));
+					} catch {
+						/* style swapped underneath us */
+					}
+				}
 			}
 			if (moving) this.raf = requestAnimationFrame(step);
 		};

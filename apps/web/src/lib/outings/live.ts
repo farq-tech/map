@@ -11,7 +11,7 @@
  */
 
 import { API_BASE_URL } from "../api";
-import { OutingApiError, OutingsApi, type GpsState, type Member, type OutingSnapshot, type Position } from "./api";
+import { OutingApiError, OutingsApi, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position } from "./api";
 import type { DeviceFix, ShareMode } from "./policy";
 
 export type LiveState = "connecting" | "live" | "polling" | "offline" | "closed";
@@ -20,11 +20,12 @@ export type LiveEvent =
 	| { type: "position"; position: Position }
 	| { type: "presence"; user_id: string; online: boolean; away: boolean }
 	| { type: "member_joined"; member: Member }
-	| { type: "member_updated"; member: Pick<Member, "user_id" | "display_name" | "avatar"> }
+	| { type: "member_updated"; member: Pick<Member, "user_id" | "display_name" | "avatar" | "phone"> }
 	| { type: "member_left"; user_id: string; reason: "left" | "removed" }
 	| { type: "member_sharing"; user_id: string; sharing: boolean }
 	| { type: "owner_changed"; owner_id: string }
 	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null }
+	| { type: "member_note"; user_id: string; note: MemberNote | null }
 	| { type: "outing_status"; status: OutingSnapshot["outing"]["status"] };
 
 export type ClosedReason = "outing_ended" | "removed" | "left" | "not_a_member" | "unauthorized" | "replaced";

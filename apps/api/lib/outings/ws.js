@@ -12,6 +12,7 @@
  *   → { type: 'presence', away }
  *   → { type: 'heartbeat', gps }         (no coordinates; "I am still here")
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
+ *   → { type: 'note', id, text }         ← { type: 'note_ack', id, ok, note }  (everyone: member_note)
  *   ← position · presence · member_* · outing_status · owner_changed · closed
  */
 
@@ -85,6 +86,14 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
         if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps);
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
+        if (msg.type === 'note') {
+          try {
+            const r = await service.setNote(conn.user, conn.outingId, msg.text);
+            return reply({ type: 'note_ack', id: msg.id ?? null, ok: true, note: r.note });
+          } catch (e) {
+            return reply({ type: 'note_ack', id: msg.id ?? null, ok: false, reason: e.code || 'server_error' });
+          }
+        }
         if (msg.type === 'position') {
           const r = await service.recordPosition(conn.user, conn.outingId, msg.fix);
           reply({ type: 'ack', id: msg.id ?? null, ok: r.ok, reason: r.ok ? undefined : r.reason, server_now: new Date().toISOString() });

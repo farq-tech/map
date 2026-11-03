@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -169,6 +169,27 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const aMember = withLink.body.members.find((m) => m.user_id === aId);
   assert.ok(aMember.last_seen_at, 'snapshot says when we last heard each member');
   assert.equal(aMember.gps, 'weak');
+
+  /* An optional phone, seen by fellow members only. */
+  assert.equal((await api('PATCH', '/me', B, { phone: '0551234567' })).body.user.phone, '+966551234567');
+  const ph = await api('GET', `/${outingId}`, A);
+  assert.equal(ph.body.members.find((m) => m.user_id === bId).phone, '+966551234567');
+  assert.equal((await api('PATCH', '/me', B, { phone: 'nope' })).status, 400);
+
+  /* A note over A's car: B hears it live, it is in the snapshot, and it can be cleared. */
+  la.send({ type: 'note', id: 'n1', text: '  بوقف عند\u202e المحطة  ' });
+  const nack = await la.next((m) => m.type === 'note_ack' && m.id === 'n1');
+  assert.equal(nack.ok, true);
+  assert.equal(nack.note.text, 'بوقف عند المحطة', 'cleaned: trimmed, no bidi override');
+  const heard = await lb.next((m) => m.type === 'member_note');
+  assert.deepEqual([heard.user_id, heard.note.text], [aId, 'بوقف عند المحطة']);
+  assert.equal((await api('GET', `/${outingId}`, B)).body.members.find((m) => m.user_id === aId).note.text, 'بوقف عند المحطة');
+  la.send({ type: 'note', id: 'n2', text: 'again' });
+  assert.equal((await la.next((m) => m.id === 'n2')).reason, 'too_frequent');
+  await new Promise((r) => setTimeout(r, 2_100));
+  assert.equal((await api('POST', `/${outingId}/note`, A, { text: '' })).status, 200);
+  assert.equal((await lb.next((m) => m.type === 'member_note')).note, null, 'cleared');
+  assert.equal((await api('POST', `/${outingId}/note`, C, { text: 'hi' })).status, 404, 'outsider cannot post');
 
   /* An outsider cannot join a room by socket. */
   const lc = live(C, outingId);
