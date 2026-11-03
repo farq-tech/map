@@ -11,6 +11,7 @@
  * so we explain the step instead of showing a button that cannot work.
  */
 
+import { ensureWorker, releaseWorkerIfUnused } from "../sw/worker";
 import { API_BASE_URL } from "../api";
 import { loadIdentity } from "./api";
 
@@ -113,13 +114,9 @@ async function authed(method: string, path: string, body: unknown): Promise<Resp
 	});
 }
 
-const SW_URL = "/sw.js";
-
-async function registration(): Promise<ServiceWorkerRegistration> {
-	const existing = await navigator.serviceWorker.getRegistration("/");
-	if (existing) return existing;
-	await navigator.serviceWorker.register(SW_URL, { scope: "/" });
-	return navigator.serviceWorker.ready;
+/* The worker is shared with offline areas (lib/sw/worker.ts). */
+function registration(): Promise<ServiceWorkerRegistration> {
+	return ensureWorker();
 }
 
 /** The subscription this browser already has, if any (no prompt, no network). */
@@ -167,6 +164,8 @@ export async function disablePush(): Promise<void> {
 	if (!sub) return;
 	await authed("DELETE", "/push/subscribe", { endpoint: sub.endpoint }).catch(() => undefined);
 	await sub.unsubscribe().catch(() => undefined);
+	/* Saved offline areas still need the worker; otherwise it can go. */
+	await releaseWorkerIfUnused().catch(() => false);
 }
 
 /**

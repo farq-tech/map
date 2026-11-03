@@ -16,7 +16,7 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import { haversineMeters } from "../sary/domain";
 import { lerp, tweenMs, type LngLat } from "./motion";
 import { initials, type Freshness } from "./policy";
-import { snapRadius, snapToRoad } from "../sary/roadSnap";
+import { matchOnMap, RoadMatcher, snapRadius } from "../sary/roadSnap";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, setVehicleOpacity, vehicleIds } from "../sary/vehicleLayer";
 
 export type ParticipantView = {
@@ -56,6 +56,8 @@ type Rec = {
 	heading: number | null;
 	onCarClick: (() => void) | null;
 	anchor: LngLat;
+	/** Keeps this car on the same street from fix to fix (display only). */
+	matcher: RoadMatcher;
 };
 
 /* Layer-id safe key for a participant's car. */
@@ -139,14 +141,19 @@ export class ParticipantMarkers {
 		for (const v of views) {
 			seen.add(v.userId);
 			const raw = { lng: v.lng, lat: v.lat };
-			/* A confident fix in town is drawn on the street; an approximate one stays a ring where measured. */
-			const target = v.approximate ? raw : snapToRoad(this.map, raw, snapRadius(v.accuracyM));
 			let rec = this.recs.get(v.userId);
+			/* Course for matching: the reported one, or real movement since the last anchor. */
+			const course = v.heading != null ? v.heading : rec && distanceMeters(rec.anchor, raw) >= 12 ? bearingBetween(rec.anchor, raw) : null;
+			const matcher = rec?.matcher ?? new RoadMatcher();
+			/* A confident fix in town is drawn on the street it drives along; an approximate one stays a ring where measured. */
+			const matched = v.approximate ? null : matchOnMap(this.map, matcher, raw, course, snapRadius(v.accuracyM));
+			if (v.approximate) matcher.reset();
+			const target = matched ? matched.point : raw;
 			if (!rec) {
 				const el = build(v, this.onTap, this.onVoiceTap);
 				/* Anchored at the bottom so a note bubble grows upward, never over the car. */
 				const marker = new mapboxgl.Marker({ element: el, anchor: "bottom", offset: [0, 22] }).setLngLat(target).addTo(this.map);
-				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null };
+				rec = { marker, el, shown: target, from: target, to: target, start: now, duration: 0, lastAt: v.at, sig: "", car: false, heading: v.heading, anchor: raw, onCarClick: null, matcher };
 				this.recs.set(v.userId, rec);
 			} else if (target.lng !== rec.to.lng || target.lat !== rec.to.lat) {
 				const gap = v.at - rec.lastAt;
@@ -169,6 +176,8 @@ export class ParticipantMarkers {
 				rec.heading = bearingBetween(rec.anchor, raw);
 				rec.anchor = raw;
 			}
+			/* Moving along a matched road: the car points down the road. */
+			if (course != null && matched?.heading != null) rec.heading = matched.heading;
 			{
 				/* Style reloads drop layers; ensuring again is cheap and idempotent. */
 				const car = this.drawCar(v);
