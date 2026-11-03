@@ -30,7 +30,11 @@ export type Member = {
 	last_seen_at?: string | null;
 	/** What their GPS last reported in a heartbeat. */
 	gps?: GpsState | null;
+	/** A short line they put over their car («بوقف عند المحطة»); gone after 15 min. */
+	note?: MemberNote | null;
 };
+
+export type MemberNote = { text: string; at: string };
 
 export type GpsState = "ok" | "weak" | "unavailable" | "denied";
 
@@ -214,6 +218,7 @@ export const OutingsApi = {
 		await call("DELETE", `/${id}/invites`);
 		saveInviteToken(id, null);
 	},
+	note: (id: string, text: string) => call<{ note: MemberNote | null }>("POST", `/${id}/note`, { text }),
 	setSharing: (id: string, sharing: boolean) => call<{ sharing: boolean }>("PATCH", `/${id}/me`, { sharing }),
 	leave: (id: string) => call<{ ended: boolean }>("POST", `/${id}/leave`),
 	removeMember: (id: string, userId: string) => call("DELETE", `/${id}/members/${userId}`),
@@ -235,6 +240,8 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		invalid_name: "اكتب اسمًا يظهر لأصحابك.",
 		invalid_outing_name: "اكتب اسمًا للطلعة.",
 		rate_limited: "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
+		too_frequent: "انتظر ثانيتين ثم أرسل.",
+		invalid_note: "اكتب عبارة قصيرة.",
 		network: "لا يوجد اتصال بالإنترنت.",
 		timeout: "الشبكة بطيئة. أعد المحاولة.",
 		outings_unconfigured: "الطلعات المشتركة غير مفعّلة على الخادم.",
@@ -252,6 +259,8 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		invalid_name: "Enter a name your friends will see.",
 		invalid_outing_name: "Name the outing.",
 		rate_limited: "Too many attempts. Wait a moment.",
+		too_frequent: "Wait a couple of seconds, then send.",
+		invalid_note: "Write a short line.",
 		network: "You are offline.",
 		timeout: "The network is slow. Try again.",
 		outings_unconfigured: "Shared outings are not enabled on the server.",

@@ -21,6 +21,7 @@ import {
 import { expiresIn } from "../../lib/outings/format";
 import { lastSeenAgeMs, positionAgeMs } from "../../lib/outings/outingState";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
+import { memberColors } from "../../lib/outings/carColors";
 import {
 	accuracyGrade,
 	bearingDeg,
@@ -80,6 +81,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [map, setMap] = useState<MapboxMap | null>(null);
 	const [focus, setFocus] = useState<{ lat: number; lng: number; id: string; zoom?: number; kind?: "select" | "locate" | "bounds"; bounds?: [number, number, number, number] | null } | null>(null);
 	const markersRef = useRef<ParticipantMarkers | null>(null);
+	const [composing, setComposing] = useState(false);
+	const [noteDraft, setNoteDraft] = useState("");
+	const [noteError, setNoteError] = useState<string | null>(null);
+	const [noteAlert, setNoteAlert] = useState<{ userId: string; name: string; text: string; color: string } | null>(null);
 	const [follow, setFollow] = useState(false);
 	const fittedRef = useRef(false);
 
@@ -106,6 +111,74 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		path: `/outings/${outingId}`,
 		robots: "noindex",
 	});
+
+	/* One colour per person, the same on every phone (join order). */
+	const colors = useMemo(() => memberColors(view ? [...view.members.values()] : []), [view]);
+	const myColor = me ? colors.get(me.user_id) : undefined;
+	/* A note lives 15 minutes on the server; hide it here on the same clock. */
+	const liveNote = (m: { note?: { text: string; at: string } | null } | undefined) =>
+		m?.note && now - new Date(m.note.at).getTime() < NOTE_TTL_MS ? m.note.text : null;
+	const myNote = me ? liveNote(view?.members.get(me.user_id)) : null;
+
+	/* Someone put a line over their car: say it out loud on everyone else's screen. */
+	const seenNotesRef = useRef<Map<string, string> | null>(null);
+	useEffect(() => {
+		if (!view) return;
+		const first = seenNotesRef.current === null;
+		const seen = seenNotesRef.current || new Map<string, string>();
+		for (const m of view.members.values()) {
+			const at = m.note?.at || "";
+			if (seen.get(m.user_id) === at) continue;
+			seen.set(m.user_id, at);
+			if (first || !m.note || m.user_id === me?.user_id) continue;
+			setNoteAlert({ userId: m.user_id, name: m.display_name, text: m.note.text, color: colors.get(m.user_id) || "#e8eef0" });
+			try {
+				navigator.vibrate?.([140, 70, 140]);
+			} catch {
+				/* */
+			}
+			if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {
+				try {
+					new Notification(m.display_name, { body: m.note.text, tag: `sary-note-${m.user_id}` });
+				} catch {
+					/* */
+				}
+			}
+		}
+		seenNotesRef.current = seen;
+	}, [view, me?.user_id, colors]);
+
+	useEffect(() => {
+		if (!noteAlert) return;
+		const t = window.setTimeout(() => setNoteAlert(null), 7_000);
+		return () => window.clearTimeout(t);
+	}, [noteAlert]);
+
+	const openComposer = () => {
+		setNoteDraft("");
+		setNoteError(null);
+		setComposing(true);
+		/* Ask once, from a tap, so a note can reach a phone whose screen is dimmed. */
+		try {
+			if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission();
+		} catch {
+			/* */
+		}
+	};
+
+	const sendNote = async (text: string) => {
+		setNoteError(null);
+		setBusy(true);
+		try {
+			await OutingsApi.note(outingId, text);
+			setComposing(false);
+			setToast(text ? (isRTL ? "وصلت رسالتك لأصحابك ✓" : "Sent to the group ✓") : isRTL ? "مُسحت الرسالة" : "Note cleared");
+		} catch (e) {
+			setNoteError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
+		} finally {
+			setBusy(false);
+		}
+	};
 
 	const rows: Row[] = useMemo(() => {
 		if (!view) return [];
@@ -164,9 +237,11 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				approximate: accuracyGrade(r.position!.accuracy) === "poor",
 				weak: accuracyGrade(r.position!.accuracy) !== "good",
 				selected: r.member.user_id === selected,
+				color: colors.get(r.member.user_id) || "#e8eef0",
+				note: liveNote(r.member),
 			}));
 		layer.sync(views);
-	}, [rows, selected, map]);
+	}, [rows, selected, map, colors]);
 
 	const groupBounds = (): [number, number, number, number] | null => {
 		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position).map((r) => r.position!);
@@ -198,7 +273,17 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		}
 	};
 
-	/* First time positions arrive, frame the whole group once. */
+	/* Frame the whole group when positions first arrive, and again each time
+	 * someone new appears, so nobody is left off-screen. */
+	const placedRef = useRef<Set<string>>(new Set());
+	useEffect(() => {
+		if (!map) return;
+		const placed = rows.filter((r) => r.position).map((r) => r.member.user_id);
+		const newcomer = placed.some((id) => !placedRef.current.has(id));
+		placed.forEach((id) => placedRef.current.add(id));
+		if (newcomer && fittedRef.current && !follow) fitGroup();
+	}, [rows, map]);
+
 	useEffect(() => {
 		if (fittedRef.current || !map) return;
 		if (rows.some((r) => r.position)) {
@@ -326,6 +411,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						showUserLocation={locationPinKind === "gps" && Boolean(userLocation)}
 						followMode={follow}
 						vehicleMode={canSend ? "prado" : "dot"}
+						vehicleHex={myColor}
+						vehicleLabel={isRTL ? "أنت" : "You"}
+						vehicleNote={myNote}
+						onVehicleTap={openComposer}
 						onBreakFollow={() => setFollow(false)}
 						isRTL={isRTL}
 						hideAddressSearch
@@ -365,6 +454,11 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			<div className="sary-o-fabs">
 				<button type="button" className="sary-fab" onClick={locateMe} data-testid="outing-locate">{isRTL ? "موقعي" : "Me"}</button>
 				<button type="button" className="sary-fab" onClick={fitGroup} data-testid="outing-fit">{isRTL ? "المجموعة" : "Group"}</button>
+				{outing?.status === "active" || outing?.status === "paused" ? (
+					<button type="button" className="sary-fab" onClick={openComposer} data-testid="outing-note-open">
+						{isRTL ? "رسالة" : "Message"}
+					</button>
+				) : null}
 			</div>
 
 			<FarqBottomSheet
@@ -433,7 +527,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					) : (
 						<ul className="sary-o-members" data-testid="outing-members">
 							<li className="sary-o-member is-me">
-								<Face name={me ? view?.members.get(me.user_id)?.display_name || "" : ""} avatar={me ? view?.members.get(me.user_id)?.avatar || null : null} />
+								<Face name={me ? view?.members.get(me.user_id)?.display_name || "" : ""} avatar={me ? view?.members.get(me.user_id)?.avatar || null : null} color={myColor} />
 								<div>
 									<strong>{isRTL ? "أنت" : "You"}{isOwner ? (isRTL ? " · صاحب الطلعة" : " · owner") : ""}</strong>
 									<span>{sharingLine}</span>
@@ -442,7 +536,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							{rows.map((r) => (
 								<li key={r.member.user_id}>
 									<button type="button" className="sary-o-member" onClick={() => setSelected(r.member.user_id)} data-testid="outing-member" data-user={r.member.user_id} data-fresh={r.fresh || "none"}>
-										<Face name={r.member.display_name} avatar={r.member.avatar} fresh={r.fresh} />
+										<Face name={r.member.display_name} avatar={r.member.avatar} fresh={r.fresh} color={colors.get(r.member.user_id)} />
 										<div>
 											<strong>
 												{r.member.display_name}
@@ -690,6 +784,76 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				</div>
 			) : null}
 
+			{composing ? (
+				<div className="sary-o-modal" role="dialog" aria-modal="true" aria-labelledby="outing-note-title" data-testid="outing-note">
+					<form
+						className="sary-o-card"
+						onSubmit={(e) => {
+							e.preventDefault();
+							if (noteDraft.trim()) void sendNote(noteDraft.trim());
+						}}
+					>
+						<h2 id="outing-note-title">{isRTL ? "رسالة فوق سيارتك" : "A line over your car"}</h2>
+						<p className="sary-o-note">
+							{isRTL ? "تظهر فوق سيارتك على خريطة الجميع، ويجيهم تنبيه. تختفي بعد ١٥ دقيقة." : "Shows over your car on everyone's map, with an alert. Gone after 15 minutes."}
+						</p>
+						<div className="sary-o-presets">
+							{(isRTL ? NOTE_PRESETS_AR : NOTE_PRESETS_EN).map((p) => (
+								<button key={p} type="button" className="sary-o-preset" disabled={busy} onClick={() => void sendNote(p)} data-testid="outing-note-preset">
+									{p}
+								</button>
+							))}
+						</div>
+						<label className="sary-o-form">
+							<span>{isRTL ? "أو اكتب عبارتك" : "Or write your own"}</span>
+							<input
+								value={noteDraft}
+								onChange={(e) => setNoteDraft(e.target.value)}
+								maxLength={80}
+								enterKeyHint="send"
+								placeholder={isRTL ? "مثال: بوقف عند المحطة" : "e.g. Stopping for fuel"}
+								data-testid="outing-note-input"
+								autoFocus
+							/>
+						</label>
+						{noteError ? <p className="sary-o-error" role="alert">{noteError}</p> : null}
+						<div className="sary-o-row">
+							<button type="submit" className="sary-o-primary" disabled={busy || !noteDraft.trim()} data-testid="outing-note-send">
+								{isRTL ? "أرسل" : "Send"}
+							</button>
+							{myNote ? (
+								<button type="button" className="sary-o-secondary" disabled={busy} onClick={() => void sendNote("")} data-testid="outing-note-clear">
+									{isRTL ? "امسح رسالتي" : "Clear my note"}
+								</button>
+							) : null}
+							<button type="button" className="sary-o-secondary" onClick={() => setComposing(false)}>
+								{isRTL ? "إلغاء" : "Cancel"}
+							</button>
+						</div>
+					</form>
+				</div>
+			) : null}
+
+			{noteAlert ? (
+				<button
+					type="button"
+					className="sary-o-alert"
+					role="alert"
+					style={{ "--car": noteAlert.color } as React.CSSProperties}
+					onClick={() => {
+						setSelected(noteAlert.userId);
+						setPanel("members");
+						setSnap("half");
+						setNoteAlert(null);
+					}}
+					data-testid="outing-note-alert"
+				>
+					<i aria-hidden="true" />
+					<strong>{noteAlert.name}</strong>
+					<span>{noteAlert.text}</span>
+				</button>
+			) : null}
+
 			{toast ? (
 				<div className="sary-o-toast" role="status" data-testid="outing-toast">
 					{toast}
@@ -698,6 +862,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		</div>
 	);
 }
+
+const NOTE_TTL_MS = 15 * 60_000;
+const NOTE_PRESETS_AR = ["بوقف عند المحطة ⛽", "انتظروني", "وقفت، تعالوا", "عندي عطل", "تمام، ماشي"];
+const NOTE_PRESETS_EN = ["Stopping for fuel ⛽", "Wait for me", "Stopped — come over", "Car trouble", "All good, moving"];
 
 function memberLine(r: Row, isRTL: boolean): string {
 	const m = r.member;
@@ -739,9 +907,10 @@ function StatusPill({ row, isRTL }: { row: Row; isRTL: boolean }) {
 	);
 }
 
-function Face({ name, avatar, fresh }: { name: string; avatar: string | null; fresh?: Freshness | null }) {
+function Face({ name, avatar, fresh, color }: { name: string; avatar: string | null; fresh?: Freshness | null; color?: string }) {
+	const style = { ...(avatar ? { backgroundImage: `url("${avatar}")` } : {}), ...(color ? { "--car": color } : {}) } as React.CSSProperties;
 	return (
-		<span className="sary-o-face" data-fresh={fresh || undefined} style={avatar ? { backgroundImage: `url("${avatar}")` } : undefined} aria-hidden="true">
+		<span className="sary-o-face" data-fresh={fresh || undefined} style={style} aria-hidden="true">
 			{avatar ? "" : initials(name)}
 		</span>
 	);

@@ -10,6 +10,7 @@
  */
 
 import type { Map as MapboxMap } from "mapbox-gl";
+import { ensureRoadProbe } from "./roadSnap";
 import { suvModelUrl } from "./suvModel";
 
 export const VEHICLE_SOURCE = "sary-vehicle";
@@ -25,7 +26,7 @@ export function modelIdFor(hex: string): string {
 }
 
 /** On-screen length the car keeps until its true size (≈4.9 m) is larger. */
-export const VEHICLE_SCREEN_PX = 36;
+export const VEHICLE_SCREEN_PX = 26;
 const CAR_LENGTH_M = 4.9;
 /* Metres per CSS pixel at zoom 0 around Saudi latitudes (cos 25°). */
 const MPP_Z0 = 156543.03 * Math.cos((25 * Math.PI) / 180);
@@ -82,7 +83,15 @@ export function canDrawModels(map: MapboxMap): boolean {
  * Adds (once per style) the model for this body colour, the source and the
  * layer. Safe to call repeatedly. Returns false when the map cannot draw it.
  */
-export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
+/** Layer ids for one car: "" is your own car, any other key a participant's. */
+export function vehicleIds(key = ""): { source: string; layer: string; spot: string } {
+	return key
+		? { source: `${VEHICLE_SOURCE}-${key}`, layer: `${VEHICLE_LAYER}-${key}`, spot: `${VEHICLE_SPOT_LAYER}-${key}` }
+		: { source: VEHICLE_SOURCE, layer: VEHICLE_LAYER, spot: VEHICLE_SPOT_LAYER };
+}
+
+export function ensureVehicleLayer(map: MapboxMap, bodyHex: string, key = "", spotColor = "#e8862e"): boolean {
+	const ids = vehicleIds(key);
 	if (!canDrawModels(map)) return false;
 	const m = map as unknown as { addModel: (id: string, url: string) => void };
 	const id = modelIdFor(bodyHex);
@@ -100,17 +109,18 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 			m.addModel(id, suvModelUrl(bodyHex));
 			added.add(id);
 		}
-		if (!map.getSource(VEHICLE_SOURCE)) {
-			map.addSource(VEHICLE_SOURCE, { type: "geojson", data: vehicleFeature(null) });
+		ensureRoadProbe(map);
+		if (!map.getSource(ids.source)) {
+			map.addSource(ids.source, { type: "geojson", data: vehicleFeature(null) });
 		}
-		if (!map.getLayer(VEHICLE_SPOT_LAYER)) {
+		if (!map.getLayer(ids.spot)) {
 			map.addLayer({
-				id: VEHICLE_SPOT_LAYER,
+				id: ids.spot,
 				type: "circle",
-				source: VEHICLE_SOURCE,
+				source: ids.source,
 				paint: {
 					"circle-radius": 6,
-					"circle-color": "#e8862e",
+					"circle-color": spotColor,
 					"circle-stroke-color": "#ffffff",
 					"circle-stroke-width": 2.5,
 					"circle-pitch-alignment": "map",
@@ -118,11 +128,11 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 				},
 			} as unknown as Parameters<MapboxMap["addLayer"]>[0]);
 		}
-		if (!map.getLayer(VEHICLE_LAYER)) {
+		if (!map.getLayer(ids.layer)) {
 			map.addLayer({
-				id: VEHICLE_LAYER,
+				id: ids.layer,
 				type: "model",
-				source: VEHICLE_SOURCE,
+				source: ids.source,
 				layout: { "model-id": id },
 				paint: {
 					"model-type": "common-3d",
@@ -135,7 +145,7 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 				},
 			} as unknown as Parameters<MapboxMap["addLayer"]>[0]);
 		} else {
-			map.setLayoutProperty(VEHICLE_LAYER, "model-id", id);
+			map.setLayoutProperty(ids.layer, "model-id", id);
 		}
 		return true;
 	} catch (e) {
@@ -151,19 +161,26 @@ export function ensureVehicleLayer(map: MapboxMap, bodyHex: string): boolean {
 let warned = false;
 const addedModels = new WeakMap<MapboxMap, Set<string>>();
 
-export function setVehicle(map: MapboxMap, pos: { lng: number; lat: number } | null, heading: number | null): void {
-	const src = map.getSource(VEHICLE_SOURCE) as { setData?: (d: GeoJSON.FeatureCollection) => void } | undefined;
+export function setVehicle(map: MapboxMap, pos: { lng: number; lat: number } | null, heading: number | null, key = ""): void {
+	const ids = vehicleIds(key);
+	const src = map.getSource(ids.source) as { setData?: (d: GeoJSON.FeatureCollection) => void } | undefined;
 	src?.setData?.(vehicleFeature(pos));
-	if (map.getLayer(VEHICLE_LAYER)) {
-		map.setPaintProperty(VEHICLE_LAYER, "model-rotation" as never, vehicleRotation(heading) as never);
+	if (map.getLayer(ids.layer)) {
+		map.setPaintProperty(ids.layer, "model-rotation" as never, vehicleRotation(heading) as never);
 	}
 }
 
-export function removeVehicle(map: MapboxMap): void {
+export function setVehicleOpacity(map: MapboxMap, key: string, opacity: number): void {
+	const ids = vehicleIds(key);
+	if (map.getLayer(ids.layer)) map.setPaintProperty(ids.layer, "model-opacity" as never, opacity as never);
+}
+
+export function removeVehicle(map: MapboxMap, key = ""): void {
+	const ids = vehicleIds(key);
 	try {
-		if (map.getLayer(VEHICLE_LAYER)) map.removeLayer(VEHICLE_LAYER);
-		if (map.getLayer(VEHICLE_SPOT_LAYER)) map.removeLayer(VEHICLE_SPOT_LAYER);
-		if (map.getSource(VEHICLE_SOURCE)) map.removeSource(VEHICLE_SOURCE);
+		if (map.getLayer(ids.layer)) map.removeLayer(ids.layer);
+		if (map.getLayer(ids.spot)) map.removeLayer(ids.spot);
+		if (map.getSource(ids.source)) map.removeSource(ids.source);
 	} catch {
 		/* style swapped underneath us */
 	}

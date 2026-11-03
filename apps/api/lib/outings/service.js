@@ -421,6 +421,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
         away: away.has(x.user_id),
         last_seen_at: link.get(x.user_id)?.at ? new Date(link.get(x.user_id).at).toISOString() : null,
         gps: link.get(x.user_id)?.gps || null,
+        note: o.status === 'ended' ? null : noteOf(outingId, x.user_id),
       })),
       positions: pos,
       invite: m.role === 'owner' ? { active: Boolean(inv[0]), expires_at: inv[0]?.expires_at || null } : null,
@@ -551,6 +552,41 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     return outcome;
   }
 
+  /* ---------- car notes ---------- */
+
+  /* A note is a passing word to the group, not a record: held in memory only,
+   * gone after NOTE_TTL_MS, when replaced, or when the server restarts. */
+  const NOTE_TTL_MS = 15 * 60_000;
+  const NOTE_MIN_GAP_MS = 2_000;
+  const notes = new Map(); // `${outingId}:${userId}` → { text, at }
+
+  function noteOf(outingId, userId) {
+    const n = notes.get(`${outingId}:${userId}`);
+    if (!n) return null;
+    if (now() - n.at > NOTE_TTL_MS) {
+      notes.delete(`${outingId}:${userId}`);
+      return null;
+    }
+    return { text: n.text, at: new Date(n.at).toISOString() };
+  }
+
+  async function setNote(user, outingId, raw) {
+    const m = await requireMember(user, outingId);
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    const text = v.note(raw);
+    if (text === null) throw err('invalid_note', 400);
+    const key = `${outingId}:${user.id}`;
+    const prev = notes.get(key);
+    if (prev && now() - prev.at < NOTE_MIN_GAP_MS) throw err('too_frequent', 429);
+    const at = now();
+    if (text) notes.set(key, { text, at });
+    else notes.delete(key);
+    const payload = text ? { text, at: new Date(at).toISOString() } : null;
+    /* Everyone, the sender's other devices included. */
+    hub.emit(outingId, { type: 'member_note', user_id: user.id, note: payload });
+    return { note: payload };
+  }
+
   async function setSharing(user, outingId, sharing) {
     await requireMember(user, outingId, { fresh: true });
     const on = sharing === true;
@@ -667,6 +703,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     removeMember,
     leave,
     setSharing,
+    setNote,
     recordPosition,
     sweep,
   };

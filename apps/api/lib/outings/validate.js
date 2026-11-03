@@ -34,6 +34,13 @@ function displayName(raw) {
   return cleanText(raw, NAME_MAX);
 }
 
+/** A short line over your car («بوقف عند المحطة»). Empty clears it. */
+const NOTE_MAX = 80;
+function note(raw) {
+  if (raw === '' || raw === null) return '';
+  return cleanText(raw, NOTE_MAX);
+}
+
 function outingName(raw) {
   return cleanText(raw, OUTING_NAME_MAX);
 }
@@ -117,7 +124,9 @@ module.exports = {
   MAX_FIX_AGE_MS,
   MAX_ACCURACY_M,
   MAX_SPEED_MPS,
+  NOTE_MAX,
   displayName,
+  note,
   outingName,
   avatar,
   fix,

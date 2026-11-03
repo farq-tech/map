@@ -36,7 +36,8 @@ import {
 	setSaryTerrain,
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
-import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle } from "../../lib/sary/vehicleLayer";
+import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, VEHICLE_LAYER } from "../../lib/sary/vehicleLayer";
+import { snapToRoad } from "../../lib/sary/roadSnap";
 import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
@@ -420,6 +421,10 @@ export default function FarqMap({
 	tracks = null,
 	userTrack = null,
 	vehicleMode = "dot",
+	vehicleHex,
+	vehicleLabel,
+	vehicleNote,
+	onVehicleTap,
 	vehicleMotion = "idle",
 	outdoorLayer = "around",
 	onBreakFollow,
@@ -468,6 +473,14 @@ export default function FarqMap({
 	tracks?: GeoJSON.FeatureCollection | null;
 	userTrack?: GeoJSON.FeatureCollection | null;
 	vehicleMode?: "dot" | "prado";
+	/** Body colour of your 3D car; defaults to the colour saved in your profile. */
+	vehicleHex?: string;
+	/** A name chip floated above your 3D car (shared outings: «أنت»). */
+	vehicleLabel?: string;
+	/** Your short line over your car («بوقف عند المحطة»). */
+	vehicleNote?: string | null;
+	/** Tapping your car (or its name chip). */
+	onVehicleTap?: () => void;
 	vehicleMotion?: "idle" | "moving";
 	outdoorLayer?: OutdoorLayerId;
 	onBreakFollow?: () => void;
@@ -518,6 +531,9 @@ export default function FarqMap({
 	const vehicleShownRef = useRef<{ lng: number; lat: number } | null>(null);
 	const vehicleHeadingRef = useRef<number | null>(null);
 	const vehicleAnchorRef = useRef<{ lng: number; lat: number } | null>(null);
+	const vehicleLabelRef = useRef<mapboxgl.Marker | null>(null);
+	const onVehicleTapRef = useRef(onVehicleTap);
+	onVehicleTapRef.current = onVehicleTap;
 	const vehicleRafRef = useRef(0);
 	const isRtlRef = useRef(isRTL);
 	const selectedPlaceIdRef = useRef(selectedPlaceId);
@@ -1224,7 +1240,36 @@ export default function FarqMap({
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map || !introDoneRef.current) return;
-		const car3d = vehicleMode === "prado" && showUserLocation && userLocation ? ensureVehicleLayer(map, vehicleColorHex(loadVehicleColor())) : null;
+		const car3d = vehicleMode === "prado" && showUserLocation && userLocation ? ensureVehicleLayer(map, vehicleHex || vehicleColorHex(loadVehicleColor())) : null;
+		/* The name chip rides with the car; without a car or a label there is none. */
+		if (car3d && vehicleLabel) {
+			if (!vehicleLabelRef.current) {
+				const el = document.createElement("button");
+				el.type = "button";
+				el.className = "sary-peer is-car is-me";
+				el.dataset.testid = "sary-my-car";
+				el.innerHTML = `<span class="sary-peer__note" hidden></span><span class="sary-peer__name"><i class="sary-peer__dot" aria-hidden="true"></i><b></b></span>`;
+				el.addEventListener("click", (e) => {
+					e.stopPropagation();
+					onVehicleTapRef.current?.();
+				});
+				vehicleLabelRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom", offset: [0, -22] });
+				/* The car itself is tappable too. */
+				map.on("click", VEHICLE_LAYER, () => onVehicleTapRef.current?.());
+			}
+			const el = vehicleLabelRef.current.getElement();
+			el.style.setProperty("--peer-color", vehicleHex || vehicleColorHex(loadVehicleColor()));
+			el.querySelector("b")!.textContent = vehicleLabel;
+			(el.querySelector(".sary-peer__name") as HTMLElement).dir = isRTL ? "rtl" : "ltr";
+			const note = el.querySelector(".sary-peer__note") as HTMLElement;
+			note.hidden = !vehicleNote;
+			note.textContent = vehicleNote || "";
+			note.dir = isRTL ? "rtl" : "ltr";
+			el.setAttribute("aria-label", vehicleNote ? `${vehicleLabel}: ${vehicleNote}` : vehicleLabel);
+			vehicleLabelRef.current.setLngLat(vehicleShownRef.current || userLocation!).addTo(map);
+		} else {
+			vehicleLabelRef.current?.remove();
+		}
 		/* Observable state for QA scripts: which vehicle the map is drawing. */
 		map.getContainer().dataset.vehicle = car3d === null ? "none" : car3d ? "model" : "fallback";
 		if (car3d && userLocation) {
@@ -1245,11 +1290,13 @@ export default function FarqMap({
 				}
 			}
 			const from = vehicleShownRef.current;
-			const to = { lng: userLocation.lng, lat: userLocation.lat };
+			/* In town, on the street rather than inside the house beside it. */
+			const to = snapToRoad(map, { lng: userLocation.lng, lat: userLocation.lat });
 			cancelAnimationFrame(vehicleRafRef.current);
 			if (!from || reducedMotionRef.current) {
 				vehicleShownRef.current = to;
 				setVehicle(map, to, vehicleHeadingRef.current);
+				vehicleLabelRef.current?.setLngLat(to);
 			} else {
 				/* Glide to the new real fix over under a second; never past it. */
 				const start = performance.now();
@@ -1259,6 +1306,7 @@ export default function FarqMap({
 					vehicleShownRef.current = p;
 					try {
 						setVehicle(map, p, vehicleHeadingRef.current);
+						vehicleLabelRef.current?.setLngLat(p);
 					} catch {
 						return;
 					}
@@ -1298,6 +1346,10 @@ export default function FarqMap({
 		avatarVersion,
 		vehicleMode,
 		vehicleMotion,
+		vehicleHex,
+		vehicleLabel,
+		vehicleNote,
+		isRTL,
 	]);
 
 	/* The photo lives in this browser and is changed from a control elsewhere in

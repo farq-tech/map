@@ -126,6 +126,10 @@ function createOutingsRouter({ service, hub, limits = {} }) {
     res.json({ ok: true, ...(await service.setSharing(req.user, req.params.id, req.body?.sharing)) });
   }));
 
+  router.post('/:id/note', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setNote(req.user, req.params.id, req.body?.text)) });
+  }));
+
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.leave(req.user, req.params.id)) });
   }));
