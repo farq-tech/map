@@ -1,7 +1,7 @@
 import { Navigation } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE_URL } from "../../lib/api";
-import { coarseBbox, groupMotion, rankAlong, shareLine, type Candidate, type Mover, type Ranked } from "../../lib/outings/ahead";
+import { coarseBbox, groupMotion, NEAR_BOX, needWider, rankAlong, shareLine, type Candidate, type Mover, type Ranked } from "../../lib/outings/ahead";
 import { directionLabel } from "../../lib/outings/policy";
 import { directionsUrl, formatKm } from "../../lib/sary/domain";
 
@@ -14,27 +14,40 @@ type Feature = { properties: { id: string; kind: string; name: string | null; br
  */
 export function NearestServices({ people, isRTL, onShare, onClose, busy }: { people: Mover[]; isRTL: boolean; onShare: (text: string) => void; onClose: () => void; busy: boolean }) {
 	const motion = useMemo(() => groupMotion(people), [people]);
-	const box = motion ? coarseBbox(motion.origin).join(",") : null;
+	const near = motion ? coarseBbox(motion.origin, NEAR_BOX.grid, NEAR_BOX.half).join(",") : null;
+	const wide = motion ? coarseBbox(motion.origin).join(",") : null;
+	const heading = motion?.heading ?? null;
+	const originRef = useRef(motion);
+	originRef.current = motion;
 	const [items, setItems] = useState<Candidate[] | null>(null);
 	const [error, setError] = useState(false);
 
+	/* Near box first; only when it has too few fuel answers along the way, the wide one too. */
 	useEffect(() => {
-		if (!box) return;
+		if (!near || !wide) return;
 		let off = false;
 		setError(false);
-		fetch(`${API_BASE_URL}/api/outdoor/features?bbox=${box}&types=fuel,well,spring&limit=400`, { headers: { accept: "application/json" } })
-			.then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-			.then((fc: { features?: Feature[] }) => {
-				if (off) return;
-				setItems((fc.features || []).map((f) => ({ id: f.properties.id, kind: f.properties.kind, name: f.properties.name, brand: f.properties.brand || null, lat: f.properties.lat, lng: f.properties.lng })));
-			})
-			.catch(() => !off && setError(true));
+		setItems(null);
+		const load = (box: string) =>
+			fetch(`${API_BASE_URL}/api/outdoor/features?bbox=${box}&types=fuel,well,spring&limit=400`, { headers: { accept: "application/json" } })
+				.then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+				.then((fc: { features?: Feature[] }) =>
+					(fc.features || []).map((f) => ({ id: f.properties.id, kind: f.properties.kind, name: f.properties.name, brand: f.properties.brand || null, lat: f.properties.lat, lng: f.properties.lng })),
+				);
+		(async () => {
+			let got = await load(near);
+			const m = originRef.current;
+			if (m && needWider(rankAlong(m.origin, m.heading, got.filter((c) => c.kind === "fuel")), m.heading)) {
+				const seen = new Set(got.map((c) => c.id));
+				got = [...got, ...(await load(wide)).filter((c) => !seen.has(c.id))];
+			}
+			if (!off) setItems(got);
+		})().catch(() => !off && setError(true));
 		return () => {
 			off = true;
 		};
-	}, [box]);
+	}, [near, wide]);
 
-	const heading = motion?.heading ?? null;
 	const fuel = useMemo(() => (motion && items ? rankAlong(motion.origin, heading, items.filter((c) => c.kind === "fuel")) : []), [motion, items, heading]);
 	const water = useMemo(() => (motion && items ? rankAlong(motion.origin, heading, items.filter((c) => c.kind === "well" || c.kind === "spring"), { limit: 2 }) : []), [motion, items, heading]);
 

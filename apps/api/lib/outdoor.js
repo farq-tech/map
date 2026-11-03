@@ -206,11 +206,22 @@ function queryFeatures({ bbox, types, zoom, limit }) {
     if (typeSet && !typeSet.has(p.kind) && !typeSet.has(p.group)) continue;
     if (box && !inBbox(p.lng, p.lat, box)) continue;
     hits.push(f);
-    if (hits.length >= cap) break;
+    /* Without a box there is no "nearer"; keep the old first-N behaviour. */
+    if (!box && hits.length >= cap) break;
+  }
+  /* A dense box (Riyadh holds hundreds of fuel stations) keeps the features
+   * nearest its centre, not whichever came first in the file. */
+  let truncated = false;
+  if (hits.length > cap) {
+    truncated = true;
+    const c = { lng: (box.west + box.east) / 2, lat: (box.south + box.north) / 2 };
+    hits.sort((a, b) => haversineMeters(c, a.properties) - haversineMeters(c, b.properties));
+    hits.length = cap;
   }
   return {
     type: 'FeatureCollection',
     count: hits.length,
+    ...(truncated ? { truncated: true } : {}),
     source: 'osm',
     license: 'ODbL',
     features: hits,
