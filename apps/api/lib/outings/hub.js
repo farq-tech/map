@@ -16,6 +16,31 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
   const rooms = new Map(); // outingId -> Set<conn>
   const pollers = new Map(); // outingId -> Map(userId -> lastPollAt)
   const away = new Map(); // outingId -> Set(userId)
+  /* When we last heard anything from each member, and what their GPS said.
+   * Kept apart from fixes on purpose: connected-without-GPS and GPS-without-network
+   * are different states. outingId -> Map(userId -> { at, gps }) */
+  const links = new Map();
+
+  function touch(outingId, userId, gps) {
+    if (!outingId || !userId) return;
+    if (!links.has(outingId)) links.set(outingId, new Map());
+    const m = links.get(outingId);
+    const prev = m.get(userId);
+    const next = { at: now(), gps: gps || prev?.gps || null };
+    m.set(userId, next);
+    return { prev, next };
+  }
+
+  /** A connection heartbeat (no coordinates) → everyone else learns we still hear this person. */
+  function heartbeat(outingId, userId, gps) {
+    const g = gps === 'ok' || gps === 'weak' || gps === 'unavailable' || gps === 'denied' ? gps : null;
+    const { next } = touch(outingId, userId, g);
+    emit(outingId, { type: 'member_link', user_id: userId, last_seen_at: new Date(next.at).toISOString(), gps: next.gps }, { exceptUser: userId });
+  }
+
+  function linkState(outingId) {
+    return new Map(links.get(outingId) || []);
+  }
 
   function send(conn, msg) {
     if (conn.ws.readyState !== OPEN) return;
@@ -55,6 +80,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     const wasOnline = onlineUsers(outingId).has(conn.userId);
     room.add(conn);
     conn.outingId = outingId;
+    touch(outingId, conn.userId);
     if (!wasOnline) emit(outingId, { type: 'presence', user_id: conn.userId, online: true, away: false }, { exceptUser: conn.userId });
   }
 
@@ -89,11 +115,13 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     const p = pollers.get(outingId);
     const wasOnline = onlineUsers(outingId).has(userId);
     p.set(userId, now());
+    touch(outingId, userId);
     if (!wasOnline) emit(outingId, { type: 'presence', user_id: userId, online: true, away: false }, { exceptUser: userId });
   }
 
   function kick(outingId, userId, reason) {
     pollers.get(outingId)?.delete(userId);
+    links.get(outingId)?.delete(userId);
     away.get(outingId)?.delete(userId);
     for (const c of [...(rooms.get(outingId) || [])]) {
       if (c.userId !== userId) continue;
@@ -128,6 +156,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     rooms.delete(outingId);
     pollers.delete(outingId);
     away.delete(outingId);
+    links.delete(outingId);
   }
 
   /** Drop poll presence that went quiet, announcing it once. */
@@ -152,7 +181,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return { rooms: rooms.size, sockets };
   }
 
-  return { join, leave, emit, connectionsOf, kick, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
+  return { join, leave, emit, connectionsOf, touch, heartbeat, linkState, kick, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
 }
 
 module.exports = { createHub };

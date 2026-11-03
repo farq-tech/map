@@ -3,6 +3,7 @@ import type { SheetSnap } from "../intelligence/FarqBottomSheet";
 import FarqBottomSheet from "../intelligence/FarqBottomSheet";
 import { Button } from "../ui/Button";
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 
 const LAYERS: Array<{ id: OutdoorLayerId; ar: string; en: string }> = [
 	{ id: "around", ar: "حولك", en: "Around" },
@@ -78,6 +79,9 @@ export default function SaryExploreChrome({
 					</button>
 				))}
 			</div>
+			<Link to="/outings" className="sary-outing-entry" data-testid="sary-outing-entry">
+				{isRTL ? "طلعة مشتركة" : "Shared outing"}
+			</Link>
 			<div className="sary-fabs">
 				<button
 					type="button"

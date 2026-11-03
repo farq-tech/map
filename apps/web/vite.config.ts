@@ -21,6 +21,8 @@ export default defineConfig(({ mode }) => {
 				"/api": {
 					target: apiTarget,
 					changeOrigin: true,
+					/* /api/outings/live is a WebSocket. */
+					ws: true,
 				},
 			},
 		},

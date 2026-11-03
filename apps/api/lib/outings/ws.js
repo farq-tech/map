@@ -10,6 +10,7 @@
  * then
  *   → { type: 'position', id, fix }      ← { type: 'ack', id, ok, reason? }
  *   → { type: 'presence', away }
+ *   → { type: 'heartbeat', gps }         (no coordinates; "I am still here")
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
  *   ← position · presence · member_* · outing_status · owner_changed · closed
  */
@@ -80,6 +81,8 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
           return;
         }
         if (!conn.userId || !conn.outingId) return;
+        hub.touch(conn.outingId, conn.userId);
+        if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps);
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
         if (msg.type === 'position') {

@@ -421,6 +421,7 @@ export default function FarqMap({
 	vehicleMotion = "idle",
 	outdoorLayer = "around",
 	onBreakFollow,
+	onMapReady,
 }: {
 	places: IntelligenceMapPlaces | null;
 	/** Accepted for IntelligenceMapSplit compatibility — not painted as a mosaic. */
@@ -468,6 +469,8 @@ export default function FarqMap({
 	vehicleMotion?: "idle" | "moving";
 	outdoorLayer?: OutdoorLayerId;
 	onBreakFollow?: () => void;
+	/** The map instance once loaded (null on unmount), for overlays drawn by the caller. */
+	onMapReady?: (map: MapboxMap | null) => void;
 }) {
 	const token = getMapboxAccessToken();
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -530,6 +533,8 @@ export default function FarqMap({
 	onMapInteractionRef.current = onMapInteraction;
 	onLeftUserLocationRef.current = onLeftUserLocation;
 	onBreakFollowRef.current = onBreakFollow;
+	const onMapReadyRef = useRef(onMapReady);
+	onMapReadyRef.current = onMapReady;
 	userLocationRef.current = userLocation;
 	modeRef.current = mode;
 	followModeRef.current = followMode;
@@ -777,6 +782,7 @@ export default function FarqMap({
 			}
 
 			setMapReady(true);
+			onMapReadyRef.current?.(map);
 			try {
 				/* Layer-scoped listeners survive a style swap; bind once. A tap on a
 				 * cluster or a pin is theirs — the حي only takes the empty field. */
@@ -1023,6 +1029,7 @@ export default function FarqMap({
 			searchRef.current = null;
 			setMapReady(false);
 			setIntroDone(false);
+			onMapReadyRef.current?.(null);
 			map.remove();
 			mapRef.current = null;
 		};

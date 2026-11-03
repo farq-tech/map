@@ -160,6 +160,16 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   assert.equal((await api('POST', `/${outingId}/positions`, B, { fix: step(RIYADH, -2) })).status, 200);
   assert.equal((await la.next((m) => m.type === 'position')).position.user_id, bId);
 
+  /* Connection heartbeat is separate from fixes: no coordinates, just "still here" + GPS state. */
+  la.send({ type: 'heartbeat', gps: 'weak' });
+  const link = await lb.next((m) => m.type === 'member_link');
+  assert.deepEqual([link.user_id, link.gps], [aId, 'weak']);
+  assert.equal('lat' in link, false);
+  const withLink = await api('GET', `/${outingId}`, B);
+  const aMember = withLink.body.members.find((m) => m.user_id === aId);
+  assert.ok(aMember.last_seen_at, 'snapshot says when we last heard each member');
+  assert.equal(aMember.gps, 'weak');
+
   /* An outsider cannot join a room by socket. */
   const lc = live(C, outingId);
   await lc.opened;

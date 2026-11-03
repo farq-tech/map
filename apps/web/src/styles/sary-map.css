@@ -197,3 +197,34 @@
 		width: min(420px, 36vw);
 	}
 }
+
+/* Entry to طلعة مشتركة — under the layer rail, on the reading side. */
+.sary-outing-entry {
+	position: absolute;
+	top: calc(116px + env(safe-area-inset-top));
+	right: 12px;
+	z-index: 6;
+	display: inline-flex;
+	align-items: center;
+	height: 36px;
+	padding: 0 14px;
+	border-radius: 999px;
+	background: #e8842c;
+	color: #1c1814;
+	font-size: 14px;
+	font-weight: 700;
+	text-decoration: none;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+[dir="ltr"] .sary-outing-entry {
+	right: auto;
+	left: 12px;
+}
+
+@media (min-width: 1024px) {
+	.sary-outing-entry {
+		left: 24px;
+		right: auto;
+	}
+}

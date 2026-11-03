@@ -94,6 +94,13 @@ function createOutingsRouter({ service, hub, limits = {} }) {
     res.json({ ok: true, ...snapshot });
   }));
 
+  /* HTTP fallback heartbeat: "still here", no coordinates. */
+  router.post('/:id/heartbeat', auth, asyncHandler(async (req, res) => {
+    await service.requireMember(req.user, req.params.id);
+    hub?.heartbeat(req.params.id, req.user.id, req.body?.gps);
+    res.json({ ok: true });
+  }));
+
   router.post('/:id/positions', auth, asyncHandler(async (req, res) => {
     if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     const r = await service.recordPosition(req.user, req.params.id, req.body?.fix);

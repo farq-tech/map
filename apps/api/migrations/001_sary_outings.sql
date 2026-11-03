@@ -71,6 +71,8 @@ CREATE TABLE IF NOT EXISTS sary.member_positions (
   accuracy     real CHECK (accuracy IS NULL OR accuracy >= 0),
   heading      real CHECK (heading IS NULL OR (heading >= 0 AND heading < 360)),
   speed        real CHECK (speed IS NULL OR speed >= 0),
+  -- The sender's cadence (precise|balanced|saver), so others judge freshness fairly.
+  mode         text CHECK (mode IS NULL OR mode IN ('precise', 'balanced', 'saver')),
   recorded_at  timestamptz NOT NULL,
   received_at  timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (outing_id, user_id),

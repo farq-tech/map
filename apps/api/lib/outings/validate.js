@@ -15,8 +15,8 @@ const AVATAR_MAX_CHARS = 24_000;
 const MAX_FIX_AGE_MS = 60_000;
 /** Beyond this the fix cannot place a person usefully on a map of the desert. */
 const MAX_ACCURACY_M = 1_000;
-/** Faster than any car on a dune; anything above is a GPS glitch. */
-const MAX_SPEED_MPS = 90;
+/** ~200 km/h: faster than any car on these roads; above it is a GPS glitch. */
+const MAX_SPEED_MPS = 55;
 
 function cleanText(raw, max) {
   if (typeof raw !== 'string') return null;
@@ -78,9 +78,11 @@ function fix(raw, now = Date.now()) {
   if (heading !== null) {
     heading = finite(heading) ? ((heading % 360) + 360) % 360 : null;
   }
+  const mode = ['precise', 'balanced', 'saver'].includes(raw.mode) ? raw.mode : null;
   return {
     ok: true,
     value: {
+      mode,
       lat: Math.round(lat * 1e6) / 1e6,
       lng: Math.round(lng * 1e6) / 1e6,
       accuracy: accuracy === null ? null : Math.round(accuracy * 10) / 10,

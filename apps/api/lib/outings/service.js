@@ -35,12 +35,15 @@ function envNumber(name, fallback, { min = -Infinity, max = Infinity } = {}) {
 function defaultConfig() {
   return {
     maxMembers: envNumber('OUTING_MAX_MEMBERS', 50, { min: 2, max: 200 }),
-    inviteTtlHours: envNumber('OUTING_INVITE_TTL_HOURS', 48, { min: 1, max: 24 * 14 }),
+    inviteTtlHours: envNumber('OUTING_INVITE_TTL_HOURS', 24, { min: 1, max: 24 * 14 }),
     /* Broadcast every accepted fix, but write it to Postgres at most this often per member. */
     persistEveryMs: envNumber('OUTING_PERSIST_EVERY_MS', 10_000, { min: 0, max: 120_000 }),
     /* Server-side floor between two accepted fixes from one member. */
     minFixIntervalMs: envNumber('OUTING_MIN_FIX_INTERVAL_MS', 1_000, { min: 0, max: 60_000 }),
-    positionRetentionHours: envNumber('OUTING_POSITION_RETENTION_HOURS', 6, { min: 0.1, max: 72 }),
+    /* The last known position is the one thing a group in the desert must not
+     * lose, so it lives as long as the outing is open (idle outings end at
+     * idleEndHours). Ending the outing deletes it. */
+    positionRetentionHours: envNumber('OUTING_POSITION_RETENTION_HOURS', 24, { min: 0.1, max: 24 * 7 }),
     idleEndHours: envNumber('OUTING_IDLE_END_HOURS', 24, { min: 1, max: 24 * 30 }),
     membershipCacheMs: 15_000,
     authCacheMs: 60_000,
@@ -48,7 +51,7 @@ function defaultConfig() {
 }
 
 function noopEvents() {
-  return { emit() {}, kick() {}, closeRoom() {}, onlineUsers: () => new Set(), awayUsers: () => new Set() };
+  return { emit() {}, kick() {}, closeRoom() {}, onlineUsers: () => new Set(), awayUsers: () => new Set(), linkState: () => new Map() };
 }
 
 function createOutingsService({ pool, events = noopEvents(), config = {}, now = () => Date.now() } = {}) {
@@ -356,6 +359,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       accuracy: p.accuracy,
       heading: p.heading,
       speed: p.speed,
+      mode: p.mode || null,
       recorded_at: new Date(p.recorded_at).toISOString(),
       received_at: new Date(p.received_at).toISOString(),
     };
@@ -365,7 +369,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   async function positions(outingId, outingStatus) {
     if (outingStatus !== 'active') return [];
     const rows = await q(
-      `SELECT p.user_id, p.lat, p.lng, p.accuracy, p.heading, p.speed, p.recorded_at, p.received_at
+      `SELECT p.user_id, p.lat, p.lng, p.accuracy, p.heading, p.speed, p.mode, p.recorded_at, p.received_at
        FROM sary.member_positions p
        JOIN sary.outing_members m ON m.outing_id = p.outing_id AND m.user_id = p.user_id
        WHERE p.outing_id = $1 AND m.status = 'active' AND m.sharing
@@ -407,10 +411,17 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     ]);
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
+    const link = hub.linkState ? hub.linkState(outingId) : new Map();
     return {
       outing: o,
       me: { user_id: user.id, role: m.role, sharing: m.sharing },
-      members: mem.map((x) => ({ ...x, online: online.has(x.user_id), away: away.has(x.user_id) })),
+      members: mem.map((x) => ({
+        ...x,
+        online: online.has(x.user_id),
+        away: away.has(x.user_id),
+        last_seen_at: link.get(x.user_id)?.at ? new Date(link.get(x.user_id).at).toISOString() : null,
+        gps: link.get(x.user_id)?.gps || null,
+      })),
       positions: pos,
       invite: m.role === 'owner' ? { active: Boolean(inv[0]), expires_at: inv[0]?.expires_at || null } : null,
       server_now: new Date(now()).toISOString(),
@@ -583,16 +594,16 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (!prev || t - persistedAt >= cfg.persistEveryMs) {
       lastPersist.set(key, t);
       const written = await q(
-        `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at)
-         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+        `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
                        WHERE m.outing_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.sharing AND o.status = 'active')
          ON CONFLICT (outing_id, user_id) DO UPDATE SET
            lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
-           speed = EXCLUDED.speed, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
+           speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
          WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
          RETURNING user_id`,
-        [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at],
+        [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at, pos.mode],
       );
       if (!written.length && !prev) {
         /* The DB disagrees with the cache (state changed elsewhere): refuse. */
