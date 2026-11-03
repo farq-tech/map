@@ -15,6 +15,7 @@
  */
 
 const v = require('./validate');
+const { createRateLimiter } = require('./rate-limit');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -400,12 +401,16 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   async function getOuting(user, outingId) {
     const m = await requireMember(user, outingId, { fresh: true });
     const [o] = await q(
-      `SELECT id, name, status, owner_id, created_at, started_at, ended_at FROM sary.outings WHERE id = $1`,
+      `SELECT id, name, status, owner_id, created_at, started_at, ended_at,
+              rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by
+       FROM sary.outings WHERE id = $1`,
       [outingId],
     );
+    const { rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by, ...outing } = o;
+    outing.rally = rallyOut({ rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by });
     const [mem, pos, inv] = await Promise.all([
       members(outingId),
-      positions(outingId, o.status),
+      positions(outingId, outing.status),
       m.role === 'owner'
         ? q(
             `SELECT expires_at FROM sary.outing_invites
@@ -419,7 +424,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
     return {
-      outing: o,
+      outing,
       me: { user_id: user.id, role: m.role, sharing: m.sharing },
       members: mem.map((x) => ({
         ...x,
@@ -427,7 +432,9 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
         away: away.has(x.user_id),
         last_seen_at: link.get(x.user_id)?.at ? new Date(link.get(x.user_id).at).toISOString() : null,
         gps: link.get(x.user_id)?.gps || null,
-        note: o.status === 'ended' ? null : noteOf(outingId, x.user_id),
+        note: outing.status === 'ended' ? null : noteOf(outingId, x.user_id),
+        battery: hub.batteryOut ? hub.batteryOut(link.get(x.user_id)?.battery || null) : null,
+        sos: outing.status === 'ended' ? null : sosOf(outingId, x.user_id),
       })),
       positions: pos,
       invite: m.role === 'owner' ? { active: Boolean(inv[0]), expires_at: inv[0]?.expires_at || null } : null,
@@ -461,6 +468,12 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
 
   async function endOutingRows(run, outingId) {
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [outingId]);
+    await run(
+      `UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL
+       WHERE id = $1`,
+      [outingId],
+    );
+    dropSos(outingId);
     await run(
       `UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`,
       [outingId],
@@ -509,6 +522,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (!rows.length) throw err('not_a_member', 404);
     forgetOuting(outingId);
     dropLatest(outingId, memberId);
+    dropSos(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
     return { removed: memberId };
@@ -547,6 +561,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     });
     forgetOuting(outingId);
     dropLatest(outingId, user.id);
+    dropSos(outingId, user.id);
     hub.kick(outingId, user.id, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: user.id, reason: 'left' });
     if (outcome.owner) hub.emit(outingId, { type: 'owner_changed', owner_id: outcome.owner });
@@ -591,6 +606,108 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     /* Everyone, the sender's other devices included. */
     hub.emit(outingId, { type: 'member_note', user_id: user.id, note: payload });
     return { note: payload };
+  }
+
+  /* ---------- safety: SOS, rally point ---------- */
+
+  /* An SOS is a call for help right now, not a record: in memory only, until
+   * the sender cancels it («أنا بخير»), leaves, the outing ends, or SOS_TTL_MS
+   * passes. It carries the sender's last real fix with that fix's own time, so
+   * nobody mistakes an old position for a live one. */
+  const SOS_TTL_MS = 60 * 60_000;
+  const SOS_MIN_GAP_MS = 3_000;
+  const sosAlerts = new Map(); // `${outingId}:${userId}` → { at, updated_at, fix }
+  const sosLimit = createRateLimiter({ limit: 20, windowMs: 10 * 60_000, now });
+
+  function sosOf(outingId, userId) {
+    const key = `${outingId}:${userId}`;
+    const a = sosAlerts.get(key);
+    if (!a) return null;
+    if (now() - a.updated_at > SOS_TTL_MS) {
+      sosAlerts.delete(key);
+      return null;
+    }
+    return { at: new Date(a.at).toISOString(), fix: a.fix };
+  }
+
+  function dropSos(outingId, userId) {
+    if (userId) return sosAlerts.delete(`${outingId}:${userId}`);
+    for (const k of [...sosAlerts.keys()]) if (k.startsWith(`${outingId}:`)) sosAlerts.delete(k);
+  }
+
+  /**
+   * Raise (or refresh, with a newer fix) my SOS. `fix` is optional — a phone
+   * with no GPS can still call for help — and is validated like any fix but
+   * may be up to 30 min old. It goes out even with sharing off: pressing SOS
+   * for a full second is the decision to be found.
+   */
+  async function raiseSos(user, outingId, rawFix) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    let fix = null;
+    if (rawFix != null) {
+      const t = now();
+      const parsed = v.fix(rawFix, t, { maxAgeMs: v.SOS_FIX_MAX_AGE_MS });
+      if (!parsed.ok) throw err(parsed.reason === 'stale' ? 'sos_fix_stale' : 'invalid_fix', 400);
+      fix = { lat: parsed.value.lat, lng: parsed.value.lng, accuracy: parsed.value.accuracy, recorded_at: parsed.value.recorded_at.toISOString() };
+    }
+    const key = `${outingId}:${user.id}`;
+    const prev = sosAlerts.get(key);
+    if (prev && now() - prev.updated_at < SOS_MIN_GAP_MS) throw err('too_frequent', 429);
+    if (!sosLimit(user.id)) throw err('rate_limited', 429);
+    /* A refresh without a fix keeps the one we had; a fix never moves backwards in time. */
+    const keep = prev?.fix && (!fix || new Date(prev.fix.recorded_at) > new Date(fix.recorded_at));
+    const next = { at: prev && now() - prev.updated_at <= SOS_TTL_MS ? prev.at : now(), updated_at: now(), fix: keep ? prev.fix : fix };
+    sosAlerts.set(key, next);
+    const sos = sosOf(outingId, user.id);
+    hub.emit(outingId, { type: 'sos', user_id: user.id, sos });
+    return { sos };
+  }
+
+  async function cancelSos(user, outingId) {
+    await requireMember(user, outingId);
+    const had = sosAlerts.delete(`${outingId}:${user.id}`);
+    if (had) hub.emit(outingId, { type: 'sos', user_id: user.id, sos: null });
+    return { sos: null };
+  }
+
+  function rallyOut(r) {
+    if (r.rally_lat == null || r.rally_lng == null) return null;
+    return {
+      lat: r.rally_lat,
+      lng: r.rally_lng,
+      label: r.rally_label || null,
+      set_at: r.rally_set_at ? new Date(r.rally_set_at).toISOString() : null,
+      set_by: r.rally_set_by || null,
+    };
+  }
+
+  /** Owner drops, moves (same call) or clears (raw === null) the meeting pin. */
+  async function setRally(user, outingId, raw) {
+    const m = await requireOwner(user, outingId);
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    let row;
+    if (raw === null) {
+      [row] = await q(
+        `UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL, updated_at = now()
+         WHERE id = $1 AND status <> 'ended'
+         RETURNING rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by`,
+        [outingId],
+      );
+    } else {
+      const r = v.rally(raw);
+      if (!r) throw err('invalid_rally', 400);
+      [row] = await q(
+        `UPDATE sary.outings SET rally_lat = $2, rally_lng = $3, rally_label = $4, rally_set_at = now(), rally_set_by = $5, updated_at = now()
+         WHERE id = $1 AND status <> 'ended'
+         RETURNING rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by`,
+        [outingId, r.lat, r.lng, r.label, user.id],
+      );
+    }
+    if (!row) throw err('outing_ended', 409);
+    const rally = rallyOut(row);
+    hub.emit(outingId, { type: 'rally', rally });
+    return { rally };
   }
 
   async function setSharing(user, outingId, sharing) {
@@ -673,8 +790,10 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     for (const { id } of ended) {
       await q(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [id]);
       await q(`UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`, [id]);
+      await q(`UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL WHERE id = $1`, [id]);
       forgetOuting(id);
       dropLatest(id);
+      dropSos(id);
       hub.emit(id, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(id, 'outing_ended');
     }
@@ -710,6 +829,9 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     leave,
     setSharing,
     setNote,
+    raiseSos,
+    cancelSos,
+    setRally,
     recordPosition,
     sweep,
   };

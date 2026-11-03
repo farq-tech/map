@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_safety.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -342,4 +342,136 @@ test('twenty members in one outing, two outings isolated', { skip, timeout: 60_0
   assert.equal(snap.positions.length, 20);
   for (const s of sockets) s.ws.close();
   spy.close();
+});
+
+test('outing safety — SOS, battery, rally point', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(URL_);
+  await migrate(pool);
+  const outings = setupOutings({ pool, autoMigrate: false, limits: { identityPerHour: 100, invitePer10Min: 100 }, config: { minFixIntervalMs: 0, persistEveryMs: 0 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+
+  async function api(method, path, token, body) {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }
+
+  function live(token, outingId) {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+    const inbox = [];
+    const waiters = [];
+    ws.on('message', (d) => {
+      const msg = JSON.parse(String(d));
+      inbox.push(msg);
+      for (const w of [...waiters]) if (w.pred(msg)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(msg); }
+    });
+    const next = (pred, ms = 4000) => {
+      const hit = inbox.find(pred);
+      if (hit) { inbox.splice(inbox.indexOf(hit), 1); return Promise.resolve(hit); }
+      return new Promise((resolve, reject) => {
+        const w = { pred, resolve: (m) => { clearTimeout(timer); inbox.splice(inbox.indexOf(m), 1); resolve(m); } };
+        const timer = setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); reject(new Error('timeout waiting for message')); }, ms);
+        waiters.push(w);
+      });
+    };
+    const opened = new Promise((r) => ws.on('open', r)).then(() => ws.send(JSON.stringify({ type: 'auth', token, outing_id: outingId })));
+    return { ws, next, opened, inbox, send: (m) => ws.send(JSON.stringify(m)) };
+  }
+
+  const a = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const b = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const c = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+  const created = (await api('POST', '/', a.token, { name: 'طلعة الأمان' })).body;
+  const id = created.outing_id;
+  await api('POST', '/invites/join', b.token, { token: created.invite.token });
+  await api('POST', `/${id}/status`, a.token, { action: 'start' });
+
+  const la = live(a.token, id);
+  const lb = live(b.token, id);
+  await Promise.all([la.opened, lb.opened]);
+  const ready = await la.next((m) => m.type === 'ready');
+  await lb.next((m) => m.type === 'ready');
+  assert.equal(ready.snapshot.outing.rally, null, 'no rally point to begin with');
+
+  /* --- battery rides the heartbeat; nothing is invented when a phone cannot tell --- */
+  lb.send({ type: 'heartbeat', gps: 'ok', battery: { level: 0.12, charging: false } });
+  const link = await la.next((m) => m.type === 'member_link' && m.user_id === b.user.id);
+  assert.deepEqual([link.battery.level, link.battery.charging], [0.12, false]);
+  assert.ok(link.battery.at);
+  let snap = (await api('GET', `/${id}`, a.token)).body;
+  assert.equal(snap.members.find((m) => m.user_id === b.user.id).battery.level, 0.12, 'battery in the snapshot');
+  assert.equal(snap.members.find((m) => m.user_id === a.user.id).battery, null, 'never guessed for a phone that sent none');
+  assert.equal((await api('POST', `/${id}/heartbeat`, a.token, { gps: 'ok', battery: { level: 7, charging: true } })).status, 200);
+  assert.equal((await lb.next((m) => m.type === 'member_link' && m.user_id === a.user.id)).battery, null, 'out-of-range reading is dropped');
+
+  /* --- SOS --- */
+  assert.equal((await api('POST', `/${id}/sos`, c.token, { fix: null })).status, 404, 'outsider cannot raise an SOS');
+  assert.equal((await api('POST', `/${id}/sos`, b.token, { fix: { lat: RIYADH.lat, lng: RIYADH.lng, accuracy: 12, age_ms: 40 * 60_000 } })).body.error, 'sos_fix_stale');
+  const raised = await api('POST', `/${id}/sos`, b.token, { fix: { lat: RIYADH.lat, lng: RIYADH.lng, accuracy: 12, age_ms: 90_000 } });
+  assert.equal(raised.status, 200);
+  const heard = await la.next((m) => m.type === 'sos');
+  assert.equal(heard.user_id, b.user.id);
+  assert.equal(heard.sos.fix.lat, RIYADH.lat);
+  const fixAge = Date.now() - new Date(heard.sos.fix.recorded_at).getTime();
+  assert.ok(fixAge >= 89_000 && fixAge < 100_000, 'the fix keeps its own (older) time');
+  assert.equal((await api('POST', `/${id}/sos`, b.token, {})).body.error, 'too_frequent', 'rate limited');
+
+  /* A late joiner and a reconnect both see it in the snapshot. */
+  const rotated = (await api('POST', `/${id}/invites`, a.token, {})).body.invite.token;
+  await api('POST', '/invites/join', c.token, { token: rotated });
+  const lc = live(c.token, id);
+  await lc.opened;
+  const cReady = await lc.next((m) => m.type === 'ready');
+  const bInSnap = cReady.snapshot.members.find((m) => m.user_id === b.user.id);
+  assert.equal(bInSnap.sos.fix.lng, RIYADH.lng, 'late joiner sees the active SOS');
+
+  /* «أنا بخير» clears it for everyone. */
+  assert.equal((await api('DELETE', `/${id}/sos`, b.token)).status, 200);
+  assert.equal((await la.next((m) => m.type === 'sos')).sos, null);
+  assert.equal((await lc.next((m) => m.type === 'sos')).sos, null);
+  snap = (await api('GET', `/${id}`, c.token)).body;
+  assert.equal(snap.members.find((m) => m.user_id === b.user.id).sos, null);
+
+  /* With no GPS at all you can still call for help. */
+  await new Promise((r) => setTimeout(r, 3_100));
+  assert.equal((await api('POST', `/${id}/sos`, b.token, { fix: null })).body.sos.fix, null);
+  assert.equal((await la.next((m) => m.type === 'sos')).sos.fix, null);
+
+  /* --- rally point --- */
+  assert.equal((await api('PUT', `/${id}/rally`, b.token, { lat: 24.8, lng: 46.7 })).status, 403, 'members cannot set it');
+  assert.equal((await api('PUT', `/${id}/rally`, c.token, { lat: 24.8, lng: 46.7 })).status, 403);
+  assert.equal((await api('PUT', `/${id}/rally`, a.token, { lat: 'x', lng: 46.7 })).body.error, 'invalid_rally');
+  const set = await api('PUT', `/${id}/rally`, a.token, { lat: 24.8, lng: 46.7, label: 'عند الطلح' });
+  assert.equal(set.status, 200);
+  const r1 = await lb.next((m) => m.type === 'rally');
+  assert.deepEqual([r1.rally.lat, r1.rally.lng, r1.rally.label, r1.rally.set_by], [24.8, 46.7, 'عند الطلح', a.user.id]);
+  await api('PUT', `/${id}/rally`, a.token, { lat: 24.81, lng: 46.71 });
+  assert.equal((await lb.next((m) => m.type === 'rally')).rally.lat, 24.81, 'moved');
+  assert.equal((await api('GET', `/${id}`, c.token)).body.outing.rally.lng, 46.71, 'rally in the snapshot');
+  await api('DELETE', `/${id}/rally`, a.token);
+  assert.equal((await lb.next((m) => m.type === 'rally')).rally, null, 'cleared');
+  await api('PUT', `/${id}/rally`, a.token, { lat: 24.82, lng: 46.72 });
+
+  /* --- leaving drops my SOS; ending wipes rally and every SOS --- */
+  await api('POST', `/${id}/leave`, b.token);
+  snap = (await api('GET', `/${id}`, c.token)).body;
+  assert.equal(snap.members.some((m) => m.sos), false);
+  await api('POST', `/${id}/status`, a.token, { action: 'end' });
+  const row = (await pool.query('SELECT rally_lat, rally_lng FROM sary.outings WHERE id = $1', [id])).rows[0];
+  assert.deepEqual(row, { rally_lat: null, rally_lng: null }, 'ending deletes the rally point');
+  for (const s of [la, lb, lc]) s.ws.close();
 });

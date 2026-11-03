@@ -17,6 +17,9 @@ const MAX_FIX_AGE_MS = 60_000;
 const MAX_ACCURACY_M = 1_000;
 /** ~200 km/h: faster than any car on these roads; above it is a GPS glitch. */
 const MAX_SPEED_MPS = 55;
+/** An SOS carries the sender's last real fix even when GPS has since gone
+ * quiet; it is shown with its time, never as live, so it may be older. */
+const SOS_FIX_MAX_AGE_MS = 30 * 60_000;
 
 function cleanText(raw, max) {
   if (typeof raw !== 'string') return null;
@@ -84,7 +87,7 @@ function finite(v) {
  * rather than a timestamp, so a phone whose clock is minutes off still yields
  * an honest `recorded_at` on ours.
  */
-function fix(raw, now = Date.now()) {
+function fix(raw, now = Date.now(), { maxAgeMs = MAX_FIX_AGE_MS } = {}) {
   if (!raw || typeof raw !== 'object') return { ok: false, reason: 'invalid' };
   const { lat, lng } = raw;
   if (!finite(lat) || !finite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
@@ -96,7 +99,7 @@ function fix(raw, now = Date.now()) {
   if (accuracy !== null && accuracy > MAX_ACCURACY_M) return { ok: false, reason: 'inaccurate' };
   const age = raw.age_ms == null ? 0 : raw.age_ms;
   if (!finite(age) || age < 0) return { ok: false, reason: 'invalid_age' };
-  if (age > MAX_FIX_AGE_MS) return { ok: false, reason: 'stale' };
+  if (age > maxAgeMs) return { ok: false, reason: 'stale' };
   let speed = raw.speed == null ? null : raw.speed;
   if (speed !== null && (!finite(speed) || speed < 0)) speed = null;
   if (speed !== null && speed > MAX_SPEED_MPS) return { ok: false, reason: 'implausible_speed' };
@@ -117,6 +120,28 @@ function fix(raw, now = Date.now()) {
       recorded_at: new Date(now - Math.round(age)),
     },
   };
+}
+
+/**
+ * Battery Status API reading sent with the link heartbeat: { level 0..1,
+ * charging }. Anything else (iOS has no such API) is null — never a guess.
+ */
+function battery(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { level, charging } = raw;
+  if (!finite(level) || level < 0 || level > 1 || typeof charging !== 'boolean') return null;
+  return { level: Math.round(level * 100) / 100, charging };
+}
+
+/** A meeting point the owner drops on the map, with an optional short label. */
+const RALLY_LABEL_MAX = 40;
+function rally(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { lat, lng } = raw;
+  if (!finite(lat) || !finite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  const label = raw.label == null || raw.label === '' ? null : cleanText(raw.label, RALLY_LABEL_MAX);
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, label };
 }
 
 function isUuid(v) {
@@ -143,7 +168,11 @@ module.exports = {
   MAX_FIX_AGE_MS,
   MAX_ACCURACY_M,
   MAX_SPEED_MPS,
+  SOS_FIX_MAX_AGE_MS,
   NOTE_MAX,
+  RALLY_LABEL_MAX,
+  battery,
+  rally,
   displayName,
   note,
   phone,
