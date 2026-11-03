@@ -205,4 +205,14 @@ describe("edge arrows keep my own name chip clear", () => {
 		expect(avoidRect([s], null, view, insets, chip)).toEqual([s]);
 		expect(avoidRect([s], { left: 300, top: 120, right: 320, bottom: 140 }, view, insets, chip)[0]).toEqual(s);
 	});
+
+	it("clears several rects at once: the side buttons and «أنت»", () => {
+		const fabs = { left: 12, top: 450, right: 114, bottom: 640 };
+		const me = { left: 150, top: 600, right: 230, bottom: 630 };
+		const wide: Insets = { ...insets, right: 0 };
+		const s = { ...edgeSpot({ x: 120, y: 900 }, view, wide, chip)!, id: "d" };
+		const [out] = avoidRect([s], [me, fabs, null], view, wide, chip);
+		expect(hit(out, me) || hit(out, fabs)).toBe(false);
+	});
 });
+

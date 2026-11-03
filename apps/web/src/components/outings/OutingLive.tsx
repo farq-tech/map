@@ -98,6 +98,22 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	/* One in-app confirmation for every irreversible step (no browser dialogs). */
 	const [confirm, setConfirm] = useState<{ kind: "end" | "leave" | "remove"; userId?: string; name?: string } | null>(null);
 	const [toast, setToast] = useState<string | null>(null);
+	/* Where the top bar ends (it grows when the status detail opens): the alert lane sits right under it. */
+	const barRef = useRef<HTMLElement | null>(null);
+	const [barBottom, setBarBottom] = useState(84);
+	useEffect(() => {
+		const el = barRef.current;
+		if (!el || typeof ResizeObserver === "undefined") return;
+		const measure = () => {
+			const parent = el.offsetParent as HTMLElement | null;
+			const top = parent ? parent.getBoundingClientRect().top : 0;
+			setBarBottom(Math.round(el.getBoundingClientRect().bottom - top));
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, []);
 	const [busy, setBusy] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [now, setNow] = useState(() => Date.now());
@@ -647,7 +663,13 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		/* Never cover my own car's «أنت» chip: slide arrows along the edge past it. */
 		const mine = m.getContainer().querySelector<HTMLElement>('[data-testid="sary-my-car"]')?.getBoundingClientRect();
 		const keepClear = mine && mine.width ? { left: mine.left - box.left, top: mine.top - box.top, right: mine.right - box.left, bottom: mine.bottom - box.top } : null;
-		setArrows(avoidRect(spreadOnEdges(spots, v, insets, EDGE_CHIP), keepClear, v, insets, EDGE_CHIP));
+		/* …nor the round-button column on the side. */
+		const fabs = document.querySelector<HTMLElement>(".sary-o-fabs")?.getBoundingClientRect();
+		const fabsClear = fabs && fabs.width ? { left: fabs.left - box.left, top: fabs.top - box.top, right: fabs.right - box.left, bottom: fabs.bottom - box.top } : null;
+		const spread = spreadOnEdges(spots, v, insets, EDGE_CHIP);
+		/* When there is no room at all (tiny map area, several chips), a chip may stay under the
+		 * column: the column sits above the chips (z-index), so its buttons stay usable. */
+		setArrows(avoidRect(spread, [keepClear, fabsClear], v, insets, EDGE_CHIP));
 	};
 	const updateArrowsRef = useRef(updateArrows);
 	updateArrowsRef.current = updateArrows;
@@ -673,6 +695,13 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	useEffect(() => {
 		updateArrowsRef.current();
 	}, [rows, snap, map]);
+	/* The lane under the bar and the button column move with the sheet (260 ms transition):
+	 * measure again once they have settled, so a chip never lands on where they used to be. */
+	const laneKey = `${barBottom}|${noteAlert ? 1 : 0}${gapAlert ? 1 : 0}${newestVoice ? 1 : 0}${toast ? 1 : 0}${mySos ? 1 : 0}${sosViews.length}|${snap}`;
+	useEffect(() => {
+		const t = window.setTimeout(() => updateArrowsRef.current(), 320);
+		return () => window.clearTimeout(t);
+	}, [laneKey]);
 
 	/* --- driving mode: bigger targets and text while moving (or when chosen) --- */
 	const [drivePref, setDrivePref] = useState<DrivePref>(() => loadPref(DRIVE_KEY, "auto"));
@@ -920,6 +949,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	return (
 		<div
 			className="sary-o-live"
+			style={{ "--sary-bar-bottom": `${barBottom}px` } as React.CSSProperties}
 			dir={isRTL ? "rtl" : "ltr"}
 			data-testid="outing-live"
 			data-snap={snap}
@@ -957,7 +987,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				</Suspense>
 			</div>
 
-			<header className={`sary-o-bar${gpsProblem || offline ? " has-warn" : ""}${statusOpen ? " is-open" : ""}`}>
+			<header ref={barRef} className={`sary-o-bar${gpsProblem || offline ? " has-warn" : ""}${statusOpen ? " is-open" : ""}`}>
 				<div className="sary-o-bar-row">
 					<button type="button" className="sary-o-round" onClick={() => void navigate({ to: "/outings" })} aria-label={isRTL ? "رجوع" : "Back"}>
 						{isRTL ? <ChevronRight className="size-5" aria-hidden /> : <ChevronLeft className="size-5" aria-hidden />}
@@ -992,6 +1022,12 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 									{isRTL ? "بلا إنترنت" : "Offline"}
 									<span className="sary-o-sr">{` — ${offlineText}`}</span>
 								</span>
+							) : wakeHint ? (
+								/* #18's keep-screen-on hint, folded into the status line (#21) instead of a floating toast. */
+								<span className="sary-o-badge is-info" role="status" data-testid="outing-wake-hint">
+									{isRTL ? "🔌 وصّل الشاحن" : "🔌 Plug in"}
+									<span className="sary-o-sr">{isRTL ? " — الشاشة تبقى مضاءة أثناء الطلعة" : " — the screen stays on during the outing"}</span>
+								</span>
 							) : null}
 							<ChevronDown className="sary-o-status-chev size-4" aria-hidden />
 						</button>
@@ -1009,6 +1045,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					) : offline ? (
 						<p className="is-warn">{offlineText}</p>
 					) : null}
+					{wakeHeld ? <p>{isRTL ? "الشاشة تبقى مضاءة أثناء الطلعة — وصّل الشاحن." : "The screen stays on during the outing — plug in the charger."}</p> : null}
 				</div>
 			</header>
 
@@ -1074,12 +1111,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 
 			{outing && outing.status !== "ended" ? (
 				<PushToTalk outingId={outingId} isRTL={isRTL} onSent={setToast} />
-			) : null}
-
-			{newestVoice ? (
-				<div className={`sary-o-voice-wrap${noteAlert ? " is-below" : ""}`}>
-					<VoiceBanner chip={newestVoice} isRTL={isRTL} onPlay={() => inbox.play(newestVoice.clip)} />
-				</div>
 			) : null}
 
 			<FarqBottomSheet
@@ -1581,46 +1612,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				</div>
 			) : null}
 
-			{noteAlert ? (
-				<button
-					type="button"
-					className="sary-o-alert"
-					role="alert"
-					style={{ "--car": noteAlert.color } as React.CSSProperties}
-					onClick={() => {
-						setSelected(noteAlert.userId);
-						setPanel("members");
-						setSnap("half");
-						setNoteAlert(null);
-					}}
-					data-testid="outing-note-alert"
-				>
-					<i aria-hidden="true" />
-					<strong>{noteAlert.name}</strong>
-					<span>{noteAlert.text}</span>
-				</button>
-			) : null}
-
-			{!noteAlert && gapAlert ? (
-				<button
-					type="button"
-					className="sary-o-alert"
-					role="alert"
-					style={{ "--car": gapAlert.color } as React.CSSProperties}
-					onClick={() => {
-						setSelected(gapAlert.userId);
-						setPanel("members");
-						setSnap("half");
-						fitWith(gapAlert.userId);
-						setGapAlert(null);
-					}}
-					data-testid="outing-gap-alert"
-				>
-					<i aria-hidden="true" />
-					<span>{gapAlert.text}</span>
-				</button>
-			) : null}
-
 			{placingRally ? (
 				<RallyPlacer
 					map={map}
@@ -1652,10 +1643,62 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				/>
 			) : null}
 
-			{mySos ? <MySosBanner isRTL={isRTL} busy={sosBusy} onCancel={() => void cancelSos()} /> : null}
-			{!mySos && !sosOpen && sosViews.length ? (
-				<SosStrip names={sosViews.map((a) => a.name)} isRTL={isRTL} onOpen={() => setDismissedSos(new Set())} />
-			) : null}
+			{/* One lane under the top bar for everything that used to stack over the map:
+			 * the SOS line first (mine, or someone else's after the full-screen alert),
+			 * then ONE transient — a note, else a gap alert, else a voice clip — then a toast.
+			 * The full-screen SOS alert stays a full-screen alert. */}
+			<div className="sary-o-lane" data-testid="outing-lane">
+				{mySos ? <MySosBanner isRTL={isRTL} busy={sosBusy} onCancel={() => void cancelSos()} /> : null}
+				{!mySos && !sosOpen && sosViews.length ? (
+					<SosStrip names={sosViews.map((a) => a.name)} isRTL={isRTL} onOpen={() => setDismissedSos(new Set())} />
+				) : null}
+				{noteAlert ? (
+					<button
+						type="button"
+						className="sary-o-alert"
+						role="alert"
+						style={{ "--car": noteAlert.color } as React.CSSProperties}
+						onClick={() => {
+							setSelected(noteAlert.userId);
+							setPanel("members");
+							setSnap("half");
+							setNoteAlert(null);
+						}}
+						data-testid="outing-note-alert"
+					>
+						<i aria-hidden="true" />
+						<strong>{noteAlert.name}</strong>
+						<span>{noteAlert.text}</span>
+					</button>
+				) : null}
+
+				{!noteAlert && gapAlert ? (
+					<button
+						type="button"
+						className="sary-o-alert"
+						role="alert"
+						style={{ "--car": gapAlert.color } as React.CSSProperties}
+						onClick={() => {
+							setSelected(gapAlert.userId);
+							setPanel("members");
+							setSnap("half");
+							fitWith(gapAlert.userId);
+							setGapAlert(null);
+						}}
+						data-testid="outing-gap-alert"
+					>
+						<i aria-hidden="true" />
+						<span>{gapAlert.text}</span>
+					</button>
+				) : null}
+				{newestVoice && !noteAlert && !gapAlert ? <VoiceBanner chip={newestVoice} isRTL={isRTL} onPlay={() => inbox.play(newestVoice.clip)} /> : null}
+				{toast ? (
+					<div className="sary-o-toast" role="status" data-testid="outing-toast">
+						{toast}
+					</div>
+				) : null}
+			</div>
+
 			{sosOpen ? (
 				<SosAlert
 					alert={sosOpen}
@@ -1678,16 +1721,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				/>
 			) : null}
 
-			{wakeHint && !toast ? (
-				<div className="sary-o-toast sary-o-wake-hint" role="status" data-testid="outing-wake-hint">
-					{isRTL ? "وصّل الشاحن — الشاشة تبقى مضاءة أثناء الطلعة" : "Plug in the charger — the screen stays on during the outing"}
-				</div>
-			) : null}
-			{toast ? (
-				<div className="sary-o-toast" role="status" data-testid="outing-toast">
-					{toast}
-				</div>
-			) : null}
 		</div>
 	);
 }
@@ -1700,14 +1733,21 @@ const EDGE_CHIP = { w: 136, h: 38 };
 /** The part of the map not covered by our own top bar and the sheet. */
 function visibleInsets(box: DOMRect, isRTL: boolean, snap: SheetSnap): Insets {
 	let top = 0;
-	for (const el of document.querySelectorAll(".sary-o-bar")) top = Math.max(top, el.getBoundingClientRect().bottom - box.top);
+	/* The top bar and the alert lane under it are not map. */
+	for (const el of document.querySelectorAll(".sary-o-bar, .sary-o-lane > *")) top = Math.max(top, el.getBoundingClientRect().bottom - box.top);
 	top += 6;
 	if (window.innerWidth >= 1024) {
 		/* Desktop: the sheet is a card on the inline-end side. */
 		const side = 440;
 		return { top, bottom: 0, left: isRTL ? side : 0, right: isRTL ? 0 : side };
 	}
-	return { top, bottom: sheetHeightPx(snap, window.innerHeight), left: 0, right: 0 };
+	/* The «طوارئ» / «اضغط وتكلم» row floats just above the sheet: not map either. */
+	let bottom = sheetHeightPx(snap, window.innerHeight);
+	for (const el of document.querySelectorAll(".sary-sos-btn, .sary-o-ptt")) {
+		const r = el.getBoundingClientRect();
+		if (r.width && r.height && r.top < box.bottom) bottom = Math.max(bottom, box.bottom - r.top + 6);
+	}
+	return { top, bottom, left: 0, right: 0 };
 }
 
 const DRIVE_KEY = "sary.outings.drive.v1";

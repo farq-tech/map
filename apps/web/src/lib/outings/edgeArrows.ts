@@ -100,28 +100,32 @@ function chipRect(s: { x: number; y: number }, chip: Size): Rect {
 
 /**
  * A chip must never cover something that has to stay readable — above all my
- * own car's «أنت» name chip, which can sit right at the edge of the map area.
- * Slide each chip that would cover `keepClear` along its own edge, to the
- * nearer side that still fits; chips it would then land on are pushed on in
- * the same direction. If neither side fits, it stays where it was.
+ * own car's «أنت» name chip, which can sit right at the edge of the map area,
+ * and the round-button column. Slide each chip that would cover one of
+ * `keepClear` along its own edge to the nearest spot that covers none of them
+ * and still fits; chips it would then land on are pushed on in the same
+ * direction. If no such spot exists, it stays where it was.
  */
-export function avoidRect<T extends EdgeSpot>(spots: T[], keepClear: Rect | null, view: Size, insets: Insets, chip: Size, gap = 4): T[] {
-	if (!keepClear) return spots;
+export function avoidRect<T extends EdgeSpot>(spots: T[], keepClear: Rect | Array<Rect | null> | null, view: Size, insets: Insets, chip: Size, gap = 4): T[] {
+	const rects = (Array.isArray(keepClear) ? keepClear : [keepClear]).filter((x): x is Rect => Boolean(x));
+	if (!rects.length) return spots;
 	const r = safeRect(view, insets);
 	const out = spots.map((s) => ({ ...s }));
-	const clear: Rect = { left: keepClear.left - gap, top: keepClear.top - gap, right: keepClear.right + gap, bottom: keepClear.bottom + gap };
+	const clears: Rect[] = rects.map((k) => ({ left: k.left - gap, top: k.top - gap, right: k.right + gap, bottom: k.bottom + gap }));
+	const covers = (p: { x: number; y: number }) => clears.some((c) => overlaps(chipRect(p, chip), c));
 	for (const s of out) {
-		if (!overlaps(chipRect(s, chip), clear)) continue;
+		if (!covers(s)) continue;
 		const vertical = s.edge === "left" || s.edge === "right";
 		const key = vertical ? "y" : "x";
 		const half = vertical ? chip.h / 2 : chip.w / 2;
 		const lo = (vertical ? r.top : r.left) + half + EDGE_MARGIN;
 		const hi = (vertical ? r.bottom : r.right) - half - EDGE_MARGIN;
-		const before = (vertical ? clear.top : clear.left) - half;
-		const after = (vertical ? clear.bottom : clear.right) + half;
-		const options = [before, after].filter((v) => v >= lo && v <= hi).sort((a, b) => Math.abs(a - s[key]) - Math.abs(b - s[key]));
+		const candidates = clears.flatMap((c) => [(vertical ? c.top : c.left) - half, (vertical ? c.bottom : c.right) + half]);
+		const options = candidates
+			.filter((v) => v >= lo && v <= hi && !covers({ ...s, [key]: v }))
+			.sort((a, b) => Math.abs(a - s[key]) - Math.abs(b - s[key]));
 		const step = (vertical ? chip.h : chip.w) + gap;
-		/* Try the nearer side first; take it only if the neighbours it pushes still fit. */
+		/* Try the nearest spot first; take it only if the neighbours it pushes still fit. */
 		for (const target of options) {
 			const dir = Math.sign(target - s[key]) || 1;
 			/* Neighbours not clearly behind the new spot, nearest first in the direction of travel. */

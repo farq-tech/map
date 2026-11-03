@@ -1502,3 +1502,84 @@
 .sary-o-live[data-drive="1"][data-snap="half"] .sary-o-fabs .sary-fab {
 	min-height: 46px;
 }
+
+/* ---- integration: one alert lane under the top bar ----
+ * The SOS line (#24), note / gap alerts, the voice banner (#23) and toasts all
+ * used to sit fixed at the top of the screen, over the bar and each other.
+ * They now stack in one lane right under the bar (whose height is measured
+ * into --sary-bar-bottom), so the status line (#21) always stays readable. */
+.sary-o-lane {
+	position: absolute;
+	z-index: 8;
+	top: calc(var(--sary-bar-bottom, 84px) + 6px);
+	inset-inline: 12px;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	pointer-events: none;
+}
+
+.sary-o-lane > * {
+	pointer-events: auto;
+}
+
+.sary-o-lane > .sary-o-alert,
+.sary-o-lane > .sary-sos-mine,
+.sary-o-lane > .sary-sos-strip,
+.sary-o-lane > .sary-o-voice,
+.sary-o-lane > .sary-o-toast {
+	position: static;
+	inset: auto;
+	top: auto;
+	bottom: auto;
+	left: auto;
+	transform: none;
+	width: auto;
+	max-width: none;
+	margin: 0;
+}
+
+.sary-o-lane > .sary-o-alert {
+	padding: 10px 14px;
+}
+
+.sary-o-lane > .sary-o-toast {
+	align-self: center;
+	max-width: 100%;
+	text-align: center;
+}
+
+/* The keep-screen-on hint (#18) lives in the status line now. */
+.sary-o-badge.is-info {
+	background: rgba(143, 224, 168, 0.16);
+	color: #c8f0d4;
+}
+
+/* ---- integration: «اضغط وتكلم» (#23) beside «طوارئ» (#24), never on top of it ----
+ * Same bottom-start corner, same height above the sheet, one button-width in. */
+.sary-o-ptt-wrap {
+	inset-inline-start: calc(12px + 64px + 10px);
+	bottom: calc(min(calc(var(--sary-sheet-h, 148px) + 20px + env(safe-area-inset-bottom, 0px)), calc(100dvh - 240px)) + 4px);
+	/* Leave room for the round-button column on the other side. */
+	max-width: calc(100% - 86px - 132px);
+	align-items: flex-start;
+}
+
+.sary-o-ptt {
+	max-width: 100%;
+}
+
+.sary-o-ptt > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---- integration: with the sheet open, the side column keeps only «موقعي» and «المجموعة» ----
+ * Four tall buttons above a half sheet reach the alert lane on a short phone
+ * (iPhone 14: 664 px). «رسالة» and «أقرب محطة» come back with the sheet lowered. */
+.sary-o-live:not([data-snap="peek"]) .sary-o-fabs .sary-fab:nth-child(n + 3) {
+	display: none;
+}
