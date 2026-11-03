@@ -1496,6 +1496,7 @@
 	justify-content: space-between;
 	gap: 8px;
 	font-size: 0.9rem;
+}
 
 /* Half-open sheet while driving: the button column must still clear the top bar. */
 .sary-o-live[data-drive="1"][data-snap="half"] .sary-o-fabs .sary-fab {
