@@ -122,6 +122,7 @@ app.get('/api/health', (_req, res) => {
       menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
       farq_api_origin: Boolean(FARQ_API_ORIGIN),
       outings: Boolean(outings.service),
+      outings_push: Boolean(outings.service && outings.push.enabled),
     },
     outings: outings.hub.stats(),
   });

@@ -22,7 +22,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, limits = {} }) {
+function createOutingsRouter({ service, hub, push, limits = {} }) {
   const router = express.Router();
   router.use(express.json({ limit: '48kb' }));
   router.use((_req, res, next) => {
@@ -59,6 +59,24 @@ function createOutingsRouter({ service, hub, limits = {} }) {
   router.patch('/me', auth, asyncHandler(async (req, res) => {
     const user = await service.updateProfile(req.user, req.body || {});
     res.json({ ok: true, user });
+  }));
+
+  /* Web Push. Off (enabled:false) unless the API has VAPID keys. */
+  router.get('/push/config', (_req, res) => {
+    res.json({ ok: true, ...(push ? push.publicConfig() : { enabled: false, public_key: null }) });
+  });
+
+  router.post('/push/subscribe', auth, asyncHandler(async (req, res) => {
+    if (!push?.enabled) return res.status(503).json({ ok: false, error: 'push_disabled' });
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await push.subscribe(req.user, req.body?.subscription);
+    if (!r.ok) return res.status(400).json(r);
+    res.status(201).json({ ok: true });
+  }));
+
+  router.delete('/push/subscribe', auth, asyncHandler(async (req, res) => {
+    if (!push) return res.json({ ok: true, removed: 0 });
+    res.json({ ok: true, ...(await push.unsubscribe(req.user, req.body?.endpoint)) });
   }));
 
   router.post('/invites/preview', asyncHandler(async (req, res) => {

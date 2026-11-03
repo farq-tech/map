@@ -15,6 +15,7 @@
  */
 
 const v = require('./validate');
+const { pushPayloadFor } = require('./push');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -54,7 +55,11 @@ function noopEvents() {
   return { emit() {}, kick() {}, closeRoom() {}, onlineUsers: () => new Set(), awayUsers: () => new Set(), linkState: () => new Map() };
 }
 
-function createOutingsService({ pool, events = noopEvents(), config = {}, now = () => Date.now() } = {}) {
+function noopPush() {
+  return { enabled: false, notifyMembers: async () => ({ sent: 0, removed: 0, failed: 0, skipped: 0 }) };
+}
+
+function createOutingsService({ pool, events = noopEvents(), push = noopPush(), config = {}, now = () => Date.now() } = {}) {
   if (!pool) throw new Error('outings service needs a pool');
   const cfg = { ...defaultConfig(), ...config };
   const authCache = new Map(); // digest hex -> { user, at }
@@ -589,8 +594,38 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     else notes.delete(key);
     const payload = text ? { text, at: new Date(at).toISOString() } : null;
     /* Everyone, the sender's other devices included. */
-    hub.emit(outingId, { type: 'member_note', user_id: user.id, note: payload });
+    const event = { type: 'member_note', user_id: user.id, note: payload };
+    hub.emit(outingId, event);
+    /* …and a push to members whose screen is off. Best effort, never awaited. */
+    if (payload) void announce(outingId, user.id, event);
     return { note: payload };
+  }
+
+  /* ---------- push ---------- */
+
+  /** Push to every active member except the sender. Generic: any payload. */
+  function notifyMembers(outingId, exceptUserId, payload) {
+    return push.notifyMembers(outingId, exceptUserId, payload);
+  }
+
+  /** An outing event (member_note, sos, …) → a push, when that event type is pushed. */
+  async function announce(outingId, senderId, event) {
+    if (!push.enabled) return null;
+    try {
+      const [row] = await q(
+        `SELECT o.name AS outing_name, u.display_name AS sender_name
+         FROM sary.outings o LEFT JOIN sary.users u ON u.id = $2::uuid
+         WHERE o.id = $1`,
+        [outingId, v.isUuid(senderId) ? senderId : null],
+      );
+      if (!row) return null;
+      const payload = pushPayloadFor(event, { senderName: row.sender_name, outingName: row.outing_name });
+      if (!payload) return null;
+      return await notifyMembers(outingId, senderId || null, payload);
+    } catch (e) {
+      console.warn('[outings-push] announce', e.code || e.message);
+      return null;
+    }
   }
 
   async function setSharing(user, outingId, sharing) {
@@ -690,6 +725,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
 
   return {
     config: cfg,
+    push,
     setEvents(next) {
       hub = next || noopEvents();
     },
@@ -710,6 +746,8 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     leave,
     setSharing,
     setNote,
+    notifyMembers,
+    announce,
     recordPosition,
     sweep,
   };
