@@ -15,6 +15,7 @@ import {
 	AVATAR_CHANGED,
 	loadAvatar,
 	loadVehicleColor,
+	vehicleColorHex,
 	normalizeHeading,
 } from "../../lib/farqAvatar";
 import { buildUserMarker, updateUserMarker } from "../../lib/farqUserMarker";
@@ -35,7 +36,8 @@ import {
 	setSaryTerrain,
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
-import { buildPradoMarker, updatePradoMarker } from "../../lib/sary/pradoMarker";
+import { ensureVehicleLayer, removeVehicle, setVehicle } from "../../lib/sary/vehicleLayer";
+import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
 	AURA_VIEWPORT_IDLE_MS,
@@ -512,7 +514,10 @@ export default function FarqMap({
 	const outdoorLayerRef = useRef(outdoorLayer);
 	const tracksRef = useRef(tracks);
 	const userTrackRef = useRef(userTrack);
-	const pradoMarkerRef = useRef<mapboxgl.Marker | null>(null);
+	/* The 3D car: where it is drawn now (tweened toward each real fix) and its last real heading. */
+	const vehicleShownRef = useRef<{ lng: number; lat: number } | null>(null);
+	const vehicleHeadingRef = useRef<number | null>(null);
+	const vehicleRafRef = useRef(0);
 	const isRtlRef = useRef(isRTL);
 	const selectedPlaceIdRef = useRef(selectedPlaceId);
 	const gisNeighborhoodsRef = useRef(gisNeighborhoods);
@@ -1023,8 +1028,7 @@ export default function FarqMap({
 			persistCamera(map);
 			ro.disconnect();
 			userMarkerRef.current?.remove();
-			pradoMarkerRef.current?.remove();
-			pradoMarkerRef.current = null;
+			cancelAnimationFrame(vehicleRafRef.current);
 			clearPinMarkers(pinMarkersRef.current);
 			searchRef.current = null;
 			setMapReady(false);
@@ -1207,7 +1211,8 @@ export default function FarqMap({
 				center: [userLocation.lng, userLocation.lat],
 				duration: reducedMotionRef.current ? 0 : 420,
 				essential: true,
-				pitch: map.getPitch(),
+				/* Following the 3D car: tilt enough that it reads as a car, not a roof. */
+				pitch: vehicleModeRef.current === "prado" ? Math.max(map.getPitch(), 50) : map.getPitch(),
 				bearing: typeof userHeading === "number" ? userHeading : map.getBearing(),
 			});
 		} catch {
@@ -1218,34 +1223,42 @@ export default function FarqMap({
 	useEffect(() => {
 		const map = mapRef.current;
 		if (!map || !introDoneRef.current) return;
-		if (vehicleMode === "prado" && showUserLocation && userLocation) {
+		if (vehicleMode === "prado" && showUserLocation && userLocation && ensureVehicleLayer(map, vehicleColorHex(loadVehicleColor()))) {
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
-			let z = 14;
-			try {
-				z = map.getZoom();
-			} catch {
-				/* */
-			}
-			if (!pradoMarkerRef.current) {
-				pradoMarkerRef.current = new mapboxgl.Marker({
-					element: buildPradoMarker(),
-					anchor: "center",
-				})
-					.setLngLat([userLocation.lng, userLocation.lat])
-					.addTo(map);
+			/* Keep the last real heading while parked; never invent one. */
+			if (typeof userHeading === "number" && Number.isFinite(userHeading)) vehicleHeadingRef.current = userHeading;
+			const from = vehicleShownRef.current;
+			const to = { lng: userLocation.lng, lat: userLocation.lat };
+			cancelAnimationFrame(vehicleRafRef.current);
+			if (!from || reducedMotionRef.current) {
+				vehicleShownRef.current = to;
+				setVehicle(map, to, vehicleHeadingRef.current);
 			} else {
-				pradoMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+				/* Glide to the new real fix over under a second; never past it. */
+				const start = performance.now();
+				const step = () => {
+					const t = Math.min(1, (performance.now() - start) / 800);
+					const p = lerp(from, to, t);
+					vehicleShownRef.current = p;
+					try {
+						setVehicle(map, p, vehicleHeadingRef.current);
+					} catch {
+						return;
+					}
+					if (t < 1) vehicleRafRef.current = requestAnimationFrame(step);
+				};
+				vehicleRafRef.current = requestAnimationFrame(step);
 			}
-			updatePradoMarker(pradoMarkerRef.current.getElement(), {
-				heading: userHeading,
-				simplified: z < 13,
-				motion: vehicleMotion,
-			});
 			return;
 		}
-		pradoMarkerRef.current?.remove();
-		pradoMarkerRef.current = null;
+		cancelAnimationFrame(vehicleRafRef.current);
+		vehicleShownRef.current = null;
+		try {
+			removeVehicle(map);
+		} catch {
+			/* */
+		}
 		if (!showUserLocation || !userLocation) {
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;

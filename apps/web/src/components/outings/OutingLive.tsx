@@ -325,6 +325,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						userHeading={userHeading}
 						showUserLocation={locationPinKind === "gps" && Boolean(userLocation)}
 						followMode={follow}
+						vehicleMode={canSend ? "prado" : "dot"}
 						onBreakFollow={() => setFollow(false)}
 						isRTL={isRTL}
 						hideAddressSearch
