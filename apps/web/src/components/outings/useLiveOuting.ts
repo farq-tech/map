@@ -70,7 +70,11 @@ export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: Fie
 		void reload();
 		const ch = new LiveChannel(outingId, id.token, {
 			onSnapshot,
-			onEvent: (e) => setView((prev) => (prev ? applyEvent(prev, e) : prev)),
+			onEvent: (e) => {
+				setView((prev) => (prev ? applyEvent(prev, e) : prev));
+				/* A new role changes what the server shows me (the invite state): fetch it. */
+				if ((e.type === "member_role" && e.user_id === id.user.id) || e.type === "owner_changed") void reload();
+			},
 			onState: setLiveState,
 			onClosed: (r) => {
 				setClosed(r);

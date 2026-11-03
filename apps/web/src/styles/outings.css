@@ -986,3 +986,14 @@
 .sary-o-field .sary-o-row {
 	flex-wrap: wrap;
 }
+
+/* Recovery code: one glance to read back, nothing to misread. */
+.sary-o-code {
+	width: 100%;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	/* 34 characters must fit a 320 px phone without scrolling the field. */
+	font-size: clamp(11px, 3.4vw, 15px);
+	letter-spacing: 0;
+	padding: 0 8px;
+	text-align: center;
+}

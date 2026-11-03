@@ -27,6 +27,18 @@ class OutingError extends Error {
 
 const err = (code, status) => new OutingError(code, status);
 
+/**
+ * May this membership lead the outing — start/pause/resume it, manage the
+ * invite link, set rally points? The owner always; a «مساعد» (co-leader) too.
+ * Pure, so other modules can reuse it on a `membership()` row.
+ */
+function canLead(m) {
+  return Boolean(m && m.status === 'active' && (m.role === 'owner' || m.co_leader === true));
+}
+
+/* Compared against when no row matches, so a miss costs the same as a wrong code. */
+const NO_DIGEST = Buffer.alloc(32);
+
 function envNumber(name, fallback, { min = -Infinity, max = Infinity } = {}) {
   const n = Number(process.env[name]);
   if (!Number.isFinite(n)) return fallback;
@@ -176,6 +188,71 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     return next;
   }
 
+  /* ---------- recovery ---------- */
+
+  function forgetUser(userId) {
+    for (const [k, hit] of authCache) if (hit.user.id === userId) authCache.delete(k);
+  }
+
+  async function recoveryStatus(user) {
+    const [row] = await q(`SELECT recovery_created_at FROM sary.users WHERE id = $1`, [user.id]);
+    return { active: Boolean(row?.recovery_created_at), created_at: row?.recovery_created_at || null };
+  }
+
+  /**
+   * A new recovery code for this person, replacing any earlier one. Returned
+   * once, here; the server keeps only the selector and a digest of the rest.
+   */
+  async function createRecoveryCode(user) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const code = v.newRecoveryCode();
+      const { selector, verifier } = v.recoveryCode(code);
+      try {
+        const [row] = await q(
+          `UPDATE sary.users SET recovery_selector = $2, recovery_hash = $3, recovery_created_at = now()
+           WHERE id = $1 RETURNING recovery_created_at`,
+          [user.id, selector, v.digest(verifier)],
+        );
+        if (!row) throw err('unauthorized', 401);
+        return { code, created_at: row.recovery_created_at };
+      } catch (e) {
+        if (e.code !== '23505') throw e; // selector collision: draw again
+      }
+    }
+    throw err('server_busy', 503);
+  }
+
+  /**
+   * A recovery code from a new device → a fresh device token for that person.
+   * The old token stops working at once (and its live sockets are dropped),
+   * and the code is consumed: the person saves a new one afterwards.
+   */
+  async function recover(rawCode) {
+    const parsed = v.recoveryCode(rawCode);
+    if (!parsed) throw err('recovery_invalid', 400);
+    const token = v.newSecret();
+    const row = await tx(async (run) => {
+      const [hit] = await run(
+        `SELECT id, recovery_hash FROM sary.users WHERE recovery_selector = $1 FOR UPDATE`,
+        [parsed.selector],
+      );
+      const ok = v.sameDigest(v.digest(parsed.verifier), hit?.recovery_hash || NO_DIGEST);
+      if (!hit || !ok) return null;
+      const [u] = await run(
+        `UPDATE sary.users
+         SET token_hash = $2, recovery_selector = NULL, recovery_hash = NULL, recovery_created_at = NULL, last_seen_at = now()
+         WHERE id = $1
+         RETURNING id, display_name, avatar, phone`,
+        [hit.id, v.digest(token)],
+      );
+      return u;
+    });
+    if (!row) throw err('recovery_invalid', 400);
+    forgetUser(row.id);
+    hub.dropUser?.(row.id, 'unauthorized');
+    return { user: publicUser(row), token };
+  }
+
   /* ---------- membership ---------- */
 
   async function membership(outingId, userId, { fresh = false } = {}) {
@@ -184,8 +261,8 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const hit = room?.get(userId);
     if (!fresh && hit && now() - hit.at < cfg.membershipCacheMs) return hit.row;
     const [row] = await q(
-      `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id,
-              m.role, m.status, m.sharing
+      `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id, o.join_locked,
+              m.role, m.status, m.sharing, m.co_leader
        FROM sary.outings o
        LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = $2
        WHERE o.id = $1`,
@@ -209,6 +286,13 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   async function requireOwner(user, outingId) {
     const m = await requireMember(user, outingId, { fresh: true });
     if (m.role !== 'owner') throw err('owner_only', 403);
+    return m;
+  }
+
+  /** The owner or a co-leader — see canLead. Always reads fresh. */
+  async function requireLeader(user, outingId) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (!canLead(m)) throw err('leader_only', 403);
     return m;
   }
 
@@ -244,7 +328,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   }
 
   async function rotateInvite(user, outingId, { ttl_hours } = {}) {
-    const m = await requireOwner(user, outingId);
+    const m = await requireLeader(user, outingId);
     if (m.outing_status === 'ended') throw err('outing_ended', 409);
     return tx(async (run) => {
       await run(
@@ -256,7 +340,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   }
 
   async function revokeInvites(user, outingId) {
-    await requireOwner(user, outingId);
+    await requireLeader(user, outingId);
     const rows = await q(
       `UPDATE sary.outing_invites SET revoked_at = now()
        WHERE outing_id = $1 AND revoked_at IS NULL RETURNING id`,
@@ -274,11 +358,21 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     return null;
   }
 
+  async function inviteState(outingId) {
+    const [inv] = await q(
+      `SELECT expires_at FROM sary.outing_invites
+       WHERE outing_id = $1 AND revoked_at IS NULL AND expires_at > now()
+       ORDER BY created_at DESC LIMIT 1`,
+      [outingId],
+    );
+    return { active: Boolean(inv), expires_at: inv?.expires_at || null };
+  }
+
   async function previewInvite(token) {
     if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
     const [row] = await q(
       `SELECT i.outing_id, i.expires_at, i.revoked_at,
-              o.name, o.status AS outing_status, u.display_name AS owner_name,
+              o.name, o.status AS outing_status, o.join_locked, u.display_name AS owner_name,
               (SELECT count(*)::int FROM sary.outing_members m
                 WHERE m.outing_id = o.id AND m.status = 'active') AS member_count
        FROM sary.outing_invites i
@@ -296,6 +390,8 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       owner_name: row.owner_name,
       member_count: row.member_count,
       expires_at: row.expires_at,
+      /* Shown so the invitee learns why joining will fail, before typing a name. */
+      join_locked: row.join_locked === true,
     };
   }
 
@@ -303,7 +399,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
     const result = await tx(async (run) => {
       const [row] = await run(
-        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, o.status AS outing_status
+        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, o.status AS outing_status, o.join_locked
          FROM sary.outing_invites i JOIN sary.outings o ON o.id = i.outing_id
          WHERE i.token_hash = $1
          FOR UPDATE OF i, o`,
@@ -317,6 +413,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       );
       if (existing?.status === 'active') return { outing_id: row.outing_id, already: true };
       if (existing?.status === 'removed') throw err('removed_from_outing', 403);
+      if (row.join_locked) throw err('join_locked', 403);
       const [{ n }] = await run(
         `SELECT count(*)::int AS n FROM sary.outing_members WHERE outing_id = $1 AND status = 'active'`,
         [row.outing_id],
@@ -324,7 +421,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       if (n >= cfg.maxMembers) throw err('outing_full', 409);
       if (existing) {
         await run(
-          `UPDATE sary.outing_members SET status = 'active', sharing = true, left_at = NULL, joined_at = now()
+          `UPDATE sary.outing_members SET status = 'active', sharing = true, co_leader = false, left_at = NULL, joined_at = now()
            WHERE outing_id = $1 AND user_id = $2`,
           [row.outing_id, user.id],
         );
@@ -342,7 +439,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (!result.already) {
       hub.emit(result.outing_id, {
         type: 'member_joined',
-        member: { user_id: user.id, display_name: user.display_name, avatar: user.avatar, phone: user.phone || null, role: 'member', sharing: true },
+        member: { user_id: user.id, display_name: user.display_name, avatar: user.avatar, phone: user.phone || null, role: 'member', co_leader: false, sharing: true },
       });
     }
     return result;
@@ -350,7 +447,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
 
   async function members(outingId) {
     return q(
-      `SELECT m.user_id, u.display_name, u.avatar, u.phone, m.role, m.sharing, m.joined_at
+      `SELECT m.user_id, u.display_name, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
        FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
        WHERE m.outing_id = $1 AND m.status = 'active'
        ORDER BY m.role = 'owner' DESC, m.joined_at`,
@@ -401,27 +498,21 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   async function getOuting(user, outingId) {
     const m = await requireMember(user, outingId, { fresh: true });
     const [o] = await q(
-      `SELECT id, name, status, owner_id, created_at, started_at, ended_at FROM sary.outings WHERE id = $1`,
+      `SELECT id, name, status, owner_id, join_locked, created_at, started_at, ended_at FROM sary.outings WHERE id = $1`,
       [outingId],
     );
+    const leads = canLead(m);
     const [mem, pos, inv] = await Promise.all([
       members(outingId),
       positions(outingId, o.status),
-      m.role === 'owner'
-        ? q(
-            `SELECT expires_at FROM sary.outing_invites
-             WHERE outing_id = $1 AND revoked_at IS NULL AND expires_at > now()
-             ORDER BY created_at DESC LIMIT 1`,
-            [outingId],
-          )
-        : Promise.resolve([]),
+      leads ? inviteState(outingId) : Promise.resolve(null),
     ]);
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
     return {
       outing: o,
-      me: { user_id: user.id, role: m.role, sharing: m.sharing },
+      me: { user_id: user.id, role: m.role, co_leader: m.co_leader === true, can_lead: leads, sharing: m.sharing },
       members: mem.map((x) => ({
         ...x,
         online: online.has(x.user_id),
@@ -431,7 +522,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
         note: o.status === 'ended' ? null : noteOf(outingId, x.user_id),
       })),
       positions: pos,
-      invite: m.role === 'owner' ? { active: Boolean(inv[0]), expires_at: inv[0]?.expires_at || null } : null,
+      invite: inv,
       server_now: new Date(now()).toISOString(),
     };
   }
@@ -471,7 +562,8 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   async function setStatus(user, outingId, action) {
     const t = TRANSITIONS[action];
     if (!t) throw err('invalid_action');
-    const m = await requireOwner(user, outingId);
+    /* Ending is final and stays the owner's; a co-leader drives the rest. */
+    const m = action === 'end' ? await requireOwner(user, outingId) : await requireLeader(user, outingId);
     if (!t.from.includes(m.outing_status)) throw err('invalid_transition', 409);
     const [o] = await tx(async (run) => {
       const rows = await run(
@@ -500,7 +592,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     if (memberId === user.id) throw err('cannot_remove_self');
     const rows = await tx(async (run) => {
       const r = await run(
-        `UPDATE sary.outing_members SET status = 'removed', left_at = now(), sharing = false
+        `UPDATE sary.outing_members SET status = 'removed', left_at = now(), sharing = false, co_leader = false
          WHERE outing_id = $1 AND user_id = $2 AND status = 'active' RETURNING user_id`,
         [outingId, memberId],
       );
@@ -523,16 +615,17 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     const m = await requireMember(user, outingId, { fresh: true });
     const outcome = await tx(async (run) => {
       await run(
-        `UPDATE sary.outing_members SET status = 'left', left_at = now(), sharing = false
+        `UPDATE sary.outing_members SET status = 'left', left_at = now(), sharing = false, co_leader = false
          WHERE outing_id = $1 AND user_id = $2`,
         [outingId, user.id],
       );
       await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
       if (m.role !== 'owner') return { ended: false, owner: null };
       await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
+      /* A co-leader is the natural heir; otherwise the earliest to join. */
       const [next] = await run(
         `SELECT user_id FROM sary.outing_members WHERE outing_id = $1 AND status = 'active'
-         ORDER BY joined_at LIMIT 1 FOR UPDATE`,
+         ORDER BY co_leader DESC, joined_at LIMIT 1 FOR UPDATE`,
         [outingId],
       );
       if (!next || m.outing_status === 'ended') {
@@ -542,7 +635,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
         }
         return { ended: true, owner: null };
       }
-      await run(`UPDATE sary.outing_members SET role = 'owner' WHERE outing_id = $1 AND user_id = $2`, [outingId, next.user_id]);
+      await run(`UPDATE sary.outing_members SET role = 'owner', co_leader = false WHERE outing_id = $1 AND user_id = $2`, [outingId, next.user_id]);
       await run(`UPDATE sary.outings SET owner_id = $2, updated_at = now() WHERE id = $1`, [outingId, next.user_id]);
       return { ended: false, owner: next.user_id };
     });
@@ -557,6 +650,38 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       hub.closeRoom(outingId, 'outing_ended');
     }
     return outcome;
+  }
+
+  /* ---------- co-leaders & join lock ---------- */
+
+  /** Owner only: make an active member a «مساعد», or take it back. */
+  async function setCoLeader(user, outingId, memberId, on) {
+    const m = await requireOwner(user, outingId);
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (typeof on !== 'boolean') throw err('invalid_role');
+    if (!v.isUuid(memberId)) throw err('not_a_member', 404);
+    if (memberId === user.id) throw err('owner_is_leader');
+    const rows = await q(
+      `UPDATE sary.outing_members SET co_leader = $3
+       WHERE outing_id = $1 AND user_id = $2 AND status = 'active' AND role = 'member'
+       RETURNING user_id, co_leader`,
+      [outingId, memberId, on],
+    );
+    if (!rows.length) throw err('not_a_member', 404);
+    forgetOuting(outingId);
+    hub.emit(outingId, { type: 'member_role', user_id: memberId, co_leader: on });
+    return { user_id: memberId, co_leader: on };
+  }
+
+  /** Owner only: «قفل الانضمام» — invite links stop admitting anyone new. */
+  async function setJoinLock(user, outingId, locked) {
+    const m = await requireOwner(user, outingId);
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (typeof locked !== 'boolean') throw err('invalid_lock');
+    await q(`UPDATE sary.outings SET join_locked = $2, updated_at = now() WHERE id = $1`, [outingId, locked]);
+    forgetOuting(outingId);
+    hub.emit(outingId, { type: 'outing_lock', join_locked: locked });
+    return { join_locked: locked };
   }
 
   /* ---------- car notes ---------- */
@@ -712,8 +837,15 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     createUser,
     authenticate,
     updateProfile,
+    recoveryStatus,
+    createRecoveryCode,
+    recover,
     membership,
     requireMember,
+    requireLeader,
+    canLead,
+    setCoLeader,
+    setJoinLock,
     createOuting,
     rotateInvite,
     revokeInvites,
@@ -732,4 +864,4 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   };
 }
 
-module.exports = { createOutingsService, OutingError };
+module.exports = { createOutingsService, OutingError, canLead };

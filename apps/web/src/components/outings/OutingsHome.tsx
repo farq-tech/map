@@ -15,6 +15,7 @@ import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
 import ProfileForm from "./ProfileForm";
+import { RecoverySave } from "./Recovery";
 import "../../styles/outings.css";
 
 /** /outings — start an outing, rejoin a current one, look back at past ones. */
@@ -195,6 +196,8 @@ export default function OutingsHome() {
 					</section>
 
 					{error ? <p className="sary-o-error" role="alert">{error}</p> : null}
+
+					<RecoverySave isRTL={isRTL} />
 
 					<section className="sary-o-card" data-testid="outing-current">
 						<h2>{isRTL ? "طلعاتك الحالية" : "Current outings"}</h2>

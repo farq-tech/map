@@ -270,3 +270,30 @@ describe("outing state reducer", () => {
 		expect(v.positions.size).toBe(0);
 	});
 });
+
+describe("co-leader and join lock", () => {
+	it("making me «مساعد» turns on the leader controls; taking it back turns them off", () => {
+		let v = fromSnapshot(snap());
+		expect(v.snapshot.me.can_lead).toBeFalsy();
+		v = applyEvent(v, { type: "member_role", user_id: "me", co_leader: true });
+		expect(v.snapshot.me).toMatchObject({ co_leader: true, can_lead: true });
+		expect(v.members.get("me")!.co_leader).toBe(true);
+		v = applyEvent(v, { type: "member_role", user_id: "me", co_leader: false });
+		expect(v.snapshot.me.can_lead).toBe(false);
+	});
+	it("someone else's role change leaves my controls alone", () => {
+		const v = applyEvent(fromSnapshot(snap()), { type: "member_role", user_id: "a", co_leader: true });
+		expect(v.snapshot.me.can_lead).toBeFalsy();
+		expect(v.members.get("a")!.co_leader).toBe(true);
+	});
+	it("a co-leader who inherits the outing is owner, no longer flagged co-leader", () => {
+		let v = applyEvent(fromSnapshot(snap()), { type: "member_role", user_id: "me", co_leader: true });
+		v = applyEvent(v, { type: "owner_changed", owner_id: "me" });
+		expect(v.snapshot.me).toMatchObject({ role: "owner", co_leader: false, can_lead: true });
+		expect(v.members.get("me")!.co_leader).toBe(false);
+	});
+	it("the lock is reflected on the outing", () => {
+		const v = applyEvent(fromSnapshot(snap()), { type: "outing_lock", join_locked: true });
+		expect(v.snapshot.outing.join_locked).toBe(true);
+	});
+});

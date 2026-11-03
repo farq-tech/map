@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { loadAvatar } from "../../lib/farqAvatar";
 import { OutingApiError, OutingsApi, outingErrorText, type Identity } from "../../lib/outings/api";
+import { RecoveryForm } from "./Recovery";
 
 /**
  * The name (and, only if the person ticks it, the photo) that members of
@@ -13,6 +14,9 @@ export default function ProfileForm({ isRTL, onDone, submitLabel }: { isRTL: boo
 	const [sharePhoto, setSharePhoto] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [recovering, setRecovering] = useState(false);
+
+	if (recovering) return <RecoveryForm isRTL={isRTL} onDone={onDone} onCancel={() => setRecovering(false)} />;
 
 	return (
 		<form
@@ -58,6 +62,9 @@ export default function ProfileForm({ isRTL, onDone, submitLabel }: { isRTL: boo
 			{error ? <p className="sary-o-error" role="alert">{error}</p> : null}
 			<button type="submit" className="sary-o-primary" disabled={busy || !name.trim()} data-testid="outing-profile-submit">
 				{busy ? "…" : submitLabel || (isRTL ? "متابعة" : "Continue")}
+			</button>
+			<button type="button" className="sary-o-link-btn" onClick={() => setRecovering(true)} data-testid="outing-recover-open">
+				{isRTL ? "استخدمت سَرى من قبل؟ عندي رمز استرجاع" : "Used Sary before? I have a recovery code"}
 			</button>
 		</form>
 	);

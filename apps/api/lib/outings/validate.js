@@ -136,6 +136,46 @@ function digest(secret) {
   return crypto.createHash('sha256').update(String(secret)).digest();
 }
 
+/* ---------- recovery codes ---------- */
+
+/** Crockford base32: no I, L, O, U — nothing to misread when copied by hand. */
+const RECOVERY_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const RECOVERY_SELECTOR_LEN = 8; // 40 bits, only to find the row
+const RECOVERY_VERIFIER_LEN = 20; // 100 bits, stored as a digest
+const RECOVERY_LEN = RECOVERY_SELECTOR_LEN + RECOVERY_VERIFIER_LEN;
+
+/** A fresh code, grouped in fours for reading aloud: XXXX-XXXX-…(7 groups). */
+function newRecoveryCode() {
+  let raw = '';
+  for (let i = 0; i < RECOVERY_LEN; i += 1) raw += RECOVERY_ALPHABET[crypto.randomInt(RECOVERY_ALPHABET.length)];
+  return raw.match(/.{4}/g).join('-');
+}
+
+/**
+ * What a person typed or pasted → { selector, verifier }, or null. Forgiving
+ * about spaces, dashes, case, Arabic-Indic digits and the usual look-alikes
+ * (O→0, I/L→1), strict about everything else.
+ */
+function recoveryCode(raw) {
+  if (typeof raw !== 'string' || raw.length > 120) return null;
+  const t = raw
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .toUpperCase()
+    .replace(/[\s\-_.\u2010-\u2015]/g, '')
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1');
+  if (t.length !== RECOVERY_LEN) return null;
+  for (const ch of t) if (!RECOVERY_ALPHABET.includes(ch)) return null;
+  return { selector: t.slice(0, RECOVERY_SELECTOR_LEN), verifier: t.slice(RECOVERY_SELECTOR_LEN) };
+}
+
+/** Constant-time equality of two digests (Buffers); false on any length mismatch. */
+function sameDigest(a, b) {
+  if (!Buffer.isBuffer(a) || !Buffer.isBuffer(b) || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 module.exports = {
   NAME_MAX,
   OUTING_NAME_MAX,
@@ -154,4 +194,8 @@ module.exports = {
   newSecret,
   isSecretShaped,
   digest,
+  RECOVERY_LEN,
+  newRecoveryCode,
+  recoveryCode,
+  sameDigest,
 };

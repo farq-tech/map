@@ -14,6 +14,7 @@ import { formatNumber } from "../../lib/sary/domain";
 import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
+import { RecoveryForm } from "./Recovery";
 import "../../styles/outings.css";
 
 const PENDING_KEY = "sary.outings.pendingInvite";
@@ -50,6 +51,7 @@ export default function OutingJoin() {
 	const avatar = loadAvatar();
 	const [name, setName] = useState("");
 	const [sharePhoto, setSharePhoto] = useState(false);
+	const [recovering, setRecovering] = useState(false);
 
 	useSaryChrome();
 	usePageMeta({
@@ -113,11 +115,26 @@ export default function OutingJoin() {
 						{isRTL ? `${formatNumber(preview.member_count, true)} مشارك` : `${preview.member_count} members`} ·{" "}
 						{statusLabel(preview.status, isRTL)}
 					</p>
+					{preview.join_locked ? (
+						<p className="sary-o-error" role="status" data-testid="outing-join-locked">
+							{outingErrorText("join_locked", isRTL)}
+						</p>
+					) : null}
 					<p className="sary-o-note">
 						{isRTL
 							? "بعد الانضمام يرى أعضاء الطلعة موقعك وأنت على شاشة الطلعة فقط، وتستطيع إيقاف المشاركة أو المغادرة متى شئت."
 							: "Once you join, members see your location only while you are on the outing screen. You can pause sharing or leave any time."}
 					</p>
+					{recovering && !identity ? (
+						<RecoveryForm
+							isRTL={isRTL}
+							onDone={(id) => {
+								setIdentity(id);
+								setRecovering(false);
+							}}
+							onCancel={() => setRecovering(false)}
+						/>
+					) : (
 					<form
 						className="sary-o-form"
 						onSubmit={(e) => {
@@ -165,7 +182,13 @@ export default function OutingJoin() {
 									? isRTL ? `انضم للطلعة باسم ${identity.user.display_name}` : `Join as ${identity.user.display_name}`
 									: isRTL ? "انضم للطلعة" : "Join the outing"}
 						</button>
+						{!identity ? (
+							<button type="button" className="sary-o-link-btn" onClick={() => setRecovering(true)} data-testid="outing-recover-open">
+								{isRTL ? "استخدمت سَرى من قبل؟ عندي رمز استرجاع" : "Used Sary before? I have a recovery code"}
+							</button>
+						) : null}
 					</form>
+					)}
 					<button type="button" className="sary-o-secondary" onClick={() => void navigate({ to: "/map" })}>
 						{isRTL ? "ليس الآن" : "Not now"}
 					</button>

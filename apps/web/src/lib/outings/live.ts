@@ -24,6 +24,8 @@ export type LiveEvent =
 	| { type: "member_left"; user_id: string; reason: "left" | "removed" }
 	| { type: "member_sharing"; user_id: string; sharing: boolean }
 	| { type: "owner_changed"; owner_id: string }
+	| { type: "member_role"; user_id: string; co_leader: boolean }
+	| { type: "outing_lock"; join_locked: boolean }
 	| { type: "member_link"; user_id: string; last_seen_at: string; gps: GpsState | null }
 	| { type: "member_note"; user_id: string; note: MemberNote | null }
 	| { type: "outing_status"; status: OutingSnapshot["outing"]["status"] };
