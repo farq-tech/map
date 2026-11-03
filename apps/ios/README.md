@@ -70,9 +70,9 @@ Simulated location: `xcrun simctl location booted set 24.7136,46.6753`. To test 
 
 ## What the owner must provide
 
-1. **Apple Developer Team ID.** Set `DEVELOPMENT_TEAM` in `project.yml` (or in Xcode → target → Signing & Capabilities). FarqNavigate uses `MH7J92HV9N`. If that is the same account, use it.
-2. **Bundle ID.** The placeholder is `sa.sary.albarq`. Register it in the developer portal (Identifiers → App IDs) with the **Associated Domains** capability enabled. If you change it, change it in `project.yml` and in the AASA file.
-3. **Universal Links.** Edit `apps/web/public/.well-known/apple-app-site-association` and replace `TEAMID_PLACEHOLDER` with the Team ID, so it reads `ABCDE12345.sa.sary.albarq`. Deploy the web app, then check that `https://farq-map-investor.vercel.app/.well-known/apple-app-site-association` returns JSON (`vercel.json` sets the content type). Apple's CDN caches it, so allow up to a day. Until then, the `saryalbarq://join#<token>` scheme and «انضم برابط» (paste a link) both work.
+1. **Apple Developer Team ID:** done. `MH7J92HV9N` (the same account as FarqNavigate) is set in `project.yml` and in the AASA file.
+2. **Bundle ID.** It is `sa.sary.albarq` (nothing else in the repo uses it). Register it in the developer portal (Identifiers → App IDs) with the **Associated Domains** capability enabled. If you change it, change it in `project.yml` and in the AASA file.
+3. **Universal Links.** `apps/web/public/.well-known/apple-app-site-association` already names `MH7J92HV9N.sa.sary.albarq`. Deploy the web app, then check that `https://farq-map-investor.vercel.app/.well-known/apple-app-site-association` returns JSON (`vercel.json` sets the content type). Apple's CDN caches it, so allow up to a day. Until then, the `saryalbarq://join#<token>` scheme and «انضم برابط» (paste a link) both work.
 4. **App icon.** `Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` is a generated placeholder. Replace it with the real 1024×1024 artwork.
 5. **Privacy policy URL** for App Store Connect, covering location, name, optional phone and notes, all shown only to fellow outing members, with only the latest fix kept and deleted when the outing ends.
 

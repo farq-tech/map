@@ -272,15 +272,15 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					26DCA2709104968DE7DD6B95 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = MH7J92HV9N;
 						ProvisioningStyle = Automatic;
 					};
 					885227E9528F08985ED8D551 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = MH7J92HV9N;
 						ProvisioningStyle = Automatic;
 					};
 					A1C39E997AC05945B40DC896 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = MH7J92HV9N;
 						ProvisioningStyle = Automatic;
 						TestTargetID = 26DCA2709104968DE7DD6B95;
 					};
@@ -403,7 +403,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -484,7 +484,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;

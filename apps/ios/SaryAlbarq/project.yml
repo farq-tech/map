@@ -25,8 +25,8 @@ settings:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
-    # OWNER: set your Apple Team ID here (or in Xcode → Signing) before a device build.
-    DEVELOPMENT_TEAM: ""
+    # Apple Team ID (same account as FarqNavigate).
+    DEVELOPMENT_TEAM: MH7J92HV9N
     CODE_SIGN_STYLE: Automatic
   configs:
     Debug:
