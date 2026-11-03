@@ -144,6 +144,30 @@ function rally(raw) {
   return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, label };
 }
 
+/**
+ * An opt-in trip summary: totals only, computed on the person's own phone.
+ * Anything that is not three plausible numbers is refused — there is no field
+ * here that could carry a point. `spanS` is how long the outing ran on our clock.
+ */
+const TRIP_MAX_DISTANCE_M = 3_000_000;
+const TRIP_MAX_DURATION_S = 14 * 24 * 3600;
+function tripSummary(raw, { spanS = null } = {}) {
+  if (!raw || typeof raw !== 'object') return { ok: false, reason: 'invalid_summary' };
+  const keys = Object.keys(raw);
+  if (keys.some((k) => !['distance_m', 'duration_s', 'moving_s'].includes(k))) return { ok: false, reason: 'invalid_summary' };
+  const int = (x) => (finite(x) && x >= 0 ? Math.round(x) : null);
+  const distance = int(raw.distance_m);
+  const duration = int(raw.duration_s);
+  const moving = raw.moving_s == null ? duration : int(raw.moving_s);
+  if (distance === null || duration === null || moving === null) return { ok: false, reason: 'invalid_summary' };
+  if (distance > TRIP_MAX_DISTANCE_M || duration > TRIP_MAX_DURATION_S || moving > duration) return { ok: false, reason: 'implausible_summary' };
+  /* Faster on average than any car on these roads is a broken tracker, not a trip. */
+  if (distance > MAX_SPEED_MPS * Math.max(moving, 1) + 500) return { ok: false, reason: 'implausible_summary' };
+  /* A device can only have been in the outing while it ran (plus a little clock slack). */
+  if (spanS != null && duration > spanS + 600) return { ok: false, reason: 'implausible_summary' };
+  return { ok: true, value: { distance_m: distance, duration_s: duration, moving_s: moving } };
+}
+
 function isUuid(v) {
   return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
@@ -219,6 +243,7 @@ module.exports = {
   outingName,
   avatar,
   fix,
+  tripSummary,
   isUuid,
   newSecret,
   isSecretShaped,

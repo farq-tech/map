@@ -6,6 +6,7 @@ import { useLanguage } from "../../contexts/LanguageContext";
 import { useLocation } from "../../contexts/LocationContext";
 import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import {
+	loadIdentity,
 	inviteUrl,
 	loadGapKm,
 	loadInviteToken,
@@ -52,6 +53,9 @@ import { downloadReport, useFieldDiagnostics } from "./useFieldDiagnostics";
 import { diag, exportFileName } from "../../lib/outings/fieldDiagnostics";
 import { BatteryBadge, MySosBanner, RallyCard, RallyPlacer, SosAlert, SosHoldButton, SosStrip, useAudioUnlock, useSiren, type SosAlertView } from "./OutingSafety";
 import { PushRow } from "./PushRow";
+import { PushToTalk, useVoiceInbox, VoiceBanner } from "./PushToTalk";
+import { NearestServices } from "./NearestServices";
+import { TripSummaryCard, useMyTrip } from "./TripSummary";
 import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
@@ -101,6 +105,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [noteError, setNoteError] = useState<string | null>(null);
 	const [noteAlert, setNoteAlert] = useState<{ userId: string; name: string; text: string; color: string } | null>(null);
 	const [follow, setFollow] = useState(false);
+	const [nearest, setNearest] = useState(false);
 	const fittedRef = useRef(false);
 	/* Safety: SOS, gap alerts, rally point. */
 	const [gapKm, setGapKm] = useState(() => loadGapKm());
@@ -144,6 +149,16 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const liveNote = (m: { note?: { text: string; at: string } | null } | undefined) =>
 		m?.note && now - new Date(m.note.at).getTime() < NOTE_TTL_MS ? m.note.text : null;
 	const myNote = me ? liveNote(view?.members.get(me.user_id)) : null;
+
+	/* This phone's own trip totals, kept here unless shared at the end. */
+	useMyTrip(outingId, outing?.status === "active");
+
+	/* Push-to-talk clips from the others: chip over their car, auto-play after one tap. */
+	const inbox = useVoiceInbox(view, me?.user_id, (id) => ({ name: view?.members.get(id)?.display_name || "", color: colors.get(id) || "#e8eef0" }));
+	const voiceRef = useRef(inbox);
+	voiceRef.current = inbox;
+	const voiceSig = [...inbox.chips.values()].map((c) => `${c.clip.id}:${c.state}`).join(",");
+	const newestVoice = [...inbox.chips.values()].sort((a, b) => new Date(b.clip.at).getTime() - new Date(a.clip.at).getTime())[0] || null;
 
 	/* Someone put a line over their car: say it out loud on everyone else's screen. */
 	const seenNotesRef = useRef<Map<string, string> | null>(null);
@@ -244,7 +259,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			fitWithRef.current(id);
 			setPanel("members");
 			setSnap("half");
-		}, () => reducedMotion, isRTL);
+		}, () => reducedMotion, isRTL, (id) => {
+			const chip = voiceRef.current.chips.get(id);
+			if (chip) voiceRef.current.play(chip.clip);
+		});
 		markersRef.current = layer;
 		return () => {
 			layer.destroy();
@@ -274,9 +292,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				selected: r.member.user_id === selected,
 				color: colors.get(r.member.user_id) || "#e8eef0",
 				note: r.member.sos ? (isRTL ? "🆘 طوارئ" : "🆘 SOS") : liveNote(r.member),
+				voice: (() => {
+					const chip = voiceRef.current.chips.get(r.member.user_id);
+					if (!chip) return null;
+					return { label: isRTL ? `رسالة صوتية من ${r.member.display_name}` : `Voice message from ${r.member.display_name}`, playing: chip.state === "playing" };
+				})(),
 			}));
 		layer.sync(views);
-	}, [rows, selected, map, colors]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [rows, selected, map, colors, voiceSig]);
 
 	/* ---------- safety ---------- */
 
@@ -684,6 +708,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				<section className="sary-o-card" role="status">
 					<h2>{outing?.name || (isRTL ? "طلعة مشتركة" : "Shared outing")}</h2>
 					<p data-testid="outing-closed-reason">{text}</p>
+					{terminal === "outing_ended" ? <TripSummaryCard outingId={outingId} isRTL={isRTL} meId={me?.user_id || loadIdentity()?.user.id} /> : null}
 					{loadError && !terminal ? (
 						<button type="button" className="sary-o-primary" onClick={() => void live.reload()}>
 							{isRTL ? "إعادة المحاولة" : "Retry"}
@@ -804,6 +829,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						{isRTL ? "رسالة" : "Message"}
 					</button>
 				) : null}
+				<button type="button" className="sary-fab" onClick={() => setNearest(true)} data-testid="outing-nearest-open">
+					{isRTL ? "أقرب محطة" : "Nearest fuel"}
+				</button>
 			</div>
 
 			{me && outing && outing.status !== "ended" && !mySos ? (
@@ -813,6 +841,16 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					onTrigger={() => void raiseSos()}
 					onShortPress={() => setToast(isRTL ? "اضغط مطولًا ثانية كاملة لإرسال نداء الطوارئ" : "Press and hold for a full second to send an SOS")}
 				/>
+			) : null}
+
+			{outing && outing.status !== "ended" ? (
+				<PushToTalk outingId={outingId} isRTL={isRTL} onSent={setToast} />
+			) : null}
+
+			{newestVoice ? (
+				<div className={`sary-o-voice-wrap${noteAlert ? " is-below" : ""}`}>
+					<VoiceBanner chip={newestVoice} isRTL={isRTL} onPlay={() => inbox.play(newestVoice.clip)} />
+				</div>
 			) : null}
 
 			<FarqBottomSheet
@@ -1336,6 +1374,22 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					onCancel={() => {
 						setPlacingRally(false);
 						setSnap("half");
+					}}
+				/>
+			) : null}
+
+			{nearest ? (
+				<NearestServices
+					people={[
+						...rows.filter((r) => r.position).map((r) => ({ lat: r.position!.lat, lng: r.position!.lng, heading: r.position!.heading, speed: r.position!.speed })),
+						...(locationPinKind === "gps" && userLocation ? [{ lat: userLocation.lat, lng: userLocation.lng, heading: userHeading, speed: userSpeed }] : []),
+					]}
+					isRTL={isRTL}
+					busy={busy}
+					onClose={() => setNearest(false)}
+					onShare={(text) => {
+						setNearest(false);
+						void sendNote(text);
 					}}
 				/>
 			) : null}

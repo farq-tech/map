@@ -223,6 +223,11 @@ function pushPayloadFor(event, { senderName, outingName } = {}) {
   if (event?.type === 'member_note' && event.note?.text) {
     return { type: 'note', title: `${who}${where}`, body: event.note.text, tag: `sary-note-${event.user_id}`, ttl: 15 * 60, urgency: 'normal' };
   }
+  if (event?.type === 'voice_clip' && event.clip?.id) {
+    const secs = Math.max(1, Math.round((Number(event.clip.duration_ms) || 0) / 1000));
+    const left = Math.max(60, Math.round((new Date(event.clip.expires_at).getTime() - Date.now()) / 1000) || 600);
+    return { type: 'voice_clip', title: `${who}${where}`, body: `🎙️ رسالة صوتية (${secs} ث) — افتح الطلعة لتسمعها.`, tag: `sary-clip-${event.clip.user_id || 'x'}`, ttl: Math.min(left, 600), urgency: 'normal' };
+  }
   if (event?.type === 'sos' && event.refresh) return null; // same SOS, newer fix: no second alarm
   if (event?.type === 'sos' && 'sos' in event && event.sos === null) {
     /* «أنا بخير»: replaces the SOS notification (same tag) so a phone in a pocket stops saying "help". */

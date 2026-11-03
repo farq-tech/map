@@ -52,3 +52,45 @@ test('search finds a real named well when the substring exists', () => {
 test('getFeature 404s on a made-up id', () => {
   assert.equal(outdoor.getFeature('well:not-a-real-osm-id'), null);
 });
+
+test('fuel stations load from fuel.geojson when present, as kind fuel (ODbL)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { convert } = require('../scripts/build-outdoor-fuel');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sary-fuel-'));
+  try {
+    const fc = convert({
+      elements: [
+        { type: 'node', id: 1, lat: 25.21, lon: 46.62, tags: { amenity: 'fuel', name: 'محطة الثمامة', brand: 'ساسكو' } },
+        { type: 'way', id: 2, center: { lat: 25.4, lon: 46.7 }, tags: { amenity: 'fuel' } },
+        { type: 'node', id: 3, lat: 51.5, lon: -0.1, tags: { amenity: 'fuel', name: 'London' } },
+        { type: 'node', id: 4, lat: 25.3, lon: 46.6, tags: { amenity: 'cafe' } },
+      ],
+    });
+    assert.equal(fc.features.length, 2, 'outside KSA and non-fuel are dropped');
+    assert.equal(fc.features[1].properties.name, null, 'an unnamed station stays unnamed');
+    fs.writeFileSync(path.join(dir, 'fuel.geojson'), JSON.stringify(fc));
+    outdoor.__reset({ dataDir: dir });
+    const hits = outdoor.queryFeatures({ types: 'fuel' });
+    assert.equal(hits.count, 2);
+    const named = hits.features.find((f) => f.properties.name);
+    assert.equal(named.properties.kind, 'fuel');
+    assert.equal(named.properties.group, 'place');
+    assert.equal(named.properties.brand, 'ساسكو');
+    assert.equal(named.properties.license, 'ODbL');
+    const around = outdoor.queryAround({ lng: 46.62, lat: 25.2, radius: 5000 });
+    assert.equal(around.summary.nearest_fuel.properties.name, 'محطة الثمامة');
+  } finally {
+    outdoor.__reset();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('without fuel.geojson there are simply no fuel features', () => {
+  outdoor.__reset();
+  const fs = require('fs');
+  const path = require('path');
+  if (fs.existsSync(path.join(__dirname, '../data/outdoor/fuel.geojson'))) return;
+  assert.equal(outdoor.queryFeatures({ types: 'fuel' }).count, 0);
+});

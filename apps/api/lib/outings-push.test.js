@@ -160,6 +160,14 @@ test('event → push payload: notes and SOS, nothing else', () => {
   assert.equal(clear.tag, raised.tag, 'replaces the SOS notification');
   assert.equal(clear.urgency, 'normal');
   assert.match(clear.title, /سعد بخير/);
+  /* Voice clips (#23): a quiet push like a note, gone when the clip is. */
+  const clip = pushPayloadFor({ type: 'voice_clip', clip: { id: 'c1', user_id: 'u', duration_ms: 4200, expires_at: new Date(Date.now() + 600_000).toISOString() } }, { senderName: 'سعد' });
+  assert.equal(clip.type, 'voice_clip');
+  assert.equal(clip.urgency, 'normal');
+  assert.notEqual(clip.always, true, 'viewers hear it in the app, not as a push');
+  assert.ok(clip.ttl <= 600 && clip.ttl >= 60);
+  assert.match(clip.body, /4 ث/);
+  assert.equal(pushPayloadFor({ type: 'voice_clip' }), null);
   for (const type of ['position', 'member_link', 'presence', 'outing_status']) assert.equal(pushPayloadFor({ type }), null, type);
 });
 

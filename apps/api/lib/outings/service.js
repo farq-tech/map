@@ -18,6 +18,7 @@ const v = require('./validate');
 const { sanitizeDiagnostics, outingRef } = require('./diagnostics');
 const { createRateLimiter } = require('./rate-limit');
 const { pushPayloadFor } = require('./push');
+const clipsLib = require('./clips');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -81,6 +82,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   /* Freshest fix per member, ahead of the throttled DB write. outingId -> Map(userId -> pos) */
   const latest = new Map();
   const lastPersist = new Map(); // `${o}:${u}` -> ms
+  /* Voice clips: memory only, 10 minutes. See clips.js. */
+  const clips = clipsLib.createClipStore({ now });
   let hub = events;
 
   const q = (text, params) => pool.query(text, params).then((r) => r.rows);
@@ -534,6 +537,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         sos: outing.status === 'ended' ? null : sosOf(outingId, x.user_id),
       })),
       positions: pos,
+      voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
+      summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
       server_now: new Date(now()).toISOString(),
     };
@@ -553,6 +558,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     );
     const current = rows.filter((r) => r.my_status === 'active' && r.status !== 'ended');
     const history = rows.filter((r) => !(r.my_status === 'active' && r.status !== 'ended'));
+    /* Shared summaries reach the people who were still in the outing at its end. */
+    const withSummaries = history.filter((r) => r.status === 'ended' && r.my_status === 'active').map((r) => r.id);
+    const sums = withSummaries.length ? await summariesOf(withSummaries) : new Map();
+    for (const r of history) r.summaries = sums.get(r.id) || [];
     return { current, history };
   }
 
@@ -599,6 +608,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     });
     forgetOuting(outingId);
     if (t.to !== 'active') dropLatest(outingId);
+    if (t.to === 'ended') clips.dropOuting(outingId);
     hub.emit(outingId, { type: 'outing_status', status: o.status, started_at: o.started_at, ended_at: o.ended_at });
     if (t.to === 'ended') hub.closeRoom(outingId, 'outing_ended');
     return o;
@@ -621,6 +631,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     forgetOuting(outingId);
     dropLatest(outingId, memberId);
     dropSos(outingId, memberId);
+    clips.dropUser(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
     return { removed: memberId };
@@ -661,11 +672,13 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     forgetOuting(outingId);
     dropLatest(outingId, user.id);
     dropSos(outingId, user.id);
+    clips.dropUser(outingId, user.id);
     hub.kick(outingId, user.id, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: user.id, reason: 'left' });
     if (outcome.owner) hub.emit(outingId, { type: 'owner_changed', owner_id: outcome.owner });
     if (outcome.ended) {
       dropLatest(outingId);
+      clips.dropOuting(outingId);
       hub.emit(outingId, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(outingId, 'outing_ended');
     }
@@ -879,6 +892,93 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     }
   }
 
+  /* ---------- voice clips ---------- */
+
+  const CLIP_MIN_GAP_MS = 2_500;
+
+  /**
+   * A member's recorded clip → kept in memory for 10 minutes and announced to
+   * everyone else in the room. Never to disk, never to a third party.
+   */
+  async function addClip(user, outingId, { buf, durationMs } = {}) {
+    const m = await requireMember(user, outingId);
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (!Buffer.isBuffer(buf) || buf.length < clipsLib.CLIP_MIN_BYTES) throw err('invalid_clip', 400);
+    if (buf.length > clipsLib.CLIP_MAX_BYTES) throw err('too_large', 413);
+    const mime = clipsLib.sniffAudio(buf);
+    if (!mime) throw err('invalid_clip', 415);
+    const ms = clipsLib.parseDurationMs(durationMs);
+    if (ms === null) throw err('invalid_clip_duration', 400);
+    if (now() - clips.lastAt(outingId, user.id) < CLIP_MIN_GAP_MS) throw err('too_frequent', 429);
+    const clip = clips.put(outingId, user.id, { buf: Buffer.from(buf), mime, durationMs: ms });
+    /* The sender already has it; everyone else hears about it. */
+    const event = { type: 'voice_clip', clip };
+    hub.emit(outingId, event, { exceptUser: user.id });
+    /* A quiet push, like a note: only to members whose screen is off (viewers hear it in-app),
+     * normal urgency, and it expires with the clip so nobody is woken for audio that is gone. */
+    void announce(outingId, user.id, event);
+    return clip;
+  }
+
+  async function getClip(user, outingId, clipId) {
+    await requireMember(user, outingId);
+    if (typeof clipId !== 'string' || !/^[0-9a-f]{32}$/.test(clipId)) throw err('clip_gone', 404);
+    const hit = clips.get(outingId, clipId);
+    if (!hit) throw err('clip_gone', 404);
+    return hit;
+  }
+
+  /* ---------- opt-in trip summaries ---------- */
+
+  const SUMMARY_WINDOW_MS = 7 * 24 * 3600_000;
+
+  async function summariesOf(outingIds) {
+    const rows = await q(
+      `SELECT s.outing_id, s.user_id, u.display_name, s.distance_m, s.duration_s, s.moving_s, s.shared_at
+       FROM sary.trip_summaries s JOIN sary.users u ON u.id = s.user_id
+       WHERE s.outing_id = ANY($1::uuid[])
+       ORDER BY s.distance_m DESC`,
+      [outingIds],
+    );
+    const out = new Map();
+    for (const r of rows) {
+      if (!out.has(r.outing_id)) out.set(r.outing_id, []);
+      out.get(r.outing_id).push({ user_id: r.user_id, display_name: r.display_name, distance_m: r.distance_m, duration_s: r.duration_s, moving_s: r.moving_s, shared_at: r.shared_at });
+    }
+    return out;
+  }
+
+  /**
+   * «شارك ملخصي»: the person's own totals, once the outing has ended. The
+   * phone computed them from its own fixes; the server never sees a point.
+   */
+  async function shareSummary(user, outingId, raw) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (m.outing_status !== 'ended') throw err('outing_not_ended', 409);
+    const [o] = await q(`SELECT started_at, ended_at FROM sary.outings WHERE id = $1`, [outingId]);
+    if (!o.ended_at || now() - new Date(o.ended_at).getTime() > SUMMARY_WINDOW_MS) throw err('summary_window_closed', 410);
+    const spanS = o.started_at ? Math.max(0, Math.round((new Date(o.ended_at) - new Date(o.started_at)) / 1000)) : 0;
+    const parsed = v.tripSummary(raw, { spanS });
+    if (!parsed.ok) throw err(parsed.reason, 400);
+    const s = parsed.value;
+    const [row] = await q(
+      `INSERT INTO sary.trip_summaries (outing_id, user_id, distance_m, duration_s, moving_s)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (outing_id, user_id) DO UPDATE SET
+         distance_m = EXCLUDED.distance_m, duration_s = EXCLUDED.duration_s,
+         moving_s = EXCLUDED.moving_s, shared_at = now()
+       RETURNING distance_m, duration_s, moving_s, shared_at`,
+      [outingId, user.id, s.distance_m, s.duration_s, s.moving_s],
+    );
+    return { summary: { user_id: user.id, display_name: user.display_name, ...row } };
+  }
+
+  async function withdrawSummary(user, outingId) {
+    await requireMember(user, outingId, { fresh: true });
+    const rows = await q(`DELETE FROM sary.trip_summaries WHERE outing_id = $1 AND user_id = $2 RETURNING user_id`, [outingId, user.id]);
+    return { withdrawn: rows.length > 0 };
+  }
+
   async function setSharing(user, outingId, sharing) {
     await requireMember(user, outingId, { fresh: true });
     const on = sharing === true;
@@ -977,6 +1077,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       forgetOuting(id);
       dropLatest(id);
       dropSos(id);
+      clips.dropOuting(id);
       hub.emit(id, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(id, 'outing_ended');
     }
@@ -988,6 +1089,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       if (!room.size) latest.delete(oid);
     }
     for (const [k, at] of lastPersist) if (at < cutoff) lastPersist.delete(k);
+    clips.sweep();
     return { ended: ended.length };
   }
 
@@ -1026,6 +1128,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     setRally,
     notifyMembers,
     announce,
+    addClip,
+    getClip,
+    shareSummary,
+    withdrawSummary,
     recordPosition,
     recordDiagnostics,
     sweep,

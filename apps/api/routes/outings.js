@@ -17,6 +17,7 @@ const { asyncHandler } = require('../lib/async-handler');
 const { OutingError } = require('../lib/outings/service');
 const { createRateLimiter } = require('../lib/outings/rate-limit');
 const { battery } = require('../lib/outings/validate');
+const { CLIP_MAX_BYTES } = require('../lib/outings/clips');
 
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -44,6 +45,11 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
   /* Recovery codes carry 100 bits, so guessing is hopeless anyway; this keeps it that way cheaply. */
   const recoverLimit = createRateLimiter({ limit: limits.recoverPer15Min ?? 5, windowMs: 15 * 60_000 });
   const recoveryCodeLimit = createRateLimiter({ limit: 10, windowMs: 60 * 60_000 });
+  /* Push-to-talk: a few clips a minute is a conversation; more is a flood. */
+  const clipLimit = createRateLimiter({ limit: limits.clipsPer5Min ?? 20, windowMs: 5 * 60_000 });
+  const clipFetchLimit = createRateLimiter({ limit: limits.clipFetchesPerMin ?? 120, windowMs: 60_000 });
+  /* Raw audio bytes, capped. Only this route reads a body that is not JSON. */
+  const rawAudio = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: CLIP_MAX_BYTES });
 
   const auth = asyncHandler(async (req, res, next) => {
     const m = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
@@ -193,6 +199,38 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
 
   router.delete('/:id/rally', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.setRally(req.user, req.params.id, null)) });
+  }));
+
+  /* Voice clip upload: body is the recording itself; its length (ms) rides in a header. */
+  router.post('/:id/clips', auth, asyncHandler(async (req, res, next) => {
+    if (!clipLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    next();
+  }), rawAudio, asyncHandler(async (req, res) => {
+    const clip = await service.addClip(req.user, req.params.id, {
+      buf: Buffer.isBuffer(req.body) ? req.body : null,
+      durationMs: req.headers['x-clip-duration-ms'],
+    });
+    res.status(201).json({ ok: true, clip });
+  }));
+
+  router.get('/:id/clips/:clipId', auth, asyncHandler(async (req, res) => {
+    if (!clipFetchLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const { meta, buf } = await service.getClip(req.user, req.params.id, req.params.clipId);
+    res.set('Content-Type', meta.mime);
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Disposition', 'inline');
+    res.set('Expires', new Date(meta.expires_at).toUTCString());
+    res.send(buf);
+  }));
+
+  /* Opt-in trip summary: totals only, never points. */
+  router.put('/:id/summary', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.shareSummary(req.user, req.params.id, req.body?.summary)) });
+  }));
+
+  router.delete('/:id/summary', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.withdrawSummary(req.user, req.params.id)) });
   }));
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {
