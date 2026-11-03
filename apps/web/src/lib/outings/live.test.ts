@@ -74,6 +74,47 @@ function channel(extra: Partial<ConstructorParameters<typeof LiveChannel>[3]> = 
 }
 
 describe("LiveChannel", () => {
+	it("reports send attempts and ack latency for the field test, matched by frame id", () => {
+		let t = 1_000;
+		const diagEvents: unknown[] = [];
+		const { ch, h } = channel({ now: () => t });
+		(h as unknown as { onDiag: (e: unknown) => void }).onDiag = (e) => diagEvents.push(e);
+		/* Handlers are captured by reference: attach onDiag on the same object the channel holds. */
+		ch.start();
+		const ws = FakeSocket.all[0];
+		ws.open();
+		ws.push({ type: "ready", snapshot: snap() });
+		const fix = { lat: 24.7, lng: 46.7, accuracy: 5, heading: null, speed: 10, at: t };
+		ch.sendFix(fix, "balanced");
+		ch.sendFix({ ...fix, at: t + 1 }, "balanced");
+		const ids = ws.sent.filter((m) => (m as { type: string }).type === "position").map((m) => (m as { id: number }).id);
+		expect(ids).toEqual([1, 2]);
+		t += 340;
+		ws.push({ type: "ack", id: 2, ok: true });
+		t += 60;
+		ws.push({ type: "ack", id: 1, ok: false, reason: "stale_fix" });
+		ws.push({ type: "ack", id: 99, ok: true });
+		expect(diagEvents).toEqual([
+			{ kind: "send", transport: "ws" },
+			{ kind: "send", transport: "ws" },
+			{ kind: "ack", transport: "ws", ok: true, reason: undefined, latencyMs: 340 },
+			{ kind: "ack", transport: "ws", ok: false, reason: "stale_fix", latencyMs: 400 },
+			{ kind: "ack", transport: "ws", ok: true, reason: undefined, latencyMs: null },
+		]);
+		ch.stop();
+	});
+
+	it("reports a fix too old to send as dropped", () => {
+		const t = 100_000;
+		const diagEvents: unknown[] = [];
+		const { ch, h } = channel({ now: () => t });
+		(h as unknown as { onDiag: (e: unknown) => void }).onDiag = (e) => diagEvents.push(e);
+		ch.start();
+		ch.sendFix({ lat: 24.7, lng: 46.7, accuracy: 5, heading: null, speed: 10, at: t - 60_000 }, "balanced");
+		expect(diagEvents).toEqual([{ kind: "drop", reason: "too_old" }]);
+		ch.stop();
+	});
+
 	it("authenticates in the first frame, never in the URL", () => {
 		const { ch } = channel();
 		ch.start();

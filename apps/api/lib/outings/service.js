@@ -15,6 +15,7 @@
  */
 
 const v = require('./validate');
+const { sanitizeDiagnostics, outingRef } = require('./diagnostics');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -661,6 +662,20 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
   }
 
   /** Housekeeping: forget old fixes, end abandoned outings, drop dead invites. */
+  /* ---------- field-test diagnostics (opt-in, numbers only) ---------- */
+
+  async function recordDiagnostics(user, outingId, raw) {
+    /* Membership gates who may write; the row itself keeps no user and no outing id. */
+    await requireMember(user, outingId);
+    const r = sanitizeDiagnostics(raw);
+    if (!r.ok) throw err(r.error, 400);
+    await q(
+      `INSERT INTO sary.field_diagnostics (outing_ref, platform, browser, report) VALUES ($1, $2, $3, $4)`,
+      [outingRef(outingId), r.report.app.platform, r.report.app.browser, JSON.stringify(r.report)],
+    );
+    return { ok: true };
+  }
+
   async function sweep() {
     const retention = Math.round(cfg.positionRetentionHours * 3600);
     await q(`DELETE FROM sary.member_positions WHERE received_at < now() - make_interval(secs => $1)`, [retention]);
@@ -679,6 +694,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
       hub.closeRoom(id, 'outing_ended');
     }
     await q(`DELETE FROM sary.outing_invites WHERE expires_at < now() - interval '7 days'`);
+    await q(`DELETE FROM sary.field_diagnostics WHERE received_at < now() - interval '180 days'`).catch(() => undefined);
     const cutoff = now() - retention * 1000;
     for (const [oid, room] of latest) {
       for (const [uid, p] of room) if (new Date(p.received_at).getTime() < cutoff) room.delete(uid);
@@ -711,6 +727,7 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     setSharing,
     setNote,
     recordPosition,
+    recordDiagnostics,
     sweep,
   };
 }

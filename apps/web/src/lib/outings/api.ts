@@ -209,6 +209,8 @@ export const OutingsApi = {
 	poll: (id: string) => call<OutingSnapshot>("GET", `/${id}/live`),
 	heartbeat: (id: string, gps: GpsState) => call<{ ok: true }>("POST", `/${id}/heartbeat`, { gps }, { timeoutMs: 8_000 }),
 	sendPosition: (id: string, fix: unknown) => call<{ ok: true }>("POST", `/${id}/positions`, { fix }, { timeoutMs: 8_000 }),
+	/** Opt-in field-test aggregates: numbers only, re-validated by the server. */
+	sendDiagnostics: (id: string, report: unknown) => call<{ ok: true }>("POST", `/${id}/diagnostics`, { report }),
 	setStatus: (id: string, action: "start" | "pause" | "resume" | "end") =>
 		call<{ outing: OutingSnapshot["outing"] }>("POST", `/${id}/status`, { action }),
 	async rotateInvite(id: string, ttl_hours?: number): Promise<{ token: string; expires_at: string }> {

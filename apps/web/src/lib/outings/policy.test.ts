@@ -120,3 +120,19 @@ describe("geometry and display", () => {
 		expect(tweenMs(4000, 100, true)).toBe(0); // reduced motion
 	});
 });
+
+describe("FixFilter — reject reasons for the field test", () => {
+	it("says why it held a fix back", () => {
+		const f = new FixFilter();
+		expect(f.accept(north(0, 0))).not.toBeNull();
+		expect(f.lastReject).toBeNull();
+		expect(f.accept(north(10, 1_000, { accuracy: 400 }))).toBeNull();
+		expect(f.lastReject).toBe("accuracy");
+		expect(f.accept(north(10, 0))).toBeNull();
+		expect(f.lastReject).toBe("out_of_order");
+		expect(f.accept(north(5_000, 2_000))).toBeNull();
+		expect(f.lastReject).toBe("glitch");
+		expect(f.accept(north(20, 3_000))).not.toBeNull();
+		expect(f.lastReject).toBeNull();
+	});
+});

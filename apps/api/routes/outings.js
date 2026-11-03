@@ -39,6 +39,7 @@ function createOutingsRouter({ service, hub, limits = {} }) {
   const identityLimit = createRateLimiter({ limit: limits.identityPerHour ?? 10, windowMs: 60 * 60_000 });
   const inviteLimit = createRateLimiter({ limit: limits.invitePer10Min ?? 30, windowMs: 10 * 60_000 });
   const writeLimit = createRateLimiter({ limit: 120, windowMs: 60_000 });
+  const diagLimit = createRateLimiter({ limit: limits.diagnosticsPerHour ?? 6, windowMs: 60 * 60_000 });
 
   const auth = asyncHandler(async (req, res, next) => {
     const m = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
@@ -106,6 +107,13 @@ function createOutingsRouter({ service, hub, limits = {} }) {
     const r = await service.recordPosition(req.user, req.params.id, req.body?.fix);
     if (r.ok) hub?.touchPoll(req.params.id, req.user.id);
     res.status(r.ok ? 200 : r.reason === 'not_a_member' ? 404 : 409).json(r.ok ? { ok: true } : { ok: false, error: r.reason });
+  }));
+
+  /* Opt-in field-test aggregates. Numbers only — see lib/outings/diagnostics.js. */
+  router.post('/:id/diagnostics', auth, asyncHandler(async (req, res) => {
+    if (!diagLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    await service.recordDiagnostics(req.user, req.params.id, req.body?.report);
+    res.status(201).json({ ok: true });
   }));
 
   router.post('/:id/status', auth, asyncHandler(async (req, res) => {
