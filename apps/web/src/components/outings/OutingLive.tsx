@@ -7,19 +7,24 @@ import { useLocation } from "../../contexts/LocationContext";
 import { usePrefersReducedMotion } from "../../hooks/usePrefersReducedMotion";
 import {
 	inviteUrl,
+	loadGapKm,
 	loadInviteToken,
 	loadShareMode,
 	loadWakeLock,
 	OutingApiError,
 	OutingsApi,
 	outingErrorText,
+	saveGapKm,
 	saveShareMode,
 	saveWakeLock,
 	type Member,
 	type Position,
 } from "../../lib/outings/api";
 import { expiresIn } from "../../lib/outings/format";
-import { lastSeenAgeMs, positionAgeMs } from "../../lib/outings/outingState";
+import { lastSeenAgeMs, positionAgeMs, serverNow } from "../../lib/outings/outingState";
+import { wireFix } from "../../lib/outings/live";
+import { PinMarkers, type MapPin } from "../../lib/outings/pinMarker";
+import { arrived, batteryFresh, batteryLow, GapWatcher, type GapAlert, type GapInput } from "../../lib/outings/safety";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import { memberColors } from "../../lib/outings/carColors";
 import {
@@ -41,6 +46,7 @@ import type { IntelligenceMapPlaces } from "../../services/intelligenceService";
 import FarqBottomSheet, { sheetHeightPx, type SheetSnap } from "../intelligence/FarqBottomSheet";
 import { liveStateLabel, statusLabel } from "./labels";
 import { useLiveOuting } from "./useLiveOuting";
+import { BatteryBadge, MySosBanner, RallyCard, RallyPlacer, SosAlert, SosHoldButton, SosStrip, useAudioUnlock, useSiren, type SosAlertView } from "./OutingSafety";
 import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
@@ -65,7 +71,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const isRTL = language === "ar";
 	const navigate = useNavigate();
 	const reducedMotion = usePrefersReducedMotion();
-	const { userLocation, userHeading, userFixAt, userAccuracy, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
+	const { userLocation, userHeading, userFixAt, userAccuracy, userSpeed, locationPinKind, locationError, hasLocationPermission, requestLocation } = useLocation();
+	const userSpeedRef = useRef<number | null>(null);
+	userSpeedRef.current = userSpeed ?? null;
 	const [mode, setMode] = useState<ShareMode>(() => loadShareMode());
 	const live = useLiveOuting(outingId, mode);
 	const { view, liveState, closed, loadError, canSend, lastRefusal, visible, held, gpsState } = live;
@@ -88,6 +96,14 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [noteAlert, setNoteAlert] = useState<{ userId: string; name: string; text: string; color: string } | null>(null);
 	const [follow, setFollow] = useState(false);
 	const fittedRef = useRef(false);
+	/* Safety: SOS, gap alerts, rally point. */
+	const [gapKm, setGapKm] = useState(() => loadGapKm());
+	const [gapAlert, setGapAlert] = useState<{ userId: string; text: string; color: string } | null>(null);
+	const [placingRally, setPlacingRally] = useState(false);
+	const [sosBusy, setSosBusy] = useState(false);
+	const [dismissedSos, setDismissedSos] = useState<Set<string>>(() => new Set());
+	const pinsRef = useRef<PinMarkers | null>(null);
+	useAudioUnlock();
 
 	useEffect(() => {
 		if (!toast) return;
@@ -240,10 +256,186 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				weak: accuracyGrade(r.position!.accuracy) !== "good",
 				selected: r.member.user_id === selected,
 				color: colors.get(r.member.user_id) || "#e8eef0",
-				note: liveNote(r.member),
+				note: r.member.sos ? (isRTL ? "🆘 طوارئ" : "🆘 SOS") : liveNote(r.member),
 			}));
 		layer.sync(views);
 	}, [rows, selected, map, colors]);
+
+	/* ---------- safety ---------- */
+
+	const here = locationPinKind === "gps" ? userLocation : null;
+	const mySos = me ? view?.members.get(me.user_id)?.sos || null : null;
+	const sosKey = (uid: string, at: string) => `${uid}:${at}`;
+	const sosViews: SosAlertView[] = useMemo(() => {
+		if (!view) return [];
+		const out: SosAlertView[] = [];
+		for (const m of view.members.values()) {
+			if (!m.sos || m.user_id === me?.user_id) continue;
+			const f = m.sos.fix;
+			out.push({
+				userId: m.user_id,
+				name: m.display_name,
+				phone: m.phone || null,
+				sos: m.sos,
+				distanceM: f && here ? haversineMeters(here, f) : null,
+				bearing: f && here ? bearingDeg(here, f) : null,
+				fixAgeMs: f ? Math.max(0, serverNow(view, now) - new Date(f.recorded_at).getTime()) : null,
+			});
+		}
+		return out.sort((a, b) => b.sos.at.localeCompare(a.sos.at));
+	}, [view, me?.user_id, here, now]);
+	const sosViewsRef = useRef(sosViews);
+	sosViewsRef.current = sosViews;
+	const sosOpen = sosViews.find((a) => !dismissedSos.has(sosKey(a.userId, a.sos.at))) || null;
+	useSiren(Boolean(sosOpen));
+
+	/* «أنا بخير» from someone: say so once on everyone else's screen. */
+	const prevSosRef = useRef<Map<string, string>>(new Map());
+	useEffect(() => {
+		if (!view) return;
+		const cur = new Map<string, string>();
+		for (const m of view.members.values()) if (m.sos) cur.set(m.user_id, m.display_name);
+		for (const [uid, name] of prevSosRef.current) {
+			if (!cur.has(uid) && uid !== me?.user_id && view.members.has(uid)) setToast(isRTL ? `${name} بخير ✓` : `${name} is OK ✓`);
+		}
+		prevSosRef.current = cur;
+	}, [view, me?.user_id, isRTL]);
+
+	/* My last real GPS fix, for the SOS. Never an estimate; null when there is none. */
+	const myFix = () =>
+		locationPinKind === "gps" && userLocation && userFixAt != null
+			? wireFix({ lat: userLocation.lat, lng: userLocation.lng, accuracy: userAccuracy, heading: userHeading, speed: null, at: userFixAt }, mode)
+			: null;
+	const sosFixAtRef = useRef<number | null>(null);
+	const raiseSos = async () => {
+		setSosBusy(true);
+		setActionError(null);
+		const fix = myFix();
+		try {
+			try {
+				await OutingsApi.sos(outingId, fix);
+			} catch (e) {
+				/* A fix too old to help still must not stop the call for help. */
+				if (e instanceof OutingApiError && e.code === "sos_fix_stale") await OutingsApi.sos(outingId, null);
+				else throw e;
+			}
+			sosFixAtRef.current = fix ? userFixAt : null;
+			requestLocation();
+			await live.reload();
+		} catch (e) {
+			setActionError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
+		} finally {
+			setSosBusy(false);
+		}
+	};
+	const cancelSos = async () => {
+		setSosBusy(true);
+		try {
+			await OutingsApi.cancelSos(outingId);
+			sosFixAtRef.current = null;
+			await live.reload();
+			setToast(isRTL ? "أُلغي نداء الطوارئ ✓" : "SOS cancelled ✓");
+		} catch (e) {
+			setActionError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
+		} finally {
+			setSosBusy(false);
+		}
+	};
+	/* While my SOS is out, hand the group each newer real fix (at most every 20 s). */
+	useEffect(() => {
+		if (!mySos || locationPinKind !== "gps" || userFixAt == null) return;
+		if (sosFixAtRef.current != null && userFixAt - sosFixAtRef.current < 20_000) return;
+		const fix = myFix();
+		if (!fix) return;
+		sosFixAtRef.current = userFixAt;
+		OutingsApi.sos(outingId, fix).catch(() => undefined);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [Boolean(mySos), userFixAt, locationPinKind]);
+
+	/* Gap alert: someone far from the group's median, or parked while it moves. Once per episode. */
+	const gapRef = useRef(new GapWatcher(gapKm));
+	gapRef.current.thresholdKm = gapKm;
+	const lowWarnedRef = useRef<Set<string>>(new Set());
+	useEffect(() => {
+		if (!view || !me || outing?.status !== "active") return;
+		const people: GapInput[] = rows
+			.filter((r) => r.position && r.fresh && r.fresh !== "lost")
+			.map((r) => ({ userId: r.member.user_id, name: r.member.display_name, lat: r.position!.lat, lng: r.position!.lng, speed: r.position!.speed }));
+		if (here) people.push({ userId: me.user_id, name: "", lat: here.lat, lng: here.lng, speed: userSpeedRef.current, me: true });
+		gapRef.current.retain(new Set(view.members.keys()));
+		const alerts = gapRef.current.update(people, Date.now());
+		const color = (id: string) => colors.get(id) || "#e8eef0";
+		const say = (a: GapAlert) =>
+			a.kind === "far"
+				? isRTL ? `${a.name} متأخر ${formatDistance(a.distanceM, true)} عن المجموعة` : `${a.name} is ${formatDistance(a.distanceM, false)} from the group`
+				: isRTL ? `${a.name} واقف من ${formatNumber(Math.round(a.parkedMs / 60_000), true)} د والمجموعة تمشي` : `${a.name} has been stopped ${Math.round(a.parkedMs / 60_000)} min while the group moves`;
+		let next: { userId: string; text: string; color: string } | null = alerts[0] ? { userId: alerts[0].userId, text: say(alerts[0]), color: color(alerts[0].userId) } : null;
+		/* Battery under 15 % and not charging: one warning per person until it recovers. */
+		const sNow = serverNow(view, Date.now());
+		for (const m of view.members.values()) {
+			if (m.user_id === me.user_id) continue;
+			if (batteryLow(m.battery, sNow)) {
+				if (lowWarnedRef.current.has(m.user_id)) continue;
+				lowWarnedRef.current.add(m.user_id);
+				next = next || { userId: m.user_id, text: isRTL ? `بطارية ${m.display_name} ضعيفة ${formatNumber(Math.round(m.battery!.level * 100), true)}٪` : `${m.display_name}'s battery is low (${Math.round(m.battery!.level * 100)}%)`, color: color(m.user_id) };
+			} else if (m.battery && (m.battery.charging || m.battery.level >= 0.2)) lowWarnedRef.current.delete(m.user_id);
+		}
+		if (next) {
+			setGapAlert(next);
+			try {
+				navigator.vibrate?.(120);
+			} catch {
+				/* */
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [rows, here, outing?.status]);
+
+	useEffect(() => {
+		if (!gapAlert) return;
+		const t = window.setTimeout(() => setGapAlert(null), 8_000);
+		return () => window.clearTimeout(t);
+	}, [gapAlert]);
+
+	/* Rally point: who is there (≤150 m), counting only positions we would show. */
+	const rally = outing?.rally || null;
+	const rallyArrived = useMemo(() => {
+		if (!rally) return [] as string[];
+		const names = rows.filter((r) => r.position && r.fresh && r.fresh !== "lost" && arrived(rally, r.position)).map((r) => r.member.display_name);
+		if (here && arrived(rally, here)) names.unshift(isRTL ? "أنت" : "You");
+		return names;
+	}, [rally, rows, here, isRTL]);
+	const setRallyAt = async (p: { lat: number; lng: number }) => {
+		await run(() => OutingsApi.setRally(outingId, p));
+		setPlacingRally(false);
+		setSnap("half");
+		setToast(isRTL ? "حُدّدت نقطة التجمع ✓" : "Rally point set ✓");
+	};
+
+	/* Pins: the rally point, and the SOS fix of anyone calling for help. */
+	useEffect(() => {
+		if (!map) return;
+		const layer = new PinMarkers(map, (pin) => {
+			if (pin.kind === "sos") setDismissedSos((d) => {
+				const n = new Set(d);
+				for (const a of sosViewsRef.current) if (`sos-${a.userId}` === pin.id) n.delete(sosKey(a.userId, a.sos.at));
+				return n;
+			});
+			else setFocus({ lat: pin.lat, lng: pin.lng, id: `rally-${Date.now()}`, kind: "locate", zoom: 15 });
+		});
+		pinsRef.current = layer;
+		return () => {
+			layer.destroy();
+			pinsRef.current = null;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [map]);
+	useEffect(() => {
+		const pins: MapPin[] = [];
+		if (rally) pins.push({ id: "rally", kind: "rally", lat: rally.lat, lng: rally.lng, label: rally.label || (isRTL ? "نقطة التجمع" : "Rally point") });
+		for (const a of sosViews) if (a.sos.fix) pins.push({ id: `sos-${a.userId}`, kind: "sos", lat: a.sos.fix.lat, lng: a.sos.fix.lng, label: a.name });
+		pinsRef.current?.sync(pins);
+	}, [rally, sosViews, map, isRTL]);
 
 	const groupBounds = (only?: string): [number, number, number, number] | null => {
 		const pts: Array<{ lat: number; lng: number }> = rows.filter((r) => r.position && (!only || r.member.user_id === only)).map((r) => r.position!);
@@ -424,7 +616,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	}
 
 	const selectedRow = rows.find((r) => r.member.user_id === selected) || null;
-	void userFixAt;
 	void locationError;
 	const gpsProblem =
 		hasLocationPermission === false || gpsState === "denied"
@@ -525,6 +716,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				) : null}
 			</div>
 
+			{me && outing && outing.status !== "ended" && !mySos ? (
+				<SosHoldButton
+					isRTL={isRTL}
+					disabled={sosBusy}
+					onTrigger={() => void raiseSos()}
+					onShortPress={() => setToast(isRTL ? "اضغط مطولًا ثانية كاملة لإرسال نداء الطوارئ" : "Press and hold for a full second to send an SOS")}
+				/>
+			) : null}
+
 			<FarqBottomSheet
 				snap={snap}
 				onSnap={setSnap}
@@ -585,6 +785,26 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							onRemove={() => setConfirm({ kind: "remove", userId: selectedRow.member.user_id, name: selectedRow.member.display_name })}
 						/>
 					) : (
+						<>
+						<RallyCard
+							rally={rally}
+							isRTL={isRTL}
+							isOwner={isOwner}
+							canEdit={outing?.status !== "ended"}
+							busy={busy}
+							distanceM={rally && here ? haversineMeters(here, rally) : null}
+							bearing={rally && here ? bearingDeg(here, rally) : null}
+							arrivedNames={rallyArrived}
+							total={rows.length + 1}
+							onShow={() => rally && (setFollow(false), setKeepGroup(false), setFocus({ lat: rally.lat, lng: rally.lng, id: `rally-${Date.now()}`, kind: "locate", zoom: 15 }))}
+							onPlace={() => {
+								setPlacingRally(true);
+								setKeepGroup(false);
+								setFollow(false);
+								setSnap("peek");
+							}}
+							onClear={() => void run(() => OutingsApi.clearRally(outingId))}
+						/>
 						<ul className="sary-o-members" data-testid="outing-members">
 							<li className="sary-o-member is-me">
 								<Face name={me ? view?.members.get(me.user_id)?.display_name || "" : ""} avatar={me ? view?.members.get(me.user_id)?.avatar || null : null} color={myColor} />
@@ -607,7 +827,10 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 											</strong>
 											<span>{memberLine(r, isRTL)}</span>
 										</div>
-										<StatusPill row={r} isRTL={isRTL} />
+										{r.member.sos ? <span className="sary-o-pill" data-kind="sos" data-testid="outing-member-sos">SOS</span> : <StatusPill row={r} isRTL={isRTL} />}
+										{view && batteryFresh(r.member.battery, serverNow(view, now)) ? (
+											<BatteryBadge level={r.member.battery.level} charging={r.member.battery.charging} low={batteryLow(r.member.battery, serverNow(view, now))} isRTL={isRTL} />
+										) : null}
 										{r.distanceM != null && r.bearing != null ? (
 											<span className="sary-o-dist" data-testid="outing-member-distance">
 												<span className="sary-o-compass" style={{ transform: `rotate(${r.bearing}deg)` }} aria-hidden="true">↑</span>
@@ -622,6 +845,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								<li className="sary-o-note">{isRTL ? "لا أحد بعد — أرسل رابط الدعوة لأصحابك." : "Nobody yet — send the invite link."}</li>
 							) : null}
 						</ul>
+						</>
 					)
 				) : null}
 
@@ -758,6 +982,32 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								? "المشاركة تعمل والتطبيق مفتوح على هذه الشاشة فقط؛ إذا أُغلقت الشاشة أو خرجت منها يتوقف الإرسال."
 								: "Sharing runs only while this screen is open; locking the phone or leaving stops it."}
 						</p>
+						<div className="sary-o-modes" role="radiogroup" aria-label={isRTL ? "تنبيه الابتعاد عن المجموعة" : "Gap alert"} data-testid="outing-gap">
+							<span className="sary-o-modes-label">{isRTL ? "نبّهني إذا ابتعد أحد عن المجموعة" : "Alert me when someone falls behind"}</span>
+							<div className="sary-o-seg">
+								{[0, 1, 3, 5, 10].map((km) => (
+									<button
+										key={km}
+										type="button"
+										role="radio"
+										aria-checked={gapKm === km}
+										className={gapKm === km ? "is-on" : undefined}
+										onClick={() => {
+											setGapKm(km);
+											saveGapKm(km);
+										}}
+										data-testid={`outing-gap-${km}`}
+									>
+										{km === 0 ? (isRTL ? "إيقاف" : "Off") : isRTL ? `${formatNumber(km, true)} كم` : `${km} km`}
+									</button>
+								))}
+							</div>
+							<p className="sary-o-note">
+								{isRTL
+									? "تنبيه واحد لكل مرة: إذا ابتعد أحد عن وسط المجموعة أكثر من هذه المسافة، أو وقف ١٠ دقائق والمجموعة تمشي."
+									: "One alert each time: when someone is farther than this from the middle of the group, or stopped 10 min while the group moves."}
+							</p>
+						</div>
 
 						{isOwner ? (
 							<div className="sary-o-row">
@@ -915,6 +1165,67 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					<strong>{noteAlert.name}</strong>
 					<span>{noteAlert.text}</span>
 				</button>
+			) : null}
+
+			{!noteAlert && gapAlert ? (
+				<button
+					type="button"
+					className="sary-o-alert"
+					role="alert"
+					style={{ "--car": gapAlert.color } as React.CSSProperties}
+					onClick={() => {
+						setSelected(gapAlert.userId);
+						setPanel("members");
+						setSnap("half");
+						fitWith(gapAlert.userId);
+						setGapAlert(null);
+					}}
+					data-testid="outing-gap-alert"
+				>
+					<i aria-hidden="true" />
+					<span>{gapAlert.text}</span>
+				</button>
+			) : null}
+
+			{placingRally ? (
+				<RallyPlacer
+					map={map}
+					isRTL={isRTL}
+					busy={busy}
+					canUseMe={Boolean(here)}
+					onConfirm={(p) => void setRallyAt(p)}
+					onUseMe={() => here && void setRallyAt(here)}
+					onCancel={() => {
+						setPlacingRally(false);
+						setSnap("half");
+					}}
+				/>
+			) : null}
+
+			{mySos ? <MySosBanner isRTL={isRTL} busy={sosBusy} onCancel={() => void cancelSos()} /> : null}
+			{!mySos && !sosOpen && sosViews.length ? (
+				<SosStrip names={sosViews.map((a) => a.name)} isRTL={isRTL} onOpen={() => setDismissedSos(new Set())} />
+			) : null}
+			{sosOpen ? (
+				<SosAlert
+					alert={sosOpen}
+					isRTL={isRTL}
+					onShow={() => {
+						const f = sosOpen.sos.fix;
+						setDismissedSos((d) => new Set(d).add(sosKey(sosOpen.userId, sosOpen.sos.at)));
+						if (!f) return;
+						setFollow(false);
+						setKeepGroup(false);
+						setSelected(sosOpen.userId);
+						setPanel("members");
+						const b = here
+							? ([Math.min(here.lng, f.lng) - 0.0006, Math.min(here.lat, f.lat) - 0.0006, Math.max(here.lng, f.lng) + 0.0006, Math.max(here.lat, f.lat) + 0.0006] as [number, number, number, number])
+							: null;
+						if (b) frame(b, `sos-${Date.now()}`);
+						else setFocus({ lat: f.lat, lng: f.lng, id: `sos-${Date.now()}`, kind: "locate", zoom: 15.5 });
+					}}
+					onDismiss={() => setDismissedSos((d) => new Set(d).add(sosKey(sosOpen.userId, sosOpen.sos.at)))}
+				/>
 			) : null}
 
 			{toast ? (

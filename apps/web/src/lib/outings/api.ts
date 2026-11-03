@@ -12,6 +12,7 @@ const IDENTITY_KEY = "sary.outings.identity.v1";
 const INVITES_KEY = "sary.outings.invites.v1";
 const MODE_KEY = "sary.outings.mode.v1";
 const WAKE_KEY = "sary.outings.wake.v1";
+const GAP_KEY = "sary.outings.gapKm.v1";
 
 export type Identity = { token: string; user: PublicUser };
 export type PublicUser = { id: string; display_name: string; avatar: string | null; phone?: string | null };
@@ -34,9 +35,21 @@ export type Member = {
 	gps?: GpsState | null;
 	/** A short line they put over their car («بوقف عند المحطة»); gone after 15 min. */
 	note?: MemberNote | null;
+	/** Battery Status API reading from their heartbeat; null where the phone cannot tell (iOS). */
+	battery?: Battery | null;
+	/** An active call for help, until they say «أنا بخير». */
+	sos?: Sos | null;
 };
 
 export type MemberNote = { text: string; at: string };
+
+export type Battery = { level: number; charging: boolean; at: string };
+
+/** The sender's last real fix at the moment of the SOS, with that fix's own time. */
+export type SosFix = { lat: number; lng: number; accuracy: number | null; recorded_at: string };
+export type Sos = { at: string; fix: SosFix | null };
+
+export type Rally = { lat: number; lng: number; label: string | null; set_at: string | null; set_by: string | null };
 
 export type GpsState = "ok" | "weak" | "unavailable" | "denied";
 
@@ -61,6 +74,8 @@ export type OutingSnapshot = {
 		created_at: string;
 		started_at: string | null;
 		ended_at: string | null;
+		/** The owner's meeting pin («نقطة التجمع»), if any. */
+		rally?: Rally | null;
 	};
 	me: { user_id: string; role: "owner" | "member"; sharing: boolean };
 	members: Member[];
@@ -157,6 +172,16 @@ export function saveWakeLock(on: boolean): void {
 	safeSet("localStorage", WAKE_KEY, on ? "1" : "0");
 }
 
+/** Gap alert distance in km; 0 = off. Default 3. */
+export function loadGapKm(): number {
+	const n = Number(safeGet("localStorage", GAP_KEY));
+	return safeGet("localStorage", GAP_KEY) != null && Number.isFinite(n) && n >= 0 && n <= 50 ? n : 3;
+}
+
+export function saveGapKm(km: number): void {
+	safeSet("localStorage", GAP_KEY, String(km));
+}
+
 async function call<T>(method: string, path: string, body?: unknown, { auth = true, timeoutMs = 12_000 } = {}): Promise<T> {
 	const id = loadIdentity();
 	const controller = new AbortController();
@@ -207,7 +232,8 @@ export const OutingsApi = {
 	},
 	get: (id: string) => call<OutingSnapshot>("GET", `/${id}`),
 	poll: (id: string) => call<OutingSnapshot>("GET", `/${id}/live`),
-	heartbeat: (id: string, gps: GpsState) => call<{ ok: true }>("POST", `/${id}/heartbeat`, { gps }, { timeoutMs: 8_000 }),
+	heartbeat: (id: string, gps: GpsState, battery?: { level: number; charging: boolean } | null) =>
+		call<{ ok: true }>("POST", `/${id}/heartbeat`, battery ? { gps, battery } : { gps }, { timeoutMs: 8_000 }),
 	sendPosition: (id: string, fix: unknown) => call<{ ok: true }>("POST", `/${id}/positions`, { fix }, { timeoutMs: 8_000 }),
 	setStatus: (id: string, action: "start" | "pause" | "resume" | "end") =>
 		call<{ outing: OutingSnapshot["outing"] }>("POST", `/${id}/status`, { action }),
@@ -221,6 +247,10 @@ export const OutingsApi = {
 		saveInviteToken(id, null);
 	},
 	note: (id: string, text: string) => call<{ note: MemberNote | null }>("POST", `/${id}/note`, { text }),
+	sos: (id: string, fix: unknown | null) => call<{ sos: Sos }>("POST", `/${id}/sos`, { fix }),
+	cancelSos: (id: string) => call<{ sos: null }>("DELETE", `/${id}/sos`),
+	setRally: (id: string, rally: { lat: number; lng: number; label?: string | null }) => call<{ rally: Rally }>("PUT", `/${id}/rally`, rally),
+	clearRally: (id: string) => call<{ rally: null }>("DELETE", `/${id}/rally`),
 	setSharing: (id: string, sharing: boolean) => call<{ sharing: boolean }>("PATCH", `/${id}/me`, { sharing }),
 	leave: (id: string) => call<{ ended: boolean }>("POST", `/${id}/leave`),
 	removeMember: (id: string, userId: string) => call("DELETE", `/${id}/members/${userId}`),
@@ -245,6 +275,9 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		too_frequent: "انتظر ثانيتين ثم أرسل.",
 		invalid_note: "اكتب عبارة قصيرة.",
 		invalid_phone: "اكتب رقم جوال صحيح، مثل 05XXXXXXXX.",
+		invalid_rally: "تعذّر تحديد نقطة التجمع. حرّك الخريطة وأعد المحاولة.",
+		sos_fix_stale: "آخر موقع لك قديم جدًا؛ أُرسل النداء بدون موقع.",
+		invalid_fix: "تعذّر قراءة موقعك.",
 		network: "لا يوجد اتصال بالإنترنت.",
 		timeout: "الشبكة بطيئة. أعد المحاولة.",
 		outings_unconfigured: "الطلعات المشتركة غير مفعّلة على الخادم.",
@@ -265,6 +298,9 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		too_frequent: "Wait a couple of seconds, then send.",
 		invalid_note: "Write a short line.",
 		invalid_phone: "Enter a valid phone number, e.g. +9665XXXXXXXX.",
+		invalid_rally: "Could not set the rally point. Move the map and try again.",
+		sos_fix_stale: "Your last position is too old; the alert went out without it.",
+		invalid_fix: "Could not read your position.",
 		network: "You are offline.",
 		timeout: "The network is slow. Try again.",
 		outings_unconfigured: "Shared outings are not enabled on the server.",

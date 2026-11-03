@@ -682,9 +682,14 @@ function createOutingsService({ pool, events = noopEvents(), config = {}, now = 
     };
   }
 
+  /** Who may place the meeting pin. One place to widen it (e.g. to co-leaders). */
+  function requireRallyEditor(user, outingId) {
+    return requireOwner(user, outingId);
+  }
+
   /** Owner drops, moves (same call) or clears (raw === null) the meeting pin. */
   async function setRally(user, outingId, raw) {
-    const m = await requireOwner(user, outingId);
+    const m = await requireRallyEditor(user, outingId);
     if (m.outing_status === 'ended') throw err('outing_ended', 409);
     let row;
     if (raw === null) {
