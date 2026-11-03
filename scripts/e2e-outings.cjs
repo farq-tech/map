@@ -271,7 +271,8 @@ async function waitFor(fn, ms = 15_000, step = 250) {
 
   await check('history lists the ended outing, without any positions', async () => {
     await B.page.goto(`${BASE}/outings`);
-    await B.page.getByTestId('outing-history').waitFor();
+    /* The list loads after the heading: wait for the row, not the box. */
+    await B.page.getByTestId('outing-history').getByText('طلعة الثمامة').first().waitFor({ timeout: 15000 });
     const t = await B.page.getByTestId('outing-history').innerText();
     if (!/طلعة الثمامة/.test(t) || !/انتهت/.test(t)) throw new Error(t);
     await shot(B, '13-history');
