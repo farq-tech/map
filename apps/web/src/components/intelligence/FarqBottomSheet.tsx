@@ -53,6 +53,9 @@ export default function FarqBottomSheet({
 	const [dragDy, setDragDy] = useState(0);
 
 	const onPointerDown = (ev: ReactPointerEvent<HTMLDivElement>) => {
+		/* A tap on a control in the rail is the control's, not a drag: capturing
+		 * the pointer here would retarget its click to the handle and swallow it. */
+		if ((ev.target as HTMLElement).closest?.("button, a, input, select, textarea, label, [role='tab']")) return;
 		ev.currentTarget.setPointerCapture(ev.pointerId);
 		dragRef.current = { pointerId: ev.pointerId, startY: ev.clientY, moved: false };
 		setDragDy(0);

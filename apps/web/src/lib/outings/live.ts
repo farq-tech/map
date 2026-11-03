@@ -73,9 +73,17 @@ export function backoffMs(attempt: number, rand = Math.random()): number {
 	return Math.round(cap / 2 + (cap / 2) * rand);
 }
 
+/**
+ * The deployed web app is served by Vercel, whose rewrites (vercel.json) proxy
+ * /api to the Railway API but cannot carry a WebSocket. On those hosts the
+ * socket goes straight to the same Railway API vercel.json already names.
+ */
+export const DEPLOYED_API_WS = "wss://api-production-ddc84.up.railway.app/api/outings/live";
+
 export function liveSocketUrl(): string {
 	const explicit = import.meta.env?.VITE_LIVE_WS_URL;
 	if (explicit && String(explicit).trim()) return String(explicit).trim();
+	if (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")) return DEPLOYED_API_WS;
 	const base = API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
 	return `${base.replace(/^http/, "ws")}/api/outings/live`;
 }
@@ -190,7 +198,16 @@ export class LiveChannel {
 		this.clearRetry();
 		/* Sockets never worked on this network: keep the fallback going while we retry. */
 		if (this.wasPolling && !this.everReady) this.startPolling();
-		if (this.ws && this.ws.readyState <= 1) return;
+		/* A healthy live socket stays. Anything else — including a socket that
+		 * looked open through an outage — is replaced: it may be half-dead. */
+		if (this.ws && this.ws.readyState <= 1 && this.state === "live") return;
+		const old = this.ws;
+		this.ws = null;
+		try {
+			old?.close();
+		} catch {
+			/* */
+		}
 		this.connect();
 	}
 

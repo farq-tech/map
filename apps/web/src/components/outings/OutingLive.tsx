@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight, Navigation } from "lucide-react";
 import type { Map as MapboxMap } from "mapbox-gl";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
@@ -17,6 +18,7 @@ import {
 	type Member,
 	type Position,
 } from "../../lib/outings/api";
+import { expiresIn } from "../../lib/outings/format";
 import { lastSeenAgeMs, positionAgeMs } from "../../lib/outings/outingState";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import {
@@ -31,11 +33,14 @@ import {
 	type Freshness,
 	type ShareMode,
 } from "../../lib/outings/policy";
-import { haversineMeters } from "../../lib/sary/domain";
+import { directionsUrl, formatNumber, formatTime, haversineMeters } from "../../lib/sary/domain";
+import { usePageMeta } from "../../lib/usePageMeta";
+import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import type { IntelligenceMapPlaces } from "../../services/intelligenceService";
 import FarqBottomSheet, { sheetHeightPx, type SheetSnap } from "../intelligence/FarqBottomSheet";
 import { liveStateLabel, statusLabel } from "./labels";
 import { useLiveOuting } from "./useLiveOuting";
+import "../../styles/sary-map.css";
 import "../../styles/outings.css";
 
 const FarqMap = lazy(() => import("../intelligence/FarqMap"));
@@ -66,7 +71,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [panel, setPanel] = useState<OutingPanel>(initialPanel || "members");
 	const [snap, setSnap] = useState<SheetSnap>(initialPanel === "invite" ? "half" : "peek");
 	const [selected, setSelected] = useState<string | null>(null);
-	const [confirmEnd, setConfirmEnd] = useState(false);
+	/* One in-app confirmation for every irreversible step (no browser dialogs). */
+	const [confirm, setConfirm] = useState<{ kind: "end" | "leave" | "remove"; userId?: string; name?: string } | null>(null);
+	const [toast, setToast] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [now, setNow] = useState(() => Date.now());
@@ -77,6 +84,12 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const fittedRef = useRef(false);
 
 	useEffect(() => {
+		if (!toast) return;
+		const t = window.setTimeout(() => setToast(null), 2_000);
+		return () => window.clearTimeout(t);
+	}, [toast]);
+
+	useEffect(() => {
 		const t = window.setInterval(() => setNow(Date.now()), 5_000);
 		return () => window.clearInterval(t);
 	}, []);
@@ -84,6 +97,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const me = view?.snapshot.me;
 	const outing = view?.snapshot.outing;
 	const isOwner = me?.role === "owner";
+
+	useSaryChrome();
+	usePageMeta({
+		title: outing?.name
+			? isRTL ? `${outing.name} — طلعة مشتركة · سَرى البارق` : `${outing.name} — Shared outing · Sary Albarq`
+			: isRTL ? "طلعة مشتركة · سَرى البارق" : "Shared outing · Sary Albarq",
+		path: `/outings/${outingId}`,
+		robots: "noindex",
+	});
 
 	const rows: Row[] = useMemo(() => {
 		if (!view) return [];
@@ -279,7 +301,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const header = (
 		<span data-testid="outing-summary">
 			{isRTL
-				? `${(rows.length + 1).toLocaleString("ar-SA")} مشارك · ${liveCount.toLocaleString("ar-SA")} مباشر`
+				? `${formatNumber(rows.length + 1, true)} مشارك · ${formatNumber(liveCount, true)} مباشر`
 				: `${rows.length + 1} members · ${liveCount} live`}
 			{rows[0]?.distanceM != null ? ` · ${isRTL ? "الأقرب" : "nearest"} ${formatDistance(rows[0].distanceM, isRTL)}` : ""}
 		</span>
@@ -289,7 +311,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const invite = view?.snapshot.invite;
 
 	return (
-		<div className="sary-o-live" dir={isRTL ? "rtl" : "ltr"} data-testid="outing-live">
+		<div className="sary-o-live" dir={isRTL ? "rtl" : "ltr"} data-testid="outing-live" data-snap={snap}>
 			<div className="sary-o-map">
 				<Suspense fallback={<div className="sary-map-fallback" />}>
 					<FarqMap
@@ -316,7 +338,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 
 			<header className="sary-o-bar">
 				<button type="button" className="sary-o-round" onClick={() => void navigate({ to: "/outings" })} aria-label={isRTL ? "رجوع" : "Back"}>
-					{isRTL ? "→" : "←"}
+					{isRTL ? <ChevronRight className="size-5" aria-hidden /> : <ChevronLeft className="size-5" aria-hidden />}
 				</button>
 				<div className="sary-o-title">
 					<strong data-testid="outing-title">{outing?.name || "…"}</strong>
@@ -351,6 +373,21 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				testId="outing-sheet"
 				header={header}
 				rail={
+					<>
+					{isOwner && outing?.status === "created" ? (
+						<div className="sary-o-stage" data-testid="outing-stage">
+							<p>{isRTL ? "شارك الرابط مع أصحابك ثم ابدأ" : "Share the link with your friends, then start"}</p>
+							<button type="button" className="sary-o-primary" disabled={busy} onClick={() => void run(() => OutingsApi.setStatus(outingId, "start"))} data-testid="outing-start">
+								{isRTL ? "ابدأ الطلعة" : "Start the outing"}
+							</button>
+						</div>
+					) : !isOwner && outing?.status === "created" ? (
+						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار صاحب الطلعة ليبدأ" : "Waiting for the owner to start"}</p>
+					) : outing?.status === "paused" ? (
+						<p className="sary-o-stage-line" data-testid="outing-stage">
+							{isOwner ? (isRTL ? "أوقفت الطلعة مؤقتًا — المشاركة متوقفة للجميع" : "You paused the outing — sharing is off for everyone") : isRTL ? "صاحب الطلعة أوقفها مؤقتًا" : "The owner paused the outing"}
+						</p>
+					) : null}
 					<div className="sary-o-tabs" role="tablist">
 						{(["members", ...(isOwner ? ["invite"] : []), "settings"] as OutingPanel[]).map((p) => (
 							<button
@@ -368,12 +405,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								{p === "members" ? (isRTL ? "المشاركون" : "Members") : p === "invite" ? (isRTL ? "الدعوة" : "Invite") : isRTL ? "الإعدادات" : "Settings"}
 							</button>
 						))}
-						{isOwner && outing?.status === "created" ? (
-							<button type="button" className="sary-o-primary sary-o-inline" disabled={busy} onClick={() => void run(() => OutingsApi.setStatus(outingId, "start"))} data-testid="outing-start">
-								{isRTL ? "ابدأ الطلعة" : "Start"}
-							</button>
-						) : null}
 					</div>
+					</>
 				}
 			>
 				{actionError ? <p className="sary-o-error" role="alert">{actionError}</p> : null}
@@ -394,11 +427,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								setFollow(false);
 								setFocus({ lat: selectedRow.position.lat, lng: selectedRow.position.lng, id: `peer-${Date.now()}`, kind: "select", zoom: 15 });
 							}}
-							onRemove={() => {
-								if (!window.confirm(isRTL ? `إزالة ${selectedRow.member.display_name} من الطلعة؟ لن يستطيع العودة.` : `Remove ${selectedRow.member.display_name}? They cannot rejoin.`)) return;
-								setSelected(null);
-								void run(() => OutingsApi.removeMember(outingId, selectedRow.member.user_id));
-							}}
+							onRemove={() => setConfirm({ kind: "remove", userId: selectedRow.member.user_id, name: selectedRow.member.display_name })}
 						/>
 					) : (
 						<ul className="sary-o-members" data-testid="outing-members">
@@ -420,6 +449,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 											</strong>
 											<span>{memberLine(r, isRTL)}</span>
 										</div>
+										<StatusPill row={r} isRTL={isRTL} />
 										{r.distanceM != null && r.bearing != null ? (
 											<span className="sary-o-dist" data-testid="outing-member-distance">
 												<span className="sary-o-compass" style={{ transform: `rotate(${r.bearing}deg)` }} aria-hidden="true">↑</span>
@@ -442,8 +472,8 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						{inviteToken && invite?.active ? (
 							<>
 								<p className="sary-o-note">
-									{isRTL ? "أي شخص معه هذا الرابط يستطيع الانضمام حتى" : "Anyone with this link can join until"}{" "}
-									{invite.expires_at ? new Date(invite.expires_at).toLocaleString(isRTL ? "ar-SA" : "en") : ""}
+									{isRTL ? "أي شخص معه هذا الرابط يستطيع الانضمام" : "Anyone with this link can join"}
+									{invite.expires_at ? ` · ${expiresIn(invite.expires_at, isRTL, now)}` : ""}
 								</p>
 								<input className="sary-o-link" readOnly value={inviteUrl(inviteToken)} onFocus={(e) => e.currentTarget.select()} data-testid="outing-invite-link" dir="ltr" />
 								<div className="sary-o-row">
@@ -462,14 +492,25 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 													/* cancelled — fall through to copy */
 												}
 											}
-											await navigator.clipboard?.writeText(url).catch(() => undefined);
+											const ok = await navigator.clipboard?.writeText(url).then(() => true, () => false);
 											setActionError(null);
+											setToast(ok ? (isRTL ? "تم نسخ الرابط ✓" : "Link copied ✓") : isRTL ? "انسخ الرابط من الحقل أعلاه" : "Copy the link from the field above");
 										}}
 										data-testid="outing-invite-share"
 									>
 										{isRTL ? "مشاركة الرابط" : "Share link"}
 									</button>
-									<button type="button" className="sary-o-secondary" onClick={() => void navigator.clipboard?.writeText(inviteUrl(inviteToken))}>
+									<button
+										type="button"
+										className="sary-o-secondary"
+										onClick={() =>
+											void navigator.clipboard?.writeText(inviteUrl(inviteToken)).then(
+												() => setToast(isRTL ? "تم نسخ الرابط ✓" : "Link copied ✓"),
+												() => setToast(isRTL ? "انسخ الرابط من الحقل أعلاه" : "Copy the link from the field above"),
+											)
+										}
+										data-testid="outing-invite-copy"
+									>
 										{isRTL ? "نسخ" : "Copy"}
 									</button>
 								</div>
@@ -515,29 +556,34 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						<p className="sary-o-note">
 							{isRTL ? "عند الإيقاف يُحذف موقعك من الخادم فورًا ولا يراه أحد." : "Turning it off deletes your position from the server at once."}
 						</p>
-						<fieldset className="sary-o-modes">
-							<legend>{isRTL ? "سرعة التحديث" : "Update rate"}</legend>
-							{(["precise", "balanced", "saver"] as ShareMode[]).map((m) => (
-								<label key={m}>
-									<input
-										type="radio"
-										name="share-mode"
-										checked={mode === m}
-										onChange={() => {
+						<div className="sary-o-modes" role="radiogroup" aria-label={isRTL ? "سرعة التحديث" : "Update rate"} data-testid="outing-rate">
+							<span className="sary-o-modes-label">{isRTL ? "سرعة التحديث" : "Update rate"}</span>
+							<div className="sary-o-seg">
+								{(["saver", "balanced", "precise"] as ShareMode[]).map((m) => (
+									<button
+										key={m}
+										type="button"
+										role="radio"
+										aria-checked={mode === m}
+										className={mode === m ? "is-on" : undefined}
+										onClick={() => {
 											setMode(m);
 											saveShareMode(m);
 										}}
-									/>
-									<span>
-										{m === "precise"
-											? isRTL ? "دقيق — أسرع من المتوازن (بطارية وبيانات أكثر)" : "Precise — faster than balanced (more battery and data)"
-											: m === "balanced"
-												? isRTL ? "متوازن — حسب سرعتك: ٢٫٥ ث فوق ٩٠ كم/س، ٤ ث على الطريق، ٦ ث في الرمل، ٣٠ ث واقف" : "Balanced — by speed: 2.5 s above 90 km/h, 4 s on road, 6 s on sand, 30 s parked"
-												: isRTL ? "موفّر — نصف المعدل، للطلعات الطويلة" : "Saver — half the rate, for long trips"}
-									</span>
-								</label>
-							))}
-						</fieldset>
+										data-testid={`outing-rate-${m}`}
+									>
+										{m === "saver" ? (isRTL ? "موفّر" : "Saver") : m === "balanced" ? (isRTL ? "متوازن" : "Balanced") : isRTL ? "دقيق" : "Precise"}
+									</button>
+								))}
+							</div>
+							<p className="sary-o-note">
+								{mode === "saver"
+									? isRTL ? "نصف المعدل — للطلعات الطويلة وتوفير البطارية والبيانات." : "Half the rate — for long trips, saves battery and data."
+									: mode === "balanced"
+										? isRTL ? "حسب سرعتك: كل ٢٫٥ ث فوق ٩٠ كم/س، ٤ ث على الطريق، ٦ ث في الرمل، ٣٠ ث وأنت واقف." : "By speed: 2.5 s above 90 km/h, 4 s on road, 6 s on sand, 30 s parked."
+										: isRTL ? "أسرع من المتوازن — دقة أعلى واستهلاك أكثر للبطارية والبيانات." : "Faster than balanced — more precise, more battery and data."}
+							</p>
+						</div>
 						<label className="sary-o-switch">
 							<input
 								type="checkbox"
@@ -567,7 +613,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										{isRTL ? "استئناف الطلعة" : "Resume outing"}
 									</button>
 								) : null}
-								<button type="button" className="sary-o-danger" disabled={busy} onClick={() => setConfirmEnd(true)} data-testid="outing-end">
+								<button type="button" className="sary-o-danger" disabled={busy} onClick={() => setConfirm({ kind: "end" })} data-testid="outing-end">
 									{isRTL ? "إنهاء الطلعة" : "End outing"}
 								</button>
 							</div>
@@ -576,16 +622,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							type="button"
 							className="sary-o-danger"
 							disabled={busy}
-							onClick={() => {
-								const msg = isOwner
-									? isRTL ? "مغادرة الطلعة؟ ستنتقل إدارتها لأقدم مشارك." : "Leave? Ownership passes to the earliest member."
-									: isRTL ? "مغادرة الطلعة؟ تتوقف مشاركة موقعك فورًا." : "Leave? Your sharing stops at once.";
-								if (!window.confirm(msg)) return;
-								void run(async () => {
-									await OutingsApi.leave(outingId);
-									void navigate({ to: "/outings" });
-								});
-							}}
+							onClick={() => setConfirm({ kind: "leave" })}
 							data-testid="outing-leave"
 						>
 							{isRTL ? "مغادرة الطلعة" : "Leave outing"}
@@ -594,14 +631,32 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 				) : null}
 			</FarqBottomSheet>
 
-			{confirmEnd ? (
-				<div className="sary-o-modal" role="dialog" aria-modal="true" data-testid="outing-end-confirm">
+			{confirm ? (
+				<div
+					className="sary-o-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="outing-confirm-title"
+					data-testid={confirm.kind === "end" ? "outing-end-confirm" : `outing-${confirm.kind}-confirm`}
+				>
 					<div className="sary-o-card">
-						<h2>{isRTL ? "إنهاء الطلعة؟" : "End the outing?"}</h2>
+						<h2 id="outing-confirm-title">
+							{confirm.kind === "end"
+								? isRTL ? "إنهاء الطلعة؟" : "End the outing?"
+								: confirm.kind === "leave"
+									? isRTL ? "مغادرة الطلعة؟" : "Leave the outing?"
+									: isRTL ? `إزالة ${confirm.name}؟` : `Remove ${confirm.name}?`}
+						</h2>
 						<p>
-							{isRTL
-								? "تتوقف مشاركة المواقع لجميع المشاركين فورًا، وتُحذف كل المواقع المحفوظة، ويُلغى رابط الدعوة. لا يمكن التراجع."
-								: "Sharing stops for everyone, all stored positions are deleted and the invite is cancelled. This cannot be undone."}
+							{confirm.kind === "end"
+								? isRTL
+									? "تتوقف مشاركة المواقع لجميع المشاركين فورًا، وتُحذف كل المواقع المحفوظة، ويُلغى رابط الدعوة. لا يمكن التراجع."
+									: "Sharing stops for everyone, all stored positions are deleted and the invite is cancelled. This cannot be undone."
+								: confirm.kind === "leave"
+									? isOwner
+										? isRTL ? "تتوقف مشاركة موقعك فورًا، وتنتقل إدارة الطلعة لأقدم مشارك." : "Your sharing stops at once and ownership passes to the earliest member."
+										: isRTL ? "تتوقف مشاركة موقعك فورًا ولا ترى مواقع المجموعة." : "Your sharing stops at once and you no longer see the group."
+									: isRTL ? "يُحذف موقعه فورًا ولا يستطيع العودة لهذه الطلعة." : "Their position is deleted at once and they cannot rejoin this outing."}
 						</p>
 						<div className="sary-o-row">
 							<button
@@ -609,18 +664,34 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								className="sary-o-danger"
 								disabled={busy}
 								onClick={() => {
-									setConfirmEnd(false);
-									void run(() => OutingsApi.setStatus(outingId, "end"));
+									const c = confirm;
+									setConfirm(null);
+									if (c.kind === "end") void run(() => OutingsApi.setStatus(outingId, "end"));
+									else if (c.kind === "leave")
+										void run(async () => {
+											await OutingsApi.leave(outingId);
+											void navigate({ to: "/outings" });
+										});
+									else if (c.userId) {
+										setSelected(null);
+										void run(() => OutingsApi.removeMember(outingId, c.userId!));
+									}
 								}}
-								data-testid="outing-end-yes"
+								data-testid={confirm.kind === "end" ? "outing-end-yes" : `outing-${confirm.kind}-yes`}
 							>
-								{isRTL ? "إنهاء للجميع" : "End for everyone"}
+								{confirm.kind === "end" ? (isRTL ? "إنهاء للجميع" : "End for everyone") : confirm.kind === "leave" ? (isRTL ? "مغادرة" : "Leave") : isRTL ? "إزالة" : "Remove"}
 							</button>
-							<button type="button" className="sary-o-secondary" onClick={() => setConfirmEnd(false)}>
+							<button type="button" className="sary-o-secondary" onClick={() => setConfirm(null)}>
 								{isRTL ? "تراجع" : "Cancel"}
 							</button>
 						</div>
 					</div>
+				</div>
+			) : null}
+
+			{toast ? (
+				<div className="sary-o-toast" role="status" data-testid="outing-toast">
+					{toast}
 				</div>
 			) : null}
 		</div>
@@ -638,12 +709,32 @@ function memberLine(r: Row, isRTL: boolean): string {
 	}
 	const ago = formatAgo(r.ageMs, isRTL);
 	const grade = accuracyGrade(r.position.accuracy);
-	const acc = r.position.accuracy != null ? Math.round(r.position.accuracy).toLocaleString(isRTL ? "ar-SA" : "en") : "";
+	const acc = r.position.accuracy != null ? formatNumber(Math.round(r.position.accuracy), isRTL) : "";
 	const quality = grade === "poor" ? (isRTL ? ` · موقع تقريبي ±${acc} م` : ` · approximate ±${acc} m`) : grade === "fair" ? (isRTL ? ` · دقة متوسطة ±${acc} م` : ` · fair accuracy ±${acc} m`) : "";
 	const away = m.away ? (isRTL ? " · التطبيق ليس في الواجهة" : " · app not in foreground") : "";
 	if (r.fresh === "live") return `${isRTL ? "مباشر" : "Live"} · ${ago}${quality}`;
 	if (r.fresh === "recent") return `${isRTL ? "آخر موقع معروف" : "Last known position"} · ${ago}${quality}${gpsNote}${away}`;
 	return `${isRTL ? "انقطع الاتصال — آخر موقع" : "Connection lost — last position"} ${ago}`;
+}
+
+type PillKind = "live" | "recent" | "lost" | "paused" | "waiting";
+
+function pillOf(r: Row): PillKind {
+	if (!r.member.sharing) return "paused";
+	if (!r.position) return r.seenAgeMs != null && r.seenAgeMs <= 60_000 ? "waiting" : "lost";
+	return r.fresh || "lost";
+}
+
+/** Status in words and colour — never colour alone. */
+function StatusPill({ row, isRTL }: { row: Row; isRTL: boolean }) {
+	const k = pillOf(row);
+	const ar = { live: "مباشر", recent: "آخر موقع معروف", lost: "انقطع الاتصال", paused: "أوقف المشاركة", waiting: "بانتظار موقعه" };
+	const en = { live: "Live", recent: "Last known", lost: "Connection lost", paused: "Paused sharing", waiting: "Waiting" };
+	return (
+		<span className="sary-o-pill" data-kind={k} data-testid="outing-member-status">
+			{(isRTL ? ar : en)[k]}
+		</span>
+	);
 }
 
 function Face({ name, avatar, fresh }: { name: string; avatar: string | null; fresh?: Freshness | null }) {
@@ -675,7 +766,8 @@ function MemberCard({
 	return (
 		<div className="sary-o-panel" data-testid="outing-member-card">
 			<button type="button" className="sary-o-link-btn" onClick={onBack}>
-				{isRTL ? "→ كل المشاركين" : "← All members"}
+				{isRTL ? <ChevronRight className="size-4" aria-hidden /> : <ChevronLeft className="size-4" aria-hidden />}
+				{isRTL ? "كل المشاركين" : "All members"}
 			</button>
 			<div className="sary-o-member is-card">
 				<Face name={row.member.display_name} avatar={row.member.avatar} fresh={row.fresh} />
@@ -683,6 +775,7 @@ function MemberCard({
 					<strong>{row.member.display_name}</strong>
 					<span>{memberLine(row, isRTL)}</span>
 				</div>
+				<StatusPill row={row} isRTL={isRTL} />
 			</div>
 			<dl className="sary-o-facts">
 				{row.distanceM != null && row.bearing != null ? (
@@ -696,17 +789,17 @@ function MemberCard({
 				{p ? (
 					<>
 						<dt>{isRTL ? "آخر تحديث" : "Last update"}</dt>
-						<dd>{new Date(p.recorded_at).toLocaleTimeString(isRTL ? "ar-SA" : "en")}</dd>
+						<dd>{formatTime(p.recorded_at, isRTL)}</dd>
 						{p.speed != null ? (
 							<>
 								<dt>{isRTL ? "السرعة" : "Speed"}</dt>
-								<dd>{Math.round(p.speed * 3.6).toLocaleString(isRTL ? "ar-SA" : "en")} {isRTL ? "كم/س" : "km/h"}</dd>
+								<dd>{formatNumber(Math.round(p.speed * 3.6), isRTL)} {isRTL ? "كم/س" : "km/h"}</dd>
 							</>
 						) : null}
 						{p.accuracy != null ? (
 							<>
 								<dt>{isRTL ? "الدقة" : "Accuracy"}</dt>
-								<dd>± {Math.round(p.accuracy).toLocaleString(isRTL ? "ar-SA" : "en")} {isRTL ? "م" : "m"}</dd>
+								<dd>± {formatNumber(Math.round(p.accuracy), isRTL)} {isRTL ? "م" : "m"}</dd>
 							</>
 						) : null}
 					</>
@@ -716,6 +809,18 @@ function MemberCard({
 				<button type="button" className="sary-o-primary" disabled={!p} onClick={onFocus} data-testid="outing-member-focus">
 					{isRTL ? "أظهره على الخريطة" : "Show on map"}
 				</button>
+				{p ? (
+					<a
+						className="sary-o-secondary sary-o-linkbtn"
+						href={directionsUrl(p)}
+						target="_blank"
+						rel="noopener noreferrer"
+						data-testid="outing-member-directions"
+					>
+						<Navigation className="size-4" aria-hidden />
+						{isRTL ? "اتجه إليه" : "Directions"}
+					</a>
+				) : null}
 				{isOwner && row.member.role !== "owner" ? (
 					<button type="button" className="sary-o-danger" disabled={busy} onClick={onRemove} data-testid="outing-member-remove">
 						{isRTL ? "إزالة" : "Remove"}

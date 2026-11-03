@@ -3,6 +3,7 @@ import Header from "../components/Header";
 import RouteFallback from "../components/RouteFallback";
 import { useLanguage } from "../contexts/LanguageContext";
 import { usePageMeta } from "../lib/usePageMeta";
+import { useSaryChrome } from "../lib/sary/useSaryChrome";
 import type { MapProduct, MapSearch } from "../routes/map";
 
 const IntelligenceMapSplit = lazy(() => import("../components/intelligence/IntelligenceMapSplit"));
@@ -18,6 +19,7 @@ export default function MapPage({
 	const { language } = useLanguage();
 	const isRTL = language === "ar";
 	const outdoor = product === "outdoor";
+	useSaryChrome(outdoor);
 
 	usePageMeta({
 		title: outdoor

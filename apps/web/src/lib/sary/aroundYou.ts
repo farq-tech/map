@@ -1,4 +1,4 @@
-import { haversineMeters, type EntityGroup, type OutdoorEntity } from "./domain";
+import { formatKm, formatNumber, haversineMeters, type EntityGroup, type OutdoorEntity } from "./domain";
 
 export type AroundSummary = {
 	tracks: number;
@@ -41,22 +41,38 @@ export function summarizeAround(
 	};
 }
 
+/** Arabic counting: ١ مسار · مساران · ٣ مسارات · ١١ مسارًا. */
+export function countAr(n: number, one: string, two: string, few: string, many: string): string {
+	const d = formatNumber(n, true);
+	if (n === 1) return one;
+	if (n === 2) return two;
+	if (n >= 3 && n <= 10) return `${d} ${few}`;
+	return `${d} ${many}`;
+}
+
+function near(label: string, e: OutdoorEntity, isRTL: boolean): string {
+	const name = e.name ? ` «${e.name}»` : "";
+	return isRTL ? `${label}${name} على بُعد ${formatKm(e.distanceM, true)}` : `${label}${name} ${formatKm(e.distanceM, false)} away`;
+}
+
 export function aroundLines(summary: AroundSummary, isRTL: boolean): string[] {
 	const lines: string[] = [];
 	if (summary.tracks) {
-		lines.push(isRTL ? `${summary.tracks} مسارات` : `${summary.tracks} tracks`);
+		lines.push(
+			isRTL
+				? `${countAr(summary.tracks, "مسار واحد", "مساران", "مسارات", "مسارًا")} حولك`
+				: `${summary.tracks} track${summary.tracks === 1 ? "" : "s"} around you`,
+		);
 	}
 	if (summary.places) {
-		lines.push(isRTL ? `${summary.places} أماكن` : `${summary.places} places`);
+		lines.push(
+			isRTL
+				? `${countAr(summary.places, "معلم واحد", "معلمان", "معالم", "معلمًا")} حولك`
+				: `${summary.places} place${summary.places === 1 ? "" : "s"} around you`,
+		);
 	}
-	if (summary.nearestWell) {
-		lines.push(isRTL ? "بئر قريب" : "A nearby well");
-	}
-	if (summary.nearestRawdah) {
-		lines.push(isRTL ? "روضة قريبة" : "A nearby rawdah");
-	}
-	if (summary.nearestShaib) {
-		lines.push(isRTL ? "شعيب قريب" : "A nearby shaib");
-	}
+	if (summary.nearestWell) lines.push(near(isRTL ? "أقرب بئر" : "Nearest well", summary.nearestWell, isRTL));
+	if (summary.nearestRawdah) lines.push(near(isRTL ? "أقرب روضة" : "Nearest rawdah", summary.nearestRawdah, isRTL));
+	if (summary.nearestShaib) lines.push(near(isRTL ? "أقرب شعيب" : "Nearest shaib", summary.nearestShaib, isRTL));
 	return lines;
 }

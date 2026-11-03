@@ -1341,12 +1341,17 @@ export default function FarqMap({
 	if (missingToken) {
 		return (
 			<div
-				className="flex h-full items-center justify-center bg-neutral-900 px-6 text-center text-sm text-white/80"
+				className="flex h-full flex-col items-center justify-center bg-neutral-900 px-6 text-center text-sm text-white/80"
 				data-testid="intelligence-map-canvas"
 			>
 				{isRTL
-					? "أضف VITE_MAPBOX_ACCESS_TOKEN في Frontend/.env.local ثم أعد تشغيل Vite."
-					: "Add VITE_MAPBOX_ACCESS_TOKEN to Frontend/.env.local and restart Vite."}
+					? "تعذّر تحميل الخريطة الآن. أعد المحاولة بعد قليل."
+					: "The map could not load right now. Try again shortly."}
+				{import.meta.env.DEV ? (
+					<span className="mt-2 block text-xs opacity-70" dir="ltr">
+						dev: set VITE_MAPBOX_ACCESS_TOKEN in .env.local at the repo root, then restart Vite.
+					</span>
+				) : null}
 			</div>
 		);
 	}

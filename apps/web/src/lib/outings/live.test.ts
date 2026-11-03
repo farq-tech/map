@@ -166,6 +166,24 @@ describe("LiveChannel", () => {
 		ch.stop();
 	});
 
+	it("network back after an outage replaces a socket that only looked open", () => {
+		let online = true;
+		const { ch, events } = channel({ online: () => online });
+		ch.start();
+		FakeSocket.all[0].open();
+		FakeSocket.all[0].push({ type: "ready", snapshot: snap() });
+		online = false;
+		window.dispatchEvent(new Event("offline"));
+		expect(events.at(-1)).toBe("offline");
+		online = true;
+		window.dispatchEvent(new Event("online"));
+		expect(FakeSocket.all).toHaveLength(2);
+		FakeSocket.all[1].open();
+		FakeSocket.all[1].push({ type: "ready", snapshot: snap() });
+		expect(events.at(-1)).toBe("live");
+		ch.stop();
+	});
+
 	it("backoff grows, is capped, and is jittered", () => {
 		expect(backoffMs(0, 0)).toBe(500);
 		expect(backoffMs(3, 1)).toBe(8_000);
