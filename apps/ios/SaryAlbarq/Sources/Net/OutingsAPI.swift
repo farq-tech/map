@@ -124,7 +124,9 @@ final class OutingsAPI {
     struct InviteBox: Decodable { var invite: CreatedInvite }
     struct PreviewBox: Decodable { var invite: InvitePreview }
     struct JoinBox: Decodable { var outing_id: String; var already: Bool? }
-    struct OutingBox: Decodable { var outing: OutingInfo }
+    /// `POST /:id/status` returns only id, name, status, started_at, ended_at.
+    struct StatusOuting: Decodable { var id: String; var status: OutingStatus }
+    struct OutingBox: Decodable { var outing: StatusOuting }
     struct NoteBox: Decodable { var note: MemberNote? }
     struct SharingBox: Decodable { var sharing: Bool }
     struct OkBox: Decodable { var ok: Bool? }
@@ -154,7 +156,7 @@ final class OutingsAPI {
         struct B: Encodable { var fix: WireFix }
         let _: OkBox = try await call("POST", "/\(id)/positions", body: B(fix: fix), timeout: 8)
     }
-    func setStatus(_ id: String, action: String) async throws -> OutingInfo {
+    func setStatus(_ id: String, action: String) async throws -> StatusOuting {
         let r: OutingBox = try await call("POST", "/\(id)/status", body: ["action": action])
         return r.outing
     }
