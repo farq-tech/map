@@ -193,9 +193,9 @@ export const OutingsApi = {
 		if (cur) saveIdentity({ ...cur, user: r.user });
 		return r.user;
 	},
-	list: () => call<{ current: OutingSummary[]; history: OutingSummary[] }>("GET", "/"),
+	list: () => call<{ current: OutingSummary[]; history: OutingSummary[] }>("GET", ""),
 	async create(name: string): Promise<{ outing_id: string; invite: { token: string; expires_at: string } }> {
-		const r = await call<{ outing_id: string; invite: { token: string; expires_at: string } }>("POST", "/", { name });
+		const r = await call<{ outing_id: string; invite: { token: string; expires_at: string } }>("POST", "", { name });
 		saveInviteToken(r.outing_id, r.invite.token);
 		return r;
 	},
