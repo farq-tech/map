@@ -177,21 +177,43 @@ export function haversineMeters(
 	return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/** Arabic-Indic digits in Arabic, Western in English — one rule for every number on screen. */
+export function formatNumber(n: number, isRTL: boolean, maximumFractionDigits = 0): string {
+	return n.toLocaleString(isRTL ? "ar-SA" : "en", { maximumFractionDigits });
+}
+
 export function formatKm(meters: number | null | undefined, isRTL: boolean): string {
 	if (meters == null || !Number.isFinite(meters)) return isRTL ? "غير مؤكد" : "Unconfirmed";
 	const km = meters / 1000;
-	const n = km < 10 ? km.toFixed(1) : Math.round(km).toString();
+	const n = formatNumber(km < 10 ? Math.round(km * 10) / 10 : Math.round(km), isRTL, 1);
 	return isRTL ? `${n} كم` : `${n} km`;
 }
 
 export function formatDuration(ms: number, isRTL: boolean): string {
 	const total = Math.max(0, Math.round(ms / 1000));
+	if (total < 60) return isRTL ? "أقل من دقيقة" : "under a minute";
 	const h = Math.floor(total / 3600);
 	const m = Math.floor((total % 3600) / 60);
 	if (isRTL) {
-		if (h) return `${h} س ${m} د`;
-		return `${m} د`;
+		if (h) return `${formatNumber(h, true)} س ${formatNumber(m, true)} د`;
+		return `${formatNumber(m, true)} د`;
 	}
 	if (h) return `${h}h ${m}m`;
 	return `${m}m`;
+}
+
+/** Gregorian, in the reader's language: ٣ نوفمبر ٢٠٢٦ — ar-SA alone defaults to the Hijri calendar. */
+export function formatDate(ms: number | string | Date, isRTL: boolean): string {
+	return new Date(ms).toLocaleDateString(isRTL ? "ar-SA-u-ca-gregory" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+export function formatTime(ms: number | string | Date, isRTL: boolean): string {
+	return new Date(ms).toLocaleTimeString(isRTL ? "ar-SA-u-ca-gregory" : "en-GB", { hour: "numeric", minute: "2-digit" });
+}
+
+/** Turn-by-turn belongs to the phone's own navigation app; we hand it the real coordinates. */
+export function directionsUrl(p: { lat: number; lng: number }): string {
+	const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+	if (/iPhone|iPad|iPod/.test(ua)) return `https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d`;
+	return `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`;
 }

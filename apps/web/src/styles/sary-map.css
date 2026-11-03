@@ -149,51 +149,432 @@
 	background: #221c16;
 }
 
-.sary-prado {
-	pointer-events: none;
-	width: 112px;
-	height: 112px;
-}
-
-.sary-prado-body {
-	width: 100%;
-	height: 100%;
-	transform-origin: 50% 62%;
-	filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.45));
-	transition: transform 180ms linear;
-}
-
-.sary-prado-img {
-	display: block;
-	width: 100%;
-	height: 100%;
-	object-fit: contain;
-	user-select: none;
-}
-
-.sary-prado.is-moving {
-	width: 128px;
-	height: 128px;
-}
-
-.sary-prado.is-simplified {
-	width: 56px;
-	height: 56px;
-}
-
 .sary-error {
 	color: #f0b7a4;
 }
 
 @media (min-width: 1024px) {
-	.sary-split .farq-sheet {
-		display: none;
-	}
-
 	.sary-search,
 	.sary-layer-rail {
 		left: 24px;
 		right: auto;
 		width: min(420px, 36vw);
 	}
+}
+
+/* Entry to طلعة مشتركة — under the layer rail, on the reading side. */
+.sary-outing-entry {
+	position: absolute;
+	top: calc(116px + env(safe-area-inset-top));
+	right: 12px;
+	z-index: 6;
+	display: inline-flex;
+	align-items: center;
+	height: 36px;
+	padding: 0 14px;
+	border-radius: 999px;
+	background: #e8842c;
+	color: #1c1814;
+	font-size: 14px;
+	font-weight: 700;
+	text-decoration: none;
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+[dir="ltr"] .sary-outing-entry {
+	right: auto;
+	left: 12px;
+}
+
+@media (min-width: 1024px) {
+	.sary-outing-entry {
+		left: 24px;
+		right: auto;
+	}
+}
+
+
+/* ------------------------------------------------------------------ */
+/* The Sary sheet. The Farq sheet styles are scoped to its own chrome, */
+/* so on Sary the sheet rendered below the fold and nobody could reach */
+/* the record button or the list. Heights match sheetHeightPx().       */
+/* ------------------------------------------------------------------ */
+.sary-map-pane,
+.sary-chrome,
+.sary-o-live {
+	--sary-sheet-h: 148px;
+}
+
+.sary-chrome[data-snap="half"],
+.sary-o-live[data-snap="half"] {
+	--sary-sheet-h: 52dvh;
+}
+
+.sary-chrome[data-snap="full"],
+.sary-o-live[data-snap="full"] {
+	--sary-sheet-h: 90dvh;
+}
+
+.sary-chrome > .farq-sheet,
+.sary-o-live > .farq-sheet {
+	position: fixed;
+	inset-inline: 0;
+	bottom: 0;
+	z-index: 20;
+	height: var(--sary-sheet-h);
+	display: flex;
+	flex-direction: column;
+	background: #221c16;
+	color: #f4efe6;
+	border-radius: 22px 22px 0 0;
+	box-shadow: 0 -10px 34px rgba(0, 0, 0, 0.45);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	transition: height 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 200ms ease-out;
+}
+
+.sary-chrome .farq-sheet-grab,
+.sary-o-live .farq-sheet-grab {
+	flex: 0 0 auto;
+	padding: 6px 14px 10px;
+	cursor: grab;
+}
+
+.sary-chrome .farq-sheet-handle,
+.sary-o-live .farq-sheet-handle {
+	display: block;
+	width: 40px;
+	height: 4px;
+	border-radius: 2px;
+	background: rgba(244, 239, 230, 0.28);
+	margin: 0 auto 8px;
+}
+
+.sary-chrome .farq-sheet-head,
+.sary-o-live .farq-sheet-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 32px;
+}
+
+.sary-chrome .farq-sheet-headline,
+.sary-o-live .farq-sheet-headline {
+	min-width: 0;
+	font-weight: 800;
+	font-size: 15px;
+	line-height: 1.4;
+	text-align: start;
+}
+
+.sary-chrome .farq-sheet-collapse,
+.sary-o-live .farq-sheet-collapse {
+	flex: 0 0 auto;
+	width: 36px;
+	height: 36px;
+	border: 0;
+	border-radius: 999px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(244, 239, 230, 0.1);
+	color: #f4efe6;
+}
+
+.sary-chrome .farq-sheet-rail,
+.sary-o-live .farq-sheet-rail {
+	margin-top: 10px;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.sary-chrome .farq-sheet-body,
+.sary-o-live .farq-sheet-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior: contain;
+	padding: 0 16px 16px;
+}
+
+.sary-chrome > .farq-sheet[data-snap="peek"] .farq-sheet-body,
+.sary-o-live > .farq-sheet[data-snap="peek"] .farq-sheet-body {
+	display: none;
+}
+
+/* Everything that floats above the map rides above the sheet. */
+.sary-chrome .sary-fabs,
+.sary-o-fabs {
+	bottom: calc(var(--sary-sheet-h) + 14px + env(safe-area-inset-bottom, 0px)) !important;
+	transition: bottom 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sary-map-pane .mapboxgl-ctrl-bottom-left,
+.sary-map-pane .mapboxgl-ctrl-bottom-right,
+.sary-o-map .mapboxgl-ctrl-bottom-left,
+.sary-o-map .mapboxgl-ctrl-bottom-right {
+	bottom: calc(var(--sary-sheet-h, 148px) + env(safe-area-inset-bottom, 0px));
+}
+
+.sary-map-pane:has(.sary-chrome[data-snap="half"]),
+.sary-o-live[data-snap="half"] {
+	--sary-sheet-h: 52dvh;
+}
+
+.sary-map-pane:has(.sary-chrome[data-snap="full"]),
+.sary-o-live[data-snap="full"] {
+	--sary-sheet-h: 90dvh;
+}
+
+/* Desktop: the sheet becomes a floating card beside the map, never hidden. */
+@media (min-width: 1024px) {
+	.sary-chrome > .farq-sheet,
+	.sary-o-live > .farq-sheet {
+		inset-inline: auto 24px;
+		bottom: 24px;
+		width: 400px;
+		max-height: calc(100dvh - 180px);
+		border-radius: 22px;
+	}
+
+	.sary-chrome[data-snap="full"] > .farq-sheet,
+	.sary-o-live[data-snap="full"] > .farq-sheet {
+		height: calc(100dvh - 180px);
+	}
+
+	.sary-chrome .sary-fabs,
+	.sary-o-fabs {
+		bottom: 24px !important;
+		inset-inline-end: 440px !important;
+		inset-inline-start: auto !important;
+	}
+}
+
+/* Keyboard users can see where they are. */
+.sary-chrome button:focus-visible,
+.sary-chrome a:focus-visible,
+.sary-chrome input:focus-visible,
+.sary-o-live button:focus-visible,
+.sary-o-page button:focus-visible,
+.sary-o-page a:focus-visible,
+.sary-o-page input:focus-visible,
+.sary-desktop-panel button:focus-visible {
+	outline: 3px solid #e8842c;
+	outline-offset: 2px;
+}
+
+.sary-layer-chip {
+	min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sary-chrome > .farq-sheet,
+	.sary-o-live > .farq-sheet,
+	.sary-chrome .sary-fabs,
+	.sary-o-fabs {
+		transition: none;
+	}
+}
+
+/* Sary pages: the whole document is sand-dark, not Farq teal (useSaryChrome). */
+body.sary-body {
+	background: #1a1612;
+	color: #f4efe6;
+}
+
+/* Search: clear button inside the field, and a one-line hint under it. */
+.sary-search input {
+	padding-inline-end: 48px;
+}
+
+.sary-search-clear {
+	position: absolute;
+	top: 2px;
+	inset-inline-end: 2px;
+	width: 44px;
+	height: 44px;
+	border: 0;
+	border-radius: 14px;
+	background: transparent;
+	color: #d4c6ae;
+	font-size: 22px;
+	line-height: 1;
+}
+
+.sary-search-hint {
+	margin: 6px 4px 0;
+	padding: 6px 10px;
+	border-radius: 10px;
+	background: rgba(28, 24, 20, 0.9);
+	color: #f0d9b5;
+	font-size: 13px;
+}
+
+/* Language chip on phones, above «موقعي». */
+.sary-fab--small {
+	min-width: 44px;
+	padding: 0 10px;
+	font-weight: 700;
+	font-size: 13px;
+}
+
+@media (min-width: 1024px) {
+	.sary-fab--small {
+		display: none;
+	}
+}
+
+/* «طلعتك جارية» — the entry says when a shared outing is live. */
+.sary-outing-entry.is-live {
+	gap: 8px;
+	background: #1c1814;
+	color: #f4efe6;
+	border: 2px solid #e8842c;
+}
+
+.sary-outing-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: #8fe0a8;
+	box-shadow: 0 0 0 3px rgba(143, 224, 168, 0.25);
+}
+
+/* Place/route actions and trip summaries. */
+.sary-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 10px 0;
+}
+
+.sary-action {
+	flex: 1 1 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: 14px;
+	background: rgba(244, 239, 230, 0.1);
+	color: #f4efe6;
+	font: inherit;
+	font-weight: 700;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.sary-action.is-primary {
+	background: #e8842c;
+	color: #1c1814;
+}
+
+.sary-action.is-danger {
+	background: rgba(214, 84, 60, 0.18);
+	color: #f0b7a4;
+}
+
+.sary-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+	gap: 8px;
+	margin: 4px 0 12px;
+}
+
+.sary-stats div {
+	padding: 10px 12px;
+	border-radius: 14px;
+	background: rgba(244, 239, 230, 0.06);
+}
+
+.sary-stats dt {
+	color: #d4c6ae;
+	font-size: 12px;
+}
+
+.sary-stats dd {
+	margin: 2px 0 0;
+	font-size: 17px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+
+.sary-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 10px;
+	color: #d4c6ae;
+	font-size: 13px;
+}
+
+.sary-field input {
+	height: 46px;
+	border: 1px solid rgba(244, 239, 230, 0.16);
+	border-radius: 14px;
+	padding: 0 14px;
+	background: #1a1612;
+	color: #f4efe6;
+	font: inherit;
+	font-size: 16px;
+}
+
+.sary-confirm {
+	padding: 12px;
+	border-radius: 14px;
+	background: rgba(214, 84, 60, 0.1);
+}
+
+.sary-confirm p {
+	margin: 0;
+}
+
+.sary-empty {
+	color: #d4c6ae;
+	line-height: 1.7;
+}
+
+/* The record button is Sary's one primary action: sand-orange, not Farq teal. */
+.sary-chrome .sary-cta {
+	min-height: 48px;
+	border-color: #e8842c;
+	background: #e8842c;
+	color: #1c1814;
+	font-weight: 800;
+}
+
+.sary-chrome .sary-cta:hover {
+	background: #f0954a;
+}
+
+/* Round 2 (tested on the Vercel preview, iPhone 14 / Pixel 7 profiles) */
+
+/* The Mapbox logo sits on the sheet edge; floating buttons clear it. */
+.sary-chrome .sary-fabs,
+.sary-o-fabs {
+	bottom: calc(var(--sary-sheet-h) + 44px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Language is a secondary action: a small chip, not a second big button. */
+.sary-fab--small {
+	min-height: 36px !important;
+	min-width: 44px;
+	padding: 0 10px;
+	font-size: 13px;
+	opacity: 0.92;
+}
+
+/* Sheet summary lines read on dark sand (the Farq style is teal-grey on white). */
+.sary-chrome .farq-sheet-headline,
+.sary-chrome .farq-sheet-headline span,
+.sary-o-live .farq-sheet-headline,
+.sary-o-live .farq-sheet-headline span {
+	color: #f4efe6 !important;
+}
+
+.sary-chrome .farq-sheet-headline,
+.sary-o-live .farq-sheet-headline {
+	font-variant-numeric: tabular-nums;
 }

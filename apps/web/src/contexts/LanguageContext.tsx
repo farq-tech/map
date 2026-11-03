@@ -3,6 +3,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useContext,
+	useEffect,
 	useMemo,
 	useState,
 } from "react";
@@ -30,6 +31,13 @@ function readInitial(): Language {
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
 	const [language, setLanguage] = useState<Language>(readInitial);
+
+	/* The document starts as rtl/ar in index.html; a stored English choice must
+	 * flip it on load too, not only when the toggle is pressed. */
+	useEffect(() => {
+		document.documentElement.lang = language;
+		document.documentElement.dir = language === "ar" ? "rtl" : "ltr";
+	}, [language]);
 
 	const toggleLanguage = useCallback(() => {
 		setLanguage((prev) => {

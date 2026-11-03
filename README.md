@@ -83,6 +83,37 @@ CI runs all three on every push and pull request (`.github/workflows/ci.yml`).
 
 `/api/chat`, the previous assistant, is gone. It had no caller left in this repo, and with a current model it failed on `thought_signature` in its function-calling turn — a broken duplicate of `/api/copilot`. Its number guard survives as `apps/api/lib/reply-policy.js`, which the copilot uses.
 
+## طلعة مشتركة — shared outings and live location
+
+Friends on one off-road outing see each other on one map while the outing screen is open. No background tracking.
+
+```
+/outings                 create an outing, current and past outings, edit my name
+/outings/join#<token>    invite preview + join (token in the URL fragment: never sent to a server, wiped from the address bar)
+/outings/:id             the live map: members, distance + direction, last update, invite, settings
+```
+
+**Server** (`apps/api/lib/outings/*`, `routes/outings.js`, `migrations/001_sary_outings.sql`)
+- Identity without accounts: `POST /api/outings/me` issues a 256-bit device token, stored as SHA-256. Every call is `Authorization: Bearer`.
+- Membership is checked on the server for every read, write and socket. Non-members get `404`, removed members are kicked from their socket at once (`4403`) and cannot rejoin.
+- Lifecycle: outing `created → active ⇄ paused → ended` (owner), member `active → left | removed`, per-member sharing on/off. If the owner leaves, the earliest member takes over.
+- Storage: one row per member — the **latest** fix only, no history. Deleted on leave, removal, sharing off, pause and end. RLS on, no policies; `anon`/`authenticated` revoked.
+- Realtime: WebSocket `/api/outings/live` on the same Express server (auth in the first frame), rooms per outing, ping/pong. HTTP polling fallback (`GET /:id/live`, `POST /:id/positions`, `POST /:id/heartbeat`) when sockets cannot get through.
+- Connection heartbeats (no coordinates) are separate from fixes, so «no GPS» and «no network» are different states.
+
+**Client** (`apps/web/src/lib/outings/*`, `components/outings/*`)
+- Off-road send policy by speed: 2.5 s / 50 m above 90 km/h, 4 s / 35 m on road, 6 s / 15 m on sand, a fresh fix every 30 s parked. «موفّر» doubles, «دقيق» shortens.
+- Glitch filter: a jump implying > ~200 km/h (after both fixes' accuracy) is held until the next fix confirms it.
+- Freshness: **مباشر** (fix ≤ 15 s moving, ≤ 45 s parked) · **آخر موقع معروف** (reachable, older fix) · **انقطع الاتصال** (nothing for 60 s). Accuracy > 60 m is drawn as an approximate ring, never animated.
+- Markers interpolate between real fixes (≤ 1 s), never extrapolate; jumps over 2 km snap.
+- The last known picture is kept in session storage through outages and wiped when the outing ends.
+
+```bash
+node apps/api/scripts/migrate-outings.js                                    # apply migrations by hand (boot does it too)
+SARY_TEST_DATABASE_URL=postgres://… npm test -w @farq/map-api                # integration tests against real Postgres (drops the sary schema!)
+NODE_PATH=<playwright> node scripts/e2e-outings.cjs --base http://127.0.0.1:5173   # two browsers, end to end
+```
+
 ## Environment variable names
 
 Web (Vite, prefix `VITE_`):
@@ -101,6 +132,13 @@ API:
 - `GEMINI_API_KEY` (or `GOOGLE_GENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`) — optional; the copilot and the map work without it
 - `GEMINI_MODEL` — optional comma-separated failover list
 - `CORS_ORIGINS`
+- `SARY_DATABASE_URL` — shared outings (read/write); falls back to the comparison/`DATABASE_URL`
+- `SARY_AUTO_MIGRATE` — `0` disables running `apps/api/migrations` at boot
+- `OUTING_*` — optional tuning, see `.env.example`
+
+Web, shared outings:
+
+- `VITE_LIVE_WS_URL` — `wss://<api host>/api/outings/live`. Vercel rewrites cannot carry WebSockets; without it the client uses HTTP polling.
 
 ## What the map needs from upstream
 

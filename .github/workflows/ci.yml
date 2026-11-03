@@ -9,6 +9,15 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: sarytest
+          POSTGRES_DB: sary_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,8 +25,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: API tests
+      - name: API tests (incl. shared outings against Postgres)
         run: npm test -w @farq/map-api
+        env:
+          SARY_TEST_DATABASE_URL: postgres://postgres:sarytest@localhost:5432/sary_test
       - name: Web tests
         run: npm test -w @farq/map-web
       - name: Web build (type-check + bundle)

@@ -16,6 +16,9 @@ import "./index.css";
 const MapPage = lazy(() => import("./pages/MapPage"));
 const MerchantPage = lazy(() => import("./pages/MerchantPage"));
 const GroceryStubPage = lazy(() => import("./pages/GroceryStubPage"));
+const OutingsHome = lazy(() => import("./components/outings/OutingsHome"));
+const OutingJoin = lazy(() => import("./components/outings/OutingJoin"));
+const OutingLive = lazy(() => import("./components/outings/OutingLive"));
 
 function RootLayout() {
 	return (
@@ -92,6 +95,44 @@ const groceryRoute = createRoute({
 	),
 });
 
+/* طلعة مشتركة — shared outings. The invite token rides in the URL fragment (/outings/join#…). */
+const outingsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/outings",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<OutingsHome />
+		</Suspense>
+	),
+});
+
+const outingJoinRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/outings/join",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<OutingJoin />
+		</Suspense>
+	),
+});
+
+const outingLiveRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/outings/$id",
+	validateSearch: (s: Record<string, unknown>): { panel?: "members" | "invite" | "settings" } => ({
+		panel: s.panel === "invite" || s.panel === "settings" || s.panel === "members" ? s.panel : undefined,
+	}),
+	component: function OutingLiveRoute() {
+		const { id } = outingLiveRoute.useParams();
+		const { panel } = outingLiveRoute.useSearch();
+		return (
+			<Suspense fallback={<RouteFallback />}>
+				<OutingLive key={id} outingId={id} initialPanel={panel} />
+			</Suspense>
+		);
+	},
+});
+
 const merchantRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/merchant/$type/$id",
@@ -128,6 +169,9 @@ const routeTree = rootRoute.addChildren([
 	compareRoute,
 	groceryRoute,
 	merchantRoute,
+	outingsRoute,
+	outingJoinRoute,
+	outingLiveRoute,
 ]);
 
 const router = createRouter({ routeTree });

@@ -18,6 +18,16 @@ function ent(over: Partial<OutdoorEntity>): OutdoorEntity {
 	};
 }
 
+describe("Arabic counting", () => {
+	it("agrees with the number", async () => {
+		const { countAr } = await import("./aroundYou");
+		expect(countAr(1, "مسار واحد", "مساران", "مسارات", "مسارًا")).toBe("مسار واحد");
+		expect(countAr(2, "مسار واحد", "مساران", "مسارات", "مسارًا")).toBe("مساران");
+		expect(countAr(3, "مسار واحد", "مساران", "مسارات", "مسارًا")).toBe("٣ مسارات");
+		expect(countAr(11, "مسار واحد", "مساران", "مسارات", "مسارًا")).toBe("١١ مسارًا");
+	});
+});
+
 describe("around you", () => {
 	it("is empty without a real origin", () => {
 		const s = summarizeAround([ent({})], null);
@@ -40,6 +50,7 @@ describe("around you", () => {
 		expect(s.tracks).toBe(1);
 		expect(s.nearestWell?.id).toBe("w");
 		expect(s.nearestRawdah?.id).toBe("r");
-		expect(aroundLines(s, true).some((l) => l.includes("مسارات"))).toBe(true);
+		expect(aroundLines(s, true).some((l) => l.includes("مسار واحد"))).toBe(true);
+		expect(aroundLines(s, true).some((l) => l.startsWith("أقرب بئر") && l.includes("كم"))).toBe(true);
 	});
 });

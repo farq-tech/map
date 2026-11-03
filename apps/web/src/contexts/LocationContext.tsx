@@ -35,6 +35,10 @@ type LocationContextType = {
 	userAccuracy: number | null;
 	/** Degrees clockwise from north when the device reports one, else null. */
 	userHeading: number | null;
+	/** Ground speed in m/s when the device reports one, else null. */
+	userSpeed: number | null;
+	/** Device timestamp (ms) of the last real GPS fix; null for manual or no fix. */
+	userFixAt: number | null;
 	locationAddress: string | null;
 	isManualLocation: boolean;
 	locationPinKind: LocationPinKind;
@@ -122,6 +126,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 	const [userAccuracy, setUserAccuracy] = useState<number | null>(null);
 	/** Only ever set from a fix that actually carried one. */
 	const [userHeading, setUserHeading] = useState<number | null>(null);
+	const [userSpeed, setUserSpeed] = useState<number | null>(null);
+	const [userFixAt, setUserFixAt] = useState<number | null>(null);
 	const [locationAddress, setLocationAddress] = useState<string | null>(null);
 	const [isManualLocation, setIsManualLocation] = useState(false);
 	const [locationPinKind, setLocationPinKind] =
@@ -144,8 +150,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 		watchIdRef.current = null;
 	}, []);
 
-	const applyGps = useCallback((lat: number, lng: number, heading?: number | null, accuracy?: number | null) => {
+	const applyGps = useCallback((lat: number, lng: number, heading?: number | null, accuracy?: number | null, speed?: number | null, at?: number) => {
 		setUserLocation({ lat, lng });
+		setUserSpeed(typeof speed === "number" && Number.isFinite(speed) && speed >= 0 ? speed : null);
+		setUserFixAt(typeof at === "number" && Number.isFinite(at) ? at : Date.now());
 		setUserAccuracy(
 			typeof accuracy === "number" && Number.isFinite(accuracy) ? accuracy : null,
 		);
@@ -170,6 +178,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 					pos.coords.longitude,
 					pos.coords.heading,
 					pos.coords.accuracy,
+					pos.coords.speed,
+					pos.timestamp,
 				);
 			},
 			(err) => {
@@ -209,6 +219,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 					pos.coords.longitude,
 					pos.coords.heading,
 					pos.coords.accuracy,
+					pos.coords.speed,
+					pos.timestamp,
 				);
 				setIsLocating(false);
 				startWatch();
@@ -224,6 +236,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 
 	const setManualLocation = useCallback((lat: number, lng: number) => {
 		setUserLocation({ lat, lng });
+		setUserFixAt(null);
+		setUserSpeed(null);
 		setLocationPinKind("manual");
 		setIsManualLocation(true);
 		setHasLocationPermission(true);
@@ -239,6 +253,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 			userLocation,
 			userAccuracy,
 			userHeading,
+			userSpeed,
+			userFixAt,
 			locationAddress,
 			isManualLocation,
 			locationPinKind,
@@ -265,6 +281,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
 			userLocation,
 			userAccuracy,
 			userHeading,
+			userSpeed,
+			userFixAt,
 			locationAddress,
 			isManualLocation,
 			locationPinKind,
