@@ -15,6 +15,7 @@ const createMapRouter = require('./routes/map');
 const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
 const createOutdoorRouter = require('./routes/outdoor');
+const { setupOutings } = require('./lib/outings');
 const { warmCityCache } = require('./lib/city-opportunities');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
 
@@ -28,6 +29,9 @@ const corsOrigins = String(process.env.CORS_ORIGINS || '')
 
 const app = express();
 app.disable('x-powered-by');
+/* Behind Railway's proxy: rate limits key on the client, not the proxy. */
+app.set('trust proxy', 1);
+const outings = setupOutings();
 /* The city read model is ~2.7 MB of JSON and ~380 KB gzipped; never send it raw. */
 app.use(compression({ threshold: 1024 }));
 app.use(
@@ -117,7 +121,9 @@ app.get('/api/health', (_req, res) => {
       comparison_read: process.env.SUPABASE_COMPARISON_READ_ENABLED === '1',
       menu_catalog: process.env.MENU_CATALOG_ENABLED === '1',
       farq_api_origin: Boolean(FARQ_API_ORIGIN),
+      outings: Boolean(outings.service),
     },
+    outings: outings.hub.stats(),
   });
 });
 
@@ -125,6 +131,7 @@ app.use('/api/intelligence', createMapRouter());
 app.use('/api/outdoor', createOutdoorRouter());
 app.use('/api/copilot', createCopilotRouter());
 app.use('/api/analytics', createAnalyticsRouter());
+app.use('/api/outings', outings.router);
 
 async function proxyFarqCatalog(id) {
   if (!FARQ_API_ORIGIN) return null;
@@ -205,6 +212,7 @@ if (FARQ_API_ORIGIN) {
     if (
       req.path.startsWith('/intelligence') ||
       req.path.startsWith('/outdoor') ||
+      req.path.startsWith('/outings') ||
       req.path.startsWith('/restaurant/') ||
       req.path.startsWith('/comparison/')
     ) {
@@ -230,9 +238,12 @@ app.use((err, _req, res, _next) => {
  * unavailable. Off unless SELF_CHECK_ENABLED=1. See lib/self-check.js. */
 selfCheck.start();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[farq-map-api] listening on :${PORT}`);
   if (process.env.SUPABASE_COMPARISON_READ_ENABLED === '1' || process.env.SUPABASE_COMPARISON_READ_ENABLED === 'true') {
     warmCityCache(['riyadh']);
   }
 });
+
+/* Live outings ride the same HTTP server: WebSocket upgrade at /api/outings/live. */
+outings.attach(server);
