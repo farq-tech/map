@@ -5,7 +5,7 @@ name: SaryAlbarq
 options:
   bundleIdPrefix: sa.sary
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   developmentLanguage: ar
   createIntermediateGroups: true
 # Explicit base settings: these are what XcodeGen's presets would add, spelled
@@ -14,7 +14,7 @@ settings:
   base:
     SDKROOT: iphoneos
     SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
-    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     PRODUCT_NAME: $(TARGET_NAME)
     ALWAYS_SEARCH_USER_PATHS: NO
     CLANG_ENABLE_MODULES: YES
@@ -70,7 +70,7 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.tests
-        # Xcode 27's XCTest is built for iOS 17; the app itself still runs on 16.
+        # Same minimum as the app (iOS 17.0, owner decision).
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/SaryAlbarq.app/SaryAlbarq
         BUNDLE_LOADER: $(TEST_HOST)

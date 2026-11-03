@@ -19,6 +19,7 @@ struct SaryAlbarqApp: App {
                     if let u = a.webpageURL { model.handle(url: u) }
                 }
                 .tint(Theme.accent)
+                .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
         }
         .onChange(of: phase) { p in model.foreground(p == .active) }
     }

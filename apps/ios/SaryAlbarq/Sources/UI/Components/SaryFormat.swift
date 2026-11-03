@@ -130,3 +130,20 @@ enum SaryFormat {
         return digits("\(a) \(b) \(c)")
     }
 }
+
+extension SaryFormat {
+    /// Screen-relative direction for VoiceOver: 0° = ahead (top of screen).
+    static func relativeDirection(_ degrees: Double) -> String {
+        let d = (degrees.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+        switch d {
+        case ..<22.5, 337.5...: return "أمامك"
+        case ..<67.5: return "أمامك يمينًا"
+        case ..<112.5: return "على يمينك"
+        case ..<157.5: return "خلفك يمينًا"
+        case ..<202.5: return "خلفك"
+        case ..<247.5: return "خلفك يسارًا"
+        case ..<292.5: return "على يسارك"
+        default: return "أمامك يسارًا"
+        }
+    }
+}
