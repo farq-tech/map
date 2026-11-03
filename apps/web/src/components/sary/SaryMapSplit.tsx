@@ -491,9 +491,18 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 		if (phase === "permission") return isRTL ? "نحتاج موقعك لنعرف ما حولك" : "Location is needed to describe what is around you";
 		if (phase === "loading") return isRTL ? "نحدد موقعك…" : "Finding you…";
 		if (phase === "search") return isRTL ? "نتائج البحث" : "Search";
-		if (phase === "tracking") return isRTL ? "جارٍ تسجيل مسارك" : "Recording your track";
-		if (phase === "weak") return isRTL ? "إشارة GPS ضعيفة" : "Weak GPS";
-		if (phase === "paused") return isRTL ? "التسجيل متوقف مؤقتًا" : "Recording paused";
+		if (phase === "tracking" || phase === "weak" || phase === "paused") {
+			/* The sheet sits at peek while driving: the numbers belong in the line you can see. */
+			const km = formatKm(trip?.distanceM ?? 0, isRTL);
+			const dur = formatDuration(trip ? tripDurationMs(trip, now) : 0, isRTL);
+			const lead =
+				phase === "paused"
+					? isRTL ? "متوقف مؤقتًا" : "Paused"
+					: phase === "weak"
+						? isRTL ? "إشارة GPS ضعيفة" : "Weak GPS"
+						: isRTL ? "جارٍ التسجيل" : "Recording";
+			return `${lead} · ${km} · ${dur}`;
+		}
 		if (phase === "finish") return isRTL ? "انتهى التسجيل — احفظ مسارك" : "Recording finished — save your track";
 		if (phase === "saved") return isRTL ? "تم حفظ المسار على جهازك" : "Track saved on this device";
 		if (phase === "trips") return isRTL ? "مساراتي المسجلة" : "My recorded tracks";
@@ -608,7 +617,15 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 								<li key={line}>{line}</li>
 							))}
 							{!aroundLines(around, isRTL).length ? (
-								<li>{isRTL ? "حرّك الخريطة أو اسمح بالموقع لرؤية ما هو مرصود." : "Pan or allow location to see observed features."}</li>
+								<li>
+									{userLocation && locationPinKind === "gps"
+										? isRTL
+											? "لا توجد معالم برية مرصودة ضمن ١٥ كم منك. ابحث باسم روضة أو نفود، أو حرّك الخريطة إلى البر."
+											: "No observed outdoor features within 15 km of you. Search for a rawdah or nafud, or pan out to the desert."
+										: isRTL
+											? "اسمح بالموقع لنلخّص ما حولك، أو حرّك الخريطة وابحث."
+											: "Allow location to summarise what is around you, or pan and search."}
+								</li>
 							) : null}
 						</ul>
 					) : null}

@@ -712,7 +712,8 @@ function memberLine(r: Row, isRTL: boolean): string {
 	const acc = r.position.accuracy != null ? formatNumber(Math.round(r.position.accuracy), isRTL) : "";
 	const quality = grade === "poor" ? (isRTL ? ` · موقع تقريبي ±${acc} م` : ` · approximate ±${acc} m`) : grade === "fair" ? (isRTL ? ` · دقة متوسطة ±${acc} م` : ` · fair accuracy ±${acc} m`) : "";
 	const away = m.away ? (isRTL ? " · التطبيق ليس في الواجهة" : " · app not in foreground") : "";
-	if (r.fresh === "live") return `${isRTL ? "مباشر" : "Live"} · ${ago}${quality}`;
+	/* The status pill already says «مباشر»; the line adds what it cannot: when, and how sure. */
+	if (r.fresh === "live") return `${isRTL ? "آخر تحديث" : "Updated"} ${ago}${quality}`;
 	if (r.fresh === "recent") return `${isRTL ? "آخر موقع معروف" : "Last known position"} · ${ago}${quality}${gpsNote}${away}`;
 	return `${isRTL ? "انقطع الاتصال — آخر موقع" : "Connection lost — last position"} ${ago}`;
 }
