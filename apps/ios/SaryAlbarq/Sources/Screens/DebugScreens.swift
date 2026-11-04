@@ -23,6 +23,9 @@ struct DebugScreen: View {
         case "details": HomeView(initial: [.details(DemoData.outingId)])
         case "summary": HomeView(initial: [.summary("demo-old")])
         case "history": HomeView(initial: [.history])
+        #if DEBUG
+        case "story": StoryComposerView(facts: StoryFixtures.facts()) {}
+        #endif
         case "profile": HomeView(initial: [.profile])
         case "settings": HomeView(initial: [.settings])
         case "appearance": HomeView(initial: [.settings, .appearance])

@@ -134,9 +134,11 @@ struct TripSummaryView: View {
     var back: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    @Environment(AppearanceSettings.self) private var appearance
     @State private var phase: SnapshotPhase = .loading
     @State private var busy = false
     @State private var shareText: String?
+    @State private var story: StoryFacts?
 
     var body: some View {
         let p = theme.palette
@@ -178,6 +180,11 @@ struct TripSummaryView: View {
                     }
                 }
                 if s.outing.status == .ended {
+                    Button { story = storyFacts(s, mine: mine, local: local) } label: {
+                        SaryButtonLabel(title: "اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("summary.story")
                     mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
                 }
                 Button {
@@ -190,6 +197,23 @@ struct TripSummaryView: View {
         .sheet(item: Binding(get: { shareText.map(ShareText.init) }, set: { if $0 == nil { shareText = nil } })) { t in
             ShareSheet(items: [t.text]).presentationDetents([.medium, .large])
         }
+        .fullScreenCover(item: Binding(get: { story.map(StorySheet.init) }, set: { if $0 == nil { story = nil } })) { st in
+            StoryComposerView(facts: st.facts) { story = nil }
+                .saryPresented(appearance)
+        }
+    }
+
+    /// What «قصة الطلعة» may say: the outing's totals, my trail from this device, and only a count of the others.
+    private func storyFacts(_ s: OutingSnapshot, mine: TripShare?, local: TripTotals?) -> StoryFacts {
+        let trail = model.storyTrail(outingId)
+        var len = 0.0
+        for i in trail.indices.dropFirst() where !trail[i].gap { len += Vehicle.distanceMeters(trail[i - 1].position, trail[i].position) }
+        return StoryFacts(outingName: s.outing.name, startedAt: ISODate.parse(s.outing.started_at), endedAt: ISODate.parse(s.outing.ended_at),
+                          distanceM: mine?.distance_m ?? local.map { Double($0.distanceM) } ?? (len > 0 ? len : nil),
+                          durationS: spanSeconds(s), movingS: mine.map { Int($0.moving_s) } ?? local?.movingS,
+                          memberCount: s.members.count,
+                          companionNames: s.members.filter { $0.user_id != s.me.user_id }.map(\.display_name),
+                          trail: trail, waypoints: model.storyWaypoints(outingId))
     }
 
     @ViewBuilder
@@ -257,6 +281,11 @@ struct TripSummaryView: View {
             phase = .failed(e.arabic)
         } catch {}
     }
+}
+
+private struct StorySheet: Identifiable {
+    let facts: StoryFacts
+    var id: String { facts.outingName }
 }
 
 private struct ShareText: Identifiable {

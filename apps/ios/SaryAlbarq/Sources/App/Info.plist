@@ -55,6 +55,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>تُستخدم الكاميرا فقط لمسح رمز QR: رمز دعوة طلعة، أو رمز الاسترجاع من جوالك القديم. لا تُحفظ أي صورة.</string>
 
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>يحفظ «قصة الطلعة» (صورة أو فيديو صنعته على جوالك) في الصور فقط عندما تضغط «احفظ في الصور». لا يقرأ التطبيق صورك.</string>
+
 	<!-- Launch screen: the Dark Sand background and the app mark, the same as the splash that follows. -->
 	<key>UILaunchScreen</key>
 	<dict>

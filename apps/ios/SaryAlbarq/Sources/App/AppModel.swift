@@ -325,6 +325,26 @@ final class AppModel: ObservableObject {
         return TripLogStore.load(id)?.totals
     }
 
+    /// My trail for this outing, from this device only (for «قصة الطلعة»).
+    func storyTrail(_ id: String) -> [StoryPoint] {
+        if isDemo {
+            #if DEBUG
+            return StoryFixtures.trail(start: Date().addingTimeInterval(-(86400 * 3 + 4 * 3600) + 10 * 60))
+            #else
+            return []
+            #endif
+        }
+        return StoryTrailSource.load(id)
+    }
+
+    /// Shared waypoints for the story (icons only). None until the waypoints client lands here.
+    func storyWaypoints(_ id: String) -> [StoryWaypoint] {
+        #if DEBUG
+        if isDemo { return StoryFixtures.waypoints() }
+        #endif
+        return []
+    }
+
     func shareSummary(_ id: String) async -> TripShare? {
         guard let t = myTrip(id) else { return nil }
         if isDemo { return TripShare(user_id: DemoData.meId, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
