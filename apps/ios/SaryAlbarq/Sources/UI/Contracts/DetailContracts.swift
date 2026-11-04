@@ -114,6 +114,8 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
+    var viaNearby: Bool = false
 }
 
 struct NoteBubbleUI: Equatable {
