@@ -20,6 +20,7 @@
 		091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22577D3538F441C2B397A087 /* LocationTuning.swift */; };
 		0BCB77738A63E5DCF01CA98B /* PointCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7952EE60DE75E467D311999 /* PointCard.swift */; };
 		0C232120FA55F461674FFE2F /* OutingDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD262FCA6C49655E8242D57B /* OutingDetailsView.swift */; };
+		0C44E5F189C3E6F401E697DB /* PTTCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999239D1ACA6CBBA7C94177D /* PTTCodec.swift */; };
 		0DF6DE2014B9D921F74B94EA /* CoordinateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B8BFBB9F1B771E327A8275 /* CoordinateParser.swift */; };
 		0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */; };
 		0FC4C2E18C32E1D6F9EF7B2F /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15B691AC41FCD8479C0AB9E7 /* OnboardingFlow.swift */; };
@@ -53,6 +54,7 @@
 		32642135BD4289FE1C82C8F5 /* CreateFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A91F12AC639CDC2FA15190B /* CreateFlow.swift */; };
 		32CC22CAE8AE3CB40321B17D /* SaryAlbarqUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E24003749BC3726C3407B3A /* SaryAlbarqUITests.swift */; };
 		33F4F4423348F7788A65F9CF /* OfflineMapsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FF5F9877B2FBB60DF60356C /* OfflineMapsView.swift */; };
+		345181EBCDCEB5C75BD540D9 /* WalkieTalkieLabUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF3BC0E163A1381931DBBB9 /* WalkieTalkieLabUITests.swift */; };
 		35BAE008CD008CFA36D18AF9 /* DebugScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8E70F4903CDF5CAAA727D8 /* DebugScreens.swift */; };
 		3697BDF7AA18383A8EA58EBD /* ShowcaseBlocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5DA379111C6D7352FFB06E6 /* ShowcaseBlocks.swift */; };
 		36AA83D258DA6FEF5B807226 /* SaryStatusCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D5C8675B8818C49D07DE22 /* SaryStatusCapsule.swift */; };
@@ -78,6 +80,7 @@
 		4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */; };
 		50443BC7D769962FC54573B3 /* LivePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACEFFFBF3BBB3DA6A6AE327 /* LivePlan.swift */; };
 		50676ABA167F396BA6E7C174 /* SaryAppearancePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */; };
+		522FFF9D2561513CE3D84C56 /* PTTWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8B4883CF6EE1515B05DE75 /* PTTWire.swift */; };
 		5232C6A922DC5A881BE253DE /* PlaceSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E27E0720DD931C16730988 /* PlaceSearch.swift */; };
 		5487F7F21A426D1FE552CE27 /* ChipDeclutterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */; };
 		549ED87985925555B0E297C9 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3C7F10D18DF499BCA61AB2 /* WeatherService.swift */; };
@@ -88,6 +91,7 @@
 		5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */; };
 		5CE0D2A20AE94021998CB350 /* OutingActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DF67DE81239EDAD62E2723 /* OutingActivityCoordinator.swift */; };
 		5E1F37D3C1DAFE6A6D3AAA46 /* SafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936885EDDC9016EA6FAB7D27 /* SafetyTests.swift */; };
+		5F38F339B71924FB4B0725B6 /* WalkieTalkieTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 292BB5809C3D66E13C3848D4 /* WalkieTalkieTests.swift */; };
 		5F41F9FA232227C41EC0313F /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */; };
 		615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */; };
 		61CFE446CEBF0D9276DD62FF /* SaryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */; };
@@ -111,6 +115,7 @@
 		7150DA88C188F02803392152 /* PlanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED874D0173AB2F00E5EC9768 /* PlanUITests.swift */; };
 		720F65915109D36462C6D095 /* OutingActivityDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */; };
 		735A33AC3B44DBA0FDCE015E /* TripLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4343F12A82B70322558AC0D /* TripLog.swift */; };
+		743E98AA6FFAF26E97C77C42 /* PTTJitterBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E2519FFC2EC9250B408870 /* PTTJitterBuffer.swift */; };
 		7567E09DAF6E55DD6A4FB56C /* RecoveryFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C3945563FBFA05496632EDC /* RecoveryFormatTests.swift */; };
 		75CFCA76ED14EDCBC2D42CDE /* WeatherRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A448E556D76113B8C8771FA /* WeatherRules.swift */; };
 		769416EEC0A4B403253B0E96 /* AppModel+Speed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70A3546B6D33A2BD0ABDB4F /* AppModel+Speed.swift */; };
@@ -152,12 +157,15 @@
 		997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = C345B48C2AFDDA7637004476 /* NearbyMesh.swift */; };
 		9C57BC9BFE5C9DEA0719B95F /* OutingActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */; };
 		9CA1F2B5B3B496F3B09568DF /* StoryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB9DC7BFFD3ADBF8D84CEB32 /* StoryRenderer.swift */; };
+		9CCC7930112B15F48766EAE5 /* OutingWalkieTalkie.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0A08B6928C14FD3B79AB09 /* OutingWalkieTalkie.swift */; };
 		9CD1B7D2841649438A1B40DD /* LiveOutingPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */; };
 		9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C008F75E097C5F716CA27F92 /* StoryComposerView.swift */; };
+		9F074D8F527A6A2CB4E741D0 /* PTTFloor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A646C8F38F1576C4D69B2CD /* PTTFloor.swift */; };
 		A24E1DB789B5AFA3E1A49DA5 /* StoryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130F880F87CDE2889AC43639 /* StoryModel.swift */; };
 		A7F4AD5D6CF4BCD5C02A66F5 /* Tajawal-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */; };
 		A8CDB1F71E080D534DB28E02 /* WadiProximity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0489B2C1D18D5B00426F64E /* WadiProximity.swift */; };
 		A8F0D7298496491D5258091A /* FeatureContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB1804ED435C480DA2259A2 /* FeatureContracts.swift */; };
+		A949684470BEC92CAB97719C /* PTTAudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99017BD88327DDFF82DB3E9F /* PTTAudioEngine.swift */; };
 		AB9F2EBF5F16E7BC02ECA93E /* LiveActivityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6512E998C15D9197A532AED /* LiveActivityUITests.swift */; };
 		B029B98238C9EDEABB757DD5 /* OutingDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */; };
 		B20BBCBCD2257C003224C512 /* Speed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */; };
@@ -167,6 +175,7 @@
 		B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79172DD3710A43059AD423D9 /* LiveProductionTests.swift */; };
 		BA9EC12A242516686214DC1D /* SafetyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9277C432B14BEC26834FFA /* SafetyModels.swift */; };
 		BABEA1C522D3C3F944A5F081 /* OutingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D760D265D8142ADC975C3C6A /* OutingLiveActivityWidget.swift */; };
+		BB4A6FF47683D0376CFA6F9C /* PTTRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC606761D7FE4028F28B821 /* PTTRoute.swift */; };
 		BB72181BBB29FB559AB3DB30 /* StoryPrivacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8B7E5539A2D7D4C3619F42 /* StoryPrivacy.swift */; };
 		C0F2326D0485EE536CE47783 /* SaryWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E313CE99A6E96F6BB2DCE4DA /* SaryWidgetsBundle.swift */; };
 		C29CA1BB809B5927D6CF4D02 /* LiveOutingController+Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F0F094E60D61FC178749D4E /* LiveOutingController+Weather.swift */; };
@@ -188,6 +197,7 @@
 		E35B91A3DB815596A48FF60D /* AppearanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */; };
 		E3BB0F9928FD1FA15AED4E9C /* Policy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376AED911A9C2A29F5F4EFD0 /* Policy.swift */; };
 		E57ACA64813C79F8E8EBE177 /* WaypointPins.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2026730EB662B04457DEB1C2 /* WaypointPins.swift */; };
+		E5D8984453F0560792F1161A /* MeshVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9D31346DAF59A4452999F1 /* MeshVoice.swift */; };
 		E62055444AA1B0EF78CB78DE /* SaryMapOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84628226D3FBEC8CE9CDDE8B /* SaryMapOverlays.swift */; };
 		E7B2533F639497ED247C4033 /* WaypointLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */; };
 		E8DD03C2973FBFA303C4C411 /* WeatherPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A68479D023A2BE748792785 /* WeatherPresenter.swift */; };
@@ -259,6 +269,7 @@
 		0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointLayout.swift; sourceTree = "<group>"; };
 		087D07928C7AC61627BD3A63 /* SaryPTT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryPTT.swift; sourceTree = "<group>"; };
 		08DD20251B09C1DA7E125E91 /* ReturnTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReturnTimer.swift; sourceTree = "<group>"; };
+		08E2519FFC2EC9250B408870 /* PTTJitterBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTJitterBuffer.swift; sourceTree = "<group>"; };
 		0A0CAF1A6CC3BA3345CE20B5 /* InviteLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteLink.swift; sourceTree = "<group>"; };
 		0DCD33518F150B1E06AF5689 /* WeatherViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherViews.swift; sourceTree = "<group>"; };
 		0E41606D6ED7AD6DE331E97F /* LocalDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDestination.swift; sourceTree = "<group>"; };
@@ -270,7 +281,9 @@
 		15B691AC41FCD8479C0AB9E7 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		1616F75CC1BD288A1F5D7F47 /* PlanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanEditorView.swift; sourceTree = "<group>"; };
 		1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqApp.swift; sourceTree = "<group>"; };
+		1A646C8F38F1576C4D69B2CD /* PTTFloor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTFloor.swift; sourceTree = "<group>"; };
 		1A91F12AC639CDC2FA15190B /* CreateFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlow.swift; sourceTree = "<group>"; };
+		1B0A08B6928C14FD3B79AB09 /* OutingWalkieTalkie.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingWalkieTalkie.swift; sourceTree = "<group>"; };
 		1BACD4C5C961C090729FEC90 /* MoreMenuUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreMenuUITests.swift; sourceTree = "<group>"; };
 		1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailMatchCoordinator.swift; sourceTree = "<group>"; };
 		1ECDC19382CB3316DC07F394 /* RouteFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFile.swift; sourceTree = "<group>"; };
@@ -284,6 +297,7 @@
 		24196944BD9442139264A0B6 /* CreateOutingWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateOutingWizard.swift; sourceTree = "<group>"; };
 		28D20037D03EABCC832D131B /* ScreenKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenKit.swift; sourceTree = "<group>"; };
 		29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedUITests.swift; sourceTree = "<group>"; };
+		292BB5809C3D66E13C3848D4 /* WalkieTalkieTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkieTalkieTests.swift; sourceTree = "<group>"; };
 		29BAD7EA4146554682B94424 /* TrailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailTests.swift; sourceTree = "<group>"; };
 		29CF69283BC9759E1B44196C /* MeshCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshCrypto.swift; sourceTree = "<group>"; };
 		2A68479D023A2BE748792785 /* WeatherPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherPresenter.swift; sourceTree = "<group>"; };
@@ -376,6 +390,8 @@
 		96DA38518A590AB9B0FF6628 /* SaryTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryTokens.swift; sourceTree = "<group>"; };
 		978DED85B9A53695F514416B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		979581766CAF361A0D21C0B0 /* OutingWeather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingWeather.swift; sourceTree = "<group>"; };
+		99017BD88327DDFF82DB3E9F /* PTTAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTAudioEngine.swift; sourceTree = "<group>"; };
+		999239D1ACA6CBBA7C94177D /* PTTCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTCodec.swift; sourceTree = "<group>"; };
 		9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipDeclutterUITests.swift; sourceTree = "<group>"; };
 		9CAF059F25F880DEEA683E7A /* WeatherModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherModels.swift; sourceTree = "<group>"; };
 		9FD67E7728BC446CC952AC77 /* StoryFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryFixtures.swift; sourceTree = "<group>"; };
@@ -389,6 +405,8 @@
 		A76B7AC870FF18C0416DEE76 /* SaryButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryButtons.swift; sourceTree = "<group>"; };
 		A7D103A86D3A736B06E9438E /* WeatherChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherChip.swift; sourceTree = "<group>"; };
 		A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingContract.swift; sourceTree = "<group>"; };
+		ABC606761D7FE4028F28B821 /* PTTRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTRoute.swift; sourceTree = "<group>"; };
+		AC8B4883CF6EE1515B05DE75 /* PTTWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTWire.swift; sourceTree = "<group>"; };
 		AD262FCA6C49655E8242D57B /* OutingDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingDetailsView.swift; sourceTree = "<group>"; };
 		ADD3481E4956173E7476C431 /* WaypointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointTests.swift; sourceTree = "<group>"; };
 		AE9277C432B14BEC26834FFA /* SafetyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyModels.swift; sourceTree = "<group>"; };
@@ -403,6 +421,7 @@
 		BB9EBA4DBD0EE2156C0A0383 /* OutingFeaturesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingFeaturesAPI.swift; sourceTree = "<group>"; };
 		BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityBuilder.swift; sourceTree = "<group>"; };
 		BE100E5962388F4D3E30A69F /* CreateFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlowUITests.swift; sourceTree = "<group>"; };
+		BEF3BC0E163A1381931DBBB9 /* WalkieTalkieLabUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkieTalkieLabUITests.swift; sourceTree = "<group>"; };
 		C008F75E097C5F716CA27F92 /* StoryComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryComposerView.swift; sourceTree = "<group>"; };
 		C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingDestination.swift; sourceTree = "<group>"; };
 		C250D2876001271445C51C05 /* TrailRawLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailRawLog.swift; sourceTree = "<group>"; };
@@ -425,6 +444,7 @@
 		DB9278B615CF2065EAB95DC4 /* CreateFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateFlowTests.swift; sourceTree = "<group>"; };
 		DB9DC7BFFD3ADBF8D84CEB32 /* StoryRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryRenderer.swift; sourceTree = "<group>"; };
 		DC378DBA5C797B0A053E99D1 /* TrailMatching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailMatching.swift; sourceTree = "<group>"; };
+		DE9D31346DAF59A4452999F1 /* MeshVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshVoice.swift; sourceTree = "<group>"; };
 		DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRulesTests.swift; sourceTree = "<group>"; };
 		E0489B2C1D18D5B00426F64E /* WadiProximity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WadiProximity.swift; sourceTree = "<group>"; };
 		E1357FA88F811568C444EAFE /* SaryAlbarqUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -522,6 +542,20 @@
 			path = Create;
 			sourceTree = "<group>";
 		};
+		2DE92FFEF0B87B77B2619DAA /* PTT */ = {
+			isa = PBXGroup;
+			children = (
+				1B0A08B6928C14FD3B79AB09 /* OutingWalkieTalkie.swift */,
+				99017BD88327DDFF82DB3E9F /* PTTAudioEngine.swift */,
+				999239D1ACA6CBBA7C94177D /* PTTCodec.swift */,
+				1A646C8F38F1576C4D69B2CD /* PTTFloor.swift */,
+				08E2519FFC2EC9250B408870 /* PTTJitterBuffer.swift */,
+				ABC606761D7FE4028F28B821 /* PTTRoute.swift */,
+				AC8B4883CF6EE1515B05DE75 /* PTTWire.swift */,
+			);
+			path = PTT;
+			sourceTree = "<group>";
+		};
 		2E34D73B37A06B558F2BA4B2 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
@@ -597,6 +631,7 @@
 				DBDF67E55C9E93EEFBC799A6 /* Mesh */,
 				028F6CF2C8E769BC0F270D1D /* Net */,
 				713B15BD8FAE6A8C8A3E2B77 /* Plan */,
+				2DE92FFEF0B87B77B2619DAA /* PTT */,
 				708036541DBBC706E8349484 /* Safety */,
 				7F1002D60F5359AEF819FDFD /* Screens */,
 				4E03B80DD195DCBC58769CF2 /* Story */,
@@ -659,6 +694,7 @@
 				2E6DA5CD2131BB21430FC238 /* StoryTests.swift */,
 				76C15BFC3A0DDB5B7A822D45 /* TrailAccuracyTests.swift */,
 				29BAD7EA4146554682B94424 /* TrailTests.swift */,
+				292BB5809C3D66E13C3848D4 /* WalkieTalkieTests.swift */,
 				ADD3481E4956173E7476C431 /* WaypointTests.swift */,
 				42C1C3FA58A8C93A2102ACB0 /* WeatherTests.swift */,
 				01FB7D7462CB968C1B2B7987 /* Fixtures */,
@@ -813,6 +849,7 @@
 				E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */,
 				29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */,
 				A2F250B4DBC1D0018C096D9D /* StoryUITests.swift */,
+				BEF3BC0E163A1381931DBBB9 /* WalkieTalkieLabUITests.swift */,
 				38DA1D694DA79F92A99941CD /* WaypointsUITests.swift */,
 			);
 			path = UITests;
@@ -892,6 +929,7 @@
 			children = (
 				29CF69283BC9759E1B44196C /* MeshCrypto.swift */,
 				92E5C3B7CAF047A17215B8E1 /* MeshStore.swift */,
+				DE9D31346DAF59A4452999F1 /* MeshVoice.swift */,
 				C345B48C2AFDDA7637004476 /* NearbyMesh.swift */,
 			);
 			path = Mesh;
@@ -1117,6 +1155,7 @@
 				2F8F190AEC4682EBB4977F9E /* ScreensUITests.swift in Sources */,
 				693C61DAE332565D0BB660FD /* SpeedUITests.swift in Sources */,
 				1FF78175DEA5D06E0A2A39A4 /* StoryUITests.swift in Sources */,
+				345181EBCDCEB5C75BD540D9 /* WalkieTalkieLabUITests.swift in Sources */,
 				4BCCFE1D2BFD50079C5F2084 /* WaypointsUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1148,6 +1187,7 @@
 				92B96B2F349DEA5FB18939FA /* StoryTests.swift in Sources */,
 				38198210B9D2DB871B2DC413 /* TrailAccuracyTests.swift in Sources */,
 				2AA0BA776FFBD6002E7B11CC /* TrailTests.swift in Sources */,
+				5F38F339B71924FB4B0725B6 /* WalkieTalkieTests.swift in Sources */,
 				98F4EB3B6FBDCC01779015FA /* WaypointTests.swift in Sources */,
 				4A03A5EB17408785D87EC545 /* WeatherTests.swift in Sources */,
 			);
@@ -1197,6 +1237,7 @@
 				FD5538296A9585D2DD795C7F /* MapStage.swift in Sources */,
 				D2D6DFACC32724C0B71EFE67 /* MeshCrypto.swift in Sources */,
 				2D57E09AFD46BAE41FD94E99 /* MeshStore.swift in Sources */,
+				E5D8984453F0560792F1161A /* MeshVoice.swift in Sources */,
 				F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */,
 				997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */,
 				86B80A0CAF9A0FECB38A6F8D /* OfflineMaps.swift in Sources */,
@@ -1214,8 +1255,15 @@
 				771CF1A9EC8865D34CE4F02E /* OutingSession.swift in Sources */,
 				2F7CB1EAD4ADF08D52B7BE14 /* OutingSheets.swift in Sources */,
 				871618BA2834A861C00B7131 /* OutingState.swift in Sources */,
+				9CCC7930112B15F48766EAE5 /* OutingWalkieTalkie.swift in Sources */,
 				6DD59CA571FFB0ABCF7FAEEC /* OutingWeather.swift in Sources */,
 				00DB1B5A251C9F87CE438139 /* OutingsAPI.swift in Sources */,
+				A949684470BEC92CAB97719C /* PTTAudioEngine.swift in Sources */,
+				0C44E5F189C3E6F401E697DB /* PTTCodec.swift in Sources */,
+				9F074D8F527A6A2CB4E741D0 /* PTTFloor.swift in Sources */,
+				743E98AA6FFAF26E97C77C42 /* PTTJitterBuffer.swift in Sources */,
+				BB4A6FF47683D0376CFA6F9C /* PTTRoute.swift in Sources */,
+				522FFF9D2561513CE3D84C56 /* PTTWire.swift in Sources */,
 				5232C6A922DC5A881BE253DE /* PlaceSearch.swift in Sources */,
 				C2F97FDEC9ED998804C7C064 /* PlanAPI.swift in Sources */,
 				C6A43AED85778F01DE131F67 /* PlanEditorView.swift in Sources */,

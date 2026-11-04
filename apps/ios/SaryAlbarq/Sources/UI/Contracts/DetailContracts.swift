@@ -120,6 +120,8 @@ struct NameChipUI: Equatable {
     var convoy: ConvoyBadgeUI? = nil
     /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
     var viaNearby: Bool = false
+    /// On air in «قناة الطلعة» right now: an animated speaking badge.
+    var speaking: Bool = false
 }
 
 struct NoteBubbleUI: Equatable {

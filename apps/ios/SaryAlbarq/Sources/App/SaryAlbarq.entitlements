@@ -10,6 +10,10 @@
 	<!-- SOS arrives as a Time Sensitive notification (breaks through Focus when allowed). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- «قناة الطلعة»: Apple's PushToTalk framework (system PTT UI on the Lock Screen /
+	     Dynamic Island, pushtotalk wake-ups). Enable "Push to Talk" on the App ID. -->
+	<key>com.apple.developer.push-to-talk</key>
+	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:farq-map-investor.vercel.app</string>

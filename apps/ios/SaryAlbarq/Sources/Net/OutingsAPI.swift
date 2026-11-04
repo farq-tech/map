@@ -5,8 +5,33 @@ enum Endpoints {
     /// The Railway API, called directly (the Vercel `/api` rewrite proxies the
     /// same server but cannot carry a WebSocket). No key: identity is a per-device
     /// Bearer token the server issues.
-    static let apiBase = URL(string: "https://api-production-ddc84.up.railway.app")!
-    static let liveSocket = URL(string: "wss://api-production-ddc84.up.railway.app/api/outings/live")!
+    static var apiBase: URL {
+        #if DEBUG
+        /* Local end-to-end tests: `-SaryAPIBase http://127.0.0.1:8787` (never in a release build). */
+        if let b = debugBase { return b }
+        #endif
+        return URL(string: "https://api-production-ddc84.up.railway.app")!
+    }
+
+    static var liveSocket: URL {
+        #if DEBUG
+        if let b = debugBase, var c = URLComponents(url: b, resolvingAgainstBaseURL: false) {
+            c.scheme = c.scheme == "https" ? "wss" : "ws"
+            c.path = "/api/outings/live"
+            if let u = c.url { return u }
+        }
+        #endif
+        return URL(string: "wss://api-production-ddc84.up.railway.app/api/outings/live")!
+    }
+
+    #if DEBUG
+    private static var debugBase: URL? {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryAPIBase"), i + 1 < a.count, let u = URL(string: a[i + 1]),
+              let h = u.host, h == "127.0.0.1" || h == "localhost" else { return nil }
+        return u
+    }
+    #endif
 }
 
 struct OutingAPIError: Error, Equatable {
@@ -207,6 +232,17 @@ final class OutingsAPI {
     func registerApns(token: String, environment: String, bundleId: String) async throws {
         let _: OkBox = try await call("POST", "/push/apns", body: ["token": token, "environment": environment, "bundle_id": bundleId])
     }
+    // MARK: «قناة الطلعة» — this device's PushToTalk channel token for one outing
+
+    func registerPTTToken(_ outingId: String, token: String, environment: String) async throws {
+        let _: OkBox = try await call("POST", "/\(outingId)/ptt/token", body: ["token": token, "environment": environment])
+    }
+
+    /// Muted the channel or left the outing: no more wake-ups for this phone (every token of mine for it).
+    func unregisterPTTToken(_ outingId: String) async throws {
+        let _: OkBox = try await call("DELETE", "/\(outingId)/ptt/token", body: [String: String]())
+    }
+
     func unregisterApns(token: String) async throws {
         let _: OkBox = try await call("DELETE", "/push/apns", body: ["token": token])
     }
