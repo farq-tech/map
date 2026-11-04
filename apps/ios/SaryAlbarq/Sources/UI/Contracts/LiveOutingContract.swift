@@ -39,6 +39,8 @@ enum LiveWarningUI: Equatable, Hashable {
     case keepScreenOn
     /// Location permission is off; sharing cannot work.
     case locationOff
+    /// iOS «الموقع الدقيق» is off: positions and «مساري» are kilometres off.
+    case preciseOff
 
     var label: String {
         switch self {
@@ -46,6 +48,7 @@ enum LiveWarningUI: Equatable, Hashable {
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
         case .keepScreenOn: return "خلّ الشاشة شغالة لدقة أعلى"
         case .locationOff: return "إذن الموقع مقفل · افتح الإعدادات"
+        case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
         }
     }
 }
@@ -398,4 +401,8 @@ struct TrailCardUIState: Equatable {
     var recordingInBackground: Bool
     var showFriends: Bool
     var backTrackActive: Bool
+    /// While recording: «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    var health: TrailHealth? = nil
+    /// «طابق مساري مع الطرق».
+    var matchOn = true
 }

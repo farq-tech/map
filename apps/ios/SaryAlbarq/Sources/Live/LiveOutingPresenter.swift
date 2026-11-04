@@ -35,6 +35,8 @@ struct LivePresenterInput {
     var nearbyVia: Set<String> = []
     /// Members' cars heard directly phone to phone right now.
     var nearbyCars = 0
+    /// iOS «الموقع الدقيق» is off (reduced accuracy: km-level fixes).
+    var preciseOff = false
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -117,6 +119,8 @@ enum LiveOutingPresenter {
     static func warnings(_ i: LivePresenterInput) -> [LiveWarningUI] {
         var w: [LiveWarningUI] = []
         if !i.locationAuthorized && i.gpsState == .denied { w.append(.locationOff) }
+        /* Reduced accuracy is kilometres off: the map, the trail and «طريق العودة» are all wrong. */
+        if i.locationAuthorized && i.preciseOff { w.append(.preciseOff) }
         if i.link == .offline { w.append(.noInternet) }
         if i.wantsToShare && i.gpsState == .weak { w.append(.weakGPS) }
         /* Positions go out only while the app is on screen. */

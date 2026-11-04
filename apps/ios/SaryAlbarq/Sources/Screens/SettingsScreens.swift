@@ -428,6 +428,9 @@ struct NotificationSettingsView: View {
 struct AboutView: View {
     var back: () -> Void
     @Environment(\.sary) private var theme
+    /// Five taps on the version: the hidden diagnostics («تصدير سجل المسار (GPX)»).
+    @State private var versionTaps = 0
+    @State private var gpx: [(id: String, url: URL)] = []
 
     var body: some View {
         let p = theme.palette
@@ -439,8 +442,27 @@ struct AboutView: View {
                 Text("سَرى البارق").font(.sary(26, .heavy)).foregroundStyle(p.textPrimary)
                 Text("الإصدار \(SaryFormat.digits(v).replacingOccurrences(of: "٫", with: ".")) (\(SaryFormat.digits(b)))").saryNumber(.subhead).foregroundStyle(p.textSecondary)
                     .accessibilityIdentifier("about.version")
+                    .onTapGesture {
+                        versionTaps += 1
+                        if versionTaps == 5 { gpx = TrailGPX.outings().prefix(5).compactMap { id in TrailGPX.export(outingId: id).map { (id, $0) } } }
+                    }
             }
             .frame(maxWidth: .infinity)
+            if versionTaps >= 5 {
+                SarySection(title: "تشخيص", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) بصيغة GPX، لترسله لفريق سَرى البارق.") {
+                    if gpx.isEmpty {
+                        Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                            .padding(.vertical, theme.space(.s))
+                    }
+                    ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
+                        ShareLink(item: item.url) {
+                            SaryButtonLabel(title: n == 0 ? "تصدير سجل المسار (GPX)" : "تصدير سجل المسار (GPX) · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.sary(.secondary))
+                        .accessibilityIdentifier("about.gpx.\(n)")
+                    }
+                }
+            }
             SarySection(title: "مصادر") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")

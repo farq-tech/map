@@ -21,15 +21,17 @@ final class TrailFilterTests: XCTestCase {
     var dLat: Double { f.dLat }
     func fix(_ n: Double, _ e: Double = 0, t: Double, acc: Double = 5) -> DeviceFix { f.fix(n, e, t: t, acc: acc) }
 
-    func testAccuracyGateMinStepAndOrder() {
+    func testAccuracyWeightingMinStepAndOrder() {
         var tr = Trail()
         XCTAssertTrue(tr.add(fix(0, t: 0)))
-        XCTAssertFalse(tr.add(fix(50, t: 5, acc: 80)), "a poor fix is not a trail point")
-        XCTAssertFalse(tr.add(fix(6, t: 10)), "under 10 m is jitter")
-        XCTAssertTrue(tr.add(fix(12, t: 12)))
-        XCTAssertFalse(tr.add(fix(40, t: 11)), "older than the last point")
+        XCTAssertFalse(tr.add(fix(50, t: 5, acc: 150)), "over 100 m is not used at all")
+        XCTAssertFalse(tr.add(fix(4, t: 10)), "under 8 m is jitter")
+        XCTAssertTrue(tr.add(fix(20, t: 12)))
+        XCTAssertFalse(tr.add(fix(40, t: 11)), "older than the last fix")
         XCTAssertFalse(tr.add(fix(40, t: 12)), "same time")
         XCTAssertEqual(tr.points.count, 2)
+        /* A noisy (60 m) but real fix still pulls the trail — weighted by its accuracy, not dropped. */
+        XCTAssertTrue(tr.add(fix(60, t: 16, acc: 60)))
         XCTAssertFalse(tr.points.contains(where: \.gap))
     }
 
@@ -42,14 +44,15 @@ final class TrailFilterTests: XCTestCase {
         XCTAssertEqual(tr.points.count, 3)
         XCTAssertLessThan(tr.points.map(\.lat).max()!, 24.7 + 100 * dLat)
 
-        /* The last kept point was the bad one: three fixes that agree with each other win. */
+        /* The filter was the one off: three fixes that agree with each other win (a reset, not a gap:
+         * fixes kept coming, so nothing is dashed). */
         var tr2 = Trail()
         tr2.add(fix(0, t: 0))
         XCTAssertFalse(tr2.add(fix(5000, t: 3)))
         XCTAssertFalse(tr2.add(fix(5020, t: 4)))
         XCTAssertTrue(tr2.add(fix(5040, t: 5)))
-        XCTAssertTrue(tr2.points[1].gap, "the jump itself is drawn as an unrecorded stretch, not a path")
-        XCTAssertEqual(tr2.points.count, 4)
+        XCTAssertFalse(tr2.points[1].gap)
+        XCTAssertEqual(tr2.points[1].lat, 24.7 + 5040 * dLat, accuracy: 15 * dLat)
     }
 }
 
@@ -133,7 +136,7 @@ final class TrailSimplifyTests: XCTestCase {
         XCTAssertLessThan(tr.points.count, 200, "a straight drive is stored as a few points")
         XCTAssertGreaterThanOrEqual(tr.points.count, Trail.rawTail)
         XCTAssertEqual(tr.points.first?.t, f.t0)
-        XCTAssertEqual(tr.points.last!.lat, f.fix(599 * 12, t: 0).lat, accuracy: 1e-9)
+        XCTAssertEqual(tr.points.last!.lat, f.fix(599 * 12, t: 0).lat, accuracy: 3 * f.dLat)
         XCTAssertEqual(tr.recordedLengthM, 599 * 12, accuracy: 10)
     }
 }
@@ -186,7 +189,8 @@ final class BackTrackTests: XCTestCase {
         XCTAssertTrue(off.offTrack)
         XCTAssertEqual(off.bearing, 270, accuracy: 3, "the arrow points back to the trail (west)")
         XCTAssertTrue(bt.update(at(800, 50)).offTrack, "no flicker at the edge")
-        XCTAssertFalse(bt.update(at(800, 35)).offTrack)
+        XCTAssertTrue(bt.update(at(800, 36)).offTrack)
+        XCTAssertFalse(bt.update(at(800, 30)).offTrack, "back on inside 35 m")
     }
 
     func testAutoAdvancesAsIRetraceAndArrives() {
@@ -318,7 +322,7 @@ final class TrailSessionTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    private func session(always: Bool = true) -> OutingSession {
+    private func session(always: Bool = true, lockedScreen: Bool? = nil) -> OutingSession {
         var env = SessionEnv()
         env.makeSocket = { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s }
         env.scheduler = FakeScheduler()
@@ -327,6 +331,7 @@ final class TrailSessionTests: XCTestCase {
         env.timers = false
         env.authorizationOverride = true
         env.alwaysOverride = always
+        env.lockedScreenTrailOverride = lockedScreen
         env.trailDirectory = dir
         let s = OutingSession(id: "o1", myUserId: "u1", api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43), location: location, env: env)
         s.open()
@@ -397,8 +402,21 @@ final class TrailSessionTests: XCTestCase {
         XCTAssertTrue(RecordingURLProtocol.requests.isEmpty)
     }
 
-    func testWithoutAlwaysTheLockedStretchIsAGap() {
+    /// iOS 17+: «أثناء الاستخدام» keeps the trail going with the screen locked (background activity session).
+    func testWhenInUseRecordsWithTheScreenLockedToo() {
         let s = session(always: false)
+        serverReady(sockets[0])
+        s.trailFix(trailFix(0))
+        foreground = false
+        s.foreground(false)
+        XCTAssertTrue(s.recordingInBackground, "build 4 stopped here: every screen lock became a dashed line")
+        for i in 1..<10 { s.trailFix(trailFix(i)) }
+        XCTAssertEqual(s.trail.points.count, 10)
+        XCTAssertEqual(s.trail.gapCount, 0)
+    }
+
+    func testWhenIOSCannotRecordLockedOnlyALongFarSilenceIsAGap() {
+        let s = session(always: false, lockedScreen: false)
         serverReady(sockets[0])
         s.trailFix(trailFix(0))
         s.trailFix(trailFix(1))
@@ -409,8 +427,24 @@ final class TrailSessionTests: XCTestCase {
         XCTAssertEqual(s.trail.points.count, 2, "nothing is recorded with the screen locked")
         foreground = true
         s.foreground(true)
-        s.trailFix(trailFix(9))
-        XCTAssertEqual(s.trail.points.map(\.gap), [false, false, true], "the unseen stretch is an honest gap")
+        s.trailFix(trailFix(20))
+        XCTAssertEqual(s.trail.points.map(\.gap), [false, false, false], "19 s away: drawn, not dashed")
+        s.trailFix(trailFix(200))
+        XCTAssertEqual(s.trail.points.last?.gap, true, "3 minutes and 6 km unseen: an honest gap")
+    }
+
+    func testRawFixesAreKeptEvenWhenNotDrawn() {
+        let s = session()
+        serverReady(sockets[0])
+        for i in 0..<5 { s.trailFix(trailFix(i)) }
+        var poor = trailFix(6)
+        poor.accuracy = 900
+        s.trailFix(poor)
+        s.saveTrail()
+        let raw = TrailRawLog.load("o1", in: dir)
+        XCTAssertEqual(raw.count, 6, "every fix, including the one too poor to draw")
+        XCTAssertEqual(raw.last?.acc, 900)
+        XCTAssertGreaterThanOrEqual(s.trailHealth.fixesPerMinute, 5, "fixes of the last minute")
     }
 
     func testBackgroundRecordingStopsWhenTheOutingEnds() {
@@ -469,8 +503,8 @@ final class TrailSessionTests: XCTestCase {
         let s2 = session()
         XCTAssertEqual(s2.trail.points.count, 5, "loaded from this device, offline")
         serverReady(sockets[1])
-        s2.trailFix(trailFix(30))
-        XCTAssertTrue(s2.trail.points.last!.gap, "the time the app was closed is a gap")
+        s2.trailFix(trailFix(200))
+        XCTAssertTrue(s2.trail.points.last!.gap, "the time the app was closed (minutes, km) is a gap")
         s2.clearTrail()
         XCTAssertTrue(s2.trail.isEmpty)
         XCTAssertNil(TrailStore.load("o1", in: dir))

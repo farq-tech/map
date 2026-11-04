@@ -25,7 +25,15 @@ struct SaryAlbarqApp: App {
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
         }
-        .onChange(of: phase) { p in model.foreground(p == .active) }
+        /* Only .background is "left the screen". `.inactive` (Control Center, notification shade,
+         * an incoming-call banner, a system prompt) used to stop the GPS and cut «مساري» into gaps. */
+        .onChange(of: phase) { p in
+            switch p {
+            case .active: model.foreground(true)
+            case .background: model.foreground(false)
+            default: break
+            }
+        }
     }
 }
 
