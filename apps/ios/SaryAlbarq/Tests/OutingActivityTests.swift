@@ -57,12 +57,20 @@ final class OutingActivityTests: XCTestCase {
     }
 
     func testOldOwnFixHidesEveryDistance() throws {
-        let s = try XCTUnwrap(OutingActivityBuilder.state(input(view(), fixAgeS: 90), backMeters: 6_100))
+        let s = try XCTUnwrap(OutingActivityBuilder.state(input(view(), fixAgeS: 150), backMeters: 6_100))
         XCTAssertFalse(s.gpsOK)
         XCTAssertNil(s.backMeters, "distance back needs a fresh fix of mine")
         XCTAssertNil(s.farthestName)
         XCTAssertNil(s.farthestMeters)
-        XCTAssertEqual(s.liveCount, 2, "my own 90 s old fix is not live")
+        XCTAssertEqual(s.liveCount, 2, "my own 150 s old fix is not live")
+    }
+
+    func testParkedWithScreenLockedKeepsDistances() throws {
+        /* 90 s without a new fix (15 m filter, parked): still placed, but not counted live. */
+        let s = try XCTUnwrap(OutingActivityBuilder.state(input(view(), fixAgeS: 90), backMeters: 6_100))
+        XCTAssertTrue(s.gpsOK)
+        XCTAssertEqual(s.backMeters, 6_100)
+        XCTAssertEqual(s.liveCount, 2)
     }
 
     func testDeniedGpsAndOfflineLink() throws {

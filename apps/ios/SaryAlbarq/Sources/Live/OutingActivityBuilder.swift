@@ -10,6 +10,11 @@ struct StuckMark: Equatable {
 /// Turns the live screen's real data into the Live Activity's picture.
 /// Pure: the same presenter rules as the map (an old fix is never live).
 enum OutingActivityBuilder {
+    /// My own fix still places me for distances up to this age. Looser than the map's 30 s
+    /// «live» because with the screen locked the trail GPS only reports every 15 m: a parked
+    /// car gets no new fix, and that is not a lost GPS.
+    static let myFixMaxAgeS: TimeInterval = 120
+
     /// - Parameters:
     ///   - backMeters: along my trail to its start (back-track), when it exists.
     ///   - stuck: members who reported «غرّزت», newest first or in any order.
@@ -21,7 +26,7 @@ enum OutingActivityBuilder {
         /* My own fix decides every distance: without a fresh one, none is shown. */
         var gpsOK = false
         if let f = i.myFix, i.gpsState != .denied, i.gpsState != .unavailable {
-            gpsOK = i.now.timeIntervalSince1970 * 1000 - f.atMs <= LiveOutingPresenter.myLiveMaxAgeMs
+            gpsOK = i.now.timeIntervalSince1970 - f.atMs / 1000 <= myFixMaxAgeS
         }
         var farthest: ParticipantUI?
         if gpsOK {

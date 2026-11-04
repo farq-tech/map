@@ -11,8 +11,8 @@ import Foundation
 final class OutingActivityCoordinator {
     typealias Activity = ActivityKit.Activity<OutingActivityAttributes>
 
-    /// Distance back along my trail to its start, from the session's back-track data.
-    var backMeters: (OutingSession, DeviceFix) -> Double? = { _, _ in nil }
+    /// Distance back along my trail to its start («طريق العودة»), nil without a trail.
+    lazy var backMeters: (OutingSession, DeviceFix) -> Double? = { [unowned self] s, f in self.backDistance(s, f) }
     /// «غرّزت» marks, once the stuck state reaches the session.
     var stuck: (OutingSession) -> [StuckMark] = { _ in [] }
 
@@ -24,6 +24,8 @@ final class OutingActivityCoordinator {
     private var lastPushAt: Date?
     private var flush: Timer?
     private var scheduled = false
+    /// Back-track over the trail as it was at `count` points (rebuilt when the trail grows).
+    private var backTrack: (id: String, count: Int, track: BackTrack)?
     /// DEBUG screenshot fixture is up: live data does not replace it.
     private var debugPinned = false
 
@@ -88,6 +90,17 @@ final class OutingActivityCoordinator {
         push(a, state, now: now)
     }
 
+    private func backDistance(_ s: OutingSession, _ f: DeviceFix) -> Double? {
+        let n = s.trail.points.count
+        if backTrack?.id != s.id || backTrack?.count != n {
+            backTrack = BackTrack(s.trail).map { (s.id, n, $0) }
+        }
+        guard var b = backTrack else { return nil }
+        let st = b.track.update(LngLat(lng: f.lng, lat: f.lat))
+        backTrack = b
+        return st.remainingM
+    }
+
     private func start(_ s: OutingSession, _ state: OutingActivityState) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled, let v = s.view else { return }
         let attrs = OutingActivityAttributes(outingId: s.id, outingName: v.snapshot.outing.name)
@@ -143,6 +156,7 @@ final class OutingActivityCoordinator {
         lastState = nil
         lastPushAt = nil
         lastAlerted = nil
+        backTrack = nil
         guard let a = activity else { return }
         activity = nil
         endNow(a)
