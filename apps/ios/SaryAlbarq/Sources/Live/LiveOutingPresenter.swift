@@ -188,7 +188,8 @@ enum LiveOutingPresenter {
                 note: activeNote(m.note, view: v, now: i.now),
                 hasVoice: hasVoice,
                 hasPhone: !(m.phone ?? "").isEmpty,
-                photo: nil
+                photo: nil,
+                silentSince: isMe ? nil : silentSince(m.user_id, in: v)
             ), idx))
         }
         /* Me first, then nearest, then the ones with no distance in join order. */

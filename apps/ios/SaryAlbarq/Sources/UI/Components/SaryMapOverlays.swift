@@ -52,7 +52,9 @@ struct SaryNameChip: View {
                     .saryText(.caption)
                     .lineLimit(1)
                     .foregroundStyle(chip.presence.isLive ? p.textPrimary : p.textSecondary)
-                if !chip.presence.isLive {
+                if let s = chip.silentSince {
+                    SarySilentBadge(since: s, now: chip.now, compact: true)
+                } else if !chip.presence.isLive {
                     Text(style.label(now: chip.now))
                         .saryText(.micro, weight: .medium)
                         .foregroundStyle(p.textSecondary)
@@ -91,7 +93,7 @@ struct SaryNameChip: View {
         }
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .accessibilityLabel(Text(chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))"))
+        .accessibilityLabel(Text(chip.isMe ? "أنت" : "\(chip.name)، \(chip.silentSince.map { SilenceText.badge(since: $0, now: chip.now) } ?? style.accessibilityLabel(now: chip.now))"))
         .modifier(OptionalIdentifier(id: id))
     }
 }

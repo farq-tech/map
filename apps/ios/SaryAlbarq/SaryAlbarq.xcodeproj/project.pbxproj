@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		00DB1B5A251C9F87CE438139 /* OutingsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C328DB2C402A95A6C6F356 /* OutingsAPI.swift */; };
 		02CE1FBA75860269420A052B /* ShowcaseMocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35455B0FA230E73A9455A6F2 /* ShowcaseMocks.swift */; };
+		0581A59CAA10795150F85050 /* MemberSilenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8723F363C9B425AF658764E3 /* MemberSilenceTests.swift */; };
 		06912821BBE6C7BA595233FB /* SaryFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A6DD3BA79D59CFC045E663 /* SaryFormat.swift */; };
 		071B934F70A195F66BAC9EEF /* ServerRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */; };
 		07C479D806218F00E06056B8 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7054D28829BF6342E6ADB5CB /* VoiceClips.swift */; };
@@ -45,7 +46,9 @@
 		44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */; };
 		48FD091ED96CA8AD956F0810 /* DemoTrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C608FD300357F3B7B83789 /* DemoTrail.swift */; };
 		4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */; };
+		5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA8B0FAD7F7F6C8B244F4824 /* LiveSilence.swift */; };
 		50676ABA167F396BA6E7C174 /* SaryAppearancePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */; };
+		534DD3C2CE1D86F8CB06EA8D /* SarySilentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F377D12ABBDFF265A84F2135 /* SarySilentCard.swift */; };
 		5487F7F21A426D1FE552CE27 /* ChipDeclutterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */; };
 		5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */; };
 		5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */; };
@@ -91,6 +94,7 @@
 		CD1803F06895A058CDE03F6B /* LocationSharer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13815A9D77BC92625010C184 /* LocationSharer.swift */; };
 		D22660E1F8F03254318888A9 /* PushRegistrarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C73B19C59765D8D2D342EC1 /* PushRegistrarTests.swift */; };
 		DECB2C60519D02E59632BF87 /* SuvModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D00282D218E5D04013AD73 /* SuvModel.swift */; };
+		E06B690ADB34C21AA47D89AC /* MemberSilence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC0B3A7948BE2867645CB90 /* MemberSilence.swift */; };
 		E35B91A3DB815596A48FF60D /* AppearanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */; };
 		E3BB0F9928FD1FA15AED4E9C /* Policy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376AED911A9C2A29F5F4EFD0 /* Policy.swift */; };
 		E62055444AA1B0EF78CB78DE /* SaryMapOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84628226D3FBEC8CE9CDDE8B /* SaryMapOverlays.swift */; };
@@ -142,6 +146,7 @@
 		29BAD7EA4146554682B94424 /* TrailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailTests.swift; sourceTree = "<group>"; };
 		2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Bold.ttf"; sourceTree = "<group>"; };
 		2D946A6C4BA372259FDBA0CB /* OutingSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingSheets.swift; sourceTree = "<group>"; };
+		2EC0B3A7948BE2867645CB90 /* MemberSilence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberSilence.swift; sourceTree = "<group>"; };
 		30AC37E1EA85F7EC642D4ACE /* OutingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingState.swift; sourceTree = "<group>"; };
 		31571952C88A8EFB16D42C17 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		318D0930455B81369FEEE9E0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -186,6 +191,7 @@
 		8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingPresenter.swift; sourceTree = "<group>"; };
 		829DC987210D81AB7F10A4F2 /* AccountDeletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletion.swift; sourceTree = "<group>"; };
 		84628226D3FBEC8CE9CDDE8B /* SaryMapOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryMapOverlays.swift; sourceTree = "<group>"; };
+		8723F363C9B425AF658764E3 /* MemberSilenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberSilenceTests.swift; sourceTree = "<group>"; };
 		8B2B0A0909BDD5E63CA7FC11 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		8B4370475FC1006881BCACF8 /* SaryMapControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryMapControls.swift; sourceTree = "<group>"; };
 		8C3945563FBFA05496632EDC /* RecoveryFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryFormatTests.swift; sourceTree = "<group>"; };
@@ -222,8 +228,10 @@
 		ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSheet.swift; sourceTree = "<group>"; };
 		EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRules.swift; sourceTree = "<group>"; };
 		F1338061A444CBC2D438FE17 /* OfflineMaps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMaps.swift; sourceTree = "<group>"; };
+		F377D12ABBDFF265A84F2135 /* SarySilentCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SarySilentCard.swift; sourceTree = "<group>"; };
 		F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryCards.swift; sourceTree = "<group>"; };
 		F5DA379111C6D7352FFB06E6 /* ShowcaseBlocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowcaseBlocks.swift; sourceTree = "<group>"; };
+		FA8B0FAD7F7F6C8B244F4824 /* LiveSilence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSilence.swift; sourceTree = "<group>"; };
 		FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingController.swift; sourceTree = "<group>"; };
 		FD9FA98B1A53C6183E33883C /* SendGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendGate.swift; sourceTree = "<group>"; };
 		FF000A053D67AA53866613C3 /* CarColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarColors.swift; sourceTree = "<group>"; };
@@ -365,6 +373,7 @@
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
 				7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */,
 				7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */,
+				8723F363C9B425AF658764E3 /* MemberSilenceTests.swift */,
 				B7375A05885429491947FFF5 /* OutingStateTests.swift */,
 				DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */,
 				4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */,
@@ -418,6 +427,7 @@
 			children = (
 				FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */,
 				8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */,
+				FA8B0FAD7F7F6C8B244F4824 /* LiveSilence.swift */,
 				7054D28829BF6342E6ADB5CB /* VoiceClips.swift */,
 			);
 			path = Live;
@@ -437,6 +447,7 @@
 				3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */,
 				087D07928C7AC61627BD3A63 /* SaryPTT.swift */,
 				350C0C1DE95561FD26192CDE /* SarySheet.swift */,
+				F377D12ABBDFF265A84F2135 /* SarySilentCard.swift */,
 				60638084F780BC8BED2D9961 /* SarySOS.swift */,
 				B6F18F1551C61F843F8D69AB /* SaryStates.swift */,
 				34D5C8675B8818C49D07DE22 /* SaryStatusCapsule.swift */,
@@ -498,6 +509,7 @@
 				FF000A053D67AA53866613C3 /* CarColors.swift */,
 				54C608FD300357F3B7B83789 /* DemoTrail.swift */,
 				0A0CAF1A6CC3BA3345CE20B5 /* InviteLink.swift */,
+				2EC0B3A7948BE2867645CB90 /* MemberSilence.swift */,
 				978DED85B9A53695F514416B /* Models.swift */,
 				30AC37E1EA85F7EC642D4ACE /* OutingState.swift */,
 				376AED911A9C2A29F5F4EFD0 /* Policy.swift */,
@@ -659,6 +671,7 @@
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
 				5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */,
 				1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */,
+				0581A59CAA10795150F85050 /* MemberSilenceTests.swift in Sources */,
 				2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */,
 				0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */,
 				F19CF3E2845E4431FCA570F3 /* PrivacyTests.swift in Sources */,
@@ -693,9 +706,11 @@
 				9CD1B7D2841649438A1B40DD /* LiveOutingPresenter.swift in Sources */,
 				1FA64AB181BA37FCE46FAC6E /* LiveOutingScreen.swift in Sources */,
 				7106AAFF960B91D1859F66A7 /* LiveSheet.swift in Sources */,
+				5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */,
 				CD1803F06895A058CDE03F6B /* LocationSharer.swift in Sources */,
 				091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */,
 				FD5538296A9585D2DD795C7F /* MapStage.swift in Sources */,
+				E06B690ADB34C21AA47D89AC /* MemberSilence.swift in Sources */,
 				F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */,
 				86B80A0CAF9A0FECB38A6F8D /* OfflineMaps.swift in Sources */,
 				33F4F4423348F7788A65F9CF /* OfflineMapsView.swift in Sources */,
@@ -727,6 +742,7 @@
 				98BC6C17560D22BF1DA67E5E /* SarySOS.swift in Sources */,
 				79C7509AC991ABF9C69BD616 /* SarySheet.swift in Sources */,
 				40EB626DF9BC21B3B55B0303 /* SaryShowcase.swift in Sources */,
+				534DD3C2CE1D86F8CB06EA8D /* SarySilentCard.swift in Sources */,
 				C4BE81361B59B343906259EA /* SaryStates.swift in Sources */,
 				36AA83D258DA6FEF5B807226 /* SaryStatusCapsule.swift in Sources */,
 				44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */,

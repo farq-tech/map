@@ -98,6 +98,8 @@ struct ParticipantUI: Equatable, Identifiable {
     var hasPhone: Bool
     /// Optional photo. Initials on their colour are drawn when nil.
     var photo: UIImage?
+    /// Their sharing went silent (server-decided): when their last fix arrived. Shows «انقطع منذ ١٠ د».
+    var silentSince: Date? = nil
 
     /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {

@@ -86,6 +86,8 @@ enum LiveAlertKindUI: Equatable {
     case voice(VoiceClipUI)
     /// Short neutral toast (e.g. «تم نسخ الرابط»).
     case toast(String)
+    /// «انقطع إرسال فهد منذ ١٠ د» with «اتجه» / «اتصال» (SarySilentCard.swift).
+    case silent(SilentAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -236,6 +238,8 @@ struct LiveOutingActions {
     var dismissAlert: (_ id: String) -> Void = { _ in }
     /// Voice banners in the lane.
     var voice: VoiceBannerActions = .init()
+    /// «انقطع الإرسال» cards: «اتجه» / «اتصال».
+    var silent: SilentAlertActions = .init()
 
     // Side buttons
     /// «موقعي» (`outing-locate`). Expect: centre the map on me.

@@ -146,6 +146,8 @@ struct OutingSnapshot: Codable, Equatable {
     var voice_clips: [VoiceClip]?
     /// Totals members chose to share once the outing ended (never points).
     var summaries: [TripShare]?
+    /// Members whose sharing went silent ≥10 min (server-decided). Never draw them as live.
+    var silent: [SilentInfo]? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

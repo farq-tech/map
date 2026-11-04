@@ -114,6 +114,8 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
+    var silentSince: Date? = nil
 }
 
 struct NoteBubbleUI: Equatable {

@@ -174,7 +174,7 @@ final class LiveOutingController: ObservableObject {
             /* Ages tick in whole minutes on the chip; quantised so the annotation is not rebuilt every second. */
             let chipNow = Date(timeIntervalSince1970: (i.now.timeIntervalSince1970 / 30).rounded(.down) * 30)
             if showNames || m.isMe {
-                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow)
+                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow, silentSince: p?.silentSince)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -202,6 +202,7 @@ final class LiveOutingController: ObservableObject {
             pushAlert(LiveAlertUI(id: "voice:\(c.id)", kind: .voice(VoiceClipUI(id: c.id, senderName: name, senderColor: v.colors[c.user_id] ?? 0xFFFFFF,
                                                                                 durationSeconds: max(1, Int((Double(c.duration_ms) / 1000).rounded())), playback: .idle))), ttl: 60)
         }
+        reconcileSilence(prev: prev, next: v)
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
@@ -448,8 +449,13 @@ final class LiveOutingController: ObservableObject {
             guard let self else { return }
             let parts = id.split(separator: ":").map(String.init)
             if parts.first == "note", parts.count > 1 { self.show(member: parts[1]) }
+            if parts.first == "silent", parts.count > 1 { self.showSilent(parts[1]) }
         }
         a.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
+        a.silent = SilentAlertActions(
+            go: { [weak self] uid in self?.goToSilent(uid) },
+            call: { [weak self] uid in self?.dial(uid, whatsApp: false) }
+        )
         a.voice = VoiceBannerActions(
             play: { [weak self] id in self?.togglePlay(id) },
             dismiss: { [weak self] id in self?.dismissAlert("voice:\(id)") }
