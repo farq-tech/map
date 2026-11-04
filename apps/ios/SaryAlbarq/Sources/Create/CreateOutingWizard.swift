@@ -565,15 +565,16 @@ private struct InviteStep: View {
         } else {
             SaryBanner(text: "ما عندنا رابط الدعوة على هذا الجوال. افتح الطلعة وأنشئ رابطًا جديدًا من «الدعوة».", tone: .warning)
         }
+        /* Said right above the buttons: finishing here is the creator's consent (shares by default). */
+        Label(ShareMemory.joinStatement, systemImage: "location.fill")
+            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("create.shareStatement")
         Button(action: start) { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
             .buttonStyle(.sary(.primary))
             .accessibilityIdentifier("create.start")
         Button("لاحقًا", action: later)
             .buttonStyle(.sary(.plain))
             .accessibilityIdentifier("create.later")
-        Label(ShareMemory.joinStatement, systemImage: "location.fill")
-            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("create.shareStatement")
         Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
     }

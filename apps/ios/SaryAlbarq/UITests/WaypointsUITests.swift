@@ -30,7 +30,8 @@ final class WaypointsUITests: XCTestCase {
     func testAddWaypointByLongPressThenDeleteIt() {
         let app = launch()
         let map = app.otherElements["outing.map"]
-        map.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.42)).press(forDuration: 1.3)
+        /* An empty stretch of map (right of the demo cars; their chips and note bubbles open the member card). */
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.56)).press(forDuration: 1.3)
         /* The single long-press opens the point card; its «أضف نقطة» opens the composer. */
         let add = app.buttons["point.add"]
         XCTAssertTrue(add.waitForExistence(timeout: 8), "the long-press point card")

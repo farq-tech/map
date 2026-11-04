@@ -84,6 +84,9 @@ final class CreateFlowUITests: XCTestCase {
 
         /* The live map: the weather chip is always there. */
         allowLocationIfAsked()
+        /* The creator shares by default (build 6): once When-In-Use is granted, the «دائمًا» explainer follows. */
+        let later = app.buttons["share.always.later"]
+        if later.waitForExistence(timeout: 6) { shot("live-always-explainer"); later.tap() }
         let chip = app.buttons["weather.chip"]
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         sleep(3)

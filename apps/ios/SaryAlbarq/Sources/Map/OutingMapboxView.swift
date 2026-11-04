@@ -865,7 +865,10 @@ struct OutingMapboxView: UIViewRepresentable {
                     startCompact = crowded
                     placeStart(sp.point, force: true)
                 }
-                taken.append(crowded ? r.icon : r.icon.union(r.label))
+                /* A car's chip right on the pin itself: the chip wins (the trail line still starts there). */
+                let covered = taken.contains { $0.intersects(r.icon.insetBy(dx: 4, dy: 4)) }
+                startPin?.host.view.isHidden = covered
+                if !covered { taken.append(crowded ? r.icon : r.icon.union(r.label)) }
             }
             waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
             CATransaction.commit()
