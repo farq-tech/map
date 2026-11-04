@@ -372,11 +372,23 @@ final class AppModel: ObservableObject {
     }
 
     func foreground(_ active: Bool) {
-        session?.foreground(active)
+        phoneActive = active
+        session?.foreground(active || CarPlayHub.active)
         if active {
             Task { await refresh() }
             Task { await push.refresh(signedIn: signedIn && !isDemo) }
         }
+    }
+
+    /// The phone's own screen is up (SwiftUI scene phase).
+    private var phoneActive = true
+
+    /// CARPLAY HOOK: the CarPlay screen showing the app counts as the app being open in
+    /// front of you (the driver sees the live map there), so the session stays "visible"
+    /// while CarPlay shows it even with the phone locked. Sharing still needs every other
+    /// `SendGate` condition (consent, «شارك موقعي», active outing). See docs/CARPLAY-ENTITLEMENT.md.
+    func carPlayVisible(_ on: Bool) {
+        session?.foreground(phoneActive || on)
     }
 
     /// The app restarted mid-share: pick the share back up (this identity, this outing, consent given; foreground only).

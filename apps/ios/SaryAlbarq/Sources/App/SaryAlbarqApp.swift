@@ -24,6 +24,7 @@ struct SaryAlbarqApp: App {
                 }
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
+                .saryCarPlayPreviewIfRequested() // CARPLAY PREVIEW HOOK: DEBUG + `-SaryCarPlayPreview` only (Sources/CarPlay)
         }
         .onChange(of: phase) { p in model.foreground(p == .active) }
     }
@@ -31,7 +32,10 @@ struct SaryAlbarqApp: App {
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The app's model, for the push callbacks UIKit delivers here.
-    @MainActor static weak var model: AppModel?
+    @MainActor static weak var model: AppModel? {
+        /* CarPlay may connect before the phone UI: it waits for this. */
+        didSet { NotificationCenter.default.post(name: .saryModelReady, object: nil) }
+    }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in
@@ -94,6 +98,10 @@ extension AppearanceSettings {
         #endif
         return s
     }
+}
+
+extension Notification.Name {
+    static let saryModelReady = Notification.Name("sary.model.ready")
 }
 
 enum Theme {

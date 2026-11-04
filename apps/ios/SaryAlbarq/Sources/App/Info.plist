@@ -75,8 +75,25 @@
 	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
+		<!-- The phone window (SwiftUI WindowGroup) plus the CarPlay screen. -->
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<!-- CarPlay Navigation (Sources/CarPlay). Connects only when the build carries
+			     com.apple.developer.carplay-maps (CARPLAY_ENABLED=YES). -->
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>CarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
 	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
