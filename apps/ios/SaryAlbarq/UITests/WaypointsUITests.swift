@@ -13,7 +13,7 @@ final class WaypointsUITests: XCTestCase {
 
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-demoNoWaypoints"] + extra
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-demoNoWaypoints"] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for l in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[l].exists { alert.buttons[l].tap(); return true }
             return false
@@ -84,7 +84,7 @@ final class WaypointsUITests: XCTestCase {
     /// tail (live fixes only), and the honest status in the sheet. Also the screenshots.
     private func convoyFlow(_ look: [String], _ name: String) {
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-demoConvoy"] + look
+        app.launchArguments = ["-demo", "-SaryWeatherDemo", "calm", "-demoConvoy"] + look
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for l in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[l].exists { alert.buttons[l].tap(); return true }
             return false

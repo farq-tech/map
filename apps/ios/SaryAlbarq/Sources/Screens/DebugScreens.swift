@@ -65,6 +65,7 @@ struct DebugScreen: View {
             SaryPage(title: "") { PointCard(subject: .point(LngLat(lng: 46.67530, lat: 24.71360), name: nil), actions: PointActions(setDestination: { _, _ in }, addPoint: { _ in }, rally: { _ in })).sarySurface(radius: SaryRadius.m) }
         case "plan-me-stale":
             SaryPage(title: "") { PointCard(subject: .me(.init(point: LngLat(lng: 46.67530, lat: 24.71360), accuracyM: 8, at: Date().addingTimeInterval(-300)))).sarySurface(radius: SaryRadius.m) }
+        case "weather-here": WeatherPointSheet(point: OutingDestination(name: "نفود الثويرات", lat: 25.7712, lng: 45.1043), close: {})
         default: HomeView()
         }
     }

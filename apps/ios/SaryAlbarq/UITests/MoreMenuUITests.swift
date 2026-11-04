@@ -4,7 +4,7 @@ import XCTest
 final class MoreMenuUITests: XCTestCase {
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo"] + extra
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm"] + extra
         app.launch()
         return app
     }

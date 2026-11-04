@@ -5,7 +5,7 @@ import XCTest
 final class SafetyUITests: XCTestCase {
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryDrive", "0"] + extra
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryDrive", "0"] + extra
         app.launch()
         return app
     }

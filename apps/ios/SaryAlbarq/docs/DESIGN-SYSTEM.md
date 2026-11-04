@@ -145,7 +145,20 @@ Shots: `docs/app-shots/`.
 (`Tests/SafetyTests.swift`, plus an opt-in end-to-end test with
 `TEST_RUNNER_SARY_E2E_BASE=http://127.0.0.1:<port>` against a local API).
 Cards go into the shared alert lane as `.safety(SafetyAlertUI)`; the «السلامة»
-section sits in the participants tab; «غرّزت» is the last control in the cluster.
+section sits in the participants tab; «غرّزت» is in the cluster's «المزيد» menu (and one tap in that section).
 A 404/405 without an error code means the server has no such route yet: the UI
 says «غير متاح بعد», never pretends. DEBUG: `-SarySafety timer|overdue|stuck-me|stuck-friend|sunset|unavailable|confirm-stuck|editor`,
 `-SarySafetySheet half|full`. Shots: `docs/app-shots/safety-*.jpg`.
+## Weather (wired)
+
+`Sources/Weather/`: Open-Meteo forecast + air-quality (dust, PM10), no key. The
+outing area is rounded to 0.1° before it is sent; a destination / «الطقس هنا»
+point is sent as chosen; members' live positions never. Responses are cached on
+disk per area; data older than an hour is never labelled «الآن». Thresholds are
+in `WeatherThresholds` (tested). The live map adds an invisible Streets v8
+`waterway` probe; `WadiProximity` turns it into the «احذر السيول في الأودية»
+hint (an estimate; the app links to the NCM for official warnings).
+DEBUG screenshot flags: `-SaryWeatherDemo rain|dust|calm`, `-SaryWeatherDemoAge <min>`,
+`-SaryDemoDestination "lat,lng,name"`, `-SaryDemoShift "dLat,dLng"`,
+`-SaryLiveSheet half|full`, `-SaryLiveModal weather`, `-SaryScreen weather-here`.
+Shots: `docs/app-shots/weather-*.jpg`.

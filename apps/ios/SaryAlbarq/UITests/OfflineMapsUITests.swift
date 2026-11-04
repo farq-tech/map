@@ -32,7 +32,7 @@ final class OfflineMapsUITests: XCTestCase {
 
     func test2LiveMapDrawsWithMapboxCutOff() {
         let app = XCUIApplication()
-        app.launchArguments = ["-demo", "-SaryMapboxOffline", "-SaryClearAmbient", "-SaryScheme", "light"]
+        app.launchArguments = ["-demo", "-SaryWeatherDemo", "calm", "-SaryMapboxOffline", "-SaryClearAmbient", "-SaryScheme", "light"]
         addUIInterruptionMonitor(withDescription: "location") { alert in
             for l in ["Allow While Using App", "السماح أثناء استخدام التطبيق"] where alert.buttons[l].exists { alert.buttons[l].tap(); return true }
             return false

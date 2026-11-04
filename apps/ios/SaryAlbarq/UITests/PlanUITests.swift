@@ -89,7 +89,7 @@ final class PlanUITests: XCTestCase {
 
     func testCopyMyLocationFromTheControlCluster() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm"]
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()

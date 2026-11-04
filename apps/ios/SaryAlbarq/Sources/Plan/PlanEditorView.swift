@@ -215,6 +215,8 @@ struct PlanEditorView: View {
             focus(pt)
             flash("صارت الوجهة. اضغط «احفظ».")
         }
+        /* «الطقس هنا» lives on the live map (it would close this editor and its unsaved edits). */
+        a.weatherHere = nil
         /* In the editor «أضف نقطة» extends the planned route (the shared-waypoint composer
            lives on the live map and cannot open over this sheet). */
         a.addPoint = { pt in add(pt); card = nil; searchOpen = false; focus(pt) }

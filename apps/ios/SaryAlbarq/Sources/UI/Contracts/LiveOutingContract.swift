@@ -90,6 +90,8 @@ enum LiveAlertKindUI: Equatable {
     case safety(SafetyAlertUI)
     /// Convoy mode: someone out of the column (see `ConvoyAlertUI`).
     case convoy(ConvoyAlertUI)
+    /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
+    case weather(WeatherAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {

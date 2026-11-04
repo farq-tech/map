@@ -31,6 +31,10 @@ struct LiveOutingScreen: View {
     @State private var screenHeight: CGFloat = 0
     /// «المزيد» menu beside the control cluster.
     @State private var moreOpen = false
+    /// While a finger is on the screen the alert lane holds still (a card arriving mid-tap
+    /// must not shift or cover what the person is touching); it catches up just after.
+    @State private var frozenAlerts: [LiveAlertUI]?
+    @State private var touching = false
 
     var body: some View {
         let ui = controller.ui
@@ -57,7 +61,8 @@ struct LiveOutingScreen: View {
                     waypoints: controller.mapWaypoints,
                     onWaypointTap: { controller.features.modal = .waypoint($0) },
                     plan: plan,
-                    onLongPress: { controller.planLongPress($0, at: $1) }
+                    onLongPress: { controller.planLongPress($0, at: $1) },
+                    onWaterways: { controller.weather.setWaterways($0) }
                 )
                 }
                 .ignoresSafeArea()
@@ -70,6 +75,7 @@ struct LiveOutingScreen: View {
             }
             .onPreferenceChange(ChromeFramesKey.self) { frames = $0 }
         }
+        .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
@@ -83,6 +89,17 @@ struct LiveOutingScreen: View {
                 }
                 .saryAppearance(appearance)
                 .sarySheetPresentation(detent: $controller.sheetDetent)
+        }
+    }
+
+    private func touchChanged(_ down: Bool) {
+        touching = down
+        if down {
+            if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                if !touching { frozenAlerts = nil }
+            }
         }
     }
 
@@ -152,7 +169,7 @@ struct LiveOutingScreen: View {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if !rowMode {
-                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
+                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
                         LivePlanStrip(controller: controller)
                     }

@@ -66,6 +66,9 @@ struct OutingDetailsView: View {
                     }
                 }
                 if s.outing.status != .ended {
+                    DetailsWeatherSection(snapshot: s, myFix: model.location.lastFix)
+                }
+                if s.outing.status != .ended {
                     Button { model.open(outingId) } label: { SaryButtonLabel(title: "افتح الخريطة", systemImage: "map.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("details.open")

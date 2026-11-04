@@ -37,7 +37,7 @@ final class SaryAlbarqUITests: XCTestCase {
     /// and the native sheet with the participants (honest presence for each).
     func testLiveScreenShowsChromeAndParticipants() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm"]
         allowLocation()
         app.launch()
         XCTAssertTrue(app.otherElements["outing.map"].waitForExistence(timeout: 15) || app.maps.firstMatch.waitForExistence(timeout: 5))
@@ -66,7 +66,7 @@ final class SaryAlbarqUITests: XCTestCase {
 
     func testConsentComesBeforeSharingAndListIsReachable() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm"]
         allowLocation()
         app.launch()
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]

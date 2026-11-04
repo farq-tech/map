@@ -93,6 +93,12 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case .weather:
+            WeatherSheet(weather: controller.weather, close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case let .weatherAt(point):
+            WeatherPointSheet(point: point, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
         case .trailAlways:
             TrailAlwaysExplainer(allow: controller.allowAlways, later: controller.laterAlways)
                 .presentationDetents([.large])
@@ -130,6 +136,7 @@ private struct ParticipantsTab: View {
             if ui.status != .ended {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
                 SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
+                LiveWeatherCard(controller: controller, weather: controller.weather)
             }
             ConvoySection(controller: controller, features: controller.features)
             TrailCard(controller: controller, card: controller.trailCard)
