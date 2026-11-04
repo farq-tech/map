@@ -31,6 +31,10 @@ enum LiveModal: Identifiable, Equatable {
     /// For someone who consented before sharing went background: sharing now keeps going
     /// with the screen locked; ask iOS for «دائمًا».
     case shareAlways
+    /// «الملاحة»: where to, the route options, the remaining steps.
+    case navPicker
+    case navOptions
+    case navSteps
 
     var id: String {
         switch self {
@@ -46,6 +50,9 @@ enum LiveModal: Identifiable, Equatable {
         case .trailAlways: return "trailAlways"
         case let .plan(m): return m.id
         case .shareAlways: return "shareAlways"
+        case .navPicker: return "navPicker"
+        case .navOptions: return "navOptions"
+        case .navSteps: return "navSteps"
         }
     }
 }
@@ -84,7 +91,12 @@ final class LiveOutingController: ObservableObject {
     @Published var camera: MapCameraRequest?
     @Published var following = false
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
-    @Published var modal: LiveModal?
+    @Published var modal: LiveModal? {
+        didSet {
+            if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }
+            if case .participant = oldValue, !cardMessage.isEmpty { cardMessage = [:] }
+        }
+    }
     @Published var inviteLink: String?
     @Published var isRevoking = false
     @Published var statusExpanded = false
@@ -108,6 +120,16 @@ final class LiveOutingController: ObservableObject {
     let speed = SpeedModel()
     var speedState = LiveSpeedState()
 
+    /// Turn-by-turn «الملاحة» (see Sources/Navigation).
+    let nav: NavSession
+    /// The plan's «الوجهة» and drawn route (wired by the plan feature; nil / empty without it).
+    var navDestination: () -> OutingDestination? = { nil }
+    var navPlanRoute: () -> [LngLat] = { [] }
+    /// Bumps the planning preview's camera fit.
+    var navCameraKey = 0
+    /// A line for a participant's card («روح له» refused: their position is old).
+    @Published var cardMessage: [String: String] = [:]
+
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
     private var stationList: [OutdoorAPI.Station] = []
@@ -123,6 +145,7 @@ final class LiveOutingController: ObservableObject {
         self.appearance = appearance
         safety = Self.makeSafety(for: session)
         features = OutingFeaturesModel(session: session, backend: featuresBackend ?? DemoFeaturesBackend(myId: session.myUserId, notDeployed: true))
+        nav = NavSession(provider: Self.navProvider(session: session))
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         showFriendTrails = TrailPrefs.friends()
         inviteLink = session.storedInviteURL()?.absoluteString
@@ -153,6 +176,13 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
         features.start()
+        nav.myFix = { [weak location] in location?.lastFix }
+        nav.toast = { [weak self] t in self?.toast(t) }
+        /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
+        nav.voice.canSpeak = { [weak session] in session?.walkie.floor.state == .idle }
+        nav.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { self?.objectWillChange.send() }
+        }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
         let args = ProcessInfo.processInfo.arguments
@@ -180,6 +210,9 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.features.compose(at: p) }
         }
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
+        #if DEBUG
+        navDebugLaunch()
+        #endif
     }
 
     /// «غرّزت» heard phone to phone (SOS and notes show through the merged picture).
@@ -298,6 +331,7 @@ final class LiveOutingController: ObservableObject {
 
     private func locationChanged() {
         updateSpeed()
+        if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
         updateAuto()
         checkConvoy()
@@ -611,8 +645,8 @@ final class LiveOutingController: ObservableObject {
                 self.lowerSheetThenAsk(.point(r.position))
             },
             rallyGo: { [weak self] in
-                guard let r = self?.rallyPoint else { return }
-                Directions.open(lat: r.position.lat, lng: r.position.lng, name: r.label.isEmpty ? "نقطة التجمع" : r.label)
+                /* «اتجه»: turn-by-turn in the app (Apple Maps stays one tap away in the options). */
+                self?.navigate(NavTargets.rally(self?.rallyPoint))
             },
             rallyMove: { [weak self] in self?.startPicking(moving: true) },
             rallyRemove: { [weak self] in Task { await self?.session.clearRally() } },
@@ -657,6 +691,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }
 
@@ -738,7 +773,7 @@ final class LiveOutingController: ObservableObject {
     func participantCard(_ id: String) -> ParticipantCardUIState? {
         guard let p = LiveOutingPresenter.participants(input).first(where: { $0.id == id }), let v = session.view else { return nil }
         return ParticipantCardUIState(participant: p, now: Date(), canManage: v.iOwn && !p.isMe && p.role != .leader,
-                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: nil)
+                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id])
     }
 
     func participantActions(_ id: String) -> ParticipantCardActions {
@@ -749,6 +784,7 @@ final class LiveOutingController: ObservableObject {
                 self?.modal = nil
                 self?.show(member: id)
             },
+            navigate: { [weak self] in self?.navigateToMember(id) },
             promoteCoLeader: { [weak self] in
                 guard let self else { return }
                 let on = self.session.view?.members[id]?.co_leader != true

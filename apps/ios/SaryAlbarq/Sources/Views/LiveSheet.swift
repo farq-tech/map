@@ -13,8 +13,13 @@ struct LiveSheet: View {
         let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
-            SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
-                             expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
+            if controller.nav.isActive {
+                /* Navigating: the peek is the guidance bar (arrival time, what is left, «إنهاء»). */
+                NavBottomBar(nav: controller.nav, end: controller.endNav)
+            } else {
+                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
+                                 expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
+            }
             if ui.sheetDetent != .peek {
                 SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
                     .padding(.horizontal, theme.space(.l))
@@ -111,6 +116,16 @@ struct LiveSheet: View {
             ShareAlwaysExplainer(allow: controller.allowShareAlways, later: controller.laterShareAlways)
                 .presentationDetents([.large])
                 .interactiveDismissDisabled()
+        case .navPicker:
+            NavTargetPicker(rows: controller.navPickerRows,
+                            pick: { t in controller.modal = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.navigate(to: t) } },
+                            refused: { _ in },
+                            close: { controller.modal = nil })
+        case .navOptions:
+            NavOptionsSheet(nav: controller.nav, start: controller.startNav, cancel: { controller.modal = nil },
+                            openInAppleMaps: controller.openInAppleMaps)
+        case .navSteps:
+            NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
         }
     }
 }

@@ -9,10 +9,17 @@ options:
   developmentLanguage: ar
   createIntermediateGroups: true
 # Mapbox Maps SDK v11 (same renderer family as the web's Mapbox GL v3), pinned exactly.
+# It is pinned to the exact version the Navigation SDK below requires (Navigation
+# 3.27.3 pins Maps 11.27.3 exactly in its Package.swift); move both together.
 packages:
   MapboxMaps:
     url: https://github.com/mapbox/mapbox-maps-ios.git
-    exactVersion: 11.33.1
+    exactVersion: 11.27.3
+  # Mapbox Navigation SDK v3 (turn-by-turn). Only the Core product is used (no
+  # NavigationViewController / CarPlayManager): our own UI over our own map.
+  MapboxNavigation:
+    url: https://github.com/mapbox/mapbox-navigation-ios.git
+    exactVersion: 3.27.3
 # Explicit base settings: these are what XcodeGen's presets would add, spelled
 # out so the project generates the same with any XcodeGen install.
 settings:
@@ -58,6 +65,10 @@ targets:
     dependencies:
       - package: MapboxMaps
         product: MapboxMaps
+      - package: MapboxNavigation
+        product: MapboxNavigationCore
+      - package: MapboxNavigation
+        product: MapboxDirections
       # The outing's Live Activity (Lock Screen + Dynamic Island).
       - target: SaryAlbarqWidgets
     # Config/Base.xcconfig optionally includes the gitignored Config/Secrets.xcconfig

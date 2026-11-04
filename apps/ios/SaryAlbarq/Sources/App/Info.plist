@@ -54,7 +54,10 @@
 	<!-- Background location (owner decision, 2026-11): with «دائمًا», a member who pressed
 	     «شارك موقعي» keeps sharing their live position with that outing's members off screen
 	     (blue indicator; HTTP POST /positions; stops on stop / leave / removed / ended), and the
-	     on-device trail keeps recording. With «أثناء الاستخدام» nothing is sent off screen (SendGate). -->
+	     on-device trail keeps recording. With «أثناء الاستخدام» nothing is sent off screen (SendGate).
+	     An active turn-by-turn navigation («الملاحة», started by the person) keeps following the
+	     route and rerouting with the screen locked (Mapbox Navigation SDK).
+	     audio: the walkie-talkie («قناة الطلعة») and the spoken Arabic turn instructions. -->
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>TrailRecording</key>

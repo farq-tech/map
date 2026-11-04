@@ -90,6 +90,13 @@ struct LivePlanModalView: View {
     private func actions(_ plan: PlanModel) -> PointActions {
         let lead = controller.session.view?.iLead == true
         var a = PointActions(setDestination: nil, addPoint: nil, rally: nil)
+        if !controller.nav.isActive {
+            a.navigateHere = { p in
+                controller.modal = nil
+                /* After the card's sheet has gone, so the nav sheets never race it. */
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p) }
+            }
+        }
         if lead {
             a.setDestination = { p, name in
                 controller.modal = nil

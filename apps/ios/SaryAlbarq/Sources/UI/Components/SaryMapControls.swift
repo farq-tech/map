@@ -226,5 +226,7 @@ extension SaryMapControlItem {
     /// «انسخ موقعي»: my coordinates card (copy / share), from «تخطيط الطلعة».
     static let copyMyLocation = SaryMapControlItem(id: "copyme", systemImage: "location.viewfinder", label: "انسخ موقعي", accessibilityID: "outing-copyme")
     /// «ابحث»: a place or coordinates.
+    /// «ملاحة»: turn-by-turn to a friend, the destination, the rally point or a point (behind «المزيد»).
+    static let navigate = SaryMapControlItem(id: "navigate", systemImage: SaryIcon.directions, label: "ملاحة", accessibilityID: "outing-navigate")
     static let search = SaryMapControlItem(id: "search", systemImage: "magnifyingglass", label: "ابحث", accessibilityID: "outing-search")
 }

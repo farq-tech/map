@@ -126,6 +126,10 @@ struct OutingMapboxView: UIViewRepresentable {
     var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
     /// Watercourses (wadi / stream / river…) in the loaded Streets tiles, after the camera settles (weather: flood hint).
     var onWaterways: ([WaterwayLine]) -> Void = { _ in }
+    /// «الملاحة»: routes, the off-road remainder, the target and the guidance camera (see `NavMapDrawer`).
+    var nav = MapNavDrawing()
+    /// An alternative's time label was tapped.
+    var onSelectRoute: (String) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -159,6 +163,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onWaterways = onWaterways
         c.picking = picking
         c.following = following
+        c.navDrawer.onSelectRoute = onSelectRoute
         if c.theme != theme {
             c.theme = theme
             c.themeChanged()
@@ -169,6 +174,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setWaypoints(waypoints)
         c.setTrails(trails)
         c.setPlan(plan)
+        c.setNav(nav)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -220,6 +226,7 @@ struct OutingMapboxView: UIViewRepresentable {
         var onUserGesture: () -> Void = {}
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
+        let navDrawer = NavMapDrawer()
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -315,6 +322,7 @@ struct OutingMapboxView: UIViewRepresentable {
             /* The ONE long-press handler: the point card («تخطيط الطلعة»), whose «أضف نقطة»
                opens the shared-waypoint composer. */
             installLongPress(map)
+            navDrawer.attach(map)
         }
 
         func setWaypoints(_ list: [MapWaypoint]) {
@@ -325,6 +333,21 @@ struct OutingMapboxView: UIViewRepresentable {
             layoutChips()
         }
         private var waypointTheme: SaryTheme?
+
+        /// Navigation drawing + camera; while guidance owns the camera, group framing and «موقعي» stand aside.
+        func setNav(_ d: MapNavDrawing) {
+            navDrawer.theme = theme
+            if d.camera != nil { keepGroup = false }
+            navTick(d)
+        }
+
+        private func navTick(_ d: MapNavDrawing? = nil) {
+            let me = lastCars.first(where: \.isMe)
+            let heading = me.flatMap { recs[$0.id]?.heading }
+            navDrawer.update(d ?? navLast, chrome: chrome, me: me.map { recs[$0.id]?.shown ?? $0.position }, heading: heading)
+            if let d { navLast = d }
+        }
+        private var navLast = MapNavDrawing()
 
         func detach() {
             planDrawing.longPress?.cancel()
@@ -379,6 +402,7 @@ struct OutingMapboxView: UIViewRepresentable {
             trailLayerKey = nil
             drawTrails()
             drawPlan(force: true)
+            navDrawer.styleLoaded()
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -551,7 +575,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 recs[id] = nil
             }
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
-            keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
+            if navDrawer.ownsCamera { navTick() } else { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
             followMe()
             layoutChips()
             project()
@@ -559,7 +583,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         /// «موقعي»: keep my car centred (gently, at most once a second).
         private func followMe() {
-            guard following, let map, let me = lastCars.first(where: \.isMe) else { return }
+            guard following, !navDrawer.ownsCamera, let map, let me = lastCars.first(where: \.isMe) else { return }
             keepGroup = false
             let now = CACurrentMediaTime()
             guard now - lastFollowAt > 1 else { return }
@@ -996,8 +1020,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 s.data = .featureCollection(FeatureCollection(features: []))
                 try? m.addSource(s)
             }
-            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one. */
-            let below = m.allLayerIdentifiers.first { $0.id.hasPrefix("sary-vehicle") }?.id
+            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one
+             * (and under a navigation route, which must stay readable over an old trail). */
+            let ids = m.allLayerIdentifiers.map(\.id)
+            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
             let pos: LayerPosition? = below.map { .below($0) }
             let w = (theme.drive ? 7.0 : 5.0) + (trails.highlight ? 2.5 : 0)
             func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 9, k * 0.45, 14, k, 18, k * 1.35] }
