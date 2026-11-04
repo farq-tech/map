@@ -34,6 +34,7 @@ struct LiveSheet: View {
         }
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(MediaSheetHost(center: MediaCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -127,6 +128,7 @@ private struct ParticipantsTab: View {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
             }
             TrailCard(controller: controller, card: controller.trailCard)
+            MediaEntryCard(center: MediaCenters.of(controller))
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
