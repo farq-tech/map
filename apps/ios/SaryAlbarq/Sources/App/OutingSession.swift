@@ -80,6 +80,9 @@ final class OutingSession: ObservableObject, Identifiable {
     private var trailUnsaved = 0
     /// Cars of the same outing nearby, phone to phone, when the internet is gone.
     let mesh: NearbyMesh
+    /// «قناة الطلعة»: the live walkie-talkie (replaces the «اضغط وتكلم» clips).
+    let walkie: OutingWalkieTalkie
+    private var walkieSink: AnyCancellable?
     private var meshActivation = MeshActivation()
     private var meshSink: AnyCancellable?
     /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
@@ -110,6 +113,7 @@ final class OutingSession: ObservableObject, Identifiable {
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
+        walkie = OutingWalkieTalkie(outingId: id, me: myUserId, tokenBackend: demo == nil ? api : nil, defaults: env.defaults)
         if demo != nil { link = .live }
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
@@ -123,6 +127,9 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         mesh.onEvents = { [weak self] evs in self?.nearbyEvents(evs) }
         meshSink = mesh.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
+        walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
+        walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: the privacy gate
@@ -175,7 +182,11 @@ final class OutingSession: ObservableObject, Identifiable {
             return
         }
         #endif
-        guard !isDemo else { return }
+        /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
+        guard !isDemo else {
+            walkie.attach(channel: nil, mesh: mesh)
+            return debugAutoTalk()
+        }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
             makeSocket: env.makeSocket,
             poll: { [api] in try await api.poll($0) },
@@ -192,10 +203,14 @@ final class OutingSession: ObservableObject, Identifiable {
             onState: { [weak self] s in MainActor.assumeIsolated { self?.linkChanged(s) } },
             onClosed: { [weak self] r in MainActor.assumeIsolated { self?.closed(r) } },
             onAck: { [weak self] ok, reason in MainActor.assumeIsolated { self?.ack(ok, reason) } },
-            onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } }
+            onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } },
+            onPTT: { [weak self] sig in MainActor.assumeIsolated { self?.walkie.receive(sig) } },
+            onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } }
         )
         channel = ch
+        walkie.attach(channel: ch, mesh: mesh)
         ch.start()
+        debugAutoTalk()
         if !visible { ch.setAway(true) }
         if env.timers {
             /* Connection heartbeat, no coordinates: lets others tell "no GPS" from "no network". */
@@ -207,12 +222,33 @@ final class OutingSession: ObservableObject, Identifiable {
         location.onFix = { [weak self] f in self?.handleFix(f) }
     }
 
+    private func debugAutoTalk() {
+        #if DEBUG
+        /* Lab: `-SaryPTTAutoTalk "<after s>,<for s>"` holds the walkie-talkie button by itself (with -SaryPTTTone). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryPTTAutoTalk"), i + 1 < args.count {
+            let t = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if t.count == 2 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + t[0]) { [weak self] in
+                    PTTAudioEngine.log.notice("[PTT] lab: press")
+                    self?.walkie.pressBegan()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t[0] + t[1]) { [weak self] in
+                    PTTAudioEngine.log.notice("[PTT] lab: release")
+                    self?.walkie.pressEnded()
+                }
+            }
+        }
+        #endif
+    }
+
     func close() {
         stopBackgroundTrail()
         saveTrail()
         location.onTrailFix = { _ in }
         mesh.setRunning(false)
         stopSharingLocally()
+        walkie.detach(leftOuting: closedReason != nil)
         channel?.stop()
         channel = nil
         timers.forEach { $0.invalidate() }
@@ -481,6 +517,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private func linkChanged(_ s: LiveChannel.State) {
         link = s
         updateMesh()
+        walkie.linkChanged()
         if s == .live || s == .polling, pendingServerStop {
             Task { await self.retryServerStop() }
         }
@@ -562,6 +599,7 @@ final class OutingSession: ObservableObject, Identifiable {
         saveTrail()
         stopSharingLocally()
         if r == .outingEnded { view?.apply(.outingStatus(.ended)) }
+        walkie.detach(leftOuting: true)
         channel?.stop()
     }
 

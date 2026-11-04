@@ -41,10 +41,16 @@ final class NearbyMesh: NSObject, ObservableObject {
     var myFix: () -> DeviceFix? = { nil }
     /// Events from other members that are new to this phone.
     var onEvents: ([MeshEvent]) -> Void = { _ in }
+    /// «قناة الطلعة» frames from a nearby member (see MeshVoice.swift).
+    var onVoice: (MeshVoiceCodec.Message) -> Void = { _ in }
+    private var voiceCodec: MeshVoiceCodec
+    private var voiceLimiter = MeshVoiceLimiter()
 
     init(outingId: String, me: String, members: Set<String>, serverKey: String? = nil) {
         store = MeshStore(me: me, members: members)
-        codec = MeshCodec(keys: MeshKeys(outingId: outingId, serverKey: serverKey), me: me)
+        let keys = MeshKeys(outingId: outingId, serverKey: serverKey)
+        codec = MeshCodec(keys: keys, me: me)
+        voiceCodec = MeshVoiceCodec(keys: keys, me: me)
         super.init()
     }
 
@@ -62,6 +68,7 @@ final class NearbyMesh: NSObject, ObservableObject {
         let k = MeshKeys(outingId: outingId, serverKey: key)
         guard k.outingTag != codec.keys.outingTag else { return }
         codec = MeshCodec(keys: k, me: store.me)
+        voiceCodec = MeshVoiceCodec(keys: k, me: store.me)
         if running { stop(); start() }
     }
 
@@ -170,9 +177,31 @@ final class NearbyMesh: NSObject, ObservableObject {
         lastSent = now
     }
 
+    /// Phones of this outing connected directly right now (voice goes one hop only).
+    var directPeers: Int { session?.connectedPeers.count ?? 0 }
+
+    /// A walkie-talkie frame to every directly connected member. Audio is sent
+    /// unreliably (a late packet is worthless); start/stop reliably.
+    @discardableResult
+    func sendVoice(_ kind: MeshVoiceCodec.Kind, body: Data) -> Bool {
+        guard running, let s = session, !s.connectedPeers.isEmpty,
+              let d = try? voiceCodec.seal(kind, body: body, nowMs: Self.nowMs()) else { return false }
+        do {
+            try s.send(d, toPeers: s.connectedPeers, with: kind == .audio ? .unreliable : .reliable)
+            return true
+        } catch { return false }
+    }
+
+    private func receivedVoice(_ data: Data, key: String, now: Double) {
+        guard voiceLimiter.allow(key, nowMs: now) else { return }
+        guard let m = try? voiceCodec.open(data, members: store.members, nowMs: now) else { return }
+        onVoice(m)
+    }
+
     fileprivate func received(_ data: Data, from peer: MCPeerID) {
         let now = Self.nowMs()
         let key = peer.displayName
+        if MeshVoiceCodec.isVoice(data) { return receivedVoice(data, key: key, now: now) }
         guard limiter.allow(key, nowMs: now) else { return }
         do {
             let (from, payload) = try codec.open(data, members: store.members, nowMs: now, replay: &replay)
@@ -212,7 +241,10 @@ final class NearbyMesh: NSObject, ObservableObject {
 
     fileprivate func peerChanged(_ peer: MCPeerID, _ state: MCSessionState) {
         if state == .connected { broadcast(force: true) }
-        if state == .notConnected { limiter.forget(peer.displayName) }
+        if state == .notConnected {
+            limiter.forget(peer.displayName)
+            voiceLimiter.forget(peer.displayName)
+        }
         refreshCount()
     }
 }

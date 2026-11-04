@@ -397,12 +397,13 @@ private struct PTTBlocks: View {
                 HStack(spacing: 18) {
                     SaryPTTButton(state: .idle)
                     SaryPTTButton(state: .arming)
-                    SaryPTTButton(state: .recording(seconds: 7))
-                    SaryPTTButton(state: .sending)
+                    SaryPTTButton(state: .talking(seconds: 7, remaining: 53))
+                    SaryPTTButton(state: .listening(name: "فهد", color: SaryCarColors.palette[1]))
+                    SaryPTTButton(state: .muted)
                 }
             }
         }
-        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار · اسحب بعيدًا للإلغاء") {
+        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار وتكلم · ارفع إصبعك لتتوقف") {
             ShowcaseMapStrip(height: 190) {
                 SaryPTTButton(state: state, actions: .init(
                     pressBegan: {
@@ -412,7 +413,7 @@ private struct PTTBlocks: View {
                             try? await Task.sleep(nanoseconds: 350_000_000)
                             var s = 0
                             while !Task.isCancelled {
-                                state = .recording(seconds: s)
+                                state = .talking(seconds: s, remaining: max(0, 60 - s))
                                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                                 s += 1
                             }
@@ -420,8 +421,7 @@ private struct PTTBlocks: View {
                     },
                     pressEnded: {
                         task?.cancel()
-                        state = .sending
-                        Task { try? await Task.sleep(nanoseconds: 900_000_000); state = .idle }
+                        state = .idle
                     },
                     cancelled: { task?.cancel(); state = .idle }
                 ))

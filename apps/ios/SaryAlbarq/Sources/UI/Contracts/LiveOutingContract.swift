@@ -101,15 +101,20 @@ struct LiveAlertUI: Equatable, Identifiable {
 
 // MARK: - Push-to-talk
 
-/// ONE enum for the push-to-talk button. No extra flags.
+/// ONE enum for the walkie-talkie button («قناة الطلعة»). No extra flags.
 enum PTTStateUI: Equatable {
+    /// Nobody on air: hold to talk.
     case idle
-    /// Pressed; mic is starting («جارٍ التجهيز…»).
+    /// Pressed; asking for the floor («جارٍ فتح القناة…»).
     case arming
-    /// Recording; elapsed whole seconds.
-    case recording(seconds: Int)
-    /// Released; uploading the clip.
-    case sending
+    /// I am on air, live; elapsed and remaining whole seconds (60 s max).
+    case talking(seconds: Int, remaining: Int)
+    /// Someone else is on air: «فلان يتكلم» (the button is busy, not disabled).
+    case listening(name: String, color: UInt32)
+    /// «اكتم القناة» is on.
+    case muted
+    /// No server and no nearby car: nothing to talk to.
+    case unavailable
 }
 
 // MARK: - SOS
@@ -199,6 +204,8 @@ struct SettingsTabUIState: Equatable {
     var myPhone: String?
     var notificationsOn: Bool
     var batterySharingOn: Bool
+    /// «اكتم القناة»: no live voice in or out for this outing on this phone.
+    var pttMuted: Bool = false
     var offline: OfflineAreasUIState
     /// Leader-only actions: «أوقف مؤقتًا» / «استأنف» and «أنهِ الطلعة».
     var isLeader: Bool
@@ -285,11 +292,11 @@ struct SOSActions {
 }
 
 struct PTTActions {
-    /// Finger down on «اضغط وتكلم». Expect: `ptt = .arming` → `.recording(0)`.
+    /// Finger down. Expect: `ptt = .arming` → `.talking` once the floor is granted (live audio).
     var pressBegan: () -> Void = {}
-    /// Finger up on the button. Expect: `ptt = .sending` → `.idle`.
+    /// Finger up (or dragged away — live audio cannot be taken back). Expect: off the air, `.idle`.
     var pressEnded: () -> Void = {}
-    /// Finger dragged far off the button before release. Expect: discard, `ptt = .idle`.
+    /// Same as `pressEnded` for live talk (kept for the contract's older callers).
     var cancelled: () -> Void = {}
 }
 
@@ -337,6 +344,8 @@ struct SettingsTabActions {
     var saveMyPhone: (_ phone: String?) -> Void = { _ in }
     var setNotifications: (_ on: Bool) -> Void = { _ in }
     var setBatterySharing: (_ on: Bool) -> Void = { _ in }
+    /// «اكتم القناة».
+    var setPTTMuted: (_ on: Bool) -> Void = { _ in }
     /// Offline maps section (same actions as `OfflineAreasScreen`).
     var offline: OfflineAreasActions = .init()
     /// Leader: «أوقف مؤقتًا» / «استأنف الطلعة», after confirmation.
