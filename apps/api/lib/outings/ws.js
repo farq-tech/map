@@ -17,6 +17,7 @@
  *   ← return_timer · member_stuck · stuck_reply · stuck_clear · waypoint_added · waypoint_removed
  *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
  *   ← member_silent · member_resumed · member_going_offline   (see lib/outings/silence.js)
+ *   ← media_state { state }   («قناة الطلعة», state or null — see lib/outings/media.js)
  *   (voice clips themselves go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  */
 

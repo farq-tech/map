@@ -7,7 +7,8 @@
  * rest of the API is unaffected. Web Push is on only when VAPID_* are set
  * (see lib/outings/push.js), native iOS push only when APNS_* are set (see
  * lib/outings/apns.js); `push: { config, sender }` / `apns: { config, sender }`
- * override them in tests. Both go through one notifyMembers(), so every event
+ * override them in tests. Turn-by-turn routing (/routing) is on only when
+ * VALHALLA_ORIGIN + VALHALLA_GATEWAY_TOKEN are set (see lib/outings/routing.js). Both go through one notifyMembers(), so every event
  * that is pushed reaches browsers and iPhones with the same rules.
  */
 
@@ -23,7 +24,7 @@ const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./a
  * Notes are pushed by service.setNote itself. */
 const PUSHED_EVENTS = new Set(['sos']);
 
-function setupOutings({ pool = getOutingsPool(), config, limits, now, push: pushOpts = {}, apns: apnsOpts = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
+function setupOutings({ pool = getOutingsPool(), config, limits, now, push: pushOpts = {}, apns: apnsOpts = {}, routing = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
   const hub = createHub();
   /* Members looking at the outing right now already get the in-app alert. */
   const viewers = (outingId) => {
@@ -41,7 +42,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
       if (PUSHED_EVENTS.has(event?.type)) void service.announce(outingId, event.user_id, event);
     };
   }
-  const router = createOutingsRouter({ service, hub, push, apns, limits });
+  const router = createOutingsRouter({ service, hub, push, apns, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;

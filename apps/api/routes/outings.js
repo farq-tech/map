@@ -19,13 +19,14 @@ const { createRateLimiter } = require('../lib/outings/rate-limit');
 const { battery } = require('../lib/outings/validate');
 const { CLIP_MAX_BYTES } = require('../lib/outings/clips');
 const { parseSubscription } = require('../lib/outings/push');
+const { createRoutingRouter } = require('../lib/outings/routing');
 
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
+function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = {} }) {
   const router = express.Router();
   /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
   const smallJson = express.json({ limit: '48kb' });
@@ -37,6 +38,9 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
     res.set('Cache-Control', 'no-store');
     next();
   });
+
+  /* Turn-by-turn over Farq Valhalla. Status is public and answers even without a database. */
+  router.use('/routing', createRoutingRouter({ authenticate: service ? service.authenticate : null, ...routing }));
 
   if (!service) {
     router.use((_req, res) => res.status(503).json({ ok: false, error: 'outings_unconfigured' }));
@@ -372,6 +376,21 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
 
   router.delete('/:id/checklist/:itemId', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.removeChecklistItem(req.user, req.params.id, req.params.itemId)) });
+  }));
+
+  /* ---- «قناة الطلعة»: shared YouTube channel (state only — every phone plays its own official player) ---- */
+  router.get('/:id/media', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.getMedia(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/media', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.mediaAction(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.post('/:id/media/takeover', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.takeoverMedia(req.user, req.params.id)) });
   }));
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {

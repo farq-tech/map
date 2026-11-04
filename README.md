@@ -127,6 +127,15 @@ Friends on one off-road outing see each other on one map while the outing screen
 - Keep the screen on: while the outing is active and I am sharing, the screen wake lock is requested automatically (a saved «off» is respected) and re-acquired whenever the page is visible again; the hint «وصّل الشاحن» shows in the status line.
 - **One service worker** (`apps/web/public/sw.js`) does push and offline areas. It stays registered while push is subscribed **or** an offline area is saved (`src/lib/sw/worker.ts`); deleting the last area clears the offline cache but only unregisters the worker when push does not need it. The offline fetch logic runs only while an area exists, and never touches `/api`, `/_api` or non-GET requests.
 
+**Turn-by-turn routing** (`apps/api/lib/outings/routing.js`) — Arabic directions for the app over Farq's own Valhalla (GCC graph) through the Farq Valhalla gateway. The phone holds no secret: it sends its outing identity, the API calls the gateway with `VALHALLA_GATEWAY_TOKEN`.
+  - `GET /api/outings/routing/status` → `{ ok, enabled, provider: "farq-valhalla" }` (public; answers even without a database).
+  - `POST /api/outings/routing/route` (Bearer identity) `{ locations: [{lat,lng}] (2–10, inside lat 12–33 / lng 34–60), costing?: "auto"|"truck", options?: { avoid_unpaved?, avoid_tolls?, avoid_highways?: bool, use_tracks?: 0–1 }, alternates?: 0–2, language?: "ar-SA"|"en-US", depart_at?: ISO }` → Valhalla's OSRM-format JSON unchanged (`code`, `routes`, `waypoints`, polyline6 geometry, per-step `bannerInstructions` / `voiceInstructions` — what the Mapbox Navigation SDK decodes as a Directions response) plus `provider: "farq-valhalla"`.
+  - Sent to Valhalla `/route`: `locations` (`lon`, `type: break`), `costing`, `costing_options.<costing>` (`use_tolls: 0` / `use_highways: 0` when avoided, `use_tracks`, `exclude_unpaved: true`), `language` (default `ar-SA`), `units: kilometers`, `directions_type: instructions`, `format: osrm`, `banner_instructions`, `voice_instructions`, `shape_format: polyline6`, `alternates` (two-location, non-timed routes only — Valhalla has none otherwise), `date_time: { type: 1, value }` from `depart_at` in GCC local time (UTC+3). Only our own `authorization`/`content-type`/`accept` headers go upstream; 20 s timeout; responses over 4 MB are refused.
+  - Errors: `400 invalid_locations|invalid_costing|invalid_options|invalid_alternates|invalid_language|invalid_depart_at`, `401 unauthorized`, `422 out_of_area|no_route|route_too_long`, `429 rate_limited` (30/min and 300/day per identity, 60/min and 600/day per address), `502 routing_failed`, `503 routing_unavailable` (env vars unset, gateway down or timing out, token rejected).
+  - Off without `VALHALLA_ORIGIN` + `VALHALLA_GATEWAY_TOKEN` (see below); it says so once in the log and nothing else changes.
+  - Map matching (`trace_route`) is not available: the gateway allows only `route`, `optimized_route`, `isochrone`, `sources_to_targets`. Adding it is a one-line change to `ALLOWED_ACTIONS` in FARQ-B2B's `services/valhalla-gateway/main.py`, done there first.
+  - Tests: `lib/outings-routing.test.js` (fake gateway, no database).
+
 ```bash
 node apps/api/scripts/migrate-outings.js                                    # apply migrations by hand (boot does it too)
 SARY_TEST_DATABASE_URL=postgres://… npm test -w @farq/map-api                # integration tests against real Postgres (drops the sary schema!)
@@ -157,6 +166,7 @@ API:
 - `OUTING_*` — optional tuning, see `.env.example`
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — Web Push for outing notes/SOS (`npx web-push generate-vapid-keys`). Unset → push off. Private key: API only.
 - `APNS_KEY_ID`, `APNS_TEAM_ID` (`MH7J92HV9N`), `APNS_PRIVATE_KEY` (the `.p8` contents; `\n`-escaped on one line is fine), `APNS_BUNDLE_ID` (`sa.sary.albarq`) — native iOS push. Any unset → APNs off. API only, never in the repo. Creating the key (account owner, once): Apple Developer → Certificates, IDs & Profiles → **Keys** → **+** → name it, tick **Apple Push Notifications service (APNs)** → Continue → Register → **Download** the `AuthKey_<KEYID>.p8` (Apple lets you download it only once — store it in the password manager) and note the **Key ID** shown on that page. One key serves both sandbox and production and every app in the team. The app itself needs the Push Notifications capability (`aps-environment` entitlement) for `sa.sary.albarq`.
+- `VALHALLA_ORIGIN`, `VALHALLA_GATEWAY_TOKEN` — turn-by-turn routing over the Farq Valhalla gateway (`https://` origin, no path; the gateway's bearer token). Either unset → routing off. API only, never in the repo.
 
 Web, shared outings:
 
