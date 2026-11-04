@@ -20,6 +20,7 @@ const { createRateLimiter } = require('./rate-limit');
 const { pushPayloadFor } = require('./push');
 const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
+const { createSilenceWatch } = require('./silence');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -116,6 +117,15 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     requireLeader: (...a) => requireLeader(...a),
     membership: (...a) => membership(...a),
     positions: (...a) => positions(...a),
+  });
+
+  /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → one alert each. See silence.js. */
+  const silence = createSilenceWatch({
+    q,
+    now,
+    events: () => hub,
+    latest: (outingId) => latest.get(outingId),
+    notify: (outingId, userId, info) => features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
   });
 
   function dropLatest(outingId, userId) {
@@ -567,6 +577,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       })),
       positions: pos,
       stuck: outing.status === 'ended' ? [] : features.stuckList(outingId),
+      /* Members whose sharing went silent (≥10 min without a fix): never draw them as live. */
+      silent: outing.status === 'active' ? silence.list(outingId) : [],
       voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
       summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
@@ -641,7 +653,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       return rows;
     });
     forgetOuting(outingId);
-    if (t.to !== 'active') dropLatest(outingId);
+    if (t.to !== 'active') {
+      dropLatest(outingId);
+      silence.drop(outingId);
+    }
     if (t.to === 'ended') clips.dropOuting(outingId);
     hub.emit(outingId, { type: 'outing_status', status: o.status, started_at: o.started_at, ended_at: o.ended_at });
     if (t.to === 'ended') hub.closeRoom(outingId, 'outing_ended');
@@ -665,6 +680,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!rows.length) throw err('not_a_member', 404);
     forgetOuting(outingId);
     dropLatest(outingId, memberId);
+    silence.drop(outingId, memberId, 'removed');
     dropSos(outingId, memberId);
     if (features.dropStuck(outingId, memberId)) hub.emit(outingId, { type: 'stuck_clear', user_id: memberId });
     clips.dropUser(outingId, memberId);
@@ -711,6 +727,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   function afterLeave(outingId, userId, outcome) {
     forgetOuting(outingId);
     dropLatest(outingId, userId);
+    silence.drop(outingId, userId, 'left');
+    if (outcome.ended) silence.drop(outingId);
     dropSos(outingId, userId);
     if (features.dropStuck(outingId, userId)) hub.emit(outingId, { type: 'stuck_clear', user_id: userId });
     notes.delete(`${outingId}:${userId}`);
@@ -810,6 +828,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     for (const oid of result.touched) {
       forgetOuting(oid);
       dropLatest(oid, user.id);
+      silence.drop(oid, user.id);
       dropSos(oid, user.id);
       clips.dropUser(oid, user.id);
       lastPersist.delete(`${oid}:${user.id}`);
@@ -1127,7 +1146,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       if (!on) await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
     });
     forgetOuting(outingId);
-    if (!on) dropLatest(outingId, user.id);
+    if (!on) {
+      dropLatest(outingId, user.id);
+      silence.drop(outingId, user.id, 'sharing_off');
+    }
     hub.emit(outingId, { type: 'member_sharing', user_id: user.id, sharing: on });
     return { sharing: on };
   }
@@ -1180,6 +1202,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     }
     const position = shapePosition(user.id, pos);
     hub.emit(outingId, { type: 'position', position });
+    silence.onFix(outingId, user.id);
     return { ok: true, position };
   }
 
@@ -1198,6 +1221,18 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     return { ok: true };
   }
 
+  /** «بطلع من التغطية»: I know I will lose signal — do not alarm the group about me. */
+  async function goingOffline(user, outingId, raw = {}) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    return silence.goingOffline(outingId, user.id, raw?.minutes);
+  }
+
+  /** Every 60 s (index.js): members whose sharing went silent. */
+  function sweepSilence() {
+    return silence.sweep();
+  }
+
   async function sweep() {
     const retention = Math.round(cfg.positionRetentionHours * 3600);
     await q(`DELETE FROM sary.member_positions WHERE received_at < now() - make_interval(secs => $1)`, [retention]);
@@ -1213,6 +1248,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       await q(`UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL WHERE id = $1`, [id]);
       forgetOuting(id);
       dropLatest(id);
+      silence.drop(id);
       dropSos(id);
       features.dropStuck(id);
       clips.dropOuting(id);
@@ -1275,6 +1311,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     withdrawSummary,
     recordPosition,
     recordDiagnostics,
+    goingOffline,
+    sweepSilence,
     sweep,
   };
 }

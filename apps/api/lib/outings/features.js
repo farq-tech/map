@@ -680,6 +680,7 @@ function createFeatures(ctx) {
     accountRows,
     afterAccountDeleted,
     sweepFeatures,
+    pushFeature,
   };
 }
 

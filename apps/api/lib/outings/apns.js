@@ -37,7 +37,7 @@ const APNS_ORIGINS = Object.freeze({
   production: 'https://api.push.apple.com',
   sandbox: 'https://api.sandbox.push.apple.com',
 });
-const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue']);
+const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent']);
 const ACTIVE = new Set(['stuck_reply']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;

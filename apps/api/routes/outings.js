@@ -306,6 +306,12 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
     res.json({ ok: true, ...(await service.cancelReturnTimer(req.user, req.params.id)) });
   }));
 
+  /* ---- «بطلع من التغطية»: no silence alert about me until my next fix (or `minutes`, ≤ 12 h) ---- */
+  router.post('/:id/going-offline', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.goingOffline(req.user, req.params.id, req.body || {})) });
+  }));
+
   /* ---- «غرّزت» ---- */
   router.post('/:id/stuck', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.raiseStuck(req.user, req.params.id, req.body || {})) });
