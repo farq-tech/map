@@ -53,7 +53,7 @@ final class AppModel: ObservableObject {
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
             TrailStore.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys {
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys + SpeedPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
         }

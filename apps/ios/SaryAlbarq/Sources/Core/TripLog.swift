@@ -19,6 +19,8 @@ struct TripLog: Codable, Equatable {
     /// The previous accepted fix (kept only to measure the next step; overwritten every fix).
     var lastLat: Double?
     var lastLng: Double?
+    /// Top speed so far (local only; see `Speed.swift`). Optional so older saved logs still decode.
+    var peak: SpeedPeak?
 
     /// Faster than any car here: a GPS jump, not driving.
     static let maxSpeedMps = 70.0
@@ -33,9 +35,12 @@ struct TripLog: Codable, Equatable {
         return TripTotals(distanceM: Int(distanceM.rounded()), durationS: Int(dur.rounded()), movingS: Int(min(movingS, dur).rounded()))
     }
 
-    mutating func add(lat: Double, lng: Double, accuracy: Double?, speed: Double?, atMs: Double) {
+    mutating func add(lat: Double, lng: Double, accuracy: Double?, speed: Double?, atMs: Double, speedAccuracy: Double? = nil) {
         guard (accuracy ?? 0) <= Self.maxAccuracyM else { return }
         if let t = lastAtMs, atMs <= t { return }
+        var pk = peak ?? SpeedPeak()
+        pk.add(DeviceFix(lat: lat, lng: lng, accuracy: accuracy, heading: nil, speed: speed, atMs: atMs, speedAccuracy: speedAccuracy))
+        peak = pk
         defer {
             lastLat = lat
             lastLng = lng

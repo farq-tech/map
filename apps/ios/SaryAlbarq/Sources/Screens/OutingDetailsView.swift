@@ -157,6 +157,11 @@ struct TripSummaryView: View {
                     stat("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     stat("road.lanes", "مسافتي", (mine.map { $0.distance_m } ?? local.map { Double($0.distanceM) }).map { SaryFormat.distance(meters: $0) } ?? "—")
                     stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
+                    if let sp = model.mySpeed(outingId) {
+                        /* On this device only: never in the shared summary or the share text. */
+                        stat("speedometer", "أعلى سرعة", SaryFormat.speed(kmh: sp.maxKmh))
+                        stat("car.side.fill", "متوسط السرعة أثناء الحركة", SaryFormat.speed(kmh: sp.avgMovingKmh))
+                    }
                 }
                 .accessibilityIdentifier("summary.stats")
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {

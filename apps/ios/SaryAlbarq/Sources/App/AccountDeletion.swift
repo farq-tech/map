@@ -81,7 +81,7 @@ enum LocalAccountData {
             TripLogStore.key, InviteTokenStore.key, OnboardingProgress.key,
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
-        ] + TrailPrefs.keys
+        ] + TrailPrefs.keys + SpeedPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {

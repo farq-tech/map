@@ -95,9 +95,9 @@ struct LiveOutingScreen: View {
         let dockTop = ["dock", "cluster-row"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
-        let cluster = frames["cluster"]
-        let left = cluster.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 } ?? 0
-        let right = cluster.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 } ?? 0
+        let side = ["cluster", "speed"].compactMap { frames[$0] }
+        let left = side.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 }.max() ?? 0
+        let right = side.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 }.max() ?? 0
         return UIEdgeInsets(top: topChromeBottom + 4, left: left, bottom: bottom + 4, right: right)
     }
 
@@ -109,7 +109,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -171,6 +171,14 @@ struct LiveOutingScreen: View {
                 HStack(alignment: .bottom) {
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
                         .chromeFrame("ptt")
+                        .overlay(alignment: .top) {
+                            /* «سرعة المركبة»: right above «اضغط وتكلم», on the other side from the control
+                             * cluster. An overlay, so the dock's measured frame stays as it was; its own frame
+                             * («speed») joins the keep-out rects and the map's side inset. */
+                            SarySpeedometer(ui: controller.speedometerUI)
+                                .chromeFrame("speed")
+                                .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
+                        }
                     Spacer()
                     if rowMode {
                         SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)

@@ -265,6 +265,7 @@ struct SaryParticipantRow: View {
                         }
                         line {
                             SaryPresenceBadge(presence: participant.presence, now: now)
+                            if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
                             if let b = participant.batteryPercent { SaryBatteryLabel(percent: b) }
                         }
                     }
@@ -295,6 +296,7 @@ struct SaryParticipantRow: View {
         parts.append(SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }
+        if let k = participant.speedKmh, participant.presence.isLive { parts.append(SarySpeedLabel.accessibility(kmh: k)) }
         if let bat = participant.batteryPercent { parts.append("البطارية \(SaryFormat.percent(bat))") }
         return parts.joined(separator: "، ")
     }
@@ -344,10 +346,16 @@ struct SaryParticipantCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if p.distanceMeters != nil || p.batteryPercent != nil {
+            let speed = p.presence.isLive ? p.speedKmh : nil
+            if p.distanceMeters != nil || p.batteryPercent != nil || speed != nil {
                 HStack(spacing: theme.space(.m)) {
-                    stat(title: "المسافة") {
-                        SaryDistanceLabel(meters: p.distanceMeters, bearing: p.bearingDegrees, style: .headline)
+                    if p.distanceMeters != nil {
+                        stat(title: "المسافة") {
+                            SaryDistanceLabel(meters: p.distanceMeters, bearing: p.bearingDegrees, style: .headline)
+                        }
+                    }
+                    if let k = speed {
+                        stat(title: "السرعة") { SarySpeedLabel(kmh: k, style: .headline) }
                     }
                     if let b = p.batteryPercent {
                         stat(title: "البطارية") { SaryBatteryLabel(percent: b).saryText(.headline) }
