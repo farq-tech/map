@@ -112,6 +112,12 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// «الملاحة»: routes, the off-road remainder, the target and the guidance camera (see `NavMapDrawer`).
+    var nav = MapNavDrawing()
+    /// A long press on empty map («ابدأ الملاحة إلى هنا»).
+    var onLongPress: (LngLat) -> Void = { _ in }
+    /// An alternative's time label was tapped.
+    var onSelectRoute: (String) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -142,6 +148,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onUserGesture = onUserGesture
         c.picking = picking
         c.following = following
+        c.onLongPress = onLongPress
+        c.navDrawer.onSelectRoute = onSelectRoute
         if c.theme != theme {
             c.theme = theme
             c.themeChanged()
@@ -150,6 +158,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.sync(members)
         c.setRally(rally)
         c.setTrails(trails)
+        c.setNav(nav)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -194,6 +203,9 @@ struct OutingMapboxView: UIViewRepresentable {
         var onMapTap: (LngLat) -> Void = { _ in }
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
+        var onLongPress: (LngLat) -> Void = { _ in }
+        let navDrawer = NavMapDrawer()
+        private var longPressInteraction: Cancelable?
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -277,13 +289,35 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 return false
             })
+            navDrawer.attach(map)
+            longPressInteraction = map.mapboxMap.addInteraction(LongPressInteraction { [weak self] ctx in
+                guard let self, !self.picking, self.car(at: ctx.point) == nil else { return false }
+                self.onLongPress(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
+                return true
+            })
         }
+
+        /// Navigation drawing + camera; while guidance owns the camera, group framing and «موقعي» stand aside.
+        func setNav(_ d: MapNavDrawing) {
+            navDrawer.theme = theme
+            if d.camera != nil { keepGroup = false }
+            navTick(d)
+        }
+
+        private func navTick(_ d: MapNavDrawing? = nil) {
+            let me = lastCars.first(where: \.isMe)
+            let heading = me.flatMap { recs[$0.id]?.heading }
+            navDrawer.update(d ?? navLast, chrome: chrome, me: me.map { recs[$0.id]?.shown ?? $0.position }, heading: heading)
+            if let d { navLast = d }
+        }
+        private var navLast = MapNavDrawing()
 
         func detach() {
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
             tapInteraction?.cancel()
+            longPressInteraction?.cancel()
             cancelables.removeAll()
         }
 
@@ -329,6 +363,7 @@ struct OutingMapboxView: UIViewRepresentable {
             ensureRoadProbe()
             trailLayerKey = nil
             drawTrails()
+            navDrawer.styleLoaded()
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -455,7 +490,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 recs[id] = nil
             }
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
-            keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
+            if navDrawer.ownsCamera { navTick() } else { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
             followMe()
             layoutChips()
             project()
@@ -463,7 +498,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         /// «موقعي»: keep my car centred (gently, at most once a second).
         private func followMe() {
-            guard following, let map, let me = lastCars.first(where: \.isMe) else { return }
+            guard following, !navDrawer.ownsCamera, let map, let me = lastCars.first(where: \.isMe) else { return }
             keepGroup = false
             let now = CACurrentMediaTime()
             guard now - lastFollowAt > 1 else { return }
@@ -896,8 +931,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 s.data = .featureCollection(FeatureCollection(features: []))
                 try? m.addSource(s)
             }
-            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one. */
-            let below = m.allLayerIdentifiers.first { $0.id.hasPrefix("sary-vehicle") }?.id
+            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one
+             * (and under a navigation route, which must stay readable over an old trail). */
+            let ids = m.allLayerIdentifiers.map(\.id)
+            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
             let pos: LayerPosition? = below.map { .below($0) }
             let w = (theme.drive ? 7.0 : 5.0) + (trails.highlight ? 2.5 : 0)
             func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 9, k * 0.45, 14, k, 18, k * 1.35] }

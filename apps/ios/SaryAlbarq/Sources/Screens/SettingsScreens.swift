@@ -419,6 +419,18 @@ struct NotificationSettingsView: View {
 struct AboutView: View {
     var back: () -> Void
     @Environment(\.sary) private var theme
+    /// Hidden developer settings: always in DEBUG, after 7 taps on the version in Release.
+    @AppStorage("sary.dev.unlocked") private var devUnlocked = false
+    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.mapbox.rawValue
+    @State private var versionTaps = 0
+
+    private var showDev: Bool {
+        #if DEBUG
+        return true
+        #else
+        return devUnlocked
+        #endif
+    }
 
     var body: some View {
         let p = theme.palette
@@ -430,8 +442,19 @@ struct AboutView: View {
                 Text("سَرى البارق").font(.sary(26, .heavy)).foregroundStyle(p.textPrimary)
                 Text("الإصدار \(SaryFormat.digits(v).replacingOccurrences(of: "٫", with: ".")) (\(SaryFormat.digits(b)))").saryNumber(.subhead).foregroundStyle(p.textSecondary)
                     .accessibilityIdentifier("about.version")
+                    .onTapGesture {
+                        versionTaps += 1
+                        if versionTaps >= 7 { devUnlocked = true }
+                    }
             }
             .frame(maxWidth: .infinity)
+            if showDev {
+                SarySection(title: "مزوّد المسارات", footer: "Mapbox هو الافتراضي. «فرق» يجرّب خادم الشركة (Valhalla) أولًا، و«تلقائي» يستخدمه فقط إذا كان مفعّلًا على الخادم؛ وإذا ما قدر يرد نرجع لـ Mapbox تلقائيًا.") {
+                    SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
+                        get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },
+                        set: { navProvider = $0.rawValue }), label: \.label, id: "dev.navProvider")
+                }
+            }
             SarySection(title: "مصادر") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")

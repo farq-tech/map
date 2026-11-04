@@ -22,6 +22,10 @@ enum LiveModal: Identifiable, Equatable {
     case offlineMaps
     /// Our explainer before asking iOS for «دائمًا» (the screen-locked trail).
     case trailAlways
+    /// «الملاحة»: where to, the route options, the remaining steps.
+    case navPicker
+    case navOptions
+    case navSteps
 
     var id: String {
         switch self {
@@ -33,6 +37,9 @@ enum LiveModal: Identifiable, Equatable {
         case .notify: return "notify"
         case .offlineMaps: return "offline"
         case .trailAlways: return "trailAlways"
+        case .navPicker: return "navPicker"
+        case .navOptions: return "navOptions"
+        case .navSteps: return "navSteps"
         }
     }
 }
@@ -64,7 +71,12 @@ final class LiveOutingController: ObservableObject {
     @Published var camera: MapCameraRequest?
     @Published var following = false
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
-    @Published var modal: LiveModal?
+    @Published var modal: LiveModal? {
+        didSet {
+            if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }
+            if case .participant = oldValue, !cardMessage.isEmpty { cardMessage = [:] }
+        }
+    }
     @Published var inviteLink: String?
     @Published var isRevoking = false
     @Published var statusExpanded = false
@@ -85,6 +97,16 @@ final class LiveOutingController: ObservableObject {
     /// Friends' last ~30 minutes, from the positions this phone already receives. Memory only.
     private(set) var friendTrails = FriendTrails()
 
+    /// Turn-by-turn «الملاحة» (see Sources/Navigation).
+    let nav: NavSession
+    /// The plan's «الوجهة» and drawn route (wired by the plan feature; nil / empty without it).
+    var navDestination: () -> OutingDestination? = { nil }
+    var navPlanRoute: () -> [LngLat] = { [] }
+    /// Bumps the planning preview's camera fit.
+    var navCameraKey = 0
+    /// A line for a participant's card («روح له» refused: their position is old).
+    @Published var cardMessage: [String: String] = [:]
+
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
     private var stationList: [OutdoorAPI.Station] = []
@@ -97,6 +119,7 @@ final class LiveOutingController: ObservableObject {
         self.session = session
         self.location = location
         self.appearance = appearance
+        nav = NavSession(provider: Self.navProvider(session: session))
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         showFriendTrails = TrailPrefs.friends()
         inviteLink = session.storedInviteURL()?.absoluteString
@@ -109,6 +132,12 @@ final class LiveOutingController: ObservableObject {
         player.onProgress = { [weak self] id, p in self?.setPlayback(id, .playing(progress: p)) }
         player.onFinish = { [weak self] id in self?.setPlayback(id, .idle) }
         lastView = session.view
+        nav.myFix = { [weak location] in location?.lastFix }
+        nav.toast = { [weak self] t in self?.toast(t) }
+        nav.voice.canSpeak = { [weak self] in self?.ptt == .idle }
+        nav.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { self?.objectWillChange.send() }
+        }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
         let args = ProcessInfo.processInfo.arguments
@@ -118,6 +147,9 @@ final class LiveOutingController: ObservableObject {
         }
         #endif
         if let v = session.view { ingestFriends(v) }
+        #if DEBUG
+        navDebugLaunch()
+        #endif
     }
 
     // MARK: state
@@ -210,6 +242,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
         updateAuto()
         objectWillChange.send()
@@ -491,8 +524,8 @@ final class LiveOutingController: ObservableObject {
                 self.lowerSheetThenAsk(.point(r.position))
             },
             rallyGo: { [weak self] in
-                guard let r = self?.rallyPoint else { return }
-                Directions.open(lat: r.position.lat, lng: r.position.lng, name: r.label.isEmpty ? "نقطة التجمع" : r.label)
+                /* «اتجه»: turn-by-turn in the app (Apple Maps stays one tap away in the options). */
+                self?.navigate(NavTargets.rally(self?.rallyPoint))
             },
             rallyMove: { [weak self] in self?.startPicking(moving: true) },
             rallyRemove: { [weak self] in Task { await self?.session.clearRally() } },
@@ -536,6 +569,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }
 
@@ -575,7 +609,7 @@ final class LiveOutingController: ObservableObject {
     func participantCard(_ id: String) -> ParticipantCardUIState? {
         guard let p = LiveOutingPresenter.participants(input).first(where: { $0.id == id }), let v = session.view else { return nil }
         return ParticipantCardUIState(participant: p, now: Date(), canManage: v.iOwn && !p.isMe && p.role != .leader,
-                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: nil)
+                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id])
     }
 
     func participantActions(_ id: String) -> ParticipantCardActions {
@@ -586,6 +620,7 @@ final class LiveOutingController: ObservableObject {
                 self?.modal = nil
                 self?.show(member: id)
             },
+            navigate: { [weak self] in self?.navigateToMember(id) },
             promoteCoLeader: { [weak self] in
                 guard let self else { return }
                 let on = self.session.view?.members[id]?.co_leader != true

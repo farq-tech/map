@@ -49,7 +49,13 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: {
+                        controller.following = false
+                        controller.navUserMovedMap()
+                    },
+                    nav: controller.mapNav,
+                    onLongPress: { controller.navLongPressed($0) },
+                    onSelectRoute: { controller.nav.select($0) }
                 )
                 .ignoresSafeArea()
 
@@ -109,7 +115,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speedlimit"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -130,6 +136,7 @@ struct LiveOutingScreen: View {
                     ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                         SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
                     }
+                    navTop
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
                                       warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
@@ -138,7 +145,7 @@ struct LiveOutingScreen: View {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if !rowMode {
-                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
+                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
                     }
                 }
@@ -171,6 +178,15 @@ struct LiveOutingScreen: View {
                 HStack(alignment: .bottom) {
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
                         .chromeFrame("ptt")
+                        .overlay(alignment: .top) {
+                            /* The posted speed limit while navigating, right above «اضغط وتكلم» — where the
+                             * speedometer («سرعة المركبة», feat/ios-speed) sits: they go side by side there. */
+                            if controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
+                                NavSpeedLimitSign(kmh: k)
+                                    .chromeFrame("speedlimit")
+                                    .offset(y: -(theme.drive ? 62 : 52) - theme.space(.m))
+                            }
+                        }
                     Spacer()
                     if rowMode {
                         SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)
@@ -192,14 +208,44 @@ struct LiveOutingScreen: View {
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: sheetTop)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
+        .animation(theme.animation(.smooth), value: controller.nav.phase)
+    }
+
+    /// «الملاحة» at the top: the maneuver banner, the off-road leg, or «وصلت».
+    @ViewBuilder
+    private var navTop: some View {
+        let nav = controller.nav
+        switch nav.phase {
+        case .guiding:
+            NavManeuverBanner(nav: nav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            if let moved = controller.navMemberMovedMeters, let t = nav.target {
+                Button { controller.navigateToMember(t.memberId ?? "") } label: {
+                    SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) · حدّث الطريق", systemImage: SaryIcon.retry)
+                }
+                .buttonStyle(.sary(.secondary, compact: true))
+                .accessibilityIdentifier("nav.memberMoved")
+            }
+        case .offRoad:
+            NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        case .arrived:
+            NavArrivalCard(nav: nav, end: controller.endNav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        default:
+            EmptyView()
+        }
     }
 
     private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        /* Navigating: the guidance camera, the voice and the steps. */
+        if controller.nav.isActive { return controller.navControlItems }
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
                                                   backTracking: controller.backTrack != nil)
-        /* Drive mode keeps the few that matter on the move: me, the group, and the way back. */
-        return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } : all
+        let navItem = SaryMapControlItem(id: "navigate", systemImage: SaryIcon.directions, label: "ملاحة", accessibilityID: "outing-navigate")
+        /* Drive mode keeps the few that matter on the move: me, the group, the way back, and «ملاحة». */
+        return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } + [navItem] : all + [navItem]
     }
 
     private func controlTapped(_ id: String) {
@@ -210,7 +256,8 @@ struct LiveOutingScreen: View {
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
-        default: break
+        case "navigate": controller.openNavPicker()
+        default: controller.navControlTapped(id)
         }
     }
 }

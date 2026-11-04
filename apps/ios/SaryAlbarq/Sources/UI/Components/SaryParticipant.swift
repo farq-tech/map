@@ -367,8 +367,17 @@ struct SaryParticipantCard: View {
                     .buttonStyle(.sary(.secondary))
                     .disabled(!p.hasPhone)
             }
-            Button(action: actions.showOnMap) { SaryButtonLabel(title: "أظهره على الخريطة", systemImage: SaryIcon.showOnMap) }
-                .buttonStyle(.saryPrimary)
+            HStack(spacing: theme.space(.s)) {
+                Button(action: actions.showOnMap) { SaryButtonLabel(title: "أظهره على الخريطة", systemImage: SaryIcon.showOnMap) }
+                    .buttonStyle(.saryPrimary)
+                if !p.isMe {
+                    /* «روح له»: only to a live position; an old one explains why instead of guiding. */
+                    Button(action: actions.navigate) { SaryButtonLabel(title: "روح له", systemImage: SaryIcon.directions) }
+                        .buttonStyle(.sary(.secondary))
+                        .opacity(p.presence.isLive ? 1 : 0.55)
+                        .accessibilityIdentifier("participant.navigate")
+                }
+            }
 
             if state.canManage {
                 VStack(spacing: 0) {
