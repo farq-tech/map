@@ -299,7 +299,12 @@ const STUCK_REPLY_TEXT = {
   cant: (who) => `${who} ما يقدر يجي`,
 };
 
-function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId } = {}) {
+/** 10 → «١٠»: the alert texts use Arabic-Indic digits. */
+function arDigits(n) {
+  return String(n).replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d)));
+}
+
+function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId, silentMinutes, lastMinutes, level } = {}) {
   const who = senderName || 'أحد أعضاء الطلعة';
   const where = outingName ? ` · ${outingName}` : '';
   switch (kind) {
@@ -326,6 +331,19 @@ function featurePayload(kind, { senderName, outingName, note, title, replyKind, 
     case 'stuck_reply': {
       const line = (STUCK_REPLY_TEXT[replyKind] || STUCK_REPLY_TEXT.coming)(who);
       return { type: 'stuck_reply', title: `${line}${where}`, body: line, tag: `sary-stuck-reply-${userId || 'x'}`, ttl: 3 * 3600, urgency: 'high', always: true, to_user: userId };
+    }
+    case 'member_silent': {
+      /* «انقطع إرسال فهد منذ ١٠ د — آخر موقع قبل ١٠ د». The 30-min one replaces the 10-min one (same tag). */
+      const since = arDigits(Math.max(1, Math.floor(Number(silentMinutes) || Number(level) || 10)));
+      const lastAgo = Number(lastMinutes) > 0 ? ` — آخر موقع قبل ${arDigits(Math.floor(Number(lastMinutes)))} د` : '';
+      return {
+        type: 'member_silent',
+        title: `📡 انقطع إرسال ${who}${where}`,
+        body: `انقطع إرسال ${who} منذ ${since} د${lastAgo}`,
+        tag: `sary-silent-${userId || 'x'}`,
+        ttl: 3600,
+        urgency: 'high',
+      };
     }
     case 'waypoint_added':
       return { type: 'waypoint_added', title: `${who}${where}`, body: `📍 أضاف نقطة: ${trimText(title || '', 60)}`, tag: `sary-waypoint-${outingId || 'x'}`, ttl: 3600, urgency: 'normal' };

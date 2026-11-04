@@ -45,6 +45,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
   const router = createOutingsRouter({ service, hub, push, apns, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
+  let silenceSweep = null;
   let socket = null;
   const ready = service && autoMigrate
     ? migrate(pool, { log: console.log }).catch((e) => {
@@ -71,10 +72,16 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
         service.sweepReturnTimers().catch((e) => console.warn('[outings] timer sweep:', e.code || e.message));
       }, 60_000);
       timerSweep.unref?.();
+      /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → alert the others once each. Every minute. */
+      silenceSweep = setInterval(() => {
+        service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message));
+      }, 60_000);
+      silenceSweep.unref?.();
     },
     close() {
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
+      clearInterval(silenceSweep);
       socket?.close();
       apns.close();
     },
