@@ -140,11 +140,72 @@ final class SessionPrivacyTests: XCTestCase {
         sockets.flatMap(\.sent).filter { $0["type"] as? String == "position" }.count
     }
 
-    func testJoinedButNeverPressedShareSendsNothing() {
+    /// Before this phone joined (no «انضم» tapped here): the server's default `sharing=true` sends nothing.
+    func testNotJoinedHereSendsNothing() {
         let s = session()
         serverReady(sockets[0])
         XCTAssertEqual(s.view?.snapshot.me.sharing, true, "server default after join")
+        s.resumeIfPreviouslySharing()
         for _ in 0..<5 { s.handleFix(freshFix()) }
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    /// Owner decision (build 6): tapping «انضم» is the consent; sharing starts without «شارك موقعي».
+    func testJoiningIsConsentAndSharesByDefault() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        XCTAssertTrue(s.wantsToShare)
+        XCTAssertTrue(s.gate.allowsPosition, "joined + permission + active outing + server sharing: visible at once")
+        s.handleFix(freshFix())
+        XCTAssertEqual(positionsSent, 1)
+    }
+
+    func testJoinedThenStoppedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        s.stopSharingLocally()
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults), "a relaunch does not resume a stopped share")
+    }
+
+    func testJoinedThenOutingEndedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        sockets[0].serverSays(["type": "outing_status", "status": "ended"])
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    func testJoinedThenLeftOrRemovedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        sockets[0].serverSays(["type": "member_left", "user_id": "u1"])
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    func testDeletingTheAccountForgetsJoinConsent() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        LocalAccountData.wipe(defaults: defaults)
+        XCTAssertFalse(ShareMemory.hasConsent(user: "u1", outing: "o1", defaults: defaults))
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults))
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        s.handleFix(freshFix())
         XCTAssertFalse(s.gate.allowsPosition)
         XCTAssertEqual(positionsSent, 0)
     }

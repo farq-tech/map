@@ -69,6 +69,18 @@ enum ShareMemory {
         defaults.set(all, forKey: consentKey)
     }
 
+    /// The line shown on «انضم» (and on the creator's last wizard step): tapping it is the consent.
+    static let joinStatement = "بانضمامك يشوف أعضاء الطلعة موقعك مباشرة، وتقدر توقف المشاركة أو تطلع متى ما بغيت"
+
+    /// Owner decision (build 6): joining IS the consent. Tapping «انضم» (or creating the outing)
+    /// records consent for this identity + outing at that moment and arms the share, so the
+    /// member is visible without pressing «شارك موقعي». Every other `SendGate` condition still
+    /// holds (iOS permission, active outing, server sharing on, not stopped / left / ended).
+    static func consentByJoining(user: String, outing: String, defaults: UserDefaults = .standard) {
+        recordConsent(user: user, outing: outing, defaults: defaults)
+        setActiveShare(user: user, outing: outing, defaults: defaults)
+    }
+
     static func activeShare(user: String, defaults: UserDefaults = .standard) -> String? {
         guard let v = defaults.string(forKey: activeShareKey) else { return nil }
         let parts = v.split(separator: "|", maxSplits: 1).map(String.init)

@@ -388,6 +388,10 @@ final class OutingSession: ObservableObject, Identifiable {
         reconcileSharing()
     }
 
+    /// Opened right after «انضم» / creating: the controller follows up with the «دائمًا» explainer
+    /// once iOS answered the location prompt (or shows the Settings fix when refused).
+    @Published var joinedJustNow = false
+
     /// You pressed stop: nothing more leaves the phone, the server deletes your fix.
     func stopSharing() async {
         /* Tell nearby cars too, so a relay never keeps showing where you were. */
@@ -406,7 +410,8 @@ final class OutingSession: ObservableObject, Identifiable {
         }
     }
 
-    private func stopSharingLocally() {
+    /// Internal for tests (the «أوقف» path without the network).
+    func stopSharingLocally() {
         wantsToShare = false
         lastSent = nil
         channel?.dropPendingFix()

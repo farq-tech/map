@@ -35,8 +35,8 @@ struct JoinByLinkSheet: View {
                 .buttonStyle(.sary(.primary))
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 .accessibilityIdentifier("paste.continue")
-            Text("الانضمام لا يشارك موقعك. تختار المشاركة بنفسك داخل الطلعة.")
-                .saryText(.footnote).foregroundStyle(theme.palette.textTertiary)
+            Text(ShareMemory.joinStatement)
+                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .sheet(isPresented: $scanning) {
             QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال صاحب الطلعة.") { s in
@@ -112,8 +112,10 @@ struct InviteJoinSheet: View {
                     .buttonStyle(.sary(.primary))
                     .disabled(busy || (model.identity == nil && name.trimmingCharacters(in: .whitespaces).isEmpty))
                     .accessibilityIdentifier("invite.join")
-                    Text("الانضمام لا يشارك موقعك. تختار المشاركة بنفسك داخل الطلعة.")
-                        .saryText(.footnote).foregroundStyle(p.textTertiary)
+                    Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                        .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("join.shareStatement")
                 }
                 Button("ليس الآن", action: close).buttonStyle(.sary(.plain))
             case .expired:

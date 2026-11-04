@@ -208,6 +208,10 @@ private struct ShareCallout: View {
                     Button { controller.setSharingPaused(false) } label: { SaryButtonLabel(title: "شارك موقعي", systemImage: SaryIcon.locate) }
                         .buttonStyle(.saryPrimary)
                         .accessibilityIdentifier("live.share")
+                    if controller.locationDenied {
+                        /* Joined (sharing by default) but iOS refused the location: stay joined, show the fix. */
+                        ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
+                    }
                 } else {
                     HStack(spacing: theme.space(.s)) {
                         Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
@@ -413,7 +417,7 @@ struct ShareBackgroundHintRow: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
-        if hint == .needsAlways {
+        if hint == .needsAlways || hint == .denied {
             Button(action: openSettings) { row(link: true) }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("live.shareHint.settings")

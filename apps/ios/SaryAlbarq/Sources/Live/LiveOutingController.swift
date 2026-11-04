@@ -161,7 +161,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.sessionChanged() }
+            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin() }
         }.store(in: &bag)
         location.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.locationChanged() }
@@ -335,6 +335,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        followUpJoin()
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
@@ -759,6 +760,19 @@ final class LiveOutingController: ObservableObject {
     func laterShareAlways() {
         UserDefaults.standard.set(true, forKey: Self.shareAlwaysAskedKey)
         modal = nil
+    }
+
+    /// Joined (consent given by joining) but iOS location is refused or restricted.
+    var locationDenied: Bool {
+        session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
+    }
+
+    /// Right after «انضم»: once iOS answered the When-In-Use prompt, the «دائمًا» explainer
+    /// (the always-share flow) follows; a refusal leaves the member joined with the Settings fix.
+    func followUpJoin() {
+        guard session.joinedJustNow, location.authorization != .notDetermined else { return }
+        session.joinedJustNow = false
+        if location.canLocate { offerShareAlwaysIfNeeded() }
     }
 
     /// One line under «موقعك مُشارَك»: what happens when the screen locks, and what to do.

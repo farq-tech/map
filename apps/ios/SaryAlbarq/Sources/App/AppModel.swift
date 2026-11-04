@@ -356,10 +356,29 @@ final class AppModel: ObservableObject {
             let r = try await api.create(name: clean)
             InviteTokenStore.save(r.outing_id, r.invite.token)
             await refresh()
-            if openNow { open(r.outing_id) }
+            if openNow {
+                /* The quick create (no wizard): the creator joins it, same default as «انضم». */
+                consentByJoining(r.outing_id)
+                open(r.outing_id)
+                startSharingAfterJoin(r.outing_id)
+            }
             return r.outing_id
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
+    }
+
+    /// Joining (or creating) is the consent: stored for this identity + outing now.
+    func consentByJoining(_ outingId: String) {
+        guard let me = identity?.user.id else { return }
+        ShareMemory.consentByJoining(user: me, outing: outingId)
+    }
+
+    /// Right after joining: the open session asks iOS for the location and shares by itself
+    /// (the «دائمًا» explainer follows once When-In-Use is granted; a refusal shows the fix).
+    func startSharingAfterJoin(_ outingId: String) {
+        guard let s = session, s.id == outingId else { return }
+        s.joinedJustNow = true
+        s.resumeIfPreviouslySharing()
     }
 
     /// The invite link for an outing this phone created (`-demo`: a demo link that joins nothing).
@@ -374,8 +393,11 @@ final class AppModel: ObservableObject {
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
+            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: share by default. */
+            consentByJoining(r.outing_id)
             await refresh()
             open(r.outing_id)
+            startSharingAfterJoin(r.outing_id)
             if !push.explained { offerNotifications = true }
             return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}

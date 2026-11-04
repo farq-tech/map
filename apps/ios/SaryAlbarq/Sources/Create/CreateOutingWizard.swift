@@ -85,10 +85,15 @@ struct CreateOutingWizard: View {
     private func finish(start: Bool) {
         guard !flow.creating else { return }
         if let id = flow.outingId {
+            /* The creator is in the outing: the statement on this step is the consent (share by default). */
+            model.consentByJoining(id)
             if start { model.pendingStart = id }
             dismiss()
             if start {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { model.open(id) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    model.open(id)
+                    model.startSharingAfterJoin(id)
+                }
             } else {
                 Task { await model.refresh() }
             }
@@ -566,7 +571,10 @@ private struct InviteStep: View {
         Button("لاحقًا", action: later)
             .buttonStyle(.sary(.plain))
             .accessibilityIdentifier("create.later")
-        Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع. مشاركة موقعك تبقى باختيارك.")
+        Label(ShareMemory.joinStatement, systemImage: "location.fill")
+            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("create.shareStatement")
+        Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
     }
 }

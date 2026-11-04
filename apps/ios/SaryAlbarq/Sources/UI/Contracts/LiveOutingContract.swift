@@ -61,9 +61,12 @@ enum ShareBackgroundHint: Equatable {
     case dontForceQuit
     /// «دائمًا» + Low Power Mode: still sharing, a little less often.
     case lowPower
+    /// Joined (sharing by default) but iOS location is refused: the one-line fix. Tapping opens Settings.
+    case denied
 
     var text: String {
         switch self {
+        case .denied: return "ما سمحت بالموقع، فأعضاء الطلعة ما يشوفونك. افتح الإعدادات ← الموقع ← «أثناء الاستخدام»."
         case .needsAlways: return "تتوقف المشاركة إذا قفلت الشاشة. اختر «دائمًا» من الإعدادات لتستمر."
         case .dontForceQuit: return "تستمر والشاشة مقفلة. لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة."
         case .lowPower: return "وضع توفير الطاقة: تستمر والشاشة مقفلة، لكن أقل تكرارًا (كل ٣٠ ثانية تقريبًا)."
@@ -72,6 +75,7 @@ enum ShareBackgroundHint: Equatable {
 
     var systemImage: String {
         switch self {
+        case .denied: return "location.slash.fill"
         case .needsAlways: return "gearshape.fill"
         case .dontForceQuit: return "lock.iphone"
         case .lowPower: return "battery.25percent"
