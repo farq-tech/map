@@ -360,6 +360,10 @@ final class AppModel: ObservableObject {
     }
 
     private func seedDemoLists() {
+        if ProcessInfo.processInfo.arguments.contains("-demoEmpty") {
+            listPhase = .loaded
+            return
+        }
         current = [
             OutingSummary(id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, role: "owner", my_status: "active", member_count: 4, created_at: nil, started_at: ISODate.string(Date().addingTimeInterval(-3000)), ended_at: nil),
             OutingSummary(id: "demo-paused", name: "مشوار العارض", status: .paused, role: "member", my_status: "active", member_count: 3, created_at: nil, started_at: nil, ended_at: nil),

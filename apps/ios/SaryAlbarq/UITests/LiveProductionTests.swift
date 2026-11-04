@@ -13,11 +13,14 @@ final class LiveProductionTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState"]
         app.launch()
+        XCTAssertTrue(app.buttons["onboarding.begin"].waitForExistence(timeout: 10))
+        app.buttons["onboarding.begin"].tap()
         let onboarding = app.textFields["onboarding.name"]
         XCTAssertTrue(onboarding.waitForExistence(timeout: 10))
         onboarding.tap()
         onboarding.typeText(name)
         app.buttons["onboarding.start"].tap()
+        if app.buttons["onboarding.skipLocation"].waitForExistence(timeout: 15) { app.buttons["onboarding.skipLocation"].tap() }
         XCTAssertTrue(app.buttons["list.create"].waitForExistence(timeout: 20))
         XCUIDevice.shared.system.open(url)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -25,7 +28,7 @@ final class LiveProductionTests: XCTestCase {
             springboard.buttons[label].tap()
             break
         }
-        let join = app.buttons["انضم"].firstMatch
+        let join = app.buttons["invite.join"].firstMatch
         XCTAssertTrue(join.waitForExistence(timeout: 15))
         join.tap()
         XCTAssertTrue(app.buttons["outing-sheet-summary"].waitForExistence(timeout: 20), "the live screen opens")
