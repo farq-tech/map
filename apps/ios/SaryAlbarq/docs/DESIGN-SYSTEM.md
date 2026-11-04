@@ -119,6 +119,7 @@ components above (`SaryPage` header + scroll, `SarySection`, `SaryNavRow`,
 | New outing, join by link, invite preview | `OutingSheets.swift` | invite: valid / expired / invalid / retryable error |
 | Outing details, trip summary, history | `OutingDetailsView.swift` | summary: shared totals from `GET /:id`, my totals from this device (`TripLog`), «شارك ملخصي» = `PUT /:id/summary` |
 | Profile, settings, appearance, privacy, notifications, about | `SettingsScreens.swift` | privacy: share precision, battery, what is sent and when, «احذف حسابي» → `DeleteAccountView` (typed confirmation, DELETE /api/outings/me) |
+| Trip plan, checklist, destination, coordinates | `Plan/*` | details: plan preview + «قائمة التجهيز» (any member adds / assigns / ticks, «٧ من ١٠», live via `checklist_updated`, polled every 15 s off the map); editor: tap to add, drag, undo, GPX/KML import (streamed, capped, simplified ≤ 5000), GPX export; dashed plan line on the live map, «اتبع الخطة» (off-route like «طريق العودة»), «الوجهة» with «اتجه»; long-press anywhere = the one coordinate card (copy decimal / DMS in Western digits, share Google / Apple link, «اجعلها الوجهة», «أضف نقطة», «نقطة تجمع», «الطقس هنا» hook); «انسخ موقعي» in the control cluster; «ابحث أو أدخل إحداثية». 404/405 → «غير متاح بعد». |
 
 Push: `App/PushRegistrar.swift` (unit-tested with a fake server) registers the
 APNs token at `POST /api/outings/push/apns` (sandbox in Debug, production in
@@ -131,5 +132,6 @@ Screenshots: `scripts/app-shots.sh <udid> <name> -demo -SaryScreen <screen> -Sar
 (`-SaryOffline` forces the offline state). Screens: `splash onboarding onboarding-profile
 onboarding-location recovery-restore recovery-code recovery-code-shown home details summary
 history profile settings appearance privacy notifications offline-maps about create join
-invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped`.
+invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped plan-details plan-editor plan-search plan-point plan-me-stale`
+(`-demoPlanEmpty`, `-demoPlanUnavailable`; `-SaryPlanFollow` turns «اتبع الخطة» on in the live demo).
 Shots: `docs/app-shots/`.

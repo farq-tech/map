@@ -87,6 +87,10 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// «تخطيط الطلعة»: planned route (dashed), destination and the long-pressed point.
+    var plan = MapPlan()
+    /// Long-press anywhere: the coordinate and its screen point (the coordinate card).
+    var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -124,6 +128,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setChrome(chrome)
         c.sync(members)
         c.setRally(rally)
+        c.onLongPress = onLongPress
+        c.setPlan(plan)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -147,9 +153,11 @@ struct OutingMapboxView: UIViewRepresentable {
     // MARK: -
 
     final class Coordinator: NSObject, GestureManagerDelegate {
-        private weak var map: MapView?
+        private(set) weak var map: MapView?
         private var cancelables = Set<AnyCancelable>()
-        private var styleReady = false
+        private(set) var styleReady = false
+        let planDrawing = LivePlanDrawing()
+        var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
         private var addedModels = Set<String>()
         private var recs: [String: Rec] = [:]
         private var lastCars: [MapMember] = []
@@ -245,9 +253,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 return false
             })
+            installLongPress(map)
         }
 
         func detach() {
+            planDrawing.longPress?.cancel()
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
@@ -295,6 +305,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": 1.15])
             ensureRoadProbe()
+            drawPlan(force: true)
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -441,6 +452,7 @@ struct OutingMapboxView: UIViewRepresentable {
         func themeChanged() {
             light = nil
             applyLight()
+            drawPlan(force: true)
             for r in recs.values { remove(chipsOf: r) }
             for g in groupBoxes.values { g.removeFromSuperview() }
             groupBoxes = [:]

@@ -17,6 +17,9 @@ enum LiveEvent: Equatable {
     case rally(RallyInfo?)
     case memberRole(userId: String, coLeader: Bool)
     case voiceClip(VoiceClip)
+    /// «تخطيط الطلعة»: nil when the frame carries no plan (refetch it).
+    case planUpdated(TripPlan?)
+    case checklistUpdated([ChecklistItem])
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -65,6 +68,10 @@ enum LiveEvent: Equatable {
             return .memberRole(userId: uid, coLeader: obj["co_leader"] as? Bool ?? false)
         case "voice_clip":
             return (decodeJSON(obj["clip"]) as VoiceClip?).map(LiveEvent.voiceClip)
+        case "plan_updated":
+            return .planUpdated(decodeJSON(obj["plan"]))
+        case "checklist_updated":
+            return (decodeJSON(obj["items"]) as [ChecklistItem]?).map(LiveEvent.checklistUpdated)
         default:
             return nil
         }
@@ -172,6 +179,8 @@ struct OutingView: Equatable {
             guard !clips.contains(where: { $0.id == c.id }) else { return }
             clips.append(c)
             if clips.count > 30 { clips.removeFirst(clips.count - 30) }
+        case .planUpdated, .checklistUpdated:
+            break // held by PlanModel, not the outing view
         }
     }
 

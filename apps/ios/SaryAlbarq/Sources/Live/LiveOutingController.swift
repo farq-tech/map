@@ -20,6 +20,8 @@ enum LiveModal: Identifiable, Equatable {
     case notify
     /// «احفظ الخريطة بلا إنترنت» for this outing's area.
     case offlineMaps
+    /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
+    case plan(LivePlanModal)
 
     var id: String {
         switch self {
@@ -30,6 +32,7 @@ enum LiveModal: Identifiable, Equatable {
         case .rallyLabel: return "rally"
         case .notify: return "notify"
         case .offlineMaps: return "offline"
+        case let .plan(m): return m.id
         }
     }
 }

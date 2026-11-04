@@ -25,6 +25,7 @@ struct LiveOutingScreen: View {
     @StateObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var app: AppModel
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
     @State private var screenHeight: CGFloat = 0
@@ -35,6 +36,7 @@ struct LiveOutingScreen: View {
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
+                PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
                     members: controller.mapMembers(theme: theme),
                     rally: controller.rallyPoint,
@@ -47,8 +49,11 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: { controller.following = false },
+                    plan: plan,
+                    onLongPress: { controller.planLongPress($0, at: $1) }
                 )
+                }
                 .ignoresSafeArea()
 
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full))
@@ -134,6 +139,7 @@ struct LiveOutingScreen: View {
                     if !rowMode {
                         SaryAlertLane(alerts: ui.alerts, limit: theme.drive ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
+                        LivePlanStrip(controller: controller)
                     }
                 }
                 .chromeFrame("top")
@@ -190,7 +196,8 @@ struct LiveOutingScreen: View {
     private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil)
-        return theme.drive ? Array(all.prefix(2)) : all
+        let copyMe = SaryMapControlItem(id: "copyme", systemImage: "location.viewfinder", label: "انسخ موقعي", accessibilityID: "outing-copyme")
+        return theme.drive ? Array(all.prefix(2)) : all + [copyMe]
     }
 
     private func controlTapped(_ id: String) {
@@ -200,6 +207,7 @@ struct LiveOutingScreen: View {
         case "fit": a.fitGroup()
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
+        case "copyme": controller.modal = .plan(.me)
         default: break
         }
     }

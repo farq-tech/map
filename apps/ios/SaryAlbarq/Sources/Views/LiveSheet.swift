@@ -91,6 +91,8 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case let .plan(m):
+            LivePlanModalView(controller: controller, modal: m)
         }
     }
 }
