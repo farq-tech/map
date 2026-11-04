@@ -146,6 +146,10 @@ struct OutingSnapshot: Codable, Equatable {
     var voice_clips: [VoiceClip]?
     /// Totals members chose to share once the outing ended (never points).
     var summaries: [TripShare]?
+    /// Optional, members only: 32 random bytes (base64url) keying the
+    /// phone-to-phone link (`MeshKeys`). Until the server sends it, the app
+    /// derives an interim key from the outing id (see docs/NEARBY-MESH.md).
+    var mesh_key: String? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

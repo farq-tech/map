@@ -61,6 +61,9 @@ struct SaryNameChip: View {
                 if chip.hasVoice {
                     Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
                 }
+                if chip.viaNearby && !chip.isMe {
+                    SaryNearbyMark(compact: true)
+                }
                 if noteWaiting {
                     Image(systemName: SaryIcon.note)
                         .font(.system(size: 10, weight: .bold))
@@ -91,7 +94,7 @@ struct SaryNameChip: View {
         }
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .accessibilityLabel(Text(chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))"))
+        .accessibilityLabel(Text(chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))\(chip.viaNearby ? "، \(SaryNearbyMark.text)" : "")"))
         .modifier(OptionalIdentifier(id: id))
     }
 }
