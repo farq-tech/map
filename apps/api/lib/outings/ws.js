@@ -16,6 +16,7 @@
  *   ← position · presence · member_* · sos · rally · voice_clip · outing_status · owner_changed · closed
  *   ← return_timer · member_stuck · stuck_reply · stuck_clear · waypoint_added · waypoint_removed
  *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
+ *   ← media_state { state }   («قناة الطلعة», state or null — see lib/outings/media.js)
  *   (older builds' voice clips go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  *
  * Live push-to-talk «قناة الطلعة» (lib/outings/ptt.js): ptt_join / ptt_leave /
