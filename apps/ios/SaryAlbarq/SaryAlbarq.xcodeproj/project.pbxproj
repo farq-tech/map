@@ -446,6 +446,7 @@
 		6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionTests.swift; sourceTree = "<group>"; };
 		6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityTests.swift; sourceTree = "<group>"; };
 		7054D28829BF6342E6ADB5CB /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
+		7172FCC8CD02CE979267C29A /* SaryAlbarq-PortalPending.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryAlbarq-PortalPending.entitlements"; sourceTree = "<group>"; };
 		71FA16F086DA2E158BD914C1 /* Trail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trail.swift; sourceTree = "<group>"; };
 		722A5E7011E6663441A0888F /* DemoFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoFeatures.swift; sourceTree = "<group>"; };
 		74730391AAD5CE3F324E29F8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
@@ -555,6 +556,7 @@
 		E13D7B33BE15B22E053E00E9 /* CarPlayPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayPresenterTests.swift; sourceTree = "<group>"; };
 		E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryContracts.swift; sourceTree = "<group>"; };
 		E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrar.swift; sourceTree = "<group>"; };
+		E1F76C428A1BC91857A5F458 /* SaryShare-PortalPending.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryShare-PortalPending.entitlements"; sourceTree = "<group>"; };
 		E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SaryAlbarqWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E313CE99A6E96F6BB2DCE4DA /* SaryWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryWidgetsBundle.swift; sourceTree = "<group>"; };
 		E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreensUITests.swift; sourceTree = "<group>"; };
@@ -754,6 +756,7 @@
 				E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */,
 				E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */,
 				49A3565CAFC838A5267BB20F /* SaryAlbarq-CarPlay.entitlements */,
+				7172FCC8CD02CE979267C29A /* SaryAlbarq-PortalPending.entitlements */,
 				22D142BEE2D2FB9BA3700CFB /* SaryAlbarq.entitlements */,
 				1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */,
 				1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */,
@@ -1031,6 +1034,7 @@
 			isa = PBXGroup;
 			children = (
 				521D45AC99F6A1F0BAA36EF7 /* Info.plist */,
+				E1F76C428A1BC91857A5F458 /* SaryShare-PortalPending.entitlements */,
 				5202A74E759623322A81CEA4 /* SaryShare.entitlements */,
 				F28C90C2692FC05D3D4BC90C /* ShareViewController.swift */,
 			);
@@ -1670,9 +1674,10 @@
 /* Begin XCBuildConfiguration section */
 		0131C2513ECA7CB95ADB2870 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = ShareExtension/SaryShare.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(SARY_SHARE_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1774,9 +1779,10 @@
 		};
 		6F738353ABB403DD8E035B51 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
-				CODE_SIGN_ENTITLEMENTS = ShareExtension/SaryShare.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(SARY_SHARE_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

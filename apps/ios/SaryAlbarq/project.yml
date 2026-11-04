@@ -117,6 +117,9 @@ targets:
   SaryShare:
     type: app-extension
     platform: iOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
     sources:
       - ShareExtension
       - Sources/Media/YouTubeLink.swift
@@ -127,7 +130,8 @@ targets:
         PRODUCT_NAME: SaryShare
         INFOPLIST_FILE: ShareExtension/Info.plist
         GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_ENTITLEMENTS: ShareExtension/SaryShare.entitlements
+        # TEMPORARY (build 6): without the App Group on device/archive builds (Config/Base.xcconfig).
+        CODE_SIGN_ENTITLEMENTS: $(SARY_SHARE_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         SUPPORTS_MACCATALYST: NO

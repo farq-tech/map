@@ -11,5 +11,16 @@ MAPBOX_ACCESS_TOKEN =
 // Once Apple approves (docs/CARPLAY-ENTITLEMENT.md), set CARPLAY_ENABLED = YES on the first line.
 CARPLAY_ENABLED = NO
 CARPLAY_ENABLED[sdk=iphonesimulator*] = YES
-SARY_ENTITLEMENTS_NO = Sources/App/SaryAlbarq.entitlements
+// TEMPORARY (TestFlight build 6): Push to Talk and the App Group group.sa.sary.albarq are not on
+// the App IDs yet and the App Store Connect API key cannot add them (owner: Apple Developer portal ->
+// Identifiers -> sa.sary.albarq: enable Push to Talk + App Groups; register group.sa.sary.albarq and
+// assign it to sa.sary.albarq and sa.sary.albarq.share). Until then device/archive builds sign
+// without those two; the simulator keeps them. Set SARY_PORTAL_PENDING = NO once done.
+SARY_PORTAL_PENDING = YES
+SARY_PORTAL_PENDING[sdk=iphonesimulator*] = NO
+SARY_APP_ENTITLEMENTS_PENDING_NO = Sources/App/SaryAlbarq.entitlements
+SARY_APP_ENTITLEMENTS_PENDING_YES = Sources/App/SaryAlbarq-PortalPending.entitlements
+SARY_SHARE_ENTITLEMENTS_PENDING_NO = ShareExtension/SaryShare.entitlements
+SARY_SHARE_ENTITLEMENTS_PENDING_YES = ShareExtension/SaryShare-PortalPending.entitlements
+SARY_ENTITLEMENTS_NO = $(SARY_APP_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))
 SARY_ENTITLEMENTS_YES = Sources/App/SaryAlbarq-CarPlay.entitlements
