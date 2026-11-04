@@ -95,6 +95,11 @@ Friends on one off-road outing see each other on one map while the outing screen
 
 **Server** (`apps/api/lib/outings/*`, `routes/outings.js`, `migrations/001_sary_outings.sql`)
 - Identity without accounts: `POST /api/outings/me` issues a 256-bit device token, stored as SHA-256. Every call is `Authorization: Bearer`.
+- **Account deletion («احذف حسابي», App Store 5.1.1(v))**: `DELETE /api/outings/me` (Bearer, rate limited per address, 5/h) → `200 { ok: true }`; afterwards the token is `401` everywhere (a repeat is `401` too). One transaction, **hard delete** of the `sary.users` row:
+  1. every open outing the person is in is left with the normal leave rules — owner hand-over to a «مساعد», else the earliest member; the outing ends if nobody is left. Other members get the same live events as a leave (`member_left` with `reason: "left"`, `owner_changed`, `outing_status: ended`).
+  2. ended outings they still own pass to another member (`owner_id` only; a member who had left does not become `role: owner`), or are deleted when nobody else was ever in them. `outings.owner_id` / `outing_invites.created_by` are `NOT NULL` without `ON DELETE`, so this is what makes the row deletable with no schema change; invite rows they created are re-attributed to the outing's current owner, so a group's live link keeps working.
+  3. deleting the row cascades memberships, the latest fix, trip summaries, web push subscriptions and APNs tokens; the recovery code lives on the row; `rally_set_by` is set null. Memory-only state — notes, SOS, voice clips they sent, cached fixes, auth cache, open sockets — is dropped. `field_diagnostics` hold no user id and are untouched. There are no other account links.
+  Other members' positions, notes, clips and summaries are not touched. Tests: `lib/outings-delete.test.js`.
 - Membership is checked on the server for every read, write and socket. Non-members get `404`, removed members are kicked from their socket at once (`4403`) and cannot rejoin.
 - Lifecycle: outing `created → active ⇄ paused → ended` (owner), member `active → left | removed`, per-member sharing on/off. If the owner leaves, the earliest member takes over.
 - Storage: one row per member — the **latest** fix only, no history. Deleted on leave, removal, sharing off, pause and end. RLS on, no policies; `anon`/`authenticated` revoked.
@@ -112,6 +117,11 @@ Friends on one off-road outing see each other on one map while the outing screen
 - Web Push for a note over a car and for an `sos` event — never positions. `notifyMembers(outingId, exceptUserId, payload)` sends to active members of an open outing except the sender; members looking at the outing right now get the in-app alert instead (SOS reaches them too).
 - Subscriptions belong to a device identity (max 5), are re-checked against membership at send time, deleted when the push service answers 404/410, and must point at a real browser push service (FCM, Mozilla, Apple, WNS).
 - `GET /api/outings/push/config` → `{ enabled, public_key }`; `POST|DELETE /api/outings/push/subscribe`. Off without `VAPID_*`.
+- **Native iOS push (APNs)** (`apps/api/lib/outings/apns.js`, `migrations/008_sary_apns_tokens.sql`) goes out wherever web push does, through the same `notifyMembers()` — same recipients (active members of an open outing, never the sender, viewers only for SOS). HTTP/2 with token auth (ES256 JWT from the `.p8`, renewed every 50 min), Node's built-in `http2`/`crypto` only. Production tokens → `api.push.apple.com`, sandbox → `api.sandbox.push.apple.com`; a token answered with 410 / `BadDeviceToken` / `Unregistered` is deleted. SOS is `time-sensitive` with the default sound (not `critical`: that needs an Apple entitlement); notes, voice clips and «أنا بخير» are `passive`. The web `tag` is the `apns-collapse-id` (so «أنا بخير» replaces the SOS), `thread-id` is `sary-outing-<id>`, and every payload carries `type`, `outing_id`, `url`.
+  - `GET /api/outings/push/apns` → `{ ok, enabled, bundle_id }` (public).
+  - `POST /api/outings/push/apns` (Bearer) `{ token: "<hex device token, 64+>", environment: "sandbox"|"production", bundle_id?: "sa.sary.albarq" }` → `201 { ok: true }`; `400 invalid_token|invalid_environment|invalid_bundle_id`; `503 apns_disabled`. Max 5 tokens per identity, re-registering moves a token to the new identity.
+  - `DELETE /api/outings/push/apns` (Bearer) `{ token }` → `{ ok, removed }` (only your own).
+  - Off without all four `APNS_*` (see below); it says so once in the log and nothing else changes.
 - «فعّل التنبيهات» in the outing settings. iPhone: Safari delivers web push only to the home-screen app (iOS 16.4+), so a Safari tab shows the «إضافة إلى الشاشة الرئيسية» steps; `manifest.webmanifest` + `sw.js` make that install work.
 - Also pushed: «أنا بخير» (a quiet `sos_clear` that replaces the SOS notification, same tag; refreshing an SOS with a newer fix does not ring again) and voice clips (quiet, like notes, expiring with the clip).
 - Keep the screen on: while the outing is active and I am sharing, the screen wake lock is requested automatically (a saved «off» is respected) and re-acquired whenever the page is visible again; the hint «وصّل الشاحن» shows in the status line.
@@ -146,6 +156,7 @@ API:
 - `SARY_AUTO_MIGRATE` — `0` disables running `apps/api/migrations` at boot
 - `OUTING_*` — optional tuning, see `.env.example`
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` — Web Push for outing notes/SOS (`npx web-push generate-vapid-keys`). Unset → push off. Private key: API only.
+- `APNS_KEY_ID`, `APNS_TEAM_ID` (`MH7J92HV9N`), `APNS_PRIVATE_KEY` (the `.p8` contents; `\n`-escaped on one line is fine), `APNS_BUNDLE_ID` (`sa.sary.albarq`) — native iOS push. Any unset → APNs off. API only, never in the repo. Creating the key (account owner, once): Apple Developer → Certificates, IDs & Profiles → **Keys** → **+** → name it, tick **Apple Push Notifications service (APNs)** → Continue → Register → **Download** the `AuthKey_<KEYID>.p8` (Apple lets you download it only once — store it in the password manager) and note the **Key ID** shown on that page. One key serves both sandbox and production and every app in the team. The app itself needs the Push Notifications capability (`aps-environment` entitlement) for `sa.sary.albarq`.
 
 Web, shared outings:
 

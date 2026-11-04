@@ -641,40 +641,42 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
    * Leaving stops sharing at once. If the owner leaves, the earliest remaining
    * member takes over; if nobody remains, the outing ends.
    */
-  async function leave(user, outingId) {
-    const m = await requireMember(user, outingId, { fresh: true });
-    const outcome = await tx(async (run) => {
-      await run(
-        `UPDATE sary.outing_members SET status = 'left', left_at = now(), sharing = false, co_leader = false
-         WHERE outing_id = $1 AND user_id = $2`,
-        [outingId, user.id],
-      );
-      await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
-      if (m.role !== 'owner') return { ended: false, owner: null };
-      await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
-      /* A co-leader is the natural heir; otherwise the earliest to join. */
-      const [next] = await run(
-        `SELECT user_id FROM sary.outing_members WHERE outing_id = $1 AND status = 'active'
-         ORDER BY co_leader DESC, joined_at LIMIT 1 FOR UPDATE`,
-        [outingId],
-      );
-      if (!next || m.outing_status === 'ended') {
-        if (m.outing_status !== 'ended') {
-          await run(`UPDATE sary.outings SET status = 'ended', ended_at = now(), updated_at = now() WHERE id = $1`, [outingId]);
-          await endOutingRows(run, outingId);
-        }
-        return { ended: true, owner: null };
+  async function leaveRows(run, m, outingId, userId) {
+    await run(
+      `UPDATE sary.outing_members SET status = 'left', left_at = now(), sharing = false, co_leader = false
+       WHERE outing_id = $1 AND user_id = $2`,
+      [outingId, userId],
+    );
+    await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    if (m.role !== 'owner') return { ended: false, owner: null };
+    await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    /* A co-leader is the natural heir; otherwise the earliest to join. */
+    const [next] = await run(
+      `SELECT user_id FROM sary.outing_members WHERE outing_id = $1 AND status = 'active'
+       ORDER BY co_leader DESC, joined_at LIMIT 1 FOR UPDATE`,
+      [outingId],
+    );
+    if (!next || m.outing_status === 'ended') {
+      if (m.outing_status !== 'ended') {
+        await run(`UPDATE sary.outings SET status = 'ended', ended_at = now(), updated_at = now() WHERE id = $1`, [outingId]);
+        await endOutingRows(run, outingId);
       }
-      await run(`UPDATE sary.outing_members SET role = 'owner', co_leader = false WHERE outing_id = $1 AND user_id = $2`, [outingId, next.user_id]);
-      await run(`UPDATE sary.outings SET owner_id = $2, updated_at = now() WHERE id = $1`, [outingId, next.user_id]);
-      return { ended: false, owner: next.user_id };
-    });
+      return { ended: true, owner: null };
+    }
+    await run(`UPDATE sary.outing_members SET role = 'owner', co_leader = false WHERE outing_id = $1 AND user_id = $2`, [outingId, next.user_id]);
+    await run(`UPDATE sary.outings SET owner_id = $2, updated_at = now() WHERE id = $1`, [outingId, next.user_id]);
+    return { ended: false, owner: next.user_id };
+  }
+
+  /** After the leave transaction commits: caches, memory-only state, live events. */
+  function afterLeave(outingId, userId, outcome) {
     forgetOuting(outingId);
-    dropLatest(outingId, user.id);
-    dropSos(outingId, user.id);
-    clips.dropUser(outingId, user.id);
-    hub.kick(outingId, user.id, 'left');
-    hub.emit(outingId, { type: 'member_left', user_id: user.id, reason: 'left' });
+    dropLatest(outingId, userId);
+    dropSos(outingId, userId);
+    notes.delete(`${outingId}:${userId}`);
+    clips.dropUser(outingId, userId);
+    hub.kick(outingId, userId, 'left');
+    hub.emit(outingId, { type: 'member_left', user_id: userId, reason: 'left' });
     if (outcome.owner) hub.emit(outingId, { type: 'owner_changed', owner_id: outcome.owner });
     if (outcome.ended) {
       dropLatest(outingId);
@@ -682,7 +684,93 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       hub.emit(outingId, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(outingId, 'outing_ended');
     }
+  }
+
+  async function leave(user, outingId) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    const outcome = await tx((run) => leaveRows(run, m, outingId, user.id));
+    afterLeave(outingId, user.id, outcome);
     return outcome;
+  }
+
+  /* ---------- account deletion («احذف حسابي») ---------- */
+
+  /**
+   * Deletes this identity and everything that is only theirs, in one
+   * transaction. A HARD delete of the sary.users row:
+   *   1. every open outing they are active in is left with the normal leave
+   *      rules (owner hand-over, or the outing ends if nobody is left);
+   *   2. outings they still own (already ended) pass to the earliest other
+   *      member, or are deleted outright when nobody else was ever in them —
+   *      sary.outings.owner_id is NOT NULL without ON DELETE, so this is what
+   *      makes the row deletable without touching the schema;
+   *   3. invite rows they created (created_by is NOT NULL without ON DELETE)
+   *      are re-attributed to the outing's current owner, so a group's live
+   *      link keeps working;
+   *   4. DELETE the user: memberships, positions, trip summaries, web push
+   *      subscriptions and APNs tokens go with it (ON DELETE CASCADE), recovery
+   *      code columns live on the row itself, rally_set_by is SET NULL.
+   * Memory-only state (notes, SOS, voice clips they sent, latest fixes, auth
+   * cache, sockets) is dropped after commit. The token is 401 from then on.
+   */
+  async function deleteAccount(user) {
+    const result = await tx(async (run) => {
+      const [me] = await run(`SELECT id FROM sary.users WHERE id = $1 FOR UPDATE`, [user.id]);
+      if (!me) return null;
+      const open = await run(
+        `SELECT m.outing_id, m.role, m.status, o.status AS outing_status
+         FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+         WHERE m.user_id = $1 AND m.status = 'active' AND o.status <> 'ended'
+         ORDER BY m.joined_at
+         FOR UPDATE OF m, o`,
+        [user.id],
+      );
+      const left = [];
+      for (const m of open) left.push({ outingId: m.outing_id, outcome: await leaveRows(run, m, m.outing_id, user.id) });
+      const owned = await run(`SELECT id FROM sary.outings WHERE owner_id = $1 FOR UPDATE`, [user.id]);
+      const touched = new Set(left.map((l) => l.outingId));
+      let deletedOutings = 0;
+      for (const { id } of owned) {
+        touched.add(id);
+        const [heir] = await run(
+          `SELECT user_id, status FROM sary.outing_members WHERE outing_id = $1 AND user_id <> $2
+           ORDER BY status = 'active' DESC, co_leader DESC, joined_at LIMIT 1`,
+          [id, user.id],
+        );
+        if (!heir) {
+          await run(`DELETE FROM sary.outings WHERE id = $1`, [id]);
+          deletedOutings += 1;
+          continue;
+        }
+        if (heir.status === 'active') {
+          await run(`UPDATE sary.outing_members SET role = 'owner', co_leader = false WHERE outing_id = $1 AND user_id = $2`, [id, heir.user_id]);
+        }
+        await run(`UPDATE sary.outings SET owner_id = $2 WHERE id = $1`, [id, heir.user_id]);
+      }
+      await run(
+        `UPDATE sary.outing_invites i SET created_by = o.owner_id
+         FROM sary.outings o WHERE o.id = i.outing_id AND i.created_by = $1`,
+        [user.id],
+      );
+      const others = await run(`SELECT DISTINCT outing_id FROM sary.outing_members WHERE user_id = $1`, [user.id]);
+      for (const r of others) touched.add(r.outing_id);
+      await run(`DELETE FROM sary.users WHERE id = $1`, [user.id]);
+      return { left, touched: [...touched], deletedOutings };
+    });
+    if (!result) throw err('unauthorized', 401);
+    forgetUser(user.id);
+    for (const { outingId, outcome } of result.left) afterLeave(outingId, user.id, outcome);
+    for (const oid of result.touched) {
+      forgetOuting(oid);
+      dropLatest(oid, user.id);
+      dropSos(oid, user.id);
+      clips.dropUser(oid, user.id);
+      lastPersist.delete(`${oid}:${user.id}`);
+    }
+    for (const k of [...notes.keys()]) if (k.endsWith(`:${user.id}`)) notes.delete(k);
+    for (const k of [...sosAlerts.keys()]) if (k.endsWith(`:${user.id}`)) sosAlerts.delete(k);
+    hub.dropUser?.(user.id, 'unauthorized');
+    return { left: result.left.length, deleted_outings: result.deletedOutings };
   }
 
   /* ---------- co-leaders & join lock ---------- */
@@ -1121,6 +1209,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     setStatus,
     removeMember,
     leave,
+    deleteAccount,
     setSharing,
     setNote,
     raiseSos,

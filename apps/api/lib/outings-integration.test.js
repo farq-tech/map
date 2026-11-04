@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -763,4 +763,138 @@ test('voice clips (memory only) and opt-in trip summaries (totals only)', { skip
   assert.equal((await call('DELETE', `/${o.outing_id}/summary`, a.token)).body.withdrawn, true);
   assert.equal((await call('GET', '/', b.token)).body.history.find((h) => h.id === o.outing_id).summaries.length, 0, 'withdrawn = deleted');
   ws.close();
+});
+
+test('APNs: tokens per identity, same recipients as web push, gone tokens removed', { skip, timeout: 60_000 }, async (t) => {
+  const crypto = require('crypto');
+  const http2 = require('http2');
+  const { apnsConfigFromEnv, createApnsSender } = require('./outings/apns');
+  const pool = createPool(URL_);
+  await migrate(pool);
+
+  /* A fake APNs (h2c) behind the real HTTP/2 sender; a throwaway P-256 key. */
+  const pem = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const config = apnsConfigFromEnv({ APNS_KEY_ID: 'ABC123DEFG', APNS_TEAM_ID: 'MH7J92HV9N', APNS_PRIVATE_KEY: pem.replace(/\n/g, '\\n'), APNS_BUNDLE_ID: 'sa.sary.albarq' });
+  const inbox = [];
+  const h2 = http2.createServer();
+  h2.on('stream', (stream, headers) => {
+    let body = '';
+    stream.on('data', (c) => (body += c));
+    stream.on('end', () => {
+      const token = headers[':path'].split('/').pop();
+      inbox.push({ token, headers, payload: JSON.parse(body) });
+      if (token.startsWith('dead')) {
+        stream.respond({ ':status': 410 });
+        stream.end(JSON.stringify({ reason: 'Unregistered' }));
+      } else {
+        stream.respond({ ':status': 200 });
+        stream.end();
+      }
+    });
+  });
+  await new Promise((r) => h2.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${h2.address().port}`;
+  const sender = createApnsSender(config, { origins: { production: origin, sandbox: origin } });
+
+  const outings = setupOutings({
+    pool,
+    autoMigrate: false,
+    limits: { identityPerHour: 100, invitePer10Min: 100 },
+    push: { config: { enabled: false } },
+    apns: { config, sender, maxPerUser: 2 },
+  });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await new Promise((r) => h2.close(r));
+    await pool.end();
+  });
+  const api = async (method, path, token, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = pred();
+      if (v) return v;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const hex = () => crypto.randomBytes(32).toString('hex');
+
+  assert.deepEqual((await api('GET', '/push/apns')).body, { ok: true, enabled: true, bundle_id: 'sa.sary.albarq' });
+  assert.equal(outings.push.enabled, false, 'web push off: APNs alone still pushes');
+
+  const A = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const B = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const C = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+
+  const aTok = hex(), bOld = hex(), bNew = hex(), cTok = hex();
+  const dead = 'dead'.padEnd(64, 'd'); // the fake APNs answers 410 Unregistered for this one
+  assert.equal((await api('POST', '/push/apns', null, { token: aTok, environment: 'production' })).status, 401);
+  assert.equal((await api('POST', '/push/apns', B.token, { token: 'nothex', environment: 'production' })).status, 400);
+  assert.equal((await api('POST', '/push/apns', B.token, { token: bOld, environment: 'staging' })).status, 400);
+  for (const tok of [bOld, dead, bNew]) {
+    assert.equal((await api('POST', '/push/apns', B.token, { token: tok, environment: 'sandbox' })).status, 201);
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  const bRows = (await pool.query('SELECT token FROM sary.apns_tokens WHERE user_id = $1', [B.user.id])).rows.map((r) => r.token).sort();
+  assert.deepEqual(bRows, [dead, bNew].sort(), 'capped at 2 per person, oldest dropped');
+  assert.equal((await api('POST', '/push/apns', A.token, { token: aTok.toUpperCase(), environment: 'production' })).status, 201);
+  assert.equal((await api('POST', '/push/apns', C.token, { token: cTok, environment: 'production' })).status, 201);
+
+  const o = (await api('POST', '/', A.token, { name: 'طلعة النفود' })).body;
+  assert.equal((await api('POST', '/invites/join', B.token, { token: o.invite.token })).status, 200);
+  assert.equal((await api('POST', `/${o.outing_id}/status`, A.token, { action: 'start' })).status, 200);
+
+  /* A note from A → B's iPhone only; the 410 token is deleted. */
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'بوقف عند المحطة' })).status, 200);
+  await until(() => inbox.length >= 2);
+  await settle();
+  assert.deepEqual(inbox.map((m) => m.token).sort(), [dead, bNew].sort(), 'never the sender, never the outsider');
+  const note = inbox.find((m) => m.token === bNew);
+  assert.deepEqual(note.payload.aps.alert, { title: 'أبو فهد · طلعة النفود', body: 'بوقف عند المحطة' });
+  assert.equal(note.payload.aps['interruption-level'], 'passive');
+  assert.equal(note.payload.aps['thread-id'], `sary-outing-${o.outing_id}`);
+  assert.equal(note.payload.outing_id, o.outing_id);
+  assert.equal(note.headers['apns-topic'], 'sa.sary.albarq');
+  assert.equal((await pool.query('SELECT 1 FROM sary.apns_tokens WHERE token = $1', [dead])).rowCount, 0, '410 → token deleted');
+
+  /* The real SOS route: time-sensitive with sound; «أنا بخير» collapses onto it. */
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  const sos = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(sos.token, bNew);
+  assert.equal(sos.payload.aps['interruption-level'], 'time-sensitive');
+  assert.equal(sos.payload.aps.sound, 'default');
+  assert.equal(sos.headers['apns-priority'], '10');
+  assert.equal((await api('DELETE', `/${o.outing_id}/sos`, A.token)).status, 200);
+  const clear = await until(() => inbox.find((m) => m.payload.type === 'sos_clear'));
+  assert.equal(clear.headers['apns-collapse-id'], sos.headers['apns-collapse-id']);
+
+  /* Leaving stops pushes at once. */
+  assert.equal((await api('POST', `/${o.outing_id}/leave`, B.token)).status, 200);
+  await new Promise((r) => setTimeout(r, 2_100));
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'باقي أحد؟' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 0, 'former members get nothing');
+
+  /* Unregister removes only my own token. */
+  assert.deepEqual((await api('DELETE', '/push/apns', C.token, { token: aTok })).body, { ok: true, removed: 0 });
+  assert.deepEqual((await api('DELETE', '/push/apns', A.token, { token: aTok })).body, { ok: true, removed: 1 });
 });

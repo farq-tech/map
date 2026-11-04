@@ -24,7 +24,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, limits = {} }) {
+function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   const router = express.Router();
   router.use(express.json({ limit: '48kb' }));
   router.use((_req, res, next) => {
@@ -45,6 +45,8 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
   /* Recovery codes carry 100 bits, so guessing is hopeless anyway; this keeps it that way cheaply. */
   const recoverLimit = createRateLimiter({ limit: limits.recoverPer15Min ?? 5, windowMs: 15 * 60_000 });
   const recoveryCodeLimit = createRateLimiter({ limit: 10, windowMs: 60 * 60_000 });
+  /* Account deletion: one is enough; a handful per hour per address stops a loop or a scripted sweep. */
+  const deleteLimit = createRateLimiter({ limit: limits.deletePerHour ?? 5, windowMs: 60 * 60_000 });
   /* Push-to-talk: a few clips a minute is a conversation; more is a flood. */
   const clipLimit = createRateLimiter({ limit: limits.clipsPer5Min ?? 20, windowMs: 5 * 60_000 });
   const clipFetchLimit = createRateLimiter({ limit: limits.clipFetchesPerMin ?? 120, windowMs: 60_000 });
@@ -88,6 +90,17 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
     res.json({ ok: true, user });
   }));
 
+  /* «احذف حسابي» (App Store 5.1.1(v)): leaves every outing with the normal leave rules
+   * (owner hand-over / end), then hard-deletes the identity and everything only it owns.
+   * The token answers 401 from then on — so does a repeat. See service.deleteAccount. */
+  router.delete('/me', asyncHandler(async (req, res, next) => {
+    if (!deleteLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    next();
+  }), auth, asyncHandler(async (req, res) => {
+    await service.deleteAccount(req.user);
+    res.json({ ok: true });
+  }));
+
   /* Web Push. Off (enabled:false) unless the API has VAPID keys. */
   router.get('/push/config', (_req, res) => {
     res.json({ ok: true, ...(push ? push.publicConfig() : { enabled: false, public_key: null }) });
@@ -104,6 +117,25 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
   router.delete('/push/subscribe', auth, asyncHandler(async (req, res) => {
     if (!push) return res.json({ ok: true, removed: 0 });
     res.json({ ok: true, ...(await push.unsubscribe(req.user, req.body?.endpoint)) });
+  }));
+
+  /* Native iOS push (APNs). Off (enabled:false, 503 apns_disabled) unless the API has APNS_*.
+   * Body: { token: <hex device token>, environment: 'sandbox'|'production', bundle_id?: <must match> }. */
+  router.get('/push/apns', (_req, res) => {
+    res.json({ ok: true, ...(apns ? apns.publicConfig() : { enabled: false, bundle_id: null }) });
+  });
+
+  router.post('/push/apns', auth, asyncHandler(async (req, res) => {
+    if (!apns?.enabled) return res.status(503).json({ ok: false, error: 'apns_disabled' });
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await apns.register(req.user, req.body || {});
+    if (!r.ok) return res.status(400).json(r);
+    res.status(201).json({ ok: true });
+  }));
+
+  router.delete('/push/apns', auth, asyncHandler(async (req, res) => {
+    if (!apns) return res.json({ ok: true, removed: 0 });
+    res.json({ ok: true, ...(await apns.unregister(req.user, req.body?.token)) });
   }));
 
   router.post('/invites/preview', asyncHandler(async (req, res) => {
