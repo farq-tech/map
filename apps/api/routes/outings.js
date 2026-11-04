@@ -368,6 +368,21 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
     res.json({ ok: true, ...(await service.removeChecklistItem(req.user, req.params.id, req.params.itemId)) });
   }));
 
+  /* ---- «قناة الطلعة»: shared YouTube channel (state only — every phone plays its own official player) ---- */
+  router.get('/:id/media', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.getMedia(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/media', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.mediaAction(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.post('/:id/media/takeover', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.takeoverMedia(req.user, req.params.id)) });
+  }));
+
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.leave(req.user, req.params.id)) });
   }));

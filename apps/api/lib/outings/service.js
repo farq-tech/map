@@ -20,6 +20,7 @@ const { createRateLimiter } = require('./rate-limit');
 const { pushPayloadFor } = require('./push');
 const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
+const { createMedia } = require('./media');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -116,6 +117,13 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     requireLeader: (...a) => requireLeader(...a),
     membership: (...a) => membership(...a),
     positions: (...a) => positions(...a),
+  });
+
+  /* «قناة الطلعة»: shared YouTube channel state, memory only — see media.js. */
+  const media = createMedia({
+    q, now, err, canLead,
+    events: () => hub,
+    requireMember: (...a) => requireMember(...a),
   });
 
   function dropLatest(outingId, userId) {
@@ -567,6 +575,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       })),
       positions: pos,
       stuck: outing.status === 'ended' ? [] : features.stuckList(outingId),
+      media: outing.status === 'ended' ? null : media.mediaOf(outingId),
       voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
       summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
@@ -614,6 +623,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     dropSos(outingId);
     /* «غرّزت» ends with the outing, like SOS. A return timer does NOT: people end outings in the desert. */
     features.dropStuck(outingId);
+    media.dropMedia(outingId);
     await run(
       `UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`,
       [outingId],
@@ -669,6 +679,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (features.dropStuck(outingId, memberId)) hub.emit(outingId, { type: 'stuck_clear', user_id: memberId });
     clips.dropUser(outingId, memberId);
     void features.dropFromConvoy(outingId, memberId);
+    void media.memberGone(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -716,6 +727,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     notes.delete(`${outingId}:${userId}`);
     clips.dropUser(outingId, userId);
     if (!outcome.ended) void features.dropFromConvoy(outingId, userId);
+    if (outcome.ended) media.dropMedia(outingId);
+    else void media.memberGone(outingId, userId);
     hub.kick(outingId, userId, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: userId, reason: 'left' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -1215,6 +1228,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       dropLatest(id);
       dropSos(id);
       features.dropStuck(id);
+      media.dropMedia(id);
       clips.dropOuting(id);
       hub.emit(id, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(id, 'outing_ended');
@@ -1229,6 +1243,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     for (const [k, at] of lastPersist) if (at < cutoff) lastPersist.delete(k);
     clips.sweep();
     await features.sweepFeatures();
+    media.sweepMedia();
     return { ended: ended.length };
   }
 
@@ -1236,6 +1251,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     config: cfg,
     push,
     ...features.api,
+    ...media.api,
     setEvents(next) {
       hub = next || noopEvents();
     },
