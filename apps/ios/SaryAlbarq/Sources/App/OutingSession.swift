@@ -518,6 +518,8 @@ final class OutingSession: ObservableObject, Identifiable {
             reconcileSharing()
         case let .safety(s):
             safetyEvents.send(s)
+        case .planUpdated, .checklistUpdated:
+            PlanEvents.post(outing: id, e)
         default:
             break
         }

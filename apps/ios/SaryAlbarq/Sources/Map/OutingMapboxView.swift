@@ -117,8 +117,11 @@ struct OutingMapboxView: UIViewRepresentable {
     /// Shared waypoints (pins join the chip declutter, see `WaypointLayout`).
     var waypoints: [MapWaypoint] = []
     var onWaypointTap: (String) -> Void = { _ in }
-    /// Long press on the map («أضف نقطة هنا»); not while picking a rally point.
-    var onLongPress: (LngLat) -> Void = { _ in }
+    /// «تخطيط الطلعة»: planned route (dashed), destination and the long-pressed point.
+    var plan = MapPlan()
+    /// The only long press on the map: the coordinate and its screen point (the point card,
+    /// which offers «أضف نقطة», «الوجهة», «نقطة التجمع»…); not while picking a rally point.
+    var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -160,6 +163,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setRally(rally)
         c.setWaypoints(waypoints)
         c.setTrails(trails)
+        c.setPlan(plan)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -185,9 +189,11 @@ struct OutingMapboxView: UIViewRepresentable {
     // MARK: -
 
     final class Coordinator: NSObject, GestureManagerDelegate {
-        private weak var map: MapView?
+        private(set) weak var map: MapView?
         private var cancelables = Set<AnyCancelable>()
-        private var styleReady = false
+        private(set) var styleReady = false
+        let planDrawing = LivePlanDrawing()
+        var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
         private var addedModels = Set<String>()
         private var recs: [String: Rec] = [:]
         private var lastCars: [MapMember] = []
@@ -196,10 +202,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var roads: [RoadSnap.RoadLine] = []
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
-        private var longPressInteraction: Cancelable?
         let waypointPins = WaypointPins()
         private var lastWaypoints: [MapWaypoint] = []
-        var onLongPress: (LngLat) -> Void = { _ in }
         private var light: SunLight.Preset?
         private var fitting = false
         private var fittedIds = Set<String>()
@@ -291,17 +295,15 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 return false
             })
-            longPressInteraction = map.mapboxMap.addInteraction(LongPressInteraction { [weak self] ctx in
-                guard let self, !self.picking else { return false }
-                self.onLongPress(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
-                return true
-            })
             waypointPins.onClusterTap = { [weak self] pts in
                 guard let self else { return }
                 self.keepGroup = false
                 self.onUserGesture()
                 self.frame(pts)
             }
+            /* The ONE long-press handler: the point card («تخطيط الطلعة»), whose «أضف نقطة»
+               opens the shared-waypoint composer. */
+            installLongPress(map)
         }
 
         func setWaypoints(_ list: [MapWaypoint]) {
@@ -314,11 +316,11 @@ struct OutingMapboxView: UIViewRepresentable {
         private var waypointTheme: SaryTheme?
 
         func detach() {
+            planDrawing.longPress?.cancel()
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
             tapInteraction?.cancel()
-            longPressInteraction?.cancel()
             cancelables.removeAll()
         }
 
@@ -364,6 +366,7 @@ struct OutingMapboxView: UIViewRepresentable {
             ensureRoadProbe()
             trailLayerKey = nil
             drawTrails()
+            drawPlan(force: true)
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -516,6 +519,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 startPin = nil
                 placeStart(p)
             }
+            drawPlan(force: true)
             for r in recs.values { remove(chipsOf: r) }
             for g in groupBoxes.values { g.removeFromSuperview() }
             groupBoxes = [:]

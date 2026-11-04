@@ -31,6 +31,10 @@ final class WaypointsUITests: XCTestCase {
         let app = launch()
         let map = app.otherElements["outing.map"]
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.18, dy: 0.42)).press(forDuration: 1.3)
+        /* The single long-press opens the point card; its «أضف نقطة» opens the composer. */
+        let add = app.buttons["point.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 8), "the long-press point card")
+        add.tap()
         let title = app.textFields["waypoint.title"]
         XCTAssertTrue(title.waitForExistence(timeout: 8), "the composer opens at the pressed spot")
         app.buttons["waypoint.kind.water"].tap()

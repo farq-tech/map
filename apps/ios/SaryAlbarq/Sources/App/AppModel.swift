@@ -38,6 +38,8 @@ final class AppModel: ObservableObject {
     let location: LocationSharer
     let push: PushRegistrar
     let isDemo: Bool
+    /// «تخطيط الطلعة»: one plan + checklist model per outing (demo data under `-demo`).
+    lazy var plans = PlanCenter(backend: isDemo ? DemoPlanBackend() : api)
     private let monitor = NWPathMonitor()
     private var observers: [NSObjectProtocol] = []
     private var pushSink: AnyCancellable?

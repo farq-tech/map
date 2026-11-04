@@ -223,4 +223,8 @@ struct SaryMoreMenu: View {
 extension SaryMapControlItem {
     /// «أضف نقطة» at my position (long press on the map adds one anywhere).
     static let addWaypoint = SaryMapControlItem(id: "waypoint", systemImage: "mappin.and.ellipse", label: "أضف نقطة", accessibilityID: "outing-waypoint-add")
+    /// «انسخ موقعي»: my coordinates card (copy / share), from «تخطيط الطلعة».
+    static let copyMyLocation = SaryMapControlItem(id: "copyme", systemImage: "location.viewfinder", label: "انسخ موقعي", accessibilityID: "outing-copyme")
+    /// «ابحث»: a place or coordinates.
+    static let search = SaryMapControlItem(id: "search", systemImage: "magnifyingglass", label: "ابحث", accessibilityID: "outing-search")
 }

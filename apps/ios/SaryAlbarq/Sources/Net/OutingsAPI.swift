@@ -105,7 +105,7 @@ final class OutingsAPI {
 
     private struct Empty: Encodable {}
 
-    /// Internal (not private) so the feature clients in other files (waypoints, convoy) use the same path.
+    /// Internal (not private) so the feature clients in other files (waypoints, convoy, plan) use the same path.
     func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12) async throws -> T {
         var req = URLRequest(url: base.appendingPathComponent("api/outings" + path), timeoutInterval: timeout)
         req.httpMethod = method

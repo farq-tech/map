@@ -25,6 +25,7 @@ struct LiveOutingScreen: View {
     @StateObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var app: AppModel
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
     @State private var screenHeight: CGFloat = 0
@@ -38,6 +39,7 @@ struct LiveOutingScreen: View {
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
                 let members = controller.mapMembers(theme: theme)
+                PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
                     members: members,
                     rally: controller.rallyPoint,
@@ -54,8 +56,10 @@ struct LiveOutingScreen: View {
                     onUserGesture: { controller.following = false },
                     waypoints: controller.mapWaypoints,
                     onWaypointTap: { controller.features.modal = .waypoint($0) },
-                    onLongPress: { controller.features.compose(at: $0) }
+                    plan: plan,
+                    onLongPress: { controller.planLongPress($0, at: $1) }
                 )
+                }
                 .ignoresSafeArea()
 
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full))
@@ -150,6 +154,7 @@ struct LiveOutingScreen: View {
                     if !rowMode {
                         SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
+                        LivePlanStrip(controller: controller)
                     }
                 }
                 .chromeFrame("top")
@@ -232,7 +237,7 @@ struct LiveOutingScreen: View {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         return SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
                                                backTracking: controller.backTrack != nil)
-            + [.safetyStuck(active: controller.safety.myStuck != nil), .addWaypoint]
+            + [.safetyStuck(active: controller.safety.myStuck != nil), .addWaypoint, .copyMyLocation, .search]
     }
 
     /// On the map: «موقعي», «المجموعة», «رسالة», «طريق العودة» + «المزيد»
@@ -246,7 +251,7 @@ struct LiveOutingScreen: View {
         return all.filter { SaryMapControlItem.primaryIDs.contains($0.id) } + [more]
     }
 
-    /// Behind «المزيد»: أقرب محطة، غرّزت، أضف نقطة.
+    /// Behind «المزيد»: أقرب محطة، غرّزت، أضف نقطة، انسخ موقعي، ابحث.
     private func moreItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         allControls(ui).filter { !SaryMapControlItem.primaryIDs.contains($0.id) }
     }
@@ -263,6 +268,8 @@ struct LiveOutingScreen: View {
         case "stuck": controller.stuckControlTapped()
         case "waypoint": controller.features.composeAtMe(controller.location.lastFix)
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
+        case "copyme": controller.modal = .plan(.me)
+        case "search": controller.modal = .plan(.search)
         default: break
         }
     }

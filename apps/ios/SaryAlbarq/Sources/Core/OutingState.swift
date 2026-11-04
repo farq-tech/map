@@ -23,6 +23,9 @@ enum LiveEvent: Equatable {
     case waypointAdded(Waypoint)
     case waypointRemoved(id: String)
     case convoy(ConvoyInfo?)
+    /// «تخطيط الطلعة»: nil when the frame carries no plan (refetch it).
+    case planUpdated(TripPlan?)
+    case checklistUpdated([ChecklistItem])
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -77,6 +80,10 @@ enum LiveEvent: Equatable {
             return (obj["id"] as? String).map { .waypointRemoved(id: $0) }
         case "convoy_updated":
             return .convoy(decodeJSON(obj["convoy"]))
+        case "plan_updated":
+            return .planUpdated(decodeJSON(obj["plan"]))
+        case "checklist_updated":
+            return (decodeJSON(obj["items"]) as [ChecklistItem]?).map(LiveEvent.checklistUpdated)
         default:
             return SafetyEvent.decode(type, obj).map(LiveEvent.safety)
         }
@@ -187,9 +194,9 @@ struct OutingView: Equatable {
         case let .convoy(c):
             snapshot.outing.convoy = c
             snapshot.convoy = nil
-        case .safety, .waypointAdded, .waypointRemoved:
+        case .safety, .waypointAdded, .waypointRemoved, .planUpdated, .checklistUpdated:
             /* Safety state lives in SafetyController; waypoints are kept by OutingFeaturesModel
-               (loaded with GET /waypoints, not part of the snapshot). */
+               (loaded with GET /waypoints); the plan and checklist by PlanModel. */
             break
         }
     }

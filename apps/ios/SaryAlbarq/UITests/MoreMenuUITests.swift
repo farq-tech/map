@@ -20,12 +20,12 @@ final class MoreMenuUITests: XCTestCase {
         for id in ["outing-locate", "outing-fit", "outing-note-open", "outing-backtrack"] {
             XCTAssertTrue(any(app, id).exists, "\(id) stays on the map")
         }
-        for id in ["outing-nearest-open", "outing-stuck", "outing-waypoint-add"] {
+        for id in ["outing-nearest-open", "outing-stuck", "outing-waypoint-add", "outing-copyme", "outing-search"] {
             XCTAssertFalse(any(app, id).exists, "\(id) is behind «المزيد»")
         }
         more.tap()
         XCTAssertTrue(any(app, "outing-more-menu").waitForExistence(timeout: 5))
-        for id in ["outing-nearest-open", "outing-stuck", "outing-waypoint-add"] {
+        for id in ["outing-nearest-open", "outing-stuck", "outing-waypoint-add", "outing-copyme", "outing-search"] {
             XCTAssertTrue(any(app, id).exists, "\(id) in the menu")
         }
         let shot = XCTAttachment(screenshot: app.screenshot())

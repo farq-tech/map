@@ -22,6 +22,8 @@ enum LiveModal: Identifiable, Equatable {
     case offlineMaps
     /// Our explainer before asking iOS for «دائمًا» (the screen-locked trail).
     case trailAlways
+    /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
+    case plan(LivePlanModal)
 
     var id: String {
         switch self {
@@ -33,6 +35,7 @@ enum LiveModal: Identifiable, Equatable {
         case .notify: return "notify"
         case .offlineMaps: return "offline"
         case .trailAlways: return "trailAlways"
+        case let .plan(m): return m.id
         }
     }
 }
@@ -134,6 +137,12 @@ final class LiveOutingController: ObservableObject {
         #endif
         if let v = session.displayView { ingestFriends(v) }
         attachSafety()
+        /* The point card's «أضف نقطة» (the single map long-press) opens the shared-waypoint
+           composer; after the card's sheet has gone, so the two sheets never race. */
+        PointActions.addWaypointHook = { [weak self] outingId, p in
+            guard let self, outingId == self.session.id else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.features.compose(at: p) }
+        }
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
     }
 
