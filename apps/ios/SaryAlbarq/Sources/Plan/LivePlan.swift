@@ -90,6 +90,13 @@ struct LivePlanModalView: View {
     private func actions(_ plan: PlanModel) -> PointActions {
         let lead = controller.session.view?.iLead == true
         var a = PointActions(setDestination: nil, addPoint: nil, rally: nil)
+        if !controller.nav.isActive {
+            a.navigateHere = { p in
+                controller.modal = nil
+                /* After the card's sheet has gone, so the nav sheets never race it. */
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p) }
+            }
+        }
         if lead {
             a.setDestination = { p, name in
                 controller.modal = nil
@@ -119,38 +126,51 @@ struct LivePlanModalView: View {
     }
 }
 
-/// Under the status capsule: «اتبع الخطة» and the destination, or the follow status.
+/// Under the status capsule: the weather chip (always), «اتبع الخطة» and the
+/// destination, or the follow status. `weatherOnly` (sheet at half height) keeps just the chip.
 struct LivePlanStrip: View {
     let controller: LiveOutingController
+    var weatherOnly = false
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        LivePlanStripContent(controller: controller, plan: model.plans.model(controller.session.id))
+        LivePlanStripContent(controller: controller, plan: model.plans.model(controller.session.id), weatherOnly: weatherOnly)
     }
 }
 
 private struct LivePlanStripContent: View {
     let controller: LiveOutingController
     @ObservedObject var plan: PlanModel
+    var weatherOnly: Bool
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
 
     var body: some View {
         let tp = plan.plan
         let lead = controller.session.view?.iLead == true
-        if plan.following, tp.hasRoute {
-            TimelineView(.periodic(from: .now, by: 5)) { ctx in
-                followBar(plan.followStatus(fix: location.lastFix, now: ctx.date))
+        let chip = LiveWeatherChip(controller: controller, weather: controller.weather)
+        if weatherOnly {
+            HStack { chip; Spacer(minLength: 0) }
+        } else if plan.following, tp.hasRoute {
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
+                TimelineView(.periodic(from: .now, by: 5)) { ctx in
+                    followBar(plan.followStatus(fix: location.lastFix, now: ctx.date))
+                }
+                HStack { chip; Spacer(minLength: 0) }
             }
-        } else if tp.hasRoute || tp.destination != nil || lead {
+        } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: theme.space(.s)) {
+                    /* Always first: the weather is never hidden (destination > group > me). */
+                    chip
                     if tp.hasRoute {
                         pill("اتبع الخطة", "point.topleft.down.to.point.bottomright.curvepath.fill", id: "plan.follow") { plan.following = true }
                     }
                     if let d = tp.destination { destinationPill(d) }
-                    pill(tp.isEmpty ? "خطّط" : "الخطة", "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
-                    pill("بحث", "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
+                    if tp.hasRoute || tp.destination != nil || lead {
+                        pill(tp.isEmpty ? "خطّط" : "الخطة", "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
+                        pill("بحث", "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
+                    }
                 }
             }
         }

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- TEMPORARY (TestFlight build 6): SaryAlbarq.entitlements minus Push to Talk and the App Group,
+	     which are not on the App ID yet (the owner enables them in the Apple Developer portal).
+	     Used for device/archive builds while SARY_PORTAL_PENDING = YES (Config/Base.xcconfig).
+	     The walkie-talkie falls back to the in-app route; a shared YouTube link to the clipboard. -->
+	<!-- Universal Links for invite URLs. Needs apps/web/public/.well-known/apple-app-site-association
+	     deployed with the real Team ID, and the Associated Domains capability on the App ID. -->
+	<!-- Push Notifications (APNs). Xcode re-signs it as "production" for App Store builds. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- SOS arrives as a Time Sensitive notification (breaks through Focus when allowed). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:farq-map-investor.vercel.app</string>
+	</array>
+</dict>
+</plist>

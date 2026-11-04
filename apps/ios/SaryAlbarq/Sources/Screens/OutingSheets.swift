@@ -2,68 +2,7 @@ import SwiftUI
 import UIKit
 
 // MARK: - New outing
-
-struct CreateOutingSheet: View {
-    @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.sary) private var theme
-    @State private var name = ""
-    @State private var busy = false
-    @State private var error: String?
-
-    private let ideas = ["كشتة الثمامة", "طلعة نفود", "مشوار العارض", "شواء الخميس"]
-
-    var body: some View {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        SaryPage(title: "طلعة جديدة", close: { dismiss() }) {
-            SaryTextField(title: "اسم الطلعة", placeholder: "مثل: كشتة الثمامة", text: $name, id: "create.name", maxLength: ServerRules.outingNameMax,
-                          disabled: busy)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: theme.space(.s)) {
-                    ForEach(ideas, id: \.self) { i in
-                        Button(i) { name = i }
-                            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
-                    }
-                }
-            }
-            if let error { SaryInlineMessage(text: error, tone: .error) }
-            if !model.online { SaryOfflineStrip(text: "بلا إنترنت — تقدر تنشئ الطلعة أول ما يرجع الاتصال.") }
-            Button {
-                busy = true
-                error = nil
-                Task {
-                    if await model.createOuting(name: trimmed) != nil { dismiss() } else {
-                        error = model.errorText ?? "تعذّر إنشاء الطلعة."
-                        model.errorText = nil
-                    }
-                    busy = false
-                }
-            } label: { SaryButtonLabel(title: "أنشئ الطلعة", busy: busy, busyTitle: "ننشئها…") }
-                .buttonStyle(.sary(.primary))
-                .disabled(trimmed.isEmpty || busy || !model.online)
-                .accessibilityIdentifier("create.submit")
-            SarySection(title: "بعد الإنشاء") {
-                VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    step("1", "تفتح الخريطة، وتشارك رابط الدعوة أو رمز QR مع أصحابك.")
-                    step("2", "تبدأ الطلعة متى ما تحركتم، وتقدر توقفها مؤقتًا أو تنهيها للجميع.")
-                    step("3", "كل واحد يختار بنفسه متى يشارك موقعه.")
-                }
-                .padding(.vertical, theme.space(.s))
-            }
-        }
-        .presentationDetents([.large])
-    }
-
-    private func step(_ n: String, _ t: String) -> some View {
-        HStack(alignment: .top, spacing: theme.space(.s)) {
-            Text(SaryFormat.digits(n)).saryNumber(.subhead, weight: .bold)
-                .foregroundStyle(theme.palette.onAccent)
-                .frame(width: 24, height: 24)
-                .background(Circle().fill(theme.palette.accent))
-            Text(t).saryText(.subhead).foregroundStyle(theme.palette.textSecondary).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
+// «طلعة جديدة» is the three-step `CreateOutingWizard` (Sources/Create).
 
 // MARK: - Join by link (paste / scan)
 
@@ -96,8 +35,8 @@ struct JoinByLinkSheet: View {
                 .buttonStyle(.sary(.primary))
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 .accessibilityIdentifier("paste.continue")
-            Text("الانضمام لا يشارك موقعك. تختار المشاركة بنفسك داخل الطلعة.")
-                .saryText(.footnote).foregroundStyle(theme.palette.textTertiary)
+            Text(ShareMemory.joinStatement)
+                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .sheet(isPresented: $scanning) {
             QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال صاحب الطلعة.") { s in
@@ -173,8 +112,10 @@ struct InviteJoinSheet: View {
                     .buttonStyle(.sary(.primary))
                     .disabled(busy || (model.identity == nil && name.trimmingCharacters(in: .whitespaces).isEmpty))
                     .accessibilityIdentifier("invite.join")
-                    Text("الانضمام لا يشارك موقعك. تختار المشاركة بنفسك داخل الطلعة.")
-                        .saryText(.footnote).foregroundStyle(p.textTertiary)
+                    Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                        .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("join.shareStatement")
                 }
                 Button("ليس الآن", action: close).buttonStyle(.sary(.plain))
             case .expired:

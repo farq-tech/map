@@ -1,6 +1,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import os
 import UIKit
 import UserNotifications
 
@@ -8,8 +9,15 @@ import UserNotifications
 struct SessionEnv {
     var makeSocket: (URL) -> LiveSocket = { URLSessionLiveSocket(url: $0) }
     var scheduler: Scheduler = MainScheduler()
-    /// True while the app is on screen. Nothing is sent when this is false.
+    /// True while the app is on screen. Off screen, positions go out only with «دائمًا» (SendGate), over HTTP.
     var isForeground: @MainActor () -> Bool = { UIApplication.shared.applicationState != .background }
+    /// Background sends (`POST /:id/positions`). nil = the real API. Tests inject a fake.
+    var postPosition: ((String, WireFix) async throws -> Void)?
+    var lowPower: () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }
+    /// Wall clock, ms (background cadence and fix ages). Tests move it forward.
+    var now: () -> Double = { Date().timeIntervalSince1970 * 1000 }
+    /// Keeps the app running until one request finishes (UIKit background task); no-op in tests.
+    var keepAlive: @MainActor () -> () -> Void = { BackgroundPositionSender.backgroundTask() }
     var defaults: UserDefaults = .standard
     /// Repeating timers (age ticks, link heartbeat). Off in unit tests.
     var timers = true
@@ -21,14 +29,19 @@ struct SessionEnv {
     var trailDirectory: URL? = TrailStore.directory
     /// The phone-to-phone link (`NearbyMesh`). Needs `timers` too, so unit tests never touch the radios.
     var nearbyMesh = true
+    /// Road matcher for «مساري» (Mapbox Map Matching with the app's public token). Runs only with `timers`.
+    var trailMatching: TrailMatchingService? = MapboxTrailMatching.fromBundle()
+    /// Tests only: stands in for "iOS keeps a When-In-Use app's updates alive with the screen locked" (iOS 17+).
+    var lockedScreenTrailOverride: Bool?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
-/// you said so and the app is on screen — your shared position.
+/// you said so — your shared position: on screen over the socket, and with
+/// «دائمًا» also off screen over HTTP (`BackgroundPositionSender`).
 ///
-/// Every position goes through `gate` (`SendGate`), which `LiveChannel` asks
-/// again at the last step before the wire. The server's `sharing` flag alone
-/// never sends anything: the server turns it on at join.
+/// Every position goes through `gate` (`SendGate`), which `LiveChannel` and
+/// `BackgroundPositionSender` ask again at the last step before the wire. The
+/// server's `sharing` flag alone never sends anything: the server turns it on at join.
 @MainActor
 final class OutingSession: ObservableObject, Identifiable {
     nonisolated let id: String
@@ -71,6 +84,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private let token: String
     private let env: SessionEnv
     private var channel: LiveChannel?
+    private var backgroundSender: BackgroundPositionSender?
     private var lastSent: Policy.LastSent?
     private var timers: [Timer] = []
     private var visible = true
@@ -78,8 +92,17 @@ final class OutingSession: ObservableObject, Identifiable {
     private var pendingServerStop = false
     private var trailSavedAt = Date.distantPast
     private var trailUnsaved = 0
+    /// Raw fixes not yet appended to the outing's raw log.
+    private var rawPending: [RawFix] = []
+    /// The last few minutes of raw fixes (for «الدقة ±٨ م · ١٢ نقطة/دقيقة»).
+    private(set) var recentRaw: [RawFix] = []
+    /// Road matching of my trail (nil: no token / switched off).
+    private(set) var matcher: TrailMatchCoordinator?
     /// Cars of the same outing nearby, phone to phone, when the internet is gone.
     let mesh: NearbyMesh
+    /// «قناة الطلعة»: the live walkie-talkie (replaces the «اضغط وتكلم» clips).
+    let walkie: OutingWalkieTalkie
+    private var walkieSink: AnyCancellable?
     private var meshActivation = MeshActivation()
     private var meshSink: AnyCancellable?
     /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
@@ -110,10 +133,15 @@ final class OutingSession: ObservableObject, Identifiable {
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
+        walkie = OutingWalkieTalkie(outingId: id, me: myUserId, tokenBackend: demo == nil ? api : nil, defaults: env.defaults)
         if demo != nil { link = .live }
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
         trail.markGap()
+        if demo == nil || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
+            let m = TrailMatchCoordinator(outingId: id, dir: env.trailDirectory, service: svc)
+            matcher = m
+        }
         #if DEBUG
         if demo != nil, Self.forcedOffline { link = .offline }
         #endif
@@ -123,6 +151,9 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         mesh.onEvents = { [weak self] evs in self?.nearbyEvents(evs) }
         meshSink = mesh.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
+        walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
+        walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: the privacy gate
@@ -135,7 +166,8 @@ final class OutingSession: ObservableObject, Identifiable {
             serverSharing: view?.snapshot.me.sharing == true,
             outingActive: view?.status == .active,
             foreground: visible && env.isForeground(),
-            closed: closedReason != nil
+            closed: closedReason != nil,
+            alwaysAuthorized: hasAlwaysPermission
         )
     }
 
@@ -148,11 +180,22 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func open() {
         visible = env.isForeground()
+        location.setOffScreen(!visible)
         location.onTrailFix = { [weak self] f in self?.trailFix(f) }
+        matcher?.onChange = { [weak self] in
+            guard let self else { return }
+            self.updateRoadMode()
+            self.objectWillChange.send()
+        }
+        matcher?.accuracyAt = { [weak self] t in self?.recentRaw.last(where: { abs($0.t - t) < 1500 })?.acc }
+        /* Offline-first: whatever was recorded but not matched yet (offline, app closed) is caught up now. */
+        if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
+        location.onAuthorizationChange = { [weak self] in self?.reconcileSharing() }
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
             if self.visible { location.watchForeground() }
+            self.syncTrailGPS()
         }
         if env.timers {
             let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -175,7 +218,11 @@ final class OutingSession: ObservableObject, Identifiable {
             return
         }
         #endif
-        guard !isDemo else { return }
+        /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
+        guard !isDemo else {
+            walkie.attach(channel: nil, mesh: mesh)
+            return debugAutoTalk()
+        }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
             makeSocket: env.makeSocket,
             poll: { [api] in try await api.poll($0) },
@@ -183,19 +230,36 @@ final class OutingSession: ObservableObject, Identifiable {
             beat: { [api] in try await api.heartbeat($0, gps: $1, battery: $2) },
             scheduler: env.scheduler,
             canSendPosition: { [weak self] in
-                MainActor.assumeIsolated { self?.gate.allowsPosition ?? false }
+                /* The socket is for the screen only; off screen the HTTP sender takes over. */
+                MainActor.assumeIsolated { self.map { $0.gate.allowsPosition && $0.gate.foreground } ?? false }
             }
         ))
+        let outing = id
+        let post = env.postPosition ?? { [api] in try await api.sendPosition($0, fix: $1) }
+        let sender = BackgroundPositionSender(deps: .init(
+            post: { try await post(outing, $0) },
+            scheduler: env.scheduler,
+            canSend: { [weak self] in MainActor.assumeIsolated { self?.gate.allowsBackgroundPosition ?? false } },
+            now: env.now,
+            lowPower: env.lowPower,
+            keepAlive: { [env] in MainActor.assumeIsolated { env.keepAlive() } }
+        ))
+        sender.onResult = { [weak self] r in self?.backgroundResult(r) }
+        backgroundSender = sender
         ch.handlers = .init(
             onSnapshot: { [weak self] s in MainActor.assumeIsolated { self?.applySnapshot(s) } },
             onEvent: { [weak self] e in MainActor.assumeIsolated { self?.apply(e) } },
             onState: { [weak self] s in MainActor.assumeIsolated { self?.linkChanged(s) } },
             onClosed: { [weak self] r in MainActor.assumeIsolated { self?.closed(r) } },
             onAck: { [weak self] ok, reason in MainActor.assumeIsolated { self?.ack(ok, reason) } },
-            onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } }
+            onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } },
+            onPTT: { [weak self] sig in MainActor.assumeIsolated { self?.walkie.receive(sig) } },
+            onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } }
         )
         channel = ch
+        walkie.attach(channel: ch, mesh: mesh)
         ch.start()
+        debugAutoTalk()
         if !visible { ch.setAway(true) }
         if env.timers {
             /* Connection heartbeat, no coordinates: lets others tell "no GPS" from "no network". */
@@ -207,12 +271,37 @@ final class OutingSession: ObservableObject, Identifiable {
         location.onFix = { [weak self] f in self?.handleFix(f) }
     }
 
+    private func debugAutoTalk() {
+        #if DEBUG
+        /* Lab: `-SaryPTTAutoTalk "<after s>,<for s>"` holds the walkie-talkie button by itself (with -SaryPTTTone). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryPTTAutoTalk"), i + 1 < args.count {
+            let t = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if t.count == 2 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + t[0]) { [weak self] in
+                    PTTAudioEngine.log.notice("[PTT] lab: press")
+                    self?.walkie.pressBegan()
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + t[0] + t[1]) { [weak self] in
+                    PTTAudioEngine.log.notice("[PTT] lab: release")
+                    self?.walkie.pressEnded()
+                }
+            }
+        }
+        #endif
+    }
+
     func close() {
+        backgroundSender?.stop()
         stopBackgroundTrail()
+        location.stopTrail()
         saveTrail()
+        /* The last stretch, matched once more now the outing is over (cached for the details page). */
+        if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
         location.onTrailFix = { _ in }
         mesh.setRunning(false)
         stopSharingLocally()
+        walkie.detach(leftOuting: closedReason != nil)
         channel?.stop()
         channel = nil
         timers.forEach { $0.invalidate() }
@@ -220,20 +309,26 @@ final class OutingSession: ObservableObject, Identifiable {
         location.stopWatchingForeground()
     }
 
-    /// The app came to / left the screen. Leaving stops the GPS and drops any
-    /// fix waiting for the network; the share intent stays, so it resumes on return.
+    /// The app came to / left the screen. With «دائمًا» sharing keeps going off
+    /// screen (HTTP, `BackgroundPositionSender`); without it, leaving stops the
+    /// GPS and drops any fix waiting for the network, and the share intent stays,
+    /// so it resumes on return.
     func foreground(_ active: Bool) {
         visible = active
+        location.setOffScreen(!active)
         if active {
+            backgroundSender?.stop()
             location.watchForeground()
             stopBackgroundTrail()
+            syncTrailGPS()
             channel?.setAway(false)
             channel?.reconnectNow()
             reconcileSharing()
         } else {
             channel?.dropPendingFix()
-            /* The trail keeps going with the screen locked only with «دائمًا» and the switch on;
-             * otherwise the stretch until we are back is an honest gap. Sending stops either way. */
+            /* The trail keeps going with the screen locked when it may (switch on; «دائمًا» or the
+             * iOS 17+ activity session); otherwise the stretch until we are back is an honest gap.
+             * Positions off screen go out only through SendGate.allowsBackgroundPosition («دائمًا»). */
             if canRecordTrailInBackground {
                 recordingInBackground = true
                 location.startBackgroundTrail()
@@ -241,7 +336,13 @@ final class OutingSession: ObservableObject, Identifiable {
                 trail.markGap()
             }
             saveTrail()
-            location.stopSharing()
+            if gate.allowsBackgroundPosition && (location.isSharing || isDemo) {
+                /* «دائمًا»: keep sharing off screen, over HTTP. */
+                backgroundSender?.start()
+            } else {
+                backgroundSender?.stop()
+                location.stopSharing()
+            }
             location.stopWatchingForeground()
             channel?.setAway(true)
             objectWillChange.send()
@@ -287,12 +388,19 @@ final class OutingSession: ObservableObject, Identifiable {
         reconcileSharing()
     }
 
+    /// Opened right after «انضم» / creating: the controller follows up with the «دائمًا» explainer
+    /// once iOS answered the location prompt (or shows the Settings fix when refused).
+    @Published var joinedJustNow = false
+
     /// You pressed stop: nothing more leaves the phone, the server deletes your fix.
     func stopSharing() async {
         /* Tell nearby cars too, so a relay never keeps showing where you were. */
         mesh.stop(farewell: .stop)
         stopSharingLocally()
         guard !isDemo else { return }
+        /* Off screen (e.g. from the lock screen / CarPlay later): finish telling the server. */
+        let done = env.keepAlive()
+        defer { done() }
         do {
             _ = try await api.setSharing(id, sharing: false)
             view?.apply(.memberSharing(userId: myUserId, sharing: false))
@@ -302,10 +410,12 @@ final class OutingSession: ObservableObject, Identifiable {
         }
     }
 
-    private func stopSharingLocally() {
+    /// Internal for tests (the «أوقف» path without the network).
+    func stopSharingLocally() {
         wantsToShare = false
         lastSent = nil
         channel?.dropPendingFix()
+        backgroundSender?.stop()
         if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
             ShareMemory.setActiveShare(user: myUserId, outing: nil, defaults: env.defaults)
         }
@@ -313,16 +423,42 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     /// Resume after a relaunch only if THIS identity was sharing THIS outing with consent.
+    /// Relaunched off screen by iOS (significant change / region exit) with «دائمًا»: the GPS
+    /// starts at once (keeps the app alive) and the outing is fetched over HTTP; nothing is
+    /// sent until that snapshot confirms the outing is active and sharing is on for me.
     func resumeIfPreviouslySharing() {
-        if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent {
-            wantsToShare = true
-            reconcileSharing()
+        guard ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent else { return }
+        wantsToShare = true
+        if !visible && hasAlwaysPermission && !isDemo && view == nil {
+            if env.authorizationOverride ?? location.canLocate { location.startSharing(mode: mode) }
+            let done = env.keepAlive()
+            Task { [weak self, api, id] in
+                defer { done() }
+                if let snap = try? await api.poll(id) { self?.applySnapshot(snap) }
+            }
+        }
+        reconcileSharing()
+    }
+
+    /// The network came back: a fix waiting off screen goes now (if still fresh).
+    func networkBack() { backgroundSender?.networkBack() }
+
+    private func backgroundResult(_ r: BackgroundPositionSender.Outcome) {
+        #if DEBUG
+        ShareLog.log.notice("background send: \(String(describing: r))")
+        #endif
+        switch r {
+        case .sent: lastAck = (true, nil)
+        case let .refused(reason): ack(false, reason)
+        case .notAMember: closed(.notAMember)
+        case .unauthorized: closed(.unauthorized)
         }
     }
 
     private func reconcileSharing() {
         /* Ended, left, removed, switch off: the screen-locked trail stops at once. */
         if recordingInBackground && !canRecordTrailInBackground { stopBackgroundTrail() }
+        syncTrailGPS()
         guard let v = view else { return }
         /* Paused / ended / sharing switched off elsewhere: the intent ends too. */
         if wantsToShare && (v.status == .paused || v.status == .ended || !v.snapshot.me.sharing) {
@@ -336,6 +472,11 @@ final class OutingSession: ObservableObject, Identifiable {
         } else if !allowed && location.isSharing {
             location.stopSharing()
             channel?.dropPendingFix()
+        }
+        if gate.allowsBackgroundPosition {
+            if backgroundSender?.running == false { backgroundSender?.start() }
+        } else if backgroundSender?.running == true {
+            backgroundSender?.stop()
         }
         updateMesh()
         objectWillChange.send()
@@ -396,11 +537,20 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// Every fix from the GPS while sharing. Internal for tests.
     func handleFix(_ f: DeviceFix) {
+        #if DEBUG
+        ShareLog.log.notice("fix age=\(Int(Date().timeIntervalSince1970 * 1000 - f.atMs))ms acc=\(f.accuracy ?? -1) gate=\(self.gate.allowsPosition) fg=\(self.gate.foreground) bg=\(self.gate.allowsBackgroundPosition) gps=\(self.location.isSharing)")
+        #endif
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
         /* My own totals for «ملخص رحلتي»: on this device only, never points. */
         if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
+        if !gate.foreground {
+            /* Off screen («دائمًا»): the HTTP sender keeps only the latest fix and decides when. */
+            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isDemo else { return }
+            backgroundSender?.offer(f, mode: m)
+            return
+        }
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
         guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok else { return }
         lastSent = .init(fix: f, sentAtMs: now)
@@ -418,9 +568,55 @@ final class OutingSession: ObservableObject, Identifiable {
 
     var hasAlwaysPermission: Bool { env.alwaysOverride ?? location.hasAlways }
 
-    /// The screen-locked trail may run: «دائمًا», both switches on, and an outing I am recording.
+    /// iOS keeps the trail running with the screen locked: «دائمًا», or (iOS 17+) «أثناء الاستخدام»
+    /// with the background activity session taken while on screen.
+    var lockedScreenTrailPossible: Bool {
+        hasAlwaysPermission || (env.lockedScreenTrailOverride ?? (env.authorizationOverride ?? location.canLocate))
+    }
+
+    /// The screen-locked trail may run: both switches on, iOS allows it, and an outing I am recording.
     var canRecordTrailInBackground: Bool {
-        TrailPrefs.background(env.defaults) && hasAlwaysPermission && trailRecordingAllowed
+        TrailPrefs.background(env.defaults) && lockedScreenTrailPossible && trailRecordingAllowed
+    }
+
+    /// The GPS at its best while «مساري» records on screen; back to normal when it may not.
+    func syncTrailGPS() {
+        if trailRecordingAllowed && visible {
+            location.startTrail(background: TrailPrefs.background(env.defaults))
+        } else if !trailRecordingAllowed {
+            location.stopTrail()
+        }
+    }
+
+    /// My fix as the map draws «أنت»: the Kalman-smoothed position (and speed) for this very fix
+    /// when «مساري» is recording, else the fix itself. Display only — never what is sent.
+    func smoothedFix(_ f: DeviceFix?) -> DeviceFix? {
+        guard var f, let k = trail.filter, k.started, abs(k.tMs - f.atMs) < 1500 else { return f }
+        let p = k.position
+        f.lat = p.lat
+        f.lng = p.lng
+        if f.speed == nil { f.speed = k.speedMps }
+        return f
+    }
+
+    /// What the map draws and «طريق العودة» follows: road-matched where confident, smoothed elsewhere.
+    var displayTrail: [TrailPoint] {
+        TrailMatchPrefs.enabled(env.defaults) ? TrailDisplay.compose(trail.points, matcher?.cache) : trail.points
+    }
+
+    /// «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    var trailHealth: TrailHealth {
+        TrailHealth.compute(raw: recentRaw, nowMs: Date().timeIntervalSince1970 * 1000,
+                            preciseOff: location.preciseOff, whenInUseOnly: location.canLocate && !hasAlwaysPermission,
+                            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    /// On roads the GPS uses iOS's automotive model; where the matcher finds no road lately, the generic one.
+    private func updateRoadMode() {
+        guard let last = trail.points.last, let m = matcher else { return }
+        let matchedRecently = m.cache.spans.last.map { last.t - $0.endT < 5 * 60_000 } ?? false
+        let triedRecently = last.t - m.cache.doneUpToT < 5 * 60_000
+        if triedRecently { location.onRoad = matchedRecently }
     }
 
     /// Every GPS fix, foreground or (with «دائمًا») background. It goes into the trail on this
@@ -428,12 +624,22 @@ final class OutingSession: ObservableObject, Identifiable {
     func trailFix(_ f: DeviceFix) {
         guard trailRecordingAllowed else { return }
         guard visible || recordingInBackground else { return }
-        guard trail.add(f) else { return }
-        trailUnsaved += 1
-        if trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5 { saveTrail() }
+        /* Every raw fix is kept (compact, capped): the drawn trail is derived from them. */
+        let raw = RawFix(f)
+        rawPending.append(raw)
+        recentRaw.append(raw)
+        if recentRaw.count > 400 { recentRaw.removeFirst(recentRaw.count - 300) }
+        let added = trail.add(raw)
+        if added { trailUnsaved += 1 }
+        if rawPending.count >= 30 || (added && (trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5)) { saveTrail() }
+        if added, env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail) }
     }
 
     func saveTrail() {
+        if !rawPending.isEmpty {
+            TrailRawLog.append(rawPending, outingId: id, in: env.trailDirectory)
+            rawPending = []
+        }
         guard trailUnsaved > 0 || trail.isEmpty == false else { return }
         TrailStore.save(trail, outingId: id, in: env.trailDirectory)
         trailSavedAt = Date()
@@ -444,6 +650,9 @@ final class OutingSession: ObservableObject, Identifiable {
     func clearTrail() {
         trail = Trail()
         TrailStore.delete(id, in: env.trailDirectory)
+        matcher?.clear()
+        rawPending = []
+        recentRaw = []
         trailUnsaved = 0
     }
 
@@ -453,6 +662,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* Off and on again: what happened in between was not recorded. */
         trail.markGap()
         if !on { stopBackgroundTrail(); saveTrail() }
+        syncTrailGPS()
         objectWillChange.send()
     }
 
@@ -460,6 +670,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func setBackgroundTrail(_ on: Bool) {
         env.defaults.set(on, forKey: TrailPrefs.backgroundKey)
         if !on { stopBackgroundTrail() }
+        syncTrailGPS()
         objectWillChange.send()
     }
 
@@ -481,6 +692,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private func linkChanged(_ s: LiveChannel.State) {
         link = s
         updateMesh()
+        walkie.linkChanged()
         if s == .live || s == .polling, pendingServerStop {
             Task { await self.retryServerStop() }
         }
@@ -502,6 +714,14 @@ final class OutingSession: ObservableObject, Identifiable {
         if s.outing.status == .ended { closed(.outingEnded) }
         reconcileSharing()
     }
+
+    #if DEBUG
+    /// Demo / screenshots only: feed one live event as if the server sent it.
+    func debugApply(_ e: LiveEvent) {
+        guard isDemo else { return }
+        apply(e)
+    }
+    #endif
 
     private func apply(_ e: LiveEvent) {
         guard var v = view else { return }
@@ -543,9 +763,12 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func ack(_ ok: Bool, _ reason: String?) {
         lastAck = (ok, reason)
-        if !ok, reason == "sharing_off" || reason == "outing_paused" || reason == "outing_ended" {
+        if !ok, reason == "sharing_off" || reason == "outing_paused" || reason == "outing_ended" || reason == "not_allowed" || reason == "outing_created" {
             if reason == "outing_paused" { view?.apply(.outingStatus(.paused)) }
-            if reason == "sharing_off", let me = view?.myId { view?.apply(.memberSharing(userId: me, sharing: false)) }
+            if reason == "outing_created" { view?.apply(.outingStatus(.created)) }
+            /* not_allowed: the server's database says I am not sharing there (changed elsewhere). */
+            if reason == "sharing_off" || reason == "not_allowed", let me = view?.myId { view?.apply(.memberSharing(userId: me, sharing: false)) }
+            if reason == "outing_ended" { return closed(.outingEnded) }
             reconcileSharing()
         }
     }
@@ -562,6 +785,7 @@ final class OutingSession: ObservableObject, Identifiable {
         saveTrail()
         stopSharingLocally()
         if r == .outingEnded { view?.apply(.outingStatus(.ended)) }
+        walkie.detach(leftOuting: true)
         channel?.stop()
     }
 
@@ -706,6 +930,13 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func clipAudio(_ clip: VoiceClip) async throws -> Data { try await api.fetchClip(clip) }
 }
+
+#if DEBUG
+/// DEBUG builds only: the share path in the unified log (`log stream --predicate 'category == "share"'`), for simulator verification.
+enum ShareLog {
+    static let log = Logger(subsystem: "sa.sary.albarq", category: "share")
+}
+#endif
 
 /// Local notifications for notes and SOS.
 enum Notifier {

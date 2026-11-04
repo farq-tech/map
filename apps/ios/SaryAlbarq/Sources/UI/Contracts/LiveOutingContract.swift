@@ -39,13 +39,46 @@ enum LiveWarningUI: Equatable, Hashable {
     case keepScreenOn
     /// Location permission is off; sharing cannot work.
     case locationOff
+    /// iOS «الموقع الدقيق» is off: positions and «مساري» are kilometres off.
+    case preciseOff
 
     var label: String {
         switch self {
         case .weakGPS: return "إشارة الموقع ضعيفة"
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
-        case .keepScreenOn: return "خلّ الشاشة شغالة لدقة أعلى"
+        case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
         case .locationOff: return "إذن الموقع مقفل · افتح الإعدادات"
+        case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
+        }
+    }
+}
+
+/// One persistent line under my sharing row: what happens off screen.
+enum ShareBackgroundHint: Equatable {
+    /// «أثناء الاستخدام» only: sharing stops when the screen locks. Tapping opens Settings.
+    case needsAlways
+    /// «دائمًا»: sharing keeps going; the one thing that stops it is swiping the app away.
+    case dontForceQuit
+    /// «دائمًا» + Low Power Mode: still sharing, a little less often.
+    case lowPower
+    /// Joined (sharing by default) but iOS location is refused: the one-line fix. Tapping opens Settings.
+    case denied
+
+    var text: String {
+        switch self {
+        case .denied: return "ما سمحت بالموقع، فأعضاء الطلعة ما يشوفونك. افتح الإعدادات ← الموقع ← «أثناء الاستخدام»."
+        case .needsAlways: return "تتوقف المشاركة إذا قفلت الشاشة. اختر «دائمًا» من الإعدادات لتستمر."
+        case .dontForceQuit: return "تستمر والشاشة مقفلة. لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة."
+        case .lowPower: return "وضع توفير الطاقة: تستمر والشاشة مقفلة، لكن أقل تكرارًا (كل ٣٠ ثانية تقريبًا)."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .denied: return "location.slash.fill"
+        case .needsAlways: return "gearshape.fill"
+        case .dontForceQuit: return "lock.iphone"
+        case .lowPower: return "battery.25percent"
         }
     }
 }
@@ -92,6 +125,8 @@ enum LiveAlertKindUI: Equatable {
     case convoy(ConvoyAlertUI)
     /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
     case weather(WeatherAlertUI)
+    /// «انقطع إرسال فهد منذ ١٠ د» with «اتجه» / «اتصال» (SarySilentCard.swift).
+    case silent(SilentAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -101,15 +136,20 @@ struct LiveAlertUI: Equatable, Identifiable {
 
 // MARK: - Push-to-talk
 
-/// ONE enum for the push-to-talk button. No extra flags.
+/// ONE enum for the walkie-talkie button («قناة الطلعة»). No extra flags.
 enum PTTStateUI: Equatable {
+    /// Nobody on air: hold to talk.
     case idle
-    /// Pressed; mic is starting («جارٍ التجهيز…»).
+    /// Pressed; asking for the floor («جارٍ فتح القناة…»).
     case arming
-    /// Recording; elapsed whole seconds.
-    case recording(seconds: Int)
-    /// Released; uploading the clip.
-    case sending
+    /// I am on air, live; elapsed and remaining whole seconds (60 s max).
+    case talking(seconds: Int, remaining: Int)
+    /// Someone else is on air: «فلان يتكلم» (the button is busy, not disabled).
+    case listening(name: String, color: UInt32)
+    /// «اكتم القناة» is on.
+    case muted
+    /// No server and no nearby car: nothing to talk to.
+    case unavailable
 }
 
 // MARK: - SOS
@@ -199,6 +239,8 @@ struct SettingsTabUIState: Equatable {
     var myPhone: String?
     var notificationsOn: Bool
     var batterySharingOn: Bool
+    /// «اكتم القناة»: no live voice in or out for this outing on this phone.
+    var pttMuted: Bool = false
     var offline: OfflineAreasUIState
     /// Leader-only actions: «أوقف مؤقتًا» / «استأنف» and «أنهِ الطلعة».
     var isLeader: Bool
@@ -244,6 +286,8 @@ struct LiveOutingActions {
     var dismissAlert: (_ id: String) -> Void = { _ in }
     /// Voice banners in the lane.
     var voice: VoiceBannerActions = .init()
+    /// «انقطع الإرسال» cards: «اتجه» / «اتصال».
+    var silent: SilentAlertActions = .init()
 
     // Side buttons
     /// «موقعي» (`outing-locate`). Expect: centre the map on me.
@@ -285,11 +329,11 @@ struct SOSActions {
 }
 
 struct PTTActions {
-    /// Finger down on «اضغط وتكلم». Expect: `ptt = .arming` → `.recording(0)`.
+    /// Finger down. Expect: `ptt = .arming` → `.talking` once the floor is granted (live audio).
     var pressBegan: () -> Void = {}
-    /// Finger up on the button. Expect: `ptt = .sending` → `.idle`.
+    /// Finger up (or dragged away — live audio cannot be taken back). Expect: off the air, `.idle`.
     var pressEnded: () -> Void = {}
-    /// Finger dragged far off the button before release. Expect: discard, `ptt = .idle`.
+    /// Same as `pressEnded` for live talk (kept for the contract's older callers).
     var cancelled: () -> Void = {}
 }
 
@@ -337,6 +381,8 @@ struct SettingsTabActions {
     var saveMyPhone: (_ phone: String?) -> Void = { _ in }
     var setNotifications: (_ on: Bool) -> Void = { _ in }
     var setBatterySharing: (_ on: Bool) -> Void = { _ in }
+    /// «اكتم القناة».
+    var setPTTMuted: (_ on: Bool) -> Void = { _ in }
     /// Offline maps section (same actions as `OfflineAreasScreen`).
     var offline: OfflineAreasActions = .init()
     /// Leader: «أوقف مؤقتًا» / «استأنف الطلعة», after confirmation.
@@ -398,4 +444,8 @@ struct TrailCardUIState: Equatable {
     var recordingInBackground: Bool
     var showFriends: Bool
     var backTrackActive: Bool
+    /// While recording: «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    var health: TrailHealth? = nil
+    /// «طابق مساري مع الطرق».
+    var matchOn = true
 }

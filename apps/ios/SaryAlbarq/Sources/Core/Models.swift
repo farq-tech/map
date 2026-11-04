@@ -156,6 +156,8 @@ struct OutingSnapshot: Codable, Equatable {
     /// phone-to-phone link (`MeshKeys`). Until the server sends it, the app
     /// derives an interim key from the outing id (see docs/NEARBY-MESH.md).
     var mesh_key: String? = nil
+    /// Members whose sharing went silent ≥10 min (server-decided). Never draw them as live.
+    var silent: [SilentInfo]? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

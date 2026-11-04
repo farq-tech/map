@@ -28,6 +28,13 @@ enum LiveModal: Identifiable, Equatable {
     case trailAlways
     /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
     case plan(LivePlanModal)
+    /// For someone who consented before sharing went background: sharing now keeps going
+    /// with the screen locked; ask iOS for «دائمًا».
+    case shareAlways
+    /// «الملاحة»: where to, the route options, the remaining steps.
+    case navPicker
+    case navOptions
+    case navSteps
 
     var id: String {
         switch self {
@@ -42,6 +49,10 @@ enum LiveModal: Identifiable, Equatable {
         case let .weatherAt(p): return "weather:\(p.lat),\(p.lng)"
         case .trailAlways: return "trailAlways"
         case let .plan(m): return m.id
+        case .shareAlways: return "shareAlways"
+        case .navPicker: return "navPicker"
+        case .navOptions: return "navOptions"
+        case .navSteps: return "navSteps"
         }
     }
 }
@@ -74,14 +85,18 @@ final class LiveOutingController: ObservableObject {
     @Published var sheetDetent: SheetDetentUI = .peek
     @Published var selectedTab: LiveTabUI = .participants
     @Published var alerts: [LiveAlertUI] = []
-    @Published var ptt: PTTStateUI = .idle
     @Published var acknowledgedSOS: Set<String> = []
     @Published var heardClips: Set<String> = []
     @Published var clipPlayback: [String: VoicePlaybackUI] = [:]
     @Published var camera: MapCameraRequest?
     @Published var following = false
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
-    @Published var modal: LiveModal?
+    @Published var modal: LiveModal? {
+        didSet {
+            if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }
+            if case .participant = oldValue, !cardMessage.isEmpty { cardMessage = [:] }
+        }
+    }
     @Published var inviteLink: String?
     @Published var isRevoking = false
     @Published var statusExpanded = false
@@ -105,12 +120,23 @@ final class LiveOutingController: ObservableObject {
     let speed = SpeedModel()
     var speedState = LiveSpeedState()
 
-    private var bag = Set<AnyCancellable>()
+    /// Turn-by-turn «الملاحة» (see Sources/Navigation).
+    let nav: NavSession
+    /// The plan's «الوجهة» and drawn route (wired by the plan feature; nil / empty without it).
+    var navDestination: () -> OutingDestination? = { nil }
+    var navPlanRoute: () -> [LngLat] = { [] }
+    /// Bumps the planning preview's camera fit.
+    var navCameraKey = 0
+    /// A line for a participant's card («روح له» refused: their position is old).
+    @Published var cardMessage: [String: String] = [:]
+
+    var bag = Set<AnyCancellable>()
+    /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
+    var carPlayNav: CarPlayNavAdapter?
     private var lastView: OutingView?
     private var stationList: [OutdoorAPI.Station] = []
-    private let recorder = VoiceRecorder()
+    /// Plays clips that members on older builds still send («اضغط وتكلم» before «قناة الطلعة»).
     private let player = VoicePlayer()
-    private var pttTimer: Timer?
     private var alertTimers: [String: Timer] = [:]
     /// Last note shown per member, so a note heard nearby and then from the server alerts once.
     private var alertedNotes: [String: (text: String, at: Date)] = [:]
@@ -121,6 +147,7 @@ final class LiveOutingController: ObservableObject {
         self.appearance = appearance
         safety = Self.makeSafety(for: session)
         features = OutingFeaturesModel(session: session, backend: featuresBackend ?? DemoFeaturesBackend(myId: session.myUserId, notDeployed: true))
+        nav = NavSession(provider: Self.navProvider(session: session))
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         showFriendTrails = TrailPrefs.friends()
         inviteLink = session.storedInviteURL()?.absoluteString
@@ -134,7 +161,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.sessionChanged() }
+            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin() }
         }.store(in: &bag)
         location.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.locationChanged() }
@@ -145,13 +172,23 @@ final class LiveOutingController: ObservableObject {
         features.pushAlert = { [weak self] a, ttl in self?.pushAlert(a, ttl: ttl) }
         features.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
         features.toast = { [weak self] t in self?.toast(t) }
+        /* «فهد يتكلم الآن — انتظر دورك» and friends, as the usual toast. */
+        session.walkie.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
         features.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
         features.start()
+        nav.myFix = { [weak location] in location?.lastFix }
+        nav.toast = { [weak self] t in self?.toast(t) }
+        /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
+        nav.voice.canSpeak = { [weak session] in session?.walkie.floor.state == .idle }
+        nav.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { self?.objectWillChange.send() }
+        }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-SarySheetHalf") { sheetDetent = .half }
         if let i = args.firstIndex(of: "-SaryBackTrack") {
             let delay = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startBackTrack() }
@@ -175,6 +212,11 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.features.compose(at: p) }
         }
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
+        registerCarPlay()
+        #if DEBUG
+        pttDebugLaunch()
+        navDebugLaunch()
+        #endif
     }
 
     /// «غرّزت» heard phone to phone (SOS and notes show through the merged picture).
@@ -190,17 +232,19 @@ final class LiveOutingController: ObservableObject {
         let nearby = session.meshOverlay
         return LivePresenterInput(
             view: nearby.view,
-            myFix: location.lastFix,
+            /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
+            myFix: session.smoothedFix(location.lastFix),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
             closed: session.closedReason,
             wantsToShare: session.wantsToShare,
             isSharingNow: session.isSharingNow,
+            hasAlways: session.hasAlwaysPermission,
             sosSending: session.sosSending,
             acknowledgedSOS: acknowledgedSOS,
             alerts: alerts,
-            ptt: ptt,
+            ptt: pttUI,
             sheetDetent: sheetDetent,
             selectedTab: selectedTab,
             inviteLink: inviteLink,
@@ -209,11 +253,14 @@ final class LiveOutingController: ObservableObject {
             nightMode: appearance.prefs.nightMode.ui,
             notificationsOn: notificationsOn,
             batterySharing: session.batterySharing,
+            pttMuted: session.walkie.muted,
+            speakingUserId: speakingUserId,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,
             now: Date(),
             nearbyVia: nearby.viaNearby,
-            nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0
+            nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0,
+            preciseOff: location.preciseOff
         )
     }
 
@@ -243,7 +290,8 @@ final class LiveOutingController: ObservableObject {
             let convoyRole = features.convoyRole(m.id)
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
-                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby)
+                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
+                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -276,6 +324,7 @@ final class LiveOutingController: ObservableObject {
             pushAlert(LiveAlertUI(id: "voice:\(c.id)", kind: .voice(VoiceClipUI(id: c.id, senderName: name, senderColor: v.colors[c.user_id] ?? 0xFFFFFF,
                                                                                 durationSeconds: max(1, Int((Double(c.duration_ms) / 1000).rounded())), playback: .idle))), ttl: 60)
         }
+        reconcileSilence(prev: prev, next: v)
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
@@ -286,7 +335,9 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        followUpJoin()
         updateSpeed()
+        if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
         updateAuto()
         checkConvoy()
@@ -332,16 +383,22 @@ final class LiveOutingController: ObservableObject {
     /// Everything the map draws for trails. Friends' trails end at their last real fix and fade
     /// with it: an old position never looks live.
     func mapTrails(members: [MapMember]) -> MapTrails {
-        let t = session.trail
-        let runs = t.runs
+        /* Road-matched where the matcher is confident, smoothed elsewhere (desert). */
+        let shown = session.displayTrail
+        let runs = Trail.runs(shown)
         var out = MapTrails()
-        if t.points.count >= 2 {
+        if shown.count >= 2 {
             out.mine = MapTrails.Line(id: "me", color: myTrailColor, solid: runs.solid, gaps: runs.gaps)
         }
-        out.start = t.start?.position
+        out.start = shown.first?.position
         out.highlight = backTrack != nil
         out.gapLabels = runs.gaps
-            .map { (mid: LngLat(lng: ($0[0].lng + $0[1].lng) / 2, lat: ($0[0].lat + $0[1].lat) / 2), len: Vehicle.distanceMeters($0[0], $0[1])) }
+            .map { g -> (mid: LngLat, len: Double) in
+                var len = 0.0
+                for i in g.indices.dropFirst() { len += Vehicle.distanceMeters(g[i - 1], g[i]) }
+                let mid = g.count == 2 ? LngLat(lng: (g[0].lng + g[1].lng) / 2, lat: (g[0].lat + g[1].lat) / 2) : g[g.count / 2]
+                return (mid: mid, len: len)
+            }
             .filter { $0.len >= 150 }
             .sorted { $0.len > $1.len }
             .prefix(2).map(\.mid)
@@ -367,12 +424,14 @@ final class LiveOutingController: ObservableObject {
         if let s = t.start, let f = location.lastFix { startDist = Vehicle.distanceMeters(s.position, LngLat(lng: f.lng, lat: f.lat)) }
         return TrailCardUIState(recordedMeters: t.recordedLengthM, pointCount: t.points.count, gapCount: t.gapCount, startDistanceMeters: startDist,
                                 isRecording: session.trailRecordingAllowed, recordingOn: TrailPrefs.record(), backgroundOn: TrailPrefs.background(),
-                                backgroundAllowed: session.hasAlwaysPermission, recordingInBackground: session.recordingInBackground,
-                                showFriends: showFriendTrails, backTrackActive: backTrack != nil)
+                                backgroundAllowed: session.lockedScreenTrailPossible, recordingInBackground: session.recordingInBackground,
+                                showFriends: showFriendTrails, backTrackActive: backTrack != nil,
+                                health: session.trailRecordingAllowed ? session.trailHealth : nil,
+                                matchOn: TrailMatchPrefs.enabled())
     }
 
     func startBackTrack() {
-        guard let bt = BackTrack(session.trail) else {
+        guard let bt = BackTrack(path: session.displayTrail) else {
             toast("ما فيه مسار مسجّل بعد. يبدأ التسجيل أول ما تتحرك.")
             return
         }
@@ -393,11 +452,11 @@ final class LiveOutingController: ObservableObject {
     private func updateBackTrack() {
         guard var bt = backTrack else { return }
         /* Only a recent fix: an old one would point the wrong way. */
-        guard let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
+        guard let f = session.smoothedFix(location.lastFix), Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
             backTrackStatus = nil
             return
         }
-        let st = bt.update(LngLat(lng: f.lng, lat: f.lat))
+        let st = bt.update(LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy, atMs: f.atMs)
         if bt != backTrack { backTrack = bt }
         if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
         if st != backTrackStatus { backTrackStatus = st }
@@ -421,6 +480,12 @@ final class LiveOutingController: ObservableObject {
         stopBackTrack()
         session.clearTrail()
         toast("مسحنا مسارك لهذه الطلعة من جوالك")
+    }
+
+    /// «طابق مساري مع الطرق» (Mapbox Map Matching).
+    func setTrailMatching(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: TrailMatchPrefs.key)
+        objectWillChange.send()
     }
 
     func setTrailRecording(_ on: Bool) {
@@ -543,8 +608,13 @@ final class LiveOutingController: ObservableObject {
             if parts.first == "convoy", parts.count == 2, let t = self.session.view?.convoy?.tail_user_id { self.show(member: t) }
             if parts.first == "waypoint", parts.count > 1 { self.features.modal = .waypoint(parts[1]) }
             if id.hasPrefix("weather") { self.modal = .weather }
+            if parts.first == "silent", parts.count > 1 { self.showSilent(parts[1]) }
         }
         a.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
+        a.silent = SilentAlertActions(
+            go: { [weak self] uid in self?.goToSilent(uid) },
+            call: { [weak self] uid in self?.dial(uid, whatsApp: false) }
+        )
         a.voice = VoiceBannerActions(
             play: { [weak self] id in self?.togglePlay(id) },
             dismiss: { [weak self] id in self?.dismissAlert("voice:\(id)") }
@@ -574,7 +644,7 @@ final class LiveOutingController: ObservableObject {
         a.ptt = PTTActions(
             pressBegan: { [weak self] in self?.pttBegan() },
             pressEnded: { [weak self] in self?.pttEnded() },
-            cancelled: { [weak self] in self?.pttCancelled() }
+            cancelled: { [weak self] in self?.pttEnded() }
         )
         a.setSheetDetent = { [weak self] d in self?.sheetDetent = d }
         a.selectTab = { [weak self] t in self?.selectedTab = t }
@@ -586,8 +656,8 @@ final class LiveOutingController: ObservableObject {
                 self.lowerSheetThenAsk(.point(r.position))
             },
             rallyGo: { [weak self] in
-                guard let r = self?.rallyPoint else { return }
-                Directions.open(lat: r.position.lat, lng: r.position.lng, name: r.label.isEmpty ? "نقطة التجمع" : r.label)
+                /* «اتجه»: turn-by-turn in the app (Apple Maps stays one tap away in the options). */
+                self?.navigate(NavTargets.rally(self?.rallyPoint))
             },
             rallyMove: { [weak self] in self?.startPicking(moving: true) },
             rallyRemove: { [weak self] in Task { await self?.session.clearRally() } },
@@ -617,6 +687,7 @@ final class LiveOutingController: ObservableObject {
                 if on && !self.pushExplained() { self.modal = .notify } else { self.setPush(on) }
             },
             setBatterySharing: { [weak self] on in self?.session.batterySharing = on },
+            setPTTMuted: { [weak self] on in self?.session.walkie.setMuted(on) },
             pauseOrResumeOuting: { [weak self] in
                 guard let self, let st = self.session.view?.status else { return }
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
@@ -631,6 +702,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }
 
@@ -640,19 +712,74 @@ final class LiveOutingController: ObservableObject {
         } else if session.hasConsent {
             Task {
                 await session.beginSharing()
-                offerAlwaysIfNeeded()
+                offerShareAlwaysIfNeeded()
             }
         } else {
             modal = .consent
         }
     }
 
+    /// The consent sheet already explained that sharing keeps going with the screen locked:
+    /// share, then ask iOS for «دائمًا» right away (it shows its prompt at most once).
     func acceptConsent() {
         modal = nil
         Task {
             await session.beginSharing()
-            offerAlwaysIfNeeded()
+            guard session.wantsToShare else { return }
+            await askAlwaysForSharing()
         }
+    }
+
+    /// Asked once per device (the same key the trail explainer uses: one «دائمًا» covers both).
+    static let shareAlwaysAskedKey = "sary.outings.shareAlwaysAsked.v1"
+
+    private func askAlwaysForSharing() async {
+        UserDefaults.standard.set(true, forKey: Self.shareAlwaysAskedKey)
+        UserDefaults.standard.set(true, forKey: TrailPrefs.explainedKey)
+        guard !session.hasAlwaysPermission, location.canLocate else { return }
+        let ok = await location.requestAlways()
+        toast(ok ? "تستمر المشاركة والشاشة مقفلة حتى توقفها" : "الإذن «أثناء الاستخدام» فقط: تتوقف المشاركة إذا قفلت الشاشة")
+        objectWillChange.send()
+    }
+
+    /// Consent given before this version: explain the background sharing once, then ask for «دائمًا».
+    func offerShareAlwaysIfNeeded() {
+        guard !session.hasAlwaysPermission, location.canLocate,
+              !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self, self.modal == nil, self.session.wantsToShare else { return }
+            self.modal = .shareAlways
+        }
+    }
+
+    func allowShareAlways() {
+        modal = nil
+        Task { await askAlwaysForSharing() }
+    }
+
+    func laterShareAlways() {
+        UserDefaults.standard.set(true, forKey: Self.shareAlwaysAskedKey)
+        modal = nil
+    }
+
+    /// Joined (consent given by joining) but iOS location is refused or restricted.
+    var locationDenied: Bool {
+        session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
+    }
+
+    /// Right after «انضم»: once iOS answered the When-In-Use prompt, the «دائمًا» explainer
+    /// (the always-share flow) follows; a refusal leaves the member joined with the Settings fix.
+    func followUpJoin() {
+        guard session.joinedJustNow, location.authorization != .notDetermined else { return }
+        session.joinedJustNow = false
+        if location.canLocate { offerShareAlwaysIfNeeded() }
+    }
+
+    /// One line under «موقعك مُشارَك»: what happens when the screen locks, and what to do.
+    var shareBackgroundHint: ShareBackgroundHint? {
+        guard session.wantsToShare, session.closedReason == nil, session.view?.status == .active else { return nil }
+        if !session.hasAlwaysPermission { return location.canLocate ? .needsAlways : nil }
+        return ProcessInfo.processInfo.isLowPowerModeEnabled ? .lowPower : .dontForceQuit
     }
 
     func startOuting() { Task { await session.setStatus("start") } }
@@ -670,7 +797,7 @@ final class LiveOutingController: ObservableObject {
     func participantCard(_ id: String) -> ParticipantCardUIState? {
         guard let p = LiveOutingPresenter.participants(input).first(where: { $0.id == id }), let v = session.view else { return nil }
         return ParticipantCardUIState(participant: p, now: Date(), canManage: v.iOwn && !p.isMe && p.role != .leader,
-                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: nil)
+                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id])
     }
 
     func participantActions(_ id: String) -> ParticipantCardActions {
@@ -681,6 +808,7 @@ final class LiveOutingController: ObservableObject {
                 self?.modal = nil
                 self?.show(member: id)
             },
+            navigate: { [weak self] in self?.navigateToMember(id) },
             promoteCoLeader: { [weak self] in
                 guard let self else { return }
                 let on = self.session.view?.members[id]?.co_leader != true
@@ -805,61 +933,74 @@ final class LiveOutingController: ObservableObject {
         )
     }
 
-    // MARK: push-to-talk
+    // MARK: «قناة الطلعة» (live walkie-talkie)
+
+    /// The button's one state, from the session's walkie-talkie.
+    var pttUI: PTTStateUI {
+        let w = session.walkie
+        if w.muted { return .muted }
+        switch w.floor.state {
+        case .idle:
+            return w.mode == .unavailable && session.view?.status != .ended ? .unavailable : .idle
+        case .requesting:
+            return .arming
+        case .talking:
+            let s = w.floor.talkingSeconds(nowMs: w.nowMs)
+            return .talking(seconds: s, remaining: max(0, Int(w.floor.maxTalkMs / 1000) - s))
+        case .listening(let t):
+            let v = session.displayView
+            return .listening(name: v?.members[t.userId]?.display_name ?? (t.name.isEmpty ? "عضو" : t.name), color: v?.colors[t.userId] ?? 0xFFFFFF)
+        }
+    }
+
+    var pttLevel: Float { session.walkie.level }
+
+    #if DEBUG
+    /// `-SaryPTTDemo talking|listening` (screenshots): the walkie-talkie on air without a server.
+    private func pttDebugLaunch() {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryPTTDemo"), i + 1 < a.count else { return }
+        let what = a[i + 1]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self else { return }
+            let now = Date().timeIntervalSince1970 * 1000
+            if what == "talking" {
+                self.session.walkie.debugForce(.talking(burst: 1, sinceMs: now - 7_000))
+            } else if let friend = self.session.displayView?.orderedMembers.first(where: { $0.user_id != self.session.myUserId }) {
+                self.session.walkie.debugForce(.listening(PTTTalker(userId: friend.user_id, name: friend.display_name, burst: 1)))
+            }
+            self.objectWillChange.send()
+        }
+    }
+    #endif
+
+    /// On air right now (me or a friend): the speaking badge over that car.
+    var speakingUserId: String? {
+        switch session.walkie.floor.state {
+        case .talking: return session.myUserId
+        case .listening(let t): return t.userId
+        default: return nil
+        }
+    }
 
     private func pttBegan() {
-        guard ptt == .idle else { return }
         guard session.view?.status != .ended else { return }
-        ptt = .arming
+        if MicPermission.granted || PTTAudioEngine.testToneRequested {
+            session.walkie.pressBegan()
+            return
+        }
+        /* First time: iOS asks; they hold again once it is allowed. */
         Task {
-            let ok = recorder.hasPermission ? true : await recorder.requestPermission()
-            guard ok else {
-                ptt = .idle
-                toast("اسمح بالميكروفون من الإعدادات لتستخدم «اضغط وتكلم»")
-                return
-            }
-            /* The finger lifted while iOS asked: nothing to record, they press again. */
-            guard ptt == .arming else { return }
-            let started = await recorder.start()
-            guard started else {
-                ptt = .idle
-                toast("تعذّر تشغيل الميكروفون")
-                return
-            }
-            ptt = .recording(seconds: 0)
-            pttTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    guard let self, case .recording = self.ptt else { return }
-                    if self.recorder.isRecording { self.ptt = .recording(seconds: self.recorder.elapsed) } else { self.pttEnded() }
-                }
+            if await MicPermission.request() {
+                toast("جاهز — اضغط مطولًا وتكلم")
+            } else {
+                toast("اسمح بالميكروفون من الإعدادات لتتكلم في «قناة الطلعة»")
             }
         }
     }
 
     private func pttEnded() {
-        pttTimer?.invalidate()
-        pttTimer = nil
-        if ptt == .arming { ptt = .idle; return }
-        guard case .recording = ptt else { return }
-        let got = recorder.stop()
-        guard let clip = got else {
-            ptt = .idle
-            toast("اضغط مطولًا وتكلّم، ثم ارفع إصبعك")
-            return
-        }
-        ptt = .sending
-        Task {
-            let sent = await session.sendClip(clip.data, durationMs: clip.durationMs)
-            ptt = .idle
-            if sent != nil { toast("وصل صوتك للمجموعة") }
-        }
-    }
-
-    private func pttCancelled() {
-        pttTimer?.invalidate()
-        pttTimer = nil
-        recorder.cancel()
-        ptt = .idle
+        session.walkie.pressEnded()
     }
 
     private func togglePlay(_ clipId: String) {

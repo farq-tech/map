@@ -18,6 +18,8 @@ struct PlanMapView: UIViewRepresentable {
     var onTap: (LngLat) -> Void = { _ in }
     var onLongPress: (LngLat) -> Void = { _ in }
     var onMove: (Int, LngLat) -> Void = { _, _ in }
+    /// The camera's centre as the person moves the map («اختر من الخريطة»).
+    var onCenter: ((LngLat) -> Void)? = nil
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -66,6 +68,11 @@ struct PlanMapView: UIViewRepresentable {
             self.map = map
             self.parent = parent
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &bag)
+            map.mapboxMap.onCameraChanged.observe { [weak self, weak map] _ in
+                guard let map, let report = self?.parent?.onCenter else { return }
+                let c = map.mapboxMap.cameraState.center
+                report(LngLat(lng: c.longitude, lat: c.latitude))
+            }.store(in: &bag)
             guard parent.interactive else { return }
             interactions.append(map.mapboxMap.addInteraction(TapInteraction { [weak self] ctx in
                 guard let self, let p = self.parent, p.editing else { return false }

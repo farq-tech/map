@@ -14,6 +14,8 @@ struct MapMember: Equatable, Identifiable {
     /// Reported course, already trusted (nil when parked or not live).
     var heading: Double?
     var accuracyM: Double?
+    /// m/s when known (road snapping widens its search for a car that is clearly driving).
+    var speedMps: Double? = nil
     /// Time of this fix, ms (for the glide length between fixes).
     var atMs: Double
     var note: String?
@@ -124,6 +126,10 @@ struct OutingMapboxView: UIViewRepresentable {
     var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
     /// Watercourses (wadi / stream / river…) in the loaded Streets tiles, after the camera settles (weather: flood hint).
     var onWaterways: ([WaterwayLine]) -> Void = { _ in }
+    /// «الملاحة»: routes, the off-road remainder, the target and the guidance camera (see `NavMapDrawer`).
+    var nav = MapNavDrawing()
+    /// An alternative's time label was tapped.
+    var onSelectRoute: (String) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -157,6 +163,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onWaterways = onWaterways
         c.picking = picking
         c.following = following
+        c.navDrawer.onSelectRoute = onSelectRoute
         if c.theme != theme {
             c.theme = theme
             c.themeChanged()
@@ -167,6 +174,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setWaypoints(waypoints)
         c.setTrails(trails)
         c.setPlan(plan)
+        c.setNav(nav)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -203,6 +211,7 @@ struct OutingMapboxView: UIViewRepresentable {
         private var link: CADisplayLink?
         private var chrome: UIEdgeInsets = .zero
         private var roads: [RoadSnap.RoadLine] = []
+        private var lastRoadRefresh: CFTimeInterval = 0
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
         let waypointPins = WaypointPins()
@@ -217,6 +226,7 @@ struct OutingMapboxView: UIViewRepresentable {
         var onUserGesture: () -> Void = {}
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
+        let navDrawer = NavMapDrawer()
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -226,6 +236,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var trails = MapTrails()
         private var trailLayerKey: String?
         private var startPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailStartPin>)?
+        /// «نقطة البداية» drops its label (icon only) while a car's chip would sit on it.
+        private var startCompact = false
         private var gapPins: [(point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailGapLabel>)] = []
         private var lastProjectionAt: CFTimeInterval = 0
         /* Note bubbles only once zoomed in: at city scale they would cover each other's names. */
@@ -312,6 +324,7 @@ struct OutingMapboxView: UIViewRepresentable {
             /* The ONE long-press handler: the point card («تخطيط الطلعة»), whose «أضف نقطة»
                opens the shared-waypoint composer. */
             installLongPress(map)
+            navDrawer.attach(map)
         }
 
         func setWaypoints(_ list: [MapWaypoint]) {
@@ -322,6 +335,21 @@ struct OutingMapboxView: UIViewRepresentable {
             layoutChips()
         }
         private var waypointTheme: SaryTheme?
+
+        /// Navigation drawing + camera; while guidance owns the camera, group framing and «موقعي» stand aside.
+        func setNav(_ d: MapNavDrawing) {
+            navDrawer.theme = theme
+            if d.camera != nil { keepGroup = false }
+            navTick(d)
+        }
+
+        private func navTick(_ d: MapNavDrawing? = nil) {
+            let me = lastCars.first(where: \.isMe)
+            let heading = me.flatMap { recs[$0.id]?.heading }
+            navDrawer.update(d ?? navLast, chrome: chrome, me: me.map { recs[$0.id]?.shown ?? $0.position }, heading: heading)
+            if let d { navLast = d }
+        }
+        private var navLast = MapNavDrawing()
 
         func detach() {
             planDrawing.longPress?.cancel()
@@ -376,6 +404,7 @@ struct OutingMapboxView: UIViewRepresentable {
             trailLayerKey = nil
             drawTrails()
             drawPlan(force: true)
+            navDrawer.styleLoaded()
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -401,7 +430,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             if !m.layerExists(withId: RoadSnap.probeLayer) {
                 try? m.addLayer(with: [
-                    "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 13,
+                    "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 12,
                     "filter": RoadSnap.drivableFilter, "paint": ["line-opacity": 0, "line-width": 1],
                 ], layerPosition: nil)
             }
@@ -470,9 +499,11 @@ struct OutingMapboxView: UIViewRepresentable {
                     default: break
                     }
                 }
+                let changed = lines.count != self.roads.count || lines.first?.coords != self.roads.first?.coords
                 self.roads = lines
+                guard changed else { return }
                 /* A car drawn before its street loaded gets matched now. */
-                for r in self.recs.values where r.matcher.road == nil && !r.item.approximate {
+                for r in self.recs.values where r.matcher.road == nil && !r.matcher.offRoad {
                     r.matcher.reset()
                 }
                 self.sync(self.lastCars)
@@ -484,6 +515,9 @@ struct OutingMapboxView: UIViewRepresentable {
         func sync(_ cars: [MapMember]) {
             lastCars = cars
             guard let map else { return }
+            /* While following a moving car the map is never idle: refresh the streets every few seconds too. */
+            let t = CACurrentMediaTime()
+            if t - lastRoadRefresh > 3 { lastRoadRefresh = t; refreshRoads() }
             applyLight()
             let now = CACurrentMediaTime()
             let reduce = UIAccessibility.isReduceMotionEnabled
@@ -496,11 +530,15 @@ struct OutingMapboxView: UIViewRepresentable {
                 let course: Double? = v.heading ?? existing.flatMap { r in Vehicle.distanceMeters(r.anchor, raw) >= 12 ? Vehicle.bearing(r.anchor, raw) : nil }
                 let rec = existing ?? Rec(v, at: raw)
                 /* A confident fix in town is drawn on the street it drives along; an approximate one stays where measured. */
+                /* In town the car is on the street: also a 60–100 m city-canyon fix while clearly driving
+                 * (build 4 left those, and every «تقريبي» one, on the roofs). Parked/approximate: where measured. */
                 var matched: RoadSnap.Match?
-                if v.approximate {
+                let driving = (v.speedMps ?? 0) >= RoadSnap.drivingMps && course != nil
+                if v.approximate && !driving {
                     rec.matcher.reset()
                 } else {
-                    matched = rec.matcher.match(raw, RoadSnap.nearby(roads, raw), course: course, maxM: RoadSnap.snapRadius(v.accuracyM))
+                    matched = rec.matcher.match(raw, RoadSnap.nearby(roads, raw), course: course, speed: v.speedMps, accuracy: v.accuracyM, atMs: v.atMs)
+                    if matched?.key == nil { matched = nil }
                 }
                 let target = matched?.point ?? raw
                 if existing == nil {
@@ -539,7 +577,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 recs[id] = nil
             }
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
-            keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
+            if navDrawer.ownsCamera { navTick() } else { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
             followMe()
             layoutChips()
             project()
@@ -547,7 +585,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         /// «موقعي»: keep my car centred (gently, at most once a second).
         private func followMe() {
-            guard following, let map, let me = lastCars.first(where: \.isMe) else { return }
+            guard following, !navDrawer.ownsCamera, let map, let me = lastCars.first(where: \.isMe) else { return }
             keepGroup = false
             let now = CACurrentMediaTime()
             guard now - lastFollowAt > 1 else { return }
@@ -817,7 +855,21 @@ struct OutingMapboxView: UIViewRepresentable {
             overlay.leaderHalo.path = leaders
             overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
             /* Waypoint pins fit around what the cars' chips took. */
-            let taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            var taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            /* «نقطة البداية»: its label folds away (icon only) where a chip would cover it or it would
+             * cover a chip; the pin itself joins the obstacles so waypoint labels keep off it. */
+            if let sp = startPin {
+                let r = StartPinLayout.rects(anchor: screen(sp.point.coordinate))
+                let crowded = StartPinLayout.crowded(label: r.label, chips: taken, wasCompact: startCompact)
+                if crowded != startCompact {
+                    startCompact = crowded
+                    placeStart(sp.point, force: true)
+                }
+                /* A car's chip right on the pin itself: the chip wins (the trail line still starts there). */
+                let covered = taken.contains { $0.intersects(r.icon.insetBy(dx: 4, dy: 4)) }
+                startPin?.host.view.isHidden = covered
+                if !covered { taken.append(crowded ? r.icon : r.icon.union(r.label)) }
+            }
             waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
             CATransaction.commit()
             placeOrnaments(force: false)
@@ -984,8 +1036,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 s.data = .featureCollection(FeatureCollection(features: []))
                 try? m.addSource(s)
             }
-            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one. */
-            let below = m.allLayerIdentifiers.first { $0.id.hasPrefix("sary-vehicle") }?.id
+            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one
+             * (and under a navigation route, which must stay readable over an old trail). */
+            let ids = m.allLayerIdentifiers.map(\.id)
+            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
             let pos: LayerPosition? = below.map { .below($0) }
             let w = (theme.drive ? 7.0 : 5.0) + (trails.highlight ? 2.5 : 0)
             func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 9, k * 0.45, 14, k, 18, k * 1.35] }
@@ -1021,13 +1075,13 @@ struct OutingMapboxView: UIViewRepresentable {
             for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
         }
 
-        private func placeStart(_ p: LngLat?) {
+        private func placeStart(_ p: LngLat?, force: Bool = false) {
             guard let map else { return }
-            if p == startPin?.point { return }
+            if p == startPin?.point && !force { return }
             startPin?.annotation.remove()
             startPin = nil
             guard let p else { return }
-            let host = UIHostingController(rootView: TrailStartPin(theme: theme))
+            let host = UIHostingController(rootView: TrailStartPin(theme: theme, compact: startCompact))
             host.view.backgroundColor = .clear
             host.safeAreaRegions = []
             /* Exactly the pin's own size, so its foot (the anchor) is on the first trail point. */
@@ -1347,13 +1401,36 @@ struct RallyPin: View {
     }
 }
 
+/// Where «نقطة البداية» draws on screen (anchor = the pin's foot on the first trail point), and
+/// when its label gives way to the cars' chips. Pure, tested.
+enum StartPinLayout {
+    static let iconSize = CGSize(width: 34, height: 34)
+    static let labelSize = CGSize(width: 104, height: 24)
+
+    static func rects(anchor a: CGPoint) -> (icon: CGRect, label: CGRect) {
+        let icon = CGRect(x: a.x - iconSize.width / 2, y: a.y - iconSize.height, width: iconSize.width, height: iconSize.height)
+        let label = CGRect(x: a.x - labelSize.width / 2, y: icon.minY - 2 - labelSize.height, width: labelSize.width, height: labelSize.height)
+        return (icon, label)
+    }
+
+    /// Fold the label when any chip touches it; unfold only with a clear margin (no flicker as cars move).
+    static func crowded(label: CGRect, chips: [CGRect], wasCompact: Bool) -> Bool {
+        let margin: CGFloat = wasCompact ? 10 : 2
+        let zone = label.insetBy(dx: -margin, dy: -margin)
+        return chips.contains { $0.intersects(zone) }
+    }
+}
+
 /// «نقطة البداية»: where I entered (the first point of my trail).
 struct TrailStartPin: View {
     let theme: SaryTheme
+    /// Icon only: a car's chip is right there (see `StartPinLayout`).
+    var compact = false
 
     var body: some View {
         let p = theme.palette
         VStack(spacing: 2) {
+            if !compact {
             Text("نقطة البداية")
                 .saryText(.caption, weight: .bold)
                 .foregroundStyle(p.textPrimary)
@@ -1363,6 +1440,7 @@ struct TrailStartPin: View {
                 .background(Capsule().fill(p.chromeOpaque))
                 .overlay(Capsule().stroke(p.stroke, lineWidth: 1))
                 .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            }
             Image(systemName: "figure.walk.departure")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(Color.white)

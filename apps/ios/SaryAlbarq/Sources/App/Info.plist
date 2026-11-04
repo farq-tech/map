@@ -48,17 +48,31 @@
 
 	<!-- Base strings (Arabic, the development language). English in en.lproj/InfoPlist.strings. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط عندما تختار «شارك موقعي» والتطبيق مفتوح أمامك.</string>
+	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط بعد ما تختار «شارك موقعي».</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>يسجّل سَرى البارق «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة، ليرجّعك «طريق العودة» من نفس الطريق. المسار يبقى على جوالك فقط ولا يُرسل لأحد؛ ومشاركة موقعك مع الأصحاب تبقى والتطبيق مفتوح فقط.</string>
-	<!-- Background location is used ONLY for the on-device trail («سجّل مساري والشاشة مقفلة»,
-	     owner-approved). Positions are never sent from the background (SendGate). -->
+	<string>بعد ما تختار «شارك موقعي» في طلعة، يواصل سَرى البارق مشاركة موقعك مع أعضاء تلك الطلعة فقط في الخلفية والشاشة مقفلة (مع مؤشر الموقع الأزرق)، حتى توقف المشاركة أو تغادر أو تنتهي الطلعة. ويسجّل «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة ليرجّعك «طريق العودة» من نفس الطريق؛ المسار يبقى على جوالك ولا يُرسل لأصحابك ولا لخوادمنا (تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط).</string>
+	<!-- Background location (owner decision, 2026-11): with «دائمًا», a member who pressed
+	     «شارك موقعي» keeps sharing their live position with that outing's members off screen
+	     (blue indicator; HTTP POST /positions; stops on stop / leave / removed / ended), and the
+	     on-device trail keeps recording. With «أثناء الاستخدام» nothing is sent off screen (SendGate).
+	     An active turn-by-turn navigation («الملاحة», started by the person) keeps following the
+	     route and rerouting with the screen locked (Mapbox Navigation SDK).
+	     audio: the walkie-talkie («قناة الطلعة») and the spoken Arabic turn instructions. -->
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>TrailRecording</key>
+		<string>«الموقع الدقيق» مقفل، فيصير «مساري» تقريبيًا بالكيلومترات. اسمح بالموقع الدقيق لهذه الطلعة ليُرسم طريقك على الشوارع اللي مشيت فيها بالضبط، ويرجّعك «طريق العودة» من نفس الطريق.</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
+		<!-- «قناة الطلعة»: Apple's PushToTalk framework wakes the app to play a friend's
+		     voice with the screen locked, and lets you talk from the Lock Screen. -->
+		<string>push-to-talk</string>
+		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يسجّل صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويُرسل المقطع لأعضاء الطلعة. يُحذف من الخادم بعد ١٠ دقائق.</string>
+	<string>يلتقط صوتك فقط وأنت ضاغط على زر «قناة الطلعة»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لا يُسجَّل ولا يُحفظ في أي مكان.</string>
 
 	<!-- Phone-to-phone link for cars of the same outing (MultipeerConnectivity, NearbyMesh). -->
 	<key>NSLocalNetworkUsageDescription</key>
@@ -90,8 +104,25 @@
 	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
+		<!-- The phone window (SwiftUI WindowGroup) plus the CarPlay screen. -->
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<!-- CarPlay Navigation (Sources/CarPlay). Connects only when the build carries
+			     com.apple.developer.carplay-maps (CARPLAY_ENABLED=YES). -->
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>CarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
 	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

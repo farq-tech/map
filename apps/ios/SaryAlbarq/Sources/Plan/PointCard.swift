@@ -7,6 +7,9 @@ struct PointActions {
     var addPoint: ((LngLat) -> Void)?
     var rally: ((LngLat) -> Void)?
     var weatherHere: ((LngLat) -> Void)? = PointActions.weatherHook
+    /// «ملاحة إلى هنا» (turn-by-turn, live outing only): the map's single long press is the
+    /// point card, so navigation to a pressed point starts from here.
+    var navigateHere: ((LngLat) -> Void)? = nil
 
     /// «الطقس هنا»: the weather branch sets this; until then the button is hidden.
     static var weatherHook: ((LngLat) -> Void)?
@@ -137,6 +140,7 @@ struct PointCard: View {
         let pt = point
         var out: [Extra] = []
         var name: String? { if case let .point(_, n) = subject { return n }; return nil }
+        if let f = actions.navigateHere { out.append(Extra(id: "point.navigate", title: "ملاحة إلى هنا", icon: SaryIcon.directions) { f(pt) }) }
         if let f = actions.weatherHere { out.append(Extra(id: "point.weather", title: "الطقس هنا", icon: "cloud.sun.fill") { f(pt) }) }
         if let f = actions.setDestination { out.append(Extra(id: "point.destination", title: "اجعلها الوجهة", icon: "flag.checkered") { f(pt, name) }) }
         if let f = actions.addPoint { out.append(Extra(id: "point.add", title: "أضف نقطة", icon: "mappin.and.ellipse") { f(pt) }) }

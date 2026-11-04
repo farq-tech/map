@@ -6,7 +6,7 @@ import UserNotifications
 @main
 struct SaryAlbarqApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var model = AppModel()
+    @StateObject private var model = AppBoot.model
     @State private var appearance = AppearanceSettings.launch()
     @Environment(\.scenePhase) private var phase
 
@@ -24,14 +24,26 @@ struct SaryAlbarqApp: App {
                 }
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
+                .saryCarPlayPreviewIfRequested() // CARPLAY PREVIEW HOOK: DEBUG + `-SaryCarPlayPreview` only (Sources/CarPlay)
         }
-        .onChange(of: phase) { p in model.foreground(p == .active) }
+        /* Only .background is "left the screen". `.inactive` (Control Center, notification shade,
+         * an incoming-call banner, a system prompt) used to stop the GPS and cut «مساري» into gaps. */
+        .onChange(of: phase) { p in
+            switch p {
+            case .active: model.foreground(true)
+            case .background: model.foreground(false)
+            default: break
+            }
+        }
     }
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The app's model, for the push callbacks UIKit delivers here.
-    @MainActor static weak var model: AppModel?
+    @MainActor static weak var model: AppModel? {
+        /* CarPlay may connect before the phone UI: it waits for this. */
+        didSet { NotificationCenter.default.post(name: .saryModelReady, object: nil) }
+    }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in
@@ -63,7 +75,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
         UIView.appearance().semanticContentAttribute = .forceRightToLeft
-        /* No background location: nothing to resume for a location relaunch. */
+        /* Relaunched by iOS in the background for location (significant change / region exit
+         * while sharing with «دائمًا»): build the model now so the share resumes without UI. */
+        if launchOptions?[.location] != nil {
+            MainActor.assumeIsolated {
+                let m = AppBoot.model
+                Self.model = m
+            }
+        }
         return true
     }
 
@@ -99,6 +118,10 @@ extension AppearanceSettings {
         #endif
         return s
     }
+}
+
+extension Notification.Name {
+    static let saryModelReady = Notification.Name("sary.model.ready")
 }
 
 enum Theme {

@@ -35,6 +35,8 @@ struct LiveOutingScreen: View {
     /// must not shift or cover what the person is touching); it catches up just after.
     @State private var frozenAlerts: [LiveAlertUI]?
     @State private var touching = false
+    /// «+٢ تنبيهات» opened: the plan strip steps aside until it folds back, so the lane never reaches the controls.
+    @State private var alertsExpanded = false
 
     var body: some View {
         let ui = controller.ui
@@ -57,12 +59,17 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false },
+                    onUserGesture: {
+                        controller.following = false
+                        controller.navUserMovedMap()
+                    },
                     waypoints: controller.mapWaypoints,
                     onWaypointTap: { controller.features.modal = .waypoint($0) },
                     plan: plan,
                     onLongPress: { controller.planLongPress($0, at: $1) },
-                    onWaterways: { controller.weather.setWaterways($0) }
+                    onWaterways: { controller.weather.setWaterways($0) },
+                    nav: controller.mapNav,
+                    onSelectRoute: { controller.nav.select($0) }
                 )
                 }
                 .ignoresSafeArea()
@@ -135,7 +142,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "more", "speed"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "more", "speed", "speedlimit"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -161,6 +168,7 @@ struct LiveOutingScreen: View {
                         MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
                                      clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
                     }
+                    navTop
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
                                       warnings: ui.warnings, expanded: $controller.statusExpanded, nearbyCars: ui.nearbyCars, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
@@ -169,9 +177,21 @@ struct LiveOutingScreen: View {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if !rowMode {
-                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
-                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
-                        LivePlanStrip(controller: controller)
+                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : SaryAlertLane.defaultLimit, tapped: controller.actions.alertTapped,
+                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent,
+                                      expandedState: $alertsExpanded, maxExpandedHeight: max(220, full.height * 0.45))
+                        if !controller.nav.isActive {
+                            /* «في قناة الطلعة» notices; folded away during guidance (the banner leads). */
+                            MediaNoticeLane(center: MediaCenters.of(controller))
+                        }
+                        /* Guidance: the maneuver banner leads; the lane keeps one card and the plan pills
+                         * fold away, leaving only the weather chip (never hidden). */
+                        if !alertsExpanded {
+                            LivePlanStrip(controller: controller, weatherOnly: controller.nav.isActive)
+                        }
+                    } else {
+                        /* Sheet at half height: the alert lane and plan pills step aside, the weather stays. */
+                        LivePlanStrip(controller: controller, weatherOnly: true)
                     }
                 }
                 .chromeFrame("top")
@@ -220,15 +240,24 @@ struct LiveOutingScreen: View {
                         .padding(.bottom, theme.space(.s))
                 }
                 HStack(alignment: .bottom) {
-                    SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
+                    SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode, level: controller.pttLevel)
                         .chromeFrame("ptt")
                         .overlay(alignment: .top) {
                             /* «سرعة المركبة»: right above «اضغط وتكلم», on the other side from the control
                              * cluster. An overlay, so the dock's measured frame stays as it was; its own frame
-                             * («speed») joins the keep-out rects and the map's side inset. */
-                            SarySpeedometer(ui: controller.speedometerUI)
-                                .chromeFrame("speed")
-                                .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
+                             * («speed») joins the keep-out rects and the map's side inset. While navigating, the
+                             * posted speed limit («الملاحة») sits right next to it. */
+                            HStack(alignment: .center, spacing: theme.space(.s)) {
+                                SarySpeedometer(ui: controller.speedometerUI)
+                                    .chromeFrame("speed")
+                                if controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
+                                    NavSpeedLimitSign(kmh: k)
+                                        .chromeFrame("speedlimit")
+                                        .transition(.scale.combined(with: .opacity))
+                                }
+                            }
+                            .fixedSize()
+                            .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
                         }
                     Spacer()
                     if rowMode {
@@ -253,8 +282,35 @@ struct LiveOutingScreen: View {
         .environment(\.safetyAlertActions, controller.safety.alertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
         .animation(theme.animation(.snappy), value: moreOpen)
+        .animation(theme.animation(.smooth), value: controller.nav.phase)
         .onChange(of: controller.sheetDetent) { _, d in if d == .full { moreOpen = false } }
         .onChange(of: theme.drive) { _, d in if d { moreOpen = false } }
+    }
+
+    /// «الملاحة» at the top: the maneuver banner, the off-road leg, or «وصلت».
+    @ViewBuilder
+    private var navTop: some View {
+        let nav = controller.nav
+        switch nav.phase {
+        case .guiding:
+            NavManeuverBanner(nav: nav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            if let moved = controller.navMemberMovedMeters, let t = nav.target {
+                Button { controller.navigateToMember(t.memberId ?? "") } label: {
+                    SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) · حدّث الطريق", systemImage: SaryIcon.retry)
+                }
+                .buttonStyle(.sary(.secondary, compact: true))
+                .accessibilityIdentifier("nav.memberMoved")
+            }
+        case .offRoad:
+            NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        case .arrived:
+            NavArrivalCard(nav: nav, end: controller.endNav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        default:
+            EmptyView()
+        }
     }
 
     /// Every side control the live screen offers, in order.
@@ -262,12 +318,14 @@ struct LiveOutingScreen: View {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         return SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
                                                backTracking: controller.backTrack != nil)
-            + [.safetyStuck(active: controller.safety.myStuck != nil), .addWaypoint, .copyMyLocation, .search]
+            + [.safetyStuck(active: controller.safety.myStuck != nil), .navigate, .youtube, .addWaypoint, .copyMyLocation, .search]
     }
 
     /// On the map: «موقعي», «المجموعة», «رسالة», «طريق العودة» + «المزيد»
     /// (drive mode: «موقعي», «المجموعة», «طريق العودة», nothing hidden behind a menu).
     private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        /* Navigating: the guidance camera, the voice and the steps. */
+        if controller.nav.isActive { return controller.navControlItems }
         let all = allControls(ui)
         if theme.drive { return all.filter { SaryMapControlItem.driveIDs.contains($0.id) } }
         var more = SaryMapControlItem.more(open: moreOpen)
@@ -276,7 +334,7 @@ struct LiveOutingScreen: View {
         return all.filter { SaryMapControlItem.primaryIDs.contains($0.id) } + [more]
     }
 
-    /// Behind «المزيد»: أقرب محطة، غرّزت، أضف نقطة، انسخ موقعي، ابحث.
+    /// Behind «المزيد»: أقرب محطة، غرّزت، ملاحة، يوتيوب، أضف نقطة، انسخ موقعي، ابحث.
     private func moreItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         allControls(ui).filter { !SaryMapControlItem.primaryIDs.contains($0.id) }
     }
@@ -295,7 +353,9 @@ struct LiveOutingScreen: View {
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "copyme": controller.modal = .plan(.me)
         case "search": controller.modal = .plan(.search)
-        default: break
+        case "navigate": controller.openNavPicker()
+        case "youtube": MediaCenters.of(controller).open()
+        default: controller.navControlTapped(id)
         }
     }
 }

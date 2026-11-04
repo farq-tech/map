@@ -194,6 +194,7 @@ struct SaryStatusCapsule: View {
         case .noInternet: return SaryIcon.offline
         case .keepScreenOn: return "iphone"
         case .locationOff: return SaryIcon.gpsOff
+        case .preciseOff: return "location.slash"
         }
     }
 
@@ -201,6 +202,7 @@ struct SaryStatusCapsule: View {
         switch w {
         case .weakGPS: return .degraded
         case .noInternet, .locationOff: return .bad
+        case .preciseOff: return .degraded
         case .keepScreenOn: return .unknown
         }
     }

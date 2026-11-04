@@ -21,7 +21,7 @@ final class ScreensUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["متوقفة مؤقتًا"].exists)
         XCTAssertTrue(app.staticTexts["لم تبدأ"].exists)
         app.buttons["list.create"].tap()
-        XCTAssertTrue(app.textFields["create.name"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["create.dest.field"].waitForExistence(timeout: 5), "«طلعة جديدة» starts with «وين رايحين؟»")
         app.buttons["page-close"].tap()
         app.buttons["list.join"].tap()
         XCTAssertTrue(app.textFields["paste.field"].waitForExistence(timeout: 5))

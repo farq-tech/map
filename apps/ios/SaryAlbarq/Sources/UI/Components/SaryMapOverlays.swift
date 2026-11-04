@@ -52,7 +52,9 @@ struct SaryNameChip: View {
                     .saryText(.caption)
                     .lineLimit(1)
                     .foregroundStyle(chip.presence.isLive ? p.textPrimary : p.textSecondary)
-                if !chip.presence.isLive {
+                if let s = chip.silentSince {
+                    SarySilentBadge(since: s, now: chip.now, compact: true)
+                } else if !chip.presence.isLive {
                     Text(style.label(now: chip.now))
                         .saryText(.micro, weight: .medium)
                         .foregroundStyle(p.textSecondary)
@@ -66,7 +68,18 @@ struct SaryNameChip: View {
                         .background(Capsule().fill(p.warningText))
                         .accessibilityLabel(Text("غرّز"))
                 }
-                if chip.hasVoice {
+                if chip.speaking {
+                    /* «يتكلم»: on air in «قناة الطلعة» now. */
+                    Image(systemName: "waveform")
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(p.onAccent)
+                        .symbolEffect(.variableColor.iterative, isActive: !theme.reduceMotion)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .frame(width: 22, height: 16)
+                        .background(Capsule().fill(p.accent))
+                        .accessibilityLabel(Text("يتكلم الآن"))
+                        .accessibilityIdentifier("car.speaking")
+                } else if chip.hasVoice {
                     Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
                 }
                 if let b = chip.convoy {
@@ -112,7 +125,7 @@ struct SaryNameChip: View {
         }
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .accessibilityLabel(Text((chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))\(chip.viaNearby ? "، \(SaryNearbyMark.text)" : "")") + (chip.convoy.map { "، \($0.label)" } ?? "")))
+        .accessibilityLabel(Text((chip.isMe ? "أنت" : "\(chip.name)، \(chip.silentSince.map { SilenceText.badge(since: $0, now: chip.now) } ?? style.accessibilityLabel(now: chip.now))\(chip.viaNearby ? "، \(SaryNearbyMark.text)" : "")") + (chip.convoy.map { "، \($0.label)" } ?? "")))
         .modifier(OptionalIdentifier(id: id))
     }
 }

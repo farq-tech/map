@@ -26,6 +26,8 @@ struct ParticipantCardActions {
     var whatsApp: () -> Void = {}
     /// «أظهره على الخريطة». Expect: dismiss the card and centre on them.
     var showOnMap: () -> Void = {}
+    /// «روح له»: turn-by-turn to their last LIVE position (refused, with the reason, when it is old).
+    var navigate: () -> Void = {}
     /// «اجعله مساعدًا» (leader only), after the UI's confirmation.
     var promoteCoLeader: () -> Void = {}
     /// «أزله من الطلعة» (leader only), after the UI's confirmation.
@@ -120,6 +122,10 @@ struct NameChipUI: Equatable {
     var convoy: ConvoyBadgeUI? = nil
     /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
     var viaNearby: Bool = false
+    /// On air in «قناة الطلعة» right now: an animated speaking badge.
+    var speaking: Bool = false
+    /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
+    var silentSince: Date? = nil
 }
 
 struct NoteBubbleUI: Equatable {

@@ -13,6 +13,8 @@ struct LivePresenterInput {
     var closed: LiveCloseReason?
     var wantsToShare = false
     var isSharingNow = false
+    /// iOS location permission is «دائمًا»: sharing keeps going with the screen locked.
+    var hasAlways = false
     var sosSending = false
     /// `userId|sos.at` of incoming SOS alerts the person already saw («أظهره»).
     var acknowledgedSOS: Set<String> = []
@@ -26,6 +28,10 @@ struct LivePresenterInput {
     var nightMode: TriModeUI = .automatic
     var notificationsOn = true
     var batterySharing = false
+    /// «اكتم القناة».
+    var pttMuted = false
+    /// Who is on air in «قناة الطلعة» (me included), for the speaking badge on the car.
+    var speakingUserId: String?
     /// Clips already played (no waveform icon over that car).
     var heardClips: Set<String> = []
     /// Map rotation, degrees: arrows are relative to the top of the screen.
@@ -35,6 +41,8 @@ struct LivePresenterInput {
     var nearbyVia: Set<String> = []
     /// Members' cars heard directly phone to phone right now.
     var nearbyCars = 0
+    /// iOS «الموقع الدقيق» is off (reduced accuracy: km-level fixes).
+    var preciseOff = false
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -71,6 +79,7 @@ enum LiveOutingPresenter {
                 myPhone: me?.phone.flatMap(localPhone),
                 notificationsOn: i.notificationsOn,
                 batterySharingOn: i.batterySharing,
+                pttMuted: i.pttMuted,
                 offline: OfflineAreasUIState(areas: []),
                 isLeader: v?.iOwn == true,
                 outingStatus: status(v?.status)
@@ -117,10 +126,12 @@ enum LiveOutingPresenter {
     static func warnings(_ i: LivePresenterInput) -> [LiveWarningUI] {
         var w: [LiveWarningUI] = []
         if !i.locationAuthorized && i.gpsState == .denied { w.append(.locationOff) }
+        /* Reduced accuracy is kilometres off: the map, the trail and «طريق العودة» are all wrong. */
+        if i.locationAuthorized && i.preciseOff { w.append(.preciseOff) }
         if i.link == .offline { w.append(.noInternet) }
         if i.wantsToShare && i.gpsState == .weak { w.append(.weakGPS) }
-        /* Positions go out only while the app is on screen. */
-        if i.isSharingNow { w.append(.keepScreenOn) }
+        /* «أثناء الاستخدام» only: positions go out only while the app is on screen. */
+        if i.isSharingNow && !i.hasAlways { w.append(.keepScreenOn) }
         return w
     }
 
@@ -202,7 +213,8 @@ enum LiveOutingPresenter {
                 hasPhone: !(m.phone ?? "").isEmpty,
                 photo: nil,
                 viaNearby: !isMe && i.nearbyVia.contains(m.user_id),
-                speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now)
+                speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now),
+                silentSince: isMe ? nil : silentSince(m.user_id, in: v)
             ), idx))
         }
         /* Me first, then nearest, then the ones with no distance in join order. */
@@ -296,14 +308,14 @@ enum LiveOutingPresenter {
                 let fr: Policy.Freshness = i.gpsState == .denied ? .lost : Policy.freshness(fixAgeMs: max(0, age), speedMps: f.speed, lastSeenAgeMs: 0)
                 out.append(MapMember(id: m.user_id, position: LngLat(lng: f.lng, lat: f.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                      presence: fr, heading: fr == .live ? Policy.trustedHeading(f.heading, speed: f.speed) : nil,
-                                     accuracyM: f.accuracy, atMs: f.atMs, note: note, isMe: true))
+                                     accuracyM: f.accuracy, speedMps: f.speed, atMs: f.atMs, note: note, isMe: true))
                 continue
             }
             guard let p = v.positions[m.user_id], let fr = v.freshness(of: m.user_id, deviceNow: i.now) else { continue }
             let at = (ISODate.parse(p.recorded_at)?.timeIntervalSince1970 ?? 0) * 1000
             out.append(MapMember(id: m.user_id, position: LngLat(lng: p.lng, lat: p.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                  presence: fr, heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil,
-                                 accuracyM: p.accuracy, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
+                                 accuracyM: p.accuracy, speedMps: p.speed, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
         }
         return out
     }

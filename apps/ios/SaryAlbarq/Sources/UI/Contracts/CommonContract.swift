@@ -104,6 +104,8 @@ struct ParticipantUI: Equatable, Identifiable {
     /// Their speed in km/h, only from a fresh (live) position; nil hides it
     /// (stale: just «آخر موقع قبل …», never an old speed).
     var speedKmh: Double? = nil
+    /// Their sharing went silent (server-decided): when their last fix arrived. Shows «انقطع منذ ١٠ د».
+    var silentSince: Date? = nil
 
     /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {
