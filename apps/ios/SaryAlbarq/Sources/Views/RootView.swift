@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct RootView: View {
@@ -50,6 +51,16 @@ struct RootView: View {
     }
 }
 
+extension LiveOutingHost {
+    /// «ابدأ الطلعة» at the end of «طلعة جديدة»: once the outing has loaded, start it if it
+    /// has not started yet (never in the demo, which has no server).
+    fileprivate func startIfAsked() {
+        guard model.pendingStart == controller.session.id, let v = controller.session.view else { return }
+        model.pendingStart = nil
+        if v.status == .created, !controller.session.isDemo { controller.startOuting() }
+    }
+}
+
 struct InviteToken: Identifiable { let id: String }
 
 /// Owns the live screen's controller for as long as that outing is open.
@@ -82,6 +93,14 @@ struct LiveOutingHost: View {
 
     var body: some View {
         LiveOutingScreen(controller: controller)
+            /* A new destination (or one kept on this phone) moves the weather chip at once. */
+            .onReceive(model.plans.model(controller.session.id).$plan.map(\.destination).removeDuplicates()) { _ in
+                controller.feedWeather(force: true)
+            }
+            .onReceive(controller.session.objectWillChange) { _ in
+                DispatchQueue.main.async { startIfAsked() }
+            }
+            .onAppear { startIfAsked() }
             .onReceive(model.$offerNotifications) { offer in
                 /* First join: our notification explainer, over the live map, once things settle. */
                 guard offer, controller.modal == nil else { return }

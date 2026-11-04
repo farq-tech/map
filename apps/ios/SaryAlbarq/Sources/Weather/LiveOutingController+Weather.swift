@@ -22,13 +22,19 @@ extension LiveOutingController: WeatherPlanSource {
     var weatherRoute: [Geo.LatLng] { planModel?.plan.points.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) } ?? [] }
 
     /// Real positions only (last real fixes, my GPS, the rally point) — never estimated.
-    func feedWeather() {
-        guard weather.feedDue(Date()) else { return }
+    func feedWeather(force: Bool = false) {
+        guard weather.feedDue(Date()) || force else { return }
         var pts = mapMembers(theme: .default).filter { !$0.isMe }.map { Geo.LatLng(lat: $0.position.lat, lng: $0.position.lng) }
         if let r = rallyPoint { pts.append(Geo.LatLng(lat: r.position.lat, lng: r.position.lng)) }
         weather.setDestination(weatherDestination)
         weather.setPositions(pts, me: location.lastFix, route: weatherRoute)
         weather.start()
+    }
+
+    /// The weather sheet's «غيّر الوجهة»: the search sheet (its point card has «اجعلها الوجهة»).
+    func changeDestinationFromWeather() {
+        modal = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.modal = .plan(.search) }
     }
 
     /// «الطقس هنا»: for any point (search result, long-press, a waypoint).
