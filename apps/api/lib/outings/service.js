@@ -627,6 +627,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   async function endOutingRows(run, outingId) {
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [outingId]);
+    await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1`, [outingId]);
     await run(
       `UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL
        WHERE id = $1`,
@@ -713,6 +714,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       [outingId, userId],
     );
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    /* Their phone is no longer in «قناة الطلعة»: no more Push to Talk wake-ups. */
+    await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
     await rotateMeshKeyRows(run, outingId);
     if (m.role !== 'owner') return { ended: false, owner: null };
     await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);

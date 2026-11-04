@@ -64,6 +64,8 @@ function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = 
   const watchSubLimit = createRateLimiter({ limit: limits.watchSubscribePer10Min ?? 10, windowMs: 10 * 60_000 });
   const timerLimit = createRateLimiter({ limit: limits.timerPer10Min ?? 20, windowMs: 10 * 60_000 });
   const waypointLimit = createRateLimiter({ limit: limits.waypointsPer10Min ?? 30, windowMs: 10 * 60_000 });
+  /* A PTT token per channel join; a few an hour is plenty. */
+  const pttTokenLimit = createRateLimiter({ limit: limits.pttTokensPer10Min ?? 20, windowMs: 10 * 60_000 });
   /* Raw audio bytes, capped. Only this route reads a body that is not JSON. */
   const rawAudio = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: CLIP_MAX_BYTES });
 
@@ -280,6 +282,25 @@ function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = 
     res.set('Content-Disposition', 'inline');
     res.set('Expires', new Date(meta.expires_at).toUTCString());
     res.send(buf);
+  }));
+
+  /* «قناة الطلعة» Push to Talk: this device's ephemeral channel token for this outing.
+   * Body { token: <hex>, environment: 'sandbox'|'production' }. DELETE on leave / «اكتم القناة»
+   * (no token in the body = every token of mine for this outing). */
+  router.post('/:id/ptt/token', auth, asyncHandler(async (req, res) => {
+    if (!apns?.enabled) return res.status(503).json({ ok: false, error: 'apns_disabled' });
+    if (!writeLimit(req.user.id) || !pttTokenLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const m = await service.requireMember(req.user, req.params.id, { fresh: true });
+    if (m.outing_status === 'ended') return res.status(409).json({ ok: false, error: 'outing_ended' });
+    const r = await apns.registerPtt(req.user, req.params.id, req.body || {});
+    if (!r.ok) return res.status(400).json(r);
+    res.status(201).json({ ok: true });
+  }));
+
+  router.delete('/:id/ptt/token', auth, asyncHandler(async (req, res) => {
+    if (!apns?.registerPtt) return res.json({ ok: true, removed: 0 });
+    await service.requireMember(req.user, req.params.id);
+    res.json({ ok: true, ...(await apns.unregisterPtt(req.user, req.params.id, req.body?.token)) });
   }));
 
   /* Opt-in trip summary: totals only, never points. */
