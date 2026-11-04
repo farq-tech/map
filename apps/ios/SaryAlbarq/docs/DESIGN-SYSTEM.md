@@ -80,8 +80,18 @@ no logic: `Live/LiveOutingController.swift` owns screen state and turns the
 contract's actions into session/API calls, and `Live/LiveOutingPresenter.swift`
 maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 
-- Name chips and note bubbles are design-system views inside Mapbox view
-  annotations, so they track the cars natively; bubbles show from zoom 13.5.
+- Name chips and note bubbles are design-system views in our own overlay over
+  the map (`ChipOverlayView`), re-laid out on every camera frame and glide step
+  by `Map/ChipLayout.swift` (pure, unit-tested in `Tests/ChipLayoutTests.swift`):
+  chips that collide are stacked in a column above their cars with leader
+  lines; more than 3 (2 in drive mode) fold the friends into a group chip
+  «٣ سيارات» that, on tap, lists them in a column (and zooms in when that
+  separates them); «أنت» is never folded, sits nearest its car and is drawn on
+  top; a note bubble shows only where it has room (zoom ≥ 13.5), otherwise it
+  collapses to a small note indicator on the chip.
+- Mapbox's logo and attribution («i») stay together and visible (Mapbox's
+  terms) but move to the first free spot (bottom centre, bottom corners, top
+  corners) that does not cover the rally label or a chip (`OrnamentSpot`).
 - Edge arrows are SwiftUI (`SaryMapOverlayLayer`), placed from the map's
   projection (`EdgeArrows.place`), kept clear of the cluster, SOS dock, status
   capsule, alert lane, rally flag, «أنت» and visible friends.
@@ -91,4 +101,5 @@ maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 - Place labels are Arabic: the Standard Satellite style is fetched once and
   its labels pointed at `name_ar` (`ArabicBasemap`).
 - Real screenshots: `docs/live-shots/`. DEBUG launch overrides:
-  `-SaryScheme light|dark`, `-SaryDrive 1|0`, `-SaryNight 1|0`, `-SaryFallback 1`.
+  `-SaryScheme light|dark`, `-SaryDrive 1|0`, `-SaryNight 1|0`, `-SaryFallback 1`;
+  `-demo -demoCrowd` adds three friends parked together (the declutter case).

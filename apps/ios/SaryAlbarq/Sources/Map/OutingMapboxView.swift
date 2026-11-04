@@ -177,6 +177,13 @@ struct OutingMapboxView: UIViewRepresentable {
         private var bubblesOn = true
         static let bubbleMinZoom = 13.5
         private var projectionPending = false
+        private let overlay = ChipOverlayView()
+        private var groupBoxes: [String: HostBox<MapGroupChip>] = [:]
+        /// Members the person spread out (their group tapped while parked together).
+        private var expandedGroups = Set<String>()
+        private var lastLayout: ChipLayout.Result?
+        private var ornamentSpot: String?
+        private var ornamentCheckedAt: CFTimeInterval = 0
         /// "Keep everyone on screen": on by default, off once you move the map yourself, back on with the group button.
         var keepGroup = true
 
@@ -193,9 +200,9 @@ struct OutingMapboxView: UIViewRepresentable {
             let matcher = RoadSnap.Matcher()
             var model = false
             var layersReady = false
-            var annotation: ViewAnnotation?
-            var host: UIHostingController<MapChip>?
-            var box: ChipBox?
+            /// Name chip and note bubble, drawn in the declutter overlay (see `ChipLayout`).
+            var chipBox: HostBox<MapChip>?
+            var noteBox: HostBox<MapNote>?
 
             init(_ item: MapMember, at p: LngLat) {
                 self.item = item
@@ -216,7 +223,15 @@ struct OutingMapboxView: UIViewRepresentable {
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in self?.refreshRoads() }.store(in: &cancelables)
-            map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.project() }.store(in: &cancelables)
+            map.mapboxMap.onCameraChanged.observe { [weak self] _ in
+                self?.layoutChips()
+                self?.project()
+            }.store(in: &cancelables)
+            /* Chips live in our own overlay (over the map, under Mapbox's ornaments) so the
+             * declutter layout can move, stack and fold them in the same frame as the camera. */
+            overlay.frame = map.bounds
+            overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            map.insertSubview(overlay, at: min(1, map.subviews.count))
             /* Tapping the car itself does what tapping its name does; in pick mode an empty spot is the answer. */
             tapInteraction = map.mapboxMap.addInteraction(TapInteraction { [weak self] ctx in
                 guard let self else { return false }
@@ -251,10 +266,9 @@ struct OutingMapboxView: UIViewRepresentable {
                     self.fitGroup()
                 }
             }
-            /* Mapbox's logo and attribution stay visible, just above the bottom panel. */
-            map.ornaments.options.logo.margins = CGPoint(x: 8, y: insets.bottom + 4)
-            map.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: insets.bottom + 4)
             map.ornaments.options.compass.margins = CGPoint(x: 8, y: insets.top + 8)
+            ornamentSpot = nil
+            placeOrnaments(force: true)
         }
 
         // MARK: style
@@ -409,6 +423,7 @@ struct OutingMapboxView: UIViewRepresentable {
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
             keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
             followMe()
+            layoutChips()
             project()
         }
 
@@ -426,8 +441,11 @@ struct OutingMapboxView: UIViewRepresentable {
         func themeChanged() {
             light = nil
             applyLight()
-            for r in recs.values { r.host = nil; r.annotation?.remove(); r.annotation = nil; r.box = nil }
+            for r in recs.values { remove(chipsOf: r) }
+            for g in groupBoxes.values { g.removeFromSuperview() }
+            groupBoxes = [:]
             if let map { for r in recs.values { drawChip(r, on: map) } }
+            layoutChips()
             if let p = rallyPin?.point {
                 rallyPin?.annotation.remove()
                 rallyPin = nil
@@ -456,6 +474,7 @@ struct OutingMapboxView: UIViewRepresentable {
             if wantBubbles != bubblesOn {
                 bubblesOn = wantBubbles
                 for r in recs.values { drawChip(r, on: map) }
+                layoutChips()
             }
             let anchor = m.point(for: cam.center)
             /* Mapbox answers (-1, -1) for anything off the viewport; an off-screen
@@ -518,7 +537,6 @@ struct OutingMapboxView: UIViewRepresentable {
             if r.model {
                 try? m.setLayerProperty(for: ids.layer, property: "model-rotation", value: Vehicle.rotation(r.heading))
             }
-            r.annotation?.annotatedFeature = .geometry(Point(r.shown.coordinate))
         }
 
         private func ensureModel(_ color: UInt32, on m: MapboxMap) -> Bool {
@@ -543,36 +561,207 @@ struct OutingMapboxView: UIViewRepresentable {
 
         private func remove(_ r: Rec, on map: MapView) {
             if styleReady { removeLayers(r, on: map) }
-            r.annotation?.remove()
-            r.annotation = nil
+            r.chipBox?.removeFromSuperview()
+            r.noteBox?.removeFromSuperview()
+            r.chipBox = nil
+            r.noteBox = nil
         }
 
+        private func remove(chipsOf r: Rec) {
+            r.chipBox?.removeFromSuperview()
+            r.noteBox?.removeFromSuperview()
+            r.chipBox = nil
+            r.noteBox = nil
+        }
+
+        /// The chip's and bubble's content; where they go is `layoutChips()`.
         private func drawChip(_ r: Rec, on map: MapView) {
             let id = r.item.id
-            let chip = MapChip(chip: r.item.chip, bubble: bubblesOn ? r.item.bubble : nil, theme: theme) { [weak self] in self?.onCarTap(id) }
-            if let host = r.host {
-                if host.rootView != chip {
-                    host.rootView = chip
-                    r.box?.fit()
-                    r.annotation?.setNeedsUpdateSize()
+            if let chip = r.item.chip {
+                let view = MapChip(chip: chip, noteWaiting: false, theme: theme) { [weak self] in self?.onCarTap(id) }
+                if let box = r.chipBox { box.update(view) } else {
+                    let box = HostBox(view)
+                    overlay.addSubview(box)
+                    r.chipBox = box
                 }
             } else {
-                let host = UIHostingController(rootView: chip)
-                host.view.backgroundColor = .clear
-                let box = ChipBox(host)
-                let a = ViewAnnotation(coordinate: r.shown.coordinate, view: box)
-                /* Bottom of the chip just over the car, so a note bubble grows upward, never over it. */
-                a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom, offsetY: 24)]
-                /* Every car always shows: a friend is never hidden because two labels overlap. */
-                a.allowOverlap = true
-                a.priority = r.item.isMe ? 100 : (r.item.presence == .live ? 50 : 10)
-                map.viewAnnotations.add(a)
-                r.host = host
-                r.box = box
-                r.annotation = a
+                r.chipBox?.removeFromSuperview()
+                r.chipBox = nil
+            }
+            if bubblesOn, let bubble = r.item.bubble {
+                let view = MapNote(bubble: bubble, theme: theme) { [weak self] in self?.onCarTap(id) }
+                if let box = r.noteBox { box.update(view) } else {
+                    let box = HostBox(view)
+                    overlay.addSubview(box)
+                    r.noteBox = box
+                }
+            } else {
+                r.noteBox?.removeFromSuperview()
+                r.noteBox = nil
             }
         }
 
+        /// Declutter: stack close chips with leader lines, fold crowds into a group chip,
+        /// collapse notes that have no room. Runs with every camera frame and glide step.
+        func layoutChips() {
+            guard let map, map.bounds.width > 0 else { return }
+            let m: MapboxMap = map.mapboxMap!
+            let cam = m.cameraState
+            let anchorPt = m.point(for: cam.center)
+            func screen(_ c: CLLocationCoordinate2D) -> CGPoint {
+                let p = m.point(for: c)
+                if p.x >= 0 && p.y >= 0 { return p }
+                return ScreenProjection.point(c, center: cam.center, centerPoint: anchorPt, zoom: cam.zoom, bearing: cam.bearing)
+            }
+            var items: [ChipLayout.Item] = []
+            for r in recs.values {
+                let hasNote = r.item.bubble != nil
+                guard r.chipBox != nil || r.noteBox != nil else { continue }
+                /* The waiting-note dot is part of the chip's size, so measure the chip as it would be drawn with it. */
+                let chipSize = r.chipBox?.measure(noteWaiting: hasNote) ?? .zero
+                let prio = r.item.presence == .live ? 2 : (r.item.presence == .recent ? 1 : 0)
+                items.append(ChipLayout.Item(id: r.item.id, anchor: screen(r.shown.coordinate), chip: chipSize,
+                                             note: r.noteBox?.ideal, isMe: r.item.isMe, priority: prio))
+            }
+            var opts = ChipLayout.Options(bounds: map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: 0, right: 0)))
+            opts.expanded = expandedGroups
+            if theme.drive { opts.maxStack = 2 }
+            let result = ChipLayout.solve(items, opts)
+            lastLayout = result
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let leaders = CGMutablePath()
+            for p in result.chips {
+                guard let r = recs[p.id] else { continue }
+                let hasNote = r.item.bubble != nil
+                if let box = r.chipBox {
+                    box.setNoteWaiting(hasNote && (p.noteCollapsed || r.noteBox == nil))
+                    box.isHidden = false
+                    box.frame = p.frame
+                    overlay.bringSubviewToFront(box)
+                }
+                if let nb = r.noteBox {
+                    if let nf = p.noteFrame {
+                        nb.isHidden = false
+                        nb.frame = nf
+                        overlay.bringSubviewToFront(nb)
+                    } else {
+                        nb.isHidden = true
+                    }
+                }
+                if p.leader {
+                    let attach = CGPoint(x: p.frame.midX, y: p.frame.maxY <= p.anchor.y ? p.frame.maxY : p.frame.minY)
+                    leaders.move(to: p.anchor)
+                    leaders.addLine(to: attach)
+                }
+            }
+            let grouped = Set(result.groups.flatMap(\.ids))
+            for id in grouped {
+                recs[id]?.chipBox?.isHidden = true
+                recs[id]?.noteBox?.isHidden = true
+            }
+            var liveGroups = Set<String>()
+            for g in result.groups {
+                liveGroups.insert(g.key)
+                let view = MapGroupChip(count: g.ids.count, colors: g.ids.compactMap { recs[$0]?.item.color }, theme: theme) { [weak self] in self?.openGroup(g.key) }
+                let box: HostBox<MapGroupChip>
+                if let b = groupBoxes[g.key] { b.update(view); box = b } else {
+                    box = HostBox(view)
+                    overlay.addSubview(box)
+                    groupBoxes[g.key] = box
+                }
+                box.frame = CGRect(x: g.frame.midX - box.ideal.width / 2, y: g.frame.maxY - box.ideal.height, width: box.ideal.width, height: box.ideal.height)
+                for id in g.ids {
+                    if let r = recs[id] {
+                        leaders.move(to: screen(r.shown.coordinate))
+                        leaders.addLine(to: CGPoint(x: box.frame.midX, y: box.frame.maxY))
+                    }
+                }
+            }
+            for (k, b) in groupBoxes where !liveGroups.contains(k) {
+                b.removeFromSuperview()
+                groupBoxes[k] = nil
+            }
+            /* «أنت» on top of everything. */
+            if let me = recs.values.first(where: \.item.isMe) {
+                if let b = me.noteBox, !b.isHidden { overlay.bringSubviewToFront(b) }
+                if let b = me.chipBox { overlay.bringSubviewToFront(b) }
+            }
+            overlay.leaders.path = leaders
+            overlay.leaders.strokeColor = UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor
+            overlay.leaderHalo.path = leaders
+            overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
+            CATransaction.commit()
+            placeOrnaments(force: false)
+        }
+
+        /// A group chip was tapped: list its cars in a column, and zoom in when that separates them.
+        private func openGroup(_ key: String) {
+            guard let map, let g = lastLayout?.groups.first(where: { $0.key == key }) else { return }
+            let pts = g.ids.compactMap { recs[$0]?.shown }
+            guard !pts.isEmpty else { return }
+            /* How far apart the folded cars really are (the framing bounds are padded). */
+            var spread = 0.0
+            for a in pts { for b in pts { spread = max(spread, Vehicle.distanceMeters(a, b)) } }
+            let zoom = map.mapboxMap.cameraState.zoom
+            keepGroup = false
+            onUserGesture()
+            /* Always spread them into a column (tied to their cars by lines), and zoom in
+             * too when they are far enough apart for the zoom to separate them. */
+            expandedGroups.formUnion(g.ids)
+            layoutChips()
+            if spread >= 60 && zoom < GroupFraming.maxZoom - 0.5 { frame(pts) }
+        }
+
+        /// Mapbox's logo and attribution: kept together in a free spot of the map (never
+        /// hidden — Mapbox's terms), away from the rally label, chips and our controls.
+        private func placeOrnaments(force: Bool) {
+            guard let map, map.bounds.width > 0 else { return }
+            let now = CACurrentMediaTime()
+            if !force && now - ornamentCheckedAt < 0.5 { return }
+            ornamentCheckedAt = now
+            let logo = map.ornaments.logoView.intrinsicContentSize
+            let info = map.ornaments.attributionButton.intrinsicContentSize
+            let lw = max(logo.width, 80), lh = max(logo.height, 20)
+            let iw = max(info.width, 22)
+            let w = lw + 4 + iw, h = max(lh, info.height, 22)
+            let bounds = map.bounds
+            let clearBottom = bounds.maxY - chrome.bottom - 6
+            let left = max(8, chrome.left + 4), right = bounds.maxX - max(8, chrome.right + 4)
+            let cands: [OrnamentSpot.Candidate] = [
+                .init(rect: CGRect(x: bounds.midX - w / 2, y: clearBottom - h, width: w, height: h), name: "bottom-center"),
+                .init(rect: CGRect(x: left, y: clearBottom - h, width: w, height: h), name: "bottom-left"),
+                .init(rect: CGRect(x: right - w, y: clearBottom - h, width: w, height: h), name: "bottom-right"),
+                .init(rect: CGRect(x: left, y: chrome.top + 6, width: w, height: h), name: "top-left"),
+                .init(rect: CGRect(x: right - w, y: chrome.top + 6, width: w, height: h), name: "top-right"),
+            ]
+            var avoid: [CGRect] = []
+            if let rp = rallyPin {
+                let p = map.mapboxMap.point(for: rp.point.position.coordinate)
+                let s = rp.host.view.frame.size
+                avoid.append(CGRect(x: p.x - s.width / 2, y: p.y - s.height, width: s.width, height: s.height).insetBy(dx: -6, dy: -6))
+            }
+            if let l = lastLayout {
+                avoid += l.chips.map(\.frame) + l.chips.compactMap(\.noteFrame) + l.groups.map(\.frame)
+            }
+            /* Keep the current spot while it is still free: no hopping around as cars move. */
+            if !force, let cur = cands.first(where: { $0.name == ornamentSpot }), !avoid.contains(where: { $0.intersects(cur.rect) }) { return }
+            guard let spot = OrnamentSpot.choose(cands, avoid: avoid), spot.name != ornamentSpot || force else { return }
+            ornamentSpot = spot.name
+            let safe = map.safeAreaInsets
+            let y = bounds.maxY - safe.bottom - spot.rect.maxY
+            if spot.name.hasPrefix("top") {
+                map.ornaments.options.logo.position = .topLeft
+                map.ornaments.options.attributionButton.position = .topLeft
+                map.ornaments.options.logo.margins = CGPoint(x: spot.rect.minX - safe.left, y: spot.rect.minY - safe.top)
+                map.ornaments.options.attributionButton.margins = CGPoint(x: spot.rect.minX + lw + 4 - safe.left, y: spot.rect.minY - safe.top)
+            } else {
+                map.ornaments.options.logo.position = .bottomLeft
+                map.ornaments.options.attributionButton.position = .bottomLeft
+                map.ornaments.options.logo.margins = CGPoint(x: spot.rect.minX - safe.left, y: y)
+                map.ornaments.options.attributionButton.margins = CGPoint(x: spot.rect.minX + lw + 4 - safe.left, y: y)
+            }
+        }
 
         private func car(at p: CGPoint) -> String? {
             guard let map else { return nil }
@@ -629,8 +818,9 @@ struct OutingMapboxView: UIViewRepresentable {
                     r.shown = Motion.lerp(r.from, r.to, t)
                     moving = true
                 }
-                if styleReady, r.layersReady { setPosition(r, on: m) } else { r.annotation?.annotatedFeature = .geometry(Point(r.shown.coordinate)) }
+                if styleReady, r.layersReady { setPosition(r, on: m) }
             }
+            layoutChips()
             project()
             if !moving {
                 link?.invalidate()
@@ -715,6 +905,10 @@ struct OutingMapboxView: UIViewRepresentable {
             if gestureType != .singleTap {
                 keepGroup = false
                 onUserGesture()
+                if !expandedGroups.isEmpty {
+                    expandedGroups.removeAll()
+                    layoutChips()
+                }
             }
         }
         func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {}
@@ -722,34 +916,65 @@ struct OutingMapboxView: UIViewRepresentable {
     }
 }
 
-/// Holds a chip at its own ideal size. Mapbox measures annotation views with
-/// `systemLayoutSizeFitting`, which a bare hosting view answers with the space it is
-/// offered (or squeezes to nothing); this box answers with what SwiftUI wants.
-final class ChipBox: UIView {
-    private let host: UIHostingController<MapChip>
+/// Transparent to touches except on its chips, so the map underneath still pans and taps.
+final class ChipOverlayView: UIView {
+    /// Leader lines from a car to its moved chip (a dark halo under a light line, or the reverse).
+    let leaderHalo = CAShapeLayer()
+    let leaders = CAShapeLayer()
 
-    init(_ host: UIHostingController<MapChip>) {
-        self.host = host
-        super.init(frame: .zero)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
         backgroundColor = .clear
-        host.view.backgroundColor = .clear
-        addSubview(host.view)
-        fit()
+        isOpaque = false
+        for (l, w) in [(leaderHalo, 3.5), (leaders, 1.5)] as [(CAShapeLayer, CGFloat)] {
+            l.fillColor = nil
+            l.lineWidth = w
+            l.lineCap = .round
+            layer.addSublayer(l)
+        }
+        accessibilityIdentifier = "map.chips"
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private var ideal: CGSize { host.sizeThatFits(in: CGSize(width: 240, height: 600)) }
-
-    func fit() {
-        let s = ideal
-        frame.size = s
-        host.view.frame = CGRect(origin: .zero, size: s)
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        leaderHalo.frame = bounds
+        leaders.frame = bounds
     }
 
-    override func systemLayoutSizeFitting(_ targetSize: CGSize) -> CGSize { ideal }
-    override func sizeThatFits(_ size: CGSize) -> CGSize { ideal }
-    override var intrinsicContentSize: CGSize { ideal }
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+}
+
+/// A SwiftUI view hosted at its own ideal size (measured once per content change).
+final class HostBox<Content: View & Equatable>: UIView {
+    private let host: UIHostingController<Content>
+    private(set) var ideal: CGSize = .zero
+    private var waitingSize: CGSize?
+
+    init(_ content: Content) {
+        host = UIHostingController(rootView: content)
+        /* Never inset by the screen's safe area: these sit anywhere on the map, near the notch too. */
+        host.safeAreaRegions = []
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        host.view.backgroundColor = .clear
+        addSubview(host.view)
+        ideal = host.sizeThatFits(in: CGSize(width: 240, height: 600))
+        frame.size = ideal
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(_ content: Content) {
+        guard host.rootView != content else { return }
+        host.rootView = content
+        ideal = host.sizeThatFits(in: CGSize(width: 240, height: 600))
+        waitingSize = nil
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -757,30 +982,80 @@ final class ChipBox: UIView {
     }
 }
 
+extension HostBox where Content == MapChip {
+    /// The chip's size as drawn with (or without) the waiting-note dot.
+    func measure(noteWaiting: Bool) -> CGSize {
+        guard noteWaiting else { return ideal }
+        if let s = waitingSize { return s }
+        var v = host.rootView
+        v.noteWaiting = true
+        let probe = UIHostingController(rootView: v)
+        probe.safeAreaRegions = []
+        let s = probe.sizeThatFits(in: CGSize(width: 240, height: 600))
+        waitingSize = s
+        return s
+    }
+
+    func setNoteWaiting(_ on: Bool) {
+        guard host.rootView.noteWaiting != on else { return }
+        var v = host.rootView
+        v.noteWaiting = on
+        host.rootView = v
+    }
+}
+
 extension LngLat {
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lng) }
 }
 
-/// The chip over a car, from the design system: note bubble (if any) over the
-/// name chip. Drawn inside a Mapbox view annotation so it tracks the car
-/// natively (no SwiftUI frame lag), and themed like the rest of the chrome.
+/// The name chip over a car, from the design system. `noteWaiting` adds the
+/// small note indicator when the member's bubble has no room (crowded, or zoomed out).
 struct MapChip: View, Equatable {
-    let chip: NameChipUI?
-    let bubble: NoteBubbleUI?
+    let chip: NameChipUI
+    var noteWaiting: Bool
     let theme: SaryTheme
     var onTap: () -> Void
 
-    static func == (a: MapChip, b: MapChip) -> Bool { a.chip == b.chip && a.bubble == b.bubble && a.theme == b.theme }
+    static func == (a: MapChip, b: MapChip) -> Bool { a.chip == b.chip && a.noteWaiting == b.noteWaiting && a.theme == b.theme }
 
     var body: some View {
-        VStack(spacing: 2) {
-            if let bubble { SaryNoteBubble(bubble: bubble) }
-            if let chip { SaryNameChip(chip: chip, tapped: onTap) }
-        }
-        .padding(3)
-        .saryTheme(theme)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("car.chip")
+        SaryNameChip(chip: chip, noteWaiting: noteWaiting, tapped: onTap, id: chip.isMe ? "car.chip.me" : "car.chip")
+            .padding(2)
+            .saryTheme(theme)
+    }
+}
+
+/// A member's note bubble, placed above their chip when there is room.
+struct MapNote: View, Equatable {
+    let bubble: NoteBubbleUI
+    let theme: SaryTheme
+    var onTap: () -> Void
+
+    static func == (a: MapNote, b: MapNote) -> Bool { a.bubble == b.bubble && a.theme == b.theme }
+
+    var body: some View {
+        Button(action: onTap) { SaryNoteBubble(bubble: bubble) }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 2)
+            .saryTheme(theme)
+            .accessibilityIdentifier("car.note")
+    }
+}
+
+/// Several friends folded into one chip («٣ سيارات»); tap to spread them out.
+struct MapGroupChip: View, Equatable {
+    let count: Int
+    let colors: [UInt32]
+    let theme: SaryTheme
+    var onTap: () -> Void
+
+    static func == (a: MapGroupChip, b: MapGroupChip) -> Bool { a.count == b.count && a.colors == b.colors && a.theme == b.theme }
+
+    var body: some View {
+        SaryGroupChip(count: count, colors: colors, tapped: onTap)
+            .accessibilityIdentifier("car.group")
+            .padding(2)
+            .saryTheme(theme)
     }
 }
 

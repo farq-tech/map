@@ -170,7 +170,8 @@ final class AppModel: ObservableObject {
     }
 
     private func openDemoSession() {
-        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view())
+        let crowd = ProcessInfo.processInfo.arguments.contains("-demoCrowd")
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
         session = s
         s.open()
     }
@@ -182,19 +183,28 @@ enum DemoData {
     static let meId = "00000000-0000-4000-8000-000000000001"
     static let outingId = "00000000-0000-4000-8000-0000000000aa"
 
-    static func view(now: Date = Date()) -> OutingView {
+    /// `crowd`: three more friends parked right next to «سلطان» (the chip declutter case).
+    static func view(now: Date = Date(), crowd: Bool = false) -> OutingView {
         func ago(_ s: Double) -> String { ISODate.string(now.addingTimeInterval(-s)) }
-        let members: [Member] = [
+        var members: [Member] = [
             Member(user_id: meId, display_name: "أنا", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
             Member(user_id: "00000000-0000-4000-8000-000000000002", display_name: "أبو فهد", phone: "+966500000001", role: "member", sharing: true, joined_at: "2026-11-03T10:01:00.000Z", online: true, last_seen_at: ago(2), note: MemberNote(text: "بوقف عند المحطة", at: ago(30))),
             Member(user_id: "00000000-0000-4000-8000-000000000003", display_name: "سلطان", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:02:00.000Z", online: true, last_seen_at: ago(20)),
             Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(240)),
         ]
-        let positions: [Position] = [
+        var positions: [Position] = [
             Position(user_id: members[1].user_id, lat: 24.7128, lng: 46.67395, accuracy: 8, heading: 340, speed: 22, mode: .balanced, recorded_at: ago(3)),
             Position(user_id: members[2].user_id, lat: 24.7105, lng: 46.6747, accuracy: 15, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(95)),
             Position(user_id: members[3].user_id, lat: 24.7119, lng: 46.6770, accuracy: 25, heading: 180, speed: 10, mode: .saver, recorded_at: ago(300)),
         ]
+        if crowd {
+            for (i, name) in ["سعد", "ريم", "خالد"].enumerated() {
+                let id = "00000000-0000-4000-8000-00000000001\(i)"
+                members.append(Member(user_id: id, display_name: name, phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:0\(4 + i):00.000Z", online: true, last_seen_at: ago(2),
+                                      note: i == 0 ? MemberNote(text: "خلونا نتجمع هنا", at: ago(20)) : nil))
+                positions.append(Position(user_id: id, lat: 24.71052 + Double(i) * 0.00004, lng: 46.67478 + Double(i) * 0.00005, accuracy: 6, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(4)))
+            }
+        }
         let snap = OutingSnapshot(
             outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
             me: SnapshotMe(user_id: meId, role: "owner", sharing: true),

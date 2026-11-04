@@ -25,6 +25,16 @@ enum SaryFormat {
     /// 3 → "٣"
     static func number(_ n: Int) -> String { digits(String(n)) }
 
+    /// «سيارة واحدة»، «سيارتان»، «٣ سيارات»، «١١ سيارة» (Arabic number agreement).
+    static func cars(_ n: Int) -> String {
+        switch n {
+        case 1: return "سيارة واحدة"
+        case 2: return "سيارتان"
+        case 3...10: return "\(number(n)) سيارات"
+        default: return "\(number(n)) سيارة"
+        }
+    }
+
     /// Distance for people: under 1 km in metres rounded to 10 ("٩٠٠ م"),
     /// under 100 km with one decimal ("٦٫١ كم", "١ كم" when the decimal is 0),
     /// otherwise whole kilometres ("١٢٣ كم").

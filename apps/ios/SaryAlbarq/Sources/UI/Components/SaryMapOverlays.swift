@@ -27,7 +27,10 @@ extension View {
 
 struct SaryNameChip: View {
     var chip: NameChipUI
+    /// The member has a note that has no room on the map right now: a small indicator.
+    var noteWaiting = false
     var tapped: () -> Void = {}
+    var id: String? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -58,6 +61,14 @@ struct SaryNameChip: View {
                 if chip.hasVoice {
                     Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
                 }
+                if noteWaiting {
+                    Image(systemName: SaryIcon.note)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(SaryCarColors.ink(on: chip.color))
+                        .frame(width: 18, height: 16)
+                        .background(Capsule().fill(Color(rgb: chip.color)))
+                        .accessibilityLabel(Text("لديه رسالة"))
+                }
             }
             .fixedSize()
             .padding(.horizontal, 8)
@@ -81,6 +92,49 @@ struct SaryNameChip: View {
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text(chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))"))
+        .modifier(OptionalIdentifier(id: id))
+    }
+}
+
+// MARK: - Group chip
+
+/// Friends whose chips would pile up, folded into one chip: «٣ سيارات».
+/// Tapping it spreads them out (zoom in, or a list when parked together).
+struct SaryGroupChip: View {
+    var count: Int
+    var colors: [UInt32]
+    var tapped: () -> Void = {}
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        Button(action: tapped) {
+            HStack(spacing: 6) {
+                HStack(spacing: -4) {
+                    ForEach(Array(colors.prefix(3).enumerated()), id: \.offset) { _, c in
+                        Circle().fill(Color(rgb: c)).frame(width: 10, height: 10)
+                            .overlay(Circle().stroke(p.chromeOpaque, lineWidth: 1.5))
+                    }
+                }
+                .environment(\.layoutDirection, .leftToRight)
+                Text(SaryFormat.cars(count))
+                    .saryText(.caption, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .lineLimit(1)
+                Image(systemName: "plus.magnifyingglass")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(p.textSecondary)
+            }
+            .fixedSize()
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(p.chromeOpaque.opacity(0.96)))
+            .overlay(Capsule().strokeBorder(p.textPrimary.opacity(0.35), lineWidth: 1))
+            .saryShadow(.raised, theme)
+        }
+        .buttonStyle(SaryPressStyle())
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityLabel(Text("\(SaryFormat.cars(count)) متقاربة، اضغط للتكبير"))
     }
 }
 
