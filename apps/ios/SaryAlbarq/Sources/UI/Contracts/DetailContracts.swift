@@ -116,6 +116,8 @@ struct NameChipUI: Equatable {
     var now: Date
     /// «غرّزت»: a small stuck icon on the chip until they clear it.
     var stuck: Bool = false
+    /// «المقدمة» / «المؤخرة» badge in convoy mode.
+    var convoy: ConvoyBadgeUI? = nil
 }
 
 struct NoteBubbleUI: Equatable {

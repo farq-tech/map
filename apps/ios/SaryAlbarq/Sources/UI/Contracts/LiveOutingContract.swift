@@ -88,6 +88,8 @@ enum LiveAlertKindUI: Equatable {
     case toast(String)
     /// Return timer, «غرّزت», sunset & way back (`Sources/Safety`).
     case safety(SafetyAlertUI)
+    /// Convoy mode: someone out of the column (see `ConvoyAlertUI`).
+    case convoy(ConvoyAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {

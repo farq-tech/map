@@ -84,6 +84,27 @@ struct SaryAlertCard: View {
             SaryVoiceBanner(clip: clip, play: { voice.play(clip.id) }, dismiss: { voice.dismiss(clip.id) })
         case .safety(let s):
             SafetyAlertCard(alert: s, tapped: tapped, dismiss: dismiss)
+        case .convoy(let c):
+            card {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(systemName: c.symbol)
+                        .font(.system(size: theme.drive ? 20 : 15, weight: .bold))
+                        .foregroundStyle(theme.palette.warningText)
+                        .frame(width: theme.drive ? 48 : 36, height: theme.drive ? 48 : 36)
+                        .background(Circle().fill(theme.palette.warning.opacity(0.18)))
+                    Circle().fill(Color(rgb: c.color)).frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(theme.palette.background, lineWidth: 2))
+                }
+            } content: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(c.title).saryText(theme.drive ? .headline : .callout, weight: .bold)
+                        .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
+                    Text(c.detail).saryNumber(.footnote, weight: .medium)
+                        .foregroundStyle(theme.palette.textSecondary)
+                }
+            }
+            .accessibilityLabel(Text("القافلة: \(c.title)، \(c.detail)"))
+            .accessibilityIdentifier("convoy-alert")
         }
     }
 

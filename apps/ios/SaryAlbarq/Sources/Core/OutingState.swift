@@ -19,6 +19,10 @@ enum LiveEvent: Equatable {
     case voiceClip(VoiceClip)
     /// Return timer and «غرّزت» frames (state lives in `SafetyController`).
     case safety(SafetyEvent)
+    /// Contract §3/§4: shared waypoints and convoy mode.
+    case waypointAdded(Waypoint)
+    case waypointRemoved(id: String)
+    case convoy(ConvoyInfo?)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -67,6 +71,12 @@ enum LiveEvent: Equatable {
             return .memberRole(userId: uid, coLeader: obj["co_leader"] as? Bool ?? false)
         case "voice_clip":
             return (decodeJSON(obj["clip"]) as VoiceClip?).map(LiveEvent.voiceClip)
+        case "waypoint_added":
+            return (decodeJSON(obj["waypoint"]) as Waypoint?).map(LiveEvent.waypointAdded)
+        case "waypoint_removed":
+            return (obj["id"] as? String).map { .waypointRemoved(id: $0) }
+        case "convoy_updated":
+            return .convoy(decodeJSON(obj["convoy"]))
         default:
             return SafetyEvent.decode(type, obj).map(LiveEvent.safety)
         }
@@ -174,10 +184,18 @@ struct OutingView: Equatable {
             guard !clips.contains(where: { $0.id == c.id }) else { return }
             clips.append(c)
             if clips.count > 30 { clips.removeFirst(clips.count - 30) }
-        case .safety:
+        case let .convoy(c):
+            snapshot.outing.convoy = c
+            snapshot.convoy = nil
+        case .safety, .waypointAdded, .waypointRemoved:
+            /* Safety state lives in SafetyController; waypoints are kept by OutingFeaturesModel
+               (loaded with GET /waypoints, not part of the snapshot). */
             break
         }
     }
+
+    /// «وضع القافلة», wherever the server put it.
+    var convoy: ConvoyInfo? { snapshot.outing.convoy ?? snapshot.convoy }
 
     /// Owner or «مساعد»: may start/pause the outing and manage the rally point.
     var iLead: Bool { snapshot.me.role == "owner" || snapshot.me.co_leader == true || snapshot.me.can_lead == true }

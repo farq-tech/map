@@ -35,6 +35,7 @@ struct LiveSheet: View {
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SafetyPrompts(safety: controller.safety))
+        .modifier(FeatureModals(controller: controller, features: controller.features))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -128,6 +129,7 @@ private struct ParticipantsTab: View {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
                 SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
             }
+            ConvoySection(controller: controller, features: controller.features)
             TrailCard(controller: controller, card: controller.trailCard)
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
@@ -139,6 +141,7 @@ private struct ParticipantsTab: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
+            WaypointsSection(controller: controller, features: controller.features)
         }
     }
 }

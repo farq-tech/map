@@ -58,7 +58,7 @@ struct LiveOutingHost: View {
 
     init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
         _controller = StateObject(wrappedValue: {
-            let c = LiveOutingController(session: session, location: model.location, appearance: appearance)
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
             c.onExit = { [weak model] in model?.closeSession() }
             c.setPush = { [weak model] on in
                 guard let model else { return }

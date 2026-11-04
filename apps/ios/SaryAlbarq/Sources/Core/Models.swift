@@ -119,6 +119,8 @@ struct OutingInfo: Codable, Equatable {
     var ended_at: String?
     var rally: RallyInfo?
     var join_locked: Bool?
+    /// «وضع القافلة» (contract §4); nil or both ids nil = off.
+    var convoy: ConvoyInfo?
 }
 
 struct SnapshotMe: Codable, Equatable {
@@ -148,6 +150,8 @@ struct OutingSnapshot: Codable, Equatable {
     var summaries: [TripShare]?
     /// «غرّزت»: who is stuck right now, with the replies (nil while the server does not send it).
     var stuck: [StuckWire]? = nil
+    /// Tolerated at the top level too, in case the server sends it there.
+    var convoy: ConvoyInfo?
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).
