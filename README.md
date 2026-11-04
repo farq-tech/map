@@ -95,6 +95,11 @@ Friends on one off-road outing see each other on one map while the outing screen
 
 **Server** (`apps/api/lib/outings/*`, `routes/outings.js`, `migrations/001_sary_outings.sql`)
 - Identity without accounts: `POST /api/outings/me` issues a 256-bit device token, stored as SHA-256. Every call is `Authorization: Bearer`.
+- **Account deletion («احذف حسابي», App Store 5.1.1(v))**: `DELETE /api/outings/me` (Bearer, rate limited per address, 5/h) → `200 { ok: true }`; afterwards the token is `401` everywhere (a repeat is `401` too). One transaction, **hard delete** of the `sary.users` row:
+  1. every open outing the person is in is left with the normal leave rules — owner hand-over to a «مساعد», else the earliest member; the outing ends if nobody is left. Other members get the same live events as a leave (`member_left` with `reason: "left"`, `owner_changed`, `outing_status: ended`).
+  2. ended outings they still own pass to another member (`owner_id` only; a member who had left does not become `role: owner`), or are deleted when nobody else was ever in them. `outings.owner_id` / `outing_invites.created_by` are `NOT NULL` without `ON DELETE`, so this is what makes the row deletable with no schema change; invite rows they created are re-attributed to the outing's current owner, so a group's live link keeps working.
+  3. deleting the row cascades memberships, the latest fix, trip summaries, web push subscriptions and APNs tokens; the recovery code lives on the row; `rally_set_by` is set null. Memory-only state — notes, SOS, voice clips they sent, cached fixes, auth cache, open sockets — is dropped. `field_diagnostics` hold no user id and are untouched. There are no other account links.
+  Other members' positions, notes, clips and summaries are not touched. Tests: `lib/outings-delete.test.js`.
 - Membership is checked on the server for every read, write and socket. Non-members get `404`, removed members are kicked from their socket at once (`4403`) and cannot rejoin.
 - Lifecycle: outing `created → active ⇄ paused → ended` (owner), member `active → left | removed`, per-member sharing on/off. If the owner leaves, the earliest member takes over.
 - Storage: one row per member — the **latest** fix only, no history. Deleted on leave, removal, sharing off, pause and end. RLS on, no policies; `anon`/`authenticated` revoked.

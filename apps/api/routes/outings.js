@@ -45,6 +45,8 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   /* Recovery codes carry 100 bits, so guessing is hopeless anyway; this keeps it that way cheaply. */
   const recoverLimit = createRateLimiter({ limit: limits.recoverPer15Min ?? 5, windowMs: 15 * 60_000 });
   const recoveryCodeLimit = createRateLimiter({ limit: 10, windowMs: 60 * 60_000 });
+  /* Account deletion: one is enough; a handful per hour per address stops a loop or a scripted sweep. */
+  const deleteLimit = createRateLimiter({ limit: limits.deletePerHour ?? 5, windowMs: 60 * 60_000 });
   /* Push-to-talk: a few clips a minute is a conversation; more is a flood. */
   const clipLimit = createRateLimiter({ limit: limits.clipsPer5Min ?? 20, windowMs: 5 * 60_000 });
   const clipFetchLimit = createRateLimiter({ limit: limits.clipFetchesPerMin ?? 120, windowMs: 60_000 });
@@ -86,6 +88,17 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   router.patch('/me', auth, asyncHandler(async (req, res) => {
     const user = await service.updateProfile(req.user, req.body || {});
     res.json({ ok: true, user });
+  }));
+
+  /* «احذف حسابي» (App Store 5.1.1(v)): leaves every outing with the normal leave rules
+   * (owner hand-over / end), then hard-deletes the identity and everything only it owns.
+   * The token answers 401 from then on — so does a repeat. See service.deleteAccount. */
+  router.delete('/me', asyncHandler(async (req, res, next) => {
+    if (!deleteLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    next();
+  }), auth, asyncHandler(async (req, res) => {
+    await service.deleteAccount(req.user);
+    res.json({ ok: true });
   }));
 
   /* Web Push. Off (enabled:false) unless the API has VAPID keys. */
