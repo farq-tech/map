@@ -44,6 +44,13 @@ struct OutingAPIError: Error, Equatable {
             "too_large": "التسجيل أطول من المسموح.",
             "clip_gone": "انتهت صلاحية هذا التسجيل.",
             "join_locked": "صاحب الطلعة قفل الانضمام.",
+            "recovery_invalid": "رمز الاسترجاع غير صحيح أو استُخدم من قبل. تأكد منه وحاول مرة ثانية.",
+            "invalid_avatar": "الصورة كبيرة أو بصيغة غير مدعومة. جرّب صورة ثانية.",
+            "outing_not_ended": "تقدر تشارك ملخصك بعد ما تنتهي الطلعة.",
+            "summary_window_closed": "مضى أكثر من أسبوع على نهاية الطلعة، فما عاد ممكن مشاركة الملخص.",
+            "implausible_summary": "أرقام الرحلة على هذا الجهاز غير منطقية، فلم نرسلها.",
+            "invalid_summary": "تعذّر إرسال الملخص.",
+            "server_busy": "الخادم مشغول. أعد المحاولة بعد قليل.",
         ]
         return t[code] ?? "حدث خطأ. أعد المحاولة."
     }
@@ -140,18 +147,67 @@ final class OutingsAPI {
     struct SharingBox: Decodable { var sharing: Bool }
     struct OkBox: Decodable { var ok: Bool? }
 
-    func createIdentity(name: String) async throws -> Identity {
-        let r: IdentityBox = try await call("POST", "/me", body: ["display_name": name], auth: false)
+    func createIdentity(name: String, avatar: String? = nil) async throws -> Identity {
+        var b = ["display_name": name]
+        if let avatar { b["avatar"] = avatar }
+        let r: IdentityBox = try await call("POST", "/me", body: b, auth: false)
         return Identity(token: r.token, user: r.user)
     }
 
-    /// `phone: ""` clears it; nil leaves it unchanged.
-    func updateProfile(name: String? = nil, phone: String? = nil) async throws -> PublicUser {
+    /// `phone: ""` / `avatar: ""` clear them; nil leaves them unchanged.
+    func updateProfile(name: String? = nil, phone: String? = nil, avatar: String? = nil) async throws -> PublicUser {
         var b: [String: String] = [:]
         if let name { b["display_name"] = name }
         if let phone { b["phone"] = phone }
+        if let avatar { b["avatar"] = avatar }
         let r: UserBox = try await call("PATCH", "/me", body: b)
         return r.user
+    }
+
+    // MARK: recovery (no passwords: a code made on the old device, redeemed on the new one)
+
+    struct RecoveryStatus: Codable, Equatable { var active: Bool; var created_at: String? }
+    struct MeBox: Decodable { var user: PublicUser; var recovery: RecoveryStatus? }
+    struct RecoveryCode: Codable, Equatable { var code: String; var created_at: String? }
+    struct RecoveryBox: Decodable { var recovery: RecoveryCode }
+
+    /// `GET /me`: who this device is, and whether a recovery code is saved.
+    func me() async throws -> MeBox { try await call("GET", "/me") }
+
+    /// `POST /me/recovery`: a new code, shown once; replaces any earlier one.
+    func createRecoveryCode() async throws -> RecoveryCode {
+        let r: RecoveryBox = try await call("POST", "/me/recovery", body: [String: String]())
+        return r.recovery
+    }
+
+    /// `POST /me/recover`: the code (in the body) → a new device token. The old device is signed out.
+    func recover(code: String) async throws -> Identity {
+        let r: IdentityBox = try await call("POST", "/me/recover", body: ["code": code], auth: false)
+        return Identity(token: r.token, user: r.user)
+    }
+
+    // MARK: trip summary (opt-in totals, never points)
+
+    struct SummaryBox: Decodable { var summary: TripShare? }
+    func shareSummary(_ id: String, _ t: TripTotals) async throws -> TripShare? {
+        struct S: Encodable { var distance_m: Int; var duration_s: Int; var moving_s: Int }
+        struct B: Encodable { var summary: S }
+        let r: SummaryBox = try await call("PUT", "/\(id)/summary", body: B(summary: S(distance_m: t.distanceM, duration_s: t.durationS, moving_s: t.movingS)))
+        return r.summary
+    }
+    func withdrawSummary(_ id: String) async throws {
+        let _: OkBox = try await call("DELETE", "/\(id)/summary")
+    }
+
+    // MARK: iOS push (APNs device token; server side may still be off: 503 apns_disabled)
+
+    struct ApnsConfig: Decodable, Equatable { var enabled: Bool; var bundle_id: String? }
+    func apnsConfig() async throws -> ApnsConfig { try await call("GET", "/push/apns", auth: false) }
+    func registerApns(token: String, environment: String, bundleId: String) async throws {
+        let _: OkBox = try await call("POST", "/push/apns", body: ["token": token, "environment": environment, "bundle_id": bundleId])
+    }
+    func unregisterApns(token: String) async throws {
+        let _: OkBox = try await call("DELETE", "/push/apns", body: ["token": token])
     }
 
     func list() async throws -> ListBox { try await call("GET", "") }

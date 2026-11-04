@@ -264,6 +264,8 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Every fix from the GPS while sharing. Internal for tests.
     func handleFix(_ f: DeviceFix) {
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
+        /* My own totals for «ملخص رحلتي»: on this device only, never points. */
+        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
@@ -485,16 +487,16 @@ final class OutingSession: ObservableObject, Identifiable {
 
 /// Local notifications for notes and SOS.
 enum Notifier {
-    static func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
     static func post(title: String, body: String, outingId: String, kind: String) {
+        /* The in-app switch («التنبيهات») covers these too. */
+        guard UserDefaults.standard.object(forKey: PushRegistrar.enabledKey) as? Bool ?? true else { return }
         let c = UNMutableNotificationContent()
         c.title = title
         c.body = body
         c.sound = .default
         c.threadIdentifier = "outing-\(outingId)"
+        c.userInfo = ["outing_id": outingId, "type": kind]
+        if kind == "sos" { c.interruptionLevel = .timeSensitive } else { c.interruptionLevel = .passive; c.sound = nil }
         let r = UNNotificationRequest(identifier: "\(kind)-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(r)
     }

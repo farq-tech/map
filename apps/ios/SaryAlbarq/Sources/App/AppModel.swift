@@ -1,30 +1,60 @@
+import Combine
 import Foundation
+import Network
 import SwiftUI
+import UIKit
 
+/// Loading state of «طلعاتي».
+enum ListPhase: Equatable {
+    case loading
+    case loaded
+    case failed(String)
+}
+
+/// The app's state outside the live map: identity, my outings, invites, recovery,
+/// trip summaries and notifications. Screens read it and call its methods; it is
+/// the only place that talks to `OutingsAPI` for them.
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var identity: Identity?
     @Published private(set) var current: [OutingSummary] = []
     @Published private(set) var history: [OutingSummary] = []
+    @Published private(set) var listPhase: ListPhase = .loading
     @Published var session: OutingSession?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
     @Published var errorText: String?
     @Published var loading = false
+    /// The device has a network path (NWPathMonitor).
+    @Published private(set) var online = true
+    /// Launch splash is still up.
+    @Published private(set) var launching = true
+    /// Whether this identity has a recovery code saved (GET /me), nil = unknown.
+    @Published private(set) var recovery: OutingsAPI.RecoveryStatus?
+    /// After a first join: offer notifications with our explainer (never at launch).
+    @Published var offerNotifications = false
 
     let api: OutingsAPI
     let location: LocationSharer
+    let push: PushRegistrar
     let isDemo: Bool
+    private let monitor = NWPathMonitor()
+    private var observers: [NSObjectProtocol] = []
+    private var pushSink: AnyCancellable?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let api = OutingsAPI(tokenProvider: { IdentityStore.load()?.token })
         self.api = api
         location = LocationSharer()
+        push = PushRegistrar(backend: api)
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey] { UserDefaults.standard.removeObject(forKey: k) }
+            TripLogStore.forgetAll()
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] {
+                UserDefaults.standard.removeObject(forKey: k)
+            }
         }
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()
@@ -34,44 +64,89 @@ final class AppModel: ObservableObject {
             identity = IdentityStore.load()
         }
         api.onUnauthorized = { [weak self] in
-            Task { @MainActor in self?.signOut() }
+            Task { @MainActor in self?.signedOutByServer() }
         }
-        if isDemo { openDemo() } else { resumeActiveShare() }
+        let forcedOffline = arguments.contains("-SaryOffline")
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.online = forcedOffline ? false : path.status == .satisfied }
+        }
+        if forcedOffline { online = false }
+        monitor.start(queue: DispatchQueue(label: "sary.net"))
+        /* Screens observe the model; the registrar's state is part of it. */
+        pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
+            guard let id = n.object as? String else { return }
+            Task { @MainActor in self?.open(id) }
+        })
+        #if DEBUG
+        if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
+        #endif
+        if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        Task {
+            /* A short branded beat, never a wait: the list loads behind it. */
+            try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
+            launching = false
+        }
+        Task {
+            await push.refresh(signedIn: identity != nil)
+            #if DEBUG
+            if isDemo, push.state != .denied, push.state != .notAsked, push.state != .off { push.debugShow(.serverNotReady) }
+            #endif
+        }
     }
 
-    func createIdentity(name: String, phone: String) async {
+    /// DEBUG screenshot hook: `-SaryScreen <name>` opens one screen with demo data.
+    @Published var debugScreen: String?
+
+    var signedIn: Bool { identity != nil }
+
+    // MARK: identity
+
+    func createIdentity(name: String, phone: String, avatar: String? = nil) async -> Bool {
         guard let clean = ServerRules.cleanText(name, max: ServerRules.nameMax) else {
             errorText = OutingAPIError(code: "invalid_name", status: 400).arabic
-            return
+            return false
         }
         let p = phone.trimmingCharacters(in: .whitespaces)
         if !p.isEmpty && ServerRules.normalizePhone(p) == nil {
             errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
-            return
+            return false
         }
         loading = true
         defer { loading = false }
         do {
-            var id = try await api.createIdentity(name: clean)
+            var id = try await api.createIdentity(name: clean, avatar: avatar)
             IdentityStore.save(id)
             if let e164 = ServerRules.normalizePhone(p) {
                 id.user = try await api.updateProfile(phone: e164)
                 IdentityStore.save(id)
             }
             identity = id
-            await refresh()
+            recovery = .init(active: false, created_at: nil)
+            Task { await refresh() }
+            return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return false
     }
 
-    func updateProfile(name: String, phone: String) async -> Bool {
-        let p = phone.trimmingCharacters(in: .whitespaces)
-        let e164 = p.isEmpty ? "" : ServerRules.normalizePhone(p)
-        guard let e164 else {
-            errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
+    /// nil arguments are left unchanged; `""` clears phone / photo.
+    func updateProfile(name: String? = nil, phone: String? = nil, avatar: String? = nil) async -> Bool {
+        var e164: String?
+        if let phone {
+            let p = phone.trimmingCharacters(in: .whitespaces)
+            e164 = p.isEmpty ? "" : ServerRules.normalizePhone(p)
+            if e164 == nil {
+                errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
+                return false
+            }
+        }
+        if let name, ServerRules.cleanText(name, max: ServerRules.nameMax) == nil {
+            errorText = OutingAPIError(code: "invalid_name", status: 400).arabic
             return false
         }
+        if isDemo { return true }
         do {
-            let u = try await api.updateProfile(name: name, phone: e164)
+            let u = try await api.updateProfile(name: name, phone: e164, avatar: avatar)
             if var id = identity {
                 id.user = u
                 IdentityStore.save(id)
@@ -82,23 +157,103 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    func signOut() {
+    /// GET /me: refresh my profile and whether a recovery code is saved.
+    func loadMe() async {
+        guard identity != nil, !isDemo else { return }
+        if let r = try? await api.me() {
+            recovery = r.recovery
+            if var id = identity, id.user != r.user {
+                id.user = r.user
+                IdentityStore.save(id)
+                identity = id
+            }
+        }
+    }
+
+    /// «احفظ رمز الاسترجاع»: a new code (replaces the old one), shown once.
+    func makeRecoveryCode() async -> OutingsAPI.RecoveryCode? {
+        if isDemo { return .init(code: "7K3Q-M9XD-2HPA-VR6T-WC4N-8B1F-ZJ5E", created_at: ISODate.string(Date())) }
+        do {
+            let c = try await api.createRecoveryCode()
+            recovery = .init(active: true, created_at: c.created_at)
+            return c
+        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return nil
+    }
+
+    /// Restore on this device with a code from the old one. Returns the restored name.
+    func recover(code: String) async throws -> String {
+        let id = try await api.recover(code: code)
+        IdentityStore.save(id)
+        identity = id
+        recovery = .init(active: false, created_at: nil)
+        OnboardingProgress.done = true
+        Task { await refresh() }
+        Task { await push.refresh(signedIn: true) }
+        return id.user.display_name
+    }
+
+    /// «تسجيل الخروج من هذا الجهاز»: stop sharing, remove this device's push token, forget the identity here.
+    func signOut() async {
+        await push.unregister()
+        signedOutLocally()
+    }
+
+    /// «امسح بياناتي»: everything the API lets us remove — phone and photo on the server,
+    /// my shared trip summaries, every current outing (which deletes my position there) —
+    /// then the identity on this device. Returns how many outings I left.
+    func wipeMyData() async -> Int {
+        guard identity != nil else { return 0 }
+        if isDemo { return current.count }
+        _ = try? await api.updateProfile(phone: "", avatar: "")
+        await refresh()
+        let me = identity?.user.id
+        for o in history where o.summaries?.contains(where: { $0.user_id == me }) == true {
+            try? await api.withdrawSummary(o.id)
+        }
+        var left = 0
+        for o in current {
+            if (try? await api.leave(o.id)) != nil { left += 1 }
+        }
+        await signOut()
+        return left
+    }
+
+    private func signedOutByServer() {
+        /* The token no longer works (restored on another device): nothing to tell the server. */
+        UserDefaults.standard.removeObject(forKey: PushRegistrar.tokenKey)
+        signedOutLocally()
+        errorText = OutingAPIError(code: "unauthorized", status: 401).arabic
+    }
+
+    private func signedOutLocally() {
         if let u = identity?.user.id { ShareMemory.setActiveShare(user: u, outing: nil) }
         session?.close()
         session = nil
         IdentityStore.save(nil)
+        TripLogStore.forgetAll()
         identity = nil
+        recovery = nil
         current = []
         history = []
+        listPhase = .loading
+        OnboardingProgress.done = false
     }
 
+    // MARK: outings
+
     func refresh() async {
-        guard identity != nil, !isDemo else { return }
+        guard identity != nil, !isDemo else { if isDemo { listPhase = .loaded }; return }
+        if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()
             current = r.current
             history = r.history
-        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+            listPhase = .loaded
+        } catch let e as OutingAPIError {
+            /* Keep what we have on screen; only an empty list turns into an error page. */
+            if current.isEmpty && history.isEmpty { listPhase = .failed(e.arabic) } else { listPhase = .loaded }
+        } catch {}
     }
 
     func createOuting(name: String) async -> String? {
@@ -118,13 +273,52 @@ final class AppModel: ObservableObject {
 
     func preview(_ token: String) async throws -> InvitePreview { try await api.preview(token: token) }
 
-    func join(_ token: String) async {
+    func join(_ token: String) async -> Bool {
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
             await refresh()
             open(r.outing_id)
+            if !push.explained { offerNotifications = true }
+            return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return false
+    }
+
+    /// The outing as the server has it now (details, history summary).
+    func snapshot(_ id: String) async throws -> OutingSnapshot {
+        if isDemo { return DemoData.endedSnapshot(id: id) }
+        return try await api.get(id)
+    }
+
+    func leave(_ id: String) async -> Bool {
+        if isDemo { return true }
+        do {
+            try await api.leave(id)
+            if session?.id == id { closeSession() }
+            await refresh()
+            return true
+        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return false
+    }
+
+    /// My own totals for this outing, from this device (nil when I never shared here).
+    func myTrip(_ id: String) -> TripTotals? {
+        if isDemo { return TripTotals(distanceM: 48_300, durationS: 3 * 3600 + 12 * 60, movingS: 2 * 3600 + 5 * 60) }
+        return TripLogStore.load(id)?.totals
+    }
+
+    func shareSummary(_ id: String) async -> TripShare? {
+        guard let t = myTrip(id) else { return nil }
+        if isDemo { return TripShare(user_id: DemoData.meId, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
+        do { return try await api.shareSummary(id, t) } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return nil
+    }
+
+    func withdrawSummary(_ id: String) async -> Bool {
+        if isDemo { return true }
+        do { try await api.withdrawSummary(id); return true } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        return false
     }
 
     func open(_ outingId: String) {
@@ -138,7 +332,6 @@ final class AppModel: ObservableObject {
         let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
         session = s
         s.open()
-        Notifier.requestPermission()
     }
 
     func closeSession() {
@@ -153,7 +346,10 @@ final class AppModel: ObservableObject {
 
     func foreground(_ active: Bool) {
         session?.foreground(active)
-        if active { Task { await refresh() } }
+        if active {
+            Task { await refresh() }
+            Task { await push.refresh(signedIn: signedIn && !isDemo) }
+        }
     }
 
     /// The app restarted mid-share: pick the share back up (this identity, this outing, consent given; foreground only).
@@ -163,9 +359,19 @@ final class AppModel: ObservableObject {
         session?.resumeIfPreviouslySharing()
     }
 
+    private func seedDemoLists() {
+        current = [
+            OutingSummary(id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, role: "owner", my_status: "active", member_count: 4, created_at: nil, started_at: ISODate.string(Date().addingTimeInterval(-3000)), ended_at: nil),
+            OutingSummary(id: "demo-paused", name: "مشوار العارض", status: .paused, role: "member", my_status: "active", member_count: 3, created_at: nil, started_at: nil, ended_at: nil),
+            OutingSummary(id: "demo-new", name: "كشتة الخميس", status: .created, role: "owner", my_status: "active", member_count: 1, created_at: ISODate.string(Date().addingTimeInterval(-600)), started_at: nil, ended_at: nil),
+        ]
+        history = [OutingSummary(id: "demo-old", name: "كشتة نفود الثويرات", status: .ended, role: "member", my_status: "active", member_count: 6, created_at: nil,
+                                 started_at: ISODate.string(Date().addingTimeInterval(-86400 * 3 - 4 * 3600)), ended_at: ISODate.string(Date().addingTimeInterval(-86400 * 3)))]
+        listPhase = .loaded
+    }
+
     private func openDemo() {
-        current = [OutingSummary(id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, role: "owner", my_status: "active", member_count: 4, created_at: nil, started_at: nil, ended_at: nil)]
-        history = [OutingSummary(id: "demo-old", name: "كشتة نفود الثويرات", status: .ended, role: "member", my_status: "active", member_count: 6, created_at: nil, started_at: nil, ended_at: nil)]
+        seedDemoLists()
         openDemoSession()
     }
 
@@ -174,6 +380,15 @@ final class AppModel: ObservableObject {
         let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
         session = s
         s.open()
+    }
+}
+
+/// Onboarding finished on this device (name saved AND the location step seen).
+enum OnboardingProgress {
+    static let key = "sary.onboarding.done.v1"
+    static var done: Bool {
+        get { UserDefaults.standard.bool(forKey: key) }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 }
 
@@ -212,6 +427,31 @@ enum DemoData {
             server_now: ISODate.string(now)
         )
         return OutingView(snap, deviceNow: now)
+    }
+}
+
+extension DemoData {
+    /// An ended outing with shared summaries, for the history / trip summary screens.
+    static func endedSnapshot(id: String, now: Date = Date()) -> OutingSnapshot {
+        if id == outingId { return view(now: now).snapshot }
+        func ago(_ s: Double) -> String { ISODate.string(now.addingTimeInterval(-s)) }
+        let ended = id == "demo-old"
+        let names = ["أنا", "أبو فهد", "سلطان", "نورة", "سعد", "ريم"]
+        let members = names.enumerated().map { i, n in
+            Member(user_id: i == 0 ? meId : "00000000-0000-4000-8000-0000000002\(i)", display_name: n, phone: nil, role: i == 1 ? "owner" : "member", sharing: true,
+                   joined_at: ago(86400 * 3 + 5 * 3600), online: false, last_seen_at: ago(86400 * 3))
+        }
+        return OutingSnapshot(
+            outing: OutingInfo(id: id, name: ended ? "كشتة نفود الثويرات" : (id == "demo-paused" ? "مشوار العارض" : "كشتة الخميس"), status: ended ? .ended : (id == "demo-paused" ? .paused : .created),
+                               owner_id: members[1].user_id, created_at: ago(86400 * 3 + 6 * 3600), started_at: ended ? ago(86400 * 3 + 4 * 3600) : nil, ended_at: ended ? ago(86400 * 3) : nil),
+            me: SnapshotMe(user_id: meId, role: "member", sharing: true),
+            members: Array(members.prefix(ended ? 6 : 3)), positions: [], invite: InviteState(active: !ended, expires_at: nil), server_now: ISODate.string(now),
+            summaries: ended ? [
+                TripShare(user_id: members[1].user_id, display_name: "أبو فهد", distance_m: 61_200, duration_s: 14_100, moving_s: 9_300),
+                TripShare(user_id: members[2].user_id, display_name: "سلطان", distance_m: 57_800, duration_s: 13_900, moving_s: 8_800),
+                TripShare(user_id: members[4].user_id, display_name: "سعد", distance_m: 44_100, duration_s: 12_000, moving_s: 7_200),
+            ] : nil
+        )
     }
 }
 

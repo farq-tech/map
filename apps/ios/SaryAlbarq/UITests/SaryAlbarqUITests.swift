@@ -12,6 +12,9 @@ final class SaryAlbarqUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState"]
         app.launch()
+        XCTAssertTrue(app.buttons["onboarding.begin"].waitForExistence(timeout: 10), "the one-line idea first")
+        XCTAssertTrue(app.buttons["onboarding.restore"].exists, "restore with a recovery code, no passwords")
+        app.buttons["onboarding.begin"].tap()
         XCTAssertTrue(app.textFields["onboarding.name"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["onboarding.start"].isEnabled, "no name, no start")
         app.textFields["onboarding.name"].tap()

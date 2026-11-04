@@ -16,6 +16,8 @@ enum LiveModal: Identifiable, Equatable {
     case stations
     case consent
     case rallyLabel(LngLat, moving: Bool)
+    /// Our explainer before the notification permission prompt.
+    case notify
 
     var id: String {
         switch self {
@@ -24,6 +26,7 @@ enum LiveModal: Identifiable, Equatable {
         case .stations: return "stations"
         case .consent: return "consent"
         case .rallyLabel: return "rally"
+        case .notify: return "notify"
         }
     }
 }
@@ -40,6 +43,10 @@ final class LiveOutingController: ObservableObject {
     var onExit: () -> Void = {}
     /// «حفظ» my number (wired to the profile endpoint by the host).
     var savePhone: (String?) -> Void = { _ in }
+    /// The in-app notifications switch (registers / unregisters this device for push).
+    var setPush: (Bool) -> Void = { _ in }
+    /// The notification explainer was already shown on this device.
+    var pushExplained: () -> Bool = { true }
 
     @Published var sheetDetent: SheetDetentUI = .peek
     @Published var selectedTab: LiveTabUI = .participants
@@ -307,8 +314,10 @@ final class LiveOutingController: ObservableObject {
             setNightMode: { [weak self] m in self?.appearance.prefs.nightMode = SaryTriMode(m) },
             saveMyPhone: { [weak self] p in self?.savePhone(p) },
             setNotifications: { [weak self] on in
-                self?.notificationsOn = on
-                if on { Notifier.requestPermission() }
+                guard let self else { return }
+                self.notificationsOn = on
+                /* Never the system prompt directly: our explainer first, once. */
+                if on && !self.pushExplained() { self.modal = .notify } else { self.setPush(on) }
             },
             setBatterySharing: { [weak self] on in self?.session.batterySharing = on },
             pauseOrResumeOuting: { [weak self] in

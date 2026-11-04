@@ -1,0 +1,247 @@
+import SwiftUI
+import UIKit
+
+// Shared building blocks for the full-screen pages (everything that is not the
+// live map). They only compose design-system tokens and components.
+
+/// A page: themed background, a header (title, optional back/close and trailing
+/// buttons) and scrolling content with the design system's spacing.
+struct SaryPage<Content: View, Trailing: View>: View {
+    var title: String
+    var subtitle: String? = nil
+    var back: (() -> Void)? = nil
+    var close: (() -> Void)? = nil
+    var scrolls = true
+    @ViewBuilder var trailing: Trailing
+    @ViewBuilder var content: Content
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: theme.space(.s)) {
+                if let back {
+                    SaryIconButton(systemImage: SaryIcon.back, label: "رجوع", id: "page-back", action: back)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .saryText(.title, weight: .bold)
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                        .accessibilityAddTraits(.isHeader)
+                    if let subtitle {
+                        Text(subtitle).saryText(.subhead).foregroundStyle(p.textSecondary).lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+                trailing
+                if let close {
+                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "page-close", action: close)
+                }
+            }
+            .padding(.horizontal, theme.space(.l))
+            .padding(.top, theme.space(.m))
+            .padding(.bottom, theme.space(.s))
+            if scrolls {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: theme.space(.xl)) { content }
+                        .padding(.horizontal, theme.space(.l))
+                        .padding(.top, theme.space(.s))
+                        .padding(.bottom, theme.space(.xxl))
+                        .frame(maxWidth: 640)
+                        .frame(maxWidth: .infinity)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            } else {
+                content
+            }
+        }
+        .background(p.background.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+extension SaryPage where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil, back: (() -> Void)? = nil, close: (() -> Void)? = nil, scrolls: Bool = true, @ViewBuilder content: () -> Content) {
+        self.init(title: title, subtitle: subtitle, back: back, close: close, scrolls: scrolls, trailing: { EmptyView() }, content: content)
+    }
+}
+
+/// A tappable settings-style row: icon, title, optional detail, chevron.
+struct SaryNavRow: View {
+    var title: String
+    var detail: String? = nil
+    var systemImage: String
+    var tint: Color? = nil
+    var id: String? = nil
+    var destructive = false
+    var action: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        Button(action: action) {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: systemImage, color: destructive ? p.emergency : tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).saryText(.body, weight: .medium).foregroundStyle(destructive ? p.emergencyText : p.textPrimary)
+                    if let detail {
+                        Text(detail).saryText(.footnote).foregroundStyle(p.textSecondary).multilineTextAlignment(.leading)
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(p.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: theme.minTarget + 4)
+            .padding(.vertical, theme.space(.xs))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryRowPressStyle())
+        .modifier(OptionalIdentifier(id: id))
+    }
+}
+
+/// «جارية» / «متوقفة مؤقتًا» / «لم تبدأ» / «انتهت», in words and colour.
+struct SaryOutingStatusPill: View {
+    var status: OutingStatus
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let (text, icon, color): (String, String, Color) = {
+            switch status {
+            case .active: return ("جارية", "dot.radiowaves.left.and.right", p.liveText)
+            case .paused: return ("متوقفة مؤقتًا", SaryIcon.pause, p.warningText)
+            case .created: return ("لم تبدأ", "clock", p.textSecondary)
+            case .ended: return ("انتهت", "flag.checkered", p.textTertiary)
+            }
+        }()
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 10, weight: .bold))
+            Text(text).saryText(.caption, weight: .bold).lineLimit(1)
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(color.opacity(0.14)))
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Grey strip shown when the phone has no network: what still works, honestly.
+struct SaryOfflineStrip: View {
+    var text = "بلا إنترنت — نعرض آخر ما وصلنا، ونحدّث أول ما يرجع الاتصال."
+    var body: some View {
+        SaryBanner(text: text, tone: .warning, systemImage: SaryIcon.offline)
+            .accessibilityIdentifier("offline-banner")
+    }
+}
+
+/// A full-screen modal dialog over a scrim, from `SaryDialog`.
+struct SaryDialogModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    var systemImage: String
+    var title: String
+    var message: String
+    var confirmTitle: String
+    var confirmKind: SaryButtonKind = .destructive
+    var busy = false
+    var confirm: () -> Void
+    @Environment(\.sary) private var theme
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if isPresented {
+                ZStack {
+                    theme.palette.scrim.ignoresSafeArea()
+                        .onTapGesture { if !busy { isPresented = false } }
+                    SaryDialog(systemImage: systemImage, title: title, message: message, confirmTitle: confirmTitle,
+                               confirmKind: confirmKind, busy: busy, confirm: confirm, cancel: { isPresented = false })
+                        .padding(theme.space(.l))
+                }
+                .transition(.opacity)
+                .accessibilityIdentifier("dialog")
+            }
+        }
+        .animation(theme.animation(.smooth), value: isPresented)
+    }
+}
+
+extension View {
+    func saryDialog(_ isPresented: Binding<Bool>, systemImage: String, title: String, message: String, confirmTitle: String,
+                    kind: SaryButtonKind = .destructive, busy: Bool = false, confirm: @escaping () -> Void) -> some View {
+        modifier(SaryDialogModifier(isPresented: isPresented, systemImage: systemImage, title: title, message: message,
+                                    confirmTitle: confirmTitle, confirmKind: kind, busy: busy, confirm: confirm))
+    }
+
+    /// Presented screens re-apply the theme, RTL and the Arabic locale (sheets do not reliably inherit them).
+    func saryPresented(_ appearance: AppearanceSettings) -> some View {
+        rtl().saryAppearance(appearance)
+    }
+}
+
+/// A short message that slides in at the bottom and leaves on its own.
+struct SaryToast: View {
+    var text: String
+    @Environment(\.sary) private var theme
+    var body: some View {
+        Text(text)
+            .saryText(.callout, weight: .bold)
+            .foregroundStyle(theme.palette.textPrimary)
+            .padding(.horizontal, theme.space(.l))
+            .padding(.vertical, theme.space(.s))
+            .background(Capsule().fill(theme.palette.elevated))
+            .overlay(Capsule().stroke(theme.palette.stroke, lineWidth: 1))
+            .saryShadow(.overlay, theme)
+            .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// Profile photos travel as a small JPEG data URL (the server keeps ≤ 24 000 chars).
+enum AvatarCodec {
+    static let maxChars = 24_000
+
+    /// Square-crop, shrink and compress until it fits.
+    static func dataURL(from image: UIImage) -> String? {
+        let side = min(image.size.width, image.size.height)
+        guard side > 0 else { return nil }
+        for (px, q) in [(192.0, 0.7), (160.0, 0.6), (128.0, 0.55), (96.0, 0.5), (72.0, 0.45)] as [(CGFloat, CGFloat)] {
+            let fmt = UIGraphicsImageRendererFormat()
+            fmt.scale = 1
+            let r = UIGraphicsImageRenderer(size: CGSize(width: px, height: px), format: fmt)
+            let img = r.image { _ in
+                let scale = px / side
+                let w = image.size.width * scale, h = image.size.height * scale
+                image.draw(in: CGRect(x: (px - w) / 2, y: (px - h) / 2, width: w, height: h))
+            }
+            if let d = img.jpegData(compressionQuality: q) {
+                let s = "data:image/jpeg;base64," + d.base64EncodedString()
+                if s.count <= maxChars { return s }
+            }
+        }
+        return nil
+    }
+
+    static func image(from dataURL: String?) -> UIImage? {
+        guard let s = dataURL, let comma = s.firstIndex(of: ","), s.hasPrefix("data:image/") else { return nil }
+        return Data(base64Encoded: String(s[s.index(after: comma)...])).flatMap(UIImage.init(data:))
+    }
+}
+
+extension OutingSummary {
+    /// «بدأت قبل ٢ س» / «انتهت قبل ٣ ي» / «أُنشئت قبل ٥ د».
+    func timeLabel(now: Date = Date()) -> String? {
+        switch status {
+        case .ended: return ISODate.parse(ended_at).map { "انتهت " + SaryFormat.elapsed(since: $0, now: now) }
+        case .active, .paused: return ISODate.parse(started_at).map { "بدأت " + SaryFormat.elapsed(since: $0, now: now) }
+        case .created: return ISODate.parse(created_at).map { "أُنشئت " + SaryFormat.elapsed(since: $0, now: now) }
+        }
+    }
+
+    var participantsLabel: String { "\(SaryFormat.number(member_count)) \(member_count == 1 ? "مشارك" : (member_count == 2 ? "مشاركان" : "مشاركين"))" }
+}

@@ -173,3 +173,34 @@ final class SessionPrivacyTests: XCTestCase {
         XCTAssertFalse(s.wantsToShare, "switched off elsewhere: the intent ends too")
     }
 }
+
+/// «ملخص رحلتي»: totals only, built on the device from my own fixes.
+final class TripLogTests: XCTestCase {
+    func testAccumulatesDistanceAndMovingTimeIgnoringJitterAndJumps() {
+        var log = TripLog()
+        let t0 = 1_000_000.0
+        log.add(lat: 24.7, lng: 46.6, accuracy: 5, speed: 0, atMs: t0)
+        XCTAssertNil(log.totals, "one fix is not a trip")
+        /* ~111 m north in 10 s, driving. */
+        log.add(lat: 24.701, lng: 46.6, accuracy: 5, speed: 11, atMs: t0 + 10_000)
+        /* parked jitter: 3 m, not distance, not moving. */
+        log.add(lat: 24.70103, lng: 46.6, accuracy: 5, speed: 0, atMs: t0 + 20_000)
+        /* a 5 km jump in 2 s: a GPS glitch. */
+        log.add(lat: 24.75, lng: 46.6, accuracy: 5, speed: nil, atMs: t0 + 22_000)
+        /* a bad fix is ignored. */
+        log.add(lat: 24.9, lng: 46.6, accuracy: 300, speed: nil, atMs: t0 + 23_000)
+        let t = log.totals!
+        XCTAssertEqual(Double(t.distanceM), 111, accuracy: 3)
+        XCTAssertEqual(t.durationS, 22)
+        XCTAssertEqual(t.movingS, 10)
+    }
+
+    func testStoreIsPerOutingAndForgettable() {
+        let d = UserDefaults(suiteName: "trip-test-\(UUID().uuidString)")!
+        TripLogStore.update("a", defaults: d) { $0.add(lat: 1, lng: 1, accuracy: 5, speed: 0, atMs: 1) }
+        XCTAssertNotNil(TripLogStore.load("a", defaults: d))
+        XCTAssertNil(TripLogStore.load("b", defaults: d))
+        TripLogStore.forgetAll(defaults: d)
+        XCTAssertNil(TripLogStore.load("a", defaults: d))
+    }
+}

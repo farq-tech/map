@@ -17,6 +17,8 @@ struct SaryStateView: View {
     var kind: SaryStateKind
     var actionTitle: String?
     var actionID: String = "state-action"
+    /// The action's symbol; retry by default, nil for none (e.g. «حسنًا»).
+    var actionIcon: String? = SaryIcon.retry
     var action: () -> Void = {}
     @Environment(\.sary) private var theme
 
@@ -39,7 +41,7 @@ struct SaryStateView: View {
                 texts("بلا إنترنت", message ?? "نعرض آخر ما وصلنا، ونحدّث أول ما يرجع الاتصال")
             }
             if let actionTitle, !kind.isLoading {
-                Button(action: action) { SaryButtonLabel(title: actionTitle, systemImage: SaryIcon.retry) }
+                Button(action: action) { SaryButtonLabel(title: actionTitle, systemImage: actionIcon) }
                     .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                     .accessibilityIdentifier(actionID)
                     .padding(.top, theme.space(.xs))

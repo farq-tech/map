@@ -144,6 +144,19 @@ struct OutingSnapshot: Codable, Equatable {
     var invite: InviteState?
     var server_now: String
     var voice_clips: [VoiceClip]?
+    /// Totals members chose to share once the outing ended (never points).
+    var summaries: [TripShare]?
+}
+
+/// One member's shared trip totals (`PUT /:id/summary`).
+struct TripShare: Codable, Equatable, Identifiable {
+    var user_id: String
+    var display_name: String
+    var distance_m: Double
+    var duration_s: Double
+    var moving_s: Double
+    var shared_at: String?
+    var id: String { user_id }
 }
 
 struct OutingSummary: Codable, Equatable, Identifiable {
@@ -156,6 +169,7 @@ struct OutingSummary: Codable, Equatable, Identifiable {
     var created_at: String?
     var started_at: String?
     var ended_at: String?
+    var summaries: [TripShare]? = nil
 }
 
 struct InvitePreview: Codable, Equatable {

@@ -86,6 +86,8 @@ struct LiveSheet: View {
         case let .rallyLabel(p, moving):
             RallyLabelView(moving: moving, save: { controller.saveRally(p, label: $0) }, cancel: { controller.modal = nil })
                 .presentationDetents([.medium])
+        case .notify:
+            NotifyExplainerSheet(done: { controller.modal = nil })
         }
     }
 }

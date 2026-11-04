@@ -103,3 +103,33 @@ maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 - Real screenshots: `docs/live-shots/`. DEBUG launch overrides:
   `-SaryScheme light|dark`, `-SaryDrive 1|0`, `-SaryNight 1|0`, `-SaryFallback 1`;
   `-demo -demoCrowd` adds three friends parked together (the declutter case).
+
+## The other screens (wired)
+
+`Sources/Screens/` — every page outside the live map, built only from the
+components above (`SaryPage` header + scroll, `SarySection`, `SaryNavRow`,
+`SaryTextField`, `SaryStateView`, `SaryDialog` via `.saryDialog`):
+
+| Screen | File | Notes |
+| --- | --- | --- |
+| Splash | `OnboardingFlow.swift` (`SplashView`) | same colour as the launch screen, app mark drawn in code (`SaryMark`) |
+| Onboarding | `OnboardingFlow.swift` | idea → name ≤ 40 + optional photo + optional Saudi mobile → location explainer, THEN the system prompt |
+| Restore / recovery code | `RecoveryScreens.swift` | no passwords: `POST /me/recovery` (shown once, QR) and `POST /me/recover` (typed or scanned) |
+| «طلعاتي» | `HomeView.swift` | active / paused / not started / ended, empty, loading skeleton, offline strip, error + retry |
+| New outing, join by link, invite preview | `OutingSheets.swift` | invite: valid / expired / invalid / retryable error |
+| Outing details, trip summary, history | `OutingDetailsView.swift` | summary: shared totals from `GET /:id`, my totals from this device (`TripLog`), «شارك ملخصي» = `PUT /:id/summary` |
+| Profile, settings, appearance, privacy, notifications, about | `SettingsScreens.swift` | privacy: share precision, battery, what is sent and when, «امسح بياناتي» (what the API allows) |
+
+Push: `App/PushRegistrar.swift` (unit-tested with a fake server) registers the
+APNs token at `POST /api/outings/push/apns` (sandbox in Debug, production in
+Release), replaces it when Apple rotates it, removes it on «إيقاف» and sign-out,
+and treats `503 apns_disabled` as «داخل التطبيق فقط حاليًا», not an error. The
+system prompt only follows our explainer (after a first join, or from settings).
+A tapped notification opens its outing (`outing_id` / `url`).
+
+Screenshots: `scripts/app-shots.sh <udid> <name> -demo -SaryScreen <screen> -SaryScheme light|dark`
+(`-SaryOffline` forces the offline state). Screens: `splash onboarding onboarding-profile
+onboarding-location recovery-restore recovery-code recovery-code-shown home details summary
+history profile settings appearance privacy notifications offline-maps about create join
+invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave dialog-wipe`.
+Shots: `docs/app-shots/`.

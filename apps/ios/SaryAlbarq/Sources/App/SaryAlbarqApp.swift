@@ -11,6 +11,7 @@ struct SaryAlbarqApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .onAppear { AppDelegate.model = model }
                 .environmentObject(model)
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)
@@ -27,6 +28,35 @@ struct SaryAlbarqApp: App {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// The app's model, for the push callbacks UIKit delivers here.
+    @MainActor static weak var model: AppModel?
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in
+            guard let m = Self.model, !m.isDemo else { return }
+            await m.push.didReceive(deviceToken: deviceToken, signedIn: m.signedIn)
+        }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Task { @MainActor in Self.model?.push.didFail() }
+    }
+
+    /// A tapped notification (push or local) opens its outing.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        let id = PushRegistrar.outingId(from: info) ?? Self.localOutingId(response.notification.request)
+        guard let id else { return }
+        await MainActor.run { NotificationCenter.default.post(name: .saryOpenOuting, object: id) }
+    }
+
+    /// Local notifications carry the outing in their thread id ("outing-<id>").
+    nonisolated static func localOutingId(_ r: UNNotificationRequest) -> String? {
+        let t = r.content.threadIdentifier
+        for p in ["sary-outing-", "outing-"] where t.hasPrefix(p) { return String(t.dropFirst(p.count)) }
+        return nil
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
