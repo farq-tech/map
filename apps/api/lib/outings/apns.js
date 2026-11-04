@@ -23,12 +23,21 @@
  * Who receives a push is decided at send time exactly as for web push: active
  * members of an open outing, never the sender, and members looking at the
  * outing right now only for an SOS (`always`).
+ *
+ * Push to Talk («قناة الطلعة», lib/outings/ptt.js): iOS's PushToTalk framework
+ * hands the app an EPHEMERAL token per joined channel (one channel = one
+ * outing). When someone takes the floor, members whose app is not on screen get
+ * a `pushtotalk` push (apns-push-type: pushtotalk, apns-topic: <bundle>.voip-ptt,
+ * priority 10, expiration 0 — Apple: "Creating a Push to Talk app") whose
+ * `activeSpeaker` the app hands to the system as the active remote participant;
+ * iOS then wakes the app to play the live audio. Same HTTP/2 sender, same key.
  */
 
 const http2 = require('http2');
 const crypto = require('crypto');
 
 const MAX_PER_USER = 5;
+const PTT_MAX_PER_USER_OUTING = 3;
 const SEND_CONCURRENCY = 8;
 const JWT_MAX_AGE_MS = 50 * 60_000;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -150,6 +159,41 @@ function apnsRequestFor(payload = {}, outingId, { now = Date.now(), bundleId } =
   };
   if (bundleId) headers['apns-topic'] = bundleId;
   return { headers, body };
+}
+
+/**
+ * A Push to Talk wake-up: "<name> is talking on the outing channel". No alert,
+ * no sound (the system plays its own PTT chime); expiration 0 so a late push is
+ * dropped rather than delivered after the talker stopped. Payload keys beyond
+ * `activeSpeaker` (Apple's example key) are ours, read by the app.
+ */
+function pttRequestFor({ outingId, talkerId, name, burst }, { bundleId } = {}) {
+  const body = JSON.stringify({
+    aps: {},
+    activeSpeaker: utf8Cut(String(name || 'عضو'), 120),
+    v: 1,
+    type: 'ptt_talker',
+    outing_id: outingId,
+    user_id: talkerId,
+    burst: Number.isInteger(burst) ? burst : null,
+  });
+  const headers = {
+    'apns-push-type': 'pushtotalk',
+    'apns-priority': '10',
+    'apns-expiration': '0',
+  };
+  if (bundleId) headers['apns-topic'] = `${bundleId}.voip-ptt`;
+  return { headers, body };
+}
+
+/** { token, environment } for a PTT channel token → clean row, or { error }. */
+function parsePttRegistration(raw) {
+  if (!raw || typeof raw !== 'object') return { error: 'invalid_token' };
+  const token = typeof raw.token === 'string' ? raw.token.trim().toLowerCase() : '';
+  if (!TOKEN_RE.test(token)) return { error: 'invalid_token' };
+  const environment = typeof raw.environment === 'string' ? raw.environment.trim().toLowerCase() : '';
+  if (!ENVIRONMENTS.has(environment)) return { error: 'invalid_environment' };
+  return { token, environment };
 }
 
 /**
@@ -374,11 +418,99 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
     return result;
   }
 
+  /* ---- Push to Talk channel tokens (one per device per outing) ---- */
+
+  async function registerPtt(user, outingId, raw) {
+    if (!enabled) return { ok: false, error: 'apns_disabled' };
+    const reg = parsePttRegistration(raw);
+    if (reg.error) return { ok: false, error: reg.error };
+    await q(
+      `INSERT INTO sary.ptt_tokens (user_id, outing_id, token, environment, bundle_id) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, outing_id = EXCLUDED.outing_id,
+         environment = EXCLUDED.environment, bundle_id = EXCLUDED.bundle_id, updated_at = now()`,
+      [user.id, outingId, reg.token, reg.environment, config.bundleId],
+    );
+    /* A few devices per person per outing; the oldest token goes. */
+    await q(
+      `DELETE FROM sary.ptt_tokens WHERE id IN (
+         SELECT id FROM sary.ptt_tokens WHERE user_id = $1 AND outing_id = $2
+         ORDER BY updated_at DESC, created_at DESC OFFSET $3)`,
+      [user.id, outingId, PTT_MAX_PER_USER_OUTING],
+    );
+    return { ok: true };
+  }
+
+  /** Left the channel / muted it: this token (or every token of mine for this outing). */
+  async function unregisterPtt(user, outingId, rawToken) {
+    const token = typeof rawToken === 'string' ? rawToken.trim().toLowerCase() : '';
+    if (rawToken != null && rawToken !== '' && !TOKEN_RE.test(token)) return { removed: 0 };
+    const rows = token
+      ? await q(`DELETE FROM sary.ptt_tokens WHERE user_id = $1 AND outing_id = $2 AND token = $3 RETURNING id`, [user.id, outingId, token])
+      : await q(`DELETE FROM sary.ptt_tokens WHERE user_id = $1 AND outing_id = $2 RETURNING id`, [user.id, outingId]);
+    return { removed: rows.length };
+  }
+
+  /**
+   * Someone took the floor: wake the other members' phones. `skipUsers` are
+   * the ones already listening live (a foreground socket in the channel).
+   * Only active members of a non-ended outing; never the talker. Never throws.
+   */
+  async function notifyPtt(outingId, talkerId, { name, burst, skipUsers = new Set() } = {}) {
+    const result = { sent: 0, removed: 0, failed: 0, skipped: 0 };
+    if (!enabled || !outingId) return result;
+    try {
+      const rows = await q(
+        `SELECT t.id, t.user_id, t.token, t.environment
+         FROM sary.ptt_tokens t
+         JOIN sary.outing_members m ON m.user_id = t.user_id AND m.outing_id = t.outing_id
+         JOIN sary.outings o ON o.id = t.outing_id
+         WHERE t.outing_id = $1 AND m.status = 'active' AND o.status <> 'ended'
+           AND t.bundle_id = $3 AND t.user_id <> $2::uuid`,
+        [outingId, talkerId, config.bundleId],
+      );
+      const targets = rows.filter((r) => {
+        if (skipUsers.has(r.user_id)) {
+          result.skipped += 1;
+          return false;
+        }
+        return true;
+      });
+      if (!targets.length) return result;
+      const req = pttRequestFor({ outingId, talkerId, name, burst }, { bundleId: config.bundleId });
+      const dead = [];
+      await Promise.all(
+        targets.map(async (t) => {
+          try {
+            const r = await out.send({ token: t.token, environment: t.environment }, req);
+            if (r.status === 200) result.sent += 1;
+            else if (isGone(r)) {
+              dead.push(t.id);
+              result.removed += 1;
+            } else {
+              result.failed += 1;
+              log('[outings-apns] ptt send failed', r.status, r.reason || '');
+            }
+          } catch (e) {
+            result.failed += 1;
+            log('[outings-apns] ptt send failed', e?.code || e?.message);
+          }
+        }),
+      );
+      if (dead.length) await q(`DELETE FROM sary.ptt_tokens WHERE id = ANY($1::uuid[])`, [dead]);
+    } catch (e) {
+      log('[outings-apns] ptt', e?.code || e?.message);
+    }
+    stats.sent += result.sent;
+    stats.removed += result.removed;
+    stats.failed += result.failed;
+    return result;
+  }
+
   function close() {
     out?.close?.();
   }
 
-  return { enabled, publicConfig, register, unregister, notifyMembers, close, stats };
+  return { enabled, publicConfig, register, unregister, notifyMembers, registerPtt, unregisterPtt, notifyPtt, close, stats };
 }
 
 /**
@@ -409,6 +541,8 @@ module.exports = {
   signApnsJwt,
   parseApnsRegistration,
   apnsRequestFor,
+  pttRequestFor,
+  parsePttRegistration,
   createApnsSender,
   createApnsNotifier,
   combineNotifiers,

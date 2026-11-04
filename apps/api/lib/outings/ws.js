@@ -16,7 +16,12 @@
  *   ← position · presence · member_* · sos · rally · voice_clip · outing_status · owner_changed · closed
  *   ← return_timer · member_stuck · stuck_reply · stuck_clear · waypoint_added · waypoint_removed
  *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
- *   (voice clips themselves go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
+ *   (older builds' voice clips go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
+ *
+ * Live push-to-talk «قناة الطلعة» (lib/outings/ptt.js): ptt_join / ptt_leave /
+ * ptt_start / ptt_stop text frames, and BINARY audio frames from the talker,
+ * relayed to the other joined members only. Binary frames are the only binary
+ * this socket accepts, and have their own rate limit (not the 40-per-10 s one).
  */
 
 const { WebSocketServer } = require('ws');
@@ -29,7 +34,7 @@ const MAX_FRAME_BYTES = 4 * 1024;
 const MAX_MSGS_PER_10S = 40;
 const MAX_SOCKETS_PER_USER_ROOM = 3;
 
-function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
+function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES, perMessageDeflate: false });
 
   server.on('upgrade', (req, socket, head) => {
@@ -52,7 +57,13 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
     const reply = (msg) => hub.send(conn, msg);
 
     ws.on('message', async (data, isBinary) => {
-      if (isBinary) return ws.close(1003, 'text_only');
+      if (isBinary) {
+        /* Audio for the walkie-talkie. Without a relay, or before auth, binary is not allowed. */
+        if (!ptt || !conn.userId) return ws.close(1003, 'text_only');
+        if (!conn.outingId) return;
+        ptt.audio(conn, data);
+        return;
+      }
       const t = Date.now();
       conn.window = conn.window.filter((x) => t - x < 10_000);
       conn.window.push(t);
@@ -90,6 +101,7 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
         if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps, battery(msg.battery));
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
+        if (ptt && msg.type.startsWith('ptt_')) return void (await ptt.handle(conn, msg));
         if (msg.type === 'note') {
           try {
             const r = await service.setNote(conn.user, conn.outingId, msg.text);
@@ -111,6 +123,7 @@ function attachOutingsSocket(server, { service, hub, path = PATH } = {}) {
 
     ws.on('close', () => {
       clearTimeout(authTimer);
+      ptt?.drop(conn);
       hub.leave(conn);
     });
     ws.on('error', () => {

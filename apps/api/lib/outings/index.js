@@ -15,6 +15,7 @@ const createOutingsRouter = require('../../routes/outings');
 const { createOutingsService } = require('./service');
 const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
+const { createPttRelay } = require('./ptt');
 const { getOutingsPool, migrate } = require('./db');
 const { createPushNotifier, pushConfigFromEnv } = require('./push');
 const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./apns');
@@ -23,7 +24,7 @@ const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./a
  * Notes are pushed by service.setNote itself. */
 const PUSHED_EVENTS = new Set(['sos']);
 
-function setupOutings({ pool = getOutingsPool(), config, limits, now, push: pushOpts = {}, apns: apnsOpts = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
+function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOpts = {}, push: pushOpts = {}, apns: apnsOpts = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
   const hub = createHub();
   /* Members looking at the outing right now already get the in-app alert. */
   const viewers = (outingId) => {
@@ -41,6 +42,8 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
       if (PUSHED_EVENTS.has(event?.type)) void service.announce(outingId, event.user_id, event);
     };
   }
+  /* «قناة الطلعة»: live walkie-talkie relay on the same socket (relay only, nothing stored). */
+  const ptt = service ? createPttRelay({ hub, service, apns, ...(now ? { now } : {}), options: pttOpts }) : null;
   const router = createOutingsRouter({ service, hub, push, apns, limits });
   let sweepTimer = null;
   let timerSweep = null;
@@ -56,11 +59,12 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
     service,
     push,
     apns,
+    ptt,
     router,
     ready,
     attach(server) {
       if (!service) return;
-      socket = attachOutingsSocket(server, { service, hub });
+      socket = attachOutingsSocket(server, { service, hub, ptt });
       sweepTimer = setInterval(() => {
         service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message));
       }, 10 * 60_000);
@@ -74,6 +78,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, push: push
     close() {
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
+      ptt?.close();
       socket?.close();
       apns.close();
     },

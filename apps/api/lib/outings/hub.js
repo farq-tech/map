@@ -198,13 +198,18 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return [...(rooms.get(outingId) || [])].filter((c) => c.userId === userId);
   }
 
+  /** Every live connection in the room (the PTT relay picks its listeners from these). */
+  function roomOf(outingId) {
+    return [...(rooms.get(outingId) || [])];
+  }
+
   function stats() {
     let sockets = 0;
     for (const r of rooms.values()) sockets += r.size;
     return { rooms: rooms.size, sockets };
   }
 
-  return { join, leave, emit, connectionsOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
+  return { join, leave, emit, connectionsOf, roomOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
 }
 
 module.exports = { createHub };
