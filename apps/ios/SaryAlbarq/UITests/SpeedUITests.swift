@@ -55,8 +55,10 @@ final class SpeedUITests: XCTestCase {
         let fahd = rows.containing(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch
         let fahdRow = fahd.exists ? fahd : rows.matching(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch
         XCTAssertTrue(fahdRow.waitForExistence(timeout: 5))
-        for _ in 0..<3 where !fahdRow.isHittable { app.swipeUp() }
+        /* Read the row before scrolling to it: the integrated sheet has more sections above the
+         * rows (safety, weather, convoy, trail), and the demo fix stops being live ~15 s in. */
         XCTAssertTrue(fahdRow.label.contains("السرعة ٧٩ كم/س"), "a live friend's speed on the row: \(fahdRow.label)")
+        for _ in 0..<3 where !fahdRow.isHittable { app.swipeUp() }
         let noura = rows.matching(NSPredicate(format: "label CONTAINS %@", "نورة")).firstMatch
         XCTAssertTrue(noura.exists)
         XCTAssertFalse(noura.label.contains("السرعة"), "a stale friend shows no speed: \(noura.label)")

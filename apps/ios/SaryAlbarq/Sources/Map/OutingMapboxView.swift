@@ -828,17 +828,16 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let map, let g = lastLayout?.groups.first(where: { $0.key == key }) else { return }
             let pts = g.ids.compactMap { recs[$0]?.shown }
             guard !pts.isEmpty else { return }
-            /* How far apart the folded cars really are (the framing bounds are padded). */
-            var spread = 0.0
-            for a in pts { for b in pts { spread = max(spread, Vehicle.distanceMeters(a, b)) } }
             let zoom = map.mapboxMap.cameraState.zoom
             keepGroup = false
             onUserGesture()
             /* Always spread them into a column (tied to their cars by lines), and zoom in
-             * too when they are far enough apart for the zoom to separate them. */
+             * toward them: far apart, the zoom separates them; parked together, it moves
+             * the other cars away so the column is not folded again with newcomers (the
+             * plan's route and destination can keep the map zoomed out). */
             expandedGroups.formUnion(g.ids)
             layoutChips()
-            if spread >= 60 && zoom < GroupFraming.maxZoom - 0.5 { frame(pts) }
+            if zoom < GroupFraming.maxZoom - 0.5 { frame(pts) }
         }
 
         /// Mapbox's logo and attribution: kept together in a free spot of the map (never
