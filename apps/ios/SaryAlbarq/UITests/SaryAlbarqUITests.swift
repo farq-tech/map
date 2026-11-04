@@ -81,6 +81,11 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         attach(app, "consent")
         app.buttons["consent.accept"].tap()
+        /* First share: the «مساري» screen-locked explainer may follow (only if iOS has not already allowed «دائمًا»). */
+        if app.buttons["trail.always.later"].waitForExistence(timeout: 4) {
+            attach(app, "trail-always-explainer")
+            app.buttons["trail.always.later"].tap()
+        }
         XCTAssertTrue(app.buttons["live.stopSharing"].waitForExistence(timeout: 10), "sharing starts only after consent")
         XCTAssertTrue(app.staticTexts["live.sharing"].exists, "visible sharing indicator")
         sleep(1)
