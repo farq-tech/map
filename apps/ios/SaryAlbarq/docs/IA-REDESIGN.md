@@ -147,15 +147,31 @@ Short imperative verbs, one name per thing: «ملاحة», «ابحث أو إح
 «رسالة فوق سيارتي», «غرّزت», «أضف نقطة», «انسخ أو شارك موقعي», «أقرب محطة», «الطقس»,
 «يوتيوب». Tabs «الرحلة / المجموعة / المزيد». No entry point exists twice on the map.
 
-## 3. Before → after (controls on screen)
+## 3. Before → after (controls on screen, measured on build 8)
 
-| Screen | Before | After |
+| Screen | Before (build 7) | After (build 8) |
 |---|---|---|
-| Live, stopped, peek | 16 | see §4 |
-| Live, alert burst | 23 | |
-| Live, guiding (drive) | 11 | |
-| Actions («المزيد» → «+») | 12 on screen | |
-| Sheet half («الرحلة» vs «المشاركون») | ~24 | |
-| Home | 12 | |
-| Settings | 6 rows, 2 hidden tools | |
+| Live, stopped, peek | 16 + 4 indicators, two top rows | **10** (back · header · dot · weather · موقعي · المجموعة · + · SOS · PTT · peek), no indicators |
+| Live, alert burst | 23 (2 cards + «+٢») | **15** (1 card + bell «٤») |
+| Live, guiding (drive) | 11, banner **and** capsule | **7** (banner · camera · المجموعة · SOS · PTT · voice · steps · «إنهاء» in the bar) + speed & limit |
+| Actions | 12 on the map (5 cluster + 7 flat rows) | 3 on the map; 11 entries in 4 named groups in their own sheet |
+| Sheet, first tab | «المشاركون» ~24 | «الرحلة» ~12 (people moved to «المجموعة», settings to «المزيد») |
+| Sheet peek | 2 rows | 1 row |
+| Home | 12, two equal CTAs, all cards equal | 11, one primary CTA, active outing big on top, others compact rows |
+| Settings | 6 rows in 2 untitled groups + 2 hidden tools | 8 rows in 4 titled sections + «حول»; tools under «متقدم» |
 | Create step 1 | 3 | 3 (unchanged) |
+
+## 4. Decisions worth knowing
+* **SOS stays bottom-left, push-to-talk bottom-right** (as in build 7): moving the
+  emergency button would break muscle memory for no gain; the spec's "start/end" was
+  read as "the two bottom corners".
+* **Driving hides «+»**: the map keeps «موقعي» · «المجموعة» only. Raising the sheet
+  (one tap) switches to stopped, where «+» is back; «شكل الشاشة» pins either mode.
+* **Guidance voice and steps** moved from the map into the guidance bar (the sheet's
+  peek) so the floating group stays two buttons while navigating.
+* **«طريق العودة»** is in «+» → الطريق, in «الرحلة» → مساري, and appears on the map by
+  itself after arrival, while off the planned route, or while it runs.
+* **Toasts** (feedback for the person's own action) are not alerts: short pill, never queued.
+* **Route provider** is no longer behind 7 taps in Release: it is under «متقدم».
+* Status capsule, plan strip and peek trip strip are gone from the live screen; their
+  components stay in the design-system showcase.

@@ -134,7 +134,7 @@ struct SarySheetSummary: View {
     private func summaryText(count: Int, live: Int, nearest: Double?) -> some View {
         let p = theme.palette
         return HStack(spacing: 6) {
-            Text("\(SaryFormat.number(count)) مشارك").foregroundStyle(p.textPrimary)
+            Text("\(SaryFormat.number(count)) في الطلعة").foregroundStyle(p.textPrimary)
             dot
             HStack(spacing: 4) {
                 Circle().fill(p.live).frame(width: 7, height: 7)
@@ -167,9 +167,9 @@ struct SaryTabBar: View {
             label: { $0.label },
             systemImage: { tab in
                 switch tab {
-                case .participants: return "person.2.fill"
-                case .invite: return "link"
-                case .settings: return SaryIcon.settings
+                case .trip: return "flag.checkered"
+                case .group: return "person.2.fill"
+                case .more: return "ellipsis.circle"
                 }
             },
             id: "outing-tabs"

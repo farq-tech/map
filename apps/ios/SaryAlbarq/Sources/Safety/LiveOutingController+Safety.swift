@@ -68,7 +68,7 @@ extension LiveOutingController {
         case "stuck" where parts.count > 2: show(member: parts[2])
         case "overdue" where parts.count > 2 && parts[2] != "me": show(member: parts[2])
         default:
-            selectedTab = .participants
+            selectedTab = .trip
             sheetDetent = .half
         }
         return true
@@ -79,17 +79,10 @@ extension LiveOutingController {
     /// «غرّزت» in the control cluster: ask (confirm), or — already stuck — open my stuck card.
     func stuckControlTapped() {
         if safety.myStuck != nil {
-            selectedTab = .participants
+            selectedTab = .trip
             sheetDetent = .half
         } else {
             safety.askStuck()
         }
-    }
-}
-
-extension SaryMapControlItem {
-    /// «غرّزت» in the live control cluster (highlighted while I am stuck).
-    static func safetyStuck(active: Bool) -> SaryMapControlItem {
-        .init(id: "stuck", systemImage: SafetyIcon.stuck, label: active ? "غرّزت · أنت" : "غرّزت", accessibilityID: "outing-stuck", isActive: active)
     }
 }

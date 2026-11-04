@@ -1,6 +1,7 @@
 import XCTest
 
-/// A burst (stuck + convoy + silence + weather) shows at most 2 cards; «+N تنبيهات» expands and folds back.
+/// A burst (stuck + convoy + silence + weather) shows ONE card (the highest priority);
+/// the rest wait on the header's bell, which opens the whole queue and folds it back.
 /// Set SARY_SHOTS=<dir> (TEST_RUNNER_SARY_SHOTS for xcodebuild) to also write PNGs there.
 final class AlertLaneUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -16,21 +17,37 @@ final class AlertLaneUITests: XCTestCase {
         }
     }
 
-    func testBurstFoldsAndExpands() {
+    func testBurstShowsOneCardAndTheBellOpensTheQueue() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-demoConvoy", "-demoSilent", "-SarySafety", "stuck-friend",
-                               "-SaryWeatherDemo", "rain", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryNight", "0"]
+                               "-SaryWeatherDemo", "rain", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryNight", "0", "-SaryContext", "stopped"]
         app.launch()
-        let more = app.buttons["alerts.more"]
-        XCTAssertTrue(more.waitForExistence(timeout: 20), "the overflow pill shows")
-        XCTAssertTrue(more.label.contains("تنبيه"), more.label)
+        let bell = app.buttons["alerts.bell"]
+        XCTAssertTrue(bell.waitForExistence(timeout: 20), "the bell counts the queued alerts")
+        XCTAssertTrue(bell.label.contains("تنبيه"), bell.label)
+        /* One card on screen: the stuck friend outranks silence, convoy and weather. */
+        XCTAssertTrue(app.buttons["جاي"].waitForExistence(timeout: 5), "the stuck card (highest priority) is the one shown")
+        XCTAssertFalse(app.descendants(matching: .any)["convoy-alert"].exists, "convoy waits on the bell")
         shot(app, "alerts-burst-folded")
-        more.tap()
-        let hide = app.buttons.matching(NSPredicate(format: "identifier == 'alerts.more' AND label CONTAINS 'إخفاء'")).firstMatch
-        XCTAssertTrue(hide.waitForExistence(timeout: 5), "expanded: «إخفاء»")
+        bell.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["alerts.list"].waitForExistence(timeout: 5), "the queue opens under the header")
         sleep(1)
         shot(app, "alerts-burst-expanded")
-        hide.tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier == 'alerts.more' AND label CONTAINS 'اعرضها'")).firstMatch.waitForExistence(timeout: 5))
+        app.buttons["alerts.bell"].tap()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: app.descendants(matching: .any)["alerts.list"])
+        waitForExpectations(timeout: 5)
+    }
+
+    func testDrivingKeepsLowPriorityOnTheBell() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "rain", "-SaryContext", "driving", "-SaryScheme", "light"]
+        app.launch()
+        XCTAssertTrue(app.buttons["outing-locate"].waitForExistence(timeout: 20))
+        sleep(4)
+        /* Weather is low priority: while driving it never takes the card. */
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'alert.weather.'")).firstMatch.exists, "no weather card while driving")
+        XCTAssertFalse(app.buttons["outing-actions"].exists, "driving: no «+» on the map")
+        XCTAssertTrue(app.descendants(matching: .any)["speedometer"].firstMatch.exists, "driving: the speedometer shows")
     }
 }

@@ -99,8 +99,8 @@ final class PlanUITests: XCTestCase {
         }
         app.launch()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
-        /* «انسخ موقعي» sits behind «المزيد» (the cluster keeps four buttons). */
-        let more = app.buttons["outing-more"]
+        /* «انسخ أو شارك موقعي» is in the «+» actions sheet. */
+        let more = app.buttons["outing-actions"]
         XCTAssertTrue(more.waitForExistence(timeout: 15))
         more.tap()
         let copyMe = app.buttons["outing-copyme"]

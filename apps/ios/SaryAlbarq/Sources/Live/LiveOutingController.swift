@@ -35,9 +35,12 @@ enum LiveModal: Identifiable, Equatable {
     case navPicker
     case navOptions
     case navSteps
+    /// «+»: every less frequent action, grouped (docs/IA-REDESIGN.md §2.3).
+    case actions
 
     var id: String {
         switch self {
+        case .actions: return "actions"
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
@@ -83,7 +86,7 @@ final class LiveOutingController: ObservableObject {
     var pushExplained: () -> Bool = { true }
 
     @Published var sheetDetent: SheetDetentUI = .peek
-    @Published var selectedTab: LiveTabUI = .participants
+    @Published var selectedTab: LiveTabUI = .trip
     @Published var alerts: [LiveAlertUI] = []
     @Published var acknowledgedSOS: Set<String> = []
     @Published var heardClips: Set<String> = []
@@ -100,6 +103,15 @@ final class LiveOutingController: ObservableObject {
     @Published var inviteLink: String?
     @Published var isRevoking = false
     @Published var statusExpanded = false
+    /// The trip header's bell: the queued alerts open under the header.
+    @Published var bellOpen = false
+    /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
+    @Published var contextOverride: LiveContextOverride = LiveContextOverride.saved {
+        didSet { if !debugContext { LiveContextOverride.saved = contextOverride } }
+    }
+    private var debugContext = false
+    /// Moving > 15 km/h (with hysteresis), from the GPS.
+    @Published private(set) var motion = MotionHysteresis()
     @Published var confirm: LiveConfirm?
     @Published var stations: LoadPhaseUI<[StationUI]> = .loading
     @Published var toastText: String?
@@ -166,6 +178,9 @@ final class LiveOutingController: ObservableObject {
         let shotArgs = ProcessInfo.processInfo.arguments
         func arg(_ k: String) -> String? { shotArgs.firstIndex(of: k).flatMap { $0 + 1 < shotArgs.count ? shotArgs[$0 + 1] : nil } }
         if let d = arg("-SaryLiveSheet") { sheetDetent = d == "full" ? .full : d == "half" ? .half : .peek }
+        if let c = arg("-SaryContext").flatMap(LiveContextOverride.init) { debugContext = true; contextOverride = c }
+        if arg("-SaryLiveModal") == "actions" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .actions } }
+        if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
@@ -344,6 +359,11 @@ final class LiveOutingController: ObservableObject {
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
+        if let f = location.lastFix {
+            var m = motion
+            m.ingest(speedMps: f.speed, at: f.atMs / 1000)
+            if m != motion { motion = m }
+        }
         checkConvoy()
         feedWeather()
         if session.closedReason != nil, modal != nil { modal = nil }
@@ -399,7 +419,8 @@ final class LiveOutingController: ObservableObject {
 
     /// Everything the map draws for trails. Friends' trails end at their last real fix and fade
     /// with it: an old position never looks live.
-    func mapTrails(members: [MapMember]) -> MapTrails {
+    /// `driving`: friends' trails stay off while driving (docs/IA-REDESIGN.md §2.6).
+    func mapTrails(members: [MapMember], driving: Bool = false) -> MapTrails {
         /* Road-matched where the matcher is confident, smoothed elsewhere (desert). */
         let shown = session.displayTrail
         let runs = Trail.runs(shown)
@@ -419,7 +440,7 @@ final class LiveOutingController: ObservableObject {
             .filter { $0.len >= 150 }
             .sorted { $0.len > $1.len }
             .prefix(2).map(\.mid)
-        if showFriendTrails {
+        if showFriendTrails && !driving {
             for m in members where !m.isMe {
                 guard var pts = friendTrails.byId[m.id], !pts.isEmpty else { continue }
                 /* The line ends exactly at the car (its last real fix), never beyond it. */
@@ -668,7 +689,7 @@ final class LiveOutingController: ObservableObject {
         a.selectTab = { [weak self] t in self?.selectedTab = t }
         a.participantsTab = ParticipantsTabActions(
             openParticipant: { [weak self] id in self?.openParticipant(id) },
-            addMyPhone: { [weak self] in self?.selectedTab = .settings },
+            addMyPhone: { [weak self] in self?.selectedTab = .more },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
                 self.lowerSheetThenAsk(.point(r.position))

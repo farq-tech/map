@@ -35,8 +35,12 @@ final class BackTrackUITests: XCTestCase {
 
     func testEnterAndLeaveFromTheControlCluster() {
         let app = launch()
+        /* «طريق العودة»: in «+» → الطريق (and by itself on the map after arrival / off the route). */
+        let plus = app.buttons["outing-actions"]
+        XCTAssertTrue(plus.waitForExistence(timeout: 10), "«+» in the floating group")
+        plus.tap()
         let button = app.buttons["outing-backtrack"]
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "«طريق العودة» is in the control cluster")
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "«طريق العودة» in the actions sheet")
         XCTAssertFalse(panel(app).exists)
         button.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5), "back-track panel")

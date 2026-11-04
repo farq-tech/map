@@ -21,7 +21,7 @@ struct LivePresenterInput {
     var alerts: [LiveAlertUI] = []
     var ptt: PTTStateUI = .idle
     var sheetDetent: SheetDetentUI = .peek
-    var selectedTab: LiveTabUI = .participants
+    var selectedTab: LiveTabUI = .trip
     var inviteLink: String?
     var isRevoking = false
     var driveMode: TriModeUI = .automatic
@@ -365,6 +365,20 @@ enum EdgeArrows {
     enum Edge: Equatable { case top, right, bottom, left }
 
     static let margin: CGFloat = 6
+    /// At most this many arrows at the edge (docs/IA-REDESIGN.md §2.6).
+    static let maxArrows = 3
+
+    /// Which off-screen members get an arrow: members in an alert state (SOS, stuck,
+    /// silent) first, then the nearest; at most `maxArrows`. Driving: alert members only.
+    static func pick(candidates: [(id: String, distance: Double?)], alerting: Set<String>, driving: Bool, max n: Int = maxArrows) -> [String] {
+        let pool = driving ? candidates.filter { alerting.contains($0.id) } : candidates
+        return pool.sorted { a, b in
+            let aa = alerting.contains(a.id), ba = alerting.contains(b.id)
+            if aa != ba { return aa }
+            return (a.distance ?? .infinity, a.id) < (b.distance ?? .infinity, b.id)
+        }
+        .prefix(n).map(\.id)
+    }
 
     static func screenAngle(dx: CGFloat, dy: CGFloat) -> Double {
         (atan2(Double(dx), Double(-dy)) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)

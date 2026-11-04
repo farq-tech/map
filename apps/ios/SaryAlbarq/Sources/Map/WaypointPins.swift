@@ -47,14 +47,17 @@ final class WaypointPins {
         for id in items.keys where !ids.contains(id) { items[id] = nil }
     }
 
-    func layout(screen: (CLLocationCoordinate2D) -> CGPoint, bounds: CGRect, obstacles: [CGRect]) {
+    /// Labels only from `labelMinZoom` (close in); the pins themselves always show.
+    static let labelMinZoom = 14.5
+
+    func layout(screen: (CLLocationCoordinate2D) -> CGPoint, bounds: CGRect, obstacles: [CGRect], zoom: Double = 20) {
         var input: [WaypointLayout.Item] = []
         for (id, w) in items {
             guard let pin = pins[id] else { continue }
             input.append(.init(id: id, anchor: screen(w.position.coordinate), pin: pin.ideal, label: labels[id]?.ideal))
         }
         var o = WaypointLayout.Options(bounds: bounds, obstacles: obstacles)
-        o.showLabels = !theme.drive
+        o.showLabels = !theme.drive && zoom >= Self.labelMinZoom
         if theme.drive { o.clusterSize = CGSize(width: 56, height: 42) }
         let r = WaypointLayout.solve(input, o)
         last = r

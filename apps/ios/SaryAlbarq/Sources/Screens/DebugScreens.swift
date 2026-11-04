@@ -32,6 +32,7 @@ struct DebugScreen: View {
         case "privacy": HomeView(initial: [.settings, .privacy])
         case "notifications": HomeView(initial: [.settings, .notifications])
         case "about": HomeView(initial: [.settings, .about])
+        case "advanced": HomeView(initial: [.settings, .advanced])
         case "offline-maps": HomeView(initial: [.settings, .offlineMaps])
         case "offline-flow": NavigationStack { OfflineMapsView(back: {}, suggested: .init(west: 46.666, south: 24.704, east: 46.684, north: 24.719), outingName: "طلعة الثمامة") }
         case "offline-picker": OfflineAreaPicker(initial: .init(west: 46.655, south: 24.70, east: 46.695, north: 24.725), outingName: "طلعة الثمامة", close: {})

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The native 3-detent sheet: summary line, then the tabs المشاركون / الدعوة /
-/// الإعدادات. Everything presented over the live screen (participant card,
+/// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
+/// المزيد (docs/IA-REDESIGN.md §2.4). Everything presented over the live screen (participant card,
 /// note composer, stations, consent, rally label, a friend's SOS) is presented
 /// from here, because the sheet is the top-most presentation.
 struct LiveSheet: View {
@@ -13,15 +13,13 @@ struct LiveSheet: View {
         let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
-            let trip = controller.showsTripStrip ? controller.tripPanel : nil
             if controller.nav.isActive {
-                /* Navigating: the peek is the guidance bar (arrival time, what is left, «إنهاء»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav)
-                if let trip { TripPeekStrip(ui: trip, expand: controller.tripActions.expand, minimal: true) }
+                /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
+                NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
             } else {
+                /* One line: the people. The trip's numbers are in the header above. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
-                if let trip { TripPeekStrip(ui: trip, expand: controller.tripActions.expand) }
             }
             if ui.sheetDetent != .peek {
                 SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
@@ -29,9 +27,9 @@ struct LiveSheet: View {
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
                         switch ui.selectedTab {
-                        case .participants: ParticipantsTab(controller: controller, ui: ui)
-                        case .invite: InviteTab(controller: controller, ui: ui)
-                        case .settings: SettingsTab(controller: controller, ui: ui)
+                        case .trip: TripTab(controller: controller, ui: ui)
+                        case .group: GroupTab(controller: controller, ui: ui)
+                        case .more: SettingsTab(controller: controller, ui: ui)
                         }
                     }
                     .padding(.horizontal, theme.space(.l))
@@ -73,6 +71,14 @@ struct LiveSheet: View {
     @ViewBuilder
     private func modal(_ m: LiveModal) -> some View {
         switch m {
+        case .actions:
+            LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
+                                                                  following: controller.planModel?.following == true,
+                                                                  hasRoute: controller.planModel?.plan.hasRoute ?? false,
+                                                                  stuck: controller.safety.myStuck != nil)),
+                            action: controller.performAction, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case let .participant(id):
             if let s = controller.participantCard(id) {
                 ScrollView { SaryParticipantCard(state: s, actions: controller.participantActions(id)) }
@@ -140,9 +146,34 @@ extension IncomingSOSUI: @retroactive Hashable {
     func hash(into h: inout Hasher) { h.combine(id) }
 }
 
-// MARK: - Participants tab
+// MARK: - «الرحلة»
 
-private struct ParticipantsTab: View {
+/// Where we are going and how it goes: my sharing, the trip, the destination and plan,
+/// the weather there, safety (return timer, «غرّزت») and my trail.
+private struct TripTab: View {
+    @ObservedObject var controller: LiveOutingController
+    var ui: LiveOutingUIState
+
+    var body: some View {
+        Group {
+            ShareCallout(controller: controller, ui: ui)
+            if controller.showsTripStrip, ui.status != .notStarted {
+                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            }
+            TripPlanCard(controller: controller)
+            if ui.status != .ended {
+                LiveWeatherCard(controller: controller, weather: controller.weather)
+                SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
+            }
+            TrailCard(controller: controller, card: controller.trailCard)
+        }
+    }
+}
+
+// MARK: - «المجموعة»
+
+/// The people: who is where, the convoy, the rally point, shared points, and the invite.
+private struct GroupTab: View {
     @ObservedObject var controller: LiveOutingController
     var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
@@ -151,24 +182,6 @@ private struct ParticipantsTab: View {
         let actions = controller.actions
         let v = controller.session.view
         Group {
-            ShareCallout(controller: controller, ui: ui)
-            if controller.showsTripStrip, ui.status != .notStarted {
-                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
-            }
-            if ui.participantsTab.myPhoneMissing {
-                Button(action: actions.participantsTab.addMyPhone) {
-                    SaryBanner(text: "لم تضف رقمك · أضف رقمك ليتصل بك أصحابك", tone: .info, systemImage: SaryIcon.phone)
-                }
-                .buttonStyle(.plain)
-            }
-            if ui.status != .ended {
-                SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
-                SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
-                LiveWeatherCard(controller: controller, weather: controller.weather)
-            }
-            ConvoySection(controller: controller, features: controller.features)
-            TrailCard(controller: controller, card: controller.trailCard)
-            MediaEntryCard(center: MediaCenters.of(controller))
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
@@ -179,7 +192,20 @@ private struct ParticipantsTab: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
+            ConvoySection(controller: controller, features: controller.features)
+            if ui.status != .ended {
+                SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("rally-card")
+            }
             WaypointsSection(controller: controller, features: controller.features)
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
+                Text("ادعُ ربعك").saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+                    .accessibilityAddTraits(.isHeader)
+                InviteTab(controller: controller, ui: ui)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("invite-section")
         }
     }
 }
@@ -590,6 +616,12 @@ private struct SettingsTab: View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
         Group {
+            if ui.participantsTab.myPhoneMissing {
+                Button(action: controller.actions.participantsTab.addMyPhone) {
+                    SaryBanner(text: "لم تضف رقمك · أضفه ليتصل بك أصحابك", tone: .info, systemImage: SaryIcon.phone)
+                }
+                .buttonStyle(.plain)
+            }
             SarySection(title: "مشاركتي", footer: "بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة حتى توقفه أو تغادر أو تنتهي الطلعة. بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر لأصحابك «آخر موقع».") {
                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause,
                               isOn: Binding(get: { s.isSharingPaused }, set: { a.setSharingPaused($0) }), id: "settings-pause-sharing")
@@ -604,8 +636,20 @@ private struct SettingsTab: View {
                 SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
                               isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
             }
-            TrailSettingsSection(controller: controller, card: controller.trailCard)
+            MediaEntryCard(center: MediaCenters.of(controller))
+            SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    segmentTitle("شكل الشاشة")
+                    SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
+                    segmentTitle("وضع القيادة (خط وأزرار أكبر)")
+                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
+                    segmentTitle("الوضع الليلي")
+                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
+                }
+                .padding(theme.space(.s))
+            }
             SpeedSettingsSection()
+            TrailSettingsSection(controller: controller, card: controller.trailCard)
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {
@@ -619,14 +663,6 @@ private struct SettingsTab: View {
                 }
                 .buttonStyle(SaryRowPressStyle())
                 .accessibilityIdentifier("settings-offline")
-            }
-            SarySection(title: "وضع القيادة") {
-                SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
-                    .padding(theme.space(.s))
-            }
-            SarySection(title: "الوضع الليلي") {
-                SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
-                    .padding(theme.space(.s))
             }
             SarySection(title: "رقمي", footer: "يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب.") {
                 VStack(spacing: theme.space(.s)) {
@@ -664,6 +700,10 @@ private struct SettingsTab: View {
                 }
             }
         }
+    }
+
+    private func segmentTitle(_ t: String) -> some View {
+        Text(t).saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
     }
 
     private var title: String {

@@ -12,7 +12,8 @@ final class SpeedUITests: XCTestCase {
 
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm"]
+        /* The speedometer shows while driving only (build 8): pin the driving context. */
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryContext", "driving"]
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -51,6 +52,9 @@ final class SpeedUITests: XCTestCase {
         /* The demo's «أبو فهد» sent a moving fix moments ago (22 m/s): his speed shows while it is
          * fresh. «نورة»'s last fix is 5 minutes old: no speed, just «آخر موقع». */
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
+        let groupTab = app.buttons["المجموعة"]
+        XCTAssertTrue(groupTab.waitForExistence(timeout: 5))
+        groupTab.tap()
         let rows = app.descendants(matching: .any).matching(identifier: "participant-row")
         let fahd = rows.containing(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch
         let fahdRow = fahd.exists ? fahd : rows.matching(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch
@@ -91,7 +95,7 @@ final class SpeedUITests: XCTestCase {
     func testOverSpeedNudgeIsOffByDefaultAndAdjustable() {
         let app = launch()
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let tab = app.buttons["الإعدادات"]
+        let tab = app.buttons["المزيد"]
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.tap()
         let toggle = app.switches["speed.alert"]

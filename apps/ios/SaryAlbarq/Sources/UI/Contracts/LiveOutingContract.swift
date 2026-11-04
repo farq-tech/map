@@ -17,13 +17,14 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    case participants, invite, settings
+    /// «الرحلة» (default) · «المجموعة» · «المزيد» (docs/IA-REDESIGN.md §2.4).
+    case trip, group, more
 
     var label: String {
         switch self {
-        case .participants: return "المشاركون"
-        case .invite: return "الدعوة"
-        case .settings: return "الإعدادات"
+        case .trip: return "الرحلة"
+        case .group: return "المجموعة"
+        case .more: return "المزيد"
         }
     }
 }

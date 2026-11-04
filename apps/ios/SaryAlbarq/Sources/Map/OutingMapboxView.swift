@@ -870,7 +870,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 startPin?.host.view.isHidden = covered
                 if !covered { taken.append(crowded ? r.icon : r.icon.union(r.label)) }
             }
-            waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
+            waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken, zoom: cam.zoom)
             CATransaction.commit()
             placeOrnaments(force: false)
         }
@@ -1041,7 +1041,8 @@ struct OutingMapboxView: UIViewRepresentable {
             let ids = m.allLayerIdentifiers.map(\.id)
             let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
             let pos: LayerPosition? = below.map { .below($0) }
-            let w = (theme.drive ? 7.0 : 5.0) + (trails.highlight ? 2.5 : 0)
+            /* Thinner since build 8 (docs/IA-REDESIGN.md §2.6): the trail is context, not the subject. */
+            let w = (theme.drive ? 5.0 : 3.5) + (trails.highlight ? 2.5 : 0)
             func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 9, k * 0.45, 14, k, 18, k * 1.35] }
             let solid: [Any] = ["==", ["get", "k"], "s"]
             let gap: [Any] = ["==", ["get", "k"], "g"]
@@ -1064,7 +1065,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             layers += [
                 ["id": "\(Self.trailMine)-casing", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
-                 "paint": ["line-color": casing, "line-width": width(w + 4.5), "line-opacity": 0.92, "line-emissive-strength": 1] as [String: Any]],
+                 "paint": ["line-color": casing, "line-width": width(w + 3), "line-opacity": 0.92, "line-emissive-strength": 1] as [String: Any]],
                 ["id": "\(Self.trailMine)-line", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
                  "paint": ["line-color": mine, "line-width": width(w), "line-emissive-strength": 1] as [String: Any]],
                 ["id": "\(Self.trailMine)-gap-casing", "type": "line", "source": Self.trailMine, "filter": gap, "layout": roundLine,

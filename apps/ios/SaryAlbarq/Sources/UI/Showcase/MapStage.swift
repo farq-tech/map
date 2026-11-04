@@ -14,7 +14,7 @@ struct MapStage: View {
     @State private var alerts = Array(Mock.alerts.prefix(2))
     @State private var sheetShown = true
     @State private var detent: SheetDetentUI = .peek
-    @State private var tab: LiveTabUI = .participants
+    @State private var tab: LiveTabUI = .group
     @State private var sheetHeight: CGFloat = 0
     @State private var following = true
     @State private var ptt: PTTStateUI = .idle
