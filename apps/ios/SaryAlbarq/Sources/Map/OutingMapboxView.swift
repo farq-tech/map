@@ -22,6 +22,8 @@ struct MapMember: Equatable, Identifiable {
     var chip: NameChipUI? = nil
     /// Note bubble over the car; nil in drive mode or with no live note.
     var bubble: NoteBubbleUI? = nil
+    /// This position came phone to phone, not from the server.
+    var viaNearby = false
 
     /// Worse than 60 m: drawn as an approximate spot, never as a car, never animated (as on the web).
     var approximate: Bool { (accuracyM ?? 0) > Policy.weakAccuracyM }

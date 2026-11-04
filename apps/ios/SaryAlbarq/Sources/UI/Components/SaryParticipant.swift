@@ -265,6 +265,7 @@ struct SaryParticipantRow: View {
                         }
                         line {
                             SaryPresenceBadge(presence: participant.presence, now: now)
+                            if participant.viaNearby { SaryNearbyMark() }
                             if let b = participant.batteryPercent { SaryBatteryLabel(percent: b) }
                         }
                     }
@@ -293,6 +294,7 @@ struct SaryParticipantRow: View {
         if let r = participant.roleLabel { parts.append(r) }
         if let n = SaryCarColors.name(for: participant.color) { parts.append("السيارة \(n)") }
         parts.append(SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
+        if participant.viaNearby { parts.append(SaryNearbyMark.text) }
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }
         if let bat = participant.batteryPercent { parts.append("البطارية \(SaryFormat.percent(bat))") }
@@ -398,5 +400,32 @@ struct SaryParticipantCard: View {
         .padding(theme.space(.m))
         .frame(maxWidth: .infinity, alignment: .leading)
         .sarySurface(radius: SaryRadius.s, fill: theme.palette.sunken)
+    }
+}
+
+// MARK: - Nearby marker
+
+/// «عبر الأجهزة القريبة»: this position came phone to phone, not from the
+/// server. It says where it came from only — its age is still shown by the
+/// presence badge, so a relayed old fix never looks live.
+struct SaryNearbyMark: View {
+    static let text = "عبر الأجهزة القريبة"
+    static let icon = "antenna.radiowaves.left.and.right"
+    var compact = false
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        HStack(spacing: 3) {
+            Image(systemName: Self.icon).font(.system(size: compact ? 8 : 10, weight: .bold))
+            Text(Self.text).saryText(.micro, weight: .medium).lineLimit(1)
+        }
+        .foregroundStyle(p.textSecondary)
+        .padding(.horizontal, compact ? 5 : 6)
+        .padding(.vertical, compact ? 1 : 2)
+        .background(Capsule().fill(p.stale.opacity(0.16)))
+        .fixedSize()
+        .accessibilityLabel(Text(Self.text))
+        .accessibilityIdentifier("nearby-mark")
     }
 }

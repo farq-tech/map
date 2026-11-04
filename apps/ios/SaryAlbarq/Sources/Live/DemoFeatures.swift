@@ -9,7 +9,7 @@ enum DemoFeatures {
     static let args = ProcessInfo.processInfo.arguments
 
     static let backend = DemoFeaturesBackend(
-        myId: DemoData.meId,
+        myId: DemoData.currentMe,
         seed: args.contains("-demoNoWaypoints") ? [:] : seed(),
         notDeployed: args.contains("-demoFeaturesMissing")
     )

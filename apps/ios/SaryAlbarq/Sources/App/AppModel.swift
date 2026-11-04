@@ -61,7 +61,7 @@ final class AppModel: ObservableObject {
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()
         if isDemo {
-            identity = Identity(token: "", user: PublicUser(id: DemoData.meId, display_name: "أنا", avatar: nil, phone: nil))
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: "أنا", avatar: nil, phone: nil))
         } else {
             identity = IdentityStore.load()
         }
@@ -343,7 +343,7 @@ final class AppModel: ObservableObject {
 
     func shareSummary(_ id: String) async -> TripShare? {
         guard let t = myTrip(id) else { return nil }
-        if isDemo { return TripShare(user_id: DemoData.meId, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
+        if isDemo { return TripShare(user_id: DemoData.currentMe, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
         do { return try await api.shareSummary(id, t) } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
     }
@@ -414,8 +414,8 @@ final class AppModel: ObservableObject {
 
     private func openDemoSession() {
         let crowd = ProcessInfo.processInfo.arguments.contains("-demoCrowd")
-        let demo = DemoData.view(crowd: crowd)
-        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location,
+        let demo = DemoData.view(crowd: crowd, me: DemoData.currentMe)
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.currentMe, api: api, token: "", location: location,
                               demo: ProcessInfo.processInfo.arguments.contains("-demoConvoy") ? DemoFeatures.convoyView(demo) : demo)
         session = s
         s.open()
@@ -437,11 +437,21 @@ enum DemoData {
     static let meId = "00000000-0000-4000-8000-000000000001"
     static let outingId = "00000000-0000-4000-8000-0000000000aa"
 
+    /// The demo identity. DEBUG `-SaryDemoMe <user id>` plays another member of
+    /// the same demo outing (two simulators testing the nearby link).
+    static var currentMe: String {
+        #if DEBUG
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SaryDemoMe"), i + 1 < a.count { return a[i + 1] }
+        #endif
+        return meId
+    }
+
     /// `crowd`: three more friends parked right next to «سلطان» (the chip declutter case).
-    static func view(now: Date = Date(), crowd: Bool = false) -> OutingView {
+    static func view(now: Date = Date(), crowd: Bool = false, me: String = meId) -> OutingView {
         func ago(_ s: Double) -> String { ISODate.string(now.addingTimeInterval(-s)) }
         var members: [Member] = [
-            Member(user_id: meId, display_name: "أنا", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
+            Member(user_id: meId, display_name: me == meId ? "أنا" : "راشد", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
             Member(user_id: "00000000-0000-4000-8000-000000000002", display_name: "أبو فهد", phone: "+966500000001", role: "member", sharing: true, joined_at: "2026-11-03T10:01:00.000Z", online: true, last_seen_at: ago(2), note: MemberNote(text: "بوقف عند المحطة", at: ago(30))),
             Member(user_id: "00000000-0000-4000-8000-000000000003", display_name: "سلطان", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:02:00.000Z", online: true, last_seen_at: ago(20)),
             Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(240)),
@@ -461,8 +471,8 @@ enum DemoData {
         }
         let snap = OutingSnapshot(
             outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
-            me: SnapshotMe(user_id: meId, role: "owner", sharing: true),
-            members: members, positions: positions, invite: InviteState(active: true, expires_at: nil),
+            me: SnapshotMe(user_id: me, role: me == meId ? "owner" : "member", sharing: true),
+            members: members, positions: positions.filter { $0.user_id != me }, invite: InviteState(active: true, expires_at: nil),
             server_now: ISODate.string(now)
         )
         return OutingView(snap, deviceNow: now)

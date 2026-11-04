@@ -224,6 +224,8 @@ struct LiveOutingUIState: Equatable {
     var settingsTab: SettingsTabUIState
     /// Clock for "قبل ٤ د" labels. Tick it (e.g. every 15 s) from the wiring layer.
     var now: Date
+    /// Members' cars heard directly phone to phone in the last 30 s (0 = none / link off).
+    var nearbyCars: Int = 0
 }
 
 struct LiveOutingActions {

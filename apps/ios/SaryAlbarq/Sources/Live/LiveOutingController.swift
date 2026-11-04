@@ -96,6 +96,8 @@ final class LiveOutingController: ObservableObject {
     private let player = VoicePlayer()
     private var pttTimer: Timer?
     private var alertTimers: [String: Timer] = [:]
+    /// Last note shown per member, so a note heard nearby and then from the server alerts once.
+    private var alertedNotes: [String: (text: String, at: Date)] = [:]
 
     init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings, featuresBackend: OutingFeaturesBackend? = nil) {
         self.session = session
@@ -114,7 +116,7 @@ final class LiveOutingController: ObservableObject {
         }.store(in: &bag)
         player.onProgress = { [weak self] id, p in self?.setPlayback(id, .playing(progress: p)) }
         player.onFinish = { [weak self] id in self?.setPlayback(id, .idle) }
-        lastView = session.view
+        lastView = session.displayView
         features.pushAlert = { [weak self] a, ttl in self?.pushAlert(a, ttl: ttl) }
         features.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
         features.toast = { [weak self] t in self?.toast(t) }
@@ -130,15 +132,24 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startBackTrack() }
         }
         #endif
-        if let v = session.view { ingestFriends(v) }
+        if let v = session.displayView { ingestFriends(v) }
         attachSafety()
+        session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
+    }
+
+    /// «غرّزت» heard phone to phone (SOS and notes show through the merged picture).
+    private func nearbyEvent(_ e: MeshEvent) {
+        guard e.k == .stuck, let v = session.displayView, let m = v.members[e.u] else { return }
+        let text = ["غرّز", e.text].compactMap { $0 }.joined(separator: " · ") + " · عبر الأجهزة القريبة"
+        pushAlert(LiveAlertUI(id: "stuck:\(e.id)", kind: .note(senderName: m.display_name, senderColor: v.colors[e.u] ?? 0xFFFFFF, text: text)), ttl: 60)
     }
 
     // MARK: state
 
     var input: LivePresenterInput {
-        LivePresenterInput(
-            view: session.view,
+        let nearby = session.meshOverlay
+        return LivePresenterInput(
+            view: nearby.view,
             myFix: location.lastFix,
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
@@ -160,7 +171,9 @@ final class LiveOutingController: ObservableObject {
             batterySharing: session.batterySharing,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,
-            now: Date()
+            now: Date(),
+            nearbyVia: nearby.viaNearby,
+            nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0
         )
     }
 
@@ -190,7 +203,7 @@ final class LiveOutingController: ObservableObject {
             let convoyRole = features.convoyRole(m.id)
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
-                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init))
+                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -203,13 +216,17 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func sessionChanged() {
-        guard let v = session.view else { return }
+        /* The server's picture with nearby cars' news laid over it. */
+        guard let v = session.displayView else { return }
         ingestFriends(v)
         defer { lastView = v }
         guard let prev = lastView else { return }
-        /* New notes from friends and new clips become cards in the alert lane. */
+        /* New notes from friends and new clips become cards in the alert lane. The
+           same note heard first from a nearby car and then from the server is one card. */
         for (uid, m) in v.members where uid != v.myId {
             if let n = m.note, prev.members[uid]?.note != n, LiveOutingPresenter.activeNote(n, view: v, now: Date()) != nil {
+                if let last = alertedNotes[uid], last.text == n.text, Date().timeIntervalSince(last.at) < LiveOutingPresenter.noteTTL { continue }
+                alertedNotes[uid] = (n.text, Date())
                 pushAlert(LiveAlertUI(id: "note:\(uid):\(n.at)", kind: .note(senderName: m.display_name, senderColor: v.colors[uid] ?? 0xFFFFFF, text: n.text)), ttl: 20)
             }
         }
@@ -646,7 +663,7 @@ final class LiveOutingController: ObservableObject {
 
     func showSOS(_ alertId: String) {
         acknowledgedSOS.insert(alertId)
-        guard let uid = alertId.split(separator: "|").first.map(String.init), let v = session.view else { return }
+        guard let uid = alertId.split(separator: "|").first.map(String.init), let v = session.displayView else { return }
         if let f = v.members[uid]?.sos?.fix, v.positions[uid] == nil {
             lowerSheetThenAsk(.point(LngLat(lng: f.lng, lat: f.lat)))
         } else {

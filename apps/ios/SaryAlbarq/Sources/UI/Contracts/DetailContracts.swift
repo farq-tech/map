@@ -118,6 +118,8 @@ struct NameChipUI: Equatable {
     var stuck: Bool = false
     /// «المقدمة» / «المؤخرة» badge in convoy mode.
     var convoy: ConvoyBadgeUI? = nil
+    /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
+    var viaNearby: Bool = false
 }
 
 struct NoteBubbleUI: Equatable {

@@ -79,6 +79,9 @@ struct SaryNameChip: View {
                         .background(Capsule().fill(p.accent))
                         .accessibilityIdentifier("car.convoy.badge")
                 }
+                if chip.viaNearby && !chip.isMe {
+                    SaryNearbyMark(compact: true)
+                }
                 if noteWaiting {
                     Image(systemName: SaryIcon.note)
                         .font(.system(size: 10, weight: .bold))
@@ -109,7 +112,7 @@ struct SaryNameChip: View {
         }
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .accessibilityLabel(Text((chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))") + (chip.convoy.map { "، \($0.label)" } ?? "")))
+        .accessibilityLabel(Text((chip.isMe ? "أنت" : "\(chip.name)، \(style.accessibilityLabel(now: chip.now))\(chip.viaNearby ? "، \(SaryNearbyMark.text)" : "")") + (chip.convoy.map { "، \($0.label)" } ?? "")))
         .modifier(OptionalIdentifier(id: id))
     }
 }

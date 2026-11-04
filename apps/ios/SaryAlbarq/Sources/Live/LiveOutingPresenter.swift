@@ -31,6 +31,10 @@ struct LivePresenterInput {
     /// Map rotation, degrees: arrows are relative to the top of the screen.
     var mapBearing: Double = 0
     var now = Date()
+    /// Members whose shown position came phone to phone (`NearbyMesh`).
+    var nearbyVia: Set<String> = []
+    /// Members' cars heard directly phone to phone right now.
+    var nearbyCars = 0
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -71,7 +75,8 @@ enum LiveOutingPresenter {
                 isLeader: v?.iOwn == true,
                 outingStatus: status(v?.status)
             ),
-            now: i.now
+            now: i.now,
+            nearbyCars: i.nearbyCars
         )
     }
 
@@ -84,6 +89,13 @@ enum LiveOutingPresenter {
         case .paused?: return .paused
         case .ended?: return .ended
         }
+    }
+
+    /// «متصل مباشرة بـ ٢ سيارات» — nil when no car is directly connected.
+    static func nearbyLabel(_ n: Int) -> String? {
+        guard n > 0 else { return nil }
+        if n == 1 { return "متصل مباشرة بسيارة واحدة" }
+        return "متصل مباشرة بـ \(ArabicFormat.number(Double(n))) سيارات"
     }
 
     static func connection(_ l: LiveChannel.State, closed: LiveCloseReason?) -> ConnectionStateUI {
@@ -188,7 +200,8 @@ enum LiveOutingPresenter {
                 note: activeNote(m.note, view: v, now: i.now),
                 hasVoice: hasVoice,
                 hasPhone: !(m.phone ?? "").isEmpty,
-                photo: nil
+                photo: nil,
+                viaNearby: !isMe && i.nearbyVia.contains(m.user_id)
             ), idx))
         }
         /* Me first, then nearest, then the ones with no distance in join order. */
@@ -282,7 +295,7 @@ enum LiveOutingPresenter {
             let at = (ISODate.parse(p.recorded_at)?.timeIntervalSince1970 ?? 0) * 1000
             out.append(MapMember(id: m.user_id, position: LngLat(lng: p.lng, lat: p.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                  presence: fr, heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil,
-                                 accuracyM: p.accuracy, atMs: at, note: note, isMe: false))
+                                 accuracyM: p.accuracy, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
         }
         return out
     }

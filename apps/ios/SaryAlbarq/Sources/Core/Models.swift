@@ -152,6 +152,10 @@ struct OutingSnapshot: Codable, Equatable {
     var stuck: [StuckWire]? = nil
     /// Tolerated at the top level too, in case the server sends it there.
     var convoy: ConvoyInfo?
+    /// Optional, members only: 32 random bytes (base64url) keying the
+    /// phone-to-phone link (`MeshKeys`). Until the server sends it, the app
+    /// derives an interim key from the outing id (see docs/NEARBY-MESH.md).
+    var mesh_key: String? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

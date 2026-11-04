@@ -128,7 +128,7 @@ struct LiveOutingScreen: View {
                 VStack(spacing: theme.space(.s)) {
                     if case let .active(since) = ui.sos.mine {
                         SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
-                                       withLocation: controller.session.view?.me?.sos?.fix != nil)
+                                       withLocation: controller.session.displayView?.me?.sos?.fix != nil)
                     }
                     ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                         SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
@@ -138,7 +138,7 @@ struct LiveOutingScreen: View {
                                      clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
                     }
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
-                                      warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
+                                      warnings: ui.warnings, expanded: $controller.statusExpanded, nearbyCars: ui.nearbyCars, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
                     if let bt = controller.backTrackUI {
                         BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
