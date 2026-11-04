@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Every outings migration (001–007) applies in order on an empty database and
+ * Every outings migration (001–008) applies in order on an empty database and
  * on one in today's production state (001–002 already applied, with data).
  *
  *   SARY_TEST_DATABASE_URL=postgres://… node --test apps/api/lib/outings-migrations.test.js
@@ -30,6 +30,7 @@ const ALL = [
   '005_sary_trip_summary.sql',
   '006_sary_push_subscriptions.sql',
   '007_sary_safety.sql',
+  '008_sary_apns_tokens.sql',
 ];
 
 async function isolatedDb(url) {
@@ -43,11 +44,11 @@ async function isolatedDb(url) {
   return u.toString();
 }
 
-test('the migrations folder holds exactly 001–007', () => {
+test('the migrations folder holds exactly 001–008', () => {
   assert.deepEqual(fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort(), ALL);
 });
 
-test('001–007 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
+test('001–008 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
   const pool = createPool(await isolatedDb(URL_));
   t.after(() => pool.end());
 
@@ -68,7 +69,7 @@ test('001–007 apply in order on an empty database, then on a 001–002 (produc
   const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status) VALUES ('طلعة', $1, 'active') RETURNING id`, [u.id])).rows;
   await pool.query(`INSERT INTO sary.outing_members (outing_id, user_id, role) VALUES ($1, $2, 'owner')`, [o.id, u.id]);
 
-  assert.deepEqual(await migrate(pool), ALL.slice(2), 'only 003–007 are new');
+  assert.deepEqual(await migrate(pool), ALL.slice(2), 'only 003–008 are new');
   assert.deepEqual((await pool.query('SELECT name FROM sary.schema_migrations ORDER BY name')).rows.map((r) => r.name), ALL);
 
   /* Existing rows survive and pick up the new columns' defaults. */
@@ -76,8 +77,43 @@ test('001–007 apply in order on an empty database, then on a 001–002 (produc
   assert.deepEqual(row, { name: 'طلعة', join_locked: false, rally_lat: null });
   const mem = (await pool.query('SELECT co_leader FROM sary.outing_members WHERE outing_id = $1', [o.id])).rows[0];
   assert.equal(mem.co_leader, false);
-  for (const table of ['push_subscriptions', 'trip_summaries']) {
+  for (const table of ['push_subscriptions', 'trip_summaries', 'apns_tokens']) {
     const { rows } = await pool.query(`SELECT to_regclass('sary.' || $1) AS t`, [table]);
     assert.ok(rows[0].t, `${table} exists`);
   }
+});
+
+test('008 on a database at the current level (001–007 applied, with data): only 008 is new, RLS on, rules hold', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(await isolatedDb(URL_));
+  t.after(() => pool.end());
+  await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
+  await pool.query('CREATE SCHEMA sary');
+  await pool.query(`CREATE TABLE sary.schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const f of ALL.slice(0, 7)) {
+    await pool.query(fs.readFileSync(path.join(DIR, f), 'utf8'));
+    await pool.query('INSERT INTO sary.schema_migrations (name) VALUES ($1)', [f]);
+  }
+  const [u] = (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ('سعد', $1) RETURNING id`, [crypto.randomBytes(32)])).rows;
+  await pool.query(`INSERT INTO sary.push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, 'https://fcm.googleapis.com/fcm/send/x', $2, $3)`, [u.id, 'p'.repeat(87), 'a'.repeat(22)]);
+
+  assert.deepEqual(await migrate(pool), ['008_sary_apns_tokens.sql']);
+  assert.deepEqual(await migrate(pool), [], 'idempotent');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.push_subscriptions')).rows[0].n, 1, 'web push rows untouched');
+
+  const { rows: [rls] } = await pool.query(`SELECT relrowsecurity FROM pg_class WHERE oid = 'sary.apns_tokens'::regclass`);
+  assert.equal(rls.relrowsecurity, true);
+  const { rows: pol } = await pool.query(`SELECT 1 FROM pg_policies WHERE schemaname = 'sary' AND tablename = 'apns_tokens'`);
+  assert.equal(pol.length, 0, 'no policies');
+
+  const tok = 'ab'.repeat(32);
+  await pool.query(`INSERT INTO sary.apns_tokens (user_id, token, environment, bundle_id) VALUES ($1, $2, 'sandbox', 'sa.sary.albarq')`, [u.id, tok]);
+  const bad = async (sqlTok, env) => assert.rejects(pool.query(`INSERT INTO sary.apns_tokens (user_id, token, environment, bundle_id) VALUES ($1, $2, $3, 'sa.sary.albarq')`, [u.id, sqlTok, env]));
+  await bad(tok, 'production'); // unique per token
+  await bad('AB'.repeat(32), 'sandbox'); // stored lower-case only
+  await bad('a'.repeat(63), 'sandbox');
+  await bad('cd'.repeat(32), 'development');
+  const row = (await pool.query('SELECT created_at, updated_at FROM sary.apns_tokens WHERE token = $1', [tok])).rows[0];
+  assert.ok(row.created_at && row.updated_at);
+  await pool.query('DELETE FROM sary.users WHERE id = $1', [u.id]);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.apns_tokens')).rows[0].n, 0, 'cascades with the identity');
 });

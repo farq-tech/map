@@ -24,7 +24,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, limits = {} }) {
+function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   const router = express.Router();
   router.use(express.json({ limit: '48kb' }));
   router.use((_req, res, next) => {
@@ -104,6 +104,25 @@ function createOutingsRouter({ service, hub, push, limits = {} }) {
   router.delete('/push/subscribe', auth, asyncHandler(async (req, res) => {
     if (!push) return res.json({ ok: true, removed: 0 });
     res.json({ ok: true, ...(await push.unsubscribe(req.user, req.body?.endpoint)) });
+  }));
+
+  /* Native iOS push (APNs). Off (enabled:false, 503 apns_disabled) unless the API has APNS_*.
+   * Body: { token: <hex device token>, environment: 'sandbox'|'production', bundle_id?: <must match> }. */
+  router.get('/push/apns', (_req, res) => {
+    res.json({ ok: true, ...(apns ? apns.publicConfig() : { enabled: false, bundle_id: null }) });
+  });
+
+  router.post('/push/apns', auth, asyncHandler(async (req, res) => {
+    if (!apns?.enabled) return res.status(503).json({ ok: false, error: 'apns_disabled' });
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await apns.register(req.user, req.body || {});
+    if (!r.ok) return res.status(400).json(r);
+    res.status(201).json({ ok: true });
+  }));
+
+  router.delete('/push/apns', auth, asyncHandler(async (req, res) => {
+    if (!apns) return res.json({ ok: true, removed: 0 });
+    res.json({ ok: true, ...(await apns.unregister(req.user, req.body?.token)) });
   }));
 
   router.post('/invites/preview', asyncHandler(async (req, res) => {
