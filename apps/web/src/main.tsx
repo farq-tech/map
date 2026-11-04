@@ -19,6 +19,7 @@ const GroceryStubPage = lazy(() => import("./pages/GroceryStubPage"));
 const OutingsHome = lazy(() => import("./components/outings/OutingsHome"));
 const OutingJoin = lazy(() => import("./components/outings/OutingJoin"));
 const OutingLive = lazy(() => import("./components/outings/OutingLive"));
+const PrivacyPolicy = lazy(() => import("./components/outings/PrivacyPolicy"));
 
 function RootLayout() {
 	return (
@@ -116,6 +117,17 @@ const outingJoinRoute = createRoute({
 	),
 });
 
+/* سياسة الخصوصية — linked from the App Store listing and the iPhone app. */
+const privacyRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/privacy",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<PrivacyPolicy />
+		</Suspense>
+	),
+});
+
 const outingLiveRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/outings/$id",
@@ -172,6 +184,7 @@ const routeTree = rootRoute.addChildren([
 	outingsRoute,
 	outingJoinRoute,
 	outingLiveRoute,
+	privacyRoute,
 ]);
 
 const router = createRouter({ routeTree });
