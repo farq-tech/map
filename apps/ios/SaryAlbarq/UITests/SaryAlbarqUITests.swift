@@ -41,7 +41,8 @@ final class SaryAlbarqUITests: XCTestCase {
         allowLocation()
         app.launch()
         XCTAssertTrue(app.otherElements["outing.map"].waitForExistence(timeout: 15) || app.maps.firstMatch.waitForExistence(timeout: 5))
-        app.tap() // lets the interruption monitor answer a permission prompt
+        // Tap the status bar, not the map centre: a demo car sits there and would open its card.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the interruption monitor answer a permission prompt
         XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "status capsule")
         XCTAssertTrue(app.buttons["outing-fit"].exists, "control cluster")
         XCTAssertTrue(app.buttons["outing-locate"].exists)
@@ -70,7 +71,7 @@ final class SaryAlbarqUITests: XCTestCase {
         app.launch()
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 15))
-        app.tap() // answers the When-In-Use prompt through the interruption monitor
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // answers the When-In-Use prompt; the map centre holds a car
         sleep(1)
         summary.tap()
         XCTAssertTrue(app.buttons["live.share"].waitForExistence(timeout: 10))
