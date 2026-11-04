@@ -10,6 +10,7 @@ enum HomeRoute: Hashable {
     case recoveryCode
     case appearance
     case privacy
+    case deleteAccount
     case notifications
     case offlineMaps
     case about
@@ -50,7 +51,8 @@ struct HomeView: View {
         case .settings: SettingsView(back: pop, open: { path.append($0) })
         case .recoveryCode: RecoveryCodeScreen(back: pop)
         case .appearance: AppearanceScreen(back: pop)
-        case .privacy: PrivacySettingsView(back: pop)
+        case .privacy: PrivacySettingsView(back: pop, open: { path.append($0) })
+        case .deleteAccount: DeleteAccountView(back: pop)
         case .notifications: NotificationSettingsView(back: pop)
         case .offlineMaps: OfflineMapsView(back: pop)
         case .about: AboutView(back: pop)

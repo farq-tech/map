@@ -170,15 +170,13 @@ struct AppearanceScreen: View {
 
 struct PrivacySettingsView: View {
     var back: () -> Void
+    var open: (HomeRoute) -> Void = { _ in }
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @AppStorage(OutingSession.modeKey) private var mode: String = ShareMode.balanced.rawValue
     @AppStorage(OutingSession.batteryKey) private var battery = false
     /// Mapbox's own opt-out (the SDK observes this key; default on = the SDK default).
     @AppStorage(MapboxTelemetry.key) private var mapboxTelemetry = true
-    @State private var confirmWipe = false
-    @State private var wiping = false
-    @State private var wiped: String?
 
     var body: some View {
         let p = theme.palette
@@ -216,27 +214,16 @@ struct PrivacySettingsView: View {
                 }
                 .padding(.vertical, theme.space(.s))
             }
-            SarySection(title: "بياناتي", footer: "حذف الحساب كاملًا من الخادم (الاسم وسجل العضوية) غير متاح من التطبيق بعد؛ هذا ما نقدر نمسحه الآن.") {
+            SarySection(title: "حسابي", footer: "الخرائط التي نزّلتها بلا إنترنت تبقى على جوالك؛ تحذفها من «الخرائط بلا إنترنت».") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    Text("«امسح بياناتي» يمسح رقمك وصورتك من الخادم، ويُخرجك من كل طلعاتك الحالية (فيُحذف موقعك منها)، ثم يمسح هويتك وملخصاتك من هذا الجهاز.")
+                    Text("«احذف حسابي» يحذف حسابك من الخادم نهائيًا: اسمك وصورتك ورقمك، وعضويتك في كل الطلعات، ومواقعك ورسائلك وملخصاتك وتنبيهاتك. ثم يمسح هويتك من هذا الجهاز.")
                         .saryText(.subhead).foregroundStyle(p.textSecondary)
-                    if let wiped { SaryInlineMessage(text: wiped, tone: .success) }
-                    Button { confirmWipe = true } label: { SaryButtonLabel(title: "امسح بياناتي", systemImage: "trash.fill", busy: wiping) }
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button { open(.deleteAccount) } label: { SaryButtonLabel(title: "احذف حسابي", systemImage: "person.crop.circle.badge.xmark") }
                         .buttonStyle(.sary(.destructive))
-                        .accessibilityIdentifier("privacy.wipe")
+                        .accessibilityIdentifier("privacy.deleteAccount")
                 }
                 .padding(.vertical, theme.space(.s))
-            }
-        }
-        .saryDialog($confirmWipe, systemImage: "trash.fill", title: "تمسح بياناتك؟",
-                    message: "تخرج من كل طلعاتك، ويُمسح رقمك وصورتك من الخادم، وتُمسح هويتك من هذا الجهاز. لا يمكن التراجع.",
-                    confirmTitle: "امسح", busy: wiping) {
-            wiping = true
-            Task {
-                let n = await model.wipeMyData()
-                wiping = false
-                confirmWipe = false
-                wiped = "خرجت من \(SaryFormat.number(n)) طلعة ومُسحت بياناتك."
             }
         }
     }
@@ -246,6 +233,86 @@ struct PrivacySettingsView: View {
         case .precise: return "دقيق: كل ثانيتين تقريبًا وبأعلى دقة. الأفضل للقافلة، ويستهلك بطارية أكثر."
         case .balanced: return "متوازن: كل بضع ثوانٍ أو عند الحركة. يناسب أغلب الطلعات."
         case .saver: return "موفّر: أقل تكرارًا ودقة أقل قليلًا، لتطول البطارية."
+        }
+    }
+
+    private func fact(_ icon: String, _ t: String) -> some View {
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.palette.accentText).frame(width: 22)
+            Text(t).saryText(.subhead).foregroundStyle(theme.palette.textPrimary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// MARK: - Delete account («احذف حسابي»)
+
+/// App Store 5.1.1(v): delete the account from inside the app. Says exactly what goes and what
+/// stays, asks the person to type «احذف», then calls DELETE /api/outings/me (see AppModel.deleteAccount).
+struct DeleteAccountView: View {
+    var back: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.sary) private var theme
+    @State private var typed: String
+    @State private var busy = false
+    @State private var error: String?
+
+    static let confirmWord = "احذف"
+
+    init(back: @escaping () -> Void, typed: String = "") {
+        self.back = back
+        _typed = State(initialValue: typed)
+    }
+
+    private var confirmed: Bool { typed.trimmingCharacters(in: .whitespacesAndNewlines) == Self.confirmWord }
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "احذف حسابي", back: busy ? nil : back) {
+            SaryInlineMessage(text: "الحذف نهائي ولا يمكن التراجع عنه، ورمز الاسترجاع لن يعمل بعده.", tone: .warning)
+            SarySection(title: "يُحذف من الخادم") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    fact("person.text.rectangle", "اسمك وصورتك ورقم جوالك.")
+                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت صاحبها تنتقل لمساعدك أو لأقدم عضو، وإذا ما بقي أحد تنتهي.")
+                    fact("location.fill", "آخر موقع محفوظ لك، ورسائلك القصيرة، ونداء الطوارئ، ومقاطعك الصوتية.")
+                    fact("flag.checkered", "ملخصات رحلاتك التي شاركتها.")
+                    fact("bell.fill", "تنبيهات هذا الجهاز وأي جهاز آخر، ورمز الاسترجاع.")
+                }
+                .padding(.vertical, theme.space(.s))
+            }
+            SarySection(title: "يُمسح من هذا الجهاز") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    fact("key.fill", "هويتك المحفوظة، وموافقاتك على مشاركة الموقع، وسجل رحلاتك، وروابط الدعوة المحفوظة.")
+                }
+                .padding(.vertical, theme.space(.s))
+            }
+            SarySection(title: "يبقى") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    fact("arrow.down.circle.fill", "الخرائط التي نزّلتها بلا إنترنت: صور خرائط فقط، تبقى على جوالك وتحذفها من «الخرائط بلا إنترنت».")
+                    fact("person.3.fill", "طلعات أصحابك وملخصاتهم تبقى لهم، ولا يظهر اسمك فيها بعد الآن.")
+                    fact("paintbrush.fill", "إعدادات المظهر على هذا الجهاز.")
+                }
+                .padding(.vertical, theme.space(.s))
+            }
+            SaryTextField(title: "للتأكيد اكتب «\(Self.confirmWord)»", placeholder: Self.confirmWord, text: $typed, id: "deleteAccount.confirm",
+                          maxLength: 12, disabled: busy)
+            if let error { SaryInlineMessage(text: error, tone: .error).accessibilityIdentifier("deleteAccount.error") }
+            Button { delete() } label: { SaryButtonLabel(title: "احذف حسابي نهائيًا", systemImage: "trash.fill", busy: busy) }
+                .buttonStyle(.sary(.destructive))
+                .disabled(!confirmed || busy)
+                .accessibilityIdentifier("deleteAccount.submit")
+            Button("تراجع") { back() }
+                .buttonStyle(.sary(.plain))
+                .disabled(busy)
+        }
+    }
+
+    private func delete() {
+        busy = true
+        error = nil
+        Task {
+            let outcome = await model.deleteAccount()
+            busy = false
+            if case .failed(let m) = outcome { error = m + " لم يُحذف شيء." }
         }
     }
 

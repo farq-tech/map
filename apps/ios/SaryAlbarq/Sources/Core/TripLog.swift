@@ -55,7 +55,7 @@ struct TripLog: Codable, Equatable {
 
 /// Per-outing logs in UserDefaults (this device only; cleared on sign-out).
 enum TripLogStore {
-    private static let key = "sary.trip.logs.v1"
+    static let key = "sary.trip.logs.v1"
 
     static func load(_ outingId: String, defaults: UserDefaults = .standard) -> TripLog? {
         guard let d = defaults.data(forKey: key), let all = try? JSONDecoder().decode([String: TripLog].self, from: d) else { return nil }

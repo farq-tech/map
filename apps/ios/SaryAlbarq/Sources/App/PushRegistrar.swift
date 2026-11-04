@@ -17,6 +17,8 @@ protocol PushSystem {
     /// Shows the system prompt (only ever after our own Arabic explainer).
     func requestAuthorization() async -> Bool
     func registerForRemoteNotifications()
+    /// Account deleted: this app stops receiving pushes on this device (a new identity registers again).
+    func unregisterForRemoteNotifications()
 }
 
 struct LivePushSystem: PushSystem {
@@ -28,6 +30,9 @@ struct LivePushSystem: PushSystem {
     }
     func registerForRemoteNotifications() {
         Task { @MainActor in UIApplication.shared.registerForRemoteNotifications() }
+    }
+    func unregisterForRemoteNotifications() {
+        Task { @MainActor in UIApplication.shared.unregisterForRemoteNotifications() }
     }
 }
 
@@ -169,6 +174,16 @@ final class PushRegistrar: ObservableObject {
         guard let t = registeredToken else { return }
         try? await backend.unregisterApns(token: t)
         defaults.removeObject(forKey: Self.tokenKey)
+    }
+
+    /// After the account is deleted: the server already dropped this device's token with the
+    /// identity, so nothing is sent; forget it here and stop APNs delivery to this install.
+    func forgetDevice() {
+        defaults.removeObject(forKey: Self.tokenKey)
+        defaults.removeObject(forKey: Self.explainedKey)
+        defaults.removeObject(forKey: Self.enabledKey)
+        system.unregisterForRemoteNotifications()
+        state = .notAsked
     }
 
     static func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }

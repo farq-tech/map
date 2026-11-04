@@ -213,7 +213,7 @@ final class OfflineMaps: ObservableObject {
         areas.removeAll { $0.id == id }
     }
 
-    /// Everything, including the style pack (used by «امسح بياناتي» and when the list is emptied).
+    /// Everything, including the style pack (when the list is emptied; «احذف حسابي» keeps downloaded areas).
     func deleteAll() {
         for a in areas { tileStore.removeRegion(forId: a.id) { _ in } }
         offline.removeStylePack(for: OutingMapboxView.styleURI)

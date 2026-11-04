@@ -64,6 +64,31 @@ final class ScreensUITests: XCTestCase {
         XCTAssertTrue(app.buttons["recovery.submit"].isEnabled)
     }
 
+    /// «احذف حسابي»: explained, needs the typed word, then back to onboarding with a notice (demo: no server).
+    func testDeleteAccountNeedsTypedConfirmationAndReturnsToOnboarding() {
+        let app = launch(["-demo", "-SaryScreen", "privacy"])
+        let open = app.buttons["privacy.deleteAccount"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+        let submit = app.buttons["deleteAccount.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["يُحذف من الخادم"].exists)
+        XCTAssertTrue(app.staticTexts["يبقى"].exists)
+        XCTAssertFalse(submit.isEnabled, "nothing happens without the typed word")
+        let field = app.textFields["deleteAccount.confirm"]
+        field.tap()
+        field.typeText("حذف")
+        XCTAssertFalse(submit.isEnabled, "a near miss is not enough")
+        field.typeText(XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue + XCUIKeyboardKey.delete.rawValue + "احذف")
+        XCTAssertTrue(submit.isEnabled)
+        submit.tap()
+        let notice = app.alerts["حُذف حسابك"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 5))
+        XCTAssertTrue(notice.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "باقية على جوالك")).firstMatch.exists, "says the offline areas stay")
+        notice.buttons["حسنًا"].tap()
+        XCTAssertFalse(app.buttons["privacy.deleteAccount"].exists, "the settings are gone: back at onboarding")
+    }
+
     func testOfflineHomeSaysSo() {
         let app = launch(["-demo", "-SaryScreen", "home", "-SaryOffline"])
         XCTAssertTrue(app.descendants(matching: .any)["offline-banner"].waitForExistence(timeout: 10))

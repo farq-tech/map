@@ -313,6 +313,10 @@ final class OutingsAPI {
     func leave(_ id: String) async throws {
         let _: OkBox = try await call("POST", "/\(id)/leave")
     }
+    /// «احذف حسابي»: the server leaves every outing for me and deletes this identity. 404/405 = not deployed yet.
+    func deleteAccount() async throws {
+        let _: OkBox = try await call("DELETE", "/me")
+    }
     func preview(token: String) async throws -> InvitePreview {
         let r: PreviewBox = try await call("POST", "/invites/preview", body: ["token": token], auth: false)
         return r.invite
@@ -367,7 +371,7 @@ private struct AnyEncodable: Encodable {
 
 /// The owner keeps invite links on this device; the server only stores their hash.
 enum InviteTokenStore {
-    private static let key = "sary.outings.invites.v1"
+    static let key = "sary.outings.invites.v1"
     static func load(_ outingId: String) -> String? {
         (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[outingId]
     }

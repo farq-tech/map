@@ -118,7 +118,7 @@ components above (`SaryPage` header + scroll, `SarySection`, `SaryNavRow`,
 | «طلعاتي» | `HomeView.swift` | active / paused / not started / ended, empty, loading skeleton, offline strip, error + retry |
 | New outing, join by link, invite preview | `OutingSheets.swift` | invite: valid / expired / invalid / retryable error |
 | Outing details, trip summary, history | `OutingDetailsView.swift` | summary: shared totals from `GET /:id`, my totals from this device (`TripLog`), «شارك ملخصي» = `PUT /:id/summary` |
-| Profile, settings, appearance, privacy, notifications, about | `SettingsScreens.swift` | privacy: share precision, battery, what is sent and when, «امسح بياناتي» (what the API allows) |
+| Profile, settings, appearance, privacy, notifications, about | `SettingsScreens.swift` | privacy: share precision, battery, what is sent and when, «احذف حسابي» → `DeleteAccountView` (typed confirmation, DELETE /api/outings/me) |
 
 Push: `App/PushRegistrar.swift` (unit-tested with a fake server) registers the
 APNs token at `POST /api/outings/push/apns` (sandbox in Debug, production in
@@ -131,5 +131,5 @@ Screenshots: `scripts/app-shots.sh <udid> <name> -demo -SaryScreen <screen> -Sar
 (`-SaryOffline` forces the offline state). Screens: `splash onboarding onboarding-profile
 onboarding-location recovery-restore recovery-code recovery-code-shown home details summary
 history profile settings appearance privacy notifications offline-maps about create join
-invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave dialog-wipe`.
+invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped`.
 Shots: `docs/app-shots/`.

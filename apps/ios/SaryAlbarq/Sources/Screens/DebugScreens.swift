@@ -42,9 +42,16 @@ struct DebugScreen: View {
         case "dialog-leave":
             HomeView().saryDialog($dialog, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",
                                   message: "يتوقف إرسال موقعك وتخرج منها. ترجع فقط برابط دعوة جديد.", confirmTitle: "غادر") {}
-        case "dialog-wipe":
-            HomeView(initial: [.settings, .privacy]).saryDialog($dialog, systemImage: "trash.fill", title: "تمسح بياناتك؟",
-                                                                message: "تخرج من كل طلعاتك، ويُمسح رقمك وصورتك من الخادم، وتُمسح هويتك من هذا الجهاز. لا يمكن التراجع.", confirmTitle: "امسح") {}
+        case "privacy-account": HomeView(initial: [.settings, .privacy]).defaultScrollAnchor(.bottom)
+        case "delete-account": HomeView(initial: [.settings, .privacy, .deleteAccount])
+        case "delete-account-typed": NavigationStack { DeleteAccountView(back: {}, typed: DeleteAccountView.confirmWord) }.defaultScrollAnchor(.bottom)
+        case "account-deleted", "account-wiped":
+            OnboardingFlow(start: .intro)
+                .alert((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.title ?? "", isPresented: $dialog) {
+                    Button("حسنًا", role: .cancel) {}
+                } message: {
+                    Text((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.message ?? "")
+                }
         default: HomeView()
         }
     }

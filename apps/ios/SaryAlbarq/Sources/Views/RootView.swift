@@ -18,6 +18,11 @@ struct RootView: View {
             } else if model.identity == nil || needsOnboarding {
                 OnboardingFlow(start: model.identity == nil ? .intro : .locationExplainer)
                     .transition(.opacity)
+                    .alert(model.accountNotice?.notice?.title ?? "", isPresented: Binding(get: { model.accountNotice?.notice != nil }, set: { if !$0 { model.accountNotice = nil } })) {
+                        Button("حسنًا", role: .cancel) {}
+                    } message: {
+                        Text(model.accountNotice?.notice?.message ?? "")
+                    }
             } else {
                 HomeView()
                     .transition(.opacity)

@@ -79,9 +79,18 @@ only Mapbox's stack was.
 
 ## Account deletion
 
-The API has no "delete my account" endpoint. «امسح بياناتي» removes what the API
-allows (phone, photo, shared summaries, leaves every current outing, which
-deletes the latest position, then forgets the identity on the device). App
-Store guideline 5.1.1(v) asks for in-app account deletion when an app creates
-accounts: **the owner** needs a server endpoint that deletes the user row (name,
-memberships) before submission.
+Settings → الخصوصية → «احذف حسابي» (App Store guideline 5.1.1(v)) opens a page
+that says exactly what is deleted from the server, what is wiped from this
+device and what stays, asks the person to type «احذف», then calls
+`DELETE /api/outings/me` (farq-tech/map PR #27). That endpoint leaves every
+outing with the normal leave rules (ownership passes on) and hard-deletes the
+identity. On success the app forgets its APNs token and calls
+`unregisterForRemoteNotifications`, deletes the Keychain identity, sharing
+consent, trip logs, saved invite links, the share-precision/battery choices and
+the onboarding flag, and goes back to onboarding with a notice. Downloaded
+offline map areas stay (map tiles only, not about anyone), and the notice says
+so. Until the API is deployed, a `404`/`405` falls back to the older partial
+wipe (phone, photo, shared summaries, leave every current outing, forget the
+identity here), and the notice says plainly that the account itself was not
+deleted yet. Any other error deletes nothing and says so on the page.
+**The owner** must deploy PR #27 before submission.

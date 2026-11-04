@@ -199,24 +199,41 @@ final class AppModel: ObservableObject {
         signedOutLocally()
     }
 
-    /// «امسح بياناتي»: everything the API lets us remove — phone and photo on the server,
-    /// my shared trip summaries, every current outing (which deletes my position there) —
-    /// then the identity on this device. Returns how many outings I left.
-    func wipeMyData() async -> Int {
-        guard identity != nil else { return 0 }
-        if isDemo { return current.count }
-        _ = try? await api.updateProfile(phone: "", avatar: "")
-        await refresh()
-        let me = identity?.user.id
-        for o in history where o.summaries?.contains(where: { $0.user_id == me }) == true {
-            try? await api.withdrawSummary(o.id)
+    /// After «احذف حسابي»: what happened, shown once over the onboarding screen.
+    @Published var accountNotice: AccountDeletionOutcome?
+
+    /// «احذف حسابي» (App Store 5.1.1(v)). DELETE /api/outings/me; on success forget the
+    /// push token and everything about the person on this device — downloaded map areas
+    /// stay — and go back to onboarding. If the server has no DELETE /me yet (404/405):
+    /// the older partial wipe, said honestly. On any other error nothing is deleted.
+    func deleteAccount() async -> AccountDeletionOutcome {
+        guard identity != nil else { return .failed(OutingAPIError(code: "unauthorized", status: 401).arabic) }
+        let outcome: AccountDeletionOutcome
+        if isDemo {
+            outcome = .deleted
+            push.forgetDevice()
+            wipeAccountLocally()
+        } else {
+            outcome = await AccountDeleter(
+                backend: api,
+                myUserId: identity?.user.id,
+                forgetPush: { [push] in push.forgetDevice() },
+                unregisterPushOnServer: { [push] in await push.unregister() },
+                wipeLocal: { [weak self] in self?.wipeAccountLocally() }
+            ).run()
         }
-        var left = 0
-        for o in current {
-            if (try? await api.leave(o.id)) != nil { left += 1 }
+        if outcome.notice != nil {
+            #if DEBUG
+            debugScreen = nil
+            #endif
+            accountNotice = outcome
         }
-        await signOut()
-        return left
+        return outcome
+    }
+
+    private func wipeAccountLocally() {
+        signedOutLocally()
+        LocalAccountData.wipe()
     }
 
     private func signedOutByServer() {

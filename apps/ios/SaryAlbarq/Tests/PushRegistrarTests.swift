@@ -26,6 +26,8 @@ final class PushRegistrarTests: XCTestCase {
         func authorization() async -> UNAuthorizationStatus { status }
         func requestAuthorization() async -> Bool { asked += 1; status = grant ? .authorized : .denied; return grant }
         func registerForRemoteNotifications() { registerCalls += 1 }
+        var unregisterCalls = 0
+        func unregisterForRemoteNotifications() { unregisterCalls += 1 }
     }
 
     var defaults: UserDefaults!
