@@ -36,10 +36,12 @@ struct LiveOutingScreen: View {
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
+                let members = controller.mapMembers(theme: theme)
                 PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
-                    members: controller.mapMembers(theme: theme),
+                    members: members,
                     rally: controller.rallyPoint,
+                    trails: controller.mapTrails(members: members),
                     camera: controller.camera,
                     chrome: chromeInsets(full: full),
                     theme: theme,
@@ -136,8 +138,12 @@ struct LiveOutingScreen: View {
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
                                       warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
+                    if let bt = controller.backTrackUI {
+                        BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     if !rowMode {
-                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive ? 1 : 3, tapped: controller.actions.alertTapped,
+                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
                         LivePlanStrip(controller: controller)
                     }
@@ -191,13 +197,16 @@ struct LiveOutingScreen: View {
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: sheetTop)
+        .animation(theme.animation(.smooth), value: controller.backTrack != nil)
     }
 
     private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
-        let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil)
+        let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
+                                                  backTracking: controller.backTrack != nil)
+        /* Drive mode keeps the few that matter on the move: me, the group, and the way back. */
         let copyMe = SaryMapControlItem(id: "copyme", systemImage: "location.viewfinder", label: "انسخ موقعي", accessibilityID: "outing-copyme")
-        return theme.drive ? Array(all.prefix(2)) : all + [copyMe]
+        return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } : all + [copyMe]
     }
 
     private func controlTapped(_ id: String) {
@@ -207,8 +216,108 @@ struct LiveOutingScreen: View {
         case "fit": a.fitGroup()
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
+        case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "copyme": controller.modal = .plan(.me)
         default: break
+        }
+    }
+}
+
+/// «طريق العودة»: big arrow, distance back to «نقطة البداية» along my trail, and the
+/// off-track warning. Opaque and larger in drive mode; works offline (all on the phone).
+struct BackTrackPanel: View {
+    var ui: BackTrackUI
+    var exit: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let off = ui.phase == .offTrack
+        let arrived = ui.phase == .arrived
+        let arrowSize: CGFloat = theme.drive ? 92 : 68
+        let tone: Color = off ? p.emergency : (arrived ? p.live : p.accent)
+        HStack(spacing: theme.space(.m)) {
+            ZStack {
+                Circle().fill(tone)
+                if arrived {
+                    Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(Color.white)
+                } else if ui.phase == .waitingFix {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: arrowSize * 0.5, weight: .black))
+                        .foregroundStyle(Color.white)
+                        .rotationEffect(.degrees(ui.arrowDegrees))
+                        .animation(theme.animation(.smooth), value: ui.arrowDegrees)
+                }
+            }
+            .frame(width: arrowSize, height: arrowSize)
+            /* A real-world direction: never mirrored by the RTL layout. */
+            .environment(\.layoutDirection, .leftToRight)
+            .overlay(Circle().stroke(Color.white, lineWidth: 3))
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .saryText(theme.drive ? .title2 : .headline, weight: .bold)
+                    .foregroundStyle(off ? p.emergencyText : p.textPrimary)
+                    .accessibilityIdentifier("backtrack.title")
+                if let m = ui.remainingMeters, !arrived {
+                    Text(SaryFormat.distance(meters: m))
+                        .saryNumber(theme.drive ? .display : .title, weight: .heavy)
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .accessibilityIdentifier("backtrack.distance")
+                }
+                Text(detail)
+                    .saryText(theme.drive ? .callout : .footnote, weight: .medium)
+                    .foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: exit) {
+                Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold)
+            }
+            .buttonStyle(.sary(.secondary, width: .hug, compact: !theme.drive))
+            .accessibilityIdentifier("backtrack.exit")
+        }
+        .padding(theme.space(.m))
+        .background {
+            /* Drive mode and the warning: fully opaque, readable at a glance in sun. */
+            if theme.drive || off {
+                RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.chromeOpaque)
+            }
+        }
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
+        .overlay {
+            if off { RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.emergency, lineWidth: 3) }
+        }
+        .sensoryFeedback(.warning, trigger: off) { was, now in now && !was }
+        .sensoryFeedback(.success, trigger: arrived) { was, now in now && !was }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("backtrack.panel")
+    }
+
+    private var title: String {
+        switch ui.phase {
+        case .waitingFix: return "طريق العودة"
+        case .onTrail: return "طريق العودة"
+        case .offTrack: return "خرجت عن الطريق"
+        case .arrived: return "وصلت نقطة البداية"
+        }
+    }
+
+    private var detail: String {
+        switch ui.phase {
+        case .waitingFix: return "ننتظر موقعك من GPS…"
+        case .arrived: return "هنا دخلت أول مرة."
+        case .offTrack:
+            let m = ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? ""
+            return "أنت على بعد \(m) من مسارك · ارجع له باتجاه السهم (\(ui.directionLabel))"
+        case .onTrail:
+            if ui.onGap { return "هذا الجزء لم يُسجَّل: خط مستقيم تقريبي، انتبه للطريق" }
+            return "باقي إلى نقطة البداية على مسارك · \(ui.directionLabel)"
         }
     }
 }

@@ -14,6 +14,10 @@ struct SessionEnv {
     var timers = true
     /// Tests only: stands in for iOS location permission.
     var authorizationOverride: Bool?
+    /// Tests only: stands in for «دائمًا» (screen-locked trail).
+    var alwaysOverride: Bool?
+    /// Where «مساري» is kept on this device (tests use a temporary folder).
+    var trailDirectory: URL? = TrailStore.directory
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -47,6 +51,10 @@ final class OutingSession: ObservableObject, Identifiable {
     @Published var batterySharing: Bool {
         didSet { env.defaults.set(batterySharing, forKey: Self.batteryKey) }
     }
+    /// «مساري»: my breadcrumb trail for this outing. On this device only — never sent.
+    @Published private(set) var trail = Trail()
+    /// The GPS is kept on with the screen locked, for the trail only.
+    @Published private(set) var recordingInBackground = false
 
     let isDemo: Bool
     let location: LocationSharer
@@ -59,6 +67,8 @@ final class OutingSession: ObservableObject, Identifiable {
     private var visible = true
     /// The person pressed stop while offline: tell the server once we can.
     private var pendingServerStop = false
+    private var trailSavedAt = Date.distantPast
+    private var trailUnsaved = 0
 
     static let modeKey = "sary.outings.mode.v1"
     static let batteryKey = "sary.outings.battery.v1"
@@ -75,6 +85,9 @@ final class OutingSession: ObservableObject, Identifiable {
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         if demo != nil { link = .live }
+        trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
+        /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
+        trail.markGap()
     }
 
     // MARK: the privacy gate
@@ -100,6 +113,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func open() {
         visible = env.isForeground()
+        location.onTrailFix = { [weak self] f in self?.trailFix(f) }
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
@@ -147,6 +161,9 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func close() {
+        stopBackgroundTrail()
+        saveTrail()
+        location.onTrailFix = { _ in }
         stopSharingLocally()
         channel?.stop()
         channel = nil
@@ -161,11 +178,21 @@ final class OutingSession: ObservableObject, Identifiable {
         visible = active
         if active {
             location.watchForeground()
+            stopBackgroundTrail()
             channel?.setAway(false)
             channel?.reconnectNow()
             reconcileSharing()
         } else {
             channel?.dropPendingFix()
+            /* The trail keeps going with the screen locked only with «دائمًا» and the switch on;
+             * otherwise the stretch until we are back is an honest gap. Sending stops either way. */
+            if canRecordTrailInBackground {
+                recordingInBackground = true
+                location.startBackgroundTrail()
+            } else {
+                trail.markGap()
+            }
+            saveTrail()
             location.stopSharing()
             location.stopWatchingForeground()
             channel?.setAway(true)
@@ -244,6 +271,8 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     private func reconcileSharing() {
+        /* Ended, left, removed, switch off: the screen-locked trail stops at once. */
+        if recordingInBackground && !canRecordTrailInBackground { stopBackgroundTrail() }
         guard let v = view else { return }
         /* Paused / ended / sharing switched off elsewhere: the intent ends too. */
         if wantsToShare && (v.status == .paused || v.status == .ended || !v.snapshot.me.sharing) {
@@ -274,6 +303,74 @@ final class OutingSession: ObservableObject, Identifiable {
         if isDemo { return }
         channel?.sendFix(f, mode: m)
     }
+
+    // MARK: «مساري» — the on-device trail
+
+    /// Recording is on (switch), the outing is active or paused, I am in it, and it is not closed.
+    var trailRecordingAllowed: Bool {
+        guard TrailPrefs.record(env.defaults), closedReason == nil, let v = view, v.me != nil else { return false }
+        return v.status == .active || v.status == .paused
+    }
+
+    var hasAlwaysPermission: Bool { env.alwaysOverride ?? location.hasAlways }
+
+    /// The screen-locked trail may run: «دائمًا», both switches on, and an outing I am recording.
+    var canRecordTrailInBackground: Bool {
+        TrailPrefs.background(env.defaults) && hasAlwaysPermission && trailRecordingAllowed
+    }
+
+    /// Every GPS fix, foreground or (with «دائمًا») background. It goes into the trail on this
+    /// phone and nowhere else: this path never reaches `handleFix`, `LiveChannel` or the API.
+    func trailFix(_ f: DeviceFix) {
+        guard trailRecordingAllowed else { return }
+        guard visible || recordingInBackground else { return }
+        guard trail.add(f) else { return }
+        trailUnsaved += 1
+        if trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5 { saveTrail() }
+    }
+
+    func saveTrail() {
+        guard trailUnsaved > 0 || trail.isEmpty == false else { return }
+        TrailStore.save(trail, outingId: id, in: env.trailDirectory)
+        trailSavedAt = Date()
+        trailUnsaved = 0
+    }
+
+    /// «امسح مساري لهذه الطلعة».
+    func clearTrail() {
+        trail = Trail()
+        TrailStore.delete(id, in: env.trailDirectory)
+        trailUnsaved = 0
+    }
+
+    /// «سجّل مساري» switch.
+    func setTrailRecording(_ on: Bool) {
+        env.defaults.set(on, forKey: TrailPrefs.recordKey)
+        /* Off and on again: what happened in between was not recorded. */
+        trail.markGap()
+        if !on { stopBackgroundTrail(); saveTrail() }
+        objectWillChange.send()
+    }
+
+    /// «سجّل مساري والشاشة مقفلة» switch (asking iOS for «دائمًا» is the caller's, after the explainer).
+    func setBackgroundTrail(_ on: Bool) {
+        env.defaults.set(on, forKey: TrailPrefs.backgroundKey)
+        if !on { stopBackgroundTrail() }
+        objectWillChange.send()
+    }
+
+    private func stopBackgroundTrail() {
+        guard recordingInBackground || location.backgroundTrail else { return }
+        recordingInBackground = false
+        location.stopBackgroundTrail()
+        /* If we are still off screen, from here on nothing is recorded. */
+        if !visible { trail.markGap() }
+    }
+
+    #if DEBUG
+    /// Screenshots / UI tests: a plausible trail into the demo outing (DEBUG builds only).
+    func seedDemoTrail(_ t: Trail) { trail = t }
+    #endif
 
     // MARK: inbound
 
@@ -347,6 +444,8 @@ final class OutingSession: ObservableObject, Identifiable {
     private func closed(_ r: LiveCloseReason) {
         guard closedReason == nil else { return }
         closedReason = r
+        stopBackgroundTrail()
+        saveTrail()
         stopSharingLocally()
         if r == .outingEnded { view?.apply(.outingStatus(.ended)) }
         channel?.stop()

@@ -20,6 +20,8 @@ enum LiveModal: Identifiable, Equatable {
     case notify
     /// «احفظ الخريطة بلا إنترنت» for this outing's area.
     case offlineMaps
+    /// Our explainer before asking iOS for «دائمًا» (the screen-locked trail).
+    case trailAlways
     /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
     case plan(LivePlanModal)
 
@@ -32,6 +34,7 @@ enum LiveModal: Identifiable, Equatable {
         case .rallyLabel: return "rally"
         case .notify: return "notify"
         case .offlineMaps: return "offline"
+        case .trailAlways: return "trailAlways"
         case let .plan(m): return m.id
         }
     }
@@ -75,6 +78,15 @@ final class LiveOutingController: ObservableObject {
         didSet { UserDefaults.standard.set(notificationsOn, forKey: "sary.outings.notify.v1") }
     }
     @Published var shareItem: URL?
+    /// «طريق العودة»: a frozen copy of my trail being retraced (nil when off).
+    @Published private(set) var backTrack: BackTrack?
+    @Published private(set) var backTrackStatus: BackTrackStatus?
+    /// «أظهر مسارات الأصحاب» (this device).
+    @Published var showFriendTrails: Bool {
+        didSet { UserDefaults.standard.set(showFriendTrails, forKey: TrailPrefs.friendsKey) }
+    }
+    /// Friends' last ~30 minutes, from the positions this phone already receives. Memory only.
+    private(set) var friendTrails = FriendTrails()
 
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
@@ -89,6 +101,7 @@ final class LiveOutingController: ObservableObject {
         self.location = location
         self.appearance = appearance
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
+        showFriendTrails = TrailPrefs.friends()
         inviteLink = session.storedInviteURL()?.absoluteString
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged() }
@@ -99,6 +112,15 @@ final class LiveOutingController: ObservableObject {
         player.onProgress = { [weak self] id, p in self?.setPlayback(id, .playing(progress: p)) }
         player.onFinish = { [weak self] id in self?.setPlayback(id, .idle) }
         lastView = session.view
+        #if DEBUG
+        if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryBackTrack") {
+            let delay = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startBackTrack() }
+        }
+        #endif
+        if let v = session.view { ingestFriends(v) }
     }
 
     // MARK: state
@@ -169,6 +191,7 @@ final class LiveOutingController: ObservableObject {
 
     private func sessionChanged() {
         guard let v = session.view else { return }
+        ingestFriends(v)
         defer { lastView = v }
         guard let prev = lastView else { return }
         /* New notes from friends and new clips become cards in the alert lane. */
@@ -190,6 +213,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        updateBackTrack()
         updateAuto()
         objectWillChange.send()
     }
@@ -202,6 +226,170 @@ final class LiveOutingController: ObservableObject {
         let night = SunLight.preset(Date(), lat: f.lat, lng: f.lng) == .night
         if appearance.autoNight != night { appearance.autoNight = night }
     }
+
+    // MARK: «مساري» / «طريق العودة» / friends' trails
+
+    private func ingestFriends(_ v: OutingView) {
+        for (uid, p) in v.positions where uid != v.myId {
+            guard let d = LiveOutingPresenter.deviceDate(p.recorded_at, view: v) else { continue }
+            friendTrails.ingest(uid, lat: p.lat, lng: p.lng, atMs: d.timeIntervalSince1970 * 1000, accuracy: p.accuracy)
+        }
+        friendTrails.prune(nowMs: Date().timeIntervalSince1970 * 1000, keep: Set(v.positions.keys))
+    }
+
+    var myTrailColor: UInt32 {
+        guard let v = session.view else { return Vehicle.mySpotHex }
+        return v.colors[v.myId] ?? Vehicle.mySpotHex
+    }
+
+    /// Everything the map draws for trails. Friends' trails end at their last real fix and fade
+    /// with it: an old position never looks live.
+    func mapTrails(members: [MapMember]) -> MapTrails {
+        let t = session.trail
+        let runs = t.runs
+        var out = MapTrails()
+        if t.points.count >= 2 {
+            out.mine = MapTrails.Line(id: "me", color: myTrailColor, solid: runs.solid, gaps: runs.gaps)
+        }
+        out.start = t.start?.position
+        out.highlight = backTrack != nil
+        out.gapLabels = runs.gaps
+            .map { (mid: LngLat(lng: ($0[0].lng + $0[1].lng) / 2, lat: ($0[0].lat + $0[1].lat) / 2), len: Vehicle.distanceMeters($0[0], $0[1])) }
+            .filter { $0.len >= 150 }
+            .sorted { $0.len > $1.len }
+            .prefix(2).map(\.mid)
+        if showFriendTrails {
+            for m in members where !m.isMe {
+                guard var pts = friendTrails.byId[m.id], !pts.isEmpty else { continue }
+                /* The line ends exactly at the car (its last real fix), never beyond it. */
+                if let last = pts.last, Vehicle.distanceMeters(last.position, m.position) > 1 {
+                    pts.append(TrailPoint(lat: m.position.lat, lng: m.position.lng, t: m.atMs))
+                }
+                guard pts.count >= 2 else { continue }
+                let r = Trail.runs(pts)
+                let op: Double = m.presence == .live ? 0.6 : (m.presence == .recent ? 0.3 : 0.18)
+                out.friends.append(MapTrails.Line(id: m.id, color: m.color, opacity: op, solid: r.solid, gaps: r.gaps))
+            }
+        }
+        return out
+    }
+
+    var trailCard: TrailCardUIState {
+        let t = session.trail
+        var startDist: Double?
+        if let s = t.start, let f = location.lastFix { startDist = Vehicle.distanceMeters(s.position, LngLat(lng: f.lng, lat: f.lat)) }
+        return TrailCardUIState(recordedMeters: t.recordedLengthM, pointCount: t.points.count, gapCount: t.gapCount, startDistanceMeters: startDist,
+                                isRecording: session.trailRecordingAllowed, recordingOn: TrailPrefs.record(), backgroundOn: TrailPrefs.background(),
+                                backgroundAllowed: session.hasAlwaysPermission, recordingInBackground: session.recordingInBackground,
+                                showFriends: showFriendTrails, backTrackActive: backTrack != nil)
+    }
+
+    func startBackTrack() {
+        guard let bt = BackTrack(session.trail) else {
+            toast("ما فيه مسار مسجّل بعد. يبدأ التسجيل أول ما تتحرك.")
+            return
+        }
+        backTrack = bt
+        following = false
+        modal = nil
+        updateBackTrack()
+        var pts = bt.path.map(\.position)
+        if let f = location.lastFix { pts.append(LngLat(lng: f.lng, lat: f.lat)) }
+        lowerSheetThenAsk(.fit(pts))
+    }
+
+    func stopBackTrack() {
+        backTrack = nil
+        backTrackStatus = nil
+    }
+
+    private func updateBackTrack() {
+        guard var bt = backTrack else { return }
+        /* Only a recent fix: an old one would point the wrong way. */
+        guard let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
+            backTrackStatus = nil
+            return
+        }
+        let st = bt.update(LngLat(lng: f.lng, lat: f.lat))
+        if bt != backTrack { backTrack = bt }
+        if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
+        if st != backTrackStatus { backTrackStatus = st }
+    }
+
+    var backTrackUI: BackTrackUI? {
+        guard backTrack != nil else { return nil }
+        guard let st = backTrackStatus else {
+            return BackTrackUI(phase: .waitingFix, arrowDegrees: 0, directionLabel: "", relativeToCourse: false, onGap: false)
+        }
+        /* Moving with a trusted course: the arrow is relative to where the car points; otherwise to the top of the map. */
+        let course = location.lastFix.flatMap { Policy.trustedHeading($0.heading, speed: $0.speed) }
+        let ref = course ?? overlay.projection.bearing
+        let phase: BackTrackUI.Phase = st.arrived ? .arrived : (st.offTrack ? .offTrack : .onTrail)
+        return BackTrackUI(phase: phase, remainingMeters: st.remainingM, offsetMeters: st.offsetM,
+                           arrowDegrees: LiveOutingPresenter.relative(st.bearing, mapBearing: ref),
+                           directionLabel: Geo.directionLabel(st.bearing), relativeToCourse: course != nil, onGap: st.onGap)
+    }
+
+    func clearTrail() {
+        stopBackTrack()
+        session.clearTrail()
+        toast("مسحنا مسارك لهذه الطلعة من جوالك")
+    }
+
+    func setTrailRecording(_ on: Bool) {
+        session.setTrailRecording(on)
+        if !on { stopBackTrack() }
+    }
+
+    /// «سجّل مساري والشاشة مقفلة»: on asks for «دائمًا» (after our explainer) when iOS has not allowed it yet.
+    func setBackgroundTrail(_ on: Bool) {
+        session.setBackgroundTrail(on)
+        if on && !session.hasAlwaysPermission { modal = .trailAlways }
+        objectWillChange.send()
+    }
+
+    /// After I start sharing for the first time: offer the screen-locked trail once.
+    func offerAlwaysIfNeeded() {
+        guard TrailPrefs.background(), !session.hasAlwaysPermission, location.canLocate,
+              !UserDefaults.standard.bool(forKey: TrailPrefs.explainedKey) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self, self.modal == nil, self.session.wantsToShare else { return }
+            self.modal = .trailAlways
+        }
+    }
+
+    func allowAlways() {
+        UserDefaults.standard.set(true, forKey: TrailPrefs.explainedKey)
+        modal = nil
+        Task {
+            let ok = await location.requestAlways()
+            toast(ok ? "مسارك يُسجَّل حتى والشاشة مقفلة" : "الإذن «أثناء الاستخدام» فقط: يُسجَّل مسارك والتطبيق مفتوح")
+            objectWillChange.send()
+        }
+    }
+
+    func laterAlways() {
+        UserDefaults.standard.set(true, forKey: TrailPrefs.explainedKey)
+        modal = nil
+    }
+
+    func openAppSettings() {
+        if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+    }
+
+    #if DEBUG
+    /// Screenshots / UI tests: a trail into the demo outing with one unrecorded stretch, and friends' recent trails.
+    private func seedDemoTrails() {
+        session.seedDemoTrail(DemoTrail.mine(now: Date()))
+        guard let v = session.view else { return }
+        for (uid, p) in v.positions {
+            let end = (LiveOutingPresenter.deviceDate(p.recorded_at, view: v) ?? Date()).timeIntervalSince1970 * 1000
+            for q in DemoTrail.friend(to: LngLat(lng: p.lng, lat: p.lat), seed: uid, endMs: end - 5_000) {
+                friendTrails.ingest(uid, lat: q.lat, lng: q.lng, atMs: q.t, accuracy: 8)
+            }
+        }
+    }
+    #endif
 
     // MARK: alerts
 
@@ -358,7 +546,10 @@ final class LiveOutingController: ObservableObject {
         if paused {
             Task { await session.stopSharing() }
         } else if session.hasConsent {
-            Task { await session.beginSharing() }
+            Task {
+                await session.beginSharing()
+                offerAlwaysIfNeeded()
+            }
         } else {
             modal = .consent
         }
@@ -366,7 +557,10 @@ final class LiveOutingController: ObservableObject {
 
     func acceptConsent() {
         modal = nil
-        Task { await session.beginSharing() }
+        Task {
+            await session.beginSharing()
+            offerAlwaysIfNeeded()
+        }
     }
 
     func startOuting() { Task { await session.setStatus("start") } }

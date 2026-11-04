@@ -43,6 +43,28 @@ struct MapRallyPoint: Equatable {
     var label: String
 }
 
+/// «مساري» and the friends' recent trails, as plain data for the map.
+struct MapTrails: Equatable {
+    struct Line: Equatable {
+        var id: String
+        var color: UInt32
+        var opacity: Double = 1
+        /// Recorded runs.
+        var solid: [[LngLat]]
+        /// Unrecorded stretches: straight, dashed, never a path we pretend to know.
+        var gaps: [[LngLat]]
+    }
+
+    var mine: Line?
+    /// «نقطة البداية»: the first point of my trail (where I entered).
+    var start: LngLat?
+    var friends: [Line] = []
+    /// «طريق العودة» is on: my trail is drawn wider, with a glow.
+    var highlight = false
+    /// Where to say «لم يُسجَّل هذا الجزء» (the longest gaps only).
+    var gapLabels: [LngLat] = []
+}
+
 /// A one-shot camera request; a new `id` asks again.
 struct MapCameraRequest: Equatable {
     enum Kind: Equatable {
@@ -54,6 +76,8 @@ struct MapCameraRequest: Equatable {
         case me
         /// Centre on a point (rally point, a station, an SOS fix).
         case point(LngLat)
+        /// Frame these points (my trail and me, for «طريق العودة»).
+        case fit([LngLat])
     }
 
     var kind: Kind
@@ -71,6 +95,7 @@ struct MapCameraRequest: Equatable {
 struct OutingMapboxView: UIViewRepresentable {
     var members: [MapMember]
     var rally: MapRallyPoint? = nil
+    var trails = MapTrails()
     var camera: MapCameraRequest? = nil
     /// Screen area covered by the host's chrome: top = bottom edge of the top bar, bottom = height of the bottom panel.
     var chrome: UIEdgeInsets = .zero
@@ -128,6 +153,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setChrome(chrome)
         c.sync(members)
         c.setRally(rally)
+        c.setTrails(trails)
         c.onLongPress = onLongPress
         c.setPlan(plan)
         if let req = camera, req.id != c.lastCamera {
@@ -142,6 +168,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.centerOnMe()
             case let .point(p):
                 c.center(p)
+            case let .fit(pts):
+                c.fit(pts)
             }
         }
     }
@@ -180,6 +208,10 @@ struct OutingMapboxView: UIViewRepresentable {
         var theme: SaryTheme = .default
         var lastCamera = -1
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
+        private var trails = MapTrails()
+        private var trailLayerKey: String?
+        private var startPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailStartPin>)?
+        private var gapPins: [(point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailGapLabel>)] = []
         private var lastProjectionAt: CFTimeInterval = 0
         /* Note bubbles only once zoomed in: at city scale they would cover each other's names. */
         private var bubblesOn = true
@@ -305,6 +337,8 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": 1.15])
             ensureRoadProbe()
+            trailLayerKey = nil
+            drawTrails()
             drawPlan(force: true)
             for r in recs.values {
                 r.layersReady = false
@@ -452,6 +486,12 @@ struct OutingMapboxView: UIViewRepresentable {
         func themeChanged() {
             light = nil
             applyLight()
+            drawTrails()
+            if let p = startPin?.point {
+                startPin?.annotation.remove()
+                startPin = nil
+                placeStart(p)
+            }
             drawPlan(force: true)
             for r in recs.values { remove(chipsOf: r) }
             for g in groupBoxes.values { g.removeFromSuperview() }
@@ -808,6 +848,143 @@ struct OutingMapboxView: UIViewRepresentable {
             project()
         }
 
+        // MARK: «مساري» (on-device trail) and friends' recent trails
+
+        static let trailMine = "sary-trail-mine"
+        static let trailFriends = "sary-trail-friends"
+        private static var trailLayerIds: [String] {
+            ["\(trailFriends)-casing", "\(trailFriends)-line", "\(trailFriends)-gap",
+             "\(trailMine)-glow", "\(trailMine)-casing", "\(trailMine)-line", "\(trailMine)-gap-casing", "\(trailMine)-gap"]
+        }
+
+        func setTrails(_ t: MapTrails) {
+            guard t != trails else { return }
+            trails = t
+            drawTrails()
+        }
+
+        /// Contrasting casing: dark around a light line, white around a dark one (reads on sand and at night).
+        static func casing(for rgb: UInt32) -> String {
+            SaryContrast.luminance(rgb) > 0.32 ? "#16110b" : "#ffffff"
+        }
+
+        private func drawTrails() {
+            guard styleReady, let map else { return }
+            let m: MapboxMap = map.mapboxMap!
+            let myColor = trails.mine?.color ?? 0xE8862E
+            let key = "\(theme.drive)|\(theme.night)|\(trails.highlight)|\(myColor)"
+            if key != trailLayerKey || !m.layerExists(withId: "\(Self.trailMine)-line") {
+                addTrailLayers(m, myColor: myColor)
+                trailLayerKey = key
+            }
+            m.updateGeoJSONSource(withId: Self.trailMine, geoJSON: .featureCollection(Self.collection(trails.mine.map { [$0] } ?? [])))
+            m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
+            placeStart(trails.start)
+            placeGapLabels(trails.gapLabels)
+        }
+
+        static func collection(_ lines: [MapTrails.Line]) -> FeatureCollection {
+            var feats: [Feature] = []
+            for l in lines {
+                let props: (String) -> JSONObject = { k in ["k": .string(k), "c": .string("#" + Vehicle.hex(l.color)), "o": .number(l.opacity), "id": .string(l.id)] }
+                for run in l.solid where run.count >= 2 {
+                    var f = Feature(geometry: .lineString(LineString(run.map(\.coordinate))))
+                    f.properties = props("s")
+                    feats.append(f)
+                }
+                for g in l.gaps where g.count >= 2 {
+                    var f = Feature(geometry: .lineString(LineString(g.map(\.coordinate))))
+                    f.properties = props("g")
+                    feats.append(f)
+                }
+            }
+            return FeatureCollection(features: feats)
+        }
+
+        private func addTrailLayers(_ m: MapboxMap, myColor: UInt32) {
+            for id in Self.trailLayerIds where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
+            for src in [Self.trailFriends, Self.trailMine] where !m.sourceExists(withId: src) {
+                var s = GeoJSONSource(id: src)
+                s.data = .featureCollection(FeatureCollection(features: []))
+                try? m.addSource(s)
+            }
+            /* Under every car, chip and pin: the cars are the newest layers, so go just below the first one. */
+            let below = m.allLayerIdentifiers.first { $0.id.hasPrefix("sary-vehicle") }?.id
+            let pos: LayerPosition? = below.map { .below($0) }
+            let w = (theme.drive ? 7.0 : 5.0) + (trails.highlight ? 2.5 : 0)
+            func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 9, k * 0.45, 14, k, 18, k * 1.35] }
+            let solid: [Any] = ["==", ["get", "k"], "s"]
+            let gap: [Any] = ["==", ["get", "k"], "g"]
+            let roundLine: [String: Any] = ["line-join": "round", "line-cap": "round"]
+            let casing = Self.casing(for: myColor)
+            let mine = "#" + Vehicle.hex(myColor)
+            var layers: [[String: Any]] = [
+                ["id": "\(Self.trailFriends)-casing", "type": "line", "source": Self.trailFriends, "filter": solid, "layout": roundLine,
+                 "paint": ["line-color": theme.night ? "#ffffff" : "#16110b", "line-width": width(w * 0.55 + 2.5),
+                           "line-opacity": ["*", ["get", "o"], 0.55], "line-emissive-strength": 1] as [String: Any]],
+                ["id": "\(Self.trailFriends)-line", "type": "line", "source": Self.trailFriends, "filter": solid, "layout": roundLine,
+                 "paint": ["line-color": ["get", "c"], "line-width": width(w * 0.55), "line-opacity": ["get", "o"], "line-emissive-strength": 1] as [String: Any]],
+                ["id": "\(Self.trailFriends)-gap", "type": "line", "source": Self.trailFriends, "filter": gap, "layout": ["line-join": "round"],
+                 "paint": ["line-color": ["get", "c"], "line-width": width(w * 0.45), "line-opacity": ["*", ["get", "o"], 0.8],
+                           "line-dasharray": [1, 2.2], "line-emissive-strength": 1] as [String: Any]],
+            ]
+            if trails.highlight {
+                layers.append(["id": "\(Self.trailMine)-glow", "type": "line", "source": Self.trailMine, "layout": roundLine,
+                               "paint": ["line-color": mine, "line-width": width(w + 14), "line-opacity": 0.35, "line-blur": 6, "line-emissive-strength": 1] as [String: Any]])
+            }
+            layers += [
+                ["id": "\(Self.trailMine)-casing", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
+                 "paint": ["line-color": casing, "line-width": width(w + 4.5), "line-opacity": 0.92, "line-emissive-strength": 1] as [String: Any]],
+                ["id": "\(Self.trailMine)-line", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
+                 "paint": ["line-color": mine, "line-width": width(w), "line-emissive-strength": 1] as [String: Any]],
+                ["id": "\(Self.trailMine)-gap-casing", "type": "line", "source": Self.trailMine, "filter": gap, "layout": roundLine,
+                 "paint": ["line-color": casing, "line-width": width(w * 0.7 + 3), "line-opacity": 0.85, "line-emissive-strength": 1] as [String: Any]],
+                ["id": "\(Self.trailMine)-gap", "type": "line", "source": Self.trailMine, "filter": gap, "layout": ["line-join": "round"],
+                 "paint": ["line-color": mine, "line-width": width(w * 0.7), "line-dasharray": [1.2, 1.6], "line-emissive-strength": 1] as [String: Any]],
+            ]
+            for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
+        }
+
+        private func placeStart(_ p: LngLat?) {
+            guard let map else { return }
+            if p == startPin?.point { return }
+            startPin?.annotation.remove()
+            startPin = nil
+            guard let p else { return }
+            let host = UIHostingController(rootView: TrailStartPin(theme: theme))
+            host.view.backgroundColor = .clear
+            host.safeAreaRegions = []
+            /* Exactly the pin's own size, so its foot (the anchor) is on the first trail point. */
+            host.view.frame = CGRect(origin: .zero, size: host.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)))
+            let a = ViewAnnotation(coordinate: p.coordinate, view: host.view)
+            a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom)]
+            a.allowOverlap = true
+            a.priority = 100
+            map.viewAnnotations.add(a)
+            startPin = (p, a, host)
+        }
+
+        private func placeGapLabels(_ pts: [LngLat]) {
+            guard let map else { return }
+            if pts == gapPins.map(\.point) { return }
+            gapPins.forEach { $0.annotation.remove() }
+            gapPins = []
+            for p in pts {
+                let host = UIHostingController(rootView: TrailGapLabel(theme: theme))
+                host.view.backgroundColor = .clear
+                host.safeAreaRegions = []
+                host.view.frame = CGRect(origin: .zero, size: host.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)))
+                host.view.isUserInteractionEnabled = false
+                let a = ViewAnnotation(coordinate: p.coordinate, view: host.view)
+                /* Beside the dashed line, not on it: the line itself must stay visible. */
+                a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom, offsetY: 14), ViewAnnotationAnchorConfig(anchor: .top, offsetY: -14)]
+                a.allowOverlap = false
+                a.priority = 5
+                map.viewAnnotations.add(a)
+                gapPins.append((p, a, host))
+            }
+        }
+
         // MARK: glide between fixes
 
         private func startLink() {
@@ -875,6 +1052,12 @@ struct OutingMapboxView: UIViewRepresentable {
             let pad = UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0)
             let cam = CameraOptions(center: p.coordinate, padding: pad, zoom: zoom ?? max(map.mapboxMap.cameraState.zoom, 14))
             map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.8)
+        }
+
+        /// Frame arbitrary points (my trail and me).
+        func fit(_ pts: [LngLat]) {
+            keepGroup = false
+            frame(pts)
         }
 
         private func frame(_ pts: [LngLat]) {
@@ -1085,6 +1268,59 @@ struct RallyPin: View {
         .saryTheme(theme)
         .accessibilityLabel(label.isEmpty ? "نقطة التجمع" : label)
         .accessibilityIdentifier("map.rally")
+    }
+}
+
+/// «نقطة البداية»: where I entered (the first point of my trail).
+struct TrailStartPin: View {
+    let theme: SaryTheme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(spacing: 2) {
+            Text("نقطة البداية")
+                .saryText(.caption, weight: .bold)
+                .foregroundStyle(p.textPrimary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(p.chromeOpaque))
+                .overlay(Capsule().stroke(p.stroke, lineWidth: 1))
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            Image(systemName: "figure.walk.departure")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color.white)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color(rgb: 0x16110B)))
+                .overlay(Circle().stroke(Color.white, lineWidth: 2.5))
+        }
+        .padding(2)
+        .fixedSize()
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+        .saryTheme(theme)
+        .environment(\.layoutDirection, .rightToLeft)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("نقطة البداية، حيث دخلت"))
+        .accessibilityIdentifier("map.trailStart")
+    }
+}
+
+/// Said on an unrecorded stretch of the trail (drawn dashed and straight).
+struct TrailGapLabel: View {
+    let theme: SaryTheme
+
+    var body: some View {
+        Text("لم يُسجَّل هذا الجزء")
+            .saryText(.micro, weight: .bold)
+            .foregroundStyle(theme.palette.textSecondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(theme.palette.chromeOpaque.opacity(0.92)))
+            .fixedSize()
+            .saryTheme(theme)
+            .environment(\.layoutDirection, .rightToLeft)
+            .accessibilityIdentifier("map.trailGap")
     }
 }
 
