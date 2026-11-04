@@ -77,9 +77,9 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
       timerSweep.unref?.();
     },
     close() {
+      ptt?.close(); // release any held floor while sockets can still hear it
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
-      ptt?.close();
       socket?.close();
       apns.close();
     },
