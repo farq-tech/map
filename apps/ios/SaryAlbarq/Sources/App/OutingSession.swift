@@ -411,6 +411,8 @@ final class OutingSession: ObservableObject, Identifiable {
             closed(.left)
         case .outingStatus, .memberSharing:
             reconcileSharing()
+        case .planUpdated, .checklistUpdated:
+            PlanEvents.post(outing: id, e)
         default:
             break
         }

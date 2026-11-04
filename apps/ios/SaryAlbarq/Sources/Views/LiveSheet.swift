@@ -95,6 +95,8 @@ struct LiveSheet: View {
             TrailAlwaysExplainer(allow: controller.allowAlways, later: controller.laterAlways)
                 .presentationDetents([.large])
                 .interactiveDismissDisabled()
+        case let .plan(m):
+            LivePlanModalView(controller: controller, modal: m)
         }
     }
 }

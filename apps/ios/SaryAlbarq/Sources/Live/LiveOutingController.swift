@@ -22,6 +22,8 @@ enum LiveModal: Identifiable, Equatable {
     case offlineMaps
     /// Our explainer before asking iOS for «دائمًا» (the screen-locked trail).
     case trailAlways
+    /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
+    case plan(LivePlanModal)
 
     var id: String {
         switch self {
@@ -33,6 +35,7 @@ enum LiveModal: Identifiable, Equatable {
         case .notify: return "notify"
         case .offlineMaps: return "offline"
         case .trailAlways: return "trailAlways"
+        case let .plan(m): return m.id
         }
     }
 }

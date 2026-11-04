@@ -50,6 +50,7 @@ struct OutingDetailsView: View {
                         infoRow("lock.fill", "الانضمام", "مقفول")
                     }
                 }
+                PlanDetailsSections(snapshot: s, plan: model.plans.model(outingId))
                 let colors = CarColors.assign(s.members)
                 SarySection(title: "من في الطلعة") {
                     ForEach(Array(s.members.enumerated()), id: \.element.user_id) { i, m in

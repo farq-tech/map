@@ -105,7 +105,7 @@ final class OutingsAPI {
 
     private struct Empty: Encodable {}
 
-    private func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12) async throws -> T {
+    func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12) async throws -> T {
         var req = URLRequest(url: base.appendingPathComponent("api/outings" + path), timeoutInterval: timeout)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
