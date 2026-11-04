@@ -172,7 +172,13 @@ struct SaryTabBar: View {
                 case .more: return "ellipsis.circle"
                 }
             },
-            id: "outing-tabs"
+            optionID: { tab in
+                switch tab {
+                case .trip: return "tab.trip"
+                case .group: return "tab.group"
+                case .more: return "tab.more"
+                }
+            }
         )
     }
 }

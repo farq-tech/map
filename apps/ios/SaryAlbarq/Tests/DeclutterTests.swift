@@ -83,6 +83,20 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(AlertQueue.bellCount([convoy("c")], driving: true, media: 1), 1, "media counts on the bell")
     }
 
+    func testHistoryKeepsEveryAlertButToasts() {
+        var h: [AlertHistoryEntry] = []
+        let t0 = Date(timeIntervalSince1970: 1000)
+        AlertQueue.record(weather("w"), at: t0, into: &h)
+        AlertQueue.record(toast("t"), at: t0, into: &h)
+        AlertQueue.record(stuck("k"), at: t0.addingTimeInterval(5), into: &h)
+        AlertQueue.record(weather("w"), at: t0.addingTimeInterval(9), into: &h)
+        XCTAssertEqual(h.map(\.id), ["w", "k"], "newest first, one entry per alert, no toasts")
+        XCTAssertEqual(h.first?.text, "مطر")
+        XCTAssertEqual(h.last?.text, "سلطان غرّز")
+        for i in 0..<60 { AlertQueue.record(note("n\(i)"), at: t0, into: &h) }
+        XCTAssertEqual(h.count, AlertQueue.historyLimit)
+    }
+
     // MARK: edge arrows
 
     func testEdgeArrowsMaxThreeAlertFirst() {
@@ -134,6 +148,12 @@ final class DeclutterTests: XCTestCase {
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
         XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق العودة")
         XCTAssertEqual(active.first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
+    }
+
+    func testRouterNarrationIsSpokenOnlyInArabic() {
+        XCTAssertFalse(NavText.isArabic("Turn left onto طريق الملك فهد."), "Valhalla's English narration")
+        XCTAssertTrue(NavText.isArabic("انعطف يسارًا إلى طريق الملك فهد"))
+        XCTAssertFalse(NavText.isArabic("١٢٠"))
     }
 
     func testThreeTabs() {

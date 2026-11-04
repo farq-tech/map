@@ -50,8 +50,8 @@ final class SaryAlbarqUITests: XCTestCase {
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         summary.tap()
-        XCTAssertTrue(app.buttons["الرحلة"].waitForExistence(timeout: 5) || app.staticTexts["الرحلة"].exists, "tabs at half height")
-        app.buttons["المجموعة"].tap()
+        XCTAssertTrue(app.buttons["tab.trip"].waitForExistence(timeout: 5) || app.staticTexts["الرحلة"].exists, "tabs at half height")
+        app.buttons["tab.group"].tap()
         XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "participant-row").count, 4)
         XCTAssertTrue(app.staticTexts["أبو فهد"].exists)
         sleep(1)

@@ -97,6 +97,14 @@ enum NavText {
     }
 
     /// Only digits become Arabic-Indic in names («طريق 40» → «طريق ٤٠»); dots stay.
+    /// The text is mostly Arabic script (router narration we may speak as is).
+    static func isArabic(_ s: String) -> Bool {
+        let letters = s.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+        guard !letters.isEmpty else { return false }
+        let arabic = letters.filter { (0x0600...0x06FF).contains($0.value) || (0x0750...0x077F).contains($0.value) || (0xFB50...0xFEFF).contains($0.value) }
+        return Double(arabic.count) / Double(letters.count) >= 0.6
+    }
+
     static func arabicDigitsOnly(_ s: String) -> String {
         String(s.map { ch -> Character in
             if ch.isASCII, let v = ch.wholeNumberValue { return Character(SaryFormat.number(v)) }

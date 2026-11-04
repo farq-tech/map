@@ -189,20 +189,20 @@ struct LiveOutingScreen: View {
                             /* «سرعة المركبة» only while driving, right above «اضغط وتكلم», on the other side
                              * from the map buttons; while guiding the posted limit sits beside it. An overlay,
                              * so the dock's measured frame stays as it was. */
-                            if driving {
-                                HStack(alignment: .center, spacing: theme.space(.s)) {
+                            HStack(alignment: .center, spacing: theme.space(.s)) {
+                                if driving {
                                     SarySpeedometer(ui: controller.speedometerUI)
                                         .chromeFrame("speed")
+                                        .transition(.opacity)
                                     if controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
                                         NavSpeedLimitSign(kmh: k)
                                             .chromeFrame("speedlimit")
                                             .transition(.scale.combined(with: .opacity))
                                     }
                                 }
-                                .fixedSize()
-                                .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
-                                .transition(.opacity)
                             }
+                            .fixedSize()
+                            .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
                         }
                     Spacer()
                     if rowMode {
@@ -318,6 +318,14 @@ private struct LiveTopStack: View {
                         SaryAlertLane(alerts: AlertQueue.ordered(alerts), limit: 99, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
                         MediaNoticeLane(center: media)
+                        let active = Set(alerts.map(\.id))
+                        let past = controller.alertHistory.filter { !active.contains($0.id) }
+                        if !past.isEmpty { AlertHistoryList(entries: past, now: ui.now) }
+                        if past.isEmpty && AlertQueue.ordered(alerts).isEmpty && media.notice == nil {
+                            Text("ما فيه تنبيهات").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                                .frame(maxWidth: .infinity).padding(theme.space(.m))
+                                .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .chrome)
+                        }
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
@@ -340,7 +348,6 @@ private struct LiveTopStack: View {
         .animation(theme.animation(.smooth), value: controller.bellOpen)
         .animation(theme.animation(.smooth), value: controller.statusExpanded)
         .animation(theme.animation(.enter), value: card?.id)
-        .onChange(of: bell) { _, n in if n == 0 && AlertQueue.ordered(alerts).isEmpty { controller.bellOpen = false } }
     }
 
     private func header(bell: Int) -> some View {
@@ -358,7 +365,8 @@ private struct LiveTopStack: View {
                        statusTapped: { controller.bellOpen = false; controller.statusExpanded.toggle() },
                        weatherTapped: { controller.modal = .weather },
                        bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() },
-                       bellOpen: controller.bellOpen)
+                       bellOpen: controller.bellOpen,
+                       hasHistory: !controller.alertHistory.isEmpty)
         }
         .task { controller.feedWeather(force: true) }
     }

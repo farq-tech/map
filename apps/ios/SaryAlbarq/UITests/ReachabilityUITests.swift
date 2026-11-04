@@ -46,7 +46,7 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(any(app, "status.details").waitForExistence(timeout: 5), "status details under the header")
         any(app, "outing-link-state").tap()
         any(app, "trip.header").tap()
-        XCTAssertTrue(app.buttons["الرحلة"].waitForExistence(timeout: 5), "the header opens the trip's details")
+        XCTAssertTrue(app.buttons["tab.trip"].waitForExistence(timeout: 5), "the header opens the trip's details")
     }
 
     /// «+»: four groups, every entry present (identifiers kept from the old cluster and «المزيد»).
@@ -76,9 +76,9 @@ final class ReachabilityUITests: XCTestCase {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
         let tabs: [(String, [String])] = [
-            ("الرحلة", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends"]),
-            ("المجموعة", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
-            ("المزيد", ["settings-pause-sharing", "settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
+            ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-set", "sheet-stuck", "trail.backtrack", "trail.friends"]),
+            ("tab.group", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
+            ("tab.more", ["settings-pause-sharing", "settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
                         "settings-context", "settings-drive", "settings-night", "speed.alert", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),
         ]
         for (tab, ids) in tabs {

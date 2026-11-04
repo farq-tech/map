@@ -72,6 +72,8 @@ struct TripHeader: View {
     var weatherTapped: () -> Void
     var bellTapped: () -> Void
     var bellOpen = false
+    /// Past alerts exist: the bell stays reachable (the history) even with nothing queued.
+    var hasHistory = false
     @Environment(\.sary) private var theme
 
     private var barHeight: CGFloat { theme.drive ? 64 : 52 }
@@ -155,7 +157,7 @@ struct TripHeader: View {
                     .accessibilityIdentifier("weather.chip")
                 }
 
-                if ui.bell > 0 || bellOpen {
+                if ui.bell > 0 || bellOpen || hasHistory {
                     Button(action: bellTapped) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: bellOpen ? "bell.slash.fill" : "bell.fill")
@@ -176,7 +178,7 @@ struct TripHeader: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")"))
+                    .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : (ui.bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")")))
                     .accessibilityIdentifier("alerts.bell")
                     .transition(.scale.combined(with: .opacity))
                 }
@@ -262,5 +264,39 @@ struct TripStatusDetails: View {
         case .bad: return "الموقع غير متاح"
         case .unknown: return "الموقع غير مستخدم"
         }
+    }
+}
+
+/// Behind the bell, under the live queue: every earlier alert, newest first.
+struct AlertHistoryList: View {
+    var entries: [AlertHistoryEntry]
+    var now: Date
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: 0) {
+            Text("السجل").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.vertical, theme.space(.xs))
+            ForEach(entries) { e in
+                HStack(spacing: theme.space(.s)) {
+                    Image(systemName: e.symbol).font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(e.priority >= .returnTimer ? p.emergencyText : p.textSecondary).frame(width: 22)
+                    Text(e.text).saryText(.subhead).foregroundStyle(p.textPrimary).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(SaryFormat.lastUpdate(since: e.at, now: now).replacingOccurrences(of: "آخر تحديث ", with: ""))
+                        .saryNumber(.caption).foregroundStyle(p.textTertiary)
+                }
+                .padding(.vertical, 6)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("alerts.history.row")
+            }
+        }
+        .padding(.horizontal, theme.space(.l))
+        .padding(.vertical, theme.space(.s))
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .chrome)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("alerts.history")
     }
 }

@@ -1,5 +1,10 @@
 # سَرى البارق — Information architecture redesign («ترتيب الشاشة»)
 
+> Brief: the owner's FARQ V8 spec (driving / stopped / exploration modes, one adaptive header,
+> one action center, one alert at a time with history, map declutter, convoy intelligence,
+> My Trips + four settings sections, staged delivery). This document is the plan; §6 says
+> which stages ship in build 8 and which come next.
+
 Build 8. Goal: the live outing screen felt crowded — every feature was visible at
 once. This pass reorganises and simplifies with progressive disclosure, **without
 removing a feature**: everything stays reachable in at most two taps from the live
@@ -175,3 +180,71 @@ Short imperative verbs, one name per thing: «ملاحة», «ابحث أو إح
 * **Route provider** is no longer behind 7 taps in Release: it is under «متقدم».
 * Status capsule, plan strip and peek trip strip are gone from the live screen; their
   components stay in the design-system showcase.
+
+## 5. Feature-preservation matrix
+
+Every feature of the live screen in build 7 → where it is in build 8 → taps from the map
+(stopped context). ✔ = asserted by `UITests/ReachabilityUITests` (identifier checked), † = by
+another UI test, ‡ = unit-tested.
+
+| Feature | Build 7 | Build 8 | Taps |
+|---|---|---|---|
+| Back to «طلعاتي» | status capsule | header «‹» (`outing-back`) | 1 ✔ |
+| Connection / GPS / internet state, warnings | capsule dots + expand | header dot → details (`outing-link-state`) | 1 ✔ |
+| Nearby cars (mesh) | capsule subtitle | header line when relevant + status details | 0–1 |
+| Weather now / at destination | chip under capsule | header weather (`weather.chip`) → sheet; «+» → الخدمات → الطقس; «الرحلة» card | 1 ✔ |
+| Trip progress, remaining, ETA | peek strip | header line; «الرحلة» trip card | 0 / 1 ✔ |
+| Trip stats, arrival, «أنهِ الرحلة», summary, return trip | «المشاركون» trip card | «الرحلة» trip card | 2 † (TripUITests) |
+| Locate me / follow | cluster | floating group (`outing-locate`) | 1 ✔ |
+| Fit the group | cluster | floating group (`outing-fit`) | 1 ✔ |
+| Note above my car | cluster | «+» → المجموعة (`outing-note-open`) | 2 ✔ |
+| «طريق العودة» | cluster + «مساري» card | «+» → الطريق (`outing-backtrack`); map shortcut after arrival / off route; «الرحلة» → مساري | 1–2 ✔ † |
+| Navigation (member / destination / rally / point) | «المزيد» | «+» → الطريق (`outing-navigate`) | 2 ✔ † |
+| Search place / coordinates | «المزيد» + plan pill | «+» → الطريق (`outing-search`); «الرحلة» → ابحث | 2 ✔ |
+| Follow the plan | plan pill | «+» → الطريق (`plan.follow`); «الرحلة» → الخطة | 2 ✔ |
+| Plan editor + checklist | plan pill | «الرحلة» → «الخطة وقائمة التجهيز» (`plan.openEditor`) | 2 ✔ |
+| Destination: open in Apple / Google Maps, copy | destination pill menu | «الرحلة» → الوجهة (`plan.destination`) | 2 ✔ |
+| «غرّزت» | «المزيد» | «+» → المجموعة (`outing-stuck`); «الرحلة» → السلامة (`sheet-stuck`) | 2 ✔ † |
+| Return timer | «المشاركون» | «الرحلة» → السلامة (`timer-set`) | 1 ✔ |
+| Add waypoint | «المزيد» / long press | «+» → المجموعة (`outing-waypoint-add`); long press | 2 ✔ † |
+| Copy / share my location | «المزيد» / long press on «أنت» | «+» → المجموعة (`outing-copyme`) | 2 ✔ † |
+| Nearest station | cluster | «+» → الخدمات (`outing-nearest-open`) | 2 ✔ |
+| YouTube («قناتي» / «قناة الطلعة») | «المزيد» + sheet card | «+» → الترفيه (`outing-youtube`); «المزيد» tab (`media.entry`) | 2 ✔ † |
+| SOS | dock | dock (`outing-sos`) | 1 ✔ † |
+| Push-to-talk | dock | dock (`outing-ptt`) | 1 ✔ |
+| Speedometer | always | driving context only (`speedometer`) | 0 ✔ † |
+| Posted speed limit | while guiding | while guiding (real nav data only) | 0 |
+| Guidance camera / voice / steps | cluster | camera on the map; voice + steps in the guidance bar | 1 † |
+| Members list (distance, speed, arrival) | «المشاركون» | «المجموعة» (`participant-row`) | 2 ✔ † |
+| Convoy mode | «المشاركون» | «المجموعة» (`convoy.section`) | 2 ✔ † |
+| Rally point | «المشاركون» | «المجموعة» (`rally-card`) | 2 ✔ |
+| Shared waypoints | «المشاركون» | «المجموعة» | 2 † (WaypointsUITests) |
+| Invite (QR, copy, share, revoke) | «الدعوة» tab | «المجموعة» → ادعُ ربعك (`invite-section`) | 2 ✔ |
+| My sharing (start / stop) | «المشاركون» + «الإعدادات» | «الرحلة» top + «المزيد» (`settings-pause-sharing`) | 1–2 ✔ † |
+| Battery, notifications, my phone | «الإعدادات» | «المزيد» | 2 ✔ |
+| Channel mute | «الإعدادات» | «المزيد» (`settings-ptt-mute`) | 2 ✔ |
+| Trail settings, friends' trails | «الإعدادات» + «مساري» | «المزيد» / «الرحلة» → مساري | 2 ✔ |
+| Speed alert settings | «الإعدادات» | «المزيد» (`speed.alert`) | 2 ✔ † |
+| Drive / night mode | «الإعدادات» | «المزيد» → القيادة والعرض | 2 ✔ |
+| Screen mode override (new) | — | «المزيد» → «شكل الشاشة» (`settings-context`) | 2 ✔ |
+| Offline maps | «الإعدادات» | «المزيد» (`settings-offline`); app settings | 2 ✔ |
+| Pause / end / leave outing | «الإعدادات» | «المزيد» (`settings-leave`) | 2 ✔ |
+| Alerts (stuck, silent, timer, convoy, weather, notes, voice) | lane, 2 cards + «+N» | 1 card + bell queue (`alerts.bell`) | 0–1 † ‡ |
+| Alert history (new) | — | bell → السجل | 1 ‡ |
+| Media «في قناة الطلعة» notice | own lane | lowest tier: shown when nothing else / on the bell | 0–1 |
+| Edge arrows to off-screen friends | all | max 3, alert members first | 0 ‡ |
+| GPX export, route provider | hidden taps on «حول» | Settings → «متقدم» | 2 |
+
+## 6. Stages
+
+| Stage | Scope | Build 8 |
+|---|---|---|
+| 1 | Inventory, matrix, before/after counts (this doc) | ✅ shipped |
+| 2 | Driving / stopped modes, adaptive header, action center, 3 tabs, one alert + bell, map declutter, home, settings | ✅ shipped, unit + UI tested |
+| 3 | Notification history behind the bell | ✅ shipped, unit tested |
+| 4 | **Exploration mode**: layer switcher (satellite / standard / topographic from Mapbox Outdoors or Terrain-DEM hillshade + contours), elevation readout, coordinates + saved locations, GPX/route exploration, offline management entry | ⏭ next. Needs the offline style packs to cover each layer (today only `standard-satellite` is packed), so a layer must say «غير متاح بلا إنترنت» honestly instead of drawing blanks |
+| 5 | **Convoy intelligence**: distance from the leader per vehicle, stopped / disconnected states on rows and cars, separation + unexpected-stop alerts with grace periods and configurable thresholds (settings), return-to-meeting-point flow | ⏭ next. Build 8 keeps what exists (convoy order alerts, silent alerts, rally point) |
+
+Main experience **Map · Group · Trip**: in build 8 «الخريطة» is the live map itself (header,
+floating group, «+»), and the sheet carries «الرحلة» and «المجموعة»; the third tab «المزيد»
+holds this outing's settings. Stage 4 turns it into «الخريطة» (layers, exploration, offline).

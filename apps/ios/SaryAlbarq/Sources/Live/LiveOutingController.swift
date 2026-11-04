@@ -105,6 +105,8 @@ final class LiveOutingController: ObservableObject {
     @Published var statusExpanded = false
     /// The trip header's bell: the queued alerts open under the header.
     @Published var bellOpen = false
+    /// Every alert this screen showed, newest first (behind the bell): nothing is just dropped.
+    @Published var alertHistory: [AlertHistoryEntry] = []
     /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
     @Published var contextOverride: LiveContextOverride = LiveContextOverride.saved {
         didSet { if !debugContext { LiveContextOverride.saved = contextOverride } }
@@ -311,7 +313,8 @@ final class LiveOutingController: ObservableObject {
         let i = input
         let parts = Dictionary(LiveOutingPresenter.participants(i).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let showNames = theme.nameDisplay == .always
-        return LiveOutingPresenter.mapMembers(i, hideNotes: theme.drive).map { m in
+        /* Notes above cars are reading material: off while driving (docs/IA-REDESIGN.md §2.6). */
+        return LiveOutingPresenter.mapMembers(i, hideNotes: theme.drive || liveContext(drive: theme.drive) == .driving).map { m in
             var m = m
             let p = parts[m.id]
             let presence: ParticipantPresence = m.presence == .live ? .live : .stale(since: Date(timeIntervalSince1970: m.atMs / 1000))
@@ -585,6 +588,7 @@ final class LiveOutingController: ObservableObject {
     // MARK: alerts
 
     func pushAlert(_ a: LiveAlertUI, ttl: TimeInterval) {
+        AlertQueue.record(a, at: Date(), into: &alertHistory)
         alerts.removeAll { $0.id == a.id }
         alerts.insert(a, at: 0)
         if alerts.count > 6 { alerts.removeLast(alerts.count - 6) }

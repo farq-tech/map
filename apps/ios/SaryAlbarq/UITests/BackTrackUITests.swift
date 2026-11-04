@@ -51,10 +51,14 @@ final class BackTrackUITests: XCTestCase {
         attach(app, "backtrack")
         app.buttons["backtrack.exit"].tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5), "«إنهاء» leaves back-track mode")
-        /* The cluster button toggles too. */
+        /* Again from «+»; while it runs, «طريق العودة» sits on the map by itself and toggles it off. */
+        plus.tap()
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5))
-        button.tap()
+        let shortcut = app.buttons["outing-backtrack"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 5), "the map shortcut while it runs")
+        shortcut.tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5))
     }
 

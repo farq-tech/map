@@ -29,7 +29,7 @@ final class MediaUITests: XCTestCase {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
         /* «يوتيوب» (قناتي / قناة الطلعة) lives in the sheet's «المزيد» tab; also in «+» → الترفيه. */
-        let moreTab = app.buttons["المزيد"]
+        let moreTab = app.buttons["tab.more"]
         XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
         moreTab.tap()
         let entry = any(app, "media.entry")

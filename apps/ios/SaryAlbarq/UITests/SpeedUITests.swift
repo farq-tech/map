@@ -52,7 +52,7 @@ final class SpeedUITests: XCTestCase {
         /* The demo's «أبو فهد» sent a moving fix moments ago (22 m/s): his speed shows while it is
          * fresh. «نورة»'s last fix is 5 minutes old: no speed, just «آخر موقع». */
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let groupTab = app.buttons["المجموعة"]
+        let groupTab = app.buttons["tab.group"]
         XCTAssertTrue(groupTab.waitForExistence(timeout: 5))
         groupTab.tap()
         let rows = app.descendants(matching: .any).matching(identifier: "participant-row")
@@ -95,7 +95,7 @@ final class SpeedUITests: XCTestCase {
     func testOverSpeedNudgeIsOffByDefaultAndAdjustable() {
         let app = launch()
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let tab = app.buttons["المزيد"]
+        let tab = app.buttons["tab.more"]
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.tap()
         let toggle = app.switches["speed.alert"]
@@ -103,7 +103,8 @@ final class SpeedUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertEqual(toggle.value as? String, "0", "off by default")
         XCTAssertFalse(app.staticTexts["speed.limit"].exists)
-        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        /* Tap the switch itself (on the left in RTL), not the row's middle (its label). */
+        if toggle.switches.firstMatch.exists { toggle.switches.firstMatch.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap() }
         let limit = app.staticTexts["speed.limit"]
         XCTAssertTrue(limit.waitForExistence(timeout: 5))
         XCTAssertEqual(limit.label, "١٢٠ كم/س")

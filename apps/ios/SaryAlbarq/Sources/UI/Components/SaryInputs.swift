@@ -153,6 +153,8 @@ struct SarySegmented<Value: Hashable>: View {
     var label: (Value) -> String
     var systemImage: ((Value) -> String?)? = nil
     var id: String?
+    /// Per-option identifiers (e.g. the sheet's tabs: `tab.trip`), when the labels are not unique on screen.
+    var optionID: ((Value) -> String)? = nil
 
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -193,6 +195,7 @@ struct SarySegmented<Value: Hashable>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected ? .isSelected : [])
+                .modifier(OptionalIdentifier(id: optionID?(option)))
             }
         }
         .padding(3)
