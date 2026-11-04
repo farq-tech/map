@@ -172,6 +172,9 @@ struct LiveOutingScreen: View {
                         SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
                         LivePlanStrip(controller: controller)
+                    } else {
+                        /* Sheet at half height: the alert lane and plan pills step aside, the weather stays. */
+                        LivePlanStrip(controller: controller, weatherOnly: true)
                     }
                 }
                 .chromeFrame("top")

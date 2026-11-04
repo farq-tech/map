@@ -94,7 +94,9 @@ struct LiveSheet: View {
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
         case .weather:
-            WeatherSheet(weather: controller.weather, close: { controller.modal = nil })
+            WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
+                         changeDestination: controller.session.view?.iLead == true ? { controller.changeDestinationFromWeather() } : nil,
+                         destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil)
                 .presentationDetents([.large])
         case let .weatherAt(point):
             WeatherPointSheet(point: point, close: { controller.modal = nil })

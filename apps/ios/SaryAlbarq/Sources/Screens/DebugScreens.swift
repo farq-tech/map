@@ -35,7 +35,9 @@ struct DebugScreen: View {
         case "offline-maps": HomeView(initial: [.settings, .offlineMaps])
         case "offline-flow": NavigationStack { OfflineMapsView(back: {}, suggested: .init(west: 46.666, south: 24.704, east: 46.684, north: 24.719), outingName: "طلعة الثمامة") }
         case "offline-picker": OfflineAreaPicker(initial: .init(west: 46.655, south: 24.70, east: 46.695, north: 24.725), outingName: "طلعة الثمامة", close: {})
-        case "create": CreateOutingSheet()
+        case "create": CreateOutingWizard()
+        case "create-coordinate": CreateOutingWizard(initialText: "24.7590, 46.7491")
+        case "create-search": CreateOutingWizard(initialText: "24°45'32\"N 46°44'57\"E")
         case "join": JoinByLinkSheet()
         case "invite-valid": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "كشتة نفود الثويرات", inviterName: "أبو فهد", participantCount: 5, status: .active)))
         case "invite-expired": InviteJoinSheet(token: "x", preset: .expired)
