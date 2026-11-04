@@ -13,6 +13,8 @@ struct LivePresenterInput {
     var closed: LiveCloseReason?
     var wantsToShare = false
     var isSharingNow = false
+    /// iOS location permission is «دائمًا»: sharing keeps going with the screen locked.
+    var hasAlways = false
     var sosSending = false
     /// `userId|sos.at` of incoming SOS alerts the person already saw («أظهره»).
     var acknowledgedSOS: Set<String> = []
@@ -107,8 +109,8 @@ enum LiveOutingPresenter {
         if !i.locationAuthorized && i.gpsState == .denied { w.append(.locationOff) }
         if i.link == .offline { w.append(.noInternet) }
         if i.wantsToShare && i.gpsState == .weak { w.append(.weakGPS) }
-        /* Positions go out only while the app is on screen. */
-        if i.isSharingNow { w.append(.keepScreenOn) }
+        /* «أثناء الاستخدام» only: positions go out only while the app is on screen. */
+        if i.isSharingNow && !i.hasAlways { w.append(.keepScreenOn) }
         return w
     }
 

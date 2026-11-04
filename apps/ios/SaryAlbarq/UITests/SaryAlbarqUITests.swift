@@ -81,13 +81,16 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         attach(app, "consent")
         app.buttons["consent.accept"].tap()
-        /* First share: the «مساري» screen-locked explainer may follow (only if iOS has not already allowed «دائمًا»). */
-        if app.buttons["trail.always.later"].waitForExistence(timeout: 4) {
-            attach(app, "trail-always-explainer")
-            app.buttons["trail.always.later"].tap()
+        /* The consent sheet explained background sharing; iOS now offers «دائمًا». Keep «أثناء الاستخدام» here. */
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["Keep Only While Using", "الإبقاء على أثناء الاستخدام فقط", "Allow While Using App", "السماح أثناء استخدام التطبيق"] where springboard.buttons[label].waitForExistence(timeout: 3) {
+            springboard.buttons[label].tap()
+            break
         }
         XCTAssertTrue(app.buttons["live.stopSharing"].waitForExistence(timeout: 10), "sharing starts only after consent")
         XCTAssertTrue(app.staticTexts["live.sharing"].exists, "visible sharing indicator")
+        /* «أثناء الاستخدام» only: a persistent one-liner links to Settings to choose «دائمًا». */
+        XCTAssertTrue(app.buttons["live.shareHint.settings"].waitForExistence(timeout: 5), "When-In-Use hint with a Settings link")
         sleep(1)
         attach(app, "sharing")
         /* Going back while sharing asks first (the back button is on the map, above the sheet). */

@@ -44,8 +44,34 @@ enum LiveWarningUI: Equatable, Hashable {
         switch self {
         case .weakGPS: return "إشارة الموقع ضعيفة"
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
-        case .keepScreenOn: return "خلّ الشاشة شغالة لدقة أعلى"
+        case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
         case .locationOff: return "إذن الموقع مقفل · افتح الإعدادات"
+        }
+    }
+}
+
+/// One persistent line under my sharing row: what happens off screen.
+enum ShareBackgroundHint: Equatable {
+    /// «أثناء الاستخدام» only: sharing stops when the screen locks. Tapping opens Settings.
+    case needsAlways
+    /// «دائمًا»: sharing keeps going; the one thing that stops it is swiping the app away.
+    case dontForceQuit
+    /// «دائمًا» + Low Power Mode: still sharing, a little less often.
+    case lowPower
+
+    var text: String {
+        switch self {
+        case .needsAlways: return "تتوقف المشاركة إذا قفلت الشاشة. اختر «دائمًا» من الإعدادات لتستمر."
+        case .dontForceQuit: return "تستمر والشاشة مقفلة. لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة."
+        case .lowPower: return "وضع توفير الطاقة: تستمر والشاشة مقفلة، لكن أقل تكرارًا (كل ٣٠ ثانية تقريبًا)."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .needsAlways: return "gearshape.fill"
+        case .dontForceQuit: return "lock.iphone"
+        case .lowPower: return "battery.25percent"
         }
     }
 }

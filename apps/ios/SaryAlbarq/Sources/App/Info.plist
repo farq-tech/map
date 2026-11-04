@@ -48,11 +48,13 @@
 
 	<!-- Base strings (Arabic, the development language). English in en.lproj/InfoPlist.strings. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط عندما تختار «شارك موقعي» والتطبيق مفتوح أمامك.</string>
+	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط بعد ما تختار «شارك موقعي».</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>يسجّل سَرى البارق «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة، ليرجّعك «طريق العودة» من نفس الطريق. المسار يبقى على جوالك فقط ولا يُرسل لأحد؛ ومشاركة موقعك مع الأصحاب تبقى والتطبيق مفتوح فقط.</string>
-	<!-- Background location is used ONLY for the on-device trail («سجّل مساري والشاشة مقفلة»,
-	     owner-approved). Positions are never sent from the background (SendGate). -->
+	<string>بعد ما تختار «شارك موقعي» في طلعة، يواصل سَرى البارق مشاركة موقعك مع أعضاء تلك الطلعة فقط في الخلفية والشاشة مقفلة (مع مؤشر الموقع الأزرق)، حتى توقف المشاركة أو تغادر أو تنتهي الطلعة. ويسجّل «مساري» على جوالك فقط ليرجّعك «طريق العودة».</string>
+	<!-- Background location (owner decision, 2026-11): with «دائمًا», a member who pressed
+	     «شارك موقعي» keeps sharing their live position with that outing's members off screen
+	     (blue indicator; HTTP POST /positions; stops on stop / leave / removed / ended), and the
+	     on-device trail keeps recording. With «أثناء الاستخدام» nothing is sent off screen (SendGate). -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

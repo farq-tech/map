@@ -39,6 +39,8 @@ struct DebugScreen: View {
         case "invite-invalid": InviteJoinSheet(token: "x", preset: .invalid)
         case "invite-error": InviteJoinSheet(token: "x", preset: .error("الشبكة بطيئة. أعد المحاولة."))
         case "notify-explainer": NotifyExplainerSheet(done: {})
+        case "consent": ConsentView(accept: {}, cancel: {})
+        case "share-always-explainer": ShareAlwaysExplainer(allow: {}, later: {})
         case "dialog-leave":
             HomeView().saryDialog($dialog, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",
                                   message: "يتوقف إرسال موقعك وتخرج منها. ترجع فقط برابط دعوة جديد.", confirmTitle: "غادر") {}

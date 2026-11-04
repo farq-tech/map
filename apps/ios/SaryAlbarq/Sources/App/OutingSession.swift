@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import os
 import UIKit
 import UserNotifications
 
@@ -7,8 +8,15 @@ import UserNotifications
 struct SessionEnv {
     var makeSocket: (URL) -> LiveSocket = { URLSessionLiveSocket(url: $0) }
     var scheduler: Scheduler = MainScheduler()
-    /// True while the app is on screen. Nothing is sent when this is false.
+    /// True while the app is on screen. Off screen, positions go out only with «دائمًا» (SendGate), over HTTP.
     var isForeground: @MainActor () -> Bool = { UIApplication.shared.applicationState != .background }
+    /// Background sends (`POST /:id/positions`). nil = the real API. Tests inject a fake.
+    var postPosition: ((String, WireFix) async throws -> Void)?
+    var lowPower: () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }
+    /// Wall clock, ms (background cadence and fix ages). Tests move it forward.
+    var now: () -> Double = { Date().timeIntervalSince1970 * 1000 }
+    /// Keeps the app running until one request finishes (UIKit background task); no-op in tests.
+    var keepAlive: @MainActor () -> () -> Void = { BackgroundPositionSender.backgroundTask() }
     var defaults: UserDefaults = .standard
     /// Repeating timers (age ticks, link heartbeat). Off in unit tests.
     var timers = true
@@ -21,11 +29,12 @@ struct SessionEnv {
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
-/// you said so and the app is on screen — your shared position.
+/// you said so — your shared position: on screen over the socket, and with
+/// «دائمًا» also off screen over HTTP (`BackgroundPositionSender`).
 ///
-/// Every position goes through `gate` (`SendGate`), which `LiveChannel` asks
-/// again at the last step before the wire. The server's `sharing` flag alone
-/// never sends anything: the server turns it on at join.
+/// Every position goes through `gate` (`SendGate`), which `LiveChannel` and
+/// `BackgroundPositionSender` ask again at the last step before the wire. The
+/// server's `sharing` flag alone never sends anything: the server turns it on at join.
 @MainActor
 final class OutingSession: ObservableObject, Identifiable {
     nonisolated let id: String
@@ -62,6 +71,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private let token: String
     private let env: SessionEnv
     private var channel: LiveChannel?
+    private var backgroundSender: BackgroundPositionSender?
     private var lastSent: Policy.LastSent?
     private var timers: [Timer] = []
     private var visible = true
@@ -100,7 +110,8 @@ final class OutingSession: ObservableObject, Identifiable {
             serverSharing: view?.snapshot.me.sharing == true,
             outingActive: view?.status == .active,
             foreground: visible && env.isForeground(),
-            closed: closedReason != nil
+            closed: closedReason != nil,
+            alwaysAuthorized: hasAlwaysPermission
         )
     }
 
@@ -113,7 +124,9 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func open() {
         visible = env.isForeground()
+        location.setOffScreen(!visible)
         location.onTrailFix = { [weak self] f in self?.trailFix(f) }
+        location.onAuthorizationChange = { [weak self] in self?.reconcileSharing() }
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
@@ -136,9 +149,22 @@ final class OutingSession: ObservableObject, Identifiable {
             beat: { [api] in try await api.heartbeat($0, gps: $1, battery: $2) },
             scheduler: env.scheduler,
             canSendPosition: { [weak self] in
-                MainActor.assumeIsolated { self?.gate.allowsPosition ?? false }
+                /* The socket is for the screen only; off screen the HTTP sender takes over. */
+                MainActor.assumeIsolated { self.map { $0.gate.allowsPosition && $0.gate.foreground } ?? false }
             }
         ))
+        let outing = id
+        let post = env.postPosition ?? { [api] in try await api.sendPosition($0, fix: $1) }
+        let sender = BackgroundPositionSender(deps: .init(
+            post: { try await post(outing, $0) },
+            scheduler: env.scheduler,
+            canSend: { [weak self] in MainActor.assumeIsolated { self?.gate.allowsBackgroundPosition ?? false } },
+            now: env.now,
+            lowPower: env.lowPower,
+            keepAlive: { [env] in MainActor.assumeIsolated { env.keepAlive() } }
+        ))
+        sender.onResult = { [weak self] r in self?.backgroundResult(r) }
+        backgroundSender = sender
         ch.handlers = .init(
             onSnapshot: { [weak self] s in MainActor.assumeIsolated { self?.applySnapshot(s) } },
             onEvent: { [weak self] e in MainActor.assumeIsolated { self?.apply(e) } },
@@ -161,6 +187,7 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func close() {
+        backgroundSender?.stop()
         stopBackgroundTrail()
         saveTrail()
         location.onTrailFix = { _ in }
@@ -172,11 +199,15 @@ final class OutingSession: ObservableObject, Identifiable {
         location.stopWatchingForeground()
     }
 
-    /// The app came to / left the screen. Leaving stops the GPS and drops any
-    /// fix waiting for the network; the share intent stays, so it resumes on return.
+    /// The app came to / left the screen. With «دائمًا» sharing keeps going off
+    /// screen (HTTP, `BackgroundPositionSender`); without it, leaving stops the
+    /// GPS and drops any fix waiting for the network, and the share intent stays,
+    /// so it resumes on return.
     func foreground(_ active: Bool) {
         visible = active
+        location.setOffScreen(!active)
         if active {
+            backgroundSender?.stop()
             location.watchForeground()
             stopBackgroundTrail()
             channel?.setAway(false)
@@ -193,7 +224,13 @@ final class OutingSession: ObservableObject, Identifiable {
                 trail.markGap()
             }
             saveTrail()
-            location.stopSharing()
+            if gate.allowsBackgroundPosition && (location.isSharing || isDemo) {
+                /* «دائمًا»: keep sharing off screen, over HTTP. */
+                backgroundSender?.start()
+            } else {
+                backgroundSender?.stop()
+                location.stopSharing()
+            }
             location.stopWatchingForeground()
             channel?.setAway(true)
             objectWillChange.send()
@@ -243,6 +280,9 @@ final class OutingSession: ObservableObject, Identifiable {
     func stopSharing() async {
         stopSharingLocally()
         guard !isDemo else { return }
+        /* Off screen (e.g. from the lock screen / CarPlay later): finish telling the server. */
+        let done = env.keepAlive()
+        defer { done() }
         do {
             _ = try await api.setSharing(id, sharing: false)
             view?.apply(.memberSharing(userId: myUserId, sharing: false))
@@ -256,6 +296,7 @@ final class OutingSession: ObservableObject, Identifiable {
         wantsToShare = false
         lastSent = nil
         channel?.dropPendingFix()
+        backgroundSender?.stop()
         if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
             ShareMemory.setActiveShare(user: myUserId, outing: nil, defaults: env.defaults)
         }
@@ -263,10 +304,35 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     /// Resume after a relaunch only if THIS identity was sharing THIS outing with consent.
+    /// Relaunched off screen by iOS (significant change / region exit) with «دائمًا»: the GPS
+    /// starts at once (keeps the app alive) and the outing is fetched over HTTP; nothing is
+    /// sent until that snapshot confirms the outing is active and sharing is on for me.
     func resumeIfPreviouslySharing() {
-        if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent {
-            wantsToShare = true
-            reconcileSharing()
+        guard ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent else { return }
+        wantsToShare = true
+        if !visible && hasAlwaysPermission && !isDemo && view == nil {
+            if env.authorizationOverride ?? location.canLocate { location.startSharing(mode: mode) }
+            let done = env.keepAlive()
+            Task { [weak self, api, id] in
+                defer { done() }
+                if let snap = try? await api.poll(id) { self?.applySnapshot(snap) }
+            }
+        }
+        reconcileSharing()
+    }
+
+    /// The network came back: a fix waiting off screen goes now (if still fresh).
+    func networkBack() { backgroundSender?.networkBack() }
+
+    private func backgroundResult(_ r: BackgroundPositionSender.Outcome) {
+        #if DEBUG
+        ShareLog.log.notice("background send: \(String(describing: r))")
+        #endif
+        switch r {
+        case .sent: lastAck = (true, nil)
+        case let .refused(reason): ack(false, reason)
+        case .notAMember: closed(.notAMember)
+        case .unauthorized: closed(.unauthorized)
         }
     }
 
@@ -287,16 +353,30 @@ final class OutingSession: ObservableObject, Identifiable {
             location.stopSharing()
             channel?.dropPendingFix()
         }
+        if gate.allowsBackgroundPosition {
+            if backgroundSender?.running == false { backgroundSender?.start() }
+        } else if backgroundSender?.running == true {
+            backgroundSender?.stop()
+        }
         objectWillChange.send()
     }
 
     /// Every fix from the GPS while sharing. Internal for tests.
     func handleFix(_ f: DeviceFix) {
+        #if DEBUG
+        ShareLog.log.notice("fix age=\(Int(Date().timeIntervalSince1970 * 1000 - f.atMs))ms acc=\(f.accuracy ?? -1) gate=\(self.gate.allowsPosition) fg=\(self.gate.foreground) bg=\(self.gate.allowsBackgroundPosition) gps=\(self.location.isSharing)")
+        #endif
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
         /* My own totals for «ملخص رحلتي»: on this device only, never points. */
         if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
+        if !gate.foreground {
+            /* Off screen («دائمًا»): the HTTP sender keeps only the latest fix and decides when. */
+            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isDemo else { return }
+            backgroundSender?.offer(f, mode: m)
+            return
+        }
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
         guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok else { return }
         lastSent = .init(fix: f, sentAtMs: now)
@@ -427,9 +507,12 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func ack(_ ok: Bool, _ reason: String?) {
         lastAck = (ok, reason)
-        if !ok, reason == "sharing_off" || reason == "outing_paused" || reason == "outing_ended" {
+        if !ok, reason == "sharing_off" || reason == "outing_paused" || reason == "outing_ended" || reason == "not_allowed" || reason == "outing_created" {
             if reason == "outing_paused" { view?.apply(.outingStatus(.paused)) }
-            if reason == "sharing_off", let me = view?.myId { view?.apply(.memberSharing(userId: me, sharing: false)) }
+            if reason == "outing_created" { view?.apply(.outingStatus(.created)) }
+            /* not_allowed: the server's database says I am not sharing there (changed elsewhere). */
+            if reason == "sharing_off" || reason == "not_allowed", let me = view?.myId { view?.apply(.memberSharing(userId: me, sharing: false)) }
+            if reason == "outing_ended" { return closed(.outingEnded) }
             reconcileSharing()
         }
     }
@@ -583,6 +666,13 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func clipAudio(_ clip: VoiceClip) async throws -> Data { try await api.fetchClip(clip) }
 }
+
+#if DEBUG
+/// DEBUG builds only: the share path in the unified log (`log stream --predicate 'category == "share"'`), for simulator verification.
+enum ShareLog {
+    static let log = Logger(subsystem: "sa.sary.albarq", category: "share")
+}
+#endif
 
 /// Local notifications for notes and SOS.
 enum Notifier {

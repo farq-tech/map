@@ -5,8 +5,36 @@ enum Endpoints {
     /// The Railway API, called directly (the Vercel `/api` rewrite proxies the
     /// same server but cannot carry a WebSocket). No key: identity is a per-device
     /// Bearer token the server issues.
-    static let apiBase = URL(string: "https://api-production-ddc84.up.railway.app")!
-    static let liveSocket = URL(string: "wss://api-production-ddc84.up.railway.app/api/outings/live")!
+    static let production = URL(string: "https://api-production-ddc84.up.railway.app")!
+
+    static var apiBase: URL {
+        #if DEBUG
+        if let o = debugOverride { return o }
+        #endif
+        return production
+    }
+
+    static var liveSocket: URL {
+        var c = URLComponents(url: apiBase, resolvingAgainstBaseURL: false)!
+        c.scheme = c.scheme == "http" ? "ws" : "wss"
+        c.path = "/api/outings/live"
+        return c.url!
+    }
+
+    #if DEBUG
+    /// DEBUG builds only: `-SaryAPIBase http://127.0.0.1:PORT` points the app at a local API
+    /// (background-sharing verification on the simulator). Remembered so a background
+    /// relaunch by iOS (no launch arguments then) talks to the same server; `-SaryAPIBase prod` clears it.
+    static let debugKey = "sary.debug.apiBase"
+    static var debugOverride: URL? {
+        let d = UserDefaults.standard
+        if let arg = d.volatileDomain(forName: UserDefaults.argumentDomain)["SaryAPIBase"] as? String {
+            if arg == "prod" { d.removeObject(forKey: debugKey); return nil }
+            d.set(arg, forKey: debugKey)
+        }
+        return d.string(forKey: debugKey).flatMap(URL.init(string:))
+    }
+    #endif
 }
 
 struct OutingAPIError: Error, Equatable {

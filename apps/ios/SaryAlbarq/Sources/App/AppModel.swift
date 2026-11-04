@@ -69,7 +69,12 @@ final class AppModel: ObservableObject {
         }
         let forcedOffline = arguments.contains("-SaryOffline")
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in self?.online = forcedOffline ? false : path.status == .satisfied }
+            Task { @MainActor in
+                guard let self else { return }
+                let now = forcedOffline ? false : path.status == .satisfied
+                if now && !self.online { self.session?.networkBack() }
+                self.online = now
+            }
         }
         if forcedOffline { online = false }
         monitor.start(queue: DispatchQueue(label: "sary.net"))
@@ -379,7 +384,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The app restarted mid-share: pick the share back up (this identity, this outing, consent given; foreground only).
+    /// The app restarted mid-share — by the person, or by iOS in the background after a
+    /// significant location change / region exit: pick the share back up (this identity,
+    /// this outing, consent given). Off screen it sends only with «دائمًا» (SendGate).
     private func resumeActiveShare() {
         guard let me = identity?.user.id, let id = ShareMemory.activeShare(user: me) else { return }
         open(id)
@@ -411,7 +418,23 @@ final class AppModel: ObservableObject {
         let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
         session = s
         s.open()
+        #if DEBUG
+        /* Screenshots: the demo outing already shared (consent given), e.g. for the «دائمًا» hint. */
+        if ProcessInfo.processInfo.arguments.contains("-demoSharing") {
+            ShareMemory.recordConsent(user: DemoData.meId, outing: DemoData.outingId)
+            ShareMemory.setActiveShare(user: DemoData.meId, outing: DemoData.outingId)
+            s.resumeIfPreviouslySharing()
+        }
+        #endif
     }
+}
+
+/// The one `AppModel`, created on first use: by SwiftUI at a normal launch, or by the
+/// app delegate when iOS relaunches the app in the background for location (no UI then),
+/// so an active share resumes either way.
+@MainActor
+enum AppBoot {
+    static let model = AppModel()
 }
 
 /// Onboarding finished on this device (name saved AND the location step seen).

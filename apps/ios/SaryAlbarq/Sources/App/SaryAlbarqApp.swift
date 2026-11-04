@@ -6,7 +6,7 @@ import UserNotifications
 @main
 struct SaryAlbarqApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var model = AppModel()
+    @StateObject private var model = AppBoot.model
     @State private var appearance = AppearanceSettings.launch()
     @Environment(\.scenePhase) private var phase
 
@@ -63,7 +63,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
         UIView.appearance().semanticContentAttribute = .forceRightToLeft
-        /* No background location: nothing to resume for a location relaunch. */
+        /* Relaunched by iOS in the background for location (significant change / region exit
+         * while sharing with «دائمًا»): build the model now so the share resumes without UI. */
+        if launchOptions?[.location] != nil {
+            MainActor.assumeIsolated {
+                let m = AppBoot.model
+                Self.model = m
+            }
+        }
         return true
     }
 
