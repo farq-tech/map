@@ -465,6 +465,20 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     return result;
   }
 
+  /* ---------- offline mesh key ---------- */
+
+  /** First read of an outing without a key: make one (a concurrent reader gets the same). */
+  async function ensureMeshKey(outingId) {
+    await q(`UPDATE sary.outings SET mesh_key = $2 WHERE id = $1 AND mesh_key IS NULL`, [outingId, v.newSecret()]);
+    const [r] = await q(`SELECT mesh_key FROM sary.outings WHERE id = $1`, [outingId]);
+    return r?.mesh_key || null;
+  }
+
+  /** Someone left the group: a new key, so their copy no longer opens the mesh. */
+  async function rotateMeshKeyRows(run, outingId) {
+    await run(`UPDATE sary.outings SET mesh_key = $2 WHERE id = $1`, [outingId, v.newSecret()]);
+  }
+
   async function members(outingId) {
     return q(
       `SELECT m.user_id, u.display_name, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
@@ -520,10 +534,12 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const [o] = await q(
       `SELECT id, name, status, owner_id, join_locked, created_at, started_at, ended_at,
               rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by,
-              convoy_lead_user_id, convoy_tail_user_id, convoy_max_gap_m
+              convoy_lead_user_id, convoy_tail_user_id, convoy_max_gap_m, mesh_key
        FROM sary.outings WHERE id = $1`,
       [outingId],
     );
+    const meshKey = o.mesh_key || (await ensureMeshKey(outingId));
+    delete o.mesh_key;
     const { rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by, convoy_lead_user_id, convoy_tail_user_id, convoy_max_gap_m, ...outing } = o;
     outing.rally = rallyOut({ rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by });
     outing.convoy = features.convoyOut({ convoy_lead_user_id, convoy_tail_user_id, convoy_max_gap_m });
@@ -554,6 +570,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
       summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
+      /* Offline car-to-car mesh secret: active members only (requireMember above). */
+      mesh_key: meshKey,
       server_now: new Date(now()).toISOString(),
     };
   }
@@ -641,6 +659,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         [outingId, memberId],
       );
       await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, memberId]);
+      if (r.length) await rotateMeshKeyRows(run, outingId);
       return r;
     });
     if (!rows.length) throw err('not_a_member', 404);
@@ -652,6 +671,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     void features.dropFromConvoy(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
+    hub.emit(outingId, { type: 'mesh_key_rotated' });
     return { removed: memberId };
   }
 
@@ -666,6 +686,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       [outingId, userId],
     );
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    await rotateMeshKeyRows(run, outingId);
     if (m.role !== 'owner') return { ended: false, owner: null };
     await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
     /* A co-leader is the natural heir; otherwise the earliest to join. */
@@ -697,6 +718,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!outcome.ended) void features.dropFromConvoy(outingId, userId);
     hub.kick(outingId, userId, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: userId, reason: 'left' });
+    hub.emit(outingId, { type: 'mesh_key_rotated' });
     if (outcome.owner) hub.emit(outingId, { type: 'owner_changed', owner_id: outcome.owner });
     if (outcome.ended) {
       dropLatest(outingId);
@@ -774,6 +796,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       );
       const others = await run(`SELECT DISTINCT outing_id FROM sary.outing_members WHERE user_id = $1`, [user.id]);
       for (const r of others) touched.add(r.outing_id);
+      /* Every outing they had a key for gets a new one (open ones already did, in leaveRows). */
+      const leftIds = new Set(left.map((l) => l.outingId));
+      for (const r of others) if (!leftIds.has(r.outing_id)) await rotateMeshKeyRows(run, r.outing_id);
       /* Waypoints, return timers (+ watch links), checklist authorship, snapshots. */
       const featureInfo = await features.accountRows(run, user.id);
       await run(`DELETE FROM sary.users WHERE id = $1`, [user.id]);
@@ -792,6 +817,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     for (const k of [...notes.keys()]) if (k.endsWith(`:${user.id}`)) notes.delete(k);
     for (const k of [...sosAlerts.keys()]) if (k.endsWith(`:${user.id}`)) sosAlerts.delete(k);
     await features.afterAccountDeleted(result.featureInfo, user.id);
+    for (const oid of result.touched) if (!result.left.some((l) => l.outingId === oid)) hub.emit(oid, { type: 'mesh_key_rotated' });
     hub.dropUser?.(user.id, 'unauthorized');
     return { left: result.left.length, deleted_outings: result.deletedOutings };
   }

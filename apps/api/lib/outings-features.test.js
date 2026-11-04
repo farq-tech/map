@@ -617,3 +617,83 @@ test('watch link is rate limited per address', { skip, timeout: 30_000 }, async 
   const r = await fetch(`http://127.0.0.1:${server.address().port}/api/outings/watch/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'A'.repeat(43), subscription: {} }) });
   assert.equal(r.status, 503);
 });
+
+test('offline mesh key: members only, rotated on leave / removal / account deletion', { skip, timeout: 60_000 }, async (t) => {
+  const { createPool } = require('./outings/db');
+  const { setupOutings } = require('./outings');
+  const pool = createPool(await isolatedDb(URL_));
+  const outings = setupOutings({ pool, autoMigrate: false, limits: { identityPerHour: 100, invitePer10Min: 100, deletePerHour: 10 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  const api = async (method, path, token, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body && method !== 'GET' ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const mk = async (name) => (await api('POST', '/me', null, { display_name: name })).body;
+  const [A, B, C, D, E] = [await mk('أ'), await mk('ب'), await mk('ج'), await mk('د'), await mk('هـ')];
+  const created = await api('POST', '/', A.token, { name: 'شبكة' });
+  const O = created.body.outing_id;
+  for (const p of [B, D, E]) await api('POST', '/invites/join', p.token, { token: created.body.invite.token });
+  await api('POST', `/${O}/status`, A.token, { action: 'start' });
+  const events = [];
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+  ws.on('message', (d) => events.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.on('open', r));
+  ws.send(JSON.stringify({ type: 'auth', token: A.token, outing_id: O }));
+  const until = async (pred, ms = 4000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { if (pred()) return; await new Promise((r) => setTimeout(r, 20)); }
+    throw new Error('timeout');
+  };
+  await until(() => events.some((e) => e.type === 'ready'));
+  const ready = events.find((e) => e.type === 'ready');
+  const key = async (p) => (await api('GET', `/${O}`, p.token)).body.mesh_key;
+
+  const k1 = await key(A);
+  assert.match(k1, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(Buffer.from(k1, 'base64url').length, 32);
+  assert.equal(await key(B), k1, 'every member gets the same key');
+  assert.equal((await api('GET', `/${O}/live`, B.token)).body.mesh_key, k1);
+  assert.equal(ready.snapshot.mesh_key, k1, 'and in the live snapshot');
+  const outsider = await api('GET', `/${O}`, C.token);
+  assert.equal(outsider.status, 404);
+  assert.ok(!JSON.stringify(outsider.body).includes(k1), 'a non-member never sees it');
+  assert.ok(!JSON.stringify((await api('GET', '/', C.token)).body).includes(k1));
+  assert.ok(!JSON.stringify((await api('GET', '/', B.token)).body).includes(k1), 'not in the outings list either');
+  assert.ok(!JSON.stringify((await api('POST', '/invites/preview', null, { token: created.body.invite.token })).body).includes(k1), 'not in the invite preview');
+
+  const rotations = () => events.filter((e) => e.type === 'mesh_key_rotated');
+  /* Leave → rotated, event carries no key. */
+  await api('POST', `/${O}/leave`, B.token);
+  await until(() => rotations().length === 1);
+  assert.deepEqual(rotations()[0], { type: 'mesh_key_rotated' });
+  const k2 = await key(A);
+  assert.notEqual(k2, k1);
+  assert.equal((await api('GET', `/${O}`, B.token)).status, 404, 'the leaver cannot fetch the new key');
+  /* Removed → rotated. */
+  await api('DELETE', `/${O}/members/${D.user.id}`, A.token);
+  await until(() => rotations().length === 2);
+  const k3 = await key(A);
+  assert.notEqual(k3, k2);
+  /* Account deleted → rotated. */
+  assert.equal((await api('DELETE', '/me', E.token)).status, 200);
+  await until(() => rotations().length === 3);
+  const k4 = await key(A);
+  assert.notEqual(k4, k3);
+  assert.equal(await key(A), k4, 'stable between changes');
+  ws.close();
+});

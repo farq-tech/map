@@ -76,6 +76,13 @@ ALTER TABLE sary.outings ADD COLUMN IF NOT EXISTS convoy_max_gap_m integer NOT N
 ALTER TABLE sary.outings DROP CONSTRAINT IF EXISTS outings_convoy_gap;
 ALTER TABLE sary.outings ADD CONSTRAINT outings_convoy_gap CHECK (convoy_max_gap_m BETWEEN 200 AND 5000);
 
+/* Offline car-to-car mesh: a members-only secret per outing (32 random bytes, base64url).
+ * Returned only to active members; rotated when anyone leaves, is removed or deletes
+ * their account. Never logged. Generated on first read when null. */
+ALTER TABLE sary.outings ADD COLUMN IF NOT EXISTS mesh_key text;
+ALTER TABLE sary.outings DROP CONSTRAINT IF EXISTS outings_mesh_key_shape;
+ALTER TABLE sary.outings ADD CONSTRAINT outings_mesh_key_shape CHECK (mesh_key IS NULL OR mesh_key ~ '^[A-Za-z0-9_-]{43}$');
+
 /* «تخطيط الطلعة»: a planned route (GeoJSON LineString) and notes, set by a leader. */
 ALTER TABLE sary.outings ADD COLUMN IF NOT EXISTS plan_route jsonb;
 ALTER TABLE sary.outings ADD COLUMN IF NOT EXISTS plan_notes text;
