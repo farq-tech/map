@@ -78,6 +78,11 @@ extension AppearanceSettings {
     /// The app's one settings object. DEBUG builds accept screenshot overrides:
     /// `-SaryScheme light|dark`, `-SaryDrive 1`, `-SaryNight 1`, `-SaryFallback 1`.
     static func launch(_ args: [String] = ProcessInfo.processInfo.arguments) -> AppearanceSettings {
+        #if DEBUG
+        /* Test isolation: `-SaryDrive 1` etc. are saved like the person's own choice, so a
+           `-resetState` run starts from the default appearance, not the previous test's. */
+        if args.contains("-resetState") { UserDefaults.standard.removeObject(forKey: storageKey) }
+        #endif
         let s = AppearanceSettings()
         #if DEBUG
         func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }

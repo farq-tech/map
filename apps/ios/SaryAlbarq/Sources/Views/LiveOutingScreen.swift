@@ -28,6 +28,8 @@ struct LiveOutingScreen: View {
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
     @State private var screenHeight: CGFloat = 0
+    /// «المزيد» menu beside the control cluster.
+    @State private var moreOpen = false
 
     var body: some View {
         let ui = controller.ui
@@ -112,7 +114,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "more"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -123,6 +125,7 @@ struct LiveOutingScreen: View {
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
         let items = controlItems(ui)
+        let more = moreItems(ui)
         ZStack {
             VStack(spacing: theme.space(.s)) {
                 VStack(spacing: theme.space(.s)) {
@@ -159,11 +162,24 @@ struct LiveOutingScreen: View {
             .padding(.horizontal, theme.space(.m))
             .padding(.top, 4)
 
+            if moreOpen {
+                /* Tap anywhere outside the menu to close it. */
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { moreOpen = false }
+                    .accessibilityHidden(true)
+            }
+
             if controller.sheetDetent == .peek {
                 VStack {
                     Spacer()
-                    HStack {
+                    HStack(alignment: .bottom, spacing: theme.space(.s)) {
                         Spacer()
+                        if moreOpen {
+                            SaryMoreMenu(items: more, action: controlTapped)
+                                .chromeFrame("more")
+                                .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+                        }
                         SaryControlCluster(items: items, axis: .vertical, action: controlTapped)
                             .chromeFrame("cluster")
                             .transition(.opacity)
@@ -175,6 +191,12 @@ struct LiveOutingScreen: View {
 
             VStack {
                 Spacer()
+                if moreOpen && rowMode {
+                    SaryMoreMenu(items: more, action: controlTapped)
+                        .chromeFrame("more")
+                        .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+                        .padding(.bottom, theme.space(.s))
+                }
                 HStack(alignment: .bottom) {
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
                         .chromeFrame("ptt")
@@ -200,25 +222,46 @@ struct LiveOutingScreen: View {
         .animation(theme.animation(.smooth), value: sheetTop)
         .environment(\.safetyAlertActions, controller.safety.alertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
+        .animation(theme.animation(.snappy), value: moreOpen)
+        .onChange(of: controller.sheetDetent) { _, d in if d == .full { moreOpen = false } }
+        .onChange(of: theme.drive) { _, d in if d { moreOpen = false } }
     }
 
-    private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+    /// Every side control the live screen offers, in order.
+    private func allControls(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
-        let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
-                                                  backTracking: controller.backTrack != nil)
-            + [.safetyStuck(active: controller.safety.myStuck != nil)]
-        /* Drive mode keeps the few that matter on the move: me, the group, and the way back. */
-        return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } : all
+        return SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
+                                               backTracking: controller.backTrack != nil)
+            + [.safetyStuck(active: controller.safety.myStuck != nil), .addWaypoint]
+    }
+
+    /// On the map: «موقعي», «المجموعة», «رسالة», «طريق العودة» + «المزيد»
+    /// (drive mode: «موقعي», «المجموعة», «طريق العودة», nothing hidden behind a menu).
+    private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        let all = allControls(ui)
+        if theme.drive { return all.filter { SaryMapControlItem.driveIDs.contains($0.id) } }
+        var more = SaryMapControlItem.more(open: moreOpen)
+        /* I am stuck: the menu that holds «غرّزت» shows it. */
+        if controller.safety.myStuck != nil && !moreOpen { more.badge = 1 }
+        return all.filter { SaryMapControlItem.primaryIDs.contains($0.id) } + [more]
+    }
+
+    /// Behind «المزيد»: أقرب محطة، غرّزت، أضف نقطة.
+    private func moreItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        allControls(ui).filter { !SaryMapControlItem.primaryIDs.contains($0.id) }
     }
 
     private func controlTapped(_ id: String) {
         let a = controller.actions
+        if id == "more" { moreOpen.toggle(); return }
+        moreOpen = false
         switch id {
         case "locate": a.locateMe()
         case "fit": a.fitGroup()
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
         case "stuck": controller.stuckControlTapped()
+        case "waypoint": controller.features.composeAtMe(controller.location.lastFix)
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         default: break
         }

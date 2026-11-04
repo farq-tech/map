@@ -157,3 +157,70 @@ extension SaryMapControlItem {
         ]
     }
 }
+
+extension SaryMapControlItem {
+    /// «المزيد»: the 5th side control; opens `SaryMoreMenu` with the less frequent tools.
+    static func more(open: Bool) -> SaryMapControlItem {
+        .init(id: "more", systemImage: open ? "xmark" : "ellipsis", label: "المزيد", accessibilityID: "outing-more", isActive: open)
+    }
+
+    /// Side controls that stay on the map (design rule: at most four, plus «المزيد»).
+    static let primaryIDs = ["locate", "fit", "note", "backtrack"]
+    /// Drive mode keeps only the few that matter on the move (no «المزيد»).
+    static let driveIDs = ["locate", "fit", "backtrack"]
+}
+
+/// The «المزيد» menu beside the control cluster: a compact glass card with large,
+/// labelled rows (icon + Arabic title), one tap each.
+struct SaryMoreMenu: View {
+    var items: [SaryMapControlItem]
+    var action: (_ id: String) -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                Button { action(item.id) } label: {
+                    HStack(spacing: theme.space(.m)) {
+                        Image(systemName: item.systemImage)
+                            .font(.system(size: theme.drive ? 22 : 18, weight: .semibold))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(item.isActive ? p.onAccent : p.accentText)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(item.isActive ? p.accent : p.accent.opacity(0.14)))
+                        Text(item.label)
+                            .saryText(.body, weight: .bold)
+                            .foregroundStyle(p.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text(item.label))
+                .accessibilityAddTraits(item.isActive ? .isSelected : [])
+                .accessibilityIdentifier(item.accessibilityID)
+                if index < items.count - 1 {
+                    Rectangle().fill(p.separator).frame(height: 0.75).padding(.leading, 36 + theme.space(.m) * 2)
+                }
+            }
+        }
+        .padding(.vertical, theme.space(.xs))
+        .frame(width: 214)
+        .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.chromeOpaque.opacity(0.55)))
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
+        .saryShadow(.raised, theme)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("outing-more-menu")
+    }
+}
+
+extension SaryMapControlItem {
+    /// «أضف نقطة» at my position (long press on the map adds one anywhere).
+    static let addWaypoint = SaryMapControlItem(id: "waypoint", systemImage: "mappin.and.ellipse", label: "أضف نقطة", accessibilityID: "outing-waypoint-add")
+}

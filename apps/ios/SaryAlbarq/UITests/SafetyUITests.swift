@@ -16,8 +16,11 @@ final class SafetyUITests: XCTestCase {
 
     func testStuckConfirmStripAndClear() {
         let app = launch([])
+        let more = any(app, "outing-more")
+        XCTAssertTrue(more.waitForExistence(timeout: 20), "«المزيد» is in the control cluster")
+        more.tap()
         let stuck = any(app, "outing-stuck")
-        XCTAssertTrue(stuck.waitForExistence(timeout: 20), "«غرّزت» is in the control cluster")
+        XCTAssertTrue(stuck.waitForExistence(timeout: 5), "«غرّزت» is behind «المزيد»")
         stuck.tap()
         let yes = app.buttons["إيه، غرّزت"]
         XCTAssertTrue(yes.waitForExistence(timeout: 5), "a confirm, not a hold")
