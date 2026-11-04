@@ -28,6 +28,9 @@ enum LiveModal: Identifiable, Equatable {
     case trailAlways
     /// «تخطيط الطلعة»: point card, my coordinates, search, the plan editor.
     case plan(LivePlanModal)
+    /// For someone who consented before sharing went background: sharing now keeps going
+    /// with the screen locked; ask iOS for «دائمًا».
+    case shareAlways
 
     var id: String {
         switch self {
@@ -42,6 +45,7 @@ enum LiveModal: Identifiable, Equatable {
         case let .weatherAt(p): return "weather:\(p.lat),\(p.lng)"
         case .trailAlways: return "trailAlways"
         case let .plan(m): return m.id
+        case .shareAlways: return "shareAlways"
         }
     }
 }
@@ -152,6 +156,7 @@ final class LiveOutingController: ObservableObject {
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-SarySheetHalf") { sheetDetent = .half }
         if let i = args.firstIndex(of: "-SaryBackTrack") {
             let delay = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startBackTrack() }
@@ -198,6 +203,7 @@ final class LiveOutingController: ObservableObject {
             closed: session.closedReason,
             wantsToShare: session.wantsToShare,
             isSharingNow: session.isSharingNow,
+            hasAlways: session.hasAlwaysPermission,
             sosSending: session.sosSending,
             acknowledgedSOS: acknowledgedSOS,
             alerts: alerts,
@@ -660,19 +666,61 @@ final class LiveOutingController: ObservableObject {
         } else if session.hasConsent {
             Task {
                 await session.beginSharing()
-                offerAlwaysIfNeeded()
+                offerShareAlwaysIfNeeded()
             }
         } else {
             modal = .consent
         }
     }
 
+    /// The consent sheet already explained that sharing keeps going with the screen locked:
+    /// share, then ask iOS for «دائمًا» right away (it shows its prompt at most once).
     func acceptConsent() {
         modal = nil
         Task {
             await session.beginSharing()
-            offerAlwaysIfNeeded()
+            guard session.wantsToShare else { return }
+            await askAlwaysForSharing()
         }
+    }
+
+    /// Asked once per device (the same key the trail explainer uses: one «دائمًا» covers both).
+    static let shareAlwaysAskedKey = "sary.outings.shareAlwaysAsked.v1"
+
+    private func askAlwaysForSharing() async {
+        UserDefaults.standard.set(true, forKey: Self.shareAlwaysAskedKey)
+        UserDefaults.standard.set(true, forKey: TrailPrefs.explainedKey)
+        guard !session.hasAlwaysPermission, location.canLocate else { return }
+        let ok = await location.requestAlways()
+        toast(ok ? "تستمر المشاركة والشاشة مقفلة حتى توقفها" : "الإذن «أثناء الاستخدام» فقط: تتوقف المشاركة إذا قفلت الشاشة")
+        objectWillChange.send()
+    }
+
+    /// Consent given before this version: explain the background sharing once, then ask for «دائمًا».
+    func offerShareAlwaysIfNeeded() {
+        guard !session.hasAlwaysPermission, location.canLocate,
+              !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self, self.modal == nil, self.session.wantsToShare else { return }
+            self.modal = .shareAlways
+        }
+    }
+
+    func allowShareAlways() {
+        modal = nil
+        Task { await askAlwaysForSharing() }
+    }
+
+    func laterShareAlways() {
+        UserDefaults.standard.set(true, forKey: Self.shareAlwaysAskedKey)
+        modal = nil
+    }
+
+    /// One line under «موقعك مُشارَك»: what happens when the screen locks, and what to do.
+    var shareBackgroundHint: ShareBackgroundHint? {
+        guard session.wantsToShare, session.closedReason == nil, session.view?.status == .active else { return nil }
+        if !session.hasAlwaysPermission { return location.canLocate ? .needsAlways : nil }
+        return ProcessInfo.processInfo.isLowPowerModeEnabled ? .lowPower : .dontForceQuit
     }
 
     func startOuting() { Task { await session.setStatus("start") } }

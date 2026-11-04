@@ -2,7 +2,8 @@ import Foundation
 
 /// The one rule for when this phone may put a position on the wire. Pure, so
 /// it is tested on its own and then enforced at the last step before the
-/// network (`LiveChannel`), not only in the screen.
+/// network (`LiveChannel` in the foreground, `BackgroundPositionSender` in the
+/// background), not only in the screen.
 ///
 /// The server's own `sharing` flag is NOT consent: the server sets it to true
 /// when someone joins. A position leaves the phone only when ALL hold:
@@ -13,7 +14,11 @@ import Foundation
 ///   * the person pressed «شارك موقعي» (and has not pressed stop since);
 ///   * the server agrees sharing is on for this member;
 ///   * the outing is active and the session is not closed;
-///   * the app is in the foreground — nothing is sent from the background.
+///   * the app is on screen — OR iOS permission is «دائمًا» (owner decision,
+///     2026-11: once the member chose to share, sharing keeps going with the
+///     screen locked / in another app until they stop, leave, are removed, or
+///     the outing ends). With «أثناء الاستخدام» only, nothing is sent from the
+///     background.
 struct SendGate: Equatable {
     var consent = false
     var osAuthorized = false
@@ -22,10 +27,18 @@ struct SendGate: Equatable {
     var outingActive = false
     var foreground = false
     var closed = false
+    /// iOS location permission is «دائمًا» (Always).
+    var alwaysAuthorized = false
 
-    var allowsPosition: Bool {
-        consent && osAuthorized && userWantsShare && serverSharing && outingActive && foreground && !closed
+    /// Everything except where the app is (screen / background).
+    private var intentOpen: Bool {
+        consent && osAuthorized && userWantsShare && serverSharing && outingActive && !closed
     }
+
+    var allowsPosition: Bool { intentOpen && (foreground || alwaysAuthorized) }
+
+    /// Allowed, and the app is off screen: send over HTTP (`BackgroundPositionSender`), not the socket.
+    var allowsBackgroundPosition: Bool { intentOpen && !foreground && alwaysAuthorized }
 
     /// An SOS goes out on a 1 s hold even with sharing off (it is the decision
     /// to be found), but it carries a position only when the same gate is open.

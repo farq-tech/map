@@ -107,6 +107,10 @@ struct LiveSheet: View {
                 .interactiveDismissDisabled()
         case let .plan(m):
             LivePlanModalView(controller: controller, modal: m)
+        case .shareAlways:
+            ShareAlwaysExplainer(allow: controller.allowShareAlways, later: controller.laterShareAlways)
+                .presentationDetents([.large])
+                .interactiveDismissDisabled()
         }
     }
 }
@@ -201,6 +205,9 @@ private struct ShareCallout: View {
                     }
                     .padding(theme.space(.m))
                     .sarySurface(radius: SaryRadius.l)
+                    if let hint = controller.shareBackgroundHint {
+                        ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
+                    }
                 }
             }
         }
@@ -357,7 +364,7 @@ struct TrailAlwaysExplainer: View {
                     Text("عشان «طريق العودة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
-                    bullet("antenna.radiowaves.left.and.right.slash", "مشاركة موقعك مع الأصحاب ما تتغير: تُرسل والتطبيق مفتوح أمامك فقط.")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أعضاء الطلعة تستمر والشاشة مقفلة، إذا اخترت «شارك موقعي».")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -377,6 +384,90 @@ struct TrailAlwaysExplainer: View {
         HStack(alignment: .top, spacing: theme.space(.m)) {
             Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
             Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
+        }
+    }
+}
+
+/// The persistent one-liner under «موقعك مُشارَك»: with «أثناء الاستخدام» it is a link to
+/// Settings (choose «دائمًا»); with «دائمًا» a gentle note not to swipe the app away.
+struct ShareBackgroundHintRow: View {
+    var hint: ShareBackgroundHint
+    var openSettings: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        if hint == .needsAlways {
+            Button(action: openSettings) { row(link: true) }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("live.shareHint.settings")
+                .accessibilityHint("يفتح إعدادات سَرى البارق")
+        } else {
+            row(link: false).accessibilityIdentifier("live.shareHint")
+        }
+    }
+
+    private func row(link: Bool) -> some View {
+        HStack(spacing: theme.space(.s)) {
+            Image(systemName: hint.systemImage).foregroundStyle(link ? theme.palette.warning : theme.palette.accentText).frame(width: 20)
+            Text(hint.text).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            if link { Image(systemName: "chevron.left").font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
+        }
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .contentShape(Rectangle())
+    }
+}
+
+/// For someone who consented before sharing kept going off screen: say so, then ask iOS for «دائمًا».
+struct ShareAlwaysExplainer: View {
+    var allow: () -> Void
+    var later: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
+                    Text("المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
+                    Text("عشان يشوفك أصحابك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                        .saryText(.body).foregroundStyle(theme.palette.textSecondary)
+                    ShareAlwaysBullets()
+                    Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
+                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                }
+            }
+            Button(action: allow) { SaryButtonLabel(title: "تمام، اسمح دائمًا", systemImage: SaryIcon.check) }
+                .buttonStyle(.saryPrimary)
+                .accessibilityIdentifier("share.always.allow")
+            Button("لاحقًا، والتطبيق مفتوح فقط", action: later).buttonStyle(.saryPlain)
+                .accessibilityIdentifier("share.always.later")
+        }
+        .padding(theme.space(.l))
+    }
+}
+
+/// The same facts on the consent sheet and the «دائمًا» explainer.
+struct ShareAlwaysBullets: View {
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            bullet("lock.iphone", "تستمر المشاركة في الخلفية والشاشة مقفلة، حتى توقفها أو تغادر الطلعة أو تنتهي.")
+            bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة ما دامت المشاركة شغالة.")
+            bullet("gearshape.fill", "تحتاج إذن «دائمًا». إذا اخترت «أثناء الاستخدام» فقط، تتوقف المشاركة إذا قفلت الشاشة.")
+            bullet("xmark.app", "لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة: iOS قد لا يعيد فتحه، فتتوقف المشاركة.")
+            bullet("battery.50percent", "يستهلك بطارية أكثر؛ يخفف الدقة وأنت واقف، ويقل التكرار في وضع توفير الطاقة.")
+        }
+    }
+
+    private func bullet(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
+            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -460,7 +551,7 @@ private struct SettingsTab: View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
         Group {
-            SarySection(title: "مشاركتي", footer: "يُرسل موقعك فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة يتوقف الإرسال ويظهر لأصحابك «آخر موقع».") {
+            SarySection(title: "مشاركتي", footer: "بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة حتى توقفه أو تغادر أو تنتهي الطلعة. بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر لأصحابك «آخر موقع».") {
                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause,
                               isOn: Binding(get: { s.isSharingPaused }, set: { a.setSharingPaused($0) }), id: "settings-pause-sharing")
                 SaryDivider()
@@ -655,9 +746,12 @@ struct ConsentView: View {
                     Image(systemName: "location.circle.fill").font(.system(size: 52)).foregroundStyle(theme.palette.accent)
                     Text("مشاركة موقعك في هذه الطلعة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
                     bullet("lock.fill", "يرى موقعك أعضاء هذه الطلعة فقط، ولا أحد غيرهم.")
-                    bullet("iphone", "يُرسل موقعك فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة أو خرجت من التطبيق يتوقف الإرسال، ويظهر لأصحابك «آخر موقع» بعمره.")
-                    bullet("stop.circle.fill", "تتوقف إذا أوقفتها، أو غادرت، أو أوقف صاحب الطلعة الطلعة أو أنهاها.")
+                    bullet("stop.circle.fill", "تتوقف إذا ضغطت «أوقف»، أو غادرت، أو أزالك صاحب الطلعة، أو أوقف الطلعة أو أنهاها.")
+                    ShareAlwaysBullets()
                     bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة. مسارك («مساري») يبقى على جوالك فقط.")
+                    Text("بعد الموافقة بيسألك iOS عن إذن الموقع: اختر «السماح دائمًا» لتستمر المشاركة والشاشة مقفلة.")
+                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Button(action: accept) { SaryButtonLabel(title: "أوافق، شارك موقعي", systemImage: SaryIcon.locate) }

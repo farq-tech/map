@@ -79,7 +79,10 @@ final class LivePresenterTests: XCTestCase {
         i.isSharingNow = true
         let s = LiveOutingPresenter.state(i)
         XCTAssertEqual(s.sharing, .sharing)
-        XCTAssertTrue(s.warnings.contains(.keepScreenOn), "foreground-only sharing says so")
+        XCTAssertTrue(s.warnings.contains(.keepScreenOn), "«أثناء الاستخدام»: foreground-only sharing says so")
+        i.hasAlways = true
+        XCTAssertFalse(LiveOutingPresenter.state(i).warnings.contains(.keepScreenOn), "«دائمًا»: sharing keeps going with the screen locked")
+        i.hasAlways = false
         i.link = .offline
         XCTAssertTrue(LiveOutingPresenter.state(i).warnings.contains(.noInternet))
         XCTAssertEqual(LiveOutingPresenter.state(i).connection, .offline)

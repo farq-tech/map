@@ -364,17 +364,16 @@ final class TrailSessionTests: XCTestCase {
     }
 
     func testBackgroundTrailPointsNeverReachTheNetwork() {
+        /* Consent given once, but not sharing now: the trail alone must never touch the network. */
         ShareMemory.recordConsent(user: "u1", outing: "o1", defaults: defaults)
-        ShareMemory.setActiveShare(user: "u1", outing: "o1", defaults: defaults)
         let s = session()
         serverReady(sockets[0])
-        s.resumeIfPreviouslySharing()
-        XCTAssertTrue(s.gate.allowsPosition, "sharing is really on in the foreground")
-        /* Screen locked: the trail keeps recording (with «دائمًا»), the send gate closes. */
+        XCTAssertFalse(s.gate.allowsPosition, "not sharing")
+        /* Screen locked: the trail keeps recording (with «دائمًا»); nothing is sent. */
         foreground = false
         s.foreground(false)
         XCTAssertTrue(s.recordingInBackground)
-        XCTAssertFalse(s.gate.allowsPosition, "SendGate still refuses in the background")
+        XCTAssertFalse(s.gate.allowsBackgroundPosition, "no «شارك موقعي»: no background send either")
         let framesBefore = sentFrames.count
         RecordingURLProtocol.requests = []
         for i in 0..<20 { s.trailFix(trailFix(i)) }
