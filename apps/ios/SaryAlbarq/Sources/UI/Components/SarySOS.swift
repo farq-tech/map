@@ -123,6 +123,8 @@ struct SaryMySOSStrip: View {
     var since: Date
     var now: Date
     var imOK: () -> Void = {}
+    /// False when the alert went out without a position (I was not sharing): say so, never imply a location.
+    var withLocation = true
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -133,7 +135,7 @@ struct SaryMySOSStrip: View {
                 .symbolEffect(.pulse, isActive: !theme.reduceMotion)
             VStack(alignment: .leading, spacing: 0) {
                 Text("أرسلت طوارئ").saryText(.headline)
-                Text("الكل يشوف موقعك · \(SaryFormat.elapsed(since: since, now: now))")
+                Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل · بدون موقع") · \(SaryFormat.elapsed(since: since, now: now))")
                     .saryText(.footnote, weight: .medium).opacity(0.9)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

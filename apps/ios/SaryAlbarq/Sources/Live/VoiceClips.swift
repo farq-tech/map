@@ -13,32 +13,63 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
     private var startedAt: Date?
     private var url: URL?
 
-    /// Asks for the microphone the first time. False when refused.
+    /// Asks for the microphone the first time. False when refused (or iOS never answers).
     func requestPermission() async -> Bool {
-        await withCheckedContinuation { c in
-            AVAudioApplication.requestRecordPermission { ok in c.resume(returning: ok) }
+        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            var done = false
+            let finish: (Bool) -> Void = { ok in
+                DispatchQueue.main.async {
+                    guard !done else { return }
+                    done = true
+                    c.resume(returning: ok)
+                }
+            }
+            AVAudioApplication.requestRecordPermission { finish($0) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { finish(self.hasPermission) }
         }
     }
 
-    var hasPermission: Bool { AVAudioApplication.shared.recordPermission == .granted }
+    var hasPermission: Bool {
+        AVAudioApplication.shared.recordPermission == .granted || AVAudioSession.sharedInstance().recordPermission == .granted
+    }
 
-    func start() -> Bool {
-        let s = AVAudioSession.sharedInstance()
-        do {
-            try s.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
-            try s.setActive(true)
-        } catch { return false }
+    private let queue = DispatchQueue(label: "sa.sary.ptt")
+    /// A previous start never came back (seen on the simulator's audio input): do not queue more.
+    private var stuck = false
+
+    /// Starts recording off the main thread. False if the microphone does not
+    /// start within 2.5 s, so a wedged audio input can never freeze the map.
+    func start() async -> Bool {
+        guard !stuck else { return false }
+        stuck = true
         let u = FileManager.default.temporaryDirectory.appendingPathComponent("ptt-\(UUID().uuidString).m4a")
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 22_050,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 32_000,
-            AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
-        ]
-        guard let r = try? AVAudioRecorder(url: u, settings: settings) else { return false }
+        let r: AVAudioRecorder? = await withCheckedContinuation { (c: CheckedContinuation<AVAudioRecorder?, Never>) in
+            let once = Once()
+            queue.async {
+                let s = AVAudioSession.sharedInstance()
+                var rec: AVAudioRecorder?
+                if (try? s.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])) != nil, (try? s.setActive(true)) != nil {
+                    let settings: [String: Any] = [
+                        AVFormatIDKey: kAudioFormatMPEG4AAC,
+                        AVSampleRateKey: 22_050,
+                        AVNumberOfChannelsKey: 1,
+                        AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+                    ]
+                    if let r = try? AVAudioRecorder(url: u, settings: settings), r.record(forDuration: Self.maxSeconds) { rec = r }
+                }
+                DispatchQueue.main.async {
+                    if !once.fire({ c.resume(returning: rec) }) {
+                        /* Too late: the press already failed. Throw this one away. */
+                        rec?.stop()
+                        rec?.deleteRecording()
+                    }
+                    self.stuck = false
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { _ = once.fire { c.resume(returning: nil) } }
+        }
+        guard let r else { return false }
         r.delegate = self
-        guard r.record(forDuration: Self.maxSeconds) else { return false }
         recorder = r
         url = u
         startedAt = Date()
@@ -68,6 +99,17 @@ final class VoiceRecorder: NSObject, AVAudioRecorderDelegate {
         startedAt = nil
         if let u = url { try? FileManager.default.removeItem(at: u) }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+}
+
+/// Runs exactly one of two racing completions (on the main thread).
+private final class Once {
+    private var done = false
+    func fire(_ f: () -> Void) -> Bool {
+        guard !done else { return false }
+        done = true
+        f()
+        return true
     }
 }
 

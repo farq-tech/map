@@ -31,14 +31,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
         UIView.appearance().semanticContentAttribute = .forceRightToLeft
-        /* A relaunch for a significant location change (`launchOptions[.location]`) needs no
-         * special path: AppModel resumes the share it finds recorded, and nothing else. */
+        /* No background location: nothing to resume for a location relaunch. */
         return true
     }
 
-    /// A note from a friend shows as a banner even while the map is open.
+    /// While the app is open, notes and SOS go to the in-app alert lane / SOS screen, not a banner.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        /* On screen, the live map's alert lane already shows notes and SOS; a banner would say it twice. */
+        notification.request.identifier.hasPrefix("sos-") ? [.sound, .list] : [.list]
     }
 }
 

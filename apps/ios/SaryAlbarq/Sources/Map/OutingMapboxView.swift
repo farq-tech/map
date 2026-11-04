@@ -78,6 +78,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var theme: SaryTheme = .default
     /// While true, a tap on empty map reports its coordinate («حدد نقطة تجمع»).
     var picking = false
+    /// «موقعي» is on: the camera follows my car until the map is moved by hand.
+    var following = false
     var onMemberTap: (String) -> Void = { _ in }
     var onRallyTap: () -> Void = {}
     var onMapTap: (LngLat) -> Void = { _ in }
@@ -114,6 +116,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
         c.picking = picking
+        c.following = following
         if c.theme != theme {
             c.theme = theme
             c.themeChanged()
@@ -164,10 +167,15 @@ struct OutingMapboxView: UIViewRepresentable {
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
         var picking = false
+        var following = false
+        private var lastFollowAt: CFTimeInterval = 0
         var theme: SaryTheme = .default
         var lastCamera = -1
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
         private var lastProjectionAt: CFTimeInterval = 0
+        /* Note bubbles only once zoomed in: at city scale they would cover each other's names. */
+        private var bubblesOn = true
+        static let bubbleMinZoom = 13.5
         private var projectionPending = false
         /// "Keep everyone on screen": on by default, off once you move the map yourself, back on with the group button.
         var keepGroup = true
@@ -234,7 +242,15 @@ struct OutingMapboxView: UIViewRepresentable {
 
         func setChrome(_ insets: UIEdgeInsets) {
             guard insets != chrome, let map else { return }
+            let moved = abs(insets.bottom - chrome.bottom) > 40 || abs(insets.top - chrome.top) > 40
             chrome = insets
+            /* The sheet or the alert lane changed size: keep everyone clear of it. */
+            if moved, keepGroup, !lastCars.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                    guard let self, self.keepGroup else { return }
+                    self.fitGroup()
+                }
+            }
             /* Mapbox's logo and attribution stay visible, just above the bottom panel. */
             map.ornaments.options.logo.margins = CGPoint(x: 8, y: insets.bottom + 4)
             map.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: insets.bottom + 4)
@@ -392,7 +408,19 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
             keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
+            followMe()
             project()
+        }
+
+        /// «موقعي»: keep my car centred (gently, at most once a second).
+        private func followMe() {
+            guard following, let map, let me = lastCars.first(where: \.isMe) else { return }
+            keepGroup = false
+            let now = CACurrentMediaTime()
+            guard now - lastFollowAt > 1 else { return }
+            lastFollowAt = now
+            let pad = UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0)
+            map.camera.ease(to: CameraOptions(center: me.position.coordinate, padding: pad), duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.9)
         }
 
         func themeChanged() {
@@ -423,8 +451,22 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let map, map.bounds.width > 0 else { return }
             let m: MapboxMap = map.mapboxMap!
             var pts: [String: CGPoint] = [:]
-            for r in recs.values { pts[r.item.id] = m.point(for: r.shown.coordinate) }
-            let rally = rallyPin.map { m.point(for: $0.point.position.coordinate) }
+            let cam = m.cameraState
+            let wantBubbles = cam.zoom >= Self.bubbleMinZoom
+            if wantBubbles != bubblesOn {
+                bubblesOn = wantBubbles
+                for r in recs.values { drawChip(r, on: map) }
+            }
+            let anchor = m.point(for: cam.center)
+            /* Mapbox answers (-1, -1) for anything off the viewport; an off-screen
+             * friend still needs a direction, so project those ourselves (Web Mercator, 512-pt tiles). */
+            func screen(_ c: CLLocationCoordinate2D) -> CGPoint {
+                let p = m.point(for: c)
+                if p.x >= 0 && p.y >= 0 { return p }
+                return ScreenProjection.point(c, center: cam.center, centerPoint: anchor, zoom: cam.zoom, bearing: cam.bearing)
+            }
+            for r in recs.values { pts[r.item.id] = screen(r.shown.coordinate) }
+            let rally = rallyPin.map { screen($0.point.position.coordinate) }
             onProjection(MapProjection(points: pts, rally: rally, bearing: m.cameraState.bearing, size: map.bounds.size))
         }
 
@@ -507,7 +549,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         private func drawChip(_ r: Rec, on map: MapView) {
             let id = r.item.id
-            let chip = MapChip(chip: r.item.chip, bubble: r.item.bubble, theme: theme) { [weak self] in self?.onCarTap(id) }
+            let chip = MapChip(chip: r.item.chip, bubble: bubblesOn ? r.item.bubble : nil, theme: theme) { [weak self] in self?.onCarTap(id) }
             if let host = r.host {
                 if host.rootView != chip {
                     host.rootView = chip
@@ -600,7 +642,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         /// What our chrome leaves clear, plus room above for a name and a note over a car.
         private var framePadding: UIEdgeInsets {
-            UIEdgeInsets(top: chrome.top + GroupFraming.noteRoom, left: 32, bottom: chrome.bottom + 24, right: 32)
+            UIEdgeInsets(top: chrome.top + GroupFraming.noteRoom, left: max(110, chrome.left + 60), bottom: chrome.bottom + 24, right: max(110, chrome.right + 60))
         }
 
         private func points(only: String? = nil) -> [LngLat] {
@@ -646,15 +688,20 @@ struct OutingMapboxView: UIViewRepresentable {
 
         private func keepGroupInView(newcomers: Set<String>) {
             guard let map, !lastCars.isEmpty, map.bounds.height > 0 else { return }
-            /* Frame the group when positions first arrive, and again each time someone new appears. */
+            /* Frame the group when positions first arrive, and again each time someone new appears —
+             * unless the person is looking somewhere on purpose (moved the map, «أظهره», «موقعي»). */
             if !newcomers.isEmpty {
-                keepGroup = true
-                fitGroup()
+                if keepGroup || fittedIds.isEmpty {
+                    keepGroup = true
+                    fitGroup()
+                } else {
+                    fittedIds.formUnion(newcomers)
+                }
                 return
             }
             guard keepGroup, !fitting, lastCars.count >= 2 else { return }
             /* While keeping the group: if anyone (you included) drifts out of the clear area, reframe. */
-            let p = UIEdgeInsets(top: chrome.top + GroupFraming.noteRoom * 0.75, left: 8, bottom: chrome.bottom, right: 8)
+            let p = UIEdgeInsets(top: chrome.top + GroupFraming.noteRoom * 0.75, left: max(8, chrome.left), bottom: chrome.bottom, right: max(8, chrome.right))
             let rect = map.bounds.inset(by: p)
             guard rect.width > 0, rect.height > 0 else { return }
             let bb = map.mapboxMap.coordinateBounds(for: rect)
@@ -751,6 +798,25 @@ struct RallyPin: View {
         .saryTheme(theme)
         .accessibilityLabel(label.isEmpty ? "نقطة التجمع" : label)
         .accessibilityIdentifier("map.rally")
+    }
+}
+
+/// Flat (pitch-free) Web Mercator projection relative to a known on-screen point —
+/// good enough to point an arrow at someone who is off the screen.
+enum ScreenProjection {
+    static func world(_ c: CLLocationCoordinate2D, zoom: Double) -> CGPoint {
+        let size = 512 * pow(2, zoom)
+        let lat = max(-85.05112878, min(85.05112878, c.latitude)) * .pi / 180
+        let x = (c.longitude + 180) / 360 * size
+        let y = (1 - log(tan(lat) + 1 / cos(lat)) / .pi) / 2 * size
+        return CGPoint(x: x, y: y)
+    }
+
+    static func point(_ c: CLLocationCoordinate2D, center: CLLocationCoordinate2D, centerPoint: CGPoint, zoom: Double, bearing: Double) -> CGPoint {
+        let a = world(c, zoom: zoom), o = world(center, zoom: zoom)
+        let dx = a.x - o.x, dy = a.y - o.y
+        let r = -bearing * .pi / 180
+        return CGPoint(x: centerPoint.x + dx * cos(r) - dy * sin(r), y: centerPoint.y + dx * sin(r) + dy * cos(r))
     }
 }
 

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Frames of the chrome over the map, in the screen's coordinate space —
+/// Frames of the chrome over the map, in screen (window) coordinates —
 /// measured, not guessed, so camera framing and edge arrows avoid them.
 struct ChromeFramesKey: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
@@ -12,7 +12,8 @@ struct ChromeFramesKey: PreferenceKey {
 extension View {
     func chromeFrame(_ key: String) -> some View {
         background(GeometryReader { g in
-            Color.clear.preference(key: ChromeFramesKey.self, value: [key: g.frame(in: .named("live"))])
+            /* Window coordinates: the same space as the map's own screen points. */
+            Color.clear.preference(key: ChromeFramesKey.self, value: [key: g.frame(in: .global)])
         })
     }
 }
@@ -25,13 +26,15 @@ struct LiveOutingScreen: View {
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @State private var frames: [String: CGRect] = [:]
-    @State private var sheetHeight: CGFloat = 0
+    @State private var sheetTop: CGFloat = 0
+    @State private var screenHeight: CGFloat = 0
 
     var body: some View {
         let ui = controller.ui
         GeometryReader { geo in
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack {
+                Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
                 OutingMapboxView(
                     members: controller.mapMembers(theme: theme),
                     rally: controller.rallyPoint,
@@ -39,6 +42,7 @@ struct LiveOutingScreen: View {
                     chrome: chromeInsets(full: full),
                     theme: theme,
                     picking: controller.picking.active,
+                    following: controller.following,
                     onMemberTap: { controller.openParticipant($0) },
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
@@ -51,19 +55,19 @@ struct LiveOutingScreen: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
 
-                chrome(ui, full: full, safeTop: geo.safeAreaInsets.top)
+                chrome(ui, full: full, safeBottom: geo.safeAreaInsets.bottom)
             }
-            .coordinateSpace(name: "live")
             .onPreferenceChange(ChromeFramesKey.self) { frames = $0 }
         }
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
                 .background {
+                    /* The sheet's real top edge on screen (its content height leaves out the home-indicator area). */
                     GeometryReader { g in
                         Color.clear
-                            .onAppear { sheetHeight = g.size.height }
-                            .onChange(of: g.size.height) { _, h in sheetHeight = h }
+                            .onAppear { sheetTop = g.frame(in: .global).minY }
+                            .onChange(of: g.frame(in: .global).minY) { _, y in sheetTop = y }
                     }
                 }
                 .saryAppearance(appearance)
@@ -73,8 +77,11 @@ struct LiveOutingScreen: View {
 
     // MARK: measured chrome
 
+    /// How much of the screen the sheet covers, measured from its real top edge.
     private var bottomInset: CGFloat {
-        controller.sheetDetent == .full ? 0 : max(sheetHeight, SheetDetentUI.peekHeight(drive: theme.drive))
+        if controller.sheetDetent == .full { return 0 }
+        let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
+        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive))
     }
 
     private var topChromeBottom: CGFloat {
@@ -100,25 +107,23 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        var r = ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
-        /* «أنت»: the chip just above my car. */
-        if let me = controller.session.view?.myId, let p = controller.overlay.projection.points[me] {
-            r.append(CGRect(x: p.x - 40, y: p.y - 64, width: 80, height: 64))
-        }
-        return r
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
 
     @ViewBuilder
-    private func chrome(_ ui: LiveOutingUIState, full: CGSize, safeTop: CGFloat) -> some View {
+    private func chrome(_ ui: LiveOutingUIState, full: CGSize, safeBottom: CGFloat) -> some View {
         let rowMode = controller.sheetDetent == .half
+        /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
+        let lift = max(0, bottomInset - safeBottom)
         let items = controlItems(ui)
         ZStack {
             VStack(spacing: theme.space(.s)) {
                 VStack(spacing: theme.space(.s)) {
                     if case let .active(since) = ui.sos.mine {
-                        SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK)
+                        SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
+                                       withLocation: controller.session.view?.me?.sos?.fix != nil)
                     }
                     ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                         SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
@@ -151,7 +156,7 @@ struct LiveOutingScreen: View {
                             .transition(.opacity)
                     }
                     .padding(.horizontal, theme.space(.m))
-                    Spacer().frame(height: bottomInset + theme.bigButton + (theme.drive ? 72 : 56))
+                    Spacer().frame(height: lift + theme.bigButton + (theme.drive ? 72 : 56))
                 }
             }
 
@@ -173,13 +178,13 @@ struct LiveOutingScreen: View {
                 }
                 .chromeFrame("dock")
                 .padding(.horizontal, theme.space(.l))
-                .padding(.bottom, bottomInset + theme.space(.m))
+                .padding(.bottom, lift + theme.space(.m))
                 .opacity(controller.sheetDetent == .full ? 0 : 1)
                 .allowsHitTesting(controller.sheetDetent != .full)
             }
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
-        .animation(theme.animation(.smooth), value: sheetHeight)
+        .animation(theme.animation(.smooth), value: sheetTop)
     }
 
     private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
@@ -232,11 +237,26 @@ private struct EdgeArrowLayer: View {
 
     static let chip = CGSize(width: 104, height: 38)
 
+    /// Fixed chrome plus what moves with the camera: the rally flag and «أنت» (with my note, if any).
+    private func keepOut(me: String?, parts: [String: ParticipantUI]) -> [CGRect] {
+        var r = avoid
+        if let f = overlay.projection.rally { r.append(CGRect(x: f.x - 55, y: f.y - 76, width: 110, height: 80)) }
+        if let me, let p = overlay.projection.points[me] {
+            let note = parts[me]?.note != nil && !theme.drive
+            r.append(note ? CGRect(x: p.x - 105, y: p.y - 120, width: 210, height: 120) : CGRect(x: p.x - 45, y: p.y - 64, width: 90, height: 64))
+        }
+        /* A friend whose car is on screen keeps their name (and car) uncovered too. */
+        for (id, p) in overlay.projection.points where id != me && area.contains(p) {
+            r.append(CGRect(x: p.x - 50, y: p.y - 58, width: 100, height: 76))
+        }
+        return r
+    }
+
     var body: some View {
         let parts = Dictionary(LiveOutingPresenter.participants(controller.input).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let me = controller.session.view?.myId
         let pts = overlay.projection.points.filter { $0.key != me }.map { (id: $0.key, point: $0.value) }.sorted { $0.id < $1.id }
-        let spots = EdgeArrows.place(points: pts, area: area, chip: Self.chip, avoid: avoid)
+        let spots = EdgeArrows.place(points: pts, area: area, chip: Self.chip, avoid: keepOut(me: me, parts: parts))
         SaryMapOverlayLayer {
             ForEach(spots, id: \.id) { s in
                 if let p = parts[s.id] {

@@ -386,11 +386,14 @@ final class OutingSession: ObservableObject, Identifiable {
         }
     }
 
-    func leave() async {
+    /// Leave the outing (also after it ended). True when the server agreed.
+    @discardableResult
+    func leave() async -> Bool {
         stopSharingLocally()
-        if isDemo { closed(.left); return }
+        if isDemo { closed(.left); return true }
         let ok = await run("leave") { try await api.leave(id) }
         if ok { closed(.left) }
+        return ok
     }
 
     /// SOS after the 1 s hold. Carries my fix only when the send gate is open.

@@ -156,7 +156,7 @@ final class AppModel: ObservableObject {
         if active { Task { await refresh() } }
     }
 
-    /// iOS relaunched us (significant move) or the app restarted mid-share: pick the share back up.
+    /// The app restarted mid-share: pick the share back up (this identity, this outing, consent given; foreground only).
     private func resumeActiveShare() {
         guard let me = identity?.user.id, let id = ShareMemory.activeShare(user: me) else { return }
         open(id)

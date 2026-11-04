@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import SaryAlbarq
 
@@ -182,5 +183,20 @@ final class OutingEventTests: XCTestCase {
         XCTAssertNil(v.snapshot.outing.rally)
         XCTAssertNil(v.members["a"]?.sos)
         XCTAssertNil(v.members["a"]?.note)
+    }
+}
+
+final class ScreenProjectionTests: XCTestCase {
+    func testNorthEastIsUpRightAndBearingRotates() {
+        let c = CLLocationCoordinate2D(latitude: 24.71, longitude: 46.67)
+        let ne = CLLocationCoordinate2D(latitude: 24.78, longitude: 46.73)
+        let p = ScreenProjection.point(ne, center: c, centerPoint: CGPoint(x: 200, y: 400), zoom: 14, bearing: 0)
+        XCTAssertGreaterThan(p.x, 200)
+        XCTAssertLessThan(p.y, 400)
+        /* Map rotated 90° (east up): a point due east is straight up. */
+        let e = CLLocationCoordinate2D(latitude: 24.71, longitude: 46.75)
+        let q = ScreenProjection.point(e, center: c, centerPoint: CGPoint(x: 200, y: 400), zoom: 14, bearing: 90)
+        XCTAssertEqual(q.x, 200, accuracy: 1)
+        XCTAssertLessThan(q.y, 400)
     }
 }

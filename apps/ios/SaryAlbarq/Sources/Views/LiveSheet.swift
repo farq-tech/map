@@ -168,13 +168,13 @@ private struct ShareCallout: View {
                             .saryText(.callout, weight: .bold)
                             .foregroundStyle(theme.palette.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("live.sharing")
                         Button { controller.setSharingPaused(true) } label: { Text("أوقف") }
                             .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                             .accessibilityIdentifier("live.stopSharing")
                     }
                     .padding(theme.space(.m))
                     .sarySurface(radius: SaryRadius.l)
-                    .accessibilityIdentifier("live.sharing")
                 }
             }
         }
@@ -233,7 +233,7 @@ private struct InviteTab: View {
                     .multilineTextAlignment(.center)
             } else if s.canRevoke {
                 SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
-                                           message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا (يتوقف أي رابط قديم).", systemImage: "link"))
+                                           message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
                 SaryStateView(kind: .empty(title: "اطلب الرابط من صاحب الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
             }
@@ -310,19 +310,19 @@ private struct SettingsTab: View {
                 }
                 actionRow("غادر الطلعة", icon: "rectangle.portrait.and.arrow.right", destructive: true, id: "settings-leave") { confirm = .leave }
             }
-        }
-        .confirmationDialog(title, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible, presenting: confirm) { k in
-            switch k {
-            case .pause: Button(s.outingStatus == .paused ? "استأنف" : "أوقف مؤقتًا", action: a.pauseOrResumeOuting)
-            case .end: Button("أنهِ الطلعة للجميع", role: .destructive, action: a.endOuting)
-            case .leave: Button("غادر", role: .destructive, action: a.leaveOuting)
-            }
-            Button("إلغاء", role: .cancel) {}
-        } message: { k in
-            switch k {
-            case .pause: Text(s.outingStatus == .paused ? "يرجع الأعضاء يشاركون مواقعهم." : "تتوقف مشاركة المواقع عند الجميع وتُحذف المواقع حتى تستأنف.")
-            case .end: Text("بتنتهي الطلعة عند الكل ويتوقف تتبع المواقع. ما تقدر ترجعها.")
-            case .leave: Text("بيتوقف إرسال موقعك وتخرج من الطلعة.")
+            .confirmationDialog(title, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible, presenting: confirm) { k in
+                switch k {
+                case .pause: Button(s.outingStatus == .paused ? "استأنف" : "أوقف مؤقتًا", action: a.pauseOrResumeOuting)
+                case .end: Button("أنهِ الطلعة للجميع", role: .destructive, action: a.endOuting)
+                case .leave: Button("غادر", role: .destructive, action: a.leaveOuting)
+                }
+                Button("إلغاء", role: .cancel) {}
+            } message: { k in
+                switch k {
+                case .pause: Text(s.outingStatus == .paused ? "يرجع الأعضاء يشاركون مواقعهم." : "تتوقف مشاركة المواقع عند الجميع وتُحذف المواقع حتى تستأنف.")
+                case .end: Text("بتنتهي الطلعة عند الكل ويتوقف تتبع المواقع. ما تقدر ترجعها.")
+                case .leave: Text("بيتوقف إرسال موقعك وتخرج من الطلعة.")
+                }
             }
         }
     }
@@ -366,8 +366,7 @@ struct NoteComposer: View {
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             Text("رسالة فوق سيارتك").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
             Text("يشوفها أصحابك فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
-            SaryTextField(title: "الرسالة", placeholder: "مثل: بوقف عند المحطة", text: $text, id: "note-input", maxLength: state.maxLength,
-                          help: "\(SaryFormat.number(text.count)) / \(SaryFormat.number(state.maxLength))")
+            SaryTextField(title: "الرسالة", placeholder: "مثل: بوقف عند المحطة", text: $text, id: "note-input", maxLength: state.maxLength)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: theme.space(.s)) {
                     ForEach(state.presets, id: \.self) { p in

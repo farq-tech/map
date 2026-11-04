@@ -71,3 +71,24 @@ Current shots are in `docs/design-shots/`.
   note bubbles, stronger secondary text.
 - Map chrome (status capsule, alert lane, sheet summary) caps Dynamic Type at
   AX1 so it can never bury the map; sheets and screens scale fully.
+
+## The live screen (wired)
+
+`Views/LiveOutingScreen.swift` + `Views/LiveSheet.swift` compose these
+components over the real Mapbox map (`Map/OutingMapboxView.swift`). Views hold
+no logic: `Live/LiveOutingController.swift` owns screen state and turns the
+contract's actions into session/API calls, and `Live/LiveOutingPresenter.swift`
+maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
+
+- Name chips and note bubbles are design-system views inside Mapbox view
+  annotations, so they track the cars natively; bubbles show from zoom 13.5.
+- Edge arrows are SwiftUI (`SaryMapOverlayLayer`), placed from the map's
+  projection (`EdgeArrows.place`), kept clear of the cluster, SOS dock, status
+  capsule, alert lane, rally flag, «أنت» and visible friends.
+- Chrome frames are measured (window coordinates) and passed to the map as
+  insets, so keep-group framing stays clear of the capsule, alert lane,
+  controls and the sheet's real top edge.
+- Place labels are Arabic: the Standard Satellite style is fetched once and
+  its labels pointed at `name_ar` (`ArabicBasemap`).
+- Real screenshots: `docs/live-shots/`. DEBUG launch overrides:
+  `-SaryScheme light|dark`, `-SaryDrive 1|0`, `-SaryNight 1|0`, `-SaryFallback 1`.

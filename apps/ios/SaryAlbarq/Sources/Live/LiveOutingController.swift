@@ -215,8 +215,15 @@ final class LiveOutingController: ObservableObject {
         camera = MapCameraRequest(kind: kind, id: (camera?.id ?? 0) + 1)
     }
 
+    /// Lower the sheet, then move the camera once it has settled (the clear area changes size).
+    private func lowerSheetThenAsk(_ kind: MapCameraRequest.Kind) {
+        guard sheetDetent != .peek else { return ask(kind) }
+        sheetDetent = .peek
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.ask(kind) }
+    }
+
     func show(member id: String) {
-        if id == session.view?.myId { ask(.me) } else { ask(.withMember(id)) }
+        lowerSheetThenAsk(id == session.view?.myId ? .me : .withMember(id))
         following = false
     }
 
@@ -272,8 +279,7 @@ final class LiveOutingController: ObservableObject {
             addMyPhone: { [weak self] in self?.selectedTab = .settings },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
-                self.sheetDetent = .peek
-                self.ask(.point(r.position))
+                self.lowerSheetThenAsk(.point(r.position))
             },
             rallyGo: { [weak self] in
                 guard let r = self?.rallyPoint else { return }
@@ -312,10 +318,7 @@ final class LiveOutingController: ObservableObject {
             endOuting: { [weak self] in Task { await self?.session.setStatus("end") } },
             leaveOuting: { [weak self] in
                 guard let self else { return }
-                Task {
-                    await self.session.leave()
-                    if self.session.closedReason == .left { self.onExit() }
-                }
+                Task { if await self.session.leave() { self.onExit() } }
             }
         )
         return a
@@ -364,7 +367,6 @@ final class LiveOutingController: ObservableObject {
             whatsApp: { [weak self] in self?.dial(id, whatsApp: true) },
             showOnMap: { [weak self] in
                 self?.modal = nil
-                self?.sheetDetent = .peek
                 self?.show(member: id)
             },
             promoteCoLeader: { [weak self] in
@@ -395,9 +397,8 @@ final class LiveOutingController: ObservableObject {
     func showSOS(_ alertId: String) {
         acknowledgedSOS.insert(alertId)
         guard let uid = alertId.split(separator: "|").first.map(String.init), let v = session.view else { return }
-        sheetDetent = .peek
         if let f = v.members[uid]?.sos?.fix, v.positions[uid] == nil {
-            ask(.point(LngLat(lng: f.lng, lat: f.lat)))
+            lowerSheetThenAsk(.point(LngLat(lng: f.lng, lat: f.lat)))
         } else {
             show(member: uid)
         }
@@ -485,8 +486,7 @@ final class LiveOutingController: ObservableObject {
             show: { [weak self] id in
                 guard let self, let s = self.stationList.first(where: { $0.id == id }) else { return }
                 self.modal = nil
-                self.sheetDetent = .peek
-                self.ask(.point(LngLat(lng: s.lng, lat: s.lat)))
+                self.lowerSheetThenAsk(.point(LngLat(lng: s.lng, lat: s.lat)))
             },
             retry: { [weak self] in self?.loadStations() },
             close: { [weak self] in self?.modal = nil }
@@ -500,15 +500,16 @@ final class LiveOutingController: ObservableObject {
         guard session.view?.status != .ended else { return }
         ptt = .arming
         Task {
-            if !recorder.hasPermission {
-                let ok = await recorder.requestPermission()
-                /* The permission prompt took the finger away: they press again. */
+            let ok = recorder.hasPermission ? true : await recorder.requestPermission()
+            guard ok else {
                 ptt = .idle
-                if !ok { toast("اسمح بالميكروفون من الإعدادات لتستخدم «اضغط وتكلم»") }
+                toast("اسمح بالميكروفون من الإعدادات لتستخدم «اضغط وتكلم»")
                 return
             }
+            /* The finger lifted while iOS asked: nothing to record, they press again. */
             guard ptt == .arming else { return }
-            guard recorder.start() else {
+            let started = await recorder.start()
+            guard started else {
                 ptt = .idle
                 toast("تعذّر تشغيل الميكروفون")
                 return
@@ -528,7 +529,8 @@ final class LiveOutingController: ObservableObject {
         pttTimer = nil
         if ptt == .arming { ptt = .idle; return }
         guard case .recording = ptt else { return }
-        guard let clip = recorder.stop() else {
+        let got = recorder.stop()
+        guard let clip = got else {
             ptt = .idle
             toast("اضغط مطولًا وتكلّم، ثم ارفع إصبعك")
             return

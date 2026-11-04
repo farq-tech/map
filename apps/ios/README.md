@@ -57,21 +57,22 @@ xcodebuild -project SaryAlbarq.xcodeproj -scheme SaryAlbarq \
 
 Launch arguments: `-demo` opens a fixed, clearly labelled demo outing near Riyadh. It never talks to the server, and it is what the UI test and screenshots use. `-resetState` wipes identity, consent and the active share.
 
-Simulated location: `xcrun simctl location booted set 24.7136,46.6753`. To test background sharing, start sharing, press ⌘L to lock the simulator, and watch the fixes arrive (`xcrun simctl location booted start …` plays a route).
+Simulated location: `xcrun simctl location booted set 24.7136,46.6753`, or `xcrun simctl location booted start --speed=5 <lat,lng> <lat,lng> …` to drive a route. Locking the simulator (⌘L) must stop the fixes: sharing is foreground only.
 
 ## How it behaves (owner's rules)
 
 - **Honest positions.** Freshness uses the same thresholds as the web, measured on the server's clock (we keep the offset from `server_now`): «مباشر» means a fix from the last 15 s while moving or 45 s while parked; «آخر موقع» means old but reachable; «انقطع» means nothing heard for 60 s. Old cars are faded (opacity 0.7 / 0.4, as on the web), their name chip says «آخر موقع» or «انقطع», and they never glide: only a live, confident fix is animated, and only up to the real fix. A fix worse than 60 m is drawn as a spot marked «تقريبي», never as a car.
 - **Latest fix only.** While offline only the newest fix is kept, and it is dropped once it is older than 55 s (the server refuses anything over 60 s). The server stores only the latest fix anyway.
-- **Consent before sharing.** Joining an outing shares nothing. «شارك موقعي» first shows an Arabic consent sheet that says who sees your location, that sharing continues with the screen locked, when it stops, the battery cost, and the optional "Always" permission. Consent is remembered per outing.
-- **Visible indicator.** A green «تشارك موقعك الآن» banner is shown while sharing, and the iOS blue location pill is on (`showsBackgroundLocationIndicator = true`).
+- **Consent before sharing.** Joining an outing shares nothing (the server turns its own `sharing` flag on at join, so that flag is never treated as consent). «شارك موقعي» first shows an Arabic consent sheet that says who sees your location, that it is sent only while the app is open in front of you, and when it stops. Consent is recorded only after iOS permission is granted, per identity and per outing (`ShareMemory`), so a later sign-in never inherits it.
+- **Visible indicator.** The status capsule's GPS dot and «موقعك مُشارَك الآن مع أعضاء الطلعة» in the sheet show sharing; a «خلّ الشاشة شغالة» note says that locking the screen stops it.
 - **Stops automatically** when you stop, leave, are removed, the owner pauses or ends the outing, the socket closes with 4401/4403/4404/4410, you sign out, or location permission is revoked. Going back to the outing list while sharing asks first, because it stops sharing.
-- **Background location scope.** `allowsBackgroundLocationUpdates` is set to true in exactly one place (`LocationSharer.startSharing`) and back to false in `stopSharing`. It is only called while the outing is `active`, the server says your sharing is on, and you consented.
-- **Permissions.** When-In-Use is requested when you open an outing map (for your own dot and distances). "Always" is requested only after you accept the consent sheet. It is optional and only lets iOS relaunch the app through significant-location-change if the app was terminated mid-outing. Sharing with the screen locked works with When-In-Use, because updates start in the foreground with background updates allowed.
+- **Foreground only (owner rule).** `allowsBackgroundLocationUpdates` is never turned on, there is no significant-change monitoring, no «دائمًا» request and no `location` background mode. When the app leaves the screen the session stops the GPS and drops any fix held for the network; friends then see your last position with its age («آخر موقع»).
+- **One send gate.** `SendGate` (Core) is the only rule for putting a position on the wire: this identity's consent + iOS permission + the share press + server sharing on + outing active + app in the foreground + session open. `LiveChannel` asks it at the last step (also for a fix held across a reconnect). An SOS carries a position only when the same gate is open. Locked by `PrivacyTests` and `LiveChannelTests`.
+- **Permissions.** When-In-Use is requested when you open an outing map (for your own dot and distances). The microphone is asked the first time you hold «اضغط وتكلم». Nothing else.
 - **`pausesLocationUpdatesAutomatically = false`.** iOS's auto-pause triggers when the phone looks stationary. A parked convoy (tea stop, stuck in sand) is exactly when the others need to see you, and auto-paused updates only resume when the app comes back to the foreground. Battery is managed by the share mode instead: accuracy drops when parked, saver mode kicks in automatically on Low Power Mode or under 20 % charge, and the send policy limits network use. `activityType = .otherNavigation`, because off-road driving should not be road-snapped.
 - **Send policy.** Same as the web: fast, normal and slow tiers (2.5 s or 50 m, 4 s or 35 m, 6 s or 15 m), scaled by mode (precise ×0.6, saver ×2), a 1 s floor, and a parked heartbeat every 30 s (60 s in saver). There is also a coordinate-free link heartbeat every 15 s.
 - **Live link.** `URLSessionWebSocketTask` authenticates in the first frame (never in the URL). It reconnects with equal-jitter backoff (1 s base, 30 s cap), falls back to HTTP polling after 3 failed attempts while still retrying the socket, and replaces a half-open socket after 45 s of silence.
-- **No secrets in the app.** The identity token is issued by the server per device and kept in the Keychain (`AfterFirstUnlockThisDeviceOnly`, so a locked-screen relaunch can read it). Invite tokens are sent in request bodies, never in URLs.
+- **No secrets in the app.** The identity token is issued by the server per device and kept in the Keychain (`AfterFirstUnlockThisDeviceOnly`). Invite tokens are sent in request bodies, never in URLs. The Mapbox public token comes from the gitignored `SaryAlbarq/Config/Secrets.xcconfig`.
 
 ## What the owner must provide
 
@@ -85,7 +86,7 @@ Simulated location: `xcrun simctl location booted set 24.7136,46.6753`. To test 
 
 1. Open `SaryAlbarq.xcodeproj` and select the SaryAlbarq target. Under Signing & Capabilities, pick your team. Automatic signing creates the profile.
 2. Connect the iPhone, turn on Developer Mode (Settings → Privacy & Security), choose it as the run destination, and press ⌘R.
-3. For a real background test, join an outing from a second phone or the web, start sharing, lock the phone, and drive. The other side should keep showing «مباشر».
+3. For a real test, join an outing from a second phone or the web, start sharing and drive with the app open. Lock the phone: the other side should switch you to «آخر موقع» with its age, never keep you «مباشر».
 
 ## TestFlight
 
@@ -94,20 +95,8 @@ Simulated location: `xcrun simctl location booted set 24.7136,46.6753`. To test 
 3. In App Store Connect → TestFlight, fill in the test information, add internal testers (no review needed), or create an external group (needs a short beta review). Paste the review notes below.
 4. Bump `CURRENT_PROJECT_VERSION` in `project.yml` for every upload.
 
-## App Review notes for background location (what to tell Apple)
+## App Review notes (what to tell Apple)
 
-Paste something like this in *App Review Information → Notes*, together with a demo outing invite link and a short screen recording of the consent sheet and the locked-screen sharing:
-
-> Sary Albarq lets a group of friends driving together in the desert see each other's cars on one map during an "outing" they created and joined by invite link.
->
-> **Why background location:** On desert trips drivers keep the phone locked on the dashboard. If sharing stopped when the screen locked, the group would lose a car exactly when it is out of sight behind dunes. This is the app's core feature.
->
-> **Scope:** Location is shared only after the user taps "Share my location" inside an active outing and accepts an in-app Arabic explanation (who sees it, that it continues while locked, how it stops). Background updates are enabled only during that sharing and are switched off automatically when the user stops, leaves the outing, or the organiser pauses or ends it. The blue location indicator is always shown while sharing, and the app shows its own "you are sharing" banner.
->
-> **Data:** Positions go only to members of that outing. The server keeps only the latest position per member (no history) and deletes it when the outing ends. No ads, no tracking. The map is drawn with the Mapbox Maps SDK.
->
-> **"Always" permission** is optional and requested only after the user has started sharing. It lets iOS relaunch the app to continue an ongoing share if it was terminated. Without it, the app works with "While Using".
->
-> **To test:** open the attached invite link on the device (or use «انضم برابط» and paste it), enter a name, tap «شارك موقعي», accept, then lock the phone. The other test device (or the web page at the same link) keeps showing the car as «مباشر».
+> Sary Albarq lets a group of friends driving together in the desert see each other's cars on one map during an "outing" they created and joined by invite link. Location is used only while the app is open (When In Use); there is no background location. A position is shared only after the user taps "Share my location" inside an active outing and accepts an in-app Arabic explanation. Positions go only to members of that outing; the server keeps only the latest one and deletes it when the outing ends. Push-to-talk clips are recorded only while the button is held and are deleted from the server after 10 minutes. No ads, no tracking. The map is drawn with the Mapbox Maps SDK.
 
 App Store Connect privacy labels: Precise Location, Name, Phone Number (optional) and Other User Content (notes). All are linked to the user, used for App Functionality, and not used for tracking. These match `PrivacyInfo.xcprivacy`.

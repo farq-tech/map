@@ -61,7 +61,7 @@ struct OnboardingView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("سَرى البارق").font(.largeTitle.bold()).foregroundStyle(Theme.ink)
-                        Text("طلعات البر مع أصحابك: كل سيارة على الخريطة بلونها، وموقعك يبقى مشتركًا ولو قفلت الشاشة — فقط في الطلعة التي تختار المشاركة فيها.")
+                        Text("طلعات البر مع أصحابك: كل سيارة على الخريطة بلونها. موقعك لا يُشارك إلا في الطلعة التي تختار المشاركة فيها، والتطبيق مفتوح أمامك.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 8)

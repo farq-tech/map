@@ -16,7 +16,8 @@ struct SaryPresenceStyle {
     func label(now: Date) -> String {
         switch presence {
         case .live: return "مباشر"
-        case .stale(let since): return SaryFormat.elapsed(since: since, now: now)
+        /* Stale is never «الآن»: under a minute it is still «آخر موقع», not live. */
+        case .stale(let since): return now.timeIntervalSince(since) < 60 ? "آخر موقع" : SaryFormat.elapsed(since: since, now: now)
         case .paused: return "متوقف"
         }
     }
@@ -371,7 +372,7 @@ struct SaryParticipantCard: View {
 
             if state.canManage {
                 VStack(spacing: 0) {
-                    Button(action: actions.promoteCoLeader) { SaryButtonLabel(title: "اجعله مساعدًا", systemImage: SaryIcon.shield) }
+                    Button(action: actions.promoteCoLeader) { SaryButtonLabel(title: p.role == .coLeader ? "ألغِ صفة المساعد" : "اجعله مساعدًا", systemImage: SaryIcon.shield) }
                         .buttonStyle(.saryPlain)
                     Button(role: .destructive) { confirmRemove = true } label: {
                         SaryButtonLabel(title: "أزله من الطلعة", systemImage: "person.fill.xmark")
