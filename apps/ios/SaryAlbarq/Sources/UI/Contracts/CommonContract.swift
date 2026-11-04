@@ -106,6 +106,13 @@ struct ParticipantUI: Equatable, Identifiable {
     var speedKmh: Double? = nil
     /// Their sharing went silent (server-decided): when their last fix arrived. Shows «انقطع منذ ١٠ د».
     var silentSince: Date? = nil
+    /// «الرحلة»: metres left to the destination, only from a LIVE position (nil hides it:
+    /// an old position shows its age, never an old distance).
+    var tripRemainingMeters: Double? = nil
+    /// The remaining distance is a straight line («تقريبي»).
+    var tripRemainingApprox: Bool = true
+    /// Reached the destination: the «وصل» badge.
+    var tripArrived: Bool = false
 
     /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {

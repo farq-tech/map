@@ -125,6 +125,14 @@ final class LiveOutingController: ObservableObject {
     /// The plan's «الوجهة» and drawn route (wired by the plan feature; nil / empty without it).
     var navDestination: () -> OutingDestination? = { nil }
     var navPlanRoute: () -> [LngLat] = { [] }
+    /// «الرحلة»: start → destination → arrival → end, on this phone (`TripTracker`).
+    lazy var trip = TripTracker(outingId: session.id)
+    /// «ملخص الرحلة» after the end (wired by the host: closes the map, opens the summary).
+    var openSummary: () -> Void = {}
+    /// «طريق العودة» as a new trip (wired by the host: creates it and opens it).
+    var startReturnTrip: () -> Void = {}
+    /// «أنهِ الرحلة؟» is asked.
+    @Published var tripConfirmEnd = false
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
@@ -213,6 +221,7 @@ final class LiveOutingController: ObservableObject {
         }
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
         registerCarPlay()
+        registerTrip()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
@@ -230,7 +239,7 @@ final class LiveOutingController: ObservableObject {
 
     var input: LivePresenterInput {
         let nearby = session.meshOverlay
-        return LivePresenterInput(
+        var i = LivePresenterInput(
             view: nearby.view,
             /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
             myFix: session.smoothedFix(location.lastFix),
@@ -262,6 +271,12 @@ final class LiveOutingController: ObservableObject {
             nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0,
             preciseOff: location.preciseOff
         )
+        if let d = tripDestination {
+            i.tripDestination = d
+            i.tripArrivals = trip.record.arrivals
+            i.myTripRemaining = trip.record.me.arrived ? nil : TripPresenter.myRemaining(tripInput)
+        }
+        return i
     }
 
     var ui: LiveOutingUIState { LiveOutingPresenter.state(input) }
@@ -305,6 +320,7 @@ final class LiveOutingController: ObservableObject {
 
     private func sessionChanged() {
         updateSpeed()
+        updateTrip()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -339,6 +355,7 @@ final class LiveOutingController: ObservableObject {
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
+        updateTrip()
         updateAuto()
         checkConvoy()
         feedWeather()
@@ -430,8 +447,9 @@ final class LiveOutingController: ObservableObject {
                                 matchOn: TrailMatchPrefs.enabled())
     }
 
-    func startBackTrack() {
-        guard let bt = BackTrack(path: session.displayTrail) else {
+    /// «طريق العودة» along my trail (or, for a return trip, along the trail of the outing it came back from).
+    func startBackTrack(along path: [TrailPoint]? = nil) {
+        guard let bt = BackTrack(path: path ?? session.displayTrail) else {
             toast("ما فيه مسار مسجّل بعد. يبدأ التسجيل أول ما تتحرك.")
             return
         }
@@ -782,7 +800,15 @@ final class LiveOutingController: ObservableObject {
         return ProcessInfo.processInfo.isLowPowerModeEnabled ? .lowPower : .dontForceQuit
     }
 
-    func startOuting() { Task { await session.setStatus("start") } }
+    /// «ابدأ الطلعة»: never without a destination («لا يوجد رحلة من غير نهاية»).
+    func startOuting() {
+        guard tripDestination != nil else {
+            toast("حدّد الوجهة أولًا")
+            chooseTripDestination()
+            return
+        }
+        Task { await session.setStatus("start") }
+    }
 
     // MARK: participants
 

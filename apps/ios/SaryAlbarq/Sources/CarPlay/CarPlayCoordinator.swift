@@ -122,7 +122,7 @@ final class CarPlayCoordinator: NSObject {
         let src = CarPlayFeatures.source
         var i = CarPlayInput(view: s.view, myFix: fix, isSharingNow: s.isSharingNow,
                              course: fix.flatMap { Policy.trustedHeading($0.heading, speed: $0.speed) },
-                             destination: src?.carPlayDestination(), stuck: src?.carPlayStuckMembers() ?? [],
+                             destination: src?.carPlayDestination(), trip: src?.carPlayTripProgress(), stuck: src?.carPlayStuckMembers() ?? [],
                              convoy: src?.carPlayConvoy(), now: Date())
         #if DEBUG
         debugDecorate(&i, session: s)
@@ -378,7 +378,8 @@ final class CarPlayCoordinator: NSObject {
                 detail = (CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: r.position)?.text ?? r.label) + " · اتجاه تقريبي"
             case .destination:
                 let d = CarPlayPresenter.destination(i)!
-                detail = (CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: d.position)?.text ?? d.label) + " · اتجاه تقريبي"
+                detail = CarPlayPresenter.tripLine(i)
+                    ?? (CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: d.position)?.text ?? d.label) + " · اتجاه تقريبي"
             }
             let icon = kind == .wayBack ? "arrow.uturn.backward" : (kind == .rally ? "flag.fill" : "mappin.and.ellipse")
             let item = CPListItem(text: kind.title, detailText: detail, image: UIImage(systemName: icon))

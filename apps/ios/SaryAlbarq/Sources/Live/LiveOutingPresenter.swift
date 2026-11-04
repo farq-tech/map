@@ -43,6 +43,10 @@ struct LivePresenterInput {
     var nearbyCars = 0
     /// iOS «الموقع الدقيق» is off (reduced accuracy: km-level fixes).
     var preciseOff = false
+    /// «الرحلة»: the destination, who arrived (as this phone saw it) and my own remaining distance.
+    var tripDestination: OutingDestination?
+    var tripArrivals: [String: Double] = [:]
+    var myTripRemaining: RemainingDistance?
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -216,6 +220,16 @@ enum LiveOutingPresenter {
                 speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now),
                 silentSince: isMe ? nil : silentSince(m.user_id, in: v)
             ), idx))
+            if i.tripDestination != nil {
+                let live = !isMe && m.sharing && v.freshness(of: m.user_id, deviceNow: i.now) == .live
+                var t = TripPresenter.member(id: m.user_id, position: isMe ? nil : v.positions[m.user_id].map { Geo.LatLng(lat: $0.lat, lng: $0.lng) },
+                                             live: live, destination: i.tripDestination, arrivals: i.tripArrivals)
+                var approx = true
+                if isMe, !t.arrived, let r = i.myTripRemaining { t.remainingM = r.meters; approx = r.source.approximate }
+                out[out.count - 1].0.tripRemainingMeters = t.remainingM
+                out[out.count - 1].0.tripRemainingApprox = approx
+                out[out.count - 1].0.tripArrived = t.arrived
+            }
         }
         /* Me first, then nearest, then the ones with no distance in join order. */
         return out.sorted { a, b in

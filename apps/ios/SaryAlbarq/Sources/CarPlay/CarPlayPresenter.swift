@@ -17,6 +17,8 @@ struct CarPlayInput {
     /// My trusted course (degrees), when moving.
     var course: Double?
     var destination: CarPlayDestination?
+    /// «الرحلة» to the destination (the phone's own numbers).
+    var trip: CarPlayTripProgress?
     var stuck: [CarPlayStuck] = []
     var convoy: CarPlayConvoy?
     var now = Date()
@@ -196,7 +198,25 @@ enum CarPlayPresenter {
 
     static func destination(_ i: CarPlayInput) -> (position: LngLat, label: String)? {
         guard let d = i.destination else { return nil }
-        return (d.position, d.label.isEmpty ? "الوجهة" : d.label)
+        let name = d.label.isEmpty ? "الوجهة" : d.label
+        /* The pin carries the trip's progress: «روضة خريم · ٦٢٪». */
+        if let t = i.trip {
+            if t.arrived { return (d.position, "\(name) · وصلنا") }
+            if let p = t.percent { return (d.position, "\(name) · \(ArabicFormat.number(Double(p)))٪") }
+        }
+        return (d.position, name)
+    }
+
+    /// «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م»; nil without a trip. Never a remaining
+    /// distance or ETA the phone did not vouch for (an old fix gives just the percent).
+    static func tripLine(_ i: CarPlayInput) -> String? {
+        guard let t = i.trip else { return nil }
+        if t.arrived { return "وصلنا الوجهة" }
+        var parts: [String] = []
+        if let p = t.percent { parts.append("قطعنا \(ArabicFormat.number(Double(p)))٪") }
+        if let m = t.remainingM { parts.append("باقي \(ArabicFormat.distance(m))" + (t.approximate ? " تقريبًا" : "")) }
+        if let e = t.eta { parts.append("نوصل \(NavText.clock(e))") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// Trips the «إلى…» list offers right now (way back first when there is a trail).

@@ -40,21 +40,25 @@ final class CreateFlowStateTests: XCTestCase {
         XCTAssertEqual(g.name, "كشتة الخميس", "a typed name is never replaced")
     }
 
-    func testSkipIsAllowedAndBackReturnsToStepOneKeepingNameAndTime() {
+    func testDestinationIsRequiredAndBackReturnsToStepOneKeepingNameAndTime() {
         var f = CreateFlowState(now: t0)
-        f.skipDestination()
-        XCTAssertEqual(f.step, .weather)
-        XCTAssertTrue(f.skippedDestination)
-        XCTAssertNil(f.destination)
+        /* «لا يوجد رحلة من غير نهاية»: no way past step 1 without a destination. */
         f.name = "مشوار"
+        XCTAssertEqual(f.issue(now: t0), .destinationMissing)
+        XCTAssertFalse(f.approve(now: t0))
+        XCTAssertEqual(f.step, .destination)
+        XCTAssertFalse(f.creating)
+        f.choose(thumama)
+        XCTAssertEqual(f.step, .weather)
         f.departure = t0.addingTimeInterval(7200)
         f.back()
         XCTAssertEqual(f.step, .destination)
         XCTAssertEqual(f.name, "مشوار")
         XCTAssertEqual(f.departure, t0.addingTimeInterval(7200))
+        XCTAssertEqual(f.destination, thumama, "going back keeps the chosen destination")
         f.choose(thumama)
-        XCTAssertFalse(f.skippedDestination)
         XCTAssertEqual(f.step, .weather)
+        XCTAssertNil(f.issue(now: t0))
     }
 
     func testApproveValidatesNameAndDeparture() {
@@ -105,7 +109,6 @@ final class CreateFlowStateTests: XCTestCase {
         var f = CreateFlowState(now: t0)
         f.choose(thumama)
         XCTAssertFalse(f.choose(OutingDestination(name: "ب", lat: 25, lng: 45)))
-        f.skipDestination()
         XCTAssertEqual(f.destination, thumama)
     }
 }

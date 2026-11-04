@@ -22,9 +22,12 @@ struct CreateFlowState: Equatable {
         case nameEmpty
         case departurePast
         case departureTooFar
+        /// «لا يوجد رحلة من غير نهاية»: every outing has a destination.
+        case destinationMissing
 
         var arabic: String {
             switch self {
+            case .destinationMissing: return "اختر الوجهة أولًا: كل رحلة لها بداية ونهاية."
             case .nameEmpty: return "اكتب اسم الطلعة."
             case .departurePast: return "وقت الانطلاق فات. اختر وقتًا من الآن وطالع."
             case .departureTooFar: return "اختر وقت انطلاق خلال ١٤ يومًا."
@@ -33,9 +36,8 @@ struct CreateFlowState: Equatable {
     }
 
     private(set) var step: CreateStep = .destination
+    /// Required: there is no «بدون وجهة» — an outing is a trip with a start and an end.
     private(set) var destination: OutingDestination?
-    /// «بدون وجهة الحين»: allowed, but the weather step then has no destination to show.
-    private(set) var skippedDestination = false
     var name = ""
     var departure: Date
     private(set) var outingId: String?
@@ -76,7 +78,6 @@ struct CreateFlowState: Equatable {
         clean.name = String(d.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(TripPlan.destinationNameMax))
         if clean.name.isEmpty { clean.name = "الوجهة" }
         destination = clean
-        skippedDestination = false
         if trimmedName.isEmpty, clean.name != "الوجهة", clean.name != "نقطة على الخريطة" {
             name = String("طلعة \(clean.name)".prefix(ServerRules.outingNameMax))
         }
@@ -85,17 +86,10 @@ struct CreateFlowState: Equatable {
         return true
     }
 
-    mutating func skipDestination() {
-        guard step == .destination else { return }
-        destination = nil
-        skippedDestination = true
-        error = nil
-        step = .weather
-    }
-
     // MARK: step 2
 
     func issue(now: Date) -> Issue? {
+        if destination == nil { return .destinationMissing }
         if trimmedName.isEmpty { return .nameEmpty }
         if departure < now.addingTimeInterval(-Self.pastGraceS) { return .departurePast }
         if departure > now.addingTimeInterval(Self.maxAheadS) { return .departureTooFar }

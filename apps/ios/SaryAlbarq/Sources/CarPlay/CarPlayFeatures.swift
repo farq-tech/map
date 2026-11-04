@@ -38,8 +38,22 @@ struct CarPlayConvoy: Equatable {
 
 /// What other features hand to CarPlay. All methods are optional (defaults below).
 @MainActor
+/// «الرحلة» as the phone decided it (`TripPresenter`): only what is true now.
+struct CarPlayTripProgress: Equatable {
+    /// 0...100.
+    var percent: Int?
+    /// Nil when my fix is too old to say.
+    var remainingM: Double?
+    /// The remaining distance is a straight line.
+    var approximate: Bool
+    var eta: Date?
+    var arrived: Bool
+}
+
 protocol CarPlayFeatureSource: AnyObject {
     func carPlayDestination() -> CarPlayDestination?
+    /// «قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م».
+    func carPlayTripProgress() -> CarPlayTripProgress?
     func carPlayStuckMembers() -> [CarPlayStuck]
     func carPlayConvoy() -> CarPlayConvoy?
     /// «غرّزت» is offered on CarPlay only when this is true.
@@ -50,6 +64,7 @@ protocol CarPlayFeatureSource: AnyObject {
 
 extension CarPlayFeatureSource {
     func carPlayDestination() -> CarPlayDestination? { nil }
+    func carPlayTripProgress() -> CarPlayTripProgress? { nil }
     func carPlayStuckMembers() -> [CarPlayStuck] { [] }
     func carPlayConvoy() -> CarPlayConvoy? { nil }
     var carPlayStuckReportSupported: Bool { false }

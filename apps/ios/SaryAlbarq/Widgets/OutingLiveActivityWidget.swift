@@ -69,6 +69,7 @@ struct OutingLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
                         if let b = d.banner { BannerView(banner: b, palette: p, compact: true) }
+                        if let line = d.tripLine { TripRow(line: line, fraction: d.tripFraction ?? 0, palette: p, dim: d.isStale, compact: true) }
                         HStack {
                             if let f = d.farthestLine {
                                 Label { Text("الأبعد: \(f)") } icon: { Image(systemName: "arrow.up.and.down.and.arrow.left.and.right") }
@@ -84,8 +85,14 @@ struct OutingLiveActivityWidget: Widget {
                 }
             } compactLeading: {
                 HStack(spacing: 3) {
-                    Image(systemName: "arrow.uturn.backward").font(.system(size: 12, weight: .bold)).foregroundStyle(p.accent)
-                    Text(d.backShort).font(.number(14)).foregroundStyle(d.isStale ? p.stale : p.text)
+                    if let t = d.tripShort {
+                        /* «الرحلة»: what is left to the destination leads. */
+                        Image(systemName: "flag.checkered").font(.system(size: 12, weight: .bold)).foregroundStyle(p.live)
+                        Text(t).font(.number(14)).foregroundStyle(d.isStale ? p.stale : p.text)
+                    } else {
+                        Image(systemName: "arrow.uturn.backward").font(.system(size: 12, weight: .bold)).foregroundStyle(p.accent)
+                        Text(d.backShort).font(.number(14)).foregroundStyle(d.isStale ? p.stale : p.text)
+                    }
                 }
             } compactTrailing: {
                 if d.showAlertDot {
@@ -121,6 +128,7 @@ private struct LockScreenView: View {
                 StaleTag(d: d, palette: p)
             }
             if let b = d.banner { BannerView(banner: b, palette: p, compact: false) }
+            if let line = d.tripLine { TripRow(line: line, fraction: d.tripFraction ?? 0, palette: p, dim: d.isStale, compact: false) }
             HStack(alignment: .top, spacing: 10) {
                 Metric(icon: "arrow.uturn.backward", title: "طريق العودة", value: d.backText ?? "—", tint: p.accent, palette: p, dim: d.isStale)
                 Metric(icon: "dot.radiowaves.left.and.right", title: "الأعضاء", value: d.liveLine, tint: d.isStale ? p.stale : p.live, palette: p, dim: d.isStale)
@@ -227,5 +235,36 @@ private struct SpeedPill: View {
         .background(Capsule().fill(palette.text.opacity(0.08)))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("السرعة \(text)"))
+    }
+}
+
+
+/// «الرحلة»: start → destination bar (filled from the start, right in RTL) and one line.
+private struct TripRow: View {
+    let line: String
+    let fraction: Double
+    let palette: Ink.Palette
+    let dim: Bool
+    let compact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "flag.checkered").font(.system(size: compact ? 12 : 14, weight: .bold)).foregroundStyle(palette.live)
+                Text(line).font(.tajawal(compact ? 14 : 16)).foregroundStyle(dim ? palette.stale : palette.text).lineLimit(1).minimumScaleFactor(0.7)
+                Spacer(minLength: 0)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.text.opacity(0.14))
+                    Capsule().fill(dim ? palette.stale : (fraction >= 1 ? palette.live : palette.accent))
+                        .frame(width: max(6, g.size.width * min(1, max(0, fraction))))
+                }
+            }
+            .frame(height: compact ? 5 : 6)
+            .environment(\.layoutDirection, .rightToLeft)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("الرحلة: \(line)"))
     }
 }

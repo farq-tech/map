@@ -45,6 +45,15 @@ struct OutingActivityState: Codable, Hashable {
     var updatedAt: Date
     /// My current speed in whole km/h («سرعة المركبة»); nil shows «—» (no fresh fix / speed).
     var speedKmh: Int? = nil
+    /// «الرحلة» (start → destination), decided on the phone; nil fields hide it.
+    /// Whole percent driven, 0...100.
+    var tripPercent: Int? = nil
+    /// Metres left to the destination (never from an old fix).
+    var tripRemainingM: Double? = nil
+    /// The remaining distance is a straight line («تقريبي»).
+    var tripApprox: Bool = false
+    var tripETA: Date? = nil
+    var tripArrived: Bool = false
 }
 
 extension OutingActivityState {

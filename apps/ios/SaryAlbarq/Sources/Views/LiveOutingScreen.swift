@@ -95,7 +95,7 @@ struct LiveOutingScreen: View {
                     }
                 }
                 .saryAppearance(appearance)
-                .sarySheetPresentation(detent: $controller.sheetDetent)
+                .sarySheetPresentation(detent: $controller.sheetDetent, trip: controller.showsTripStrip)
         }
     }
 
@@ -116,7 +116,7 @@ struct LiveOutingScreen: View {
     private var bottomInset: CGFloat {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
-        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive))
+        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: controller.showsTripStrip))
     }
 
     private var topChromeBottom: CGFloat {

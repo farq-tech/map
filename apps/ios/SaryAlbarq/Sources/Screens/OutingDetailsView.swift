@@ -170,6 +170,10 @@ struct TripSummaryView: View {
                     }
                 }
                 .accessibilityIdentifier("summary.stats")
+                if let facts = model.tripFacts(outingId) {
+                    TripSummarySection(facts: facts, snapshot: s, destination: model.plans.model(outingId).plan.destination,
+                                       trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
+                }
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
@@ -204,6 +208,18 @@ struct TripSummaryView: View {
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("summary.story")
                     mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
+                    if model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
+                        Button {
+                            busy = true
+                            Task {
+                                if await model.startReturnTrip(from: outingId) == nil { busy = false }
+                            }
+                        } label: { SaryButtonLabel(title: "طريق العودة", systemImage: SaryIcon.backTrack, busy: busy) }
+                            .buttonStyle(.sary(.secondary))
+                            .accessibilityIdentifier("summary.returnTrip")
+                        Text("رحلة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
+                            .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Button {
                     shareText = text(s, mine: mine, local: local)
@@ -361,4 +377,105 @@ private struct StorySheet: Identifiable {
 private struct ShareText: Identifiable {
     let text: String
     var id: String { text }
+}
+
+/// «الرحلة» in the summary: from my start point to the destination, the clock (moving,
+/// stopped, the longest stop), the route on the map and who arrived when. All from this
+/// phone; the shared summaries above are the only thing other members ever see.
+struct TripSummarySection: View {
+    var facts: TripSummaryFacts
+    var snapshot: OutingSnapshot
+    var destination: OutingDestination?
+    var trail: Trail?
+    var online: Bool
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let m = facts.motion
+        SarySection(title: "الرحلة", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوبة على جوالك فقط.") {
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
+                row("flag.fill", "البداية", facts.start.map { NavText.clock(Date(timeIntervalSince1970: $0.atMs / 1000)) } ?? "—")
+                SaryDivider()
+                row("flag.checkered", facts.arrivedAt != nil ? "الوصول إلى \(destination?.name ?? "الوجهة")" : "النهاية",
+                    (facts.arrivedAt ?? facts.endedAt).map { NavText.clock($0) } ?? "—")
+                SaryDivider()
+                row("clock.fill", "مدة الرحلة", SaryFormat.duration(seconds: m.elapsedS))
+                SaryDivider()
+                row("car.side.fill", "وقت الحركة", SaryFormat.duration(seconds: m.movingS))
+                SaryDivider()
+                row("pause.circle.fill", "وقت الوقوف", SaryFormat.duration(seconds: m.stoppedS))
+                if let l = m.longestStopS {
+                    SaryDivider()
+                    row("hourglass", "أطول وقفة", SaryFormat.duration(seconds: l))
+                }
+                if let a = m.avgMovingKmh {
+                    SaryDivider()
+                    row("speedometer", "متوسط السرعة · أعلى سرعة", SaryFormat.speed(kmh: a) + (m.maxKmh.map { " · " + SaryFormat.speed(kmh: $0) } ?? ""))
+                }
+            }
+            .padding(.vertical, theme.space(.xs))
+            .accessibilityIdentifier("summary.trip")
+        }
+        if let route = routeLine, route.count >= 2 {
+            SarySection(title: "من البداية إلى النهاية", footer: "مرسوم من مسارك على جوالك فقط.") {
+                Group {
+                    if online {
+                        PlanMapView(route: route, destination: destination, interactive: false,
+                                    camera: PlanCamera(kind: .fit(route + (destination.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])), id: 1), theme: theme)
+                    } else if let trail {
+                        TrailSketch(trail: trail, color: p.accent)
+                    }
+                }
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous))
+                .padding(.vertical, theme.space(.s))
+                .accessibilityIdentifier("summary.route")
+            }
+        }
+        let names = snapshot.members.map { (id: $0.user_id, name: $0.user_id == snapshot.me.user_id ? "\($0.display_name) (أنت)" : $0.display_name) }
+        let order = ArrivalOrder.split(arrivals: facts.arrivals, members: names)
+        if !order.arrived.isEmpty {
+            SarySection(title: "ترتيب الوصول", footer: "كما رآه جوالك من مواقعهم المباشرة.") {
+                VStack(spacing: 0) {
+                    ForEach(Array(order.arrived.enumerated()), id: \.element.id) { i, e in
+                        if i > 0 { SaryDivider() }
+                        HStack(spacing: theme.space(.m)) {
+                            Text(SaryFormat.number(i + 1)).saryNumber(.headline, weight: .heavy).foregroundStyle(i == 0 ? p.accentText : p.textTertiary).frame(width: 22)
+                            Text(e.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                            Spacer()
+                            Text(NavText.clock(Date(timeIntervalSince1970: e.atMs / 1000))).saryNumber(.subhead).foregroundStyle(p.textSecondary)
+                        }
+                        .frame(minHeight: theme.minTarget)
+                    }
+                    if !order.waiting.isEmpty {
+                        SaryDivider()
+                        Text("ما وصلوا (أو ما وصلنا موقعهم): " + order.waiting.joined(separator: "، "))
+                            .saryText(.footnote).foregroundStyle(p.textSecondary).frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, theme.space(.s))
+                    }
+                }
+                .accessibilityIdentifier("summary.arrivalOrder")
+            }
+        }
+    }
+
+    /// My trail from the start point on, thinned for the map.
+    private var routeLine: [LngLat]? {
+        guard let t = trail else { return nil }
+        let from = facts.start?.atMs ?? 0
+        let pts = t.points.filter { $0.t >= from - 1000 }.map(\.position)
+        return PlanSimplify.capped(pts, max: 600)
+    }
+
+    private func row(_ icon: String, _ k: String, _ v: String) -> some View {
+        HStack(spacing: theme.space(.m)) {
+            SaryRowIcon(systemImage: icon)
+            Text(k).saryText(.body).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
+            Spacer()
+            Text(v).saryNumber(.body, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+        }
+        .frame(minHeight: theme.minTarget)
+        .accessibilityElement(children: .combine)
+    }
 }

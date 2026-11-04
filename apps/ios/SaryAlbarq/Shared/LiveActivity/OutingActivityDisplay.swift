@@ -32,6 +32,19 @@ enum ActivityFormat {
         return "\(number(Int(km.rounded()))) كم"
     }
 
+    /// "٤:٣٠ م" in Riyadh time — as `NavText.clock`.
+    static func clock(_ date: Date, timeZone: TimeZone = TimeZone(identifier: "Asia/Riyadh")!) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let c = cal.dateComponents([.hour, .minute], from: date)
+        let h24 = c.hour ?? 0, m = c.minute ?? 0
+        let h = h24 % 12 == 0 ? 12 : h24 % 12
+        return digits(String(format: "%d:%02d", h, m)) + (h24 < 12 ? " ص" : " م")
+    }
+
+    /// "٦٢٪".
+    static func percent(_ p: Int) -> String { "\(number(min(100, max(0, p))))٪" }
+
     /// "الآن", "قبل ٤ د", "قبل ٢ س", "قبل ٣ ي" — as `SaryFormat.elapsed`.
     static func elapsed(since: Date, now: Date) -> String {
         let s = max(0, now.timeIntervalSince(since))
@@ -75,6 +88,12 @@ struct OutingActivityDisplay: Equatable {
     var minimalText: String
     /// "٤٢ كم/س", or "—" without a fresh speed or once the picture is old.
     var speedText: String = "—"
+    /// «الرحلة»: 0...1 for the bar, nil hides the trip row.
+    var tripFraction: Double?
+    /// "قطعنا ٦٢٪ · باقي ١٢ كم · نوصل ٤:٣٠ م", or "وصلنا 🎉".
+    var tripLine: String?
+    /// Compact island: "١٢ كم" left to the destination.
+    var tripShort: String?
 
     static func make(_ s: OutingActivityState, now: Date, systemStale: Bool = false) -> OutingActivityDisplay {
         let stale = systemStale || now.timeIntervalSince(s.updatedAt) > OutingActivityState.staleAfter
@@ -91,8 +110,27 @@ struct OutingActivityDisplay: Equatable {
             backShort: back ?? "—",
             showAlertDot: s.alert != nil,
             minimalText: s.alert != nil ? "!" : (back ?? "—"),
-            speedText: stale ? "—" : (s.speedKmh.map { "\(ActivityFormat.number(max(0, $0))) كم/س" } ?? "—")
+            speedText: stale ? "—" : (s.speedKmh.map { "\(ActivityFormat.number(max(0, $0))) كم/س" } ?? "—"),
+            tripFraction: trip(s, stale: stale).fraction,
+            tripLine: trip(s, stale: stale).line,
+            tripShort: trip(s, stale: stale).short
         )
+    }
+
+    /// The trip row. A stale picture keeps the percent (it only grows) but not the
+    /// remaining distance or the ETA, which an old picture can't vouch for.
+    static func trip(_ s: OutingActivityState, stale: Bool = false) -> (fraction: Double?, line: String?, short: String?) {
+        if s.tripArrived { return (1, "وصلنا 🎉", "وصلنا") }
+        guard let p = s.tripPercent else { return (nil, nil, nil) }
+        var parts = ["قطعنا \(ActivityFormat.percent(p))"]
+        var short: String?
+        if let m = s.tripRemainingM, !stale {
+            let d = ActivityFormat.distance(meters: m)
+            parts.append("باقي \(d)" + (s.tripApprox ? " تقريبًا" : ""))
+            short = d
+        }
+        if let e = s.tripETA, !stale { parts.append("نوصل \(ActivityFormat.clock(e))") }
+        return (Double(min(100, max(0, p))) / 100, parts.joined(separator: " · "), short)
     }
 
     static func banner(_ s: OutingActivityState) -> Banner? {

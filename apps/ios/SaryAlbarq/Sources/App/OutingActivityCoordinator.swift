@@ -17,6 +17,8 @@ final class OutingActivityCoordinator {
     var stuck: (OutingSession) -> [StuckMark] = { _ in [] }
     /// «سرعة المركبة»: the live screen's `SpeedModel.snapshot`, when it is open.
     var speed: (OutingSession) -> SpeedModel.Snapshot? = { _ in nil }
+    /// «الرحلة»: the live screen's trip picture (progress, remaining, ETA), when it is open.
+    var trip: (OutingSession) -> TripPanelUI? = { _ in nil }
 
     private let location: LocationSharer
     private weak var session: OutingSession?
@@ -79,7 +81,7 @@ final class OutingActivityCoordinator {
                                        link: s.link, closed: s.closedReason, wantsToShare: s.wantsToShare, isSharingNow: s.isSharingNow,
                                        sosSending: s.sosSending, now: now)
         let back = location.lastFix.flatMap { backMeters(s, $0) }
-        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s), speed: speed(s)) else { return }
+        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s), speed: speed(s), trip: trip(s)) else { return }
 
         guard let a = activity else {
             start(s, state)
@@ -185,6 +187,8 @@ final class OutingActivityCoordinator {
         case "stuck": s.alert = .init(kind: .stuck, name: "أبو فهد", isMe: false, since: now.addingTimeInterval(-300))
         case "gps": s.gpsOK = false; s.backMeters = nil; s.farthestName = nil; s.farthestMeters = nil; s.liveCount = 2
         case "stale": s.updatedAt = now.addingTimeInterval(-7 * 60)
+        case "trip": s.tripPercent = 62; s.tripRemainingM = 12_400; s.tripETA = now.addingTimeInterval(14 * 60); s.speedKmh = 64
+        case "arrived": s.tripArrived = true; s.tripPercent = 100
         default: break
         }
         for a in Activity.activities { endNow(a) }
