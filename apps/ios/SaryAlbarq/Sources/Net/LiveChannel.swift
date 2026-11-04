@@ -220,6 +220,8 @@ final class LiveChannel {
                    let snap = try? JSONDecoder().decode(OutingSnapshot.self, from: sd) {
                     self.handlers.onSnapshot(snap)
                 }
+                /* «قناة الطلعة» (Sources/Media): only when the server sends it, so an older server reads as "not there". */
+                if let snap = msg["snapshot"] as? [String: Any], snap.keys.contains("media") { MediaEvents.post(outingId: self.outingId, raw: snap["media"]) }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
                 self.flush()
                 self.schedulePing()
@@ -230,6 +232,8 @@ final class LiveChannel {
                 if let now = msg["server_now"] as? String { self.handlers.onServerNow(now) }
             case "error", "closed", "note_ack":
                 break
+            case "media_state":
+                MediaEvents.post(outingId: self.outingId, raw: msg["state"])
             default:
                 if let e = LiveEvent.decode(msg) { self.handlers.onEvent(e) }
             }

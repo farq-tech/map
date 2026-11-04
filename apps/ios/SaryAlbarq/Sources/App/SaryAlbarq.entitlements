@@ -10,6 +10,11 @@
 	<!-- SOS arrives as a Time Sensitive notification (breaks through Focus when allowed). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- «يوتيوب»: the share extension hands a shared YouTube link's video id to the app. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.sa.sary.albarq</string>
+	</array>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:farq-map-investor.vercel.app</string>
