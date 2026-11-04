@@ -20,6 +20,10 @@ enum LiveModal: Identifiable, Equatable {
     case notify
     /// «احفظ الخريطة بلا إنترنت» for this outing's area.
     case offlineMaps
+    /// The weather sheet (area, destination, wadis, NCM link).
+    case weather
+    /// «الطقس هنا» for a picked / searched point.
+    case weatherAt(OutingDestination)
 
     var id: String {
         switch self {
@@ -30,6 +34,8 @@ enum LiveModal: Identifiable, Equatable {
         case .rallyLabel: return "rally"
         case .notify: return "notify"
         case .offlineMaps: return "offline"
+        case .weather: return "weather"
+        case let .weatherAt(p): return "weather:\(p.lat),\(p.lng)"
         }
     }
 }
@@ -43,6 +49,8 @@ final class LiveOutingController: ObservableObject {
     let location: LocationSharer
     let appearance: AppearanceSettings
     let overlay = MapOverlayModel()
+    /// Weather, wind, dust, rain and wadi floods (Sources/Weather).
+    let weather: OutingWeather
     var onExit: () -> Void = {}
     /// «حفظ» my number (wired to the profile endpoint by the host).
     var savePhone: (String?) -> Void = { _ in }
@@ -87,6 +95,8 @@ final class LiveOutingController: ObservableObject {
         self.appearance = appearance
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         inviteLink = session.storedInviteURL()?.absoluteString
+        weather = OutingWeather(outingId: session.id, tracksMap: true)
+        weather.onAlert = { [weak self] a in self?.pushAlert(LiveAlertUI(id: a.id, kind: .weather(a)), ttl: 45) }
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged() }
         }.store(in: &bag)
@@ -182,12 +192,14 @@ final class LiveOutingController: ObservableObject {
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
+        feedWeather()
         if session.closedReason != nil, modal != nil { modal = nil }
         objectWillChange.send()
     }
 
     private func locationChanged() {
         updateAuto()
+        feedWeather()
         objectWillChange.send()
     }
 
@@ -260,6 +272,7 @@ final class LiveOutingController: ObservableObject {
             guard let self else { return }
             let parts = id.split(separator: ":").map(String.init)
             if parts.first == "note", parts.count > 1 { self.show(member: parts[1]) }
+            if id.hasPrefix("weather") { self.modal = .weather }
         }
         a.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
         a.voice = VoiceBannerActions(

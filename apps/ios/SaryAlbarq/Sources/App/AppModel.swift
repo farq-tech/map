@@ -441,6 +441,14 @@ enum DemoData {
                 positions.append(Position(user_id: id, lat: 24.71052 + Double(i) * 0.00004, lng: 46.67478 + Double(i) * 0.00005, accuracy: 6, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(4)))
             }
         }
+        #if DEBUG
+        /* Screenshots: `-SaryDemoShift "dLat,dLng"` moves the demo group (e.g. next to a mapped wadi). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryDemoShift"), i + 1 < args.count {
+            let d = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if d.count == 2 { positions = positions.map { var p = $0; p.lat += d[0]; p.lng += d[1]; return p } }
+        }
+        #endif
         let snap = OutingSnapshot(
             outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
             me: SnapshotMe(user_id: meId, role: "owner", sharing: true),

@@ -47,7 +47,8 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: { controller.following = false },
+                    onWaterways: { controller.weather.setWaterways($0) }
                 )
                 .ignoresSafeArea()
 

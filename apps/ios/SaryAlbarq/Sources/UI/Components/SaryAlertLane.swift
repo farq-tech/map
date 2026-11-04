@@ -80,6 +80,17 @@ struct SaryAlertCard: View {
                 }
             }
             .accessibilityLabel(Text("\(name) ابتعد عن المجموعة، على بعد \(SaryFormat.distance(meters: meters))"))
+        case .weather(let w):
+            card {
+                WeatherAlertLeading(alert: w)
+            } content: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(w.title).saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
+                    Text(w.detail).saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(theme.drive ? 2 : 3)
+                }
+            }
+            .accessibilityLabel(Text("\(w.title). \(w.detail)"))
+            .accessibilityIdentifier("alert.weather.\(w.kind.rawValue)")
         case .voice(let clip):
             SaryVoiceBanner(clip: clip, play: { voice.play(clip.id) }, dismiss: { voice.dismiss(clip.id) })
         }

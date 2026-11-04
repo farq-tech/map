@@ -214,6 +214,14 @@ struct PrivacySettingsView: View {
                 }
                 .padding(.vertical, theme.space(.s))
             }
+            SarySection(title: "الطقس (Open-Meteo)", footer: "خدمة طقس مفتوحة بلا حساب ولا مفتاح. التنبيهات تقدير؛ التحذيرات الرسمية من المركز الوطني للأرصاد.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    fact("cloud.sun.fill", "منطقة الطلعة: نرسل إحداثيات تقريبية فقط، مقرّبة إلى ٠٫١° (نحو ١١ كم). لا نرسل أبدًا مواقع الأعضاء الحية.")
+                    fact("flag.checkered", "الوجهة، أو نقطة تختارها لـ«الطقس هنا»: نرسل إحداثياتها كما حُددت، لأنها مكان اخترتموه لا موقع شخص.")
+                    fact("person.crop.circle.badge.xmark", "لا يُرسل اسمك ولا حسابك ولا رقمك، ونحفظ آخر رد على جوالك ليعمل بلا إنترنت.")
+                }
+                .padding(.vertical, theme.space(.s))
+            }
             SarySection(title: "حسابي", footer: "الخرائط التي نزّلتها بلا إنترنت تبقى على جوالك؛ تحذفها من «الخرائط بلا إنترنت».") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text("«احذف حسابي» يحذف حسابك من الخادم نهائيًا: اسمك وصورتك ورقمك، وعضويتك في كل الطلعات، ومواقعك ورسائلك وملخصاتك وتنبيهاتك. ثم يمسح هويتك من هذا الجهاز.")

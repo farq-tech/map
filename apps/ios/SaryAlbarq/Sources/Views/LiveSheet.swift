@@ -91,6 +91,12 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case .weather:
+            WeatherSheet(weather: controller.weather, close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case let .weatherAt(point):
+            WeatherPointSheet(point: point, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
         }
     }
 }
@@ -121,6 +127,7 @@ private struct ParticipantsTab: View {
             }
             if ui.status != .ended {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
+                LiveWeatherCard(controller: controller, weather: controller.weather)
             }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants

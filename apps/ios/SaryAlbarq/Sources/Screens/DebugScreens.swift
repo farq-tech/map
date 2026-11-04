@@ -52,6 +52,7 @@ struct DebugScreen: View {
                 } message: {
                     Text((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.message ?? "")
                 }
+        case "weather-here": WeatherPointSheet(point: OutingDestination(name: "نفود الثويرات", lat: 25.7712, lng: 45.1043), close: {})
         default: HomeView()
         }
     }
