@@ -76,7 +76,7 @@ final class ReachabilityUITests: XCTestCase {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
         let tabs: [(String, [String])] = [
-            ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-set", "sheet-stuck", "trail.backtrack", "trail.friends"]),
+            ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends"]),
             ("tab.group", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
             ("tab.more", ["settings-pause-sharing", "settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
                         "settings-context", "settings-drive", "settings-night", "speed.alert", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),

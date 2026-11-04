@@ -205,7 +205,7 @@ another UI test, ‡ = unit-tested.
 | Plan editor + checklist | plan pill | «الرحلة» → «الخطة وقائمة التجهيز» (`plan.openEditor`) | 2 ✔ |
 | Destination: open in Apple / Google Maps, copy | destination pill menu | «الرحلة» → الوجهة (`plan.destination`) | 2 ✔ |
 | «غرّزت» | «المزيد» | «+» → المجموعة (`outing-stuck`); «الرحلة» → السلامة (`sheet-stuck`) | 2 ✔ † |
-| Return timer | «المشاركون» | «الرحلة» → السلامة (`timer-set`) | 1 ✔ |
+| Return timer | «المشاركون» | «الرحلة» → السلامة (`timer-card`) | 1 ✔ |
 | Add waypoint | «المزيد» / long press | «+» → المجموعة (`outing-waypoint-add`); long press | 2 ✔ † |
 | Copy / share my location | «المزيد» / long press on «أنت» | «+» → المجموعة (`outing-copyme`) | 2 ✔ † |
 | Nearest station | cluster | «+» → الخدمات (`outing-nearest-open`) | 2 ✔ |

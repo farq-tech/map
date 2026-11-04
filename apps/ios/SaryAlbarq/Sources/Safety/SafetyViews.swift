@@ -234,6 +234,7 @@ struct SafetySection: View {
             }
             .padding(.vertical, theme.space(.m))
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("safety-section")
     }
 
@@ -334,6 +335,7 @@ struct ReturnTimerCard: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("timer-card")
         .confirmationDialog("نلغي مؤقت الرجوع؟", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("ألغِ المؤقت", role: .destructive) { Task { await safety.cancelTimer() } }
