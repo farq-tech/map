@@ -107,7 +107,7 @@ struct MapStage: View {
                 SaryStatusCapsule(outingName: "طلعة الثمامة", status: .active, connection: .connected, sharing: .sharing,
                                   warnings: theme.drive ? [] : [.keepScreenOn], expanded: $expanded, back: close)
                 if !rowMode {
-                    SaryAlertLane(alerts: alerts, limit: theme.drive ? 1 : 3, dismiss: { id in alerts.removeAll { $0.id == id } })
+                    SaryAlertLane(alerts: alerts, limit: theme.drive ? 1 : SaryAlertLane.defaultLimit, dismiss: { id in alerts.removeAll { $0.id == id } })
                 }
                 Spacer()
             }

@@ -214,6 +214,7 @@ final class LiveOutingController: ObservableObject {
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
         registerCarPlay()
         #if DEBUG
+        pttDebugLaunch()
         navDebugLaunch()
         #endif
     }
@@ -939,6 +940,25 @@ final class LiveOutingController: ObservableObject {
     }
 
     var pttLevel: Float { session.walkie.level }
+
+    #if DEBUG
+    /// `-SaryPTTDemo talking|listening` (screenshots): the walkie-talkie on air without a server.
+    private func pttDebugLaunch() {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryPTTDemo"), i + 1 < a.count else { return }
+        let what = a[i + 1]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self else { return }
+            let now = Date().timeIntervalSince1970 * 1000
+            if what == "talking" {
+                self.session.walkie.debugForce(.talking(burst: 1, sinceMs: now - 7_000))
+            } else if let friend = self.session.displayView?.orderedMembers.first(where: { $0.user_id != self.session.myUserId }) {
+                self.session.walkie.debugForce(.listening(PTTTalker(userId: friend.user_id, name: friend.display_name, burst: 1)))
+            }
+            self.objectWillChange.send()
+        }
+    }
+    #endif
 
     /// On air right now (me or a friend): the speaking badge over that car.
     var speakingUserId: String? {

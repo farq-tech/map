@@ -236,6 +236,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var trails = MapTrails()
         private var trailLayerKey: String?
         private var startPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailStartPin>)?
+        /// «نقطة البداية» drops its label (icon only) while a car's chip would sit on it.
+        private var startCompact = false
         private var gapPins: [(point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailGapLabel>)] = []
         private var lastProjectionAt: CFTimeInterval = 0
         /* Note bubbles only once zoomed in: at city scale they would cover each other's names. */
@@ -853,7 +855,18 @@ struct OutingMapboxView: UIViewRepresentable {
             overlay.leaderHalo.path = leaders
             overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
             /* Waypoint pins fit around what the cars' chips took. */
-            let taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            var taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            /* «نقطة البداية»: its label folds away (icon only) where a chip would cover it or it would
+             * cover a chip; the pin itself joins the obstacles so waypoint labels keep off it. */
+            if let sp = startPin {
+                let r = StartPinLayout.rects(anchor: screen(sp.point.coordinate))
+                let crowded = StartPinLayout.crowded(label: r.label, chips: taken, wasCompact: startCompact)
+                if crowded != startCompact {
+                    startCompact = crowded
+                    placeStart(sp.point, force: true)
+                }
+                taken.append(crowded ? r.icon : r.icon.union(r.label))
+            }
             waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
             CATransaction.commit()
             placeOrnaments(force: false)
@@ -1059,13 +1072,13 @@ struct OutingMapboxView: UIViewRepresentable {
             for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
         }
 
-        private func placeStart(_ p: LngLat?) {
+        private func placeStart(_ p: LngLat?, force: Bool = false) {
             guard let map else { return }
-            if p == startPin?.point { return }
+            if p == startPin?.point && !force { return }
             startPin?.annotation.remove()
             startPin = nil
             guard let p else { return }
-            let host = UIHostingController(rootView: TrailStartPin(theme: theme))
+            let host = UIHostingController(rootView: TrailStartPin(theme: theme, compact: startCompact))
             host.view.backgroundColor = .clear
             host.safeAreaRegions = []
             /* Exactly the pin's own size, so its foot (the anchor) is on the first trail point. */
@@ -1385,13 +1398,36 @@ struct RallyPin: View {
     }
 }
 
+/// Where «نقطة البداية» draws on screen (anchor = the pin's foot on the first trail point), and
+/// when its label gives way to the cars' chips. Pure, tested.
+enum StartPinLayout {
+    static let iconSize = CGSize(width: 34, height: 34)
+    static let labelSize = CGSize(width: 104, height: 24)
+
+    static func rects(anchor a: CGPoint) -> (icon: CGRect, label: CGRect) {
+        let icon = CGRect(x: a.x - iconSize.width / 2, y: a.y - iconSize.height, width: iconSize.width, height: iconSize.height)
+        let label = CGRect(x: a.x - labelSize.width / 2, y: icon.minY - 2 - labelSize.height, width: labelSize.width, height: labelSize.height)
+        return (icon, label)
+    }
+
+    /// Fold the label when any chip touches it; unfold only with a clear margin (no flicker as cars move).
+    static func crowded(label: CGRect, chips: [CGRect], wasCompact: Bool) -> Bool {
+        let margin: CGFloat = wasCompact ? 10 : 2
+        let zone = label.insetBy(dx: -margin, dy: -margin)
+        return chips.contains { $0.intersects(zone) }
+    }
+}
+
 /// «نقطة البداية»: where I entered (the first point of my trail).
 struct TrailStartPin: View {
     let theme: SaryTheme
+    /// Icon only: a car's chip is right there (see `StartPinLayout`).
+    var compact = false
 
     var body: some View {
         let p = theme.palette
         VStack(spacing: 2) {
+            if !compact {
             Text("نقطة البداية")
                 .saryText(.caption, weight: .bold)
                 .foregroundStyle(p.textPrimary)
@@ -1401,6 +1437,7 @@ struct TrailStartPin: View {
                 .background(Capsule().fill(p.chromeOpaque))
                 .overlay(Capsule().stroke(p.stroke, lineWidth: 1))
                 .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            }
             Image(systemName: "figure.walk.departure")
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(Color.white)

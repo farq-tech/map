@@ -22,4 +22,7 @@ enum MediaShareInbox {
         let t = o["t"] as? Double ?? 0
         return YouTubeLink(videoId: v, startSeconds: t > 0 ? t : nil)
     }
+
+    /// Account deletion / `-resetState`: drop a pending shared link.
+    static func forget(in d: UserDefaults? = defaults) { d?.removeObject(forKey: key) }
 }

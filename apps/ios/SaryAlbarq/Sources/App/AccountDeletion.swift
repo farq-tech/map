@@ -82,6 +82,9 @@ enum LocalAccountData {
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
             WatchLinkStore.key, SafetyController.warnedStoreKey,
+            /* Round 3: create flow, «دائمًا» explainer, navigation preferences. */
+            RecentPlaces.key, LiveOutingController.shareAlwaysAskedKey,
+            NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
         ] + TrailPrefs.keys + SpeedPrefs.keys
     }
 
@@ -90,6 +93,9 @@ enum LocalAccountData {
         for k in keys { defaults.removeObject(forKey: k) }
         WaypointCache.wipeAll()
         TrailStore.forgetAll()
+        LocalDestinationStore.forgetAll(defaults: defaults)
+        OutingWalkieTalkie.forgetAll(defaults: defaults)
+        MediaShareInbox.forget()
     }
 }
 

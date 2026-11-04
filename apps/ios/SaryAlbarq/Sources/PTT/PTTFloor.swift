@@ -49,6 +49,11 @@ struct PTTFloor: Equatable {
 
     let me: String
     private(set) var state: State = .idle
+
+    #if DEBUG
+    /// Screenshots only (`-SaryPTTDemo`): show a floor state without a server.
+    mutating func debugForce(_ s: State) { state = s }
+    #endif
     private(set) var muted = false
     private(set) var maxTalkMs = PTTFloor.maxTalkMs
     private var nextId = 0

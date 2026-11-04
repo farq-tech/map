@@ -55,6 +55,21 @@ final class OutingWalkieTalkie: ObservableObject {
 
     static let mutedKeyPrefix = "sary.ptt.muted."
 
+    /// Account deletion / `-resetState`: every outing's «كتم» choice.
+    static func forgetAll(defaults: UserDefaults = .standard) {
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(mutedKeyPrefix) { defaults.removeObject(forKey: k) }
+    }
+
+    #if DEBUG
+    /// Screenshots only (`-SaryPTTDemo talking|listening`, DEBUG builds): the button and the
+    /// speaking badge in a floor state, without a server or a microphone.
+    func debugForce(_ s: PTTFloor.State) {
+        floor.debugForce(s)
+        mode = .server
+        if case .talking = s { level = 0.55 }
+    }
+    #endif
+
     init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard) {
         self.outingId = outingId
         self.me = me

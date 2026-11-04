@@ -66,9 +66,16 @@ final class AppModel: ObservableObject {
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
             RecentPlaces.forget()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys + SpeedPrefs.keys {
+            /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
+            LocalAccountData.wipe()
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,
+                      "sary.dev.unlocked"] + TrailPrefs.keys + SpeedPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
+            #if DEBUG
+            /* A remembered -SaryAPIBase must not leak into the next test (it is set again by its own argument). */
+            if !arguments.contains("-SaryAPIBase") { UserDefaults.standard.removeObject(forKey: Endpoints.debugKey) }
+            #endif
         }
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()

@@ -35,6 +35,8 @@ struct LiveOutingScreen: View {
     /// must not shift or cover what the person is touching); it catches up just after.
     @State private var frozenAlerts: [LiveAlertUI]?
     @State private var touching = false
+    /// «+٢ تنبيهات» opened: the plan strip steps aside until it folds back, so the lane never reaches the controls.
+    @State private var alertsExpanded = false
 
     var body: some View {
         let ui = controller.ui
@@ -175,15 +177,18 @@ struct LiveOutingScreen: View {
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if !rowMode {
-                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : 3, tapped: controller.actions.alertTapped,
-                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
+                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : SaryAlertLane.defaultLimit, tapped: controller.actions.alertTapped,
+                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent,
+                                      expandedState: $alertsExpanded, maxExpandedHeight: max(220, full.height * 0.45))
                         if !controller.nav.isActive {
                             /* «في قناة الطلعة» notices; folded away during guidance (the banner leads). */
                             MediaNoticeLane(center: MediaCenters.of(controller))
                         }
                         /* Guidance: the maneuver banner leads; the lane keeps one card and the plan pills
                          * fold away, leaving only the weather chip (never hidden). */
-                        LivePlanStrip(controller: controller, weatherOnly: controller.nav.isActive)
+                        if !alertsExpanded {
+                            LivePlanStrip(controller: controller, weatherOnly: controller.nav.isActive)
+                        }
                     } else {
                         /* Sheet at half height: the alert lane and plan pills step aside, the weather stays. */
                         LivePlanStrip(controller: controller, weatherOnly: true)

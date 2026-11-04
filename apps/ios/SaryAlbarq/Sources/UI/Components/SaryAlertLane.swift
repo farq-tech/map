@@ -1,36 +1,93 @@
 import SwiftUI
 
 /// Alerts stacked UNDER the status capsule (never over it), newest first,
-/// at most `limit` visible; older ones collapse into «+٢ تنبيه».
+/// at most `limit` visible (2 by default: a burst of stuck + convoy + silence +
+/// weather must not bury the map); the rest collapse into «+٢ تنبيهات», which
+/// expands the lane on tap and folds it back with «إخفاء».
 struct SaryAlertLane: View {
     var alerts: [LiveAlertUI]
-    var limit = 3
+    var limit = SaryAlertLane.defaultLimit
     var tapped: (String) -> Void = { _ in }
     var dismiss: (String) -> Void = { _ in }
     var voice: VoiceBannerActions = .init()
     var silent: SilentAlertActions = .init()
+    /// The screen's own state when it must react (the plan pills step aside while expanded).
+    var expandedState: Binding<Bool>? = nil
+    /// An expanded burst scrolls inside this height instead of pushing into the map controls.
+    var maxExpandedHeight: CGFloat = 420
     @Environment(\.sary) private var theme
+    @State private var localExpanded = false
+    @State private var expandedContentHeight: CGFloat = 0
+
+    static let defaultLimit = 2
+
+    private var expanded: Bool {
+        get { expandedState?.wrappedValue ?? localExpanded }
+        nonmutating set { if let b = expandedState { b.wrappedValue = newValue } else { localExpanded = newValue } }
+    }
+
+    /// «+١ تنبيه» / «+٢ تنبيهات».
+    static func overflowLabel(_ hidden: Int) -> String {
+        "+\(SaryFormat.number(hidden)) \(hidden == 1 ? "تنبيه" : "تنبيهات")"
+    }
+
+    /// What the lane shows: the first `limit`, or all of them once expanded.
+    static func visible(_ alerts: [LiveAlertUI], limit: Int, expanded: Bool) -> (shown: [LiveAlertUI], hidden: Int) {
+        let l = max(1, limit)
+        if expanded || alerts.count <= l { return (alerts, 0) }
+        return (Array(alerts.prefix(l)), alerts.count - l)
+    }
 
     var body: some View {
+        let v = Self.visible(alerts, limit: limit, expanded: expanded)
         VStack(spacing: theme.space(.s)) {
-            ForEach(alerts.prefix(limit)) { alert in
+            if expanded {
+                /* As tall as its cards, up to `maxExpandedHeight`; beyond that it scrolls. */
+                ScrollView(showsIndicators: false) {
+                    cards(v.shown)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { expandedContentHeight = $0 }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: min(max(expandedContentHeight, 1), maxExpandedHeight))
+            } else {
+                cards(v.shown)
+            }
+            if v.hidden > 0 || (expanded && alerts.count > max(1, limit)) {
+                Button { expanded.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(expanded ? "إخفاء" : Self.overflowLabel(v.hidden))
+                            .saryText(.caption, weight: .bold)
+                    }
+                    .foregroundStyle(theme.palette.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .saryGlass(Capsule(), role: .control)
+                    .frame(minHeight: theme.minTarget)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityIdentifier("alerts.more")
+                .accessibilityLabel(Text(expanded ? "إخفاء التنبيهات" : "\(Self.overflowLabel(v.hidden))، اعرضها"))
+            }
+        }
+        .animation(theme.animation(.enter), value: v.shown.map(\.id))
+        .animation(theme.animation(.snappy), value: expanded)
+        .onChange(of: alerts.count) { _, n in if n <= max(1, limit) { expanded = false } }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+
+    private func cards(_ list: [LiveAlertUI]) -> some View {
+        VStack(spacing: theme.space(.s)) {
+            ForEach(list) { alert in
                 SaryAlertCard(alert: alert, tapped: { tapped(alert.id) }, dismiss: { dismiss(alert.id) }, voice: voice, silent: silent)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
                         removal: .opacity.combined(with: .scale(scale: 0.96))
                     ))
             }
-            if alerts.count > limit {
-                Text("+\(SaryFormat.number(alerts.count - limit)) تنبيه")
-                    .saryText(.caption)
-                    .foregroundStyle(theme.palette.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .saryGlass(Capsule(), role: .control)
-            }
         }
-        .animation(theme.animation(.enter), value: alerts.map(\.id))
-        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 }
 
