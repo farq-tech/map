@@ -341,6 +341,27 @@ final class AppModel: ObservableObject {
         return TrailStore.load(id)
     }
 
+    /// My trail for this outing, from this device only (for «قصة الطلعة»): the same
+    /// «مساري» the details page draws (live session in memory, else trails-v1/<id>.json).
+    func storyTrail(_ id: String) -> [StoryPoint] {
+        if isDemo {
+            #if DEBUG
+            return StoryFixtures.trail(start: Date().addingTimeInterval(-(86400 * 3 + 4 * 3600) + 10 * 60))
+            #else
+            return []
+            #endif
+        }
+        return myTrailPoints(id).map(StoryTrailSource.points) ?? []
+    }
+
+    /// Shared waypoints for the story (icons only), from the device's waypoint cache.
+    func storyWaypoints(_ id: String) -> [StoryWaypoint] {
+        #if DEBUG
+        if isDemo { return StoryFixtures.waypoints() }
+        #endif
+        return (WaypointCache.load(id)?.waypoints ?? []).map { StoryWaypoint(kind: $0.kind.rawValue, lat: $0.lat, lng: $0.lng) }
+    }
+
     func shareSummary(_ id: String) async -> TripShare? {
         guard let t = myTrip(id) else { return nil }
         if isDemo { return TripShare(user_id: DemoData.currentMe, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
