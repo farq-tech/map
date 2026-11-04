@@ -176,7 +176,7 @@ struct LiveOutingScreen: View {
                     }
                     if !rowMode {
                         SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : 3, tapped: controller.actions.alertTapped,
-                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
+                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
                         if !controller.nav.isActive {
                             /* «في قناة الطلعة» notices; folded away during guidance (the banner leads). */
                             MediaNoticeLane(center: MediaCenters.of(controller))

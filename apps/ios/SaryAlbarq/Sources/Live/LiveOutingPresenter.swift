@@ -213,7 +213,8 @@ enum LiveOutingPresenter {
                 hasPhone: !(m.phone ?? "").isEmpty,
                 photo: nil,
                 viaNearby: !isMe && i.nearbyVia.contains(m.user_id),
-                speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now)
+                speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now),
+                silentSince: isMe ? nil : silentSince(m.user_id, in: v)
             ), idx))
         }
         /* Me first, then nearest, then the ones with no distance in join order. */

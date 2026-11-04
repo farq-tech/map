@@ -290,7 +290,7 @@ final class LiveOutingController: ObservableObject {
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
                                     stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
-                                    speaking: i.speakingUserId == m.id)
+                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -323,6 +323,7 @@ final class LiveOutingController: ObservableObject {
             pushAlert(LiveAlertUI(id: "voice:\(c.id)", kind: .voice(VoiceClipUI(id: c.id, senderName: name, senderColor: v.colors[c.user_id] ?? 0xFFFFFF,
                                                                                 durationSeconds: max(1, Int((Double(c.duration_ms) / 1000).rounded())), playback: .idle))), ttl: 60)
         }
+        reconcileSilence(prev: prev, next: v)
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
@@ -605,8 +606,13 @@ final class LiveOutingController: ObservableObject {
             if parts.first == "convoy", parts.count == 2, let t = self.session.view?.convoy?.tail_user_id { self.show(member: t) }
             if parts.first == "waypoint", parts.count > 1 { self.features.modal = .waypoint(parts[1]) }
             if id.hasPrefix("weather") { self.modal = .weather }
+            if parts.first == "silent", parts.count > 1 { self.showSilent(parts[1]) }
         }
         a.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
+        a.silent = SilentAlertActions(
+            go: { [weak self] uid in self?.goToSilent(uid) },
+            call: { [weak self] uid in self?.dial(uid, whatsApp: false) }
+        )
         a.voice = VoiceBannerActions(
             play: { [weak self] id in self?.togglePlay(id) },
             dismiss: { [weak self] id in self?.dismissAlert("voice:\(id)") }

@@ -124,6 +124,8 @@ struct NameChipUI: Equatable {
     var viaNearby: Bool = false
     /// On air in «قناة الطلعة» right now: an animated speaking badge.
     var speaking: Bool = false
+    /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
+    var silentSince: Date? = nil
 }
 
 struct NoteBubbleUI: Equatable {

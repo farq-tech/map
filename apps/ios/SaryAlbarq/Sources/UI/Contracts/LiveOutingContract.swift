@@ -121,6 +121,8 @@ enum LiveAlertKindUI: Equatable {
     case convoy(ConvoyAlertUI)
     /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
     case weather(WeatherAlertUI)
+    /// «انقطع إرسال فهد منذ ١٠ د» with «اتجه» / «اتصال» (SarySilentCard.swift).
+    case silent(SilentAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -280,6 +282,8 @@ struct LiveOutingActions {
     var dismissAlert: (_ id: String) -> Void = { _ in }
     /// Voice banners in the lane.
     var voice: VoiceBannerActions = .init()
+    /// «انقطع الإرسال» cards: «اتجه» / «اتصال».
+    var silent: SilentAlertActions = .init()
 
     // Side buttons
     /// «موقعي» (`outing-locate`). Expect: centre the map on me.

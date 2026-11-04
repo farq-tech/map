@@ -264,7 +264,8 @@ struct SaryParticipantRow: View {
                             SaryRoleChip(role: participant.role)
                         }
                         line {
-                            SaryPresenceBadge(presence: participant.presence, now: now)
+                            if let s = participant.silentSince { SarySilentBadge(since: s, now: now) }
+                            else { SaryPresenceBadge(presence: participant.presence, now: now) }
                             if participant.viaNearby { SaryNearbyMark() }
                             if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
                             if let b = participant.batteryPercent { SaryBatteryLabel(percent: b) }
@@ -294,7 +295,7 @@ struct SaryParticipantRow: View {
         var parts = [participant.name]
         if let r = participant.roleLabel { parts.append(r) }
         if let n = SaryCarColors.name(for: participant.color) { parts.append("السيارة \(n)") }
-        parts.append(SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
+        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) } ?? SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
         if participant.viaNearby { parts.append(SaryNearbyMark.text) }
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }

@@ -710,6 +710,14 @@ final class OutingSession: ObservableObject, Identifiable {
         reconcileSharing()
     }
 
+    #if DEBUG
+    /// Demo / screenshots only: feed one live event as if the server sent it.
+    func debugApply(_ e: LiveEvent) {
+        guard isDemo else { return }
+        apply(e)
+    }
+    #endif
+
     private func apply(_ e: LiveEvent) {
         guard var v = view else { return }
         let before = v

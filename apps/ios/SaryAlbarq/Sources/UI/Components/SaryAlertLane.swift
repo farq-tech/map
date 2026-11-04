@@ -8,12 +8,13 @@ struct SaryAlertLane: View {
     var tapped: (String) -> Void = { _ in }
     var dismiss: (String) -> Void = { _ in }
     var voice: VoiceBannerActions = .init()
+    var silent: SilentAlertActions = .init()
     @Environment(\.sary) private var theme
 
     var body: some View {
         VStack(spacing: theme.space(.s)) {
             ForEach(alerts.prefix(limit)) { alert in
-                SaryAlertCard(alert: alert, tapped: { tapped(alert.id) }, dismiss: { dismiss(alert.id) }, voice: voice)
+                SaryAlertCard(alert: alert, tapped: { tapped(alert.id) }, dismiss: { dismiss(alert.id) }, voice: voice, silent: silent)
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity),
                         removal: .opacity.combined(with: .scale(scale: 0.96))
@@ -38,10 +39,13 @@ struct SaryAlertCard: View {
     var tapped: () -> Void = {}
     var dismiss: () -> Void = {}
     var voice: VoiceBannerActions = .init()
+    var silent: SilentAlertActions = .init()
     @Environment(\.sary) private var theme
 
     var body: some View {
         switch alert.kind {
+        case .silent(let s):
+            SarySilentCard(alert: s, tapped: tapped, dismiss: dismiss, actions: silent)
         case .toast(let text):
             Text(text)
                 .saryText(.subhead, weight: .bold)
