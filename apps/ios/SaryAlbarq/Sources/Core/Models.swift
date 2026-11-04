@@ -146,6 +146,8 @@ struct OutingSnapshot: Codable, Equatable {
     var voice_clips: [VoiceClip]?
     /// Totals members chose to share once the outing ended (never points).
     var summaries: [TripShare]?
+    /// «غرّزت»: who is stuck right now, with the replies (nil while the server does not send it).
+    var stuck: [StuckWire]? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

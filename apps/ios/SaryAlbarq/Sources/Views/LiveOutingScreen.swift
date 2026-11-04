@@ -130,6 +130,10 @@ struct LiveOutingScreen: View {
                     ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                         SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
                     }
+                    if let stuck = controller.safety.myStuck {
+                        MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
+                                     clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
+                    }
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
                                       warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
@@ -191,6 +195,7 @@ struct LiveOutingScreen: View {
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: sheetTop)
+        .environment(\.safetyAlertActions, controller.safety.alertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
     }
 
@@ -198,6 +203,7 @@ struct LiveOutingScreen: View {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
                                                   backTracking: controller.backTrack != nil)
+            + [.safetyStuck(active: controller.safety.myStuck != nil)]
         /* Drive mode keeps the few that matter on the move: me, the group, and the way back. */
         return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } : all
     }
@@ -209,6 +215,7 @@ struct LiveOutingScreen: View {
         case "fit": a.fitGroup()
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
+        case "stuck": controller.stuckControlTapped()
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         default: break
         }

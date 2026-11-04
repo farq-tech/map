@@ -46,6 +46,8 @@ final class LiveOutingController: ObservableObject {
     let location: LocationSharer
     let appearance: AppearanceSettings
     let overlay = MapOverlayModel()
+    /// Return timer, «غرّزت», sunset & way back (`Sources/Safety`).
+    let safety: SafetyController
     var onExit: () -> Void = {}
     /// «حفظ» my number (wired to the profile endpoint by the host).
     var savePhone: (String?) -> Void = { _ in }
@@ -97,6 +99,7 @@ final class LiveOutingController: ObservableObject {
         self.session = session
         self.location = location
         self.appearance = appearance
+        safety = Self.makeSafety(for: session)
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         showFriendTrails = TrailPrefs.friends()
         inviteLink = session.storedInviteURL()?.absoluteString
@@ -118,6 +121,7 @@ final class LiveOutingController: ObservableObject {
         }
         #endif
         if let v = session.view { ingestFriends(v) }
+        attachSafety()
     }
 
     // MARK: state
@@ -174,7 +178,8 @@ final class LiveOutingController: ObservableObject {
             /* Ages tick in whole minutes on the chip; quantised so the annotation is not rebuilt every second. */
             let chipNow = Date(timeIntervalSince1970: (i.now.timeIntervalSince1970 / 30).rounded(.down) * 30)
             if showNames || m.isMe {
-                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow)
+                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
+                                    stuck: safety.isStuck(m.id))
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -446,6 +451,7 @@ final class LiveOutingController: ObservableObject {
         }
         a.alertTapped = { [weak self] id in
             guard let self else { return }
+            if self.safetyAlertTapped(id) { return }
             let parts = id.split(separator: ":").map(String.init)
             if parts.first == "note", parts.count > 1 { self.show(member: parts[1]) }
         }

@@ -58,6 +58,14 @@ struct SaryNameChip: View {
                         .foregroundStyle(p.textSecondary)
                         .lineLimit(1)
                 }
+                if chip.stuck {
+                    Image(systemName: SafetyIcon.stuck)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(p.onAccent)
+                        .frame(width: 20, height: 16)
+                        .background(Capsule().fill(p.warningText))
+                        .accessibilityLabel(Text("غرّز"))
+                }
                 if chip.hasVoice {
                     Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
                 }

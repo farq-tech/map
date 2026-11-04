@@ -34,6 +34,7 @@ struct LiveSheet: View {
         }
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(SafetyPrompts(safety: controller.safety))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -125,6 +126,7 @@ private struct ParticipantsTab: View {
             }
             if ui.status != .ended {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
+                SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
             }
             TrailCard(controller: controller, card: controller.trailCard)
             VStack(spacing: 0) {

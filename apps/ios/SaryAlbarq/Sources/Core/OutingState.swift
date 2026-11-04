@@ -17,6 +17,8 @@ enum LiveEvent: Equatable {
     case rally(RallyInfo?)
     case memberRole(userId: String, coLeader: Bool)
     case voiceClip(VoiceClip)
+    /// Return timer and «غرّزت» frames (state lives in `SafetyController`).
+    case safety(SafetyEvent)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -66,7 +68,7 @@ enum LiveEvent: Equatable {
         case "voice_clip":
             return (decodeJSON(obj["clip"]) as VoiceClip?).map(LiveEvent.voiceClip)
         default:
-            return nil
+            return SafetyEvent.decode(type, obj).map(LiveEvent.safety)
         }
     }
 }
@@ -172,6 +174,8 @@ struct OutingView: Equatable {
             guard !clips.contains(where: { $0.id == c.id }) else { return }
             clips.append(c)
             if clips.count > 30 { clips.removeFirst(clips.count - 30) }
+        case .safety:
+            break
         }
     }
 
