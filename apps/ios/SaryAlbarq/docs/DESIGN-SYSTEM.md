@@ -133,3 +133,17 @@ onboarding-location recovery-restore recovery-code recovery-code-shown home deta
 history profile settings appearance privacy notifications offline-maps about create join
 invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped`.
 Shots: `docs/app-shots/`.
+
+## Weather (wired)
+
+`Sources/Weather/`: Open-Meteo forecast + air-quality (dust, PM10), no key. The
+outing area is rounded to 0.1° before it is sent; a destination / «الطقس هنا»
+point is sent as chosen; members' live positions never. Responses are cached on
+disk per area; data older than an hour is never labelled «الآن». Thresholds are
+in `WeatherThresholds` (tested). The live map adds an invisible Streets v8
+`waterway` probe; `WadiProximity` turns it into the «احذر السيول في الأودية»
+hint (an estimate; the app links to the NCM for official warnings).
+DEBUG screenshot flags: `-SaryWeatherDemo rain|dust|calm`, `-SaryWeatherDemoAge <min>`,
+`-SaryDemoDestination "lat,lng,name"`, `-SaryDemoShift "dLat,dLng"`,
+`-SaryLiveSheet half|full`, `-SaryLiveModal weather`, `-SaryScreen weather-here`.
+Shots: `docs/app-shots/weather-*.jpg`.

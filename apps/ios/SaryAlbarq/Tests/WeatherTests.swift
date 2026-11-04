@@ -127,7 +127,7 @@ final class WeatherThresholdTests: XCTestCase {
 
     func testDustLevels() {
         XCTAssertNil(DustLevel.of(nil))
-        XCTAssertEqual(DustLevel.of(99), DustLevel.none)
+        XCTAssertEqual(DustLevel.of(99), .clear)
         XCTAssertEqual(DustLevel.of(100), .light)
         XCTAssertEqual(DustLevel.of(299), .light)
         XCTAssertEqual(DustLevel.of(300), .moderate)
@@ -253,6 +253,7 @@ final class WeatherPresenterTests: XCTestCase {
         XCTAssertFalse(ui.stale)
         XCTAssertEqual(ui.dust, .heavy)
         XCTAssertEqual(ui.condition, "غبار كثيف", "dust wins over «صحو»")
+        XCTAssertEqual(ui.visibility, "قد تقل بسبب الغبار", "the model's 20 km visibility ignores dust")
         XCTAssertEqual(ui.wind?.name, "رياح جنوبية شرقية")
         XCTAssertEqual(ui.wind?.speed, "٧ كم/س")
         XCTAssertEqual(ui.updated, "آخر تحديث قبل ١٠ د")
@@ -337,7 +338,10 @@ final class WeatherPresenterTests: XCTestCase {
 private final class FakeTransport: WeatherTransport, @unchecked Sendable {
     var fail = false
     var failAir = false
-    var calls: [URL] = []
+    private let lock = NSLock()
+    private var _calls: [URL] = []
+    /* The store fetches forecast and air concurrently: record under a lock. */
+    var calls: [URL] { lock.lock(); defer { lock.unlock() }; return _calls }
     let forecast: Data
     let air: Data
     init() throws {
@@ -345,7 +349,7 @@ private final class FakeTransport: WeatherTransport, @unchecked Sendable {
         air = try Fixture.data("openmeteo-air-riyadh")
     }
     func data(from url: URL) async throws -> Data {
-        calls.append(url)
+        lock.lock(); _calls.append(url); lock.unlock()
         if fail { throw URLError(.notConnectedToInternet) }
         if url.host?.hasPrefix("air-quality") == true {
             if failAir { throw URLError(.timedOut) }

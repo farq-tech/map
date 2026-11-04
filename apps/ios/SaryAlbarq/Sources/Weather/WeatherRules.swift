@@ -61,7 +61,7 @@ enum WeatherThresholds {
 }
 
 enum DustLevel: Int, Comparable, Codable {
-    case none, light, moderate, heavy
+    case clear, light, moderate, heavy
 
     static func < (a: DustLevel, b: DustLevel) -> Bool { a.rawValue < b.rawValue }
 
@@ -70,12 +70,12 @@ enum DustLevel: Int, Comparable, Codable {
         if d >= WeatherThresholds.dustHeavy { return .heavy }
         if d >= WeatherThresholds.dustModerate { return .moderate }
         if d >= WeatherThresholds.dustLight { return .light }
-        return .none
+        return .clear
     }
 
     var label: String {
         switch self {
-        case .none: return "لا غبار يُذكر"
+        case .clear: return "لا غبار يُذكر"
         case .light: return "غبار خفيف"
         case .moderate: return "غبار متوسط"
         case .heavy: return "غبار كثيف"
@@ -231,7 +231,7 @@ enum WeatherAlerts {
         }
 
         /* Dust reducing visibility */
-        let dustNow = soon.compactMap { DustLevel.of($0.dust) }.max() ?? .none
+        let dustNow = soon.compactMap { DustLevel.of($0.dust) }.max() ?? .clear
         let lowVis = soon.contains { ($0.visibilityM ?? .infinity) < WeatherThresholds.visibilityReducedM }
         if dustNow >= .moderate || (dustNow >= .light && lowVis) {
             let lvl = dustNow == .heavy ? 2 : 1

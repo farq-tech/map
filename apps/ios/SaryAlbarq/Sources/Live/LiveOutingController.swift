@@ -97,6 +97,13 @@ final class LiveOutingController: ObservableObject {
         inviteLink = session.storedInviteURL()?.absoluteString
         weather = OutingWeather(outingId: session.id, tracksMap: true)
         weather.onAlert = { [weak self] a in self?.pushAlert(LiveAlertUI(id: a.id, kind: .weather(a)), ttl: 45) }
+        #if DEBUG
+        /* Screenshots: `-SaryLiveSheet half|full`, `-SaryLiveModal weather`. */
+        let args = ProcessInfo.processInfo.arguments
+        func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+        if let d = arg("-SaryLiveSheet") { sheetDetent = d == "full" ? .full : d == "half" ? .half : .peek }
+        if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
+        #endif
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged() }
         }.store(in: &bag)

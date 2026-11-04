@@ -113,9 +113,9 @@ struct WeatherCardView: View {
             }
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: "sun.dust.fill").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle((ui.dust ?? .none) >= .moderate ? p.warningText : p.textSecondary).frame(width: 18)
-                Text(ui.dustText).saryText(.subhead, weight: (ui.dust ?? .none) >= .moderate ? .bold : .medium)
-                    .foregroundStyle((ui.dust ?? .none) >= .moderate ? p.warningText : p.textPrimary)
+                    .foregroundStyle((ui.dust ?? .clear) >= .moderate ? p.warningText : p.textSecondary).frame(width: 18)
+                Text(ui.dustText).saryText(.subhead, weight: (ui.dust ?? .clear) >= .moderate ? .bold : .medium)
+                    .foregroundStyle((ui.dust ?? .clear) >= .moderate ? p.warningText : p.textPrimary)
                 Text("· الرؤية \(ui.visibility)").saryNumber(.subhead).foregroundStyle(p.textSecondary).lineLimit(1)
             }
             HStack(spacing: theme.space(.s)) {

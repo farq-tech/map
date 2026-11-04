@@ -84,6 +84,10 @@ enum WeatherPresenter {
             ui.dustText = "الغبار غير متاح"
         }
         ui.visibility = WeatherFormat.visibility(h.visibilityM)
+        /* Forecast models do not lower visibility for dust: never print «أكثر من ١٠ كم» next to «غبار كثيف». */
+        if (ui.dust ?? .clear) >= .moderate, (h.visibilityM ?? .infinity) >= WeatherThresholds.visibilityReducedM {
+            ui.visibility = "قد تقل بسبب الغبار"
+        }
         if let chance = WeatherRules.maxRainChance(r, now: now) {
             ui.rainText = chance < 10 ? "لا مطر متوقع خلال ١٢ س" : "احتمال المطر حتى \(SaryFormat.percent(Int(chance.rounded()))) خلال ١٢ س"
         } else {

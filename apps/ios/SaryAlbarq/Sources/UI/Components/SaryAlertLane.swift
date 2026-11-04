@@ -86,7 +86,7 @@ struct SaryAlertCard: View {
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(w.title).saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                    Text(w.detail).saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(theme.drive ? 2 : 3)
+                    Text(w.detail).saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(w.kind == .flood ? 4 : (theme.drive ? 2 : 3))
                 }
             }
             .accessibilityLabel(Text("\(w.title). \(w.detail)"))
