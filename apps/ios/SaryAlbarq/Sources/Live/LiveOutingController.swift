@@ -84,6 +84,9 @@ final class LiveOutingController: ObservableObject {
     }
     /// Friends' last ~30 minutes, from the positions this phone already receives. Memory only.
     private(set) var friendTrails = FriendTrails()
+    /// «سرعة المركبة»: my smoothed speed (see `LiveOutingController+Speed.swift`).
+    let speed = SpeedModel()
+    var speedState = LiveSpeedState()
 
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
@@ -187,6 +190,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func sessionChanged() {
+        updateSpeed()
         guard let v = session.view else { return }
         ingestFriends(v)
         defer { lastView = v }
@@ -210,6 +214,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        updateSpeed()
         updateBackTrack()
         updateAuto()
         objectWillChange.send()

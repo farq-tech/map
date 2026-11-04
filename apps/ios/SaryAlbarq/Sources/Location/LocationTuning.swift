@@ -51,7 +51,8 @@ enum LocationTuning {
             accuracy: l.horizontalAccuracy,
             heading: l.course >= 0 ? l.course : nil,
             speed: l.speed >= 0 ? l.speed : nil,
-            atMs: l.timestamp.timeIntervalSince1970 * 1000
+            atMs: l.timestamp.timeIntervalSince1970 * 1000,
+            speedAccuracy: l.speedAccuracy >= 0 ? l.speedAccuracy : nil
         )
     }
 

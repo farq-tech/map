@@ -152,6 +152,8 @@ struct DeviceFix: Equatable {
     var speed: Double?
     /// Device timestamp of the fix, ms since 1970.
     var atMs: Double
+    /// CoreLocation's speed error, m/s (nil when unknown). Local only: never sent.
+    var speedAccuracy: Double? = nil
 
     var coordinate: Geo.LatLng { Geo.LatLng(lat: lat, lng: lng) }
 }

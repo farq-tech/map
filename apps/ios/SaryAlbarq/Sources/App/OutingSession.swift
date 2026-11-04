@@ -294,7 +294,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func handleFix(_ f: DeviceFix) {
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
         /* My own totals for «ملخص رحلتي»: on this device only, never points. */
-        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs) } }
+        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
