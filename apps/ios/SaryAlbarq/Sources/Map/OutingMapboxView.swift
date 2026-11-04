@@ -112,6 +112,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// Watercourses (wadi / stream / river…) in the loaded Streets tiles, after the camera settles (weather: flood hint).
+    var onWaterways: ([WaterwayLine]) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -140,6 +142,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onMapTap = onMapTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
+        c.onWaterways = onWaterways
         c.picking = picking
         c.following = following
         if c.theme != theme {
@@ -194,6 +197,8 @@ struct OutingMapboxView: UIViewRepresentable {
         var onMapTap: (LngLat) -> Void = { _ in }
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
+        var onWaterways: ([WaterwayLine]) -> Void = { _ in }
+        private var waterQuery: Cancelable?
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -254,7 +259,10 @@ struct OutingMapboxView: UIViewRepresentable {
             map.gestures.delegate = self
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
-            map.mapboxMap.onMapIdle.observe { [weak self] _ in self?.refreshRoads() }.store(in: &cancelables)
+            map.mapboxMap.onMapIdle.observe { [weak self] _ in
+                self?.refreshRoads()
+                self?.refreshWaterways()
+            }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 self?.layoutChips()
                 self?.project()
@@ -283,6 +291,7 @@ struct OutingMapboxView: UIViewRepresentable {
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
+            waterQuery?.cancel()
             tapInteraction?.cancel()
             cancelables.removeAll()
         }
@@ -357,6 +366,43 @@ struct OutingMapboxView: UIViewRepresentable {
                     "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 13,
                     "filter": RoadSnap.drivableFilter, "paint": ["line-opacity": 0, "line-width": 1],
                 ], layerPosition: nil)
+            }
+            /* Same source: an invisible waterway layer so watercourse tiles load too (weather's wadi hint). */
+            if !m.layerExists(withId: Self.waterProbeLayer) {
+                try? m.addLayer(with: [
+                    "id": Self.waterProbeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "waterway", "minzoom": 9,
+                    "filter": WadiProximity.filter, "paint": ["line-opacity": 0, "line-width": 1],
+                ], layerPosition: nil)
+            }
+        }
+
+        static let waterProbeLayer = "sary-waterway-probe"
+
+        /// Watercourses in the loaded tiles (roughly what is on screen), for the wadi flood hint.
+        private func refreshWaterways() {
+            guard styleReady, let m = map?.mapboxMap else { return }
+            waterQuery?.cancel()
+            waterQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["waterway"], filter: WadiProximity.filter)) { [weak self] result in
+                guard let self, case let .success(feats) = result else { return }
+                var lines: [WaterwayLine] = []
+                for q in feats {
+                    let f = q.queriedFeature.feature
+                    let props = f.properties ?? [:]
+                    func str(_ k: String) -> String? {
+                        if case let .string(s)?? = props[k] { return s }
+                        return nil
+                    }
+                    let cls = str("class") ?? str("type") ?? ""
+                    guard WadiProximity.isWatercourse(cls) || str("type") == "wadi" else { continue }
+                    let name = str("name_ar") ?? str("name")
+                    switch f.geometry {
+                    case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
+                    case let .multiLineString(ml)?:
+                        for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
+                    default: break
+                    }
+                }
+                DispatchQueue.main.async { self.onWaterways(lines) }
             }
         }
 

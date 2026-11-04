@@ -86,6 +86,8 @@ enum LiveAlertKindUI: Equatable {
     case voice(VoiceClipUI)
     /// Short neutral toast (e.g. «تم نسخ الرابط»).
     case toast(String)
+    /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
+    case weather(WeatherAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
