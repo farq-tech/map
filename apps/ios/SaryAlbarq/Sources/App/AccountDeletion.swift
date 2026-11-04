@@ -81,6 +81,7 @@ enum LocalAccountData {
             TripLogStore.key, InviteTokenStore.key, OnboardingProgress.key,
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
+            WatchLinkStore.key, SafetyController.warnedStoreKey,
         ]
     }
 

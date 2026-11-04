@@ -82,6 +82,8 @@ struct SaryAlertCard: View {
             .accessibilityLabel(Text("\(name) ابتعد عن المجموعة، على بعد \(SaryFormat.distance(meters: meters))"))
         case .voice(let clip):
             SaryVoiceBanner(clip: clip, play: { voice.play(clip.id) }, dismiss: { voice.dismiss(clip.id) })
+        case .safety(let s):
+            SafetyAlertCard(alert: s, tapped: tapped, dismiss: dismiss)
         }
     }
 

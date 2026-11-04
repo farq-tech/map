@@ -133,3 +133,16 @@ onboarding-location recovery-restore recovery-code recovery-code-shown home deta
 history profile settings appearance privacy notifications offline-maps about create join
 invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped`.
 Shots: `docs/app-shots/`.
+
+## Safety pack (wired)
+
+`Sources/Safety/` — «مؤقت الرجوع», «غرّزت» and the sunset / way-back warning.
+`SafetyController` owns the state (server via `SafetyBackend`, nil in the demo),
+`ReturnTimer.swift` / `Stuck.swift` / `SunsetWayBack.swift` are pure and unit-tested
+(`Tests/SafetyTests.swift`, plus an opt-in end-to-end test with
+`TEST_RUNNER_SARY_E2E_BASE=http://127.0.0.1:<port>` against a local API).
+Cards go into the shared alert lane as `.safety(SafetyAlertUI)`; the «السلامة»
+section sits in the participants tab; «غرّزت» is the last control in the cluster.
+A 404/405 without an error code means the server has no such route yet: the UI
+says «غير متاح بعد», never pretends. DEBUG: `-SarySafety timer|overdue|stuck-me|stuck-friend|sunset|unavailable|confirm-stuck|editor`,
+`-SarySafetySheet half|full`. Shots: `docs/app-shots/safety-*.jpg`.

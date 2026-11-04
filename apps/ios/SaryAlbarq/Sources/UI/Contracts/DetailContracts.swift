@@ -114,6 +114,8 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// «غرّزت»: a small stuck icon on the chip until they clear it.
+    var stuck: Bool = false
 }
 
 struct NoteBubbleUI: Equatable {
