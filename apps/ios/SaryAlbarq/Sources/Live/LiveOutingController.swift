@@ -190,7 +190,8 @@ final class LiveOutingController: ObservableObject {
         let nearby = session.meshOverlay
         return LivePresenterInput(
             view: nearby.view,
-            myFix: location.lastFix,
+            /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
+            myFix: session.smoothedFix(location.lastFix),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
@@ -402,7 +403,7 @@ final class LiveOutingController: ObservableObject {
     private func updateBackTrack() {
         guard var bt = backTrack else { return }
         /* Only a recent fix: an old one would point the wrong way. */
-        guard let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
+        guard let f = session.smoothedFix(location.lastFix), Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
             backTrackStatus = nil
             return
         }

@@ -169,6 +169,8 @@ final class OutingSession: ObservableObject, Identifiable {
             self.objectWillChange.send()
         }
         matcher?.accuracyAt = { [weak self] t in self?.recentRaw.last(where: { abs($0.t - t) < 1500 })?.acc }
+        /* Offline-first: whatever was recorded but not matched yet (offline, app closed) is caught up now. */
+        if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
@@ -462,6 +464,17 @@ final class OutingSession: ObservableObject, Identifiable {
         } else if !trailRecordingAllowed {
             location.stopTrail()
         }
+    }
+
+    /// My fix as the map draws «أنت»: the Kalman-smoothed position (and speed) for this very fix
+    /// when «مساري» is recording, else the fix itself. Display only — never what is sent.
+    func smoothedFix(_ f: DeviceFix?) -> DeviceFix? {
+        guard var f, let k = trail.filter, k.started, abs(k.tMs - f.atMs) < 1500 else { return f }
+        let p = k.position
+        f.lat = p.lat
+        f.lng = p.lng
+        if f.speed == nil { f.speed = k.speedMps }
+        return f
     }
 
     /// What the map draws and «طريق العودة» follows: road-matched where confident, smoothed elsewhere.

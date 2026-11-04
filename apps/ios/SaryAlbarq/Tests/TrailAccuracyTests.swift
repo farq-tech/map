@@ -492,3 +492,87 @@ final class BackTrackHysteresisTests: XCTestCase {
         XCTAssertEqual(s.alongM, 800, accuracy: 3)
     }
 }
+
+/// «المركبة تخرج عن المسار وتجي فوق المبنى»: the car (mine and friends') on the street in town,
+/// at the true position off-road.
+final class CarOnStreetTests: XCTestCase {
+    /// The real route as Mapbox Streets would give it, cut into long lines, plus a parallel street 45 m east.
+    func roads(_ route: [LngLat]) -> [RoadSnap.RoadLine] {
+        let main = RoadSnap.RoadLine(key: "main", coords: route.map { [$0.lng, $0.lat] })
+        /* Offset perpendicular to the local direction: a real parallel street on every leg. */
+        let parallel = RoadSnap.RoadLine(key: "parallel", coords: route.indices.map { i in
+            let a = route[max(0, i - 1)], b = route[min(route.count - 1, i + 1)]
+            let d = TrailGeo.xy(b, ref: a)
+            let len = max((d.x * d.x + d.y * d.y).squareRoot(), 0.001)
+            let q = TrailGeo.lngLat(45 * d.y / len, -45 * d.x / len, ref: route[i])
+            return [q.lng, q.lat]
+        })
+        return [main, parallel]
+    }
+
+    func testNoisyCityDriveIsDrawnOnTheStreetWithoutFlicker() throws {
+        let route = try RiyadhDrive.route()
+        let truth = RiyadhDrive.truth(route)
+        let raw = RiyadhDrive.fixes(truth, events: [.burst(40..<70, acc: 45), .burst(150..<190, acc: 80), .canyon(100, offsetM: 70), .canyon(260, offsetM: -60), .dropout(200..<225)])
+        let lines = roads(route)
+        for useKalman in [false, true] {
+            /* Friends: raw fixes from the server. «أنت»: the Kalman position. Both with speed + course. */
+            let m = RoadSnap.Matcher()
+            var k = TrailKalman()
+            var onStreet = 0, n = 0, switches = 0, lastKey: String?
+            for f in raw {
+                var p = f.position
+                if useKalman, case let .accepted(q, _, _, _) = k.step(f) { p = q }
+                let r = m.match(p, RoadSnap.nearby(lines, p), course: f.crs, speed: f.spd, accuracy: f.acc, atMs: f.t)
+                guard (f.spd ?? 0) >= RoadSnap.drivingMps else { continue }
+                n += 1
+                if r.key != nil, RiyadhDrive.offset(r.point, route) < 2 { onStreet += 1 }
+                if let key = r.key, key != lastKey { if lastKey != nil { switches += 1 }; lastKey = key }
+            }
+            let share = Double(onStreet) / Double(n)
+            XCTAssertGreaterThan(share, 0.97, "\(useKalman ? "me (Kalman)" : "friend (raw)"): on the driven street, not on the roofs (\(share))")
+            XCTAssertLessThanOrEqual(switches, 2, "no flicker to the parallel street (\(useKalman ? "me" : "friend"))")
+        }
+    }
+
+    func testBuild4DroppedLongStraightStreets() {
+        /* One straight 2 km street: two vertices only, 1 km from the car each way. */
+        let street = RoadSnap.RoadLine(key: "s", coords: [[46.64, 24.80], [46.66, 24.80]])
+        let p = LngLat(lng: 46.65, lat: 24.80 + 20 / 110_540)
+        XCTAssertEqual(RoadSnap.nearby([street], p).map(\.key), ["s"], "found by its segment, not only its vertices")
+    }
+
+    func testWideCanyonFixWhileDrivingSnapsButParkedOrOffRoadDoesNot() {
+        let street = RoadSnap.RoadLine(key: "s", coords: [[46.64, 24.80], [46.66, 24.80]])
+        func north(_ m: Double, _ lng: Double = 46.65) -> LngLat { LngLat(lng: lng, lat: 24.80 + m / 110_540) }
+        XCTAssertEqual(RoadSnap.searchRadius(accuracy: 70, speed: 12, course: 90), 100)
+        XCTAssertEqual(RoadSnap.searchRadius(accuracy: 70, speed: 0, course: nil), 60)
+        /* Driving east, a 70 m city fix 80 m north of the street: on the street. */
+        let a = RoadSnap.Matcher()
+        XCTAssertEqual(a.match(north(80), [street], course: 90, speed: 12, accuracy: 70, atMs: 0).key, "s")
+        /* Parked 40 s, 35 m from the street (a car park): where it is. */
+        let b = RoadSnap.Matcher()
+        for s in 0...40 { _ = b.match(north(35, 46.65 + Double(s) * 1e-7), [street], course: nil, speed: 0, accuracy: 20, atMs: Double(s) * 1000) }
+        XCTAssertNil(b.match(north(35, 46.651), [street], course: nil, speed: 0, accuracy: 20, atMs: 41_000).key)
+        /* Off-road beside the street (sand track 60 m north, good GPS): never pulled onto it, even by a poor fix. */
+        let c = RoadSnap.Matcher()
+        for s in 0..<5 { XCTAssertNil(c.match(north(60, 46.65 + Double(s) * 1e-4), [street], course: 90, speed: 8, accuracy: 5, atMs: Double(s) * 1000).key) }
+        XCTAssertTrue(c.offRoad)
+        XCTAssertNil(c.match(north(20, 46.6506), [street], course: 90, speed: 8, accuracy: 70, atMs: 6000).key, "clearly off-road: a noisy fix is not a road")
+        /* Back on the street with good fixes: snapped again. */
+        XCTAssertEqual(c.match(north(3, 46.6508), [street], course: 90, speed: 8, accuracy: 5, atMs: 7000).key, "s")
+    }
+
+    @MainActor
+    func testMyCarIsTheSmoothedPosition() {
+        var tr = Trail()
+        let f = TFix()
+        for i in 0..<20 { tr.add(f.fix(Double(i) * 12, t: Double(i))) }
+        let spike = f.fix(19 * 12 + 12, 80, t: 20, acc: 40)
+        tr.add(spike)
+        let k = tr.filter!
+        let truth = f.fix(20 * 12, t: 20)
+        XCTAssertLessThan(Vehicle.distanceMeters(k.position, LngLat(lng: truth.lng, lat: truth.lat)), 25, "the drawn car stays near the street…")
+        XCTAssertGreaterThan(Vehicle.distanceMeters(k.position, LngLat(lng: spike.lng, lat: spike.lat)), 50, "…not on the roof the 40 m fix points at")
+    }
+}

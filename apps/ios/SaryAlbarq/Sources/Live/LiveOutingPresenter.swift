@@ -300,14 +300,14 @@ enum LiveOutingPresenter {
                 let fr: Policy.Freshness = i.gpsState == .denied ? .lost : Policy.freshness(fixAgeMs: max(0, age), speedMps: f.speed, lastSeenAgeMs: 0)
                 out.append(MapMember(id: m.user_id, position: LngLat(lng: f.lng, lat: f.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                      presence: fr, heading: fr == .live ? Policy.trustedHeading(f.heading, speed: f.speed) : nil,
-                                     accuracyM: f.accuracy, atMs: f.atMs, note: note, isMe: true))
+                                     accuracyM: f.accuracy, speedMps: f.speed, atMs: f.atMs, note: note, isMe: true))
                 continue
             }
             guard let p = v.positions[m.user_id], let fr = v.freshness(of: m.user_id, deviceNow: i.now) else { continue }
             let at = (ISODate.parse(p.recorded_at)?.timeIntervalSince1970 ?? 0) * 1000
             out.append(MapMember(id: m.user_id, position: LngLat(lng: p.lng, lat: p.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                  presence: fr, heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil,
-                                 accuracyM: p.accuracy, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
+                                 accuracyM: p.accuracy, speedMps: p.speed, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
         }
         return out
     }
