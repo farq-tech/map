@@ -84,6 +84,8 @@ final class OutingSession: ObservableObject, Identifiable {
     private var meshSink: AnyCancellable?
     /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
     var stuckMarks: [StuckMark] = []
+    /// «سرعة المركبة» from the live screen's SpeedModel, for the Live Activity.
+    var speedSnapshot: () -> SpeedModel.Snapshot? = { nil }
     /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
     var onNearbyEvent: (MeshEvent) -> Void = { _ in }
     #if DEBUG
@@ -396,7 +398,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func handleFix(_ f: DeviceFix) {
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
         /* My own totals for «ملخص رحلتي»: on this device only, never points. */
-        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs) } }
+        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }

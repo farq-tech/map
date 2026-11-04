@@ -452,6 +452,7 @@ private struct SettingsTab: View {
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
             }
             TrailSettingsSection(controller: controller, card: controller.trailCard)
+            SpeedSettingsSection()
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {

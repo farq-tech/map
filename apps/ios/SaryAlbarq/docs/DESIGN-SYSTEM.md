@@ -98,6 +98,19 @@ maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 - Chrome frames are measured (window coordinates) and passed to the map as
   insets, so keep-group framing stays clear of the capsule, alert lane,
   controls and the sheet's real top edge.
+- «سرعة المركبة» (`SarySpeedometer`): my speed in whole km/h («كم/س») right
+  above «اضغط وتكلم» (an overlay on the PTT button, so it never shifts the dock),
+  on the other side from the control cluster; compact glass normally, larger and
+  opaque in drive mode, hidden with the full sheet. It reads «—» when there is no
+  trustworthy current speed (invalid / coarse fix, or older than ~5 s), never an
+  old number. A tap shows the trip's top and average moving speed for ~6 s; a red
+  outline when over the optional «نبّهني إذا تجاوزت» limit (sheet → الإعدادات →
+  السرعة; off by default; one soft haptic + one alert-lane line, rate-limited).
+  Friends' speed («٧٩ كم/س» / «واقف») appears on their row and card only while
+  their position is live; it is deliberately not on the map name chips (they
+  already carry name + age, and fold in drive mode). Logic in `Core/Speed.swift`
+  (unit-tested in `Tests/SpeedTests.swift`); the current value lives in
+  `Live/SpeedModel.swift` (`snapshot`) for a future Live Activity.
 - Place labels are Arabic: the Standard Satellite style is fetched once and
   its labels pointed at `name_ar` (`ArabicBasemap`).
 - Real screenshots: `docs/live-shots/`. DEBUG launch overrides:

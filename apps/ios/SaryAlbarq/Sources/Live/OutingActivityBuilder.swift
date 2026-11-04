@@ -18,7 +18,8 @@ enum OutingActivityBuilder {
     /// - Parameters:
     ///   - backMeters: along my trail to its start (back-track), when it exists.
     ///   - stuck: members who reported «غرّزت», newest first or in any order.
-    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = []) -> OutingActivityState? {
+    ///   - speed: my current speed (`SpeedModel.snapshot`); shown only while fresh.
+    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = [], speed: SpeedModel.Snapshot? = nil) -> OutingActivityState? {
         guard let v = i.view else { return nil }
         let parts = LiveOutingPresenter.participants(i)
         let live = parts.filter { $0.presence == .live }
@@ -43,8 +44,17 @@ enum OutingActivityBuilder {
             alert: alert(i, view: v, stuck: stuck),
             gpsOK: gpsOK,
             online: online,
-            updatedAt: i.now
+            updatedAt: i.now,
+            speedKmh: speedKmh(speed, gpsOK: gpsOK, now: i.now)
         )
+    }
+
+    /// A speed older than this is not «now» on the Lock Screen («—» instead).
+    static let speedMaxAgeS: TimeInterval = 15
+
+    static func speedKmh(_ s: SpeedModel.Snapshot?, gpsOK: Bool, now: Date) -> Int? {
+        guard gpsOK, let s, let k = s.kmh, s.atMs > 0, now.timeIntervalSince1970 - s.atMs / 1000 <= speedMaxAgeS else { return nil }
+        return k
     }
 
     /// SOS before «غرّزت»; a friend's before my own; newest first within each.
@@ -80,6 +90,7 @@ enum OutingActivityThrottle {
         let since = now.timeIntervalSince(lastAt)
         guard since >= minInterval else { return false }
         if new.farthestName != last.farthestName { return true }
+        if (new.speedKmh == nil) != (last.speedKmh == nil) || abs((new.speedKmh ?? 0) - (last.speedKmh ?? 0)) >= 5 { return true }
         if moved(new.farthestMeters, last.farthestMeters) || moved(new.backMeters, last.backMeters) { return true }
         return since >= refreshInterval
     }

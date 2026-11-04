@@ -15,6 +15,8 @@ final class OutingActivityCoordinator {
     lazy var backMeters: (OutingSession, DeviceFix) -> Double? = { [unowned self] s, f in self.backDistance(s, f) }
     /// «غرّزت» marks, once the stuck state reaches the session.
     var stuck: (OutingSession) -> [StuckMark] = { _ in [] }
+    /// «سرعة المركبة»: the live screen's `SpeedModel.snapshot`, when it is open.
+    var speed: (OutingSession) -> SpeedModel.Snapshot? = { _ in nil }
 
     private let location: LocationSharer
     private weak var session: OutingSession?
@@ -77,7 +79,7 @@ final class OutingActivityCoordinator {
                                        link: s.link, closed: s.closedReason, wantsToShare: s.wantsToShare, isSharingNow: s.isSharingNow,
                                        sosSending: s.sosSending, now: now)
         let back = location.lastFix.flatMap { backMeters(s, $0) }
-        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s)) else { return }
+        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s), speed: speed(s)) else { return }
 
         guard let a = activity else {
             start(s, state)

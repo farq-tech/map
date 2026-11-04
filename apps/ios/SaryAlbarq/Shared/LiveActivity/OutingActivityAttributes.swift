@@ -43,6 +43,8 @@ struct OutingActivityState: Codable, Hashable {
     var online: Bool
     /// When the app decided this picture. The widget ages it from here.
     var updatedAt: Date
+    /// My current speed in whole km/h («سرعة المركبة»); nil shows «—» (no fresh fix / speed).
+    var speedKmh: Int? = nil
 }
 
 extension OutingActivityState {

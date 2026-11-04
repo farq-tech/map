@@ -60,7 +60,11 @@ struct OutingLiveActivityWidget: Widget {
                     IslandMetric(icon: "dot.radiowaves.left.and.right", value: ActivityFormat.number(context.state.liveCount), caption: "مباشر", tint: d.isStale ? p.stale : p.live, dim: d.isStale)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.attributes.outingName).font(.tajawal(15)).foregroundStyle(p.text).lineLimit(1)
+                    VStack(spacing: 2) {
+                        Text(context.attributes.outingName).font(.tajawal(15)).foregroundStyle(p.text).lineLimit(1)
+                        SpeedPill(text: d.speedText, palette: p, dim: d.isStale || d.speedText == "—", size: 14)
+                    }
+                    .environment(\.layoutDirection, .rightToLeft)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
@@ -113,6 +117,7 @@ private struct LockScreenView: View {
             HStack(spacing: 8) {
                 Text(name).font(.tajawal(17, "ExtraBold")).foregroundStyle(p.text).lineLimit(1)
                 Spacer(minLength: 6)
+                SpeedPill(text: d.speedText, palette: p, dim: d.isStale || d.speedText == "—", size: 15)
                 StaleTag(d: d, palette: p)
             }
             if let b = d.banner { BannerView(banner: b, palette: p, compact: false) }
@@ -203,5 +208,24 @@ private struct IslandMetric: View {
             Text(caption).font(.tajawal(12, "Medium")).foregroundStyle(Ink.island.secondary)
         }
         .padding(.horizontal, 4)
+    }
+}
+
+/// «سرعة المركبة»: my current speed, «—» when there is no fresh one.
+private struct SpeedPill: View {
+    let text: String
+    let palette: Ink.Palette
+    let dim: Bool
+    let size: CGFloat
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "gauge.with.dots.needle.67percent").font(.system(size: size - 2, weight: .bold)).foregroundStyle(dim ? palette.stale : palette.accent)
+            Text(text).font(.tajawal(size)).foregroundStyle(dim ? palette.stale : palette.text).lineLimit(1)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Capsule().fill(palette.text.opacity(0.08)))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("السرعة \(text)"))
     }
 }

@@ -101,6 +101,9 @@ struct ParticipantUI: Equatable, Identifiable {
     /// Their position came phone to phone («عبر الأجهزة القريبة»), not from the server.
     /// `presence` still carries its real age: a relayed old fix is stale like any other.
     var viaNearby: Bool = false
+    /// Their speed in km/h, only from a fresh (live) position; nil hides it
+    /// (stale: just «آخر موقع قبل …», never an old speed).
+    var speedKmh: Double? = nil
 
     /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {

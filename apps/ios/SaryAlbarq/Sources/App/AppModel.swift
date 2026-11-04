@@ -54,6 +54,7 @@ final class AppModel: ObservableObject {
         push = PushRegistrar(backend: api)
         activity = OutingActivityCoordinator(location: location)
         activity.stuck = { $0.stuckMarks }
+        activity.speed = { $0.speedSnapshot() }
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
@@ -61,7 +62,7 @@ final class AppModel: ObservableObject {
             TripLogStore.forgetAll()
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys {
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys + SpeedPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
         }

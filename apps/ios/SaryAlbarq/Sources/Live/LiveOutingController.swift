@@ -101,6 +101,9 @@ final class LiveOutingController: ObservableObject {
     }
     /// Friends' last ~30 minutes, from the positions this phone already receives. Memory only.
     private(set) var friendTrails = FriendTrails()
+    /// «سرعة المركبة»: my smoothed speed (see `LiveOutingController+Speed.swift`).
+    let speed = SpeedModel()
+    var speedState = LiveSpeedState()
 
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
@@ -158,6 +161,7 @@ final class LiveOutingController: ObservableObject {
         attachSafety()
         /* The point card's «أضف نقطة» (the single map long-press) opens the shared-waypoint
            composer; after the card's sheet has gone, so the two sheets never race. */
+        session.speedSnapshot = { [weak self] in self?.speed.snapshot }
         /* «الطقس هنا» on the point card. */
         PointActions.weatherHook = { [weak self] p in
             guard let self else { return }
@@ -252,6 +256,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func sessionChanged() {
+        updateSpeed()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -281,6 +286,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func locationChanged() {
+        updateSpeed()
         updateBackTrack()
         updateAuto()
         checkConvoy()

@@ -142,6 +142,18 @@ final class OutingActivityTests: XCTestCase {
         XCTAssertFalse(d.isStale)
     }
 
+    func testSpeedShownOnlyWhileFresh() throws {
+        let fresh = SpeedModel.Snapshot(kmh: 42, atMs: (now.timeIntervalSince1970 - 3) * 1000)
+        let s = try XCTUnwrap(OutingActivityBuilder.state(input(view()), backMeters: nil, speed: fresh))
+        XCTAssertEqual(s.speedKmh, 42)
+        XCTAssertEqual(OutingActivityDisplay.make(s, now: now).speedText, "٤٢ كم/س")
+        let old = SpeedModel.Snapshot(kmh: 42, atMs: (now.timeIntervalSince1970 - 60) * 1000)
+        XCTAssertNil(try XCTUnwrap(OutingActivityBuilder.state(input(view()), backMeters: nil, speed: old)).speedKmh, "an old speed is not «now»")
+        XCTAssertNil(try XCTUnwrap(OutingActivityBuilder.state(input(view(), fixAgeS: 150), backMeters: nil, speed: fresh)).speedKmh, "no GPS, no speed")
+        XCTAssertEqual(OutingActivityDisplay.make(state { $0.speedKmh = nil }, now: now).speedText, "—")
+        XCTAssertEqual(OutingActivityDisplay.make(state { $0.speedKmh = 42 }, now: now.addingTimeInterval(200)).speedText, "—", "stale picture: «—»")
+    }
+
     func testNoBackTrackShowsDash() {
         let d = OutingActivityDisplay.make(state { $0.backMeters = nil; $0.farthestName = nil }, now: now)
         XCTAssertNil(d.backText)

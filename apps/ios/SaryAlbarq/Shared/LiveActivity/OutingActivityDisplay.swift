@@ -73,6 +73,8 @@ struct OutingActivityDisplay: Equatable {
     var showAlertDot: Bool
     /// The minimal island: the SOS mark wins, then the distance back.
     var minimalText: String
+    /// "٤٢ كم/س", or "—" without a fresh speed or once the picture is old.
+    var speedText: String = "—"
 
     static func make(_ s: OutingActivityState, now: Date, systemStale: Bool = false) -> OutingActivityDisplay {
         let stale = systemStale || now.timeIntervalSince(s.updatedAt) > OutingActivityState.staleAfter
@@ -88,7 +90,8 @@ struct OutingActivityDisplay: Equatable {
             backText: back,
             backShort: back ?? "—",
             showAlertDot: s.alert != nil,
-            minimalText: s.alert != nil ? "!" : (back ?? "—")
+            minimalText: s.alert != nil ? "!" : (back ?? "—"),
+            speedText: stale ? "—" : (s.speedKmh.map { "\(ActivityFormat.number(max(0, $0))) كم/س" } ?? "—")
         )
     }
 
