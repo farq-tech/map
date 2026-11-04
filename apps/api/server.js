@@ -16,6 +16,7 @@ const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
 const createOutdoorRouter = require('./routes/outdoor');
 const { setupOutings } = require('./lib/outings');
+const { routingConfigFromEnv } = require('./lib/outings/routing');
 const { warmCityCache } = require('./lib/city-opportunities');
 const { getCatalog, catalogJson } = require('./lib/comparison-catalog');
 
@@ -124,6 +125,7 @@ app.get('/api/health', (_req, res) => {
       outings: Boolean(outings.service),
       outings_push: Boolean(outings.service && outings.push.enabled),
       outings_apns: Boolean(outings.service && outings.apns.enabled),
+      outings_routing: Boolean(outings.service && routingConfigFromEnv().enabled),
     },
     outings: outings.hub.stats(),
   });
