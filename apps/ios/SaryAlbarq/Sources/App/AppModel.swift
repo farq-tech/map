@@ -37,16 +37,20 @@ final class AppModel: ObservableObject {
     let api: OutingsAPI
     let location: LocationSharer
     let push: PushRegistrar
+    /// The outing's Live Activity (Lock Screen + Dynamic Island), follows `session`.
+    let activity: OutingActivityCoordinator
     let isDemo: Bool
     private let monitor = NWPathMonitor()
     private var observers: [NSObjectProtocol] = []
     private var pushSink: AnyCancellable?
+    private var sessionSink: AnyCancellable?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let api = OutingsAPI(tokenProvider: { IdentityStore.load()?.token })
         self.api = api
         location = LocationSharer()
         push = PushRegistrar(backend: api)
+        activity = OutingActivityCoordinator(location: location)
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
@@ -75,6 +79,7 @@ final class AppModel: ObservableObject {
         monitor.start(queue: DispatchQueue(label: "sary.net"))
         /* Screens observe the model; the registrar's state is part of it. */
         pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        sessionSink = $session.sink { [activity] in activity.attach($0) }
         observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
             guard let id = n.object as? String else { return }
             Task { @MainActor in self?.open(id) }
@@ -83,6 +88,14 @@ final class AppModel: ObservableObject {
         if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
         #endif
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        activity.endOrphans()
+        #if DEBUG
+        if let i = arguments.firstIndex(of: "-SaryActivity"), i + 1 < arguments.count {
+            let name = arguments[i + 1]
+            /* ActivityKit starts one only from the foreground: wait for the scene. */
+            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); activity.debugStart(name) }
+        }
+        #endif
         Task {
             /* A short branded beat, never a wait: the list loads behind it. */
             try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
@@ -368,6 +381,8 @@ final class AppModel: ObservableObject {
     }
 
     func handle(url: URL) {
+        /* A tap on the Live Activity: back to that outing. */
+        if let id = OutingActivityState.outingId(from: url) { return open(id) }
         if let t = InviteLink.token(from: url) { pendingInvite = t }
     }
 
