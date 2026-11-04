@@ -154,9 +154,10 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
          FROM sary.push_subscriptions s
          JOIN sary.outing_members m ON m.user_id = s.user_id
          JOIN sary.outings o ON o.id = m.outing_id
-         WHERE m.outing_id = $1 AND m.status = 'active' AND o.status <> 'ended'
-           AND ($2::uuid IS NULL OR s.user_id <> $2::uuid)`,
-        [outingId, exceptUserId || null],
+         WHERE m.outing_id = $1 AND m.status = 'active' AND ($3::boolean OR o.status <> 'ended')
+           AND ($2::uuid IS NULL OR s.user_id <> $2::uuid)
+           AND ($4::uuid IS NULL OR s.user_id = $4::uuid)`,
+        [outingId, exceptUserId || null, payload.include_ended === true, payload.to_user || null],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {
@@ -178,30 +179,7 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
         at: new Date().toISOString(),
       });
       const opts = { ttl: payload.ttl ?? 900, urgency: payload.urgency || 'normal' };
-      const dead = [];
-      const used = [];
-      let i = 0;
-      async function worker() {
-        while (i < targets.length) {
-          const t = targets[i++];
-          try {
-            await out.send({ endpoint: t.endpoint, keys: { p256dh: t.p256dh, auth: t.auth } }, body, opts);
-            result.sent += 1;
-            used.push(t.id);
-          } catch (e) {
-            const code = e?.statusCode;
-            if (code === 404 || code === 410) {
-              dead.push(t.id);
-              result.removed += 1;
-            } else {
-              result.failed += 1;
-              /* Never log the endpoint: it is a capability URL. */
-              log('[outings-push] send failed', code || e?.code || e?.message);
-            }
-          }
-        }
-      }
-      await Promise.all(Array.from({ length: Math.min(SEND_CONCURRENCY, targets.length) }, worker));
+      const { dead, used } = await deliver(targets, body, opts, result);
       if (dead.length) await q(`DELETE FROM sary.push_subscriptions WHERE id = ANY($1::uuid[])`, [dead]);
       if (used.length) await q(`UPDATE sary.push_subscriptions SET last_used_at = now() WHERE id = ANY($1::uuid[])`, [used]);
     } catch (e) {
@@ -213,7 +191,69 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
     return result;
   }
 
-  return { enabled, publicConfig, subscribe, unsubscribe, count, notifyMembers, stats };
+  /** Send one encrypted body to these rows ({id, endpoint, p256dh, auth}); counts into `result`. */
+  async function deliver(targets, body, opts, result) {
+    const dead = [];
+    const used = [];
+    let i = 0;
+    async function worker() {
+      while (i < targets.length) {
+        const t = targets[i++];
+        try {
+          await out.send({ endpoint: t.endpoint, keys: { p256dh: t.p256dh, auth: t.auth } }, body, opts);
+          result.sent += 1;
+          used.push(t.id);
+        } catch (e) {
+          const code = e?.statusCode;
+          if (code === 404 || code === 410) {
+            dead.push(t.id);
+            result.removed += 1;
+          } else {
+            result.failed += 1;
+            /* Never log the endpoint: it is a capability URL. */
+            log('[outings-push] send failed', code || e?.code || e?.message);
+          }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(SEND_CONCURRENCY, targets.length) }, worker));
+    return { dead, used };
+  }
+
+  /**
+   * A return-timer watcher (someone outside the outing who holds the watch
+   * link) → web push to the subscriptions registered for that one timer. The
+   * body carries no outing id and no names beyond the title/body text; tapping
+   * it opens /watch. Never throws.
+   */
+  async function notifyWatchers(timerId, payload = {}) {
+    const result = { sent: 0, removed: 0, failed: 0, skipped: 0 };
+    if (!enabled || !timerId) return result;
+    try {
+      const targets = await q(`SELECT id, endpoint, p256dh, auth FROM sary.watch_subscriptions WHERE timer_id = $1`, [timerId]);
+      if (!targets.length) return result;
+      const body = JSON.stringify({
+        v: 1,
+        type: payload.type || 'event',
+        title: trimText(payload.title, 80),
+        body: trimText(payload.body, 240),
+        tag: payload.tag || `sary-watch-${timerId}`,
+        url: '/watch',
+        at: new Date().toISOString(),
+      });
+      const opts = { ttl: payload.ttl ?? 6 * 3600, urgency: payload.urgency || 'high' };
+      const { dead } = await deliver(targets, body, opts, result);
+      if (dead.length) await q(`DELETE FROM sary.watch_subscriptions WHERE id = ANY($1::uuid[])`, [dead]);
+    } catch (e) {
+      log('[outings-push] watchers', e?.code || e?.message);
+    }
+    stats.sent += result.sent;
+    stats.removed += result.removed;
+    stats.failed += result.failed;
+    return result;
+  }
+
+  return { enabled, publicConfig, subscribe, unsubscribe, count, notifyMembers, notifyWatchers, stats };
 }
 
 /** Outing events → push payloads. Returns null for events that are not pushed. */
@@ -248,4 +288,59 @@ function pushPayloadFor(event, { senderName, outingName } = {}) {
   return null;
 }
 
-module.exports = { createPushNotifier, createWebPushSender, pushConfigFromEnv, parseSubscription, pushPayloadFor, PUSH_HOSTS, MAX_PER_USER };
+/**
+ * Push payloads for the outing features. `include_ended` reaches members of an
+ * outing that has already ended (a return timer outlives the outing);
+ * `to_user` narrows to one person; `always` also reaches members on screen.
+ */
+const STUCK_REPLY_TEXT = {
+  coming: (who) => `${who} جاي`,
+  have_rope: (who) => `${who} عنده حبل سحب`,
+  cant: (who) => `${who} ما يقدر يجي`,
+};
+
+function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId } = {}) {
+  const who = senderName || 'أحد أعضاء الطلعة';
+  const where = outingName ? ` · ${outingName}` : '';
+  switch (kind) {
+    case 'return_timer_overdue':
+      return {
+        type: 'return_timer_overdue',
+        title: `⏰ تأخرتوا عن وقت الرجوع${where}`,
+        body: 'تأخرتوا عن وقت الرجوع — اضغط وصلت أو مدّد',
+        tag: `sary-return-${outingId || 'x'}`,
+        ttl: 6 * 3600,
+        urgency: 'high',
+        always: true,
+        include_ended: true,
+      };
+    case 'member_stuck':
+      return {
+        type: 'member_stuck',
+        title: `🚙 ${who} غرّز${where}`,
+        body: trimText(note || '', 200) || 'افتح الطلعة لترى مكانه وتردّ عليه.',
+        tag: `sary-stuck-${userId || 'x'}`,
+        ttl: 3 * 3600,
+        urgency: 'high',
+      };
+    case 'stuck_reply': {
+      const line = (STUCK_REPLY_TEXT[replyKind] || STUCK_REPLY_TEXT.coming)(who);
+      return { type: 'stuck_reply', title: `${line}${where}`, body: line, tag: `sary-stuck-reply-${userId || 'x'}`, ttl: 3 * 3600, urgency: 'high', always: true, to_user: userId };
+    }
+    case 'waypoint_added':
+      return { type: 'waypoint_added', title: `${who}${where}`, body: `📍 أضاف نقطة: ${trimText(title || '', 60)}`, tag: `sary-waypoint-${outingId || 'x'}`, ttl: 3600, urgency: 'normal' };
+    default:
+      return null;
+  }
+}
+
+/** Pushes to the people holding a watch link. Web push only (the watcher has no app). */
+function watcherPayload(kind, { ownerName } = {}) {
+  const who = ownerName || 'صاحب الطلعة';
+  if (kind === 'overdue') return { type: 'return_timer_overdue', title: `⏰ ${who} تأخروا عن وقت الرجوع`, body: 'تأخروا عن وقت الرجوع. افتح الرابط لترى آخر موقع معروف.', urgency: 'high', ttl: 12 * 3600 };
+  if (kind === 'extended') return { type: 'return_timer_extended', title: `${who} مدّدوا وقت الرجوع`, body: 'مدّدوا وقت الرجوع. افتح الرابط لترى الوقت الجديد.', urgency: 'normal', ttl: 12 * 3600 };
+  if (kind === 'arrived') return { type: 'return_timer_arrived', title: `✅ ${who} وصلوا بالسلامة`, body: 'وصلوا بالسلامة', urgency: 'normal', ttl: 12 * 3600 };
+  return null;
+}
+
+module.exports = { featurePayload, watcherPayload, createPushNotifier, createWebPushSender, pushConfigFromEnv, parseSubscription, pushPayloadFor, PUSH_HOSTS, MAX_PER_USER };

@@ -43,6 +43,19 @@
 	],
 	"headers": [
 		{
+			"source": "/watch",
+			"headers": [
+				{
+					"key": "X-Robots-Tag",
+					"value": "noindex, nofollow"
+				},
+				{
+					"key": "Referrer-Policy",
+					"value": "no-referrer"
+				}
+			]
+		},
+		{
 			"source": "/sw.js",
 			"headers": [
 				{

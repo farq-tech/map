@@ -20,6 +20,7 @@ const OutingsHome = lazy(() => import("./components/outings/OutingsHome"));
 const OutingJoin = lazy(() => import("./components/outings/OutingJoin"));
 const OutingLive = lazy(() => import("./components/outings/OutingLive"));
 const PrivacyPolicy = lazy(() => import("./components/outings/PrivacyPolicy"));
+const WatchPage = lazy(() => import("./components/outings/WatchPage"));
 
 function RootLayout() {
 	return (
@@ -128,6 +129,17 @@ const privacyRoute = createRoute({
 	),
 });
 
+/* «مؤقت الرجوع» — public watch link; the capability token rides in the fragment (/watch#…). */
+const watchRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/watch",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<WatchPage />
+		</Suspense>
+	),
+});
+
 const outingLiveRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/outings/$id",
@@ -185,6 +197,7 @@ const routeTree = rootRoute.addChildren([
 	outingJoinRoute,
 	outingLiveRoute,
 	privacyRoute,
+	watchRoute,
 ]);
 
 const router = createRouter({ routeTree });

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Every outings migration (001–008) applies in order on an empty database and
+ * Every outings migration (001–009) applies in order on an empty database and
  * on one in today's production state (001–002 already applied, with data).
  *
  *   SARY_TEST_DATABASE_URL=postgres://… node --test apps/api/lib/outings-migrations.test.js
@@ -31,6 +31,7 @@ const ALL = [
   '006_sary_push_subscriptions.sql',
   '007_sary_safety.sql',
   '008_sary_apns_tokens.sql',
+  '009_sary_outing_features.sql',
 ];
 
 async function isolatedDb(url) {
@@ -44,11 +45,11 @@ async function isolatedDb(url) {
   return u.toString();
 }
 
-test('the migrations folder holds exactly 001–008', () => {
+test('the migrations folder holds exactly 001–009', () => {
   assert.deepEqual(fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort(), ALL);
 });
 
-test('001–008 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
+test('001–009 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
   const pool = createPool(await isolatedDb(URL_));
   t.after(() => pool.end());
 
@@ -69,7 +70,7 @@ test('001–008 apply in order on an empty database, then on a 001–002 (produc
   const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status) VALUES ('طلعة', $1, 'active') RETURNING id`, [u.id])).rows;
   await pool.query(`INSERT INTO sary.outing_members (outing_id, user_id, role) VALUES ($1, $2, 'owner')`, [o.id, u.id]);
 
-  assert.deepEqual(await migrate(pool), ALL.slice(2), 'only 003–008 are new');
+  assert.deepEqual(await migrate(pool), ALL.slice(2), 'only 003–009 are new');
   assert.deepEqual((await pool.query('SELECT name FROM sary.schema_migrations ORDER BY name')).rows.map((r) => r.name), ALL);
 
   /* Existing rows survive and pick up the new columns' defaults. */
@@ -83,7 +84,7 @@ test('001–008 apply in order on an empty database, then on a 001–002 (produc
   }
 });
 
-test('008 on a database at the current level (001–007 applied, with data): only 008 is new, RLS on, rules hold', { skip, timeout: 60_000 }, async (t) => {
+test('008 on a database at the current level (001–007 applied, with data): only 008 (and 009) are new, RLS on, rules hold', { skip, timeout: 60_000 }, async (t) => {
   const pool = createPool(await isolatedDb(URL_));
   t.after(() => pool.end());
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
@@ -96,7 +97,7 @@ test('008 on a database at the current level (001–007 applied, with data): onl
   const [u] = (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ('سعد', $1) RETURNING id`, [crypto.randomBytes(32)])).rows;
   await pool.query(`INSERT INTO sary.push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, 'https://fcm.googleapis.com/fcm/send/x', $2, $3)`, [u.id, 'p'.repeat(87), 'a'.repeat(22)]);
 
-  assert.deepEqual(await migrate(pool), ['008_sary_apns_tokens.sql']);
+  assert.deepEqual(await migrate(pool), ['008_sary_apns_tokens.sql', '009_sary_outing_features.sql']);
   assert.deepEqual(await migrate(pool), [], 'idempotent');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.push_subscriptions')).rows[0].n, 1, 'web push rows untouched');
 
@@ -116,4 +117,54 @@ test('008 on a database at the current level (001–007 applied, with data): onl
   assert.ok(row.created_at && row.updated_at);
   await pool.query('DELETE FROM sary.users WHERE id = $1', [u.id]);
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.apns_tokens')).rows[0].n, 0, 'cascades with the identity');
+});
+
+test('009 on a database at 008 (with data): only 009 is new, existing rows keep working, RLS on, rules hold', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(await isolatedDb(URL_));
+  t.after(() => pool.end());
+  await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
+  await pool.query('CREATE SCHEMA sary');
+  await pool.query(`CREATE TABLE sary.schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const f of ALL.slice(0, 8)) {
+    await pool.query(fs.readFileSync(path.join(DIR, f), 'utf8'));
+    await pool.query('INSERT INTO sary.schema_migrations (name) VALUES ($1)', [f]);
+  }
+  const [u] = (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ('سعد', $1) RETURNING id`, [crypto.randomBytes(32)])).rows;
+  const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status, rally_lat, rally_lng) VALUES ('طلعة', $1, 'active', 24.7, 46.6) RETURNING id`, [u.id])).rows;
+  await pool.query(`INSERT INTO sary.outing_members (outing_id, user_id, role) VALUES ($1, $2, 'owner')`, [o.id, u.id]);
+
+  assert.deepEqual(await migrate(pool), ['009_sary_outing_features.sql']);
+  assert.deepEqual(await migrate(pool), [], 'idempotent');
+  /* Re-running the file itself is harmless too (IF NOT EXISTS everywhere). */
+  await pool.query(fs.readFileSync(path.join(DIR, '009_sary_outing_features.sql'), 'utf8'));
+
+  const row = (await pool.query('SELECT name, rally_lat, convoy_lead_user_id, convoy_max_gap_m, plan_route, plan_notes, plan_destination FROM sary.outings WHERE id = $1', [o.id])).rows[0];
+  assert.deepEqual(row, { name: 'طلعة', rally_lat: 24.7, convoy_lead_user_id: null, convoy_max_gap_m: 1000, plan_route: null, plan_notes: null, plan_destination: null });
+
+  for (const table of ['return_timers', 'watch_tokens', 'watch_subscriptions', 'outing_waypoints', 'outing_checklist']) {
+    const { rows: [rls] } = await pool.query(`SELECT relrowsecurity FROM pg_class WHERE oid = ('sary.' || $1)::regclass`, [table]);
+    assert.equal(rls.relrowsecurity, true, `${table} RLS on`);
+    const { rows: pol } = await pool.query(`SELECT 1 FROM pg_policies WHERE schemaname = 'sary' AND tablename = $1`, [table]);
+    assert.equal(pol.length, 0, `${table}: no policies`);
+  }
+
+  const due = new Date(Date.now() + 3600_000);
+  const [tm] = (await pool.query(`INSERT INTO sary.return_timers (outing_id, user_id, due_at, contact_name) VALUES ($1, $2, $3, 'أمي') RETURNING id`, [o.id, u.id, due])).rows;
+  /* One live timer per person per outing. */
+  await assert.rejects(pool.query(`INSERT INTO sary.return_timers (outing_id, user_id, due_at, contact_name) VALUES ($1, $2, $3, 'أبوي')`, [o.id, u.id, due]));
+  /* An armed timer can never hold a position snapshot. */
+  await assert.rejects(pool.query(`UPDATE sary.return_timers SET last_known = '[]'::jsonb WHERE id = $1`, [tm.id]));
+  await assert.rejects(pool.query(`INSERT INTO sary.watch_tokens (token_hash, timer_id) VALUES ($1, $2)`, [crypto.randomBytes(16), tm.id]), 'digest is 32 bytes');
+  await pool.query(`INSERT INTO sary.watch_tokens (token_hash, timer_id) VALUES ($1, $2)`, [crypto.randomBytes(32), tm.id]);
+  await assert.rejects(pool.query(`UPDATE sary.outings SET convoy_max_gap_m = 100 WHERE id = $1`, [o.id]));
+  await assert.rejects(pool.query(`INSERT INTO sary.outing_waypoints (outing_id, user_id, kind, title, lat, lng) VALUES ($1, $2, 'volcano', 'x', 1, 1)`, [o.id, u.id]));
+  await assert.rejects(pool.query(`INSERT INTO sary.outing_waypoints (outing_id, user_id, kind, title, lat, lng, photo) VALUES ($1, $2, 'camp', 'x', 1, 1, 'data:image/png;base64,AAAA')`, [o.id, u.id]));
+  await pool.query(`INSERT INTO sary.outing_waypoints (outing_id, user_id, kind, title, lat, lng) VALUES ($1, $2, 'camp', 'المخيم', 24.1, 46.1)`, [o.id, u.id]);
+  await pool.query(`INSERT INTO sary.outing_checklist (outing_id, title, created_by, assignee_user_id) VALUES ($1, 'حطب', $2, $2)`, [o.id, u.id]);
+
+  /* Deleting the outing takes its features; deleting the identity takes its timers + waypoints. */
+  await pool.query(`DELETE FROM sary.outings WHERE id = $1`, [o.id]);
+  for (const table of ['return_timers', 'watch_tokens', 'outing_waypoints', 'outing_checklist']) {
+    assert.equal((await pool.query(`SELECT count(*)::int AS n FROM sary.${table}`)).rows[0].n, 0, `${table} cascades with the outing`);
+  }
 });

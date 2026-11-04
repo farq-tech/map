@@ -18,6 +18,7 @@ const { OutingError } = require('../lib/outings/service');
 const { createRateLimiter } = require('../lib/outings/rate-limit');
 const { battery } = require('../lib/outings/validate');
 const { CLIP_MAX_BYTES } = require('../lib/outings/clips');
+const { parseSubscription } = require('../lib/outings/push');
 
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -26,7 +27,11 @@ function clientKey(req) {
 
 function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   const router = express.Router();
-  router.use(express.json({ limit: '48kb' }));
+  /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
+  const smallJson = express.json({ limit: '48kb' });
+  const bigJson = express.json({ limit: '400kb' });
+  const BIG_BODY = /^\/[^/]+\/(waypoints|plan)$/;
+  router.use((req, res, next) => ((req.method === 'POST' || req.method === 'PUT') && BIG_BODY.test(req.path) ? bigJson : smallJson)(req, res, next));
   router.use((_req, res, next) => {
     /* Positions and member lists are personal: never cache them anywhere. */
     res.set('Cache-Control', 'no-store');
@@ -50,6 +55,11 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   /* Push-to-talk: a few clips a minute is a conversation; more is a flood. */
   const clipLimit = createRateLimiter({ limit: limits.clipsPer5Min ?? 20, windowMs: 5 * 60_000 });
   const clipFetchLimit = createRateLimiter({ limit: limits.clipFetchesPerMin ?? 120, windowMs: 60_000 });
+  /* Return-timer watch link: public, so per address. A watcher polls every 30 s. */
+  const watchLimit = createRateLimiter({ limit: limits.watchPer10Min ?? 60, windowMs: 10 * 60_000 });
+  const watchSubLimit = createRateLimiter({ limit: limits.watchSubscribePer10Min ?? 10, windowMs: 10 * 60_000 });
+  const timerLimit = createRateLimiter({ limit: limits.timerPer10Min ?? 20, windowMs: 10 * 60_000 });
+  const waypointLimit = createRateLimiter({ limit: limits.waypointsPer10Min ?? 30, windowMs: 10 * 60_000 });
   /* Raw audio bytes, capped. Only this route reads a body that is not JSON. */
   const rawAudio = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: CLIP_MAX_BYTES });
 
@@ -136,6 +146,19 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
   router.delete('/push/apns', auth, asyncHandler(async (req, res) => {
     if (!apns) return res.json({ ok: true, removed: 0 });
     res.json({ ok: true, ...(await apns.unregister(req.user, req.body?.token)) });
+  }));
+
+  /* «مؤقت الرجوع» watch link — no identity: the capability token rides in the body, never a URL.
+   * Registered before /:id/* so /watch/status is not read as an outing id. */
+  router.post('/watch/status', asyncHandler(async (req, res) => {
+    if (!watchLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.watchStatus(req.body?.token)) });
+  }));
+
+  router.post('/watch/subscribe', asyncHandler(async (req, res) => {
+    if (!watchSubLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await service.watchSubscribe(req.body?.token, req.body?.subscription, (raw) => parseSubscription(raw));
+    res.status(201).json({ ok: true, ...r });
   }));
 
   router.post('/invites/preview', asyncHandler(async (req, res) => {
@@ -263,6 +286,86 @@ function createOutingsRouter({ service, hub, push, apns, limits = {} }) {
 
   router.delete('/:id/summary', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.withdrawSummary(req.user, req.params.id)) });
+  }));
+
+  /* ---- «مؤقت الرجوع»: my return timer ---- */
+  router.get('/:id/return-timer', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.getReturnTimer(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/return-timer', auth, asyncHandler(async (req, res) => {
+    if (!timerLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.armReturnTimer(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.post('/:id/return-timer/arrived', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.arrivedReturnTimer(req.user, req.params.id)) });
+  }));
+
+  router.delete('/:id/return-timer', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.cancelReturnTimer(req.user, req.params.id)) });
+  }));
+
+  /* ---- «غرّزت» ---- */
+  router.post('/:id/stuck', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.raiseStuck(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.delete('/:id/stuck', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.clearStuck(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/stuck/:userId/reply', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.replyStuck(req.user, req.params.id, req.params.userId, req.body || {})) });
+  }));
+
+  /* ---- shared waypoints ---- */
+  router.get('/:id/waypoints', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.listWaypoints(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/waypoints', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id) || !waypointLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.addWaypoint(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.delete('/:id/waypoints/:wid', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.removeWaypoint(req.user, req.params.id, req.params.wid)) });
+  }));
+
+  /* ---- convoy (leader / co-leader) ---- */
+  router.patch('/:id/convoy', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.setConvoy(req.user, req.params.id, req.body || {})) });
+  }));
+
+  /* ---- trip plan (+ destination) and checklist ---- */
+  router.get('/:id/plan', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.getPlan(req.user, req.params.id)) });
+  }));
+
+  router.put('/:id/plan', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.putPlan(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.get('/:id/checklist', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.listChecklist(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/checklist', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.addChecklistItem(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.patch('/:id/checklist/:itemId', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.patchChecklistItem(req.user, req.params.id, req.params.itemId, req.body || {})) });
+  }));
+
+  router.delete('/:id/checklist/:itemId', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.removeChecklistItem(req.user, req.params.id, req.params.itemId)) });
   }));
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {

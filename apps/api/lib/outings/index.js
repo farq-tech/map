@@ -23,7 +23,7 @@ const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./a
  * Notes are pushed by service.setNote itself. */
 const PUSHED_EVENTS = new Set(['sos']);
 
-function setupOutings({ pool = getOutingsPool(), config, limits, push: pushOpts = {}, apns: apnsOpts = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
+function setupOutings({ pool = getOutingsPool(), config, limits, now, push: pushOpts = {}, apns: apnsOpts = {}, autoMigrate = process.env.SARY_AUTO_MIGRATE !== '0' } = {}) {
   const hub = createHub();
   /* Members looking at the outing right now already get the in-app alert. */
   const viewers = (outingId) => {
@@ -33,7 +33,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, push: pushOpts 
   const push = createPushNotifier({ pool, config: pushOpts.config || pushConfigFromEnv(), sender: pushOpts.sender, viewers, maxPerUser: pushOpts.maxPerUser });
   const apns = createApnsNotifier({ pool, config: apnsOpts.config || apnsConfigFromEnv(), sender: apnsOpts.sender, viewers, maxPerUser: apnsOpts.maxPerUser });
   const fanout = combineNotifiers(push, apns);
-  const service = pool ? createOutingsService({ pool, events: hub, push: fanout, config }) : null;
+  const service = pool ? createOutingsService({ pool, events: hub, push: fanout, webPush: push, config, ...(now ? { now } : {}) }) : null;
   if (service && fanout.enabled) {
     const emit = hub.emit;
     hub.emit = (outingId, event, opts) => {
@@ -43,6 +43,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, push: pushOpts 
   }
   const router = createOutingsRouter({ service, hub, push, apns, limits });
   let sweepTimer = null;
+  let timerSweep = null;
   let socket = null;
   const ready = service && autoMigrate
     ? migrate(pool, { log: console.log }).catch((e) => {
@@ -64,9 +65,15 @@ function setupOutings({ pool = getOutingsPool(), config, limits, push: pushOpts 
         service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message));
       }, 10 * 60_000);
       sweepTimer.unref?.();
+      /* Return timers: armed + past due → overdue, snapshot, pushes. Every minute. */
+      timerSweep = setInterval(() => {
+        service.sweepReturnTimers().catch((e) => console.warn('[outings] timer sweep:', e.code || e.message));
+      }, 60_000);
+      timerSweep.unref?.();
     },
     close() {
       clearInterval(sweepTimer);
+      clearInterval(timerSweep);
       socket?.close();
       apns.close();
     },
