@@ -5,6 +5,7 @@ import UserNotifications
 struct SaryAlbarqApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @State private var appearance = AppearanceSettings.launch()
     @Environment(\.scenePhase) private var phase
 
     var body: some Scene {
@@ -18,7 +19,7 @@ struct SaryAlbarqApp: App {
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { a in
                     if let u = a.webpageURL { model.handle(url: u) }
                 }
-                .tint(Theme.accent)
+                .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
         }
         .onChange(of: phase) { p in model.foreground(p == .active) }
@@ -38,6 +39,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// A note from a friend shows as a banner even while the map is open.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+}
+
+extension AppearanceSettings {
+    /// The app's one settings object. DEBUG builds accept screenshot overrides:
+    /// `-SaryScheme light|dark`, `-SaryDrive 1`, `-SaryNight 1`, `-SaryFallback 1`.
+    static func launch(_ args: [String] = ProcessInfo.processInfo.arguments) -> AppearanceSettings {
+        let s = AppearanceSettings()
+        #if DEBUG
+        func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
+        if let v = arg("-SaryScheme") { s.prefs.colorScheme = v == "dark" ? .dark : v == "light" ? .light : .system }
+        if arg("-SaryDrive") == "1" { s.prefs.driveMode = .on }
+        if arg("-SaryDrive") == "0" { s.prefs.driveMode = .off }
+        if arg("-SaryNight") == "1" { s.prefs.nightMode = .on }
+        if arg("-SaryNight") == "0" { s.prefs.nightMode = .off }
+        if arg("-SaryFallback") == "1" { s.forceGlassFallback = true }
+        #endif
+        return s
     }
 }
 

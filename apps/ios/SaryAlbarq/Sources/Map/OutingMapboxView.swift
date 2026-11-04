@@ -18,6 +18,10 @@ struct MapMember: Equatable, Identifiable {
     var atMs: Double
     var note: String?
     var isMe: Bool
+    /// Design-system name chip; nil hides the name (names «عند اللمس», or drive mode for others).
+    var chip: NameChipUI? = nil
+    /// Note bubble over the car; nil in drive mode or with no live note.
+    var bubble: NoteBubbleUI? = nil
 
     /// Worse than 60 m: drawn as an approximate spot, never as a car, never animated (as on the web).
     var approximate: Bool { (accuracyM ?? 0) > Policy.weakAccuracyM }
@@ -46,6 +50,10 @@ struct MapCameraRequest: Equatable {
         case group
         /// Frame me together with this member.
         case withMember(String)
+        /// Centre on my own car («موقعي»).
+        case me
+        /// Centre on a point (rally point, a station, an SOS fix).
+        case point(LngLat)
     }
 
     var kind: Kind
@@ -66,8 +74,17 @@ struct OutingMapboxView: UIViewRepresentable {
     var camera: MapCameraRequest? = nil
     /// Screen area covered by the host's chrome: top = bottom edge of the top bar, bottom = height of the bottom panel.
     var chrome: UIEdgeInsets = .zero
+    /// The resolved design-system theme (chips, rally flag, night light).
+    var theme: SaryTheme = .default
+    /// While true, a tap on empty map reports its coordinate («حدد نقطة تجمع»).
+    var picking = false
     var onMemberTap: (String) -> Void = { _ in }
     var onRallyTap: () -> Void = {}
+    var onMapTap: (LngLat) -> Void = { _ in }
+    /// Screen points of every car and the rally flag, after each camera move or glide step.
+    var onProjection: (MapProjection) -> Void = { _ in }
+    /// The person moved the map by hand (keep-group is off until «المجموعة»).
+    var onUserGesture: () -> Void = {}
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -75,11 +92,17 @@ struct OutingMapboxView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MapView {
         let camera = CameraOptions(center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), zoom: 12.15, bearing: 0, pitch: 0)
-        let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: Self.styleURI))
+        let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: ArabicBasemap.cachedJSON == nil ? Self.styleURI : nil))
+        if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
+        context.coordinator.theme = theme
         context.coordinator.attach(map)
+        ArabicBasemap.load { json in
+            /* Same style with place names in Arabic; English labels only if it cannot be fetched. */
+            if let json { map.mapboxMap.loadStyle(json) }
+        }
         return map
     }
 
@@ -87,6 +110,14 @@ struct OutingMapboxView: UIViewRepresentable {
         let c = context.coordinator
         c.onCarTap = onMemberTap
         c.onRallyTap = onRallyTap
+        c.onMapTap = onMapTap
+        c.onProjection = onProjection
+        c.onUserGesture = onUserGesture
+        c.picking = picking
+        if c.theme != theme {
+            c.theme = theme
+            c.themeChanged()
+        }
         c.setChrome(chrome)
         c.sync(members)
         c.setRally(rally)
@@ -98,6 +129,10 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.fitGroup()
             case let .withMember(id):
                 c.fitWith(id)
+            case .me:
+                c.centerOnMe()
+            case let .point(p):
+                c.center(p)
             }
         }
     }
@@ -125,8 +160,15 @@ struct OutingMapboxView: UIViewRepresentable {
         private var fittedIds = Set<String>()
         var onCarTap: (String) -> Void = { _ in }
         var onRallyTap: () -> Void = {}
+        var onMapTap: (LngLat) -> Void = { _ in }
+        var onProjection: (MapProjection) -> Void = { _ in }
+        var onUserGesture: () -> Void = {}
+        var picking = false
+        var theme: SaryTheme = .default
         var lastCamera = -1
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
+        private var lastProjectionAt: CFTimeInterval = 0
+        private var projectionPending = false
         /// "Keep everyone on screen": on by default, off once you move the map yourself, back on with the group button.
         var keepGroup = true
 
@@ -144,7 +186,7 @@ struct OutingMapboxView: UIViewRepresentable {
             var model = false
             var layersReady = false
             var annotation: ViewAnnotation?
-            var host: UIHostingController<CarChip>?
+            var host: UIHostingController<MapChip>?
             var box: ChipBox?
 
             init(_ item: MapMember, at p: LngLat) {
@@ -166,11 +208,19 @@ struct OutingMapboxView: UIViewRepresentable {
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in self?.refreshRoads() }.store(in: &cancelables)
-            /* Tapping the car itself does what tapping its name does. */
+            map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.project() }.store(in: &cancelables)
+            /* Tapping the car itself does what tapping its name does; in pick mode an empty spot is the answer. */
             tapInteraction = map.mapboxMap.addInteraction(TapInteraction { [weak self] ctx in
-                guard let self, let id = self.car(at: ctx.point) else { return false }
-                self.onCarTap(id)
-                return true
+                guard let self else { return false }
+                if let id = self.car(at: ctx.point) {
+                    self.onCarTap(id)
+                    return true
+                }
+                if self.picking {
+                    self.onMapTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
+                    return true
+                }
+                return false
             })
         }
 
@@ -204,6 +254,11 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             light = nil
             applyLight()
+            if let r = rallyPin?.point {
+                rallyPin?.annotation.remove()
+                rallyPin = nil
+                setRally(r)
+            }
             /* Terrain like the web's setSaryTerrain (the web only skips it on Safari, for a WebKit bug). */
             if !m.sourceExists(withId: "mapbox-dem") {
                 try? m.addSource(withId: "mapbox-dem", properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1", "tileSize": 512, "maxzoom": 14])
@@ -220,7 +275,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private func applyLight() {
             guard styleReady, let map else { return }
             let at = lastCars.first(where: \.isMe)?.position ?? lastCars.first?.position
-            let preset = at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day
+            /* Night mode (forced or after sunset) is the night light; otherwise the sun decides. */
+            let preset: SunLight.Preset = theme.night ? .night : (at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
             guard preset != light else { return }
             light = preset
             try? map.mapboxMap.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: preset.rawValue)
@@ -336,6 +392,40 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
             keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds))
+            project()
+        }
+
+        func themeChanged() {
+            light = nil
+            applyLight()
+            for r in recs.values { r.host = nil; r.annotation?.remove(); r.annotation = nil; r.box = nil }
+            if let map { for r in recs.values { drawChip(r, on: map) } }
+            if let p = rallyPin?.point {
+                rallyPin?.annotation.remove()
+                rallyPin = nil
+                setRally(p)
+            }
+        }
+
+        /// Report where every car (and the flag) is on screen, at most ~30 times a second.
+        func project() {
+            let now = CACurrentMediaTime()
+            if now - lastProjectionAt < 1.0 / 30 {
+                guard !projectionPending else { return }
+                projectionPending = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 30) { [weak self] in
+                    self?.projectionPending = false
+                    self?.project()
+                }
+                return
+            }
+            lastProjectionAt = now
+            guard let map, map.bounds.width > 0 else { return }
+            let m: MapboxMap = map.mapboxMap!
+            var pts: [String: CGPoint] = [:]
+            for r in recs.values { pts[r.item.id] = m.point(for: r.shown.coordinate) }
+            let rally = rallyPin.map { m.point(for: $0.point.position.coordinate) }
+            onProjection(MapProjection(points: pts, rally: rally, bearing: m.cameraState.bearing, size: map.bounds.size))
         }
 
         private func drawCar(_ r: Rec, on map: MapView) {
@@ -417,7 +507,7 @@ struct OutingMapboxView: UIViewRepresentable {
 
         private func drawChip(_ r: Rec, on map: MapView) {
             let id = r.item.id
-            let chip = CarChip(label: r.item.chipLabel, color: r.item.color, note: r.item.note) { [weak self] in self?.onCarTap(id) }
+            let chip = MapChip(chip: r.item.chip, bubble: r.item.bubble, theme: theme) { [weak self] in self?.onCarTap(id) }
             if let host = r.host {
                 if host.rootView != chip {
                     host.rootView = chip
@@ -430,7 +520,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 let box = ChipBox(host)
                 let a = ViewAnnotation(coordinate: r.shown.coordinate, view: box)
                 /* Bottom of the chip just over the car, so a note bubble grows upward, never over it. */
-                a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom, offsetY: 22)]
+                a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom, offsetY: 24)]
                 /* Every car always shows: a friend is never hidden because two labels overlap. */
                 a.allowOverlap = true
                 a.priority = r.item.isMe ? 100 : (r.item.presence == .live ? 50 : 10)
@@ -462,15 +552,17 @@ struct OutingMapboxView: UIViewRepresentable {
             rallyPin?.annotation.remove()
             rallyPin = nil
             guard let rally else { return }
-            let host = UIHostingController(rootView: RallyPin(label: rally.label) { [weak self] in self?.onRallyTap() })
+            let host = UIHostingController(rootView: RallyPin(label: rally.label, theme: theme) { [weak self] in self?.onRallyTap() })
             host.view.backgroundColor = .clear
             let size = host.sizeThatFits(in: CGSize(width: 200, height: 120))
             host.view.frame = CGRect(origin: .zero, size: size)
             let a = ViewAnnotation(coordinate: rally.position.coordinate, view: host.view)
             a.variableAnchors = [ViewAnnotationAnchorConfig(anchor: .bottom)]
             a.allowOverlap = true
+            a.priority = 120
             map.viewAnnotations.add(a)
             rallyPin = (rally, a, host)
+            project()
         }
 
         // MARK: glide between fixes
@@ -497,6 +589,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 if styleReady, r.layersReady { setPosition(r, on: m) } else { r.annotation?.annotatedFeature = .geometry(Point(r.shown.coordinate)) }
             }
+            project()
             if !moving {
                 link?.invalidate()
                 link = nil
@@ -523,6 +616,21 @@ struct OutingMapboxView: UIViewRepresentable {
         func fitWith(_ id: String) {
             keepGroup = false
             frame(points(only: id))
+        }
+
+        func centerOnMe() {
+            guard let me = lastCars.first(where: \.isMe) else { return }
+            keepGroup = false
+            center(me.position, zoom: max(map?.mapboxMap.cameraState.zoom ?? 15, 15))
+        }
+
+        /// Centre a point inside the area our chrome leaves clear.
+        func center(_ p: LngLat, zoom: Double? = nil) {
+            guard let map else { return }
+            keepGroup = false
+            let pad = UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0)
+            let cam = CameraOptions(center: p.coordinate, padding: pad, zoom: zoom ?? max(map.mapboxMap.cameraState.zoom, 14))
+            map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.8)
         }
 
         private func frame(_ pts: [LngLat]) {
@@ -557,7 +665,10 @@ struct OutingMapboxView: UIViewRepresentable {
         /// A finger on the map means "let me look": stop reframing until asked.
         func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
             /* A tap (on a car, a name, or empty map) is not "let me look"; drag, pinch, rotate and tilt are. */
-            if gestureType != .singleTap { keepGroup = false }
+            if gestureType != .singleTap {
+                keepGroup = false
+                onUserGesture()
+            }
         }
         func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {}
         func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {}
@@ -568,9 +679,9 @@ struct OutingMapboxView: UIViewRepresentable {
 /// `systemLayoutSizeFitting`, which a bare hosting view answers with the space it is
 /// offered (or squeezes to nothing); this box answers with what SwiftUI wants.
 final class ChipBox: UIView {
-    private let host: UIHostingController<CarChip>
+    private let host: UIHostingController<MapChip>
 
-    init(_ host: UIHostingController<CarChip>) {
+    init(_ host: UIHostingController<MapChip>) {
         self.host = host
         super.init(frame: .zero)
         backgroundColor = .clear
@@ -603,84 +714,97 @@ extension LngLat {
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lng) }
 }
 
-/// Name chip with the member's colour dot, and the note bubble above it — the web's
-/// `.sary-peer.is-car` marker (same colours, sizes and order), right-to-left.
-struct CarChip: View, Equatable {
-    let label: String
-    let color: UInt32
-    let note: String?
+/// The chip over a car, from the design system: note bubble (if any) over the
+/// name chip. Drawn inside a Mapbox view annotation so it tracks the car
+/// natively (no SwiftUI frame lag), and themed like the rest of the chrome.
+struct MapChip: View, Equatable {
+    let chip: NameChipUI?
+    let bubble: NoteBubbleUI?
+    let theme: SaryTheme
     var onTap: () -> Void
 
-    static func == (a: CarChip, b: CarChip) -> Bool { a.label == b.label && a.color == b.color && a.note == b.note }
-
-    private static let noteBg = Color(red: 0xFF / 255, green: 0xF4 / 255, blue: 0xD6 / 255)
-    private static let noteInk = Color(red: 0x1C / 255, green: 0x18 / 255, blue: 0x14 / 255)
-    private static let chipBg = Color(red: 28 / 255, green: 24 / 255, blue: 20 / 255).opacity(0.88)
-    private static let chipInk = Color(red: 0xF4 / 255, green: 0xEF / 255, blue: 0xE6 / 255)
+    static func == (a: MapChip, b: MapChip) -> Bool { a.chip == b.chip && a.bubble == b.bubble && a.theme == b.theme }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 8) {
-                if let note, !note.isEmpty {
-                    Text(note)
-                        .font(.system(size: 13, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Self.noteInk)
-                        .padding(.horizontal, 11).padding(.vertical, 6)
-                        .background(Self.noteBg, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(alignment: .bottom) {
-                            NoteTail().fill(Self.noteBg).frame(width: 12, height: 6).offset(y: 6)
-                        }
-                        .frame(maxWidth: 190)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .shadow(color: .black.opacity(0.45), radius: 5, y: 3)
-                }
-                HStack(spacing: 6) {
-                    Circle().fill(Theme.car(color)).frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.5))
-                    Text(label).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.tail)
-                        .frame(maxWidth: 124).fixedSize()
-                }
-                .foregroundStyle(Self.chipInk)
-                .padding(.horizontal, 10).padding(.vertical, 3)
-                .background(Self.chipBg, in: Capsule())
-                .shadow(color: .black.opacity(0.45), radius: 3, y: 2)
-            }
-            .padding(4)
+        VStack(spacing: 2) {
+            if let bubble { SaryNoteBubble(bubble: bubble) }
+            if let chip { SaryNameChip(chip: chip, tapped: onTap) }
         }
-        .buttonStyle(.plain)
-        .environment(\.layoutDirection, .rightToLeft)
+        .padding(3)
+        .saryTheme(theme)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel([label, note].compactMap { $0 }.joined(separator: ": "))
         .accessibilityIdentifier("car.chip")
     }
 }
 
-/// The rally point: a blue flag head with its label above (the web's `.sary-pin[data-kind=rally]`).
+/// The rally point: the design system's flag with its label.
 struct RallyPin: View {
     let label: String
+    let theme: SaryTheme
     var onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 2) {
-                if !label.isEmpty {
-                    Text(label).font(.system(size: 12, weight: .bold)).lineLimit(1).foregroundStyle(.white)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(Color(red: 28 / 255, green: 24 / 255, blue: 20 / 255).opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
-                }
-                Text("⚑").font(.system(size: 17, weight: .black)).foregroundStyle(.white)
-                    .frame(minWidth: 36, minHeight: 36)
-                    .background(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18)
-                        .fill(Color(red: 0x1F / 255, green: 0x6F / 255, blue: 0xEB / 255)))
-                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18)
-                        .stroke(.white, lineWidth: 3))
-            }
+            SaryRallyFlag(marker: .init(label: label.isEmpty ? "نقطة التجمع" : label))
         }
         .buttonStyle(.plain)
-        .environment(\.layoutDirection, .leftToRight)
+        .saryTheme(theme)
         .accessibilityLabel(label.isEmpty ? "نقطة التجمع" : label)
         .accessibilityIdentifier("map.rally")
+    }
+}
+
+/// Where things are on screen right now (physical points, top-left origin).
+struct MapProjection: Equatable {
+    var points: [String: CGPoint]
+    var rally: CGPoint?
+    var bearing: Double
+    var size: CGSize
+}
+
+/// Mapbox Standard Satellite with place names in Arabic. Standard reads
+/// `name_en`; we fetch the same style once, point its labels at `name_ar`
+/// (falling back to the local `name`), and load it as the "basemap" import so
+/// its config (light preset, 3D objects) works as before.
+enum ArabicBasemap {
+    private(set) static var cachedJSON: String?
+    private static var loading = false
+    private static var waiters: [(String?) -> Void] = []
+
+    static func transform(_ style: String) -> String {
+        style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
+            .replacingOccurrences(of: "[\"get\",\"name_en\"]", with: "[\"coalesce\",[\"get\",\"name_ar\"],[\"get\",\"name\"]]")
+    }
+
+    static func wrap(_ style: String) -> String {
+        "{\"version\":8,\"imports\":[{\"id\":\"basemap\",\"url\":\"\",\"data\":\(style)}],\"sources\":{},\"layers\":[]}"
+    }
+
+    static func load(_ done: @escaping (String?) -> Void) {
+        /* Already fetched: the map was created with it. */
+        if cachedJSON != nil { return }
+        waiters.append(done)
+        guard !loading else { return }
+        loading = true
+        guard let token = Bundle.main.object(forInfoDictionaryKey: "MBXAccessToken") as? String, !token.isEmpty,
+              let url = URL(string: "https://api.mapbox.com/styles/v1/mapbox/standard-satellite?access_token=\(token)") else {
+            return finish(nil)
+        }
+        URLSession.shared.dataTask(with: url) { data, resp, _ in
+            var out: String?
+            if let data, (resp as? HTTPURLResponse)?.statusCode == 200, let s = String(data: data, encoding: .utf8), s.contains("name_en") {
+                out = wrap(transform(s))
+            }
+            DispatchQueue.main.async { finish(out) }
+        }.resume()
+    }
+
+    private static func finish(_ json: String?) {
+        loading = false
+        if let json { cachedJSON = json }
+        let w = waiters
+        waiters = []
+        w.forEach { $0(json) }
     }
 }
 

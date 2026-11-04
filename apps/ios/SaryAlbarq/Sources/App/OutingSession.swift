@@ -3,16 +3,29 @@ import Foundation
 import UIKit
 import UserNotifications
 
+/// What a session needs from the outside world, injectable for tests.
+struct SessionEnv {
+    var makeSocket: (URL) -> LiveSocket = { URLSessionLiveSocket(url: $0) }
+    var scheduler: Scheduler = MainScheduler()
+    /// True while the app is on screen. Nothing is sent when this is false.
+    var isForeground: @MainActor () -> Bool = { UIApplication.shared.applicationState != .background }
+    var defaults: UserDefaults = .standard
+    /// Repeating timers (age ticks, link heartbeat). Off in unit tests.
+    var timers = true
+    /// Tests only: stands in for iOS location permission.
+    var authorizationOverride: Bool?
+}
+
 /// One open outing: the live channel, the reducer's picture, and — only when
-/// you said so — your shared position.
+/// you said so and the app is on screen — your shared position.
 ///
-/// Sharing runs only while ALL hold: you gave consent for this outing, you
-/// pressed share, the outing is `active`, and the server says your sharing is
-/// on. The moment one goes false (pause, end, leave, removed, sign-out,
-/// permission revoked) location stops and background updates are switched off.
+/// Every position goes through `gate` (`SendGate`), which `LiveChannel` asks
+/// again at the last step before the wire. The server's `sharing` flag alone
+/// never sends anything: the server turns it on at join.
 @MainActor
 final class OutingSession: ObservableObject, Identifiable {
     nonisolated let id: String
+    let myUserId: String
     @Published private(set) var view: OutingView?
     @Published private(set) var link: LiveChannel.State = .connecting
     @Published private(set) var closedReason: LiveCloseReason?
@@ -20,81 +33,117 @@ final class OutingSession: ObservableObject, Identifiable {
     @Published private(set) var lastAck: (ok: Bool, reason: String?)?
     @Published var mode: ShareMode {
         didSet {
-            UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey)
+            env.defaults.set(mode.rawValue, forKey: Self.modeKey)
             location.setMode(mode)
         }
     }
     @Published var errorText: String?
     /// Bumped once a second so ages and freshness re-render.
     @Published private(set) var tick = 0
+    /// The 1 s SOS hold finished and the alert is on its way.
+    @Published private(set) var sosSending = false
+    @Published private(set) var busy: Set<String> = []
+    /// «شارك البطارية»: off unless the person turns it on (per device).
+    @Published var batterySharing: Bool {
+        didSet { env.defaults.set(batterySharing, forKey: Self.batteryKey) }
+    }
 
     let isDemo: Bool
     let location: LocationSharer
     private let api: OutingsAPI
     private let token: String
+    private let env: SessionEnv
     private var channel: LiveChannel?
     private var lastSent: Policy.LastSent?
     private var timers: [Timer] = []
-    /// No need to re-render ages while the screen is off.
     private var visible = true
+    /// The person pressed stop while offline: tell the server once we can.
+    private var pendingServerStop = false
 
     static let modeKey = "sary.outings.mode.v1"
-    static let activeShareKey = "sary.outings.activeShare.v1"
-    static let consentKey = "sary.outings.consent.v1"
+    static let batteryKey = "sary.outings.battery.v1"
 
-    init(id: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil) {
+    init(id: String, myUserId: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil, env: SessionEnv = SessionEnv()) {
         self.id = id
+        self.myUserId = myUserId
         self.api = api
         self.token = token
         self.location = location
+        self.env = env
         self.isDemo = demo != nil
         self.view = demo
-        self.mode = ShareMode(rawValue: UserDefaults.standard.string(forKey: Self.modeKey) ?? "") ?? .balanced
+        self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
+        self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         if demo != nil { link = .live }
     }
+
+    // MARK: the privacy gate
+
+    var gate: SendGate {
+        SendGate(
+            consent: ShareMemory.hasConsent(user: myUserId, outing: id, defaults: env.defaults),
+            osAuthorized: env.authorizationOverride ?? location.canLocate,
+            userWantsShare: wantsToShare,
+            serverSharing: view?.snapshot.me.sharing == true,
+            outingActive: view?.status == .active,
+            foreground: visible && env.isForeground(),
+            closed: closedReason != nil
+        )
+    }
+
+    var hasConsent: Bool { ShareMemory.hasConsent(user: myUserId, outing: id, defaults: env.defaults) }
+
+    /// Sharing for real: the gate is open and the GPS is running for it.
+    var isSharingNow: Bool { gate.allowsPosition && (location.isSharing || isDemo) }
 
     // MARK: lifecycle
 
     func open() {
+        visible = env.isForeground()
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
-            location.watchForeground()
+            if self.visible { location.watchForeground() }
         }
-        let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.visible else { return }
-                self.tick &+= 1
+        if env.timers {
+            let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.visible else { return }
+                    self.tick &+= 1
+                }
             }
+            timers.append(t)
         }
-        timers.append(t)
         guard !isDemo else { return }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
-            makeSocket: { URLSessionLiveSocket(url: $0) },
+            makeSocket: env.makeSocket,
             poll: { [api] in try await api.poll($0) },
             post: { [api] in try await api.sendPosition($0, fix: $1) },
-            beat: { [api] in try await api.heartbeat($0, gps: $1) },
-            scheduler: MainScheduler()
+            beat: { [api] in try await api.heartbeat($0, gps: $1, battery: $2) },
+            scheduler: env.scheduler,
+            canSendPosition: { [weak self] in
+                MainActor.assumeIsolated { self?.gate.allowsPosition ?? false }
+            }
         ))
         ch.handlers = .init(
-            onSnapshot: { [weak self] s in self?.applySnapshot(s) },
-            onEvent: { [weak self] e in self?.apply(e) },
-            onState: { [weak self] s in self?.link = s },
-            onClosed: { [weak self] r in self?.closed(r) },
-            onAck: { [weak self] ok, reason in self?.ack(ok, reason) },
-            onServerNow: { [weak self] now in self?.syncClock(now) }
+            onSnapshot: { [weak self] s in MainActor.assumeIsolated { self?.applySnapshot(s) } },
+            onEvent: { [weak self] e in MainActor.assumeIsolated { self?.apply(e) } },
+            onState: { [weak self] s in MainActor.assumeIsolated { self?.linkChanged(s) } },
+            onClosed: { [weak self] r in MainActor.assumeIsolated { self?.closed(r) } },
+            onAck: { [weak self] ok, reason in MainActor.assumeIsolated { self?.ack(ok, reason) } },
+            onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } }
         )
         channel = ch
         ch.start()
-        /* Connection heartbeat, no coordinates: lets others tell "no GPS" from "no network". */
-        let hb = Timer.scheduledTimer(withTimeInterval: Policy.linkHeartbeatMs / 1000, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.channel?.heartbeat(gps: self.location.gpsState)
+        if !visible { ch.setAway(true) }
+        if env.timers {
+            /* Connection heartbeat, no coordinates: lets others tell "no GPS" from "no network". */
+            let hb = Timer.scheduledTimer(withTimeInterval: Policy.linkHeartbeatMs / 1000, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.beat() }
             }
+            timers.append(hb)
         }
-        timers.append(hb)
-        location.onFix = { [weak self] f in self?.onFix(f) }
+        location.onFix = { [weak self] f in self?.handleFix(f) }
     }
 
     func close() {
@@ -106,36 +155,51 @@ final class OutingSession: ObservableObject, Identifiable {
         location.stopWatchingForeground()
     }
 
+    /// The app came to / left the screen. Leaving stops the GPS and drops any
+    /// fix waiting for the network; the share intent stays, so it resumes on return.
     func foreground(_ active: Bool) {
         visible = active
-        channel?.setAway(!active)
-        if active { channel?.reconnectNow() }
+        if active {
+            location.watchForeground()
+            channel?.setAway(false)
+            channel?.reconnectNow()
+            reconcileSharing()
+        } else {
+            channel?.dropPendingFix()
+            location.stopSharing()
+            location.stopWatchingForeground()
+            channel?.setAway(true)
+            objectWillChange.send()
+        }
+    }
+
+    private func beat() {
+        guard visible else { return }
+        channel?.heartbeat(gps: location.gpsState, battery: batterySharing ? Self.batteryNow() : nil)
+    }
+
+    static func batteryNow() -> BatteryInfo? {
+        let d = UIDevice.current
+        guard d.batteryLevel >= 0 else { return nil }
+        return BatteryInfo(level: (Double(d.batteryLevel) * 100).rounded() / 100, charging: d.batteryState == .charging || d.batteryState == .full, at: nil)
     }
 
     // MARK: sharing
 
-    static func hasConsent(for outingId: String) -> Bool {
-        (UserDefaults.standard.stringArray(forKey: consentKey) ?? []).contains(outingId)
-    }
-
-    static func recordConsent(for outingId: String) {
-        var all = UserDefaults.standard.stringArray(forKey: consentKey) ?? []
-        if !all.contains(outingId) { all.append(outingId) }
-        UserDefaults.standard.set(all, forKey: consentKey)
-    }
-
-    /// Call after the consent sheet was accepted.
+    /// Call after the consent sheet was accepted. Consent is recorded only once
+    /// iOS permission is really granted, and only for this identity.
     func beginSharing() async {
         guard let v = view, v.status == .active else {
             errorText = "المشاركة تبدأ عندما يبدأ صاحب الطلعة الطلعة."
             return
         }
-        Self.recordConsent(for: id)
         let st = await location.requestWhenInUse()
         guard st == .authorizedWhenInUse || st == .authorizedAlways else {
             errorText = "لم تسمح بالوصول إلى موقعك. فعّله من الإعدادات ← سَرى البارق ← الموقع."
             return
         }
+        ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
+        pendingServerStop = false
         if !v.snapshot.me.sharing, !isDemo {
             do { _ = try await api.setSharing(id, sharing: true) } catch let e as OutingAPIError {
                 errorText = e.arabic
@@ -144,56 +208,62 @@ final class OutingSession: ObservableObject, Identifiable {
             view?.apply(.memberSharing(userId: v.myId, sharing: true))
         }
         wantsToShare = true
-        UserDefaults.standard.set(id, forKey: Self.activeShareKey)
+        ShareMemory.setActiveShare(user: myUserId, outing: id, defaults: env.defaults)
         reconcileSharing()
-        /* Ask for Always only after they have seen sharing work, with our explanation shown first. */
-        location.requestAlways()
     }
 
-    /// You pressed stop: tell the server (it deletes your fix) and switch the GPS off.
+    /// You pressed stop: nothing more leaves the phone, the server deletes your fix.
     func stopSharing() async {
         stopSharingLocally()
         guard !isDemo else { return }
-        _ = try? await api.setSharing(id, sharing: false)
+        do {
+            _ = try await api.setSharing(id, sharing: false)
+            view?.apply(.memberSharing(userId: myUserId, sharing: false))
+            pendingServerStop = false
+        } catch {
+            pendingServerStop = true
+        }
     }
 
     private func stopSharingLocally() {
         wantsToShare = false
         lastSent = nil
-        if UserDefaults.standard.string(forKey: Self.activeShareKey) == id {
-            UserDefaults.standard.removeObject(forKey: Self.activeShareKey)
+        channel?.dropPendingFix()
+        if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
+            ShareMemory.setActiveShare(user: myUserId, outing: nil, defaults: env.defaults)
         }
         location.stopSharing()
     }
 
-    /// Resume after a relaunch only if this outing was the one being shared and consent was given.
+    /// Resume after a relaunch only if THIS identity was sharing THIS outing with consent.
     func resumeIfPreviouslySharing() {
-        if UserDefaults.standard.string(forKey: Self.activeShareKey) == id, Self.hasConsent(for: id) {
+        if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent {
             wantsToShare = true
             reconcileSharing()
         }
     }
 
-    var isSharingNow: Bool { location.isSharing && wantsToShare }
-
     private func reconcileSharing() {
         guard let v = view else { return }
-        let allowed = wantsToShare && v.status == .active && v.snapshot.me.sharing && location.canLocate && closedReason == nil
-        if allowed && !location.isSharing {
-            location.startSharing(mode: mode)
-            if let f = location.lastFix { onFix(f) }
-        } else if !allowed && location.isSharing {
-            location.stopSharing()
-        }
         /* Paused / ended / sharing switched off elsewhere: the intent ends too. */
         if wantsToShare && (v.status == .paused || v.status == .ended || !v.snapshot.me.sharing) {
             stopSharingLocally()
         }
+        let allowed = gate.allowsPosition
+        if allowed && !location.isSharing {
+            location.startSharing(mode: mode)
+            /* Only a fix from the last few seconds; an old one is never sent as "now". */
+            if let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 10_000 { handleFix(f) }
+        } else if !allowed && location.isSharing {
+            location.stopSharing()
+            channel?.dropPendingFix()
+        }
         objectWillChange.send()
     }
 
-    private func onFix(_ f: DeviceFix) {
-        guard isSharingNow else { return }
+    /// Every fix from the GPS while sharing. Internal for tests.
+    func handleFix(_ f: DeviceFix) {
+        guard gate.allowsPosition, location.isSharing || isDemo else { return }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
@@ -205,10 +275,25 @@ final class OutingSession: ObservableObject, Identifiable {
 
     // MARK: inbound
 
+    private func linkChanged(_ s: LiveChannel.State) {
+        link = s
+        if s == .live || s == .polling, pendingServerStop {
+            Task { await self.retryServerStop() }
+        }
+    }
+
+    private func retryServerStop() async {
+        guard pendingServerStop, !wantsToShare else { return }
+        if (try? await api.setSharing(id, sharing: false)) != nil {
+            pendingServerStop = false
+            view?.apply(.memberSharing(userId: myUserId, sharing: false))
+        }
+    }
+
     private func applySnapshot(_ s: OutingSnapshot) {
         let previous = view
         view = OutingView.merge(view, s)
-        if let previous { notifyNewNotes(from: previous) }
+        if let previous { notifyChanges(from: previous) }
         if s.outing.status == .ended { closed(.outingEnded) }
         reconcileSharing()
     }
@@ -218,21 +303,25 @@ final class OutingSession: ObservableObject, Identifiable {
         let before = v
         v.apply(e)
         view = v
-        if case let .memberNote(uid, note?) = e, uid != v.myId, before.members[uid]?.note != note {
-            Notifier.note(from: v.members[uid]?.display_name ?? "", text: note.text, outingId: id)
-        }
-        if case let .memberLeft(uid) = e, uid == v.myId { closed(.left) }
         switch e {
-        case .outingStatus, .memberSharing: reconcileSharing()
-        default: break
+        case let .memberNote(uid, note?) where uid != v.myId && before.members[uid]?.note != note:
+            Notifier.post(title: v.members[uid]?.display_name ?? "ملاحظة جديدة", body: note.text, outingId: id, kind: "note")
+        case let .sos(uid, sos?, refresh) where uid != v.myId && !refresh:
+            Notifier.post(title: "طوارئ: \(v.members[uid]?.display_name ?? "")", body: sos.fix == nil ? "يطلب المساعدة (بدون موقع)" : "يطلب المساعدة الآن", outingId: id, kind: "sos")
+        case let .memberLeft(uid) where uid == v.myId:
+            closed(.left)
+        case .outingStatus, .memberSharing:
+            reconcileSharing()
+        default:
+            break
         }
     }
 
-    private func notifyNewNotes(from prev: OutingView) {
+    private func notifyChanges(from prev: OutingView) {
         guard let v = view else { return }
         for (uid, m) in v.members where uid != v.myId {
             if let n = m.note, prev.members[uid]?.note != n {
-                Notifier.note(from: m.display_name, text: n.text, outingId: id)
+                Notifier.post(title: m.display_name, body: n.text, outingId: id, kind: "note")
             }
         }
     }
@@ -261,31 +350,107 @@ final class OutingSession: ObservableObject, Identifiable {
 
     // MARK: actions
 
-    func sendNote(_ text: String) async {
+    private func run(_ key: String, _ work: () async throws -> Void) async -> Bool {
+        busy.insert(key)
+        defer { busy.remove(key) }
+        do {
+            try await work()
+            return true
+        } catch let e as OutingAPIError {
+            errorText = e.arabic
+        } catch {
+            errorText = OutingAPIError(code: "network", status: 0).arabic
+        }
+        return false
+    }
+
+    @discardableResult
+    func sendNote(_ text: String) async -> Bool {
         let clean = text.isEmpty ? "" : (ServerRules.cleanText(text, max: ServerRules.noteMax) ?? "")
         if isDemo {
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: clean.isEmpty ? nil : MemberNote(text: clean, at: ISODate.string(Date())))) }
-            return
+            return true
         }
-        do {
+        return await run("note") {
             let n = try await api.note(id, text: clean)
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: n)) }
-        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        }
     }
 
     func setStatus(_ action: String) async {
-        do {
+        _ = await run("status") {
             let o = try await api.setStatus(id, action: action)
             view?.apply(.outingStatus(o.status))
             reconcileSharing()
             if o.status == .ended { closed(.outingEnded) }
-        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
+        }
     }
 
     func leave() async {
         stopSharingLocally()
-        do { try await api.leave(id) } catch let e as OutingAPIError { errorText = e.arabic; return } catch {}
-        closed(.left)
+        if isDemo { closed(.left); return }
+        let ok = await run("leave") { try await api.leave(id) }
+        if ok { closed(.left) }
+    }
+
+    /// SOS after the 1 s hold. Carries my fix only when the send gate is open.
+    func raiseSOS() async {
+        guard let me = view?.myId else { return }
+        sosSending = true
+        defer { sosSending = false }
+        var wire: WireFix?
+        if gate.allowsSosFix, let f = location.lastFix {
+            let w = Policy.wireFix(f, mode: .precise, nowMs: Date().timeIntervalSince1970 * 1000)
+            if w.age_ms <= 25 * 60_000, (f.accuracy ?? 0) <= ServerRules.maxAccuracyM { wire = w }
+        }
+        if isDemo {
+            view?.apply(.sos(userId: me, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
+            return
+        }
+        _ = await run("sos") {
+            let s = try await api.raiseSos(id, fix: wire)
+            view?.apply(.sos(userId: me, sos: s, refresh: false))
+        }
+    }
+
+    func cancelSOS() async {
+        guard let me = view?.myId else { return }
+        if isDemo { view?.apply(.sos(userId: me, sos: nil, refresh: false)); return }
+        _ = await run("sos") {
+            try await api.cancelSos(id)
+            view?.apply(.sos(userId: me, sos: nil, refresh: false))
+        }
+    }
+
+    @discardableResult
+    func setRally(lat: Double, lng: Double, label: String?) async -> Bool {
+        if isDemo { view?.apply(.rally(RallyInfo(lat: lat, lng: lng, label: label, set_at: ISODate.string(Date()), set_by: myUserId))); return true }
+        return await run("rally") {
+            let r = try await api.setRally(id, lat: lat, lng: lng, label: label)
+            view?.apply(.rally(r))
+        }
+    }
+
+    func clearRally() async {
+        if isDemo { view?.apply(.rally(nil)); return }
+        _ = await run("rally") {
+            try await api.clearRally(id)
+            view?.apply(.rally(nil))
+        }
+    }
+
+    func setCoLeader(_ member: String, on: Bool) async {
+        _ = await run("member:\(member)") {
+            if !isDemo { try await api.setCoLeader(id, member: member, on: on) }
+            view?.apply(.memberRole(userId: member, coLeader: on))
+        }
+    }
+
+    func removeMember(_ member: String) async {
+        _ = await run("member:\(member)") {
+            if !isDemo { try await api.removeMember(id, member: member) }
+            view?.apply(.memberLeft(userId: member))
+        }
     }
 
     /// The invite link this device created, if any. The server keeps only its hash.
@@ -295,28 +460,39 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// Owner only: a new link. This revokes every earlier link, so it is never automatic.
     func newInviteURL() async -> URL? {
-        do {
+        var out: URL?
+        _ = await run("invite") {
             let inv = try await api.rotateInvite(id)
             InviteTokenStore.save(id, inv.token)
-            return InviteLink.url(for: inv.token)
-        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
-        return nil
+            out = InviteLink.url(for: inv.token)
+        }
+        return out
     }
+
+    /// Push-to-talk upload. Returns the clip on success.
+    func sendClip(_ audio: Data, durationMs: Int) async -> VoiceClip? {
+        if isDemo { return nil }
+        var out: VoiceClip?
+        _ = await run("clip") { out = try await api.uploadClip(id, audio: audio, durationMs: durationMs) }
+        return out
+    }
+
+    func clipAudio(_ clip: VoiceClip) async throws -> Data { try await api.fetchClip(clip) }
 }
 
-/// Local notifications for notes over cars.
+/// Local notifications for notes and SOS.
 enum Notifier {
     static func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    static func note(from name: String, text: String, outingId: String) {
+    static func post(title: String, body: String, outingId: String, kind: String) {
         let c = UNMutableNotificationContent()
-        c.title = name.isEmpty ? "ملاحظة جديدة" : name
-        c.body = text
+        c.title = title
+        c.body = body
         c.sound = .default
         c.threadIdentifier = "outing-\(outingId)"
-        let r = UNNotificationRequest(identifier: "note-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
+        let r = UNNotificationRequest(identifier: "\(kind)-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(r)
     }
 }

@@ -23,10 +23,11 @@ final class AppModel: ObservableObject {
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
-            for k in [OutingSession.activeShareKey, OutingSession.consentKey, OutingSession.modeKey] {
-                UserDefaults.standard.removeObject(forKey: k)
-            }
+            ShareMemory.forgetAll()
+            for k in [OutingSession.modeKey, OutingSession.batteryKey] { UserDefaults.standard.removeObject(forKey: k) }
         }
+        /* v1 consent was not tied to an identity: never honour it. */
+        ShareMemory.dropLegacy()
         if isDemo {
             identity = Identity(token: "", user: PublicUser(id: DemoData.meId, display_name: "أنا", avatar: nil, phone: nil))
         } else {
@@ -82,6 +83,7 @@ final class AppModel: ObservableObject {
     }
 
     func signOut() {
+        if let u = identity?.user.id { ShareMemory.setActiveShare(user: u, outing: nil) }
         session?.close()
         session = nil
         IdentityStore.save(nil)
@@ -133,7 +135,7 @@ final class AppModel: ObservableObject {
         guard let id = identity else { return }
         if session?.id == outingId { return }
         session?.close()
-        let s = OutingSession(id: outingId, api: api, token: id.token, location: location)
+        let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
         session = s
         s.open()
         Notifier.requestPermission()
@@ -156,7 +158,7 @@ final class AppModel: ObservableObject {
 
     /// iOS relaunched us (significant move) or the app restarted mid-share: pick the share back up.
     private func resumeActiveShare() {
-        guard identity != nil, let id = UserDefaults.standard.string(forKey: OutingSession.activeShareKey) else { return }
+        guard let me = identity?.user.id, let id = ShareMemory.activeShare(user: me) else { return }
         open(id)
         session?.resumeIfPreviouslySharing()
     }
@@ -168,7 +170,7 @@ final class AppModel: ObservableObject {
     }
 
     private func openDemoSession() {
-        let s = OutingSession(id: DemoData.outingId, api: api, token: "", location: location, demo: DemoData.view())
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view())
         session = s
         s.open()
     }

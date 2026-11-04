@@ -35,6 +35,15 @@ struct OutingAPIError: Error, Equatable {
             "timeout": "الشبكة بطيئة. أعد المحاولة.",
             "outings_unconfigured": "الطلعات المشتركة غير مفعّلة على الخادم.",
             "unauthorized": "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
+            "leader_only": "هذا الإجراء لصاحب الطلعة أو مساعده فقط.",
+            "cannot_remove_self": "لا يمكنك إزالة نفسك. استخدم «غادر الطلعة».",
+            "invalid_rally": "تعذّر وضع نقطة التجمع هنا.",
+            "sos_fix_stale": "موقعك قديم، أُرسلت الطوارئ بدون موقع.",
+            "invalid_clip": "التسجيل قصير جدًا أو غير صالح.",
+            "invalid_clip_duration": "التسجيل قصير جدًا.",
+            "too_large": "التسجيل أطول من المسموح.",
+            "clip_gone": "انتهت صلاحية هذا التسجيل.",
+            "join_locked": "صاحب الطلعة قفل الانضمام.",
         ]
         return t[code] ?? "حدث خطأ. أعد المحاولة."
     }
@@ -149,8 +158,10 @@ final class OutingsAPI {
     func create(name: String) async throws -> CreatedBox { try await call("POST", "", body: ["name": name]) }
     func get(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)") }
     func poll(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)/live") }
-    func heartbeat(_ id: String, gps: GpsState) async throws {
-        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: ["gps": gps.rawValue], timeout: 8)
+    func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil) async throws {
+        struct Bat: Encodable { var level: Double; var charging: Bool }
+        struct B: Encodable { var gps: String; var battery: Bat? }
+        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: B(gps: gps.rawValue, battery: battery.map { Bat(level: $0.level, charging: $0.charging) }), timeout: 8)
     }
     func sendPosition(_ id: String, fix: WireFix) async throws {
         struct B: Encodable { var fix: WireFix }
@@ -172,6 +183,77 @@ final class OutingsAPI {
         let r: SharingBox = try await call("PATCH", "/\(id)/me", body: ["sharing": sharing])
         return r.sharing
     }
+    struct SosBox: Decodable { var sos: SosInfo? }
+    struct RallyBox: Decodable { var rally: RallyInfo? }
+    struct ClipBox: Decodable { var clip: VoiceClip }
+
+    /// Raise (or refresh) my SOS. `fix` only when the send gate is open (see `SendGate.allowsSosFix`).
+    func raiseSos(_ id: String, fix: WireFix?) async throws -> SosInfo? {
+        struct B: Encodable { var fix: WireFix? }
+        let r: SosBox = try await call("POST", "/\(id)/sos", body: B(fix: fix))
+        return r.sos
+    }
+    func cancelSos(_ id: String) async throws {
+        let _: SosBox = try await call("DELETE", "/\(id)/sos")
+    }
+    /// Drop or move the meeting point (owner or «مساعد»).
+    func setRally(_ id: String, lat: Double, lng: Double, label: String?) async throws -> RallyInfo? {
+        struct B: Encodable { var lat: Double; var lng: Double; var label: String? }
+        let r: RallyBox = try await call("PUT", "/\(id)/rally", body: B(lat: lat, lng: lng, label: label))
+        return r.rally
+    }
+    func clearRally(_ id: String) async throws {
+        let _: RallyBox = try await call("DELETE", "/\(id)/rally")
+    }
+    func setCoLeader(_ id: String, member: String, on: Bool) async throws {
+        let _: OkBox = try await call("POST", "/\(id)/members/\(member)/co-leader", body: ["co_leader": on])
+    }
+    func removeMember(_ id: String, member: String) async throws {
+        let _: OkBox = try await call("DELETE", "/\(id)/members/\(member)")
+    }
+    /// Revoke every invite link (a new one is made with `rotateInvite`).
+    func revokeInvites(_ id: String) async throws {
+        let _: OkBox = try await call("DELETE", "/\(id)/invites")
+    }
+
+    /// Push-to-talk upload: the m4a bytes as the body, the length in a header.
+    func uploadClip(_ id: String, audio: Data, durationMs: Int) async throws -> VoiceClip {
+        var req = URLRequest(url: base.appendingPathComponent("api/outings/\(id)/clips"), timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(String(durationMs), forHTTPHeaderField: "X-Clip-Duration-Ms")
+        if let t = tokenProvider() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = audio
+        let (data, resp) = try await raw(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        guard (200..<300).contains(status) else {
+            if status == 401 { onUnauthorized() }
+            throw OutingAPIError(code: obj?["error"] as? String ?? "http_\(status)", status: status)
+        }
+        if let c = try? JSONDecoder().decode(ClipBox.self, from: data) { return c.clip }
+        if let c = try? JSONDecoder().decode(VoiceClip.self, from: data) { return c }
+        throw OutingAPIError(code: "bad_response", status: status)
+    }
+
+    /// The clip's audio bytes (memory-only on the server; gone after 10 min).
+    func fetchClip(_ clip: VoiceClip) async throws -> Data {
+        let path = clip.url.hasPrefix("/") ? String(clip.url.dropFirst()) : clip.url
+        var req = URLRequest(url: base.appendingPathComponent(path), timeoutInterval: 15)
+        if let t = tokenProvider() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let (data, resp) = try await raw(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw OutingAPIError(code: status == 404 ? "clip_gone" : "http_\(status)", status: status) }
+        return data
+    }
+
+    private func raw(_ req: URLRequest) async throws -> (Data, URLResponse) {
+        do { return try await session.data(for: req) } catch let e as URLError {
+            throw OutingAPIError(code: e.code == .timedOut ? "timeout" : "network", status: 0)
+        }
+    }
+
     func leave(_ id: String) async throws {
         let _: OkBox = try await call("POST", "/\(id)/leave")
     }
@@ -180,6 +262,45 @@ final class OutingsAPI {
         return r.invite
     }
     func join(token: String) async throws -> JoinBox { try await call("POST", "/invites/join", body: ["token": token]) }
+}
+
+/// «أقرب محطة»: public OSM fuel points (ODbL) around a COARSE box — the
+/// request carries no identity and no exact position (same as the web).
+enum OutdoorAPI {
+    struct Station: Equatable, Identifiable {
+        var id: String
+        var name: String?
+        var brand: String?
+        var lat: Double
+        var lng: Double
+    }
+
+    /// ~14 km grid, ±0.125° (the web's NEAR_BOX); the wide look is 0.25° / ±0.5°.
+    static func coarseBbox(lat: Double, lng: Double, grid: Double = 0.125, half: Double = 0.125) -> [Double] {
+        let snap = { (v: Double) in (v / grid).rounded() * grid }
+        let r = { (v: Double) in (v * 1000).rounded() / 1000 }
+        let la = snap(lat), lo = snap(lng)
+        return [r(lo - half), r(la - half), r(lo + half), r(la + half)]
+    }
+
+    static func fuel(bbox: [Double], base: URL = Endpoints.apiBase, session: URLSession = .shared) async throws -> [Station] {
+        var c = URLComponents(url: base.appendingPathComponent("api/outdoor/features"), resolvingAgainstBaseURL: false)!
+        c.queryItems = [
+            .init(name: "bbox", value: bbox.map { String($0) }.joined(separator: ",")),
+            .init(name: "types", value: "fuel"),
+            .init(name: "limit", value: "400"),
+        ]
+        var req = URLRequest(url: c.url!, timeoutInterval: 12)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let data: Data, resp: URLResponse
+        do { (data, resp) = try await session.data(for: req) } catch { throw OutingAPIError(code: "network", status: 0) }
+        guard ((resp as? HTTPURLResponse)?.statusCode ?? 0) == 200 else { throw OutingAPIError(code: "http", status: 0) }
+        struct P: Decodable { var id: String; var kind: String; var name: String?; var brand: String?; var lat: Double; var lng: Double }
+        struct F: Decodable { var properties: P }
+        struct FC: Decodable { var features: [F]? }
+        let fc = try JSONDecoder().decode(FC.self, from: data)
+        return (fc.features ?? []).map(\.properties).filter { $0.kind == "fuel" }.map { Station(id: $0.id, name: $0.name, brand: $0.brand, lat: $0.lat, lng: $0.lng) }
+    }
 }
 
 private struct AnyEncodable: Encodable {

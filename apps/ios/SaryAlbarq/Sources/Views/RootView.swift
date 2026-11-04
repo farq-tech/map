@@ -2,11 +2,13 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(AppearanceSettings.self) private var appearance
 
     var body: some View {
         Group {
             if let session = model.session {
-                LiveOutingView(session: session)
+                LiveOutingHost(session: session, model: model, appearance: appearance)
+                    .id(session.id)
             } else if model.identity == nil {
                 OnboardingView()
             } else {
@@ -25,6 +27,28 @@ struct RootView: View {
 }
 
 struct InviteToken: Identifiable { let id: String }
+
+/// Owns the live screen's controller for as long as that outing is open.
+struct LiveOutingHost: View {
+    @StateObject private var controller: LiveOutingController
+
+    init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
+        _controller = StateObject(wrappedValue: {
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance)
+            c.onExit = { [weak model] in model?.closeSession() }
+            c.savePhone = { [weak model, weak c] phone in
+                guard let model else { return }
+                Task {
+                    let ok = await model.updateProfile(name: model.identity?.user.display_name ?? "", phone: phone ?? "")
+                    if ok { c?.toast("تم حفظ رقمك") }
+                }
+            }
+            return c
+        }())
+    }
+
+    var body: some View { LiveOutingScreen(controller: controller) }
+}
 
 struct OnboardingView: View {
     @EnvironmentObject private var model: AppModel
