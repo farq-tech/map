@@ -130,7 +130,9 @@ final class LiveOutingController: ObservableObject {
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
 
-    private var bag = Set<AnyCancellable>()
+    var bag = Set<AnyCancellable>()
+    /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
+    var carPlayNav: CarPlayNavAdapter?
     private var lastView: OutingView?
     private var stationList: [OutdoorAPI.Station] = []
     /// Plays clips that members on older builds still send («اضغط وتكلم» before «قناة الطلعة»).
@@ -210,6 +212,7 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.features.compose(at: p) }
         }
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
+        registerCarPlay()
         #if DEBUG
         navDebugLaunch()
         #endif
