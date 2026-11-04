@@ -96,6 +96,9 @@ final class LiveChannelTests: XCTestCase {
     var snapshots = 0
     var events: [LiveEvent] = []
     var polls = 0
+    /// The privacy gate the channel asks before every position (open for the transport tests).
+    var gateOpen = true
+    var posted: [WireFix] = []
 
     private func makeChannel(online: Bool = true) -> LiveChannel {
         sockets = []
@@ -103,9 +106,10 @@ final class LiveChannelTests: XCTestCase {
         let ch = LiveChannel(outingId: "o1", token: String(repeating: "t", count: 43), deps: .init(
             makeSocket: { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s },
             poll: { [unowned self] _ in self.polls += 1; throw OutingAPIError(code: "network", status: 0) },
-            post: { _, _ in },
-            beat: { _, _ in },
+            post: { [unowned self] _, w in self.posted.append(w) },
+            beat: { _, _, _ in },
             scheduler: clock,
+            canSendPosition: { [unowned self] in self.gateOpen },
             random: { 0.5 },
             online: { online }
         ))
@@ -265,5 +269,68 @@ final class LiveChannelTests: XCTestCase {
         XCTAssertEqual(sockets[0].closedWith, 1000)
         sockets[0].onOpen()
         XCTAssertTrue(sockets[0].sent.isEmpty, "a stopped channel never sends")
+    }
+}
+
+// MARK: - Privacy: the gate is enforced at the wire
+
+extension LiveChannelTests {
+    private func positionFrames(_ s: FakeSocket) -> [[String: Any]] { s.sent.filter { $0["type"] as? String == "position" } }
+
+    func testGateClosedNoPositionFrameEvenWhenLive() {
+        gateOpen = false
+        let ch = makeChannel()
+        ch.start()
+        ready(sockets[0])
+        ch.sendFix(fix(at: clock.nowMs - 500), mode: .balanced)
+        XCTAssertTrue(positionFrames(sockets[0]).isEmpty, "no consent / not sharing: nothing on the wire")
+        ch.heartbeat(gps: .ok)
+        XCTAssertEqual(sockets[0].sent.last?["type"] as? String, "heartbeat", "the coordinate-free heartbeat still goes")
+        XCTAssertNil(sockets[0].sent.last?["fix"])
+    }
+
+    func testFixHeldWhileOfflineIsNotSentAfterReconnectIfSharingStopped() {
+        gateOpen = true
+        let ch = makeChannel()
+        ch.start()
+        /* Not ready yet: the fix waits in the slot. */
+        ch.sendFix(fix(at: clock.nowMs - 500), mode: .balanced)
+        /* The person presses stop (or the app goes to the background) before the socket is ready. */
+        gateOpen = false
+        ready(sockets[0])
+        XCTAssertTrue(positionFrames(sockets[0]).isEmpty, "a held fix must not leak out on reconnect")
+    }
+
+    func testDropPendingFixForgetsTheHeldFix() {
+        gateOpen = true
+        let ch = makeChannel()
+        ch.start()
+        ch.sendFix(fix(at: clock.nowMs - 500), mode: .balanced)
+        ch.dropPendingFix()
+        ready(sockets[0])
+        XCTAssertTrue(positionFrames(sockets[0]).isEmpty)
+    }
+
+    func testPollingFallbackPostsNothingWithGateClosed() async throws {
+        gateOpen = false
+        let ch = makeChannel()
+        ch.start()
+        for _ in 0..<Backoff.failsBeforePolling {
+            sockets.last?.onClose(1006)
+            clock.advance(60_000)
+        }
+        XCTAssertEqual(ch.state, .polling)
+        ch.sendFix(fix(at: clock.nowMs - 500), mode: .balanced)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(posted.isEmpty, "no POST /positions with the gate closed")
+    }
+
+    func testGateOpenSendsAsBefore() {
+        gateOpen = true
+        let ch = makeChannel()
+        ch.start()
+        ready(sockets[0])
+        ch.sendFix(fix(at: clock.nowMs - 500), mode: .balanced)
+        XCTAssertEqual(positionFrames(sockets[0]).count, 1)
     }
 }

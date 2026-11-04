@@ -1,22 +1,20 @@
 import CoreLocation
 import UIKit
 
-/// The one owner of `CLLocationManager`.
+/// The one owner of `CLLocationManager`. Foreground only.
 ///
 /// Two levels, never confused:
 ///   * `watchForeground()` — your own dot for distances while the map is open.
-///     Nothing leaves the phone; no background updates.
-///   * `startSharing(mode:)` — only while you are sharing in an active outing.
-///     This is the only place `allowsBackgroundLocationUpdates` becomes true,
-///     and `stopSharing()` sets it back to false.
+///     Nothing leaves the phone.
+///   * `startSharing(mode:)` — only while you are sharing in an active outing
+///     AND the app is on screen. `allowsBackgroundLocationUpdates` is never
+///     turned on, there is no significant-change monitoring and no «دائمًا»
+///     request: when the app leaves the foreground the session stops sharing
+///     and stops the GPS (owner rule: positions are sent from the foreground only).
 ///
 /// `pausesLocationUpdatesAutomatically` is false while sharing: iOS's
 /// auto-pause fires when the phone looks stationary, and a parked convoy
-/// (tea stop, stuck in sand) is exactly when others most need to see you. Once
-/// auto-paused, updates only resume when the app returns to the foreground, so
-/// you would silently vanish. The battery cost is managed instead by the share
-/// mode, `LocationTuning` (lower accuracy when parked, saver on low battery)
-/// and the send policy.
+/// (tea stop, stuck in sand) is exactly when others most need to see you.
 @MainActor
 final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var authorization: CLAuthorizationStatus
@@ -65,20 +63,13 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         }
     }
 
-    /// Step 2 (after our Arabic explanation): Always, so iOS can relaunch the
-    /// app for significant moves if it was terminated mid-outing. Optional —
-    /// sharing with the screen locked works with When-In-Use too, because the
-    /// updates start in the foreground with background updates allowed.
-    func requestAlways() {
-        if authorization == .authorizedWhenInUse { manager.requestAlwaysAuthorization() }
-    }
-
     func watchForeground() {
         guard canLocate, !watching else { return }
         watching = true
         if !isSharing {
             manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = 10
+            /* No distance filter: a parked phone still gets fresh fixes, so its age stays honest. */
+            manager.distanceFilter = kCLDistanceFilterNone
         }
         manager.startUpdatingLocation()
     }
@@ -93,15 +84,10 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         chosenMode = mode
         filter.reset()
         isSharing = true
-        manager.allowsBackgroundLocationUpdates = true
-        manager.showsBackgroundLocationIndicator = true
+        manager.allowsBackgroundLocationUpdates = false
         manager.pausesLocationUpdatesAutomatically = false
         retune(speed: lastFix?.speed)
         manager.startUpdatingLocation()
-        /* Safety net: if iOS terminates the app, a significant move relaunches it (needs Always). */
-        if hasAlways, CLLocationManager.significantLocationChangeMonitoringAvailable() {
-            manager.startMonitoringSignificantLocationChanges()
-        }
     }
 
     func setMode(_ mode: ShareMode) {
@@ -112,12 +98,12 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     func stopSharing() {
         guard isSharing else { return }
         isSharing = false
-        manager.stopMonitoringSignificantLocationChanges()
         manager.allowsBackgroundLocationUpdates = false
         filter.reset()
         if watching {
             manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = 10
+            /* No distance filter: a parked phone still gets fresh fixes, so its age stays honest. */
+            manager.distanceFilter = kCLDistanceFilterNone
         } else {
             manager.stopUpdatingLocation()
         }

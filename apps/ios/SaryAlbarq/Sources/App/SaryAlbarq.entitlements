@@ -4,6 +4,12 @@
 <dict>
 	<!-- Universal Links for invite URLs. Needs apps/web/public/.well-known/apple-app-site-association
 	     deployed with the real Team ID, and the Associated Domains capability on the App ID. -->
+	<!-- Push Notifications (APNs). Xcode re-signs it as "production" for App Store builds. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- SOS arrives as a Time Sensitive notification (breaks through Focus when allowed). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:farq-map-investor.vercel.app</string>

@@ -2,19 +2,40 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var location: LocationSharer
+    @Environment(AppearanceSettings.self) private var appearance
+    @Environment(\.sary) private var theme
 
     var body: some View {
-        Group {
-            if let session = model.session {
-                LiveOutingView(session: session)
-            } else if model.identity == nil {
-                OnboardingView()
+        ZStack {
+            if model.launching {
+                SplashView().transition(.opacity)
+            } else if let session = model.session {
+                LiveOutingHost(session: session, model: model, appearance: appearance)
+                    .id(session.id)
+            } else if let screen = model.debugScreen {
+                DebugScreen(name: screen)
+            } else if model.identity == nil || needsOnboarding {
+                OnboardingFlow(start: model.identity == nil ? .intro : .locationExplainer)
+                    .transition(.opacity)
+                    .alert(model.accountNotice?.notice?.title ?? "", isPresented: Binding(get: { model.accountNotice?.notice != nil }, set: { if !$0 { model.accountNotice = nil } })) {
+                        Button("حسنًا", role: .cancel) {}
+                    } message: {
+                        Text(model.accountNotice?.notice?.message ?? "")
+                    }
             } else {
-                OutingsListView()
+                HomeView()
+                    .transition(.opacity)
+                    .onAppear { if model.identity != nil && location.authorization != .notDetermined { OnboardingProgress.done = true } }
             }
         }
+        .animation(theme.animation(.smooth), value: model.launching)
         .sheet(item: Binding(get: { model.pendingInvite.map(InviteToken.init) }, set: { model.pendingInvite = $0?.id })) { inv in
-            JoinView(token: inv.id).rtl()
+            InviteJoinSheet(token: inv.id).saryPresented(appearance)
+        }
+        .sheet(isPresented: Binding(get: { model.offerNotifications && model.session == nil && model.pendingInvite == nil },
+                                    set: { if !$0 { model.offerNotifications = false } })) {
+            NotifyExplainerSheet(done: { model.offerNotifications = false }).saryPresented(appearance)
         }
         .alert("تنبيه", isPresented: Binding(get: { model.errorText != nil }, set: { if !$0 { model.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
@@ -22,54 +43,49 @@ struct RootView: View {
             Text(model.errorText ?? "")
         }
     }
+
+    /// Signed in, but the location explainer was never seen and iOS has not asked yet.
+    private var needsOnboarding: Bool {
+        model.identity != nil && !OnboardingProgress.done && location.authorization == .notDetermined && !model.isDemo
+    }
 }
 
 struct InviteToken: Identifiable { let id: String }
 
-struct OnboardingView: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var name = ""
-    @State private var phone = ""
+/// Owns the live screen's controller for as long as that outing is open.
+struct LiveOutingHost: View {
+    @StateObject private var controller: LiveOutingController
 
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("سَرى البارق").font(.largeTitle.bold()).foregroundStyle(Theme.ink)
-                        Text("طلعات البر مع أصحابك: كل سيارة على الخريطة بلونها، وموقعك يبقى مشتركًا ولو قفلت الشاشة — فقط في الطلعة التي تختار المشاركة فيها.")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 8)
-                }
-                Section {
-                    TextField("اسمك كما يراه أصحابك", text: $name)
-                        .textContentType(.nickname)
-                        .accessibilityIdentifier("onboarding.name")
-                    TextField("رقم الجوال (اختياري)", text: $phone)
-                        .keyboardType(.phonePad)
-                        .textContentType(.telephoneNumber)
-                        .environment(\.layoutDirection, .leftToRight)
-                        .accessibilityIdentifier("onboarding.phone")
-                } footer: {
-                    Text("الرقم يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. يمكنك حذفه لاحقًا.")
-                }
-                Section {
-                    Button {
-                        Task { await model.createIdentity(name: name, phone: phone) }
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if model.loading { ProgressView() } else { Text("ابدأ").bold() }
-                            Spacer()
-                        }
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || model.loading)
-                    .accessibilityIdentifier("onboarding.start")
+    init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
+        _controller = StateObject(wrappedValue: {
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance)
+            c.onExit = { [weak model] in model?.closeSession() }
+            c.setPush = { [weak model] on in
+                guard let model else { return }
+                Task { await model.push.setEnabled(on, signedIn: model.signedIn) }
+            }
+            c.pushExplained = { [weak model] in model?.push.explained ?? true }
+            c.savePhone = { [weak model, weak c] phone in
+                guard let model else { return }
+                Task {
+                    let ok = await model.updateProfile(name: model.identity?.user.display_name ?? "", phone: phone ?? "")
+                    if ok { c?.toast("تم حفظ رقمك") }
                 }
             }
-            .navigationTitle("مرحبًا")
-        }
+            return c
+        }())
+    }
+
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        LiveOutingScreen(controller: controller)
+            .onReceive(model.$offerNotifications) { offer in
+                /* First join: our notification explainer, over the live map, once things settle. */
+                guard offer, controller.modal == nil else { return }
+                model.offerNotifications = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if controller.modal == nil { controller.modal = .notify } }
+            }
     }
 }
 

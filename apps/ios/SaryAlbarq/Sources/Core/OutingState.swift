@@ -9,9 +9,14 @@ enum LiveEvent: Equatable {
     case memberLeft(userId: String)
     case memberSharing(userId: String, sharing: Bool)
     case ownerChanged(ownerId: String)
-    case memberLink(userId: String, lastSeenAt: String, gps: GpsState?)
+    case memberLink(userId: String, lastSeenAt: String, gps: GpsState?, battery: BatteryInfo? = nil)
     case memberNote(userId: String, note: MemberNote?)
     case outingStatus(OutingStatus)
+    /// `sos: nil` = «أنا بخير» (cleared). `refresh` = a newer fix, not a new alarm.
+    case sos(userId: String, sos: SosInfo?, refresh: Bool)
+    case rally(RallyInfo?)
+    case memberRole(userId: String, coLeader: Bool)
+    case voiceClip(VoiceClip)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -44,12 +49,22 @@ enum LiveEvent: Equatable {
             return (obj["owner_id"] as? String).map { .ownerChanged(ownerId: $0) }
         case "member_link":
             guard let uid, let at = obj["last_seen_at"] as? String else { return nil }
-            return .memberLink(userId: uid, lastSeenAt: at, gps: (obj["gps"] as? String).flatMap(GpsState.init(rawValue:)))
+            return .memberLink(userId: uid, lastSeenAt: at, gps: (obj["gps"] as? String).flatMap(GpsState.init(rawValue:)), battery: decodeJSON(obj["battery"]))
         case "member_note":
             guard let uid else { return nil }
             return .memberNote(userId: uid, note: decodeJSON(obj["note"]))
         case "outing_status":
             return (obj["status"] as? String).flatMap(OutingStatus.init(rawValue:)).map(LiveEvent.outingStatus)
+        case "sos":
+            guard let uid else { return nil }
+            return .sos(userId: uid, sos: decodeJSON(obj["sos"]), refresh: obj["refresh"] as? Bool ?? false)
+        case "rally":
+            return .rally(decodeJSON(obj["rally"]))
+        case "member_role":
+            guard let uid else { return nil }
+            return .memberRole(userId: uid, coLeader: obj["co_leader"] as? Bool ?? false)
+        case "voice_clip":
+            return (decodeJSON(obj["clip"]) as VoiceClip?).map(LiveEvent.voiceClip)
         default:
             return nil
         }
@@ -63,6 +78,8 @@ struct OutingView: Equatable {
     var snapshot: OutingSnapshot
     var members: [String: Member]
     var positions: [String: Position]
+    /// Voice clips still on the server (newest last).
+    var clips: [VoiceClip]
     /// server clock − device clock, ms; ages are measured on the server's clock.
     var clockOffsetMs: Double
 
@@ -70,6 +87,7 @@ struct OutingView: Equatable {
         snapshot = s
         members = Dictionary(s.members.map { ($0.user_id, $0) }, uniquingKeysWith: { _, b in b })
         positions = Dictionary(s.positions.map { ($0.user_id, $0) }, uniquingKeysWith: { _, b in b })
+        clips = s.voice_clips ?? []
         let server = ISODate.parse(s.server_now) ?? deviceNow
         clockOffsetMs = (server.timeIntervalSince1970 - deviceNow.timeIntervalSince1970) * 1000
     }
@@ -100,11 +118,12 @@ struct OutingView: Equatable {
         case let .presence(uid, online, away):
             members[uid]?.online = online
             members[uid]?.away = away
-        case let .memberLink(uid, at, gps):
+        case let .memberLink(uid, at, gps, battery):
             guard members[uid] != nil else { return }
             members[uid]?.last_seen_at = at
             members[uid]?.gps = gps
             members[uid]?.online = true
+            members[uid]?.battery = battery
         case let .memberNote(uid, note):
             members[uid]?.note = note
         case let .memberJoined(m):
@@ -119,20 +138,46 @@ struct OutingView: Equatable {
         case let .memberLeft(uid):
             members[uid] = nil
             positions[uid] = nil
+            clips.removeAll { $0.user_id == uid }
         case let .memberSharing(uid, sharing):
             members[uid]?.sharing = sharing
             if !sharing { positions[uid] = nil }
             if uid == myId { snapshot.me.sharing = sharing }
         case let .ownerChanged(owner):
             for id in members.keys { members[id]?.role = id == owner ? "owner" : "member" }
+            members[owner]?.co_leader = false
             snapshot.me.role = owner == myId ? "owner" : "member"
+            if owner == myId { snapshot.me.co_leader = false }
             snapshot.outing.owner_id = owner
         case let .outingStatus(st):
             snapshot.outing.status = st
             /* Paused or ended: the server deleted every fix; so do we. */
             if st != .active { positions = [:] }
+            if st == .ended {
+                snapshot.outing.rally = nil
+                clips = []
+                for id in members.keys {
+                    members[id]?.sos = nil
+                    members[id]?.note = nil
+                }
+            }
+        case let .sos(uid, sos, _):
+            members[uid]?.sos = sos
+        case let .rally(r):
+            snapshot.outing.rally = r
+        case let .memberRole(uid, on):
+            members[uid]?.co_leader = on
+            if uid == myId { snapshot.me.co_leader = on }
+        case let .voiceClip(c):
+            guard !clips.contains(where: { $0.id == c.id }) else { return }
+            clips.append(c)
+            if clips.count > 30 { clips.removeFirst(clips.count - 30) }
         }
     }
+
+    /// Owner or «مساعد»: may start/pause the outing and manage the rally point.
+    var iLead: Bool { snapshot.me.role == "owner" || snapshot.me.co_leader == true || snapshot.me.can_lead == true }
+    var iOwn: Bool { snapshot.me.role == "owner" }
 
     func serverNowMs(deviceNow: Date = Date()) -> Double {
         deviceNow.timeIntervalSince1970 * 1000 + clockOffsetMs

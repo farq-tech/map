@@ -15,10 +15,14 @@ Task { @MainActor in
         let pv = try await api.preview(token: c.invite.token)
         log("preview: \(pv.name) by \(pv.owner_name)")
         _ = try await api.setStatus(c.outing_id, action: "start")
+        /* This throwaway identity shares on purpose: say so explicitly (the server's
+         * join default is not consent), and open the channel's privacy gate only for it. */
+        _ = try await api.setSharing(c.outing_id, sharing: true)
         let ch = LiveChannel(outingId: c.outing_id, token: id.token, deps: .init(
             makeSocket: { URLSessionLiveSocket(url: $0) },
             poll: { try await api.poll($0) }, post: { try await api.sendPosition($0, fix: $1) },
-            beat: { try await api.heartbeat($0, gps: $1) }, scheduler: MainScheduler()))
+            beat: { try await api.heartbeat($0, gps: $1, battery: $2) }, scheduler: MainScheduler(),
+            canSendPosition: { true }))
         var acks = 0
         ch.handlers = .init(
             onSnapshot: { s in log("ready snapshot: status=\(s.outing.status) members=\(s.members.count) positions=\(s.positions.count)") },

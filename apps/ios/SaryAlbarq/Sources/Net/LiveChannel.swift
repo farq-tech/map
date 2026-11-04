@@ -27,8 +27,12 @@ final class LiveChannel {
         var makeSocket: (URL) -> LiveSocket
         var poll: (String) async throws -> OutingSnapshot
         var post: (String, WireFix) async throws -> Void
-        var beat: (String, GpsState) async throws -> Void
+        var beat: (String, GpsState, BatteryInfo?) async throws -> Void
         var scheduler: Scheduler
+        /// The privacy gate (`SendGate.allowsPosition`), asked at the last step
+        /// before a position frame or POST. Closed by default: a caller has to
+        /// say, every time, that this person is sharing right now.
+        var canSendPosition: () -> Bool = { false }
         var random: () -> Double = { Double.random(in: 0...1) }
         var online: () -> Bool = { true }
     }
@@ -75,19 +79,26 @@ final class LiveChannel {
 
     /// Send now if we can; otherwise keep it as the one pending fix.
     func sendFix(_ fix: DeviceFix, mode: ShareMode) {
-        guard !stopped else { return }
+        guard !stopped, deps.canSendPosition() else { return slot.clear() }
         slot.put(fix, mode: mode)
         flush()
     }
 
+    /// Sharing stopped, the app went to the background, or consent ended: a fix
+    /// held for "when the network is back" must never go out later.
+    func dropPendingFix() { slot.clear() }
+
     /// "Still here", with no coordinates — so others can tell no-GPS from no-network.
-    func heartbeat(gps: GpsState) {
+    /// `battery` only when the person chose to share it.
+    func heartbeat(gps: GpsState, battery: BatteryInfo? = nil) {
         guard !stopped else { return }
         if state == .live {
-            sendFrame(["type": "heartbeat", "gps": gps.rawValue])
+            var f: [String: Any] = ["type": "heartbeat", "gps": gps.rawValue]
+            if let battery { f["battery"] = ["level": battery.level, "charging": battery.charging] }
+            sendFrame(f)
         } else if state == .polling {
             let id = outingId, beat = deps.beat
-            Task { try? await beat(id, gps) }
+            Task { try? await beat(id, gps, battery) }
         }
     }
 
@@ -149,6 +160,8 @@ final class LiveChannel {
 
     private func flush() {
         guard slot.pending != nil else { return }
+        /* Re-asked here because a fix can wait in the slot across a reconnect. */
+        guard deps.canSendPosition() else { return slot.clear() }
         if state == .live {
             guard let pending = slot.pending, let wire = slot.take(nowMs: deps.scheduler.nowMs) else { return }
             seq += 1
