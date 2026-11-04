@@ -54,9 +54,12 @@ targets:
     sources:
       - Sources
       - Resources
+      - Shared
     dependencies:
       - package: MapboxMaps
         product: MapboxMaps
+      # The outing's Live Activity (Lock Screen + Dynamic Island).
+      - target: SaryAlbarqWidgets
     # Config/Base.xcconfig optionally includes the gitignored Config/Secrets.xcconfig
     # (MAPBOX_ACCESS_TOKEN), which Info.plist hands to Mapbox as MBXAccessToken.
     configFiles:
@@ -73,6 +76,27 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+  # Widget extension: the outing's Live Activity. Shares only Shared/ with the app
+  # (ActivityAttributes + the pure display rules); no App Group needed.
+  SaryAlbarqWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Shared
+      - path: Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        # OWNER: register this App ID (no extra capabilities needed).
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.widgets
+        PRODUCT_NAME: SaryAlbarqWidgets
+        INFOPLIST_FILE: Widgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
   SaryAlbarqTests:
     type: bundle.unit-test
     platform: iOS

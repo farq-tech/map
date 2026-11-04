@@ -82,6 +82,8 @@ final class OutingSession: ObservableObject, Identifiable {
     let mesh: NearbyMesh
     private var meshActivation = MeshActivation()
     private var meshSink: AnyCancellable?
+    /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
+    var stuckMarks: [StuckMark] = []
     /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
     var onNearbyEvent: (MeshEvent) -> Void = { _ in }
     #if DEBUG

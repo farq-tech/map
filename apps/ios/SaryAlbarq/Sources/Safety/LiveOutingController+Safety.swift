@@ -28,6 +28,14 @@ extension LiveOutingController {
                viewChanged: session.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
                locationChanged: location.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
                timers: timers)
+        /* The Live Activity ranks «غرّزت» (OutingActivityCoordinator.stuck reads the session). */
+        s.$stuck.sink { [weak self] st in
+            guard let session = self?.session else { return }
+            let marks = st.values.map { StuckMark(userId: $0.userId, at: $0.at) }.sorted { $0.at > $1.at }
+            guard marks != session.stuckMarks else { return }
+            session.stuckMarks = marks
+            DispatchQueue.main.async { session.objectWillChange.send() }
+        }.store(in: &s.retained)
         /* Redraw the screen (chips, strips) when the safety state changes. */
         s.objectWillChange.sink { [weak self] in DispatchQueue.main.async { self?.objectWillChange.send() } }.store(in: &s.retained)
         #if DEBUG

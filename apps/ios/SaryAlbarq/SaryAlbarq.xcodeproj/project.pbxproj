@@ -12,6 +12,7 @@
 		06912821BBE6C7BA595233FB /* SaryFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A6DD3BA79D59CFC045E663 /* SaryFormat.swift */; };
 		071B934F70A195F66BAC9EEF /* ServerRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */; };
 		07C479D806218F00E06056B8 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7054D28829BF6342E6ADB5CB /* VoiceClips.swift */; };
+		080E3E57E6680A8E26D8A269 /* Tajawal-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */; };
 		08B95CC152CFCF0A70B61C87 /* AccountDeletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829DC987210D81AB7F10A4F2 /* AccountDeletion.swift */; };
 		091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22577D3538F441C2B397A087 /* LocationTuning.swift */; };
 		0BCB77738A63E5DCF01CA98B /* PointCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7952EE60DE75E467D311999 /* PointCard.swift */; };
@@ -35,6 +36,7 @@
 		2AA0BA776FFBD6002E7B11CC /* TrailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BAD7EA4146554682B94424 /* TrailTests.swift */; };
 		2AF04C664C03718542548443 /* SaryPTT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087D07928C7AC61627BD3A63 /* SaryPTT.swift */; };
 		2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31571952C88A8EFB16D42C17 /* HomeView.swift */; };
+		2B5758AC6E38B537D3F8EF80 /* OutingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */; };
 		2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7375A05885429491947FFF5 /* OutingStateTests.swift */; };
 		2D57E09AFD46BAE41FD94E99 /* MeshStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92E5C3B7CAF047A17215B8E1 /* MeshStore.swift */; };
 		2DB6F480E6502C6837550473 /* SaryGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1028ECB1BBC14F406546C403 /* SaryGlass.swift */; };
@@ -73,7 +75,9 @@
 		59EBEB964759D58E54727F8E /* SafetyAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77CE80B48719C956802AFB51 /* SafetyAPI.swift */; };
 		5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */; };
 		5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */; };
+		5CE0D2A20AE94021998CB350 /* OutingActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DF67DE81239EDAD62E2723 /* OutingActivityCoordinator.swift */; };
 		5E1F37D3C1DAFE6A6D3AAA46 /* SafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936885EDDC9016EA6FAB7D27 /* SafetyTests.swift */; };
+		5F41F9FA232227C41EC0313F /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */; };
 		615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */; };
 		61CFE446CEBF0D9276DD62FF /* SaryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */; };
 		6293DEBC6B10D9E1B68FEFC3 /* BackTrackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */; };
@@ -81,12 +85,14 @@
 		65D1768FBB2671B07CC4DE6C /* Convoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52F18343CB5D4890CE903610 /* Convoy.swift */; };
 		662A8225BE50B7128B547448 /* LiveOutingContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */; };
 		684D7791FEA2712123A0A9A1 /* SaryParticipant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */; };
+		6AE28766A15150B840EFBB23 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = D7E90053C8AC1F577F5DC3B4 /* OFL.txt */; };
 		6B71C341051934FE32A56BE3 /* SaryAlbarqApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */; };
 		6BEE9F5231818331223116B0 /* LiveChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B47DB0E41B0AD052B607CB27 /* LiveChannel.swift */; };
 		6C8C6C1D3F169181BC4A9A8B /* AccountDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */; };
 		6E8DD717C35604A4FACFA8EB /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 318D0930455B81369FEEE9E0 /* AppModel.swift */; };
 		7106AAFF960B91D1859F66A7 /* LiveSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */; };
 		7150DA88C188F02803392152 /* PlanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED874D0173AB2F00E5EC9768 /* PlanUITests.swift */; };
+		720F65915109D36462C6D095 /* OutingActivityDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */; };
 		735A33AC3B44DBA0FDCE015E /* TripLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4343F12A82B70322558AC0D /* TripLog.swift */; };
 		7567E09DAF6E55DD6A4FB56C /* RecoveryFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C3945563FBFA05496632EDC /* RecoveryFormatTests.swift */; };
 		771CF1A9EC8865D34CE4F02E /* OutingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */; };
@@ -108,31 +114,39 @@
 		898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */; };
 		8C34594CDCC94567B77196B0 /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */; };
 		8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */; };
+		8DC94CC5C6F716F6414B2314 /* OutingActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */; };
 		8EDB900CFFA6E3C7960D73D6 /* SaryMapControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4370475FC1006881BCACF8 /* SaryMapControls.swift */; };
+		8FA7B88996BB67B532C27B3B /* Tajawal-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */; };
 		911EA0E677E066F0F1D6E8CE /* LiveOutingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */; };
 		913DA56B796E0D6CA4D634BB /* CoordinateShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70543C38944AC802EC15DD6 /* CoordinateShare.swift */; };
 		92B96B2F349DEA5FB18939FA /* StoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6DA5CD2131BB21430FC238 /* StoryTests.swift */; };
+		9393DE17F42589B6FF7BD140 /* SaryAlbarqWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		94A82E0D57CB2023C035AF9F /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A6552211824B45AF52FE26 /* SettingsScreens.swift */; };
 		96E1EE0558E57803F6C58FF6 /* SafetyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74764502578EE2BF2B879A25 /* SafetyViews.swift */; };
 		98BC6C17560D22BF1DA67E5E /* SarySOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60638084F780BC8BED2D9961 /* SarySOS.swift */; };
 		98F4EB3B6FBDCC01779015FA /* WaypointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD3481E4956173E7476C431 /* WaypointTests.swift */; };
 		98F511391CA39ED1A4D0CC3F /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 522D9BD5ED742287300C4BD0 /* MapboxMaps */; };
 		997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = C345B48C2AFDDA7637004476 /* NearbyMesh.swift */; };
+		9C57BC9BFE5C9DEA0719B95F /* OutingActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */; };
 		9CA1F2B5B3B496F3B09568DF /* StoryRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB9DC7BFFD3ADBF8D84CEB32 /* StoryRenderer.swift */; };
 		9CD1B7D2841649438A1B40DD /* LiveOutingPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */; };
 		9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C008F75E097C5F716CA27F92 /* StoryComposerView.swift */; };
 		A24E1DB789B5AFA3E1A49DA5 /* StoryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130F880F87CDE2889AC43639 /* StoryModel.swift */; };
 		A7F4AD5D6CF4BCD5C02A66F5 /* Tajawal-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */; };
 		A8F0D7298496491D5258091A /* FeatureContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BB1804ED435C480DA2259A2 /* FeatureContracts.swift */; };
+		AB9F2EBF5F16E7BC02ECA93E /* LiveActivityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6512E998C15D9197A532AED /* LiveActivityUITests.swift */; };
 		B029B98238C9EDEABB757DD5 /* OutingDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */; };
 		B3D5A84F4B4B5F41857604D4 /* ChipLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 512C97CE9BE0C836977C53B6 /* ChipLayoutTests.swift */; };
 		B41FD991EF6D280EA63B5CA4 /* OfflineMapsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */; };
 		B55007BB4AC745A6F82825ED /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D1F55DF995866060A02C7E28 /* InfoPlist.strings */; };
 		B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79172DD3710A43059AD423D9 /* LiveProductionTests.swift */; };
 		BA9EC12A242516686214DC1D /* SafetyModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9277C432B14BEC26834FFA /* SafetyModels.swift */; };
+		BABEA1C522D3C3F944A5F081 /* OutingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D760D265D8142ADC975C3C6A /* OutingLiveActivityWidget.swift */; };
 		BB72181BBB29FB559AB3DB30 /* StoryPrivacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8B7E5539A2D7D4C3619F42 /* StoryPrivacy.swift */; };
+		C0F2326D0485EE536CE47783 /* SaryWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E313CE99A6E96F6BB2DCE4DA /* SaryWidgetsBundle.swift */; };
 		C2F97FDEC9ED998804C7C064 /* PlanAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3F505C8C264BD20F14F659 /* PlanAPI.swift */; };
 		C4BE81361B59B343906259EA /* SaryStates.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F18F1551C61F843F8D69AB /* SaryStates.swift */; };
+		C5E59A2E38E91C5C40D819F3 /* OutingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */; };
 		C6A43AED85778F01DE131F67 /* PlanEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1616F75CC1BD288A1F5D7F47 /* PlanEditorView.swift */; };
 		C8CCF2A9DCAC52B25C4498DF /* DesignSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33423E5B09B8A1AC4E722A89 /* DesignSystemTests.swift */; };
 		C9C19B349BAB334D88BDBB89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5AF5AA15881B17850C98CA71 /* Assets.xcassets */; };
@@ -150,9 +164,11 @@
 		E7B2533F639497ED247C4033 /* WaypointLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */; };
 		E9E23ADE2D2ECBDF3B9026D6 /* SafetyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32FCE3EEF86D3386602FB586 /* SafetyUITests.swift */; };
 		ECC05342C40A5D9AC7C042B2 /* SaryColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E4678268B288A88DA575A6 /* SaryColors.swift */; };
+		ED70ADD0AABE3D5CC74F14DE /* Tajawal-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */; };
 		EE133A4EEAB990C0B47A68C7 /* Vehicle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2A85914500826197C7FB0F /* Vehicle.swift */; };
 		EE4C6E9A9111813F2B32CA5D /* SaryInputs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F06019237C8C995F9E23ABB /* SaryInputs.swift */; };
 		EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */; };
+		EFED2B12548B002390268928 /* OutingActivityDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */; };
 		F19CF3E2845E4431FCA570F3 /* PrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */; };
 		F23D349CD8B6C406E98C88F8 /* ChipLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 228B792179E7688D3B50771D /* ChipLayout.swift */; };
 		F74C69A26E7B0C2F0766AD58 /* Trail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FA16F086DA2E158BD914C1 /* Trail.swift */; };
@@ -177,7 +193,28 @@
 			remoteGlobalIDString = 26DCA2709104968DE7DD6B95;
 			remoteInfo = SaryAlbarq;
 		};
+		F7EF5CB89AD3E24D46F21699 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F7429672CC3462184D2EC936 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 90242A21A473780334595F14;
+			remoteInfo = SaryAlbarqWidgets;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A404CB898621EBC70E59F5D3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9393DE17F42589B6FF7BD140 /* SaryAlbarqWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000E017C0BA01219E91C2926 /* FeatureFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureFlowTests.swift; sourceTree = "<group>"; };
@@ -232,6 +269,7 @@
 		3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackTrackUITests.swift; sourceTree = "<group>"; };
 		3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
 		4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAppearancePanel.swift; sourceTree = "<group>"; };
+		42DF67DE81239EDAD62E2723 /* OutingActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityCoordinator.swift; sourceTree = "<group>"; };
 		43221C3D797CB2C6A5C99A02 /* StoryMedia.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryMedia.swift; sourceTree = "<group>"; };
 		4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyTests.swift; sourceTree = "<group>"; };
 		4BB1804ED435C480DA2259A2 /* FeatureContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureContracts.swift; sourceTree = "<group>"; };
@@ -239,6 +277,7 @@
 		50A29F2A211EB5C443FC4D85 /* PlanMapLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanMapLayer.swift; sourceTree = "<group>"; };
 		512C97CE9BE0C836977C53B6 /* ChipLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipLayoutTests.swift; sourceTree = "<group>"; };
 		52B545614818C7F89DCDD20D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityDisplay.swift; sourceTree = "<group>"; };
 		52F18343CB5D4890CE903610 /* Convoy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Convoy.swift; sourceTree = "<group>"; };
 		53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsUITests.swift; sourceTree = "<group>"; };
 		54C608FD300357F3B7B83789 /* DemoTrail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoTrail.swift; sourceTree = "<group>"; };
@@ -256,6 +295,7 @@
 		61D00282D218E5D04013AD73 /* SuvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuvModel.swift; sourceTree = "<group>"; };
 		6E24003749BC3726C3407B3A /* SaryAlbarqUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqUITests.swift; sourceTree = "<group>"; };
 		6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionTests.swift; sourceTree = "<group>"; };
+		6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityTests.swift; sourceTree = "<group>"; };
 		7054D28829BF6342E6ADB5CB /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
 		71FA16F086DA2E158BD914C1 /* Trail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trail.swift; sourceTree = "<group>"; };
 		722A5E7011E6663441A0888F /* DemoFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoFeatures.swift; sourceTree = "<group>"; };
@@ -290,6 +330,7 @@
 		A2F250B4DBC1D0018C096D9D /* StoryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryUITests.swift; sourceTree = "<group>"; };
 		A3E4678268B288A88DA575A6 /* SaryColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryColors.swift; sourceTree = "<group>"; };
 		A44C2A050B84465EA50A992A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A6512E998C15D9197A532AED /* LiveActivityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityUITests.swift; sourceTree = "<group>"; };
 		A76B7AC870FF18C0416DEE76 /* SaryButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryButtons.swift; sourceTree = "<group>"; };
 		A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingContract.swift; sourceTree = "<group>"; };
 		AD262FCA6C49655E8242D57B /* OutingDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingDetailsView.swift; sourceTree = "<group>"; };
@@ -303,6 +344,7 @@
 		B7375A05885429491947FFF5 /* OutingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingStateTests.swift; sourceTree = "<group>"; };
 		B769B419B2E935D279F5F004 /* TripPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripPlan.swift; sourceTree = "<group>"; };
 		BB9EBA4DBD0EE2156C0A0383 /* OutingFeaturesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingFeaturesAPI.swift; sourceTree = "<group>"; };
+		BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityBuilder.swift; sourceTree = "<group>"; };
 		C008F75E097C5F716CA27F92 /* StoryComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryComposerView.swift; sourceTree = "<group>"; };
 		C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingDestination.swift; sourceTree = "<group>"; };
 		C345B48C2AFDDA7637004476 /* NearbyMesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyMesh.swift; sourceTree = "<group>"; };
@@ -312,8 +354,10 @@
 		D132B3832EC90CC64BA0342A /* SaryShowcase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryShowcase.swift; sourceTree = "<group>"; };
 		D4B8BFBB9F1B771E327A8275 /* CoordinateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateParser.swift; sourceTree = "<group>"; };
 		D5E57FB8A27CBA2240B35A0F /* FeatureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureViews.swift; sourceTree = "<group>"; };
+		D760D265D8142ADC975C3C6A /* OutingLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingLiveActivityWidget.swift; sourceTree = "<group>"; };
 		D7952EE60DE75E467D311999 /* PointCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCard.swift; sourceTree = "<group>"; };
 		D7E90053C8AC1F577F5DC3B4 /* OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = OFL.txt; sourceTree = "<group>"; };
+		D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityAttributes.swift; sourceTree = "<group>"; };
 		DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolicyTests.swift; sourceTree = "<group>"; };
 		DA239880AF3AA4D4E37ACB40 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		DB8B7E5539A2D7D4C3619F42 /* StoryPrivacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryPrivacy.swift; sourceTree = "<group>"; };
@@ -322,11 +366,14 @@
 		E1357FA88F811568C444EAFE /* SaryAlbarqUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryContracts.swift; sourceTree = "<group>"; };
 		E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrar.swift; sourceTree = "<group>"; };
+		E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SaryAlbarqWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E313CE99A6E96F6BB2DCE4DA /* SaryWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryWidgetsBundle.swift; sourceTree = "<group>"; };
 		E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreensUITests.swift; sourceTree = "<group>"; };
 		E4343F12A82B70322558AC0D /* TripLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripLog.swift; sourceTree = "<group>"; };
 		E4C328DB2C402A95A6C6F356 /* OutingsAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingsAPI.swift; sourceTree = "<group>"; };
 		E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingSession.swift; sourceTree = "<group>"; };
 		E7A6552211824B45AF52FE26 /* SettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreens.swift; sourceTree = "<group>"; };
+		EC2D34AC2EA424776D789FB4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSheet.swift; sourceTree = "<group>"; };
 		ED3F505C8C264BD20F14F659 /* PlanAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanAPI.swift; sourceTree = "<group>"; };
 		ED874D0173AB2F00E5EC9768 /* PlanUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanUITests.swift; sourceTree = "<group>"; };
@@ -418,9 +465,11 @@
 			children = (
 				36A0F5FA64D8DB846BB2E8E4 /* Config */,
 				849883FB983546B1003A7E47 /* Resources */,
+				5D49A3E88849B38DD00AB5DF /* Shared */,
 				3F9C07B7902141E4BA18E95C /* Sources */,
 				502C2E6652D6C490D65D52B4 /* Tests */,
 				A8E79051213FADBD889D7AB2 /* UITests */,
+				5ACDB34D02E84254D9E52416 /* Widgets */,
 				AF0812172F6B23688AE14662 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -439,6 +488,7 @@
 				829DC987210D81AB7F10A4F2 /* AccountDeletion.swift */,
 				318D0930455B81369FEEE9E0 /* AppModel.swift */,
 				A44C2A050B84465EA50A992A /* Info.plist */,
+				42DF67DE81239EDAD62E2723 /* OutingActivityCoordinator.swift */,
 				E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */,
 				E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */,
 				22D142BEE2D2FB9BA3700CFB /* SaryAlbarq.entitlements */,
@@ -505,6 +555,7 @@
 				7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */,
 				7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */,
 				009848C40DEEB8AAFB07C0CD /* NearbyMeshTests.swift */,
+				6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */,
 				B7375A05885429491947FFF5 /* OutingStateTests.swift */,
 				B691EE90902AA118435E198F /* PlanTests.swift */,
 				DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */,
@@ -529,6 +580,24 @@
 				52B545614818C7F89DCDD20D /* RootView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		5ACDB34D02E84254D9E52416 /* Widgets */ = {
+			isa = PBXGroup;
+			children = (
+				EC2D34AC2EA424776D789FB4 /* Info.plist */,
+				D760D265D8142ADC975C3C6A /* OutingLiveActivityWidget.swift */,
+				E313CE99A6E96F6BB2DCE4DA /* SaryWidgetsBundle.swift */,
+			);
+			path = Widgets;
+			sourceTree = "<group>";
+		};
+		5D49A3E88849B38DD00AB5DF /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B766A044E22A5B3EC6CF1213 /* LiveActivity */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 		708036541DBBC706E8349484 /* Safety */ = {
@@ -599,6 +668,7 @@
 				722A5E7011E6663441A0888F /* DemoFeatures.swift */,
 				FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */,
 				8047438796945B9B2C699C8B /* LiveOutingPresenter.swift */,
+				BDD389CA8D4885D6779BFE2B /* OutingActivityBuilder.swift */,
 				319F5D6B850C453345A0118C /* OutingFeaturesModel.swift */,
 				7054D28829BF6342E6ADB5CB /* VoiceClips.swift */,
 			);
@@ -631,6 +701,7 @@
 			children = (
 				3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */,
 				9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */,
+				A6512E998C15D9197A532AED /* LiveActivityUITests.swift */,
 				79172DD3710A43059AD423D9 /* LiveProductionTests.swift */,
 				1BACD4C5C961C090729FEC90 /* MoreMenuUITests.swift */,
 				53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */,
@@ -650,8 +721,18 @@
 				5E17D73842E97F9B08A394E6 /* SaryAlbarq.app */,
 				3965FB1AEE0F3BE181A0450F /* SaryAlbarqTests.xctest */,
 				E1357FA88F811568C444EAFE /* SaryAlbarqUITests.xctest */,
+				E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B766A044E22A5B3EC6CF1213 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				D91B934841C11948875B8B21 /* OutingActivityAttributes.swift */,
+				52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */,
+			);
+			path = LiveActivity;
 			sourceTree = "<group>";
 		};
 		C82218343F52515BB4AAC7D0 /* DesignSystem */ = {
@@ -719,10 +800,12 @@
 				F7CE37992E98AFCB185F50F9 /* Sources */,
 				86FF7C92958D9BF4682ED1DC /* Resources */,
 				003D6C1B9874448F4E61D28A /* Frameworks */,
+				A404CB898621EBC70E59F5D3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DC777A630548C32463FB8E46 /* PBXTargetDependency */,
 			);
 			name = SaryAlbarq;
 			packageProductDependencies = (
@@ -749,6 +832,24 @@
 			productName = SaryAlbarqTests;
 			productReference = 3965FB1AEE0F3BE181A0450F /* SaryAlbarqTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		90242A21A473780334595F14 /* SaryAlbarqWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 01DC0BDACCB6D78AE3EBEE4B /* Build configuration list for PBXNativeTarget "SaryAlbarqWidgets" */;
+			buildPhases = (
+				34851508CD4254EFE324BCE9 /* Sources */,
+				EE7B9B8BCA0CB6E0EC50977C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SaryAlbarqWidgets;
+			packageProductDependencies = (
+			);
+			productName = SaryAlbarqWidgets;
+			productReference = E2FB8B1FE3B733CDB15CDA57 /* SaryAlbarqWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		A1C39E997AC05945B40DC896 /* SaryAlbarqUITests */ = {
 			isa = PBXNativeTarget;
@@ -785,6 +886,10 @@
 						DevelopmentTeam = MH7J92HV9N;
 						ProvisioningStyle = Automatic;
 					};
+					90242A21A473780334595F14 = {
+						DevelopmentTeam = MH7J92HV9N;
+						ProvisioningStyle = Automatic;
+					};
 					A1C39E997AC05945B40DC896 = {
 						DevelopmentTeam = MH7J92HV9N;
 						ProvisioningStyle = Automatic;
@@ -811,6 +916,7 @@
 			projectRoot = "";
 			targets = (
 				26DCA2709104968DE7DD6B95 /* SaryAlbarq */,
+				90242A21A473780334595F14 /* SaryAlbarqWidgets */,
 				885227E9528F08985ED8D551 /* SaryAlbarqTests */,
 				A1C39E997AC05945B40DC896 /* SaryAlbarqUITests */,
 			);
@@ -833,15 +939,39 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EE7B9B8BCA0CB6E0EC50977C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6AE28766A15150B840EFBB23 /* OFL.txt in Resources */,
+				5F41F9FA232227C41EC0313F /* Tajawal-Bold.ttf in Resources */,
+				8FA7B88996BB67B532C27B3B /* Tajawal-ExtraBold.ttf in Resources */,
+				ED70ADD0AABE3D5CC74F14DE /* Tajawal-Medium.ttf in Resources */,
+				080E3E57E6680A8E26D8A269 /* Tajawal-Regular.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		34851508CD4254EFE324BCE9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B5758AC6E38B537D3F8EF80 /* OutingActivityAttributes.swift in Sources */,
+				EFED2B12548B002390268928 /* OutingActivityDisplay.swift in Sources */,
+				BABEA1C522D3C3F944A5F081 /* OutingLiveActivityWidget.swift in Sources */,
+				C0F2326D0485EE536CE47783 /* SaryWidgetsBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		581312741ED1BDE9BBD633FA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				6293DEBC6B10D9E1B68FEFC3 /* BackTrackUITests.swift in Sources */,
 				5487F7F21A426D1FE552CE27 /* ChipDeclutterUITests.swift in Sources */,
+				AB9F2EBF5F16E7BC02ECA93E /* LiveActivityUITests.swift in Sources */,
 				B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */,
 				8592165BEF45C57E82A828AC /* MoreMenuUITests.swift in Sources */,
 				B41FD991EF6D280EA63B5CA4 /* OfflineMapsUITests.swift in Sources */,
@@ -867,6 +997,7 @@
 				5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */,
 				1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */,
 				176A27E679C285AEDC9FB79C /* NearbyMeshTests.swift in Sources */,
+				8DC94CC5C6F716F6414B2314 /* OutingActivityTests.swift in Sources */,
 				2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */,
 				453600FDFF719FC086526D11 /* PlanTests.swift in Sources */,
 				0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */,
@@ -924,6 +1055,10 @@
 				86B80A0CAF9A0FECB38A6F8D /* OfflineMaps.swift in Sources */,
 				33F4F4423348F7788A65F9CF /* OfflineMapsView.swift in Sources */,
 				0FC4C2E18C32E1D6F9EF7B2F /* OnboardingFlow.swift in Sources */,
+				C5E59A2E38E91C5C40D819F3 /* OutingActivityAttributes.swift in Sources */,
+				9C57BC9BFE5C9DEA0719B95F /* OutingActivityBuilder.swift in Sources */,
+				5CE0D2A20AE94021998CB350 /* OutingActivityCoordinator.swift in Sources */,
+				720F65915109D36462C6D095 /* OutingActivityDisplay.swift in Sources */,
 				B029B98238C9EDEABB757DD5 /* OutingDestination.swift in Sources */,
 				0C232120FA55F461674FFE2F /* OutingDetailsView.swift in Sources */,
 				7EFE68FBACBFFDBBDC9C067C /* OutingFeaturesAPI.swift in Sources */,
@@ -1014,6 +1149,11 @@
 			target = 26DCA2709104968DE7DD6B95 /* SaryAlbarq */;
 			targetProxy = 84E396C3D4D6939A6BA318F1 /* PBXContainerItemProxy */;
 		};
+		DC777A630548C32463FB8E46 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 90242A21A473780334595F14 /* SaryAlbarqWidgets */;
+			targetProxy = F7EF5CB89AD3E24D46F21699 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -1029,6 +1169,24 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		31EB75504D0F05E722B4F9E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sa.sary.albarq.widgets;
+				PRODUCT_NAME = SaryAlbarqWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+			};
+			name = Release;
+		};
 		3FF1F4278BB3D7032F92D67C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1183,9 +1341,36 @@
 			};
 			name = Release;
 		};
+		FC98145AD8C2ABC8C1DE766A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = sa.sary.albarq.widgets;
+				PRODUCT_NAME = SaryAlbarqWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		01DC0BDACCB6D78AE3EBEE4B /* Build configuration list for PBXNativeTarget "SaryAlbarqWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FC98145AD8C2ABC8C1DE766A /* Debug */,
+				31EB75504D0F05E722B4F9E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		29B20F5FEE14F02E46FFC713 /* Build configuration list for PBXNativeTarget "SaryAlbarqTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

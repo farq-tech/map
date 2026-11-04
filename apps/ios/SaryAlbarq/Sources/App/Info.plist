@@ -68,6 +68,9 @@
 		<string>_sary-mesh._tcp</string>
 		<string>_sary-mesh._udp</string>
 	</array>
+	<!-- The outing's Live Activity (Lock Screen + Dynamic Island), started when you share. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 
 	<key>NSCameraUsageDescription</key>
 	<string>تُستخدم الكاميرا لمسح رمز QR (دعوة طلعة أو رمز الاسترجاع)، ولتصوير نقطة تشاركها مع أعضاء الطلعة إذا اخترت ذلك بنفسك. لا تُحفظ الصور في معرض جوالك.</string>
