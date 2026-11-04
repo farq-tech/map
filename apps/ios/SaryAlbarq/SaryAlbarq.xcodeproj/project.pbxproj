@@ -26,6 +26,7 @@
 		1FA64AB181BA37FCE46FAC6E /* LiveOutingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */; };
 		260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */; };
 		2922667834889B9DCA1B3555 /* SunsetWayBack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEC7F5717C18EE95B7D09DE8 /* SunsetWayBack.swift */; };
+		2AA0BA776FFBD6002E7B11CC /* TrailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BAD7EA4146554682B94424 /* TrailTests.swift */; };
 		2AF04C664C03718542548443 /* SaryPTT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087D07928C7AC61627BD3A63 /* SaryPTT.swift */; };
 		2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31571952C88A8EFB16D42C17 /* HomeView.swift */; };
 		2D0CAD2D1792ECA1A8BD3797 /* OutingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7375A05885429491947FFF5 /* OutingStateTests.swift */; };
@@ -46,6 +47,7 @@
 		40EB626DF9BC21B3B55B0303 /* SaryShowcase.swift in Sources */ = {isa = PBXBuildFile; fileRef = D132B3832EC90CC64BA0342A /* SaryShowcase.swift */; };
 		44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */; };
 		46A6420D055E9CB4B2D7F1D9 /* ReminderScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74730391AAD5CE3F324E29F8 /* ReminderScheduler.swift */; };
+		48FD091ED96CA8AD956F0810 /* DemoTrail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C608FD300357F3B7B83789 /* DemoTrail.swift */; };
 		493B53CB5FA52E7BE4AFCCF5 /* SafetyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6F5E37AF2D093C5BF7EFC3 /* SafetyController.swift */; };
 		4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */; };
 		50676ABA167F396BA6E7C174 /* SaryAppearancePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */; };
@@ -56,6 +58,7 @@
 		5E1F37D3C1DAFE6A6D3AAA46 /* SafetyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936885EDDC9016EA6FAB7D27 /* SafetyTests.swift */; };
 		615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */; };
 		61CFE446CEBF0D9276DD62FF /* SaryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46BC26B3EA93ED2F2925DFC /* SaryCards.swift */; };
+		6293DEBC6B10D9E1B68FEFC3 /* BackTrackUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */; };
 		662A8225BE50B7128B547448 /* LiveOutingContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */; };
 		684D7791FEA2712123A0A9A1 /* SaryParticipant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */; };
 		6B71C341051934FE32A56BE3 /* SaryAlbarqApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */; };
@@ -108,6 +111,7 @@
 		EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */; };
 		F19CF3E2845E4431FCA570F3 /* PrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */; };
 		F23D349CD8B6C406E98C88F8 /* ChipLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 228B792179E7688D3B50771D /* ChipLayout.swift */; };
+		F74C69A26E7B0C2F0766AD58 /* Trail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FA16F086DA2E158BD914C1 /* Trail.swift */; };
 		F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 978DED85B9A53695F514416B /* Models.swift */; };
 		FC646E6DE766A24056CC8873 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B545614818C7F89DCDD20D /* RootView.swift */; };
 		FD5538296A9585D2DD795C7F /* MapStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23715014092B50847CC5961B /* MapStage.swift */; };
@@ -147,6 +151,7 @@
 		23715014092B50847CC5961B /* MapStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapStage.swift; sourceTree = "<group>"; };
 		23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryTheme.swift; sourceTree = "<group>"; };
 		28D20037D03EABCC832D131B /* ScreenKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenKit.swift; sourceTree = "<group>"; };
+		29BAD7EA4146554682B94424 /* TrailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailTests.swift; sourceTree = "<group>"; };
 		2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Bold.ttf"; sourceTree = "<group>"; };
 		2D946A6C4BA372259FDBA0CB /* OutingSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingSheets.swift; sourceTree = "<group>"; };
 		30AC37E1EA85F7EC642D4ACE /* OutingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingState.swift; sourceTree = "<group>"; };
@@ -164,6 +169,7 @@
 		3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryParticipant.swift; sourceTree = "<group>"; };
 		3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Medium.ttf"; sourceTree = "<group>"; };
 		3DD3067CF341A79F279CD980 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackTrackUITests.swift; sourceTree = "<group>"; };
 		3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
 		4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAppearancePanel.swift; sourceTree = "<group>"; };
 		4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyTests.swift; sourceTree = "<group>"; };
@@ -171,6 +177,7 @@
 		512C97CE9BE0C836977C53B6 /* ChipLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipLayoutTests.swift; sourceTree = "<group>"; };
 		52B545614818C7F89DCDD20D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsUITests.swift; sourceTree = "<group>"; };
+		54C608FD300357F3B7B83789 /* DemoTrail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoTrail.swift; sourceTree = "<group>"; };
 		56A6DD3BA79D59CFC045E663 /* SaryFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryFormat.swift; sourceTree = "<group>"; };
 		572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingMapboxView.swift; sourceTree = "<group>"; };
 		59544682634D1CE81529B401 /* DetailContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailContracts.swift; sourceTree = "<group>"; };
@@ -183,6 +190,7 @@
 		6E24003749BC3726C3407B3A /* SaryAlbarqUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqUITests.swift; sourceTree = "<group>"; };
 		6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionTests.swift; sourceTree = "<group>"; };
 		7054D28829BF6342E6ADB5CB /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
+		71FA16F086DA2E158BD914C1 /* Trail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trail.swift; sourceTree = "<group>"; };
 		74730391AAD5CE3F324E29F8 /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
 		74764502578EE2BF2B879A25 /* SafetyViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyViews.swift; sourceTree = "<group>"; };
 		76AEF1E0EA7B3233DD82712A /* Stuck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stuck.swift; sourceTree = "<group>"; };
@@ -387,6 +395,7 @@
 				8C3945563FBFA05496632EDC /* RecoveryFormatTests.swift */,
 				936885EDDC9016EA6FAB7D27 /* SafetyTests.swift */,
 				DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */,
+				29BAD7EA4146554682B94424 /* TrailTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -478,6 +487,7 @@
 		A8E79051213FADBD889D7AB2 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */,
 				9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */,
 				79172DD3710A43059AD423D9 /* LiveProductionTests.swift */,
 				53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */,
@@ -527,12 +537,14 @@
 			children = (
 				1F3B2535F9A9E6BDD3201291 /* Backoff.swift */,
 				FF000A053D67AA53866613C3 /* CarColors.swift */,
+				54C608FD300357F3B7B83789 /* DemoTrail.swift */,
 				0A0CAF1A6CC3BA3345CE20B5 /* InviteLink.swift */,
 				978DED85B9A53695F514416B /* Models.swift */,
 				30AC37E1EA85F7EC642D4ACE /* OutingState.swift */,
 				376AED911A9C2A29F5F4EFD0 /* Policy.swift */,
 				FD9FA98B1A53C6183E33883C /* SendGate.swift */,
 				EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */,
+				71FA16F086DA2E158BD914C1 /* Trail.swift */,
 				E4343F12A82B70322558AC0D /* TripLog.swift */,
 			);
 			path = Core;
@@ -669,6 +681,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6293DEBC6B10D9E1B68FEFC3 /* BackTrackUITests.swift in Sources */,
 				5487F7F21A426D1FE552CE27 /* ChipDeclutterUITests.swift in Sources */,
 				B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */,
 				B41FD991EF6D280EA63B5CA4 /* OfflineMapsUITests.swift in Sources */,
@@ -695,6 +708,7 @@
 				7567E09DAF6E55DD6A4FB56C /* RecoveryFormatTests.swift in Sources */,
 				5E1F37D3C1DAFE6A6D3AAA46 /* SafetyTests.swift in Sources */,
 				85C7304DA76D182075D64FE6 /* ServerRulesTests.swift in Sources */,
+				2AA0BA776FFBD6002E7B11CC /* TrailTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -710,6 +724,7 @@
 				F23D349CD8B6C406E98C88F8 /* ChipLayout.swift in Sources */,
 				2F360A6DD9C12B2BB04D8175 /* CommonContract.swift in Sources */,
 				35BAE008CD008CFA36D18AF9 /* DebugScreens.swift in Sources */,
+				48FD091ED96CA8AD956F0810 /* DemoTrail.swift in Sources */,
 				7B9E5C3F50F7C40B4AE8F04E /* DesertTerrain.swift in Sources */,
 				1F7D539C2E325A4E57444F28 /* DetailContracts.swift in Sources */,
 				615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */,
@@ -775,6 +790,7 @@
 				2E314421B3C5FD58787B14DB /* Stuck.swift in Sources */,
 				2922667834889B9DCA1B3555 /* SunsetWayBack.swift in Sources */,
 				DECB2C60519D02E59632BF87 /* SuvModel.swift in Sources */,
+				F74C69A26E7B0C2F0766AD58 /* Trail.swift in Sources */,
 				735A33AC3B44DBA0FDCE015E /* TripLog.swift in Sources */,
 				EE133A4EEAB990C0B47A68C7 /* Vehicle.swift in Sources */,
 				07C479D806218F00E06056B8 /* VoiceClips.swift in Sources */,
@@ -816,7 +832,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -899,7 +915,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

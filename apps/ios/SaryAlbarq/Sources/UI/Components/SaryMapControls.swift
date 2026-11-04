@@ -146,13 +146,14 @@ private struct ControlAccessibility: ViewModifier {
 
 extension SaryMapControlItem {
     /// The standard live-outing side controls, with the web's identifiers.
-    static func liveDefaults(following: Bool = false, unreadNotes: Int? = nil) -> [SaryMapControlItem] {
+    static func liveDefaults(following: Bool = false, unreadNotes: Int? = nil, backTracking: Bool = false) -> [SaryMapControlItem] {
         [
             .init(id: "locate", systemImage: following ? SaryIcon.locateFollow : SaryIcon.locate,
                   label: "موقعي", accessibilityID: "outing-locate", isActive: following),
             .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "المجموعة", accessibilityID: "outing-fit"),
             .init(id: "note", systemImage: SaryIcon.note, label: "رسالة", accessibilityID: "outing-note-open", badge: unreadNotes),
             .init(id: "nearest", systemImage: SaryIcon.nearest, label: "أقرب محطة", accessibilityID: "outing-nearest-open"),
+            .init(id: "backtrack", systemImage: SaryIcon.backTrack, label: "طريق العودة", accessibilityID: "outing-backtrack", isActive: backTracking),
         ]
     }
 }

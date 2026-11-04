@@ -82,12 +82,13 @@ enum LocalAccountData {
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
             WatchLinkStore.key, SafetyController.warnedStoreKey,
-        ]
+        ] + TrailPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {
         IdentityStore.save(nil)
         for k in keys { defaults.removeObject(forKey: k) }
+        TrailStore.forgetAll()
     }
 }
 

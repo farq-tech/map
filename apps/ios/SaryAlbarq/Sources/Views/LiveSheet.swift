@@ -92,6 +92,10 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case .trailAlways:
+            TrailAlwaysExplainer(allow: controller.allowAlways, later: controller.laterAlways)
+                .presentationDetents([.large])
+                .interactiveDismissDisabled()
         }
     }
 }
@@ -124,6 +128,7 @@ private struct ParticipantsTab: View {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
                 SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
             }
+            TrailCard(controller: controller, card: controller.trailCard)
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
@@ -195,6 +200,152 @@ private struct ShareCallout: View {
         case .notAMember: return "لست عضوًا في هذه الطلعة."
         case .unauthorized: return "انتهت جلستك على هذا الجهاز."
         case .replaced: return "فتحت الطلعة من جهاز آخر."
+        }
+    }
+}
+
+// MARK: - «مساري»
+
+/// My trail at a glance, with «طريق العودة» and the friends' trails switch.
+private struct TrailCard: View {
+    @ObservedObject var controller: LiveOutingController
+    var card: TrailCardUIState
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("مساري").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text(summary).saryText(.footnote).foregroundStyle(p.textSecondary)
+                        .accessibilityIdentifier("trail.summary")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button {
+                card.backTrackActive ? controller.stopBackTrack() : controller.startBackTrack()
+            } label: {
+                SaryButtonLabel(title: card.backTrackActive ? "أنهِ طريق العودة" : "طريق العودة", systemImage: SaryIcon.backTrack)
+            }
+            .buttonStyle(card.backTrackActive ? .sarySecondary : .saryPrimary)
+            .disabled(card.pointCount < 2 && !card.backTrackActive)
+            .accessibilityIdentifier("trail.backtrack")
+            if card.gapCount > 0 {
+                Text("الخط المتقطع جزء لم يُسجَّل (التطبيق كان مقفل أو انقطع GPS)، نرسمه مستقيمًا ولا نخمّن الطريق.")
+                    .saryText(.caption).foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            SaryDivider()
+            SaryToggleRow(title: "أظهر مسارات الأصحاب", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
+                          isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends")
+        }
+        .padding(theme.space(.m))
+        .sarySurface(radius: SaryRadius.l)
+    }
+
+    private var summary: String {
+        guard card.recordingOn else { return "التسجيل متوقف من الإعدادات" }
+        guard card.pointCount >= 2 else { return card.isRecording ? "يبدأ التسجيل أول ما تتحرك" : "يُسجَّل مسارك والطلعة شغالة" }
+        var parts = ["سجّلنا \(SaryFormat.distance(meters: card.recordedMeters))"]
+        if let d = card.startDistanceMeters { parts.append("البداية على بعد \(SaryFormat.distance(meters: d))") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// «مساري» in the settings tab: recording, the screen-locked trail, friends' trails, clear.
+private struct TrailSettingsSection: View {
+    @ObservedObject var controller: LiveOutingController
+    var card: TrailCardUIState
+    @Environment(\.sary) private var theme
+    @State private var confirmClear = false
+
+    var body: some View {
+        let p = theme.palette
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك فقط ولا يُرسل لأي أحد، ولا حتى الخادم. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+            SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
+                          isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
+            SaryDivider()
+            SaryToggleRow(title: "سجّل مساري والشاشة مقفلة", subtitle: backgroundSubtitle, systemImage: "lock.fill",
+                          isOn: Binding(get: { card.backgroundOn }, set: { controller.setBackgroundTrail($0) }), id: "trail.background")
+                .disabled(!card.recordingOn)
+            if card.recordingOn && card.backgroundOn && !card.backgroundAllowed {
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    Text("الإذن الآن «أثناء الاستخدام» فقط، فإذا قفلت الشاشة يتوقف التسجيل ويظهر خط متقطع. للتسجيل والشاشة مقفلة: الإعدادات ← سَرى البارق ← الموقع ← «دائمًا».")
+                        .saryText(.caption).foregroundStyle(p.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("افتح الإعدادات", action: controller.openAppSettings)
+                        .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                        .accessibilityIdentifier("trail.openSettings")
+                }
+                .padding(.bottom, theme.space(.s))
+            }
+            SaryDivider()
+            SaryToggleRow(title: "أظهر مسارات الأصحاب", systemImage: SaryIcon.fitGroup,
+                          isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends.settings")
+            SaryDivider()
+            Button { confirmClear = true } label: {
+                HStack(spacing: theme.space(.m)) {
+                    SaryRowIcon(systemImage: "trash", color: p.emergency)
+                    Text("امسح مساري لهذه الطلعة").saryText(.body, weight: .bold).foregroundStyle(p.emergency)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: theme.minTarget + 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(card.pointCount == 0)
+            .accessibilityIdentifier("trail.clear")
+        }
+        .confirmationDialog("امسح مسارك؟", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("امسح مساري", role: .destructive, action: controller.clearTrail)
+            Button("إلغاء", role: .cancel) {}
+        } message: { Text("يُحذف مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق العودة» يبدأ من جديد.") }
+    }
+
+    private var backgroundSubtitle: String {
+        if !card.backgroundOn { return "متوقف: يُسجَّل والتطبيق مفتوح فقط" }
+        if !card.backgroundAllowed { return "يحتاج إذن «دائمًا» من iOS" }
+        return card.recordingInBackground ? "يُسجَّل الآن والشاشة مقفلة" : "على جوالك فقط · يستهلك بطارية أكثر"
+    }
+}
+
+/// Before iOS asks for «دائمًا»: what it is for, honestly.
+struct TrailAlwaysExplainer: View {
+    var allow: () -> Void
+    var later: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
+                    Text("سجّل مسارك حتى والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
+                    Text("عشان «طريق العودة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
+                        .saryText(.body).foregroundStyle(theme.palette.textSecondary)
+                    bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
+                    bullet("antenna.radiowaves.left.and.right.slash", "مشاركة موقعك مع الأصحاب ما تتغير: تُرسل والتطبيق مفتوح أمامك فقط.")
+                    bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
+                    bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
+                    Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
+                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                }
+            }
+            Button(action: allow) { SaryButtonLabel(title: "تمام، اسمح دائمًا", systemImage: SaryIcon.check) }
+                .buttonStyle(.saryPrimary)
+                .accessibilityIdentifier("trail.always.allow")
+            Button("لاحقًا، والتطبيق مفتوح فقط", action: later).buttonStyle(.saryPlain)
+                .accessibilityIdentifier("trail.always.later")
+        }
+        .padding(theme.space(.l))
+    }
+
+    private func bullet(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
+            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
         }
     }
 }
@@ -288,6 +439,7 @@ private struct SettingsTab: View {
                 SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الأصحاب", systemImage: "bell.fill",
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
             }
+            TrailSettingsSection(controller: controller, card: controller.trailCard)
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {
@@ -469,7 +621,7 @@ struct ConsentView: View {
                     bullet("lock.fill", "يرى موقعك أعضاء هذه الطلعة فقط، ولا أحد غيرهم.")
                     bullet("iphone", "يُرسل موقعك فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة أو خرجت من التطبيق يتوقف الإرسال، ويظهر لأصحابك «آخر موقع» بعمره.")
                     bullet("stop.circle.fill", "تتوقف إذا أوقفتها، أو غادرت، أو أوقف صاحب الطلعة الطلعة أو أنهاها.")
-                    bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة.")
+                    bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة. مسارك («مساري») يبقى على جوالك فقط.")
                 }
             }
             Button(action: accept) { SaryButtonLabel(title: "أوافق، شارك موقعي", systemImage: SaryIcon.locate) }

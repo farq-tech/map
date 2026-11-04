@@ -15,6 +15,12 @@ extension LiveOutingController {
         s.myFix = { [weak self] in self?.location.lastFix }
         s.mapBearing = { [weak self] in self?.overlay.projection.bearing ?? 0 }
         s.isSharingNow = { [weak self] in self?.session.isSharingNow ?? false }
+        /* «طريق العودة»: from where I am, back along my own trail to its start (on this phone only). */
+        s.wayBackDistanceM = { [weak self] in
+            guard let self, let f = self.location.lastFix, var bt = BackTrack(self.session.trail) else { return nil }
+            let st = bt.update(LngLat(lng: f.lng, lat: f.lat))
+            return st.arrived ? nil : st.remainingM
+        }
         s.upsertAlert = { [weak self] a, ttl in self?.upsertAlert(a, ttl: ttl) }
         s.removeAlert = { [weak self] id in self?.dismissAlert(id) }
         s.toast = { [weak self] t in self?.toast(t) }
