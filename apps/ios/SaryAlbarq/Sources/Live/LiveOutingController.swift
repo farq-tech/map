@@ -43,6 +43,8 @@ final class LiveOutingController: ObservableObject {
     let location: LocationSharer
     let appearance: AppearanceSettings
     let overlay = MapOverlayModel()
+    /// Shared waypoints and convoy mode (contract §3, §4).
+    let features: OutingFeaturesModel
     var onExit: () -> Void = {}
     /// «حفظ» my number (wired to the profile endpoint by the host).
     var savePhone: (String?) -> Void = { _ in }
@@ -81,10 +83,11 @@ final class LiveOutingController: ObservableObject {
     private var pttTimer: Timer?
     private var alertTimers: [String: Timer] = [:]
 
-    init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings) {
+    init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings, featuresBackend: OutingFeaturesBackend? = nil) {
         self.session = session
         self.location = location
         self.appearance = appearance
+        features = OutingFeaturesModel(session: session, backend: featuresBackend ?? DemoFeaturesBackend(myId: session.myUserId, notDeployed: true))
         notificationsOn = UserDefaults.standard.object(forKey: "sary.outings.notify.v1") as? Bool ?? true
         inviteLink = session.storedInviteURL()?.absoluteString
         session.objectWillChange.sink { [weak self] in
@@ -96,6 +99,13 @@ final class LiveOutingController: ObservableObject {
         player.onProgress = { [weak self] id, p in self?.setPlayback(id, .playing(progress: p)) }
         player.onFinish = { [weak self] id in self?.setPlayback(id, .idle) }
         lastView = session.view
+        features.pushAlert = { [weak self] a, ttl in self?.pushAlert(a, ttl: ttl) }
+        features.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
+        features.toast = { [weak self] t in self?.toast(t) }
+        features.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { self?.objectWillChange.send() }
+        }.store(in: &bag)
+        features.start()
     }
 
     // MARK: state
@@ -151,8 +161,10 @@ final class LiveOutingController: ObservableObject {
             let presence: ParticipantPresence = m.presence == .live ? .live : .stale(since: Date(timeIntervalSince1970: m.atMs / 1000))
             /* Ages tick in whole minutes on the chip; quantised so the annotation is not rebuilt every second. */
             let chipNow = Date(timeIntervalSince1970: (i.now.timeIntervalSince1970 / 30).rounded(.down) * 30)
-            if showNames || m.isMe {
-                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow)
+            let convoyRole = features.convoyRole(m.id)
+            if showNames || m.isMe || convoyRole != nil {
+                m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
+                                    convoy: convoyRole.map(ConvoyBadgeUI.init))
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -182,12 +194,14 @@ final class LiveOutingController: ObservableObject {
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
+        checkConvoy()
         if session.closedReason != nil, modal != nil { modal = nil }
         objectWillChange.send()
     }
 
     private func locationChanged() {
         updateAuto()
+        checkConvoy()
         objectWillChange.send()
     }
 
@@ -198,6 +212,17 @@ final class LiveOutingController: ObservableObject {
         if appearance.autoDrive != drive { appearance.autoDrive = drive }
         let night = SunLight.preset(Date(), lat: f.lat, lng: f.lng) == .night
         if appearance.autoNight != night { appearance.autoNight = night }
+    }
+
+    /// Convoy alerts from the cars drawn right now (live ones only; see `OutingFeaturesModel.liveCars`).
+    private func checkConvoy() {
+        guard session.view?.convoy?.isOn == true else { return features.evaluateConvoy(members: []) }
+        features.evaluateConvoy(members: LiveOutingPresenter.mapMembers(input, hideNotes: true))
+    }
+
+    /// Waypoints for the map.
+    var mapWaypoints: [MapWaypoint] {
+        features.waypoints.map { MapWaypoint(id: $0.id, position: $0.position, kind: $0.kind, title: $0.title) }
     }
 
     // MARK: alerts
@@ -260,6 +285,9 @@ final class LiveOutingController: ObservableObject {
             guard let self else { return }
             let parts = id.split(separator: ":").map(String.init)
             if parts.first == "note", parts.count > 1 { self.show(member: parts[1]) }
+            if parts.first == "convoy", parts.count > 2 { self.show(member: parts[2]) }
+            if parts.first == "convoy", parts.count == 2, let t = self.session.view?.convoy?.tail_user_id { self.show(member: t) }
+            if parts.first == "waypoint", parts.count > 1 { self.features.modal = .waypoint(parts[1]) }
         }
         a.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
         a.voice = VoiceBannerActions(

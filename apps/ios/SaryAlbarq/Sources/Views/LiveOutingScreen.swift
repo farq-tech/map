@@ -47,7 +47,10 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: { controller.following = false },
+                    waypoints: controller.mapWaypoints,
+                    onWaypointTap: { controller.features.modal = .waypoint($0) },
+                    onLongPress: { controller.features.compose(at: $0) }
                 )
                 .ignoresSafeArea()
 

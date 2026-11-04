@@ -52,6 +52,7 @@ final class AppModel: ObservableObject {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
+            WaypointCache.wipeAll()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] {
                 UserDefaults.standard.removeObject(forKey: k)
             }
@@ -99,6 +100,9 @@ final class AppModel: ObservableObject {
     @Published var debugScreen: String?
 
     var signedIn: Bool { identity != nil }
+
+    /// Waypoints / convoy: the real API, or the demo's in-memory one.
+    var featuresBackend: OutingFeaturesBackend { isDemo ? DemoFeatures.backend : api }
 
     // MARK: identity
 
@@ -249,6 +253,8 @@ final class AppModel: ObservableObject {
         session = nil
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
+        /* Outing data of this identity (shared waypoints read offline) goes with it. */
+        WaypointCache.wipeAll()
         identity = nil
         recovery = nil
         current = []
@@ -398,7 +404,9 @@ final class AppModel: ObservableObject {
 
     private func openDemoSession() {
         let crowd = ProcessInfo.processInfo.arguments.contains("-demoCrowd")
-        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
+        let demo = DemoData.view(crowd: crowd)
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location,
+                              demo: ProcessInfo.processInfo.arguments.contains("-demoConvoy") ? DemoFeatures.convoyView(demo) : demo)
         session = s
         s.open()
     }

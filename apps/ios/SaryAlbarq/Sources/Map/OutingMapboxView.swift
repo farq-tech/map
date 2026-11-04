@@ -87,6 +87,11 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// Shared waypoints (pins join the chip declutter, see `WaypointLayout`).
+    var waypoints: [MapWaypoint] = []
+    var onWaypointTap: (String) -> Void = { _ in }
+    /// Long press on the map («أضف نقطة هنا»); not while picking a rally point.
+    var onLongPress: (LngLat) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -115,6 +120,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onMapTap = onMapTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
+        c.waypointPins.onTap = onWaypointTap
+        c.onLongPress = onLongPress
         c.picking = picking
         c.following = following
         if c.theme != theme {
@@ -124,6 +131,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setChrome(chrome)
         c.sync(members)
         c.setRally(rally)
+        c.setWaypoints(waypoints)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -158,6 +166,10 @@ struct OutingMapboxView: UIViewRepresentable {
         private var roads: [RoadSnap.RoadLine] = []
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
+        private var longPressInteraction: Cancelable?
+        let waypointPins = WaypointPins()
+        private var lastWaypoints: [MapWaypoint] = []
+        var onLongPress: (LngLat) -> Void = { _ in }
         private var light: SunLight.Preset?
         private var fitting = false
         private var fittedIds = Set<String>()
@@ -245,13 +257,34 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 return false
             })
+            longPressInteraction = map.mapboxMap.addInteraction(LongPressInteraction { [weak self] ctx in
+                guard let self, !self.picking else { return false }
+                self.onLongPress(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
+                return true
+            })
+            waypointPins.onClusterTap = { [weak self] pts in
+                guard let self else { return }
+                self.keepGroup = false
+                self.onUserGesture()
+                self.frame(pts)
+            }
         }
+
+        func setWaypoints(_ list: [MapWaypoint]) {
+            guard list != lastWaypoints || waypointTheme != theme else { return }
+            lastWaypoints = list
+            waypointTheme = theme
+            waypointPins.set(list, theme: theme, in: overlay)
+            layoutChips()
+        }
+        private var waypointTheme: SaryTheme?
 
         func detach() {
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
             tapInteraction?.cancel()
+            longPressInteraction?.cancel()
             cancelables.removeAll()
         }
 
@@ -691,6 +724,9 @@ struct OutingMapboxView: UIViewRepresentable {
             overlay.leaders.strokeColor = UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor
             overlay.leaderHalo.path = leaders
             overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
+            /* Waypoint pins fit around what the cars' chips took. */
+            let taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
             CATransaction.commit()
             placeOrnaments(force: false)
         }
@@ -744,6 +780,7 @@ struct OutingMapboxView: UIViewRepresentable {
             if let l = lastLayout {
                 avoid += l.chips.map(\.frame) + l.chips.compactMap(\.noteFrame) + l.groups.map(\.frame)
             }
+            avoid += waypointPins.frames
             /* Keep the current spot while it is still free: no hopping around as cars move. */
             if !force, let cur = cands.first(where: { $0.name == ornamentSpot }), !avoid.contains(where: { $0.intersects(cur.rect) }) { return }
             guard let spot = OrnamentSpot.choose(cands, avoid: avoid), spot.name != ornamentSpot || force else { return }

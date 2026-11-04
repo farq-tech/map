@@ -87,6 +87,7 @@ enum LocalAccountData {
     static func wipe(defaults: UserDefaults = .standard) {
         IdentityStore.save(nil)
         for k in keys { defaults.removeObject(forKey: k) }
+        WaypointCache.wipeAll()
     }
 }
 

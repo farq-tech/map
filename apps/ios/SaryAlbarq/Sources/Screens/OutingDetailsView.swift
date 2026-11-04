@@ -159,6 +159,7 @@ struct TripSummaryView: View {
                     stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
                 }
                 .accessibilityIdentifier("summary.stats")
+                TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))

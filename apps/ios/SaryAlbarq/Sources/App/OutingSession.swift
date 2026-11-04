@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 import UIKit
@@ -43,6 +44,8 @@ final class OutingSession: ObservableObject, Identifiable {
     /// The 1 s SOS hold finished and the alert is on its way.
     @Published private(set) var sosSending = false
     @Published private(set) var busy: Set<String> = []
+    /// Every live event after the reducer applied it (waypoints are kept outside the snapshot).
+    let events = PassthroughSubject<LiveEvent, Never>()
     /// «شارك البطارية»: off unless the person turns it on (per device).
     @Published var batterySharing: Bool {
         didSet { env.defaults.set(batterySharing, forKey: Self.batteryKey) }
@@ -305,6 +308,7 @@ final class OutingSession: ObservableObject, Identifiable {
         let before = v
         v.apply(e)
         view = v
+        events.send(e)
         switch e {
         case let .memberNote(uid, note?) where uid != v.myId && before.members[uid]?.note != note:
             Notifier.post(title: v.members[uid]?.display_name ?? "ملاحظة جديدة", body: note.text, outingId: id, kind: "note")
@@ -318,6 +322,9 @@ final class OutingSession: ObservableObject, Identifiable {
             break
         }
     }
+
+    /// The server's answer to a feature call (convoy), applied like the live event that echoes it.
+    func applyLocal(_ e: LiveEvent) { apply(e) }
 
     private func notifyChanges(from prev: OutingView) {
         guard let v = view else { return }

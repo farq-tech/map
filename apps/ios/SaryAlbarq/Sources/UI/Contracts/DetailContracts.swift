@@ -114,6 +114,8 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// «المقدمة» / «المؤخرة» badge in convoy mode.
+    var convoy: ConvoyBadgeUI? = nil
 }
 
 struct NoteBubbleUI: Equatable {

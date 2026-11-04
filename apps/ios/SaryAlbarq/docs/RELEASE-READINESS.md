@@ -20,7 +20,7 @@
 | --- | --- |
 | `NSLocationWhenInUseUsageDescription` | the outing map and sharing, only after «شارك موقعي», app in front |
 | `NSMicrophoneUsageDescription` | «اضغط وتكلم», only while held |
-| `NSCameraUsageDescription` | scanning a QR (invite / recovery code) |
+| `NSCameraUsageDescription` | scanning a QR (invite / recovery code); a photo for a shared waypoint, only when the person takes one |
 
 No `NSLocationAlwaysAndWhenInUseUsageDescription`, no `UIBackgroundModes`
 (no background location). Photos: the profile photo uses `PhotosPicker`, which
