@@ -18,6 +18,8 @@ enum LiveModal: Identifiable, Equatable {
     case rallyLabel(LngLat, moving: Bool)
     /// Our explainer before the notification permission prompt.
     case notify
+    /// «احفظ الخريطة بلا إنترنت» for this outing's area.
+    case offlineMaps
 
     var id: String {
         switch self {
@@ -27,6 +29,7 @@ enum LiveModal: Identifiable, Equatable {
         case .consent: return "consent"
         case .rallyLabel: return "rally"
         case .notify: return "notify"
+        case .offlineMaps: return "offline"
         }
     }
 }
@@ -126,6 +129,17 @@ final class LiveOutingController: ObservableObject {
     }
 
     var ui: LiveOutingUIState { LiveOutingPresenter.state(input) }
+
+    /// The outing's area for offline maps: every car (and the rally point), padded to a few km.
+    var offlineSuggestion: OfflinePlan.Box? {
+        var pts = mapMembers(theme: .default).map(\.position)
+        if let r = rallyPoint { pts.append(r.position) }
+        guard let first = pts.first else { return nil }
+        var b = OfflinePlan.Box(west: first.lng, south: first.lat, east: first.lng, north: first.lat)
+        for p in pts { b.west = min(b.west, p.lng); b.east = max(b.east, p.lng); b.south = min(b.south, p.lat); b.north = max(b.north, p.lat) }
+        let pad = 0.03
+        return OfflinePlan.Box(west: b.west - pad, south: b.south - pad, east: b.east + pad, north: b.north + pad)
+    }
 
     func mapMembers(theme: SaryTheme) -> [MapMember] {
         let i = input

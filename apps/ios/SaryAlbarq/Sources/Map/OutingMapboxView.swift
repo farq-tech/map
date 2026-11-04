@@ -1108,7 +1108,16 @@ struct MapProjection: Equatable {
 /// (falling back to the local `name`), and load it as the "basemap" import so
 /// its config (light preset, 3D objects) works as before.
 enum ArabicBasemap {
-    private(set) static var cachedJSON: String?
+    /// The last fetched style is kept on disk, so an offline launch draws the same
+    /// Arabic style (its tiles, glyphs and sprites then come from the offline TileStore / style pack).
+    private(set) static var cachedJSON: String? = {
+        guard let u = fileURL, let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        return s
+    }()
+    private static var fileURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("arabic-basemap-v1.json")
+    }
+    private static var refreshed = false
     private static var loading = false
     private static var waiters: [(String?) -> Void] = []
 
@@ -1122,8 +1131,8 @@ enum ArabicBasemap {
     }
 
     static func load(_ done: @escaping (String?) -> Void) {
-        /* Already fetched: the map was created with it. */
-        if cachedJSON != nil { return }
+        /* Already fetched this launch: the map was created with it. A disk copy is refreshed once per launch. */
+        if cachedJSON != nil && refreshed { return }
         waiters.append(done)
         guard !loading else { return }
         loading = true
@@ -1142,7 +1151,18 @@ enum ArabicBasemap {
 
     private static func finish(_ json: String?) {
         loading = false
-        if let json { cachedJSON = json }
+        refreshed = true
+        if let json, json != cachedJSON {
+            cachedJSON = json
+            if let u = fileURL {
+                try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? json.write(to: u, atomically: true, encoding: .utf8)
+            }
+        } else if json != nil {
+            /* Same style as the one already drawn: nothing to reload. */
+            waiters = []
+            return
+        }
         let w = waiters
         waiters = []
         w.forEach { $0(json) }

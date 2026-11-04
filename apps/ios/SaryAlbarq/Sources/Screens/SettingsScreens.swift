@@ -130,6 +130,8 @@ struct SettingsView: View {
                 SaryNavRow(title: "الخصوصية", detail: "ما الذي يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
                 SaryDivider()
                 SaryNavRow(title: "التنبيهات", detail: pushDetail, systemImage: "bell.fill", id: "settings.notifications") { open(.notifications) }
+                SaryDivider()
+                SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
             }
             SarySection {
                 SaryNavRow(title: "ملفي", detail: model.identity?.user.display_name, systemImage: "person.fill") { open(.profile) }
@@ -172,6 +174,8 @@ struct PrivacySettingsView: View {
     @Environment(\.sary) private var theme
     @AppStorage(OutingSession.modeKey) private var mode: String = ShareMode.balanced.rawValue
     @AppStorage(OutingSession.batteryKey) private var battery = false
+    /// Mapbox's own opt-out (the SDK observes this key; default on = the SDK default).
+    @AppStorage(MapboxTelemetry.key) private var mapboxTelemetry = true
     @State private var confirmWipe = false
     @State private var wiping = false
     @State private var wiped: String?
@@ -195,6 +199,10 @@ struct PrivacySettingsView: View {
             }
             SarySection(footer: "إذا فعّلته يرى أعضاء طلعتك نسبة بطارية جوالك وهل هو على الشاحن، ليعرفوا إذا قرب ينطفي. لا يُرسل شيء آخر.") {
                 SaryToggleRow(title: "شارك نسبة البطارية", systemImage: "battery.75percent", isOn: $battery, id: "privacy.battery")
+            }
+            SarySection(title: "Mapbox", footer: "مكتبة الخرائط (Mapbox) ترسل افتراضيًا إحصاءات استخدام مجهولة لتحسين خرائطها. أوقفها هنا إن شئت؛ الخريطة تعمل مثل ما هي. هذا الخيار نفسه الموجود في زر «i» على الخريطة.") {
+                SaryToggleRow(title: "ساهم في تحسين خرائط Mapbox", subtitle: "إحصاءات مجهولة يرسلها Mapbox", systemImage: "chart.bar.fill",
+                              isOn: $mapboxTelemetry, id: "privacy.mapboxTelemetry")
             }
             SarySection(title: "ما الذي يُرسل للخادم", footer: "لا إعلانات، لا تتبع، ولا بيع بيانات.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
@@ -371,4 +379,11 @@ struct AboutView: View {
             .buttonStyle(.sary(.secondary))
         }
     }
+}
+
+/// Mapbox SDK telemetry. The SDK registers `MGLMapboxMetricsEnabled = true` and observes
+/// the key (KVO), switching its events collection off/on at once. We leave its default.
+enum MapboxTelemetry {
+    static let key = "MGLMapboxMetricsEnabled"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }

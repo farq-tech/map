@@ -197,3 +197,33 @@ final class ChipLayoutTests: XCTestCase {
         XCTAssertEqual(OrnamentSpot.choose([a, b], avoid: both)?.name, "bottom-left")
     }
 }
+
+/// Offline area rules.
+final class OfflinePlanTests: XCTestCase {
+    func box(_ km: Double) -> OfflinePlan.Box {
+        let dLat = km / 111.0, dLng = km / (111.0 * cos(24.7 * .pi / 180))
+        return .init(west: 46.67 - dLng / 2, south: 24.7 - dLat / 2, east: 46.67 + dLng / 2, north: 24.7 + dLat / 2)
+    }
+
+    func testSizeLimits() {
+        XCTAssertEqual(box(5).widthKm, 5, accuracy: 0.05)
+        XCTAssertEqual(OfflinePlan.check(box(5), estimateBytes: 30_000_000, usedBytes: 0), .ok)
+        XCTAssertEqual(OfflinePlan.check(box(0.2), estimateBytes: nil, usedBytes: 0), .tooSmall)
+        XCTAssertEqual(OfflinePlan.check(box(80), estimateBytes: nil, usedBytes: 0), .tooBig(maxKm: 60))
+    }
+
+    func testTotalCapIsEnforcedAndExplained() {
+        let used = OfflinePlan.totalCapBytes - 10_000_000
+        XCTAssertEqual(OfflinePlan.check(box(5), estimateBytes: 30_000_000, usedBytes: used), .overCap(freeBytes: 10_000_000))
+        /* Without an estimate (offline) the size is checked as it downloads. */
+        XCTAssertEqual(OfflinePlan.check(box(5), estimateBytes: nil, usedBytes: used), .ok)
+    }
+
+    func testZoomsAndTilesetsMatchTheLiveMap() {
+        XCTAssertEqual(OfflinePlan.minZoom, 11)
+        XCTAssertEqual(OfflinePlan.maxZoom, 16)
+        XCTAssertTrue(OfflinePlan.extraTilesets.contains("mapbox://mapbox.mapbox-streets-v8"))
+        XCTAssertTrue(OfflinePlan.extraTilesets.contains("mapbox://mapbox.mapbox-terrain-dem-v1"))
+        XCTAssertTrue(OfflinePlan.regionId().hasPrefix("sary-"))
+    }
+}

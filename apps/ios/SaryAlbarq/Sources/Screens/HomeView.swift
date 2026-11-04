@@ -11,6 +11,7 @@ enum HomeRoute: Hashable {
     case appearance
     case privacy
     case notifications
+    case offlineMaps
     case about
 }
 
@@ -51,6 +52,7 @@ struct HomeView: View {
         case .appearance: AppearanceScreen(back: pop)
         case .privacy: PrivacySettingsView(back: pop)
         case .notifications: NotificationSettingsView(back: pop)
+        case .offlineMaps: OfflineMapsView(back: pop)
         case .about: AboutView(back: pop)
         }
     }

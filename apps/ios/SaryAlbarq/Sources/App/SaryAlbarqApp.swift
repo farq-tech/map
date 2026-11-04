@@ -1,3 +1,5 @@
+import MapboxCommon
+import MapboxMaps
 import SwiftUI
 import UserNotifications
 
@@ -85,6 +87,10 @@ extension AppearanceSettings {
         if arg("-SaryNight") == "1" { s.prefs.nightMode = .on }
         if arg("-SaryNight") == "0" { s.prefs.nightMode = .off }
         if arg("-SaryFallback") == "1" { s.forceGlassFallback = true }
+        /* Offline proof: cut the Mapbox stack off the network; the map must draw from the TileStore. */
+        if args.contains("-SaryMapboxOffline") { OfflineSwitch.getInstance().setMapboxStackConnectedForConnected(false) }
+        /* …and with the ambient cache emptied, whatever draws comes from a saved tile region. */
+        if args.contains("-SaryClearAmbient") { TileStore.default.clearAmbientCache(completion: { (_: Result<UInt32, any Error>) in }) }
         #endif
         return s
     }

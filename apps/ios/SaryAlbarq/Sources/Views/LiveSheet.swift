@@ -88,6 +88,9 @@ struct LiveSheet: View {
                 .presentationDetents([.medium])
         case .notify:
             NotifyExplainerSheet(done: { controller.modal = nil })
+        case .offlineMaps:
+            OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
+                .presentationDetents([.large])
         }
     }
 }
@@ -282,6 +285,20 @@ private struct SettingsTab: View {
                 SaryDivider()
                 SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الأصحاب", systemImage: "bell.fill",
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
+            }
+            SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
+                Button { controller.modal = .offlineMaps } label: {
+                    HStack(spacing: theme.space(.m)) {
+                        SaryRowIcon(systemImage: "arrow.down.circle.fill")
+                        Text("احفظ الخريطة بلا إنترنت").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.forward").font(.system(size: 13, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+                    }
+                    .frame(minHeight: theme.minTarget)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(SaryRowPressStyle())
+                .accessibilityIdentifier("settings-offline")
             }
             SarySection(title: "وضع القيادة") {
                 SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
