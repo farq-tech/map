@@ -42,6 +42,8 @@ final class FeatureFlowTests: XCTestCase {
     private var sockets: [FakeSocket] = []
     private var backend: FakeFeaturesBackend!
     private var savedCacheDir: URL!
+    /// The model holds its session weakly (the controller owns it in the app): the test keeps them alive.
+    private var keep: [OutingSession] = []
 
     override func setUp() async throws {
         sockets = []
@@ -65,6 +67,7 @@ final class FeatureFlowTests: XCTestCase {
         env.authorizationOverride = true
         let s = OutingSession(id: "o1", myUserId: "u1", api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43), location: LocationSharer(), env: env)
         s.open()
+        keep.append(s)
         sockets.last!.serverSays(["type": "ready", "snapshot": [
             "outing": ["id": "o1", "name": "طلعة الاختبار", "status": "active", "owner_id": "u0"],
             "me": ["user_id": "u1", "role": role, "sharing": true, "co_leader": coLeader],
@@ -83,7 +86,7 @@ final class FeatureFlowTests: XCTestCase {
 
     func testListThenLiveAddAndRemoveThenOfflineReadsTheCache() async {
         backend.list = [wp("a", by: "u0")]
-        let (_, f) = open()
+        let (s1, f) = open(); _ = s1
         var alerts: [LiveAlertUI] = []
         f.pushAlert = { a, _ in alerts.append(a) }
         await f.reload()
@@ -98,7 +101,7 @@ final class FeatureFlowTests: XCTestCase {
         XCTAssertEqual(f.waypoints.map(\.id), ["b"])
         /* Now the network is gone: the next open still reads the last list. */
         backend.failWith = OutingAPIError(code: "network", status: 0)
-        let (_, again) = open()
+        let (s2, again) = open(); _ = s2
         again.start()
         XCTAssertEqual(again.waypoints.map(\.id), ["b"], "shown from the cache at once")
         await again.reload()
@@ -107,7 +110,7 @@ final class FeatureFlowTests: XCTestCase {
     }
 
     func testAddValidatesThenPostsAndShowsAtOnce() async {
-        let (_, f) = open()
+        let (s1, f) = open(); _ = s1
         await f.reload()
         f.compose(at: LngLat(lng: 46.7, lat: 24.7))
         let r1 = await f.add(WaypointDraft(kind: .camp, title: "   ", note: nil, lat: 24.7, lng: 46.7, photo: nil))
@@ -128,7 +131,7 @@ final class FeatureFlowTests: XCTestCase {
     /// The server branch is not deployed yet: Express answers a bare 404.
     func testNotDeployedSaysSoHonestly() async {
         backend.failWith = OutingAPIError(code: "http_404", status: 404)
-        let (_, f) = open()
+        let (s1, f) = open(); _ = s1
         await f.reload()
         XCTAssertEqual(f.phase, .notDeployed)
         let r3 = await f.add(WaypointDraft(kind: .camp, title: "مخيم", note: nil, lat: 24.7, lng: 46.7, photo: nil))
@@ -145,11 +148,11 @@ final class FeatureFlowTests: XCTestCase {
 
     func testDeleteRights() async {
         backend.list = [wp("mine", by: "u1"), wp("theirs", by: "u0")]
-        let (_, f) = open()
+        let (s1, f) = open(); _ = s1
         await f.reload()
         XCTAssertTrue(f.canDelete(f.waypoints.first { $0.id == "mine" }!))
         XCTAssertFalse(f.canDelete(f.waypoints.first { $0.id == "theirs" }!), "a member cannot delete a friend's point")
-        let (_, lead) = open(coLeader: true)
+        let (s3, lead) = open(coLeader: true); _ = s3
         await lead.reload()
         XCTAssertTrue(lead.canDelete(lead.waypoints.first { $0.id == "theirs" }!), "«مساعد» can")
         let r5 = await lead.delete("theirs")

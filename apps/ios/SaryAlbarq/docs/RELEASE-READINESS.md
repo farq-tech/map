@@ -1,8 +1,8 @@
-# Release readiness (iOS 1.0.0, build 1)
+# Release readiness (iOS 1.0.0, build 2)
 
 ## Build
 
-- `MARKETING_VERSION = 1.0.0`, `CURRENT_PROJECT_VERSION = 1` (`project.yml`).
+- `MARKETING_VERSION = 1.0.0`, `CURRENT_PROJECT_VERSION = 2` (`project.yml`).
 - Release compiles for a generic iOS device without signing:
 
   ```sh
@@ -22,8 +22,24 @@
 | `NSMicrophoneUsageDescription` | «اضغط وتكلم», only while held |
 | `NSCameraUsageDescription` | scanning a QR (invite / recovery code); a photo for a shared waypoint, only when the person takes one |
 
-No `NSLocationAlwaysAndWhenInUseUsageDescription`, no `UIBackgroundModes`
-(no background location). Photos: the profile photo uses `PhotosPicker`, which
+| `NSLocationAlwaysAndWhenInUseUsageDescription` | «مساري» only: keep recording my on-device trail with the screen locked |
+| `UIBackgroundModes: location` | the same, and nothing else |
+
+Background location (build 2, owner-approved) exists **only** for «مساري», the
+breadcrumb trail kept on this phone: switch «سجّل مساري والشاشة مقفلة» is on by
+default, but nothing runs in the background until the person has read our
+explainer (shown the first time they start sharing) and iOS granted «دائمًا».
+It runs only while an outing they belong to is active or paused, shows the blue
+location indicator, uses a 15 m distance filter and coarse accuracy when parked,
+and stops at once on leave / end / removal / sign-out / account deletion /
+switch off. Background fixes go into the trail file and nowhere else: sharing is
+stopped in the background and `SendGate` refuses any position there
+(`TrailSessionTests` proves no socket frame or HTTP request carries a trail
+point). With «أثناء الاستخدام» only, the trail records in the foreground and the
+locked stretches are drawn as honest dashed gaps. App Review note: background
+location is user-visible (trail + «طريق العودة» back-track for off-road outings).
+
+Photos: the profile photo uses `PhotosPicker`, which
 runs out of process and needs no photo-library permission string.
 The app explains location in onboarding before iOS asks, and notifications
 after a first join (or from settings) before iOS asks — never at launch.
@@ -33,7 +49,8 @@ after a first join (or from settings) before iOS asks — never at launch.
 No tracking, no tracking domains. Collected, linked to the identity, for app
 functionality only: precise location, name, phone (optional), photo
 (optional), other user content (notes), audio (push-to-talk), other data
-(opt-in battery level, opt-in trip totals). Required-reason APIs:
+(opt-in battery level, opt-in trip totals). «مساري» (the trail) is **not**
+collected: it never leaves the device, so it is not declared. Required-reason APIs:
 UserDefaults `CA92.1`, system boot time `35F9.1` (`CACurrentMediaTime` for
 animation timing). Mapbox ships its own manifest inside its framework.
 

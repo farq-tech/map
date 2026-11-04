@@ -349,3 +349,47 @@ struct OfflineAreasActions {
     /// Standalone `OfflineAreasScreen` only: «تم».
     var close: () -> Void = {}
 }
+
+// MARK: - «مساري» and «طريق العودة»
+
+/// The back-track panel (big arrow + distance back to «نقطة البداية» along my trail).
+struct BackTrackUI: Equatable {
+    enum Phase: Equatable {
+        /// No recent GPS fix yet.
+        case waitingFix
+        case onTrail
+        /// More than ~60 m from my trail: «خرجت عن الطريق».
+        case offTrack
+        case arrived
+    }
+
+    var phase: Phase
+    /// Along the trail back to the start (plus the way back onto it).
+    var remainingMeters: Double?
+    /// My distance from the trail.
+    var offsetMeters: Double?
+    /// Arrow rotation, degrees clockwise from the top of the screen (or from my heading when `relativeToCourse`).
+    var arrowDegrees: Double
+    /// The compass direction to go, in words («شمال غرب»).
+    var directionLabel: String
+    var relativeToCourse: Bool
+    /// I am on a stretch that was not recorded (straight dashed line).
+    var onGap: Bool
+}
+
+/// «مساري» card in the sheet and its settings.
+struct TrailCardUIState: Equatable {
+    var recordedMeters: Double
+    var pointCount: Int
+    var gapCount: Int
+    /// Straight-line distance from me to «نقطة البداية».
+    var startDistanceMeters: Double?
+    var isRecording: Bool
+    var recordingOn: Bool
+    var backgroundOn: Bool
+    /// iOS allows «دائمًا» (needed for the screen-locked trail).
+    var backgroundAllowed: Bool
+    var recordingInBackground: Bool
+    var showFriends: Bool
+    var backTrackActive: Bool
+}

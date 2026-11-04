@@ -229,6 +229,8 @@ enum SaryIcon {
     static let play = "play.fill"
     static let stop = "stop.fill"
     static let rally = "flag.fill"
+    /// «طريق العودة» (back along my trail).
+    static let backTrack = "arrow.uturn.backward"
     static let rallyArrived = "flag.checkered"
     static let drift = "arrow.up.right.and.arrow.down.left"
     static let warning = "exclamationmark.triangle.fill"

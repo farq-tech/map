@@ -178,6 +178,14 @@ struct TripSummaryView: View {
                         .padding(.vertical, theme.space(.xs))
                     }
                 }
+                if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                        TrailSketch(trail: trail, color: theme.palette.accent)
+                            .frame(height: 180)
+                            .padding(.vertical, theme.space(.s))
+                            .accessibilityIdentifier("summary.trail")
+                    }
+                }
                 if s.outing.status == .ended {
                     mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
                 }
@@ -257,6 +265,58 @@ struct TripSummaryView: View {
             if case .loaded = phase { return }
             phase = .failed(e.arabic)
         } catch {}
+    }
+}
+
+/// My trail drawn small, offline (no map tiles): recorded runs solid, unrecorded stretches dashed,
+/// «نقطة البداية» and the end marked.
+struct TrailSketch: View {
+    var trail: Trail
+    var color: Color
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        GeometryReader { g in
+            let pts = trail.points
+            let ref = pts[0].position
+            let xy = pts.map { TrailGeo.xy($0.position, ref: ref) }
+            let minX = xy.map(\.x).min()!, maxX = xy.map(\.x).max()!
+            let minY = xy.map(\.y).min()!, maxY = xy.map(\.y).max()!
+            let pad: CGFloat = 18
+            let w = g.size.width - pad * 2, h = g.size.height - pad * 2
+            let span = max(maxX - minX, maxY - minY, 1)
+            let k = min(w, h) / CGFloat(span)
+            let ox = pad + (w - CGFloat(maxX - minX) * k) / 2, oy = pad + (h - CGFloat(maxY - minY) * k) / 2
+            /* North up, east right — a map, so it is not mirrored in RTL. */
+            let screen = xy.map { CGPoint(x: ox + CGFloat($0.x - minX) * k, y: oy + CGFloat(maxY - $0.y) * k) }
+            ZStack {
+                RoundedRectangle(cornerRadius: SaryRadius.m).fill(theme.palette.sunken)
+                Path { path in
+                    for (i, p) in screen.enumerated() {
+                        if i == 0 || pts[i].gap { path.move(to: p) } else { path.addLine(to: p) }
+                    }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                Path { path in
+                    for i in pts.indices where i > 0 && pts[i].gap {
+                        path.move(to: screen[i - 1])
+                        path.addLine(to: screen[i])
+                    }
+                }
+                .stroke(color.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
+                Circle().fill(Color(rgb: 0x16110B)).frame(width: 14, height: 14).overlay(Circle().stroke(.white, lineWidth: 2.5))
+                    .position(screen[0])
+                Circle().fill(color).frame(width: 12, height: 12).overlay(Circle().stroke(.white, lineWidth: 2.5))
+                    .position(screen[screen.count - 1])
+                Text("نقطة البداية").saryText(.micro, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(theme.palette.chromeOpaque))
+                    .position(x: min(max(screen[0].x, 44), g.size.width - 44), y: max(screen[0].y - 16, 10))
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("رسم مسارك: \(SaryFormat.distance(meters: trail.recordedLengthM)) مسجّلة"))
     }
 }
 

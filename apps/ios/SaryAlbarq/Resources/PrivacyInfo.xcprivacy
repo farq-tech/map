@@ -10,7 +10,9 @@
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
 		<!-- Precise location: shared with the members of an outing you chose to share in.
-		     The server keeps only your latest fix and deletes it when the outing ends. -->
+		     The server keeps only your latest fix and deletes it when the outing ends.
+		     «مساري» (the breadcrumb trail, also recorded with the screen locked when the
+		     person allows «دائمًا») stays on the device and is never sent: not collected. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
