@@ -270,6 +270,15 @@ struct SaryParticipantRow: View {
                             if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
                             if let b = participant.batteryPercent { SaryBatteryLabel(percent: b) }
                         }
+                        if participant.tripArrived {
+                            SaryTripArrivedBadge()
+                        } else if let r = participant.tripRemainingMeters {
+                            Text("باقي \(SaryFormat.distance(meters: r))" + (participant.tripRemainingApprox ? " تقريبًا" : "") + " للوجهة")
+                                .saryNumber(.caption, weight: .bold)
+                                .foregroundStyle(theme.palette.textSecondary)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("participant.tripRemaining")
+                        }
                     }
                 }
                 if !typeSize.isAccessibilitySize { Spacer(minLength: 4) }
@@ -301,6 +310,8 @@ struct SaryParticipantRow: View {
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }
         if let k = participant.speedKmh, participant.presence.isLive { parts.append(SarySpeedLabel.accessibility(kmh: k)) }
         if let bat = participant.batteryPercent { parts.append("البطارية \(SaryFormat.percent(bat))") }
+        if participant.tripArrived { parts.append("وصل الوجهة") }
+        else if let r = participant.tripRemainingMeters { parts.append("باقي \(SaryFormat.distance(meters: r)) للوجهة") }
         return parts.joined(separator: "، ")
     }
 }
@@ -445,5 +456,20 @@ struct SaryNearbyMark: View {
         .fixedSize()
         .accessibilityLabel(Text(Self.text))
         .accessibilityIdentifier("nearby-mark")
+    }
+}
+
+
+/// «وصل»: reached the destination (the trip).
+struct SaryTripArrivedBadge: View {
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Label("وصل", systemImage: "flag.checkered")
+            .saryText(.caption, weight: .bold)
+            .foregroundStyle(theme.palette.liveText)
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(Capsule().fill(theme.palette.live.opacity(0.16)))
+            .accessibilityIdentifier("participant.arrived")
     }
 }

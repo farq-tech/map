@@ -56,6 +56,8 @@ extension LiveOutingHost {
     /// has not started yet (never in the demo, which has no server).
     fileprivate func startIfAsked() {
         guard model.pendingStart == controller.session.id, let v = controller.session.view else { return }
+        /* The destination is saved with the outing; wait until the plan has it (never start without one). */
+        guard controller.tripDestination != nil || v.status != .created else { return }
         model.pendingStart = nil
         if v.status == .created, !controller.session.isDemo { controller.startOuting() }
     }
@@ -78,6 +80,13 @@ struct LiveOutingHost: View {
                 Task { await model.push.setEnabled(on, signedIn: model.signedIn) }
             }
             c.pushExplained = { [weak model] in model?.push.explained ?? true }
+            c.openSummary = { [weak model] in model?.showSummaryAfterClose(session.id) }
+            c.startReturnTrip = { [weak model, weak c] in
+                guard let model else { return }
+                Task {
+                    if await model.startReturnTrip(from: session.id) == nil, let e = model.errorText { c?.toast(e); model.errorText = nil }
+                }
+            }
             c.savePhone = { [weak model, weak c] phone in
                 guard let model else { return }
                 Task {
@@ -96,6 +105,8 @@ struct LiveOutingHost: View {
             /* A new destination (or one kept on this phone) moves the weather chip at once. */
             .onReceive(model.plans.model(controller.session.id).$plan.map(\.destination).removeDuplicates()) { _ in
                 controller.feedWeather(force: true)
+                controller.updateTrip()
+                DispatchQueue.main.async { startIfAsked() }
             }
             .onReceive(controller.session.objectWillChange) { _ in
                 DispatchQueue.main.async { startIfAsked() }

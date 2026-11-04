@@ -19,7 +19,7 @@ enum OutingActivityBuilder {
     ///   - backMeters: along my trail to its start (back-track), when it exists.
     ///   - stuck: members who reported «غرّزت», newest first or in any order.
     ///   - speed: my current speed (`SpeedModel.snapshot`); shown only while fresh.
-    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = [], speed: SpeedModel.Snapshot? = nil) -> OutingActivityState? {
+    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = [], speed: SpeedModel.Snapshot? = nil, trip: TripPanelUI? = nil) -> OutingActivityState? {
         guard let v = i.view else { return nil }
         let parts = LiveOutingPresenter.participants(i)
         let live = parts.filter { $0.presence == .live }
@@ -35,7 +35,7 @@ enum OutingActivityBuilder {
         }
 
         let online = i.closed == nil && (i.link == .live || i.link == .polling)
-        return OutingActivityState(
+        var state = OutingActivityState(
             liveCount: live.count,
             memberCount: v.members.count,
             farthestName: farthest?.name,
@@ -47,6 +47,26 @@ enum OutingActivityBuilder {
             updatedAt: i.now,
             speedKmh: speedKmh(speed, gpsOK: gpsOK, now: i.now)
         )
+        applyTrip(trip, to: &state, gpsOK: gpsOK)
+        return state
+    }
+
+    /// «الرحلة» on the Lock Screen: progress, remaining and ETA — only while my fix is current.
+    static func applyTrip(_ t: TripPanelUI?, to s: inout OutingActivityState, gpsOK: Bool) {
+        guard let t else { return }
+        switch t.phase {
+        case .arrived:
+            s.tripArrived = true
+            s.tripPercent = 100
+        case .underway:
+            s.tripPercent = t.percent
+            guard gpsOK, t.myFixStaleSince == nil else { return }
+            s.tripRemainingM = t.remainingMeters
+            s.tripApprox = t.remainingApprox
+            s.tripETA = t.eta
+        default:
+            break
+        }
     }
 
     /// A speed older than this is not «now» on the Lock Screen («—» instead).
@@ -92,11 +112,13 @@ enum OutingActivityThrottle {
         if new.farthestName != last.farthestName { return true }
         if (new.speedKmh == nil) != (last.speedKmh == nil) || abs((new.speedKmh ?? 0) - (last.speedKmh ?? 0)) >= 5 { return true }
         if moved(new.farthestMeters, last.farthestMeters) || moved(new.backMeters, last.backMeters) { return true }
+        if new.tripPercent != last.tripPercent || moved(new.tripRemainingM, last.tripRemainingM) { return true }
         return since >= refreshInterval
     }
 
     static func isUrgent(_ a: OutingActivityState, _ b: OutingActivityState) -> Bool {
         a.alert != b.alert || a.gpsOK != b.gpsOK || a.online != b.online || a.liveCount != b.liveCount || a.memberCount != b.memberCount
+            || a.tripArrived != b.tripArrived || (a.tripPercent == nil) != (b.tripPercent == nil)
     }
 
     static func moved(_ a: Double?, _ b: Double?) -> Bool {

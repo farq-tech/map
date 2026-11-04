@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
     @Published var offerNotifications = false
     /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
     @Published var pendingStart: String?
+    /// «ملخص الرحلة» from the live map after the end: «طلعاتي» opens this summary.
+    @Published var pendingSummary: String?
 
     let api: OutingsAPI
     let location: LocationSharer
@@ -57,11 +59,14 @@ final class AppModel: ObservableObject {
         activity = OutingActivityCoordinator(location: location)
         activity.stuck = { $0.stuckMarks }
         activity.speed = { $0.speedSnapshot() }
+        activity.trip = { $0.tripSnapshot() }
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
+            TripStore.forgetAll()
+            ReturnTripStore.forgetAll()
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
@@ -312,6 +317,9 @@ final class AppModel: ObservableObject {
         session = nil
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
+        /* «الرحلة» (start point, arrivals) is about where I went: it goes with the identity too. */
+        TripStore.forgetAll()
+        ReturnTripStore.forgetAll()
         /* Outing data of this identity (shared waypoints read offline) goes with it. */
         WaypointCache.wipeAll()
         /* «مساري» is about where I went: it goes with the identity. */
@@ -485,6 +493,40 @@ final class AppModel: ObservableObject {
         session?.close()
         session = nil
         Task { await refresh() }
+    }
+
+    /// The trip ended: close the map and open its summary in «طلعاتي».
+    func showSummaryAfterClose(_ outingId: String) {
+        pendingSummary = outingId
+        closeSession()
+    }
+
+    /// «طريق العودة» as a NEW trip: from the destination back to my start point (kept on this
+    /// phone only). The new outing's destination is that point; its live screen also offers to
+    /// follow my old trail back. Opens and starts it like «ابدأ الطلعة» in «طلعة جديدة».
+    @discardableResult
+    func startReturnTrip(from outingId: String) async -> String? {
+        guard !isDemo else {
+            errorText = "«طريق العودة» كرحلة جديدة يحتاج الخادم؛ في العرض التجريبي استخدم «طريق العودة» في «مساري»."
+            return nil
+        }
+        guard let start = TripStore.load(outingId)?.start?.position ?? myTrailPoints(outingId)?.start?.position else {
+            errorText = "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."
+            return nil
+        }
+        let from = plans.model(outingId).plan.destination?.name
+        let name = String((from.map { "العودة من \($0)" } ?? "طريق العودة").prefix(ServerRules.outingNameMax))
+        guard let id = await createOuting(name: name, openNow: false) else { return nil }
+        ReturnTripStore.link(id, returnsFrom: outingId)
+        let plan = plans.model(id)
+        if plan.planPhase == .loading { await plan.loadPlan() }
+        _ = await plan.setDestination(OutingDestination(name: "نقطة البداية", lat: start.lat, lng: start.lng))
+        consentByJoining(id)
+        pendingStart = id
+        pendingSummary = nil
+        open(id)
+        startSharingAfterJoin(id)
+        return id
     }
 
     func handle(url: URL) {

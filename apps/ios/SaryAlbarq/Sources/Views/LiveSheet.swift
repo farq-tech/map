@@ -13,12 +13,15 @@ struct LiveSheet: View {
         let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
+            let trip = controller.showsTripStrip ? controller.tripPanel : nil
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, «إنهاء»). */
                 NavBottomBar(nav: controller.nav, end: controller.endNav)
+                if let trip { TripPeekStrip(ui: trip, expand: controller.tripActions.expand, minimal: true) }
             } else {
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
+                if let trip { TripPeekStrip(ui: trip, expand: controller.tripActions.expand) }
             }
             if ui.sheetDetent != .peek {
                 SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
@@ -149,6 +152,9 @@ private struct ParticipantsTab: View {
         let v = controller.session.view
         Group {
             ShareCallout(controller: controller, ui: ui)
+            if controller.showsTripStrip, ui.status != .notStarted {
+                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            }
             if ui.participantsTab.myPhoneMissing {
                 Button(action: actions.participantsTab.addMyPhone) {
                     SaryBanner(text: "لم تضف رقمك · أضف رقمك ليتصل بك أصحابك", tone: .info, systemImage: SaryIcon.phone)
@@ -192,11 +198,23 @@ private struct ShareCallout: View {
             switch ui.status {
             case .notStarted:
                 VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ صاحب الطلعة.", tone: .info)
-                    if v?.iLead == true {
-                        Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-                            .buttonStyle(.saryPrimary)
-                            .accessibilityIdentifier("live.start")
+                    if controller.tripDestination == nil {
+                        /* «لا يوجد رحلة من غير نهاية»: no start without a destination. */
+                        SaryBanner(text: v?.iLead == true ? "حدّد الوجهة أولًا، وبعدها ابدأ الطلعة." : "بانتظار الوجهة من صاحب الطلعة.",
+                                   tone: .warning, systemImage: "flag.slash")
+                            .accessibilityIdentifier("live.waitingDestination")
+                        if v?.iLead == true {
+                            Button { controller.chooseTripDestination() } label: { SaryButtonLabel(title: "حدّد الوجهة", systemImage: "flag.checkered") }
+                                .buttonStyle(.saryPrimary)
+                                .accessibilityIdentifier("live.setDestination")
+                        }
+                    } else {
+                        SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ صاحب الطلعة.", tone: .info)
+                        if v?.iLead == true {
+                            Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
+                                .buttonStyle(.saryPrimary)
+                                .accessibilityIdentifier("live.start")
+                        }
                     }
                 }
             case .paused:

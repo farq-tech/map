@@ -23,8 +23,7 @@ struct CreateOutingWizard: View {
             switch flow.step {
             case .destination:
                 DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
-                                choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } },
-                                skip: { withAnimation(theme.animation(.smooth)) { flow.skipDestination() } })
+                                choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
             case .weather:
                 WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
             case .invite:
@@ -149,7 +148,6 @@ private struct DestinationStep: View {
     var near: LngLat?
     var initialText: String
     var choose: (OutingDestination) -> Void
-    var skip: () -> Void
     var search: (String, LngLat?) async throws -> [PlaceSearch.Place] = { q, near in try await PlaceSearch.search(q, near: near) }
     @Environment(\.sary) private var theme
     @State private var text = ""
@@ -213,14 +211,11 @@ private struct DestinationStep: View {
                 }
             }
         }
-        VStack(spacing: theme.space(.xs)) {
-            Button("بدون وجهة الحين", action: skip)
-                .buttonStyle(.sary(.plain))
-                .accessibilityIdentifier("create.dest.skip")
-            Text("بدون وجهة ما نقدر نوريك جو المكان اللي رايحين له. تقدر تحددها بعدين من الخريطة.")
-                .saryText(.footnote).foregroundStyle(p.textTertiary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
+        /* No «بدون وجهة»: every outing is a trip with a start and an end. */
+        Label("كل طلعة رحلة لها بداية ونهاية، فالوجهة مطلوبة.", systemImage: "flag.checkered")
+            .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("create.dest.required")
         .onAppear { if text.isEmpty, !initialText.isEmpty { text = initialText } }
         .fullScreenCover(isPresented: $mapOpen) {
             MapPointPicker(start: near, close: { mapOpen = false }) { pt in
@@ -360,17 +355,15 @@ private struct WeatherStep: View {
                 departureRow.id("departure")
                 if let d = flow.destination {
                     weatherCards(d)
-                } else {
-                    SaryBanner(text: "ما حددتوا وجهة، فما نقدر نوريكم جو المكان اللي رايحين له. حددوها الحين أو من الخريطة بعدين.", tone: .warning, systemImage: "flag.slash")
                 }
                 Text("يناسبنا الجو؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 if let e = flow.error, e != CreateFlowState.Issue.nameEmpty.arabic { SaryInlineMessage(text: e, tone: .error) }
                 if !online { SaryOfflineStrip(text: "بلا إنترنت — ننشئ الطلعة أول ما يرجع الاتصال.") }
                 Button(action: approve) {
-                    SaryButtonLabel(title: flow.destination == nil ? "كمّل بدون وجهة" : "يناسبنا الجو، كمّل", systemImage: "checkmark", busy: flow.creating, busyTitle: "ننشئ الطلعة…")
+                    SaryButtonLabel(title: "يناسبنا الجو، كمّل", systemImage: "checkmark", busy: flow.creating, busyTitle: "ننشئ الطلعة…")
                 }
                 .buttonStyle(.sary(.primary))
-                .disabled(flow.creating || !online)
+                .disabled(flow.creating || !online || flow.destination == nil)
                 .accessibilityIdentifier("create.approve")
                 HStack(spacing: theme.space(.s)) {
                     Button {

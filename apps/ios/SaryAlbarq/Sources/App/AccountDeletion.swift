@@ -78,7 +78,7 @@ struct AccountDeleter {
 enum LocalAccountData {
     static var keys: [String] {
         [ShareMemory.consentKey, ShareMemory.activeShareKey] + ShareMemory.legacyKeys + [
-            TripLogStore.key, InviteTokenStore.key, OnboardingProgress.key,
+            TripLogStore.key, TripStore.key, ReturnTripStore.key, InviteTokenStore.key, OnboardingProgress.key,
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
             WatchLinkStore.key, SafetyController.warnedStoreKey,

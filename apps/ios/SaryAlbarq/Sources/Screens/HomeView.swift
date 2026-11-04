@@ -37,7 +37,16 @@ struct HomeView: View {
                 }
         }
         .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
+        .onAppear(perform: openPendingSummary)
+        .onChange(of: model.pendingSummary) { _, _ in openPendingSummary() }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
+    }
+
+    /// «ملخص الرحلة» pressed on the live map after the end.
+    private func openPendingSummary() {
+        guard let id = model.pendingSummary else { return }
+        model.pendingSummary = nil
+        path = [.summary(id)]
     }
 
     @ViewBuilder

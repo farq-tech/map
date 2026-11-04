@@ -4,11 +4,14 @@ import SwiftUI
 
 extension SheetDetentUI {
     /// Height of the minimized sheet: handle + summary line (+ drive size).
-    static func peekHeight(drive: Bool) -> CGFloat { drive ? 88 : 70 }
+    /// `trip`: the trip strip («قطعنا ٦٢٪ · باقي …») sits under the summary line.
+    static func peekHeight(drive: Bool, trip: Bool = false) -> CGFloat {
+        trip ? (drive ? 140 : 104) : (drive ? 88 : 70)
+    }
 
-    func presentationDetent(drive: Bool) -> PresentationDetent {
+    func presentationDetent(drive: Bool, trip: Bool = false) -> PresentationDetent {
         switch self {
-        case .peek: return .height(Self.peekHeight(drive: drive))
+        case .peek: return .height(Self.peekHeight(drive: drive, trip: trip))
         case .half: return .medium
         case .full: return .large
         }
@@ -35,15 +38,16 @@ extension SheetDetentUI {
 /// in drive mode / solid panel look / fallback.
 private struct SarySheetPresentation: ViewModifier {
     @Binding var detent: SheetDetentUI
+    var trip = false
     @Environment(\.sary) private var theme
 
     func body(content: Content) -> some View {
         let binding = Binding<PresentationDetent>(
-            get: { detent.presentationDetent(drive: theme.drive) },
+            get: { detent.presentationDetent(drive: theme.drive, trip: trip) },
             set: { detent = SheetDetentUI($0, drive: theme.drive) }
         )
         content
-            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: theme.drive) }), selection: binding)
+            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: theme.drive, trip: trip) }), selection: binding)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationDragIndicator(.visible)
             .presentationContentInteraction(.scrolls)
@@ -79,8 +83,8 @@ private struct SheetBackground: ViewModifier {
 
 extension View {
     /// Apply to the content of the live outing `.sheet`.
-    func sarySheetPresentation(detent: Binding<SheetDetentUI>) -> some View {
-        modifier(SarySheetPresentation(detent: detent))
+    func sarySheetPresentation(detent: Binding<SheetDetentUI>, trip: Bool = false) -> some View {
+        modifier(SarySheetPresentation(detent: detent, trip: trip))
     }
 }
 

@@ -83,6 +83,21 @@ extension LiveOutingController: CarPlayFeatureSource {
         return CarPlayDestination(position: LngLat(lng: d.lng, lat: d.lat), label: d.name)
     }
 
+    func carPlayTripProgress() -> CarPlayTripProgress? {
+        guard tripDestination != nil else { return nil }
+        let t = tripPanel
+        switch t.phase {
+        case .arrived:
+            return CarPlayTripProgress(percent: 100, remainingM: 0, approximate: false, eta: nil, arrived: true)
+        case .underway:
+            let fresh = t.myFixStaleSince == nil
+            return CarPlayTripProgress(percent: t.percent, remainingM: fresh ? t.remainingMeters : nil, approximate: t.remainingApprox,
+                                       eta: fresh ? t.eta : nil, arrived: false)
+        default:
+            return nil
+        }
+    }
+
     func carPlayStuckMembers() -> [CarPlayStuck] {
         safety.stuck.values
             .filter { !StuckLogic.expired($0, now: Date()) }

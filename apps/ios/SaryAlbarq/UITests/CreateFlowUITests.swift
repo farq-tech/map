@@ -38,7 +38,11 @@ final class CreateFlowUITests: XCTestCase {
         let field = app.textFields["create.dest.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["وين رايحين؟"].exists)
-        XCTAssertTrue(app.buttons["create.dest.skip"].exists, "skipping is offered")
+        /* «لا يوجد رحلة من غير نهاية»: no way to go on without a destination. */
+        XCTAssertFalse(app.buttons["create.dest.skip"].exists, "no «بدون وجهة الحين»")
+        XCTAssertFalse(app.buttons["بدون وجهة الحين"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["create.dest.required"].exists, "the destination is required")
+        XCTAssertFalse(app.textFields["create.name"].exists, "step 2 is not reachable without a destination")
         XCTAssertTrue(app.buttons["create.dest.map"].exists)
         shot("1-destination")
         field.tap()

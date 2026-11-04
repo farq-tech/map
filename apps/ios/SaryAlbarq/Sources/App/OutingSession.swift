@@ -109,6 +109,8 @@ final class OutingSession: ObservableObject, Identifiable {
     var stuckMarks: [StuckMark] = []
     /// «سرعة المركبة» from the live screen's SpeedModel, for the Live Activity.
     var speedSnapshot: () -> SpeedModel.Snapshot? = { nil }
+    /// «الرحلة» from the live screen (for the Live Activity), when it is open.
+    var tripSnapshot: () -> TripPanelUI? = { nil }
     /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
     var onNearbyEvent: (MeshEvent) -> Void = { _ in }
     #if DEBUG
@@ -822,6 +824,14 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func setStatus(_ action: String) async {
+        if isDemo {
+            /* `-demo`: no server; the demo outing changes state on this phone only. */
+            let st: OutingStatus = action == "end" ? .ended : action == "pause" ? .paused : .active
+            view?.apply(.outingStatus(st))
+            reconcileSharing()
+            if st == .ended { closed(.outingEnded) }
+            return
+        }
         _ = await run("status") {
             let o = try await api.setStatus(id, action: action)
             view?.apply(.outingStatus(o.status))
