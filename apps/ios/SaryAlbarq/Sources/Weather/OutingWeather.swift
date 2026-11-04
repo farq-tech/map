@@ -16,6 +16,8 @@ final class OutingWeather: ObservableObject {
     @Published private(set) var wadiDestination: WadiContext?
     /// The map has reported its watercourses at least once (live screen only).
     @Published private(set) var mapChecked = false
+    /// Where the chip's weather is for: destination > the group's area > my area.
+    @Published private(set) var source: WeatherChipSource = .none
     /// User-chosen departure for the arrival estimate; nil = now.
     @Published var departure: Date?
     /// The live screen has a map: show the wadi section.
@@ -26,6 +28,8 @@ final class OutingWeather: ObservableObject {
 
     private var tracksMap: Bool
     private var points: [Geo.LatLng] = []
+    private var others: [Geo.LatLng] = []
+    private var mine: Geo.LatLng?
     private var lines: [WaterwayLine] = []
     private var fixes: [DeviceFix] = []
     private var gate: WeatherAlertGate
@@ -73,9 +77,13 @@ final class OutingWeather: ObservableObject {
             if fixes.last.map({ me.atMs - $0.atMs >= 5_000 }) ?? true { fixes.append(me) }
             fixes.removeAll { me.atMs - $0.atMs > 10 * 60_000 }
         }
-        let c = me?.coordinate ?? Self.centroid(pts)
+        others = pts
+        mine = me?.coordinate
+        /* The outing's area: the group's centre when anyone else is known, else mine. */
+        let c = WeatherChipSource.areaCenter(others: pts, me: mine)
         let oldCell = center.map { WeatherArea(around: $0.lat, lng: $0.lng) }
         center = c
+        updateSource()
         points = pts + (me.map { [$0.coordinate] } ?? []) + WadiProximity.densify(route)
         if let c, WeatherArea(around: c.lat, lng: c.lng) != oldCell {
             Task { await refresh(force: false) }
@@ -94,6 +102,7 @@ final class OutingWeather: ObservableObject {
     func setDestination(_ d: OutingDestination?) {
         guard d != destinationPoint else { return }
         destinationPoint = d
+        updateSource()
         Task { await refresh(force: false) }
     }
 
@@ -133,10 +142,35 @@ final class OutingWeather: ObservableObject {
         if changed { gate.save(outing: outingId) }
     }
 
+    private func updateSource() {
+        let s = WeatherChipSource.select(destination: destinationPoint, others: others, me: mine)
+        if s != source { source = s }
+    }
+
+    /// The store that holds the chip's forecast.
+    var chipStore: WeatherStore? {
+        switch source {
+        case .destination: return destination
+        case .group, .me: return area
+        case .none: return nil
+        }
+    }
+
+    /// The live screen's always-visible chip.
+    func chip(now: Date) -> WeatherChipUI {
+        let st = chipStore
+        return WeatherChipPresenter.chip(source: source, report: st?.report, refreshing: st?.refreshing ?? false, failed: st?.lastFailed ?? false, now: now)
+    }
+
     // MARK: UI
 
     func areaCard(now: Date, hours: Int = 8) -> WeatherCardUI {
-        WeatherPresenter.card(title: "الطقس في منطقة الطلعة", report: area.report, refreshing: area.refreshing, failed: area.lastFailed, now: now, hours: hours)
+        let title = others.isEmpty && mine != nil ? "الطقس في منطقتك" : "الطقس في منطقة الطلعة"
+        guard center != nil else {
+            /* No position at all yet: say what is missing instead of spinning forever. */
+            return WeatherCardUI(title: title, phase: .unavailable(WeatherChipPresenter.noSourceText))
+        }
+        return WeatherPresenter.card(title: title, report: area.report, refreshing: area.refreshing, failed: area.lastFailed, now: now, hours: hours)
     }
 
     func destinationCard(now: Date, hours: Int = 8) -> WeatherCardUI {
@@ -159,7 +193,7 @@ final class OutingWeather: ObservableObject {
         return "أقرب مجرى وادٍ مرسوم على بعد \(SaryFormat.distance(meters: w.distanceM))\(w.name.map { " (\($0))" } ?? "")"
     }
 
-    static func centroid(_ pts: [Geo.LatLng]) -> Geo.LatLng? {
+    nonisolated static func centroid(_ pts: [Geo.LatLng]) -> Geo.LatLng? {
         guard !pts.isEmpty else { return nil }
         return Geo.LatLng(lat: pts.map(\.lat).reduce(0, +) / Double(pts.count), lng: pts.map(\.lng).reduce(0, +) / Double(pts.count))
     }

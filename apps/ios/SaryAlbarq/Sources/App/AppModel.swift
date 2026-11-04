@@ -33,6 +33,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var recovery: OutingsAPI.RecoveryStatus?
     /// After a first join: offer notifications with our explainer (never at launch).
     @Published var offerNotifications = false
+    /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
+    @Published var pendingStart: String?
 
     let api: OutingsAPI
     let location: LocationSharer
@@ -62,6 +64,8 @@ final class AppModel: ObservableObject {
             TripLogStore.forgetAll()
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
+            LocalDestinationStore.forgetAll()
+            RecentPlaces.forget()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys + SpeedPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
@@ -299,19 +303,32 @@ final class AppModel: ObservableObject {
         } catch {}
     }
 
-    func createOuting(name: String) async -> String? {
+    /// Creates the outing (and keeps its invite token on this phone). `openNow: false`
+    /// leaves the map closed: «طلعة جديدة» shows the invite step first.
+    func createOuting(name: String, openNow: Bool = true) async -> String? {
         guard let clean = ServerRules.cleanText(name, max: ServerRules.outingNameMax) else {
             errorText = OutingAPIError(code: "invalid_outing_name", status: 400).arabic
             return nil
+        }
+        if isDemo {
+            /* `-demo`: no server. The demo outing stands in (its link is a clearly fake demo link). */
+            if openNow { open(DemoData.outingId) }
+            return DemoData.outingId
         }
         do {
             let r = try await api.create(name: clean)
             InviteTokenStore.save(r.outing_id, r.invite.token)
             await refresh()
-            open(r.outing_id)
+            if openNow { open(r.outing_id) }
             return r.outing_id
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
+    }
+
+    /// The invite link for an outing this phone created (`-demo`: a demo link that joins nothing).
+    func inviteURL(_ outingId: String) -> URL? {
+        if let t = InviteTokenStore.load(outingId) { return InviteLink.url(for: t) }
+        return isDemo ? InviteLink.url(for: "demo-invite") : nil
     }
 
     func preview(_ token: String) async throws -> InvitePreview { try await api.preview(token: token) }

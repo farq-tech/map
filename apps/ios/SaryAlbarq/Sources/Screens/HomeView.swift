@@ -36,7 +36,7 @@ struct HomeView: View {
                         .navigationBarBackButtonHidden(true)
                 }
         }
-        .sheet(isPresented: $creating) { CreateOutingSheet().saryPresented(appearance) }
+        .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
     }
 
@@ -170,8 +170,11 @@ struct OutingCard: View {
                                     .accessibilityLabel(Text("صاحب الطلعة"))
                             }
                         }
-                        if let t = o.timeLabel() {
-                            Text(t).saryText(.caption).foregroundStyle(p.textTertiary)
+                        HStack(spacing: 6) {
+                            if let t = o.timeLabel() {
+                                Text(t).saryText(.caption).foregroundStyle(p.textTertiary)
+                            }
+                            if o.status != .ended { OutingRowWeather(outingId: o.id) }
                         }
                     }
                     Spacer(minLength: 0)
@@ -205,6 +208,31 @@ struct HistoryView: View {
             VStack(spacing: theme.space(.s)) {
                 ForEach(model.history) { o in OutingCard(o: o, open: { open(o.id) }, details: nil) }
             }
+        }
+    }
+}
+
+/// The destination's weather on an outing row (only when the outing has one; plan loaded lazily).
+private struct OutingRowWeather: View {
+    let outingId: String
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View { Inner(plan: model.plans.model(outingId)) }
+
+    private struct Inner: View {
+        @ObservedObject var plan: PlanModel
+        var body: some View {
+            Group {
+                if let d = plan.plan.destination {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag.checkered").font(.system(size: 9, weight: .bold)).accessibilityHidden(true)
+                        DestinationWeatherBadge(destination: d)
+                    }
+                } else {
+                    Color.clear.frame(width: 0, height: 0)
+                }
+            }
+            .task { if plan.planPhase == .loading { await plan.loadPlan() } }
         }
     }
 }

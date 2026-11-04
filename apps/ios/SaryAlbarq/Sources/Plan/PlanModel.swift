@@ -35,6 +35,10 @@ final class PlanModel: ObservableObject {
     @Published var errorText: String?
     /// «اتبع الخطة» is on (this device only).
     @Published var following = false
+    /// The destination lives only on this phone (the server has no plan endpoint yet);
+    /// it is sent the first time the plan loads from the server. Members do not see it until then.
+    @Published private(set) var destinationLocalOnly = false
+    private let defaults: UserDefaults
 
     private var follower = FollowPlan(points: [])
     private var observer: NSObjectProtocol?
@@ -45,9 +49,14 @@ final class PlanModel: ObservableObject {
 
     static let pollSeconds: UInt64 = 15
 
-    init(outingId: String, backend: PlanBackend) {
+    init(outingId: String, backend: PlanBackend, defaults: UserDefaults = .standard) {
         self.outingId = outingId
         self.backend = backend
+        self.defaults = defaults
+        if let local = LocalDestinationStore.load(outingId, defaults: defaults), local.pending {
+            plan.destination = local.destination
+            destinationLocalOnly = true
+        }
         observer = NotificationCenter.default.addObserver(forName: PlanEvents.name, object: outingId, queue: .main) { [weak self] n in
             guard let e = n.userInfo?["event"] as? LiveEvent else { return }
             MainActor.assumeIsolated { self?.apply(e) }
@@ -75,8 +84,34 @@ final class PlanModel: ObservableObject {
             let p = try await backend.plan(outingId)
             if pendingWrites == 0 { setPlan(p) }
             planPhase = .loaded
+            await syncLocalDestination(server: p)
         } catch {
             if PlanAvailability.notDeployed(error) { planPhase = .unavailable } else if planPhase != .loaded { planPhase = .failed(Self.text(error)) }
+        }
+    }
+
+    /// The server answers the plan now: send the destination kept on this phone.
+    /// If the server already has a destination (set after the endpoint went live), the server wins.
+    private func syncLocalDestination(server p: TripPlan) async {
+        guard let local = LocalDestinationStore.load(outingId, defaults: defaults), local.pending else { return }
+        if p.destination != nil {
+            LocalDestinationStore.clear(outingId, defaults: defaults)
+            destinationLocalOnly = false
+            return
+        }
+        var withDest = p
+        withDest.destination = local.destination
+        pendingWrites += 1
+        defer { pendingWrites -= 1 }
+        do {
+            setPlan(try await backend.putPlan(outingId, withDest.cleanedForUpload()))
+            LocalDestinationStore.clear(outingId, defaults: defaults)
+            destinationLocalOnly = false
+        } catch {
+            /* Still not accepted: keep it on the phone and show it. */
+            var keep = plan
+            keep.destination = local.destination
+            setPlan(keep)
         }
     }
 
@@ -150,6 +185,10 @@ final class PlanModel: ObservableObject {
         do {
             setPlan(try await backend.putPlan(outingId, clean))
             planPhase = .loaded
+            if destinationLocalOnly {
+                LocalDestinationStore.clear(outingId, defaults: defaults)
+                destinationLocalOnly = false
+            }
             return true
         } catch {
             setPlan(before)
@@ -163,10 +202,25 @@ final class PlanModel: ObservableObject {
         }
     }
 
+    /// Sets (or clears) the destination. If the server has no plan endpoint yet, it is
+    /// kept on this phone (`destinationLocalOnly`) and sent once the endpoint answers.
     func setDestination(_ d: OutingDestination?) async -> Bool {
         var p = plan
         p.destination = d
-        return await save(p)
+        if await save(p) { return true }
+        guard planPhase == .unavailable else { return false }
+        errorText = nil
+        var local = plan
+        local.destination = p.cleanedForUpload().destination
+        setPlan(local)
+        if let dest = local.destination {
+            LocalDestinationStore.save(outingId, .init(destination: dest, pending: true, savedAt: Date()), defaults: defaults)
+            destinationLocalOnly = true
+        } else {
+            LocalDestinationStore.clear(outingId, defaults: defaults)
+            destinationLocalOnly = false
+        }
+        return true
     }
 
     // MARK: checklist (any member)

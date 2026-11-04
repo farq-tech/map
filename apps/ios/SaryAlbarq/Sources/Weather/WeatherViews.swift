@@ -208,6 +208,10 @@ struct WeatherAlertLeading: View {
 struct WeatherSheet: View {
     @ObservedObject var weather: OutingWeather
     var close: () -> Void
+    /// Leader / co-leader: «غيّر الوجهة» (or «حدّد الوجهة»).
+    var changeDestination: (() -> Void)? = nil
+    /// Said honestly when the destination is only on this phone.
+    var destinationNote: String? = nil
     @Environment(\.sary) private var theme
     @State private var now = Date()
     @State private var pickDeparture = false
@@ -217,10 +221,15 @@ struct WeatherSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
-                    WeatherCardView(ui: weather.areaCard(now: now, hours: 24))
                     if weather.destinationPoint != nil {
-                        WeatherCardView(ui: weather.destinationCard(now: now, hours: 12))
+                        /* The destination first: it is what the chip on the map shows. */
+                        WeatherCardView(ui: weather.destinationCard(now: now, hours: 24))
                         if let a = weather.arrival(now: now) { arrivalCard(a) }
+                        destinationActions
+                        WeatherCardView(ui: weather.areaCard(now: now, hours: 12))
+                    } else {
+                        WeatherCardView(ui: weather.areaCard(now: now, hours: 24))
+                        destinationActions
                     }
                     if weather.showsWadi { wadiSection }
                     officialSection
@@ -253,6 +262,21 @@ struct WeatherSheet: View {
             now = Date()
         }
         .accessibilityIdentifier("weather.sheet")
+    }
+
+    @ViewBuilder
+    private var destinationActions: some View {
+        if let destinationNote, weather.destinationPoint != nil {
+            SaryBanner(text: destinationNote, tone: .info, systemImage: "iphone")
+                .accessibilityIdentifier("weather.destinationLocal")
+        }
+        if let changeDestination {
+            Button(action: changeDestination) {
+                SaryButtonLabel(title: weather.destinationPoint == nil ? "حدّد الوجهة لتشوف جوّها" : "غيّر الوجهة", systemImage: "flag.checkered")
+            }
+            .buttonStyle(.sary(.secondary))
+            .accessibilityIdentifier("weather.changeDestination")
+        }
     }
 
     private func arrivalCard(_ a: WeatherArrivalUI) -> some View {
@@ -361,35 +385,64 @@ struct LiveWeatherCard: View {
     }
 }
 
-/// Outing details: the weather for the outing's area (rally point, else the
-/// members' last positions, else my own fix — only its 0.1° cell is sent).
+/// Outing details: the destination's weather when there is one, else the outing's
+/// area (rally point, else the members' last positions, else my own rough fix —
+/// only its 0.1° cell is sent). Never an endless spinner: with nothing to go on it says so.
 struct DetailsWeatherSection: View {
     let snapshot: OutingSnapshot
     var myFix: DeviceFix?
+    @ObservedObject var plan: PlanModel
+    var canEditDestination = false
     @StateObject private var weather: OutingWeather
+    @StateObject private var locator = OneShotLocator()
     @State private var open = false
     @Environment(AppearanceSettings.self) private var appearance
 
-    init(snapshot: OutingSnapshot, myFix: DeviceFix?) {
+    init(snapshot: OutingSnapshot, myFix: DeviceFix?, plan: PlanModel, canEditDestination: Bool = false) {
         self.snapshot = snapshot
         self.myFix = myFix
+        self.plan = plan
+        self.canEditDestination = canEditDestination
         _weather = StateObject(wrappedValue: OutingWeather(outingId: snapshot.outing.id, tracksMap: false))
     }
 
     var body: some View {
-        WeatherCardView(ui: weather.areaCard(now: Date())) { open = true }
-            .task {
-                var pts = snapshot.positions.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) }
-                if let r = snapshot.outing.rally { pts = [Geo.LatLng(lat: r.lat, lng: r.lng)] }
-                #if DEBUG
-                weather.setDestination(WeatherDemo.destination)
-                #endif
-                weather.setPositions(pts, me: pts.isEmpty ? myFix : nil)
-                await weather.refresh(force: false)
+        let now = Date()
+        VStack(spacing: 8) {
+            if weather.destinationPoint != nil {
+                WeatherCardView(ui: weather.destinationCard(now: now)) { open = true }
+                if plan.destinationLocalOnly {
+                    SaryBanner(text: LocalDestinationCopy.note, tone: .info, systemImage: "iphone")
+                }
+            } else {
+                WeatherCardView(ui: weather.areaCard(now: now)) { open = true }
             }
-            .sheet(isPresented: $open) {
-                WeatherSheet(weather: weather, close: { open = false })
-                    .saryAppearance(appearance)
-            }
+        }
+        .task(id: feedKey) { await feed() }
+        .onAppear { locator.request() }
+        .sheet(isPresented: $open) {
+            WeatherSheet(weather: weather, close: { open = false }, destinationNote: plan.destinationLocalOnly ? LocalDestinationCopy.note : nil)
+                .saryAppearance(appearance)
+        }
+    }
+
+    private var feedKey: String {
+        "\(plan.plan.destination?.lat ?? 0),\(plan.plan.destination?.lng ?? 0),\(locator.fix?.lat ?? 0),\(myFix?.atMs ?? 0)"
+    }
+
+    private func feed() async {
+        var pts = snapshot.positions.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) }
+        if let r = snapshot.outing.rally { pts = [Geo.LatLng(lat: r.lat, lng: r.lng)] }
+        var dest = plan.plan.destination
+        #if DEBUG
+        if dest == nil { dest = WeatherDemo.destination }
+        #endif
+        weather.setDestination(dest)
+        var me = myFix
+        if me == nil, let f = locator.fix {
+            me = DeviceFix(lat: f.lat, lng: f.lng, accuracy: 1000, heading: nil, speed: nil, atMs: Date().timeIntervalSince1970 * 1000)
+        }
+        weather.setPositions(pts, me: pts.isEmpty ? me : nil)
+        await weather.refresh(force: false)
     }
 }
