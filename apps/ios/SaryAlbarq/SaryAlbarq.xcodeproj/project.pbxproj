@@ -9,16 +9,19 @@
 /* Begin PBXBuildFile section */
 		00DB1B5A251C9F87CE438139 /* OutingsAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4C328DB2C402A95A6C6F356 /* OutingsAPI.swift */; };
 		02CE1FBA75860269420A052B /* ShowcaseMocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35455B0FA230E73A9455A6F2 /* ShowcaseMocks.swift */; };
+		04AEC006F0D7113B47C5A993 /* CarPlayPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A022F20DA4CEBB0A0B4B328 /* CarPlayPresenter.swift */; };
 		06912821BBE6C7BA595233FB /* SaryFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56A6DD3BA79D59CFC045E663 /* SaryFormat.swift */; };
 		071B934F70A195F66BAC9EEF /* ServerRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */; };
 		07C479D806218F00E06056B8 /* VoiceClips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7054D28829BF6342E6ADB5CB /* VoiceClips.swift */; };
 		08B95CC152CFCF0A70B61C87 /* AccountDeletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829DC987210D81AB7F10A4F2 /* AccountDeletion.swift */; };
 		091E418E859C66DF2F4CDFF2 /* LocationTuning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22577D3538F441C2B397A087 /* LocationTuning.swift */; };
+		0B85BCADBF1A4FA05E01853A /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF6F103F4C6A52C38955282F /* CarPlaySceneDelegate.swift */; };
 		0C232120FA55F461674FFE2F /* OutingDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD262FCA6C49655E8242D57B /* OutingDetailsView.swift */; };
 		0EA881548388CE75141F6995 /* PolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA0F85CAB17933B1EB775EE5 /* PolicyTests.swift */; };
 		0FC4C2E18C32E1D6F9EF7B2F /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15B691AC41FCD8479C0AB9E7 /* OnboardingFlow.swift */; };
 		138A60F5D0FA3F96BC3F543C /* SaryTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DA38518A590AB9B0FF6628 /* SaryTokens.swift */; };
 		178BFF5CBED80157E96758AE /* RecoveryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0770F4C24CEEC9C2B35D8095 /* RecoveryScreens.swift */; };
+		1C45B2ABAFD066E38B318B27 /* CarPlayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */; };
 		1C734BBA510CAEB54C8F56F5 /* MapPortTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E50AC1451FBD435CC8E3330 /* MapPortTests.swift */; };
 		1CA61098FF2C6466AC156AEF /* CarColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF000A053D67AA53866613C3 /* CarColors.swift */; };
 		1E02895EB7B6FDE875ADFE62 /* InviteLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0CAF1A6CC3BA3345CE20B5 /* InviteLink.swift */; };
@@ -62,6 +65,7 @@
 		735A33AC3B44DBA0FDCE015E /* TripLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4343F12A82B70322558AC0D /* TripLog.swift */; };
 		7567E09DAF6E55DD6A4FB56C /* RecoveryFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C3945563FBFA05496632EDC /* RecoveryFormatTests.swift */; };
 		771CF1A9EC8865D34CE4F02E /* OutingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */; };
+		79AB0CE628DDD4A9688EB4F5 /* CarPlayFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B320D512D47E006CCF289262 /* CarPlayFeatures.swift */; };
 		79C7509AC991ABF9C69BD616 /* SarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350C0C1DE95561FD26192CDE /* SarySheet.swift */; };
 		7B9E5C3F50F7C40B4AE8F04E /* DesertTerrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C611B1059DE705E698793E36 /* DesertTerrain.swift */; };
 		7FF6F7FAA0DE9DE4CE6E5B6D /* ScreenKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D20037D03EABCC832D131B /* ScreenKit.swift */; };
@@ -76,6 +80,7 @@
 		8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */; };
 		8EDB900CFFA6E3C7960D73D6 /* SaryMapControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4370475FC1006881BCACF8 /* SaryMapControls.swift */; };
 		911EA0E677E066F0F1D6E8CE /* LiveOutingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */; };
+		9465828E29D08CBDCE33D84C /* CarPlayPhonePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635D4BB4444B8CBDFCB3DABB /* CarPlayPhonePreview.swift */; };
 		94A82E0D57CB2023C035AF9F /* SettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A6552211824B45AF52FE26 /* SettingsScreens.swift */; };
 		98BC6C17560D22BF1DA67E5E /* SarySOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60638084F780BC8BED2D9961 /* SarySOS.swift */; };
 		98F511391CA39ED1A4D0CC3F /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 522D9BD5ED742287300C4BD0 /* MapboxMaps */; };
@@ -85,6 +90,7 @@
 		B41FD991EF6D280EA63B5CA4 /* OfflineMapsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53248E2BA4A71B25490C51E5 /* OfflineMapsUITests.swift */; };
 		B55007BB4AC745A6F82825ED /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D1F55DF995866060A02C7E28 /* InfoPlist.strings */; };
 		B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79172DD3710A43059AD423D9 /* LiveProductionTests.swift */; };
+		C22A7CC533E50F7A5B7A49E0 /* CarPlayPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E13D7B33BE15B22E053E00E9 /* CarPlayPresenterTests.swift */; };
 		C4BE81361B59B343906259EA /* SaryStates.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F18F1551C61F843F8D69AB /* SaryStates.swift */; };
 		C8CCF2A9DCAC52B25C4498DF /* DesignSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33423E5B09B8A1AC4E722A89 /* DesignSystemTests.swift */; };
 		C9C19B349BAB334D88BDBB89 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5AF5AA15881B17850C98CA71 /* Assets.xcassets */; };
@@ -99,6 +105,7 @@
 		EE4C6E9A9111813F2B32CA5D /* SaryInputs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F06019237C8C995F9E23ABB /* SaryInputs.swift */; };
 		EF4D309AF067FE4352114398 /* RoadSnap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DFC99DFDE0311B8D1B504E /* RoadSnap.swift */; };
 		F19CF3E2845E4431FCA570F3 /* PrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */; };
+		F1E90EB70EF716F63FA8DAFE /* CarPlayMapViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B581A946C420C5701FCB189 /* CarPlayMapViewController.swift */; };
 		F23D349CD8B6C406E98C88F8 /* ChipLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 228B792179E7688D3B50771D /* ChipLayout.swift */; };
 		F74C69A26E7B0C2F0766AD58 /* Trail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71FA16F086DA2E158BD914C1 /* Trail.swift */; };
 		F9FE1476FA2146FBDA8C6F29 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 978DED85B9A53695F514416B /* Models.swift */; };
@@ -153,6 +160,7 @@
 		369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingScreen.swift; sourceTree = "<group>"; };
 		376AED911A9C2A29F5F4EFD0 /* Policy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Policy.swift; sourceTree = "<group>"; };
 		3965FB1AEE0F3BE181A0450F /* SaryAlbarqTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A022F20DA4CEBB0A0B4B328 /* CarPlayPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayPresenter.swift; sourceTree = "<group>"; };
 		3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryParticipant.swift; sourceTree = "<group>"; };
 		3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-Medium.ttf"; sourceTree = "<group>"; };
 		3DD3067CF341A79F279CD980 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
@@ -160,6 +168,7 @@
 		3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
 		4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAppearancePanel.swift; sourceTree = "<group>"; };
 		4609E14CD8FB70A0C054AFBF /* PrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyTests.swift; sourceTree = "<group>"; };
+		49A3565CAFC838A5267BB20F /* SaryAlbarq-CarPlay.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryAlbarq-CarPlay.entitlements"; sourceTree = "<group>"; };
 		4D5DE21DF8A6B652B7B423C3 /* CommonContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonContract.swift; sourceTree = "<group>"; };
 		512C97CE9BE0C836977C53B6 /* ChipLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipLayoutTests.swift; sourceTree = "<group>"; };
 		52B545614818C7F89DCDD20D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -169,10 +178,12 @@
 		572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingMapboxView.swift; sourceTree = "<group>"; };
 		59544682634D1CE81529B401 /* DetailContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailContracts.swift; sourceTree = "<group>"; };
 		5AF5AA15881B17850C98CA71 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5B581A946C420C5701FCB189 /* CarPlayMapViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayMapViewController.swift; sourceTree = "<group>"; };
 		5E17D73842E97F9B08A394E6 /* SaryAlbarq.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SaryAlbarq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F06019237C8C995F9E23ABB /* SaryInputs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryInputs.swift; sourceTree = "<group>"; };
 		60638084F780BC8BED2D9961 /* SarySOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SarySOS.swift; sourceTree = "<group>"; };
 		61D00282D218E5D04013AD73 /* SuvModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuvModel.swift; sourceTree = "<group>"; };
+		635D4BB4444B8CBDFCB3DABB /* CarPlayPhonePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayPhonePreview.swift; sourceTree = "<group>"; };
 		6E24003749BC3726C3407B3A /* SaryAlbarqUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqUITests.swift; sourceTree = "<group>"; };
 		6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDeletionTests.swift; sourceTree = "<group>"; };
 		7054D28829BF6342E6ADB5CB /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
@@ -200,10 +211,13 @@
 		A76B7AC870FF18C0416DEE76 /* SaryButtons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryButtons.swift; sourceTree = "<group>"; };
 		A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingContract.swift; sourceTree = "<group>"; };
 		AD262FCA6C49655E8242D57B /* OutingDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingDetailsView.swift; sourceTree = "<group>"; };
+		B320D512D47E006CCF289262 /* CarPlayFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayFeatures.swift; sourceTree = "<group>"; };
+		B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayCoordinator.swift; sourceTree = "<group>"; };
 		B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-ExtraBold.ttf"; sourceTree = "<group>"; };
 		B47DB0E41B0AD052B607CB27 /* LiveChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveChannel.swift; sourceTree = "<group>"; };
 		B6F18F1551C61F843F8D69AB /* SaryStates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryStates.swift; sourceTree = "<group>"; };
 		B7375A05885429491947FFF5 /* OutingStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingStateTests.swift; sourceTree = "<group>"; };
+		BF6F103F4C6A52C38955282F /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		C611B1059DE705E698793E36 /* DesertTerrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesertTerrain.swift; sourceTree = "<group>"; };
 		CBF04B63676B51DC3605ECA7 /* SaryAlertLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlertLane.swift; sourceTree = "<group>"; };
 		D132B3832EC90CC64BA0342A /* SaryShowcase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryShowcase.swift; sourceTree = "<group>"; };
@@ -212,6 +226,7 @@
 		DA239880AF3AA4D4E37ACB40 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRulesTests.swift; sourceTree = "<group>"; };
 		E1357FA88F811568C444EAFE /* SaryAlbarqUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SaryAlbarqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E13D7B33BE15B22E053E00E9 /* CarPlayPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayPresenterTests.swift; sourceTree = "<group>"; };
 		E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryContracts.swift; sourceTree = "<group>"; };
 		E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrar.swift; sourceTree = "<group>"; };
 		E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreensUITests.swift; sourceTree = "<group>"; };
@@ -323,6 +338,7 @@
 				A44C2A050B84465EA50A992A /* Info.plist */,
 				E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */,
 				E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */,
+				49A3565CAFC838A5267BB20F /* SaryAlbarq-CarPlay.entitlements */,
 				22D142BEE2D2FB9BA3700CFB /* SaryAlbarq.entitlements */,
 				1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */,
 			);
@@ -333,6 +349,7 @@
 			isa = PBXGroup;
 			children = (
 				3F6AA727A2C5DC0D415E2721 /* App */,
+				CF7072125346984DEF4E2062 /* CarPlay */,
 				D5B3281AE32852B968F9D0AE /* Core */,
 				86931D3795A30D9EF689412C /* Live */,
 				12B3C3B994B8ADE6016E391A /* Location */,
@@ -360,6 +377,7 @@
 			isa = PBXGroup;
 			children = (
 				6E44D5D17C6A2F26C19273B4 /* AccountDeletionTests.swift */,
+				E13D7B33BE15B22E053E00E9 /* CarPlayPresenterTests.swift */,
 				512C97CE9BE0C836977C53B6 /* ChipLayoutTests.swift */,
 				33423E5B09B8A1AC4E722A89 /* DesignSystemTests.swift */,
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
@@ -477,6 +495,19 @@
 				96DA38518A590AB9B0FF6628 /* SaryTokens.swift */,
 			);
 			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		CF7072125346984DEF4E2062 /* CarPlay */ = {
+			isa = PBXGroup;
+			children = (
+				B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */,
+				B320D512D47E006CCF289262 /* CarPlayFeatures.swift */,
+				5B581A946C420C5701FCB189 /* CarPlayMapViewController.swift */,
+				635D4BB4444B8CBDFCB3DABB /* CarPlayPhonePreview.swift */,
+				3A022F20DA4CEBB0A0B4B328 /* CarPlayPresenter.swift */,
+				BF6F103F4C6A52C38955282F /* CarPlaySceneDelegate.swift */,
+			);
+			path = CarPlay;
 			sourceTree = "<group>";
 		};
 		D4AB6DC8FFDA012F8E14AD17 /* Showcase */ = {
@@ -654,6 +685,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6C8C6C1D3F169181BC4A9A8B /* AccountDeletionTests.swift in Sources */,
+				C22A7CC533E50F7A5B7A49E0 /* CarPlayPresenterTests.swift in Sources */,
 				B3D5A84F4B4B5F41857604D4 /* ChipLayoutTests.swift in Sources */,
 				C8CCF2A9DCAC52B25C4498DF /* DesignSystemTests.swift in Sources */,
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
@@ -678,6 +710,12 @@
 				E35B91A3DB815596A48FF60D /* AppearanceSettings.swift in Sources */,
 				39D0C6136D6D47E64658617A /* Backoff.swift in Sources */,
 				1CA61098FF2C6466AC156AEF /* CarColors.swift in Sources */,
+				1C45B2ABAFD066E38B318B27 /* CarPlayCoordinator.swift in Sources */,
+				79AB0CE628DDD4A9688EB4F5 /* CarPlayFeatures.swift in Sources */,
+				F1E90EB70EF716F63FA8DAFE /* CarPlayMapViewController.swift in Sources */,
+				9465828E29D08CBDCE33D84C /* CarPlayPhonePreview.swift in Sources */,
+				04AEC006F0D7113B47C5A993 /* CarPlayPresenter.swift in Sources */,
+				0B85BCADBF1A4FA05E01853A /* CarPlaySceneDelegate.swift in Sources */,
 				F23D349CD8B6C406E98C88F8 /* ChipLayout.swift in Sources */,
 				2F360A6DD9C12B2BB04D8175 /* CommonContract.swift in Sources */,
 				35BAE008CD008CFA36D18AF9 /* DebugScreens.swift in Sources */,
@@ -809,7 +847,7 @@
 			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Sources/App/SaryAlbarq.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(SARY_ENTITLEMENTS_$(CARPLAY_ENABLED))";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -827,7 +865,7 @@
 			baseConfigurationReference = 3DD3067CF341A79F279CD980 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Sources/App/SaryAlbarq.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(SARY_ENTITLEMENTS_$(CARPLAY_ENABLED))";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Sources/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

@@ -69,7 +69,8 @@ targets:
         PRODUCT_NAME: SaryAlbarq
         INFOPLIST_FILE: Sources/App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_ENTITLEMENTS: Sources/App/SaryAlbarq.entitlements
+        # CarPlay entitlement only when CARPLAY_ENABLED=YES (Config/Base.xcconfig).
+        CODE_SIGN_ENTITLEMENTS: $(SARY_ENTITLEMENTS_$(CARPLAY_ENABLED))
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]

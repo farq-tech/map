@@ -4,3 +4,12 @@
 // shows a token message instead of tiles).
 MAPBOX_ACCESS_TOKEN =
 #include? "Secrets.xcconfig"
+
+// CarPlay (Navigation category, com.apple.developer.carplay-maps). The entitlement must be
+// granted by Apple to the account before a signed device build / archive may carry it, so it
+// is OFF for devices and archives and ON in the Simulator (where CarPlay works without Apple).
+// Once Apple approves (docs/CARPLAY-ENTITLEMENT.md), set CARPLAY_ENABLED = YES on the first line.
+CARPLAY_ENABLED = NO
+CARPLAY_ENABLED[sdk=iphonesimulator*] = YES
+SARY_ENTITLEMENTS_NO = Sources/App/SaryAlbarq.entitlements
+SARY_ENTITLEMENTS_YES = Sources/App/SaryAlbarq-CarPlay.entitlements
