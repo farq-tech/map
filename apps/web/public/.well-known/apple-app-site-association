@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["MH7J92HV9N.sa.sary.albarq"],
+        "components": [
+          {
+            "/": "/outings/join",
+            "comment": "Invite links. The token is in the #fragment, which iOS passes to the app untouched. Team MH7J92HV9N, bundle sa.sary.albarq — see apps/ios/README.md."
+          }
+        ]
+      }
+    ]
+  }
+}
