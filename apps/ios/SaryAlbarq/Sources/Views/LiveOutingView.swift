@@ -5,31 +5,55 @@ struct LiveOutingView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var location: LocationSharer
     @ObservedObject var session: OutingSession
-    @State private var fitToken = 0
-    @State private var focus: (id: String, token: Int)?
+    @State private var camera: MapCameraRequest?
     @State private var showConsent = false
     @State private var showNote = false
     @State private var showMenu = false
     @State private var inviteURL: URL?
     @State private var confirmBack = false
+    /// Bottom edge of the top bar and top edge of the bottom panel, in screen points.
+    @State private var topChrome: CGFloat = 0
+    @State private var bottomChromeTop: CGFloat = 0
+    /// A member whose card is open (tapped their car or name on the map).
+    @State private var cardFor: String?
 
     var body: some View {
         let v = session.view
-        ZStack(alignment: .top) {
-            OutingMapView(cars: cars(v), fitToken: fitToken, focus: focus)
-                .ignoresSafeArea()
-            VStack(spacing: 8) {
-                header(v)
-                if session.isSharingNow { SharingBanner(mode: location.effectiveMode, chosen: session.mode) }
-                if let r = session.closedReason { ClosedBanner(reason: r) }
-                Spacer()
-                controls(v)
-                MembersPanel(session: session, myFix: location.lastFix) { id in
-                    focus = (id, (focus?.token ?? 0) + 1)
+        GeometryReader { screen in
+            ZStack(alignment: .top) {
+                OutingMapboxView(members: mapMembers(v), camera: camera, chrome: chromeInsets(screen), onMemberTap: carTapped)
+                    .ignoresSafeArea()
+                VStack(spacing: 8) {
+                    VStack(spacing: 8) {
+                        header(v)
+                        if session.isSharingNow { SharingBanner(mode: location.effectiveMode, chosen: session.mode) }
+                        if let r = session.closedReason { ClosedBanner(reason: r) }
+                    }
+                    .background(GeometryReader { g in Color.clear.preference(key: TopChromeKey.self, value: g.frame(in: .global).maxY) })
+                    Spacer()
+                    VStack(spacing: 8) {
+                        controls(v)
+                        MembersPanel(session: session, myFix: location.lastFix) { id in
+                            camera = MapCameraRequest(kind: .withMember(id), id: (camera?.id ?? 0) + 1)
+                        }
+                    }
+                    .background(GeometryReader { g in Color.clear.preference(key: BottomChromeKey.self, value: g.frame(in: .global).minY) })
                 }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
+            .onPreferenceChange(TopChromeKey.self) { topChrome = $0 }
+            .onPreferenceChange(BottomChromeKey.self) { bottomChromeTop = $0 }
+        }
+        .sheet(isPresented: Binding(get: { cardFor != nil }, set: { if !$0 { cardFor = nil } })) {
+            if let id = cardFor, let v, let m = v.members[id] {
+                MemberCard(member: m, view: v, color: v.colors[id] ?? 0xFFFFFF, myFix: location.lastFix, tick: session.tick) {
+                    cardFor = nil
+                    camera = MapCameraRequest(kind: .withMember(id), id: (camera?.id ?? 0) + 1)
+                }
+                .presentationDetents([.height(320), .medium])
+                .rtl()
+            }
         }
         .sheet(isPresented: $showConsent) {
             ConsentSheet(hasAlways: location.hasAlways) {
@@ -54,11 +78,27 @@ struct LiveOutingView: View {
         }
     }
 
-    private func cars(_ v: OutingView?) -> [CarItem] {
+    /// The map's view of our chrome: what the top bar and the bottom panel cover.
+    private func chromeInsets(_ screen: GeometryProxy) -> UIEdgeInsets {
+        let full = screen.size.height + screen.safeAreaInsets.top + screen.safeAreaInsets.bottom
+        return UIEdgeInsets(top: topChrome, left: 0, bottom: bottomChromeTop > 0 ? max(0, full - bottomChromeTop) : 0, right: 0)
+    }
+
+    /// My car opens the note composer; anyone else's opens their card (call, WhatsApp), as on the web.
+    private func carTapped(_ id: String) {
+        guard let v = session.view else { return }
+        if id == v.myId {
+            if v.status != .ended { showNote = true }
+        } else {
+            cardFor = id
+        }
+    }
+
+    private func mapMembers(_ v: OutingView?) -> [MapMember] {
         _ = session.tick
         guard let v else { return [] }
         let colors = v.colors
-        var out: [CarItem] = []
+        var out: [MapMember] = []
         for m in v.orderedMembers {
             let isMe = m.user_id == v.myId
             if isMe {
@@ -68,11 +108,16 @@ struct LiveOutingView: View {
                  * about staleness. Only a GPS that has really gone quiet greys you out. */
                 let age = Date().timeIntervalSince1970 * 1000 - f.atMs
                 let mine: Policy.Freshness = location.gpsState == .denied ? .lost : (age > 5 * 60_000 && session.isSharingNow ? .recent : .live)
-                out.append(CarItem(id: m.user_id, coordinate: CLLocationCoordinate2D(latitude: f.lat, longitude: f.lng), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name, freshness: mine, ageText: ArabicFormat.ago(age), heading: Policy.trustedHeading(f.heading, speed: f.speed), note: m.note?.text, isMe: true))
+                out.append(MapMember(id: m.user_id, position: LngLat(lng: f.lng, lat: f.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
+                                   presence: mine, heading: Policy.trustedHeading(f.heading, speed: f.speed), accuracyM: f.accuracy, atMs: f.atMs,
+                                   note: m.note?.text, isMe: true))
                 continue
             }
             guard let p = v.positions[m.user_id], let fr = v.freshness(of: m.user_id) else { continue }
-            out.append(CarItem(id: m.user_id, coordinate: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name, freshness: fr, ageText: ArabicFormat.ago(v.positionAgeMs(p)), heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil, note: m.note?.text, isMe: false))
+            let at = (ISODate.parse(p.recorded_at)?.timeIntervalSince1970 ?? 0) * 1000
+            out.append(MapMember(id: m.user_id, position: LngLat(lng: p.lng, lat: p.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
+                               presence: fr, heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil, accuracyM: p.accuracy, atMs: at,
+                               note: m.note?.text, isMe: false))
         }
         return out
     }
@@ -153,9 +198,9 @@ struct LiveOutingView: View {
                 .background(.regularMaterial, in: Circle())
                 .accessibilityLabel("ملاحظة فوق سيارتك")
                 .disabled(v?.status == .ended)
-            Button { fitToken += 1 } label: { Image(systemName: "scope").font(.title3).padding(12) }
-                .background(.regularMaterial, in: Circle())
-                .accessibilityLabel("اعرض الجميع")
+            Button { camera = MapCameraRequest(kind: .group, id: (camera?.id ?? 0) + 1) } label: { Label("المجموعة", systemImage: "person.3.fill").font(.subheadline.bold()).padding(.horizontal, 12).padding(.vertical, 11) }
+                .background(.regularMaterial, in: Capsule())
+                .accessibilityLabel("اعرض المجموعة")
                 .accessibilityIdentifier("live.fit")
         }
     }
@@ -375,5 +420,82 @@ struct NoteSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private struct TopChromeKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct BottomChromeKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// A member's card, opened by tapping their car (the web's member card in OutingLive.tsx):
+/// who, how fresh, how far, their note, and call / WhatsApp.
+struct MemberCard: View {
+    let member: Member
+    let view: OutingView
+    let color: UInt32
+    let myFix: DeviceFix?
+    let tick: Int
+    var onShowTogether: () -> Void
+
+    var body: some View {
+        let p = view.positions[member.user_id]
+        let fr = view.freshness(of: member.user_id)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Circle().fill(Theme.car(color)).frame(width: 22, height: 22).overlay(Circle().stroke(.white, lineWidth: 2)).shadow(radius: 1)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(member.display_name).font(.title3.bold())
+                        if member.role == "owner" { Image(systemName: "crown.fill").font(.caption).foregroundStyle(Theme.amber) }
+                    }
+                    Text(detail(p, fr)).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let fr { FreshnessChip(f: fr) }
+            }
+            if let n = member.note?.text {
+                Text("«\(n)»").font(.body.bold()).padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(red: 1, green: 0xF4 / 255, blue: 0xD6 / 255), in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(Color.black)
+            }
+            HStack(spacing: 10) {
+                if let phone = member.phone, !phone.isEmpty, let tel = URL(string: "tel:\(phone)") {
+                    Link(destination: tel) { Label("اتصال", systemImage: "phone.fill").bold().frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).tint(Theme.accent)
+                        .accessibilityIdentifier("card.call")
+                    if let wa = URL(string: "https://wa.me/\(phone.filter(\.isNumber))") {
+                        Link(destination: wa) { Label("واتساب", systemImage: "message.fill").bold().frame(maxWidth: .infinity) }
+                            .buttonStyle(.bordered).tint(Theme.accent)
+                            .accessibilityIdentifier("card.whatsapp")
+                    }
+                } else {
+                    Text("لم يضف رقم جوال").font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            if p != nil {
+                Button { onShowTogether() } label: { Label("اعرضنا معًا على الخريطة", systemImage: "scope").frame(maxWidth: .infinity) }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(20)
+        .accessibilityIdentifier("member.card")
+    }
+
+    private func detail(_ p: Position?, _ fr: Policy.Freshness?) -> String {
+        guard member.sharing else { return "لا يشارك موقعه" }
+        guard let p, let fr else { return "لا موقع بعد" }
+        var parts: [String] = []
+        if let me = myFix {
+            let a = Geo.LatLng(lat: me.lat, lng: me.lng), b = Geo.LatLng(lat: p.lat, lng: p.lng)
+            parts.append("\(ArabicFormat.distance(Geo.haversineMeters(a, b))) \(Geo.directionLabel(Geo.bearingDeg(a, b)))")
+        }
+        if fr != .live { parts.append(ArabicFormat.ago(view.positionAgeMs(p))) }
+        if let s = p.speed, s >= Policy.stillMps, fr == .live { parts.append("\(ArabicFormat.number((s * 3.6).rounded())) كم/س") }
+        return parts.joined(separator: " · ")
     }
 }

@@ -189,9 +189,9 @@ enum DemoData {
             Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(240)),
         ]
         let positions: [Position] = [
-            Position(user_id: members[1].user_id, lat: 24.7290, lng: 46.6920, accuracy: 8, heading: 40, speed: 22, mode: .balanced, recorded_at: ago(3)),
-            Position(user_id: members[2].user_id, lat: 24.7050, lng: 46.6600, accuracy: 15, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(95)),
-            Position(user_id: members[3].user_id, lat: 24.6950, lng: 46.7020, accuracy: 25, heading: 180, speed: 10, mode: .saver, recorded_at: ago(300)),
+            Position(user_id: members[1].user_id, lat: 24.7128, lng: 46.67395, accuracy: 8, heading: 340, speed: 22, mode: .balanced, recorded_at: ago(3)),
+            Position(user_id: members[2].user_id, lat: 24.7105, lng: 46.6747, accuracy: 15, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(95)),
+            Position(user_id: members[3].user_id, lat: 24.7119, lng: 46.6770, accuracy: 25, heading: 180, speed: 10, mode: .saver, recorded_at: ago(300)),
         ]
         let snap = OutingSnapshot(
             outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),

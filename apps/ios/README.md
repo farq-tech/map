@@ -2,14 +2,16 @@
 
 | Folder | What it is |
 |---|---|
-| `SaryAlbarq/` | **سَرى البارق**: shared desert outings. Keeps sharing your location with the screen locked, but only inside an outing where you chose to share. SwiftUI + MapKit, iOS 16+, no third-party SDKs, no keys. |
+| `SaryAlbarq/` | **سَرى البارق**: shared desert outings. Keeps sharing your location with the screen locked, but only inside an outing where you chose to share. SwiftUI + Mapbox Maps SDK v11 (the web's map), iOS 17+. Needs a Mapbox public token in a gitignored xcconfig. |
 | `FarqNavigate/` + `FarqNavigate.xcodeproj` | The older Farq price/navigation prototype (Mapbox + MapLibre + Ferrostar, iOS 17). It is left as it was. |
 
 ## Why a separate project and not a target in FarqNavigate
 
-FarqNavigate is a different product (price comparison and turn-by-turn). It downloads the Mapbox SDK through SPM, which needs a Mapbox secret token in `~/.netrc`, and it needs a public token in `Secrets.xcconfig`. The outings app needs none of that. A separate project means it builds on a fresh Mac with nothing but Xcode, has no secrets in the app, and ships under its own bundle ID. The two projects share nothing at build time.
+FarqNavigate is a different product (price comparison and turn-by-turn). A separate project ships under its own bundle ID and shares nothing with it at build time.
 
-**Why MapKit and not Mapbox:** no SDK key to ship or rotate, no SPM download that needs credentials, Apple's hybrid imagery works over sand, and the background-location App Review story is simpler without a third-party SDK. The web app's Farq map style is not available in MapKit. If the native map ever has to match the web style exactly, switch `OutingMapView` to MapLibre. It is one file.
+**The map is Mapbox, like the web.** The owner wants the app to look exactly like the web outing map, so `Sources/Map/OutingMapboxView.swift` uses the Mapbox Maps SDK v11 (pinned exactly in `project.yml`; SPM downloads it without any secret token) with the same `standard-satellite` style and Standard config as the web, the same generated 3D 4×4 per member (`SuvModel.swift`, a port of `suvModel.ts`), the same scale-by-zoom, road snapping and keep-the-group camera. `OutingMapboxView` takes plain data (members, rally point, camera requests, chrome insets) and reports taps, so any screen can embed it.
+
+**Mapbox token.** Copy `SaryAlbarq/Config/Secrets.example.xcconfig` to `SaryAlbarq/Config/Secrets.xcconfig` (gitignored) and put the Mapbox *public* token there. `Config/Base.xcconfig` includes it optionally and `Info.plist` passes it to Mapbox as `MBXAccessToken`. Without it the app still builds, but the map shows no tiles. Never commit the token.
 
 ## Layout
 
@@ -26,7 +28,10 @@ SaryAlbarq/
   Sources/Net/                REST client, Keychain identity, WebSocket LiveChannel
   Sources/Location/           LocationSharer (the only CLLocationManager) + LocationTuning
   Sources/App/                App entry, AppModel, OutingSession, Info.plist, entitlements
-  Sources/Views/              SwiftUI screens, MKMapView wrapper with car annotations
+  Sources/Map/                Mapbox map: OutingMapboxView, SuvModel (generated glTF), Vehicle (scale,
+                              rotation, motion, sun light, group framing), RoadSnap (ports of the web's sary/ code)
+  Sources/Views/              SwiftUI screens
+  Config/                     Base.xcconfig + Secrets.example.xcconfig (Secrets.xcconfig is gitignored)
   Resources/                  Assets (placeholder icon), PrivacyInfo.xcprivacy, InfoPlist.strings (ar, en)
   Tests/                      XCTest unit tests
   UITests/                    XCUITest: onboarding + live map (demo outing)
@@ -56,7 +61,7 @@ Simulated location: `xcrun simctl location booted set 24.7136,46.6753`. To test 
 
 ## How it behaves (owner's rules)
 
-- **Honest positions.** Freshness uses the same thresholds as the web, measured on the server's clock (we keep the offset from `server_now`): «مباشر» means a fix from the last 15 s while moving or 45 s while parked; «آخر موقع» means old but reachable; «انقطع» means nothing heard for 60 s. Old cars are faded and dashed, and only live cars get a heading arrow.
+- **Honest positions.** Freshness uses the same thresholds as the web, measured on the server's clock (we keep the offset from `server_now`): «مباشر» means a fix from the last 15 s while moving or 45 s while parked; «آخر موقع» means old but reachable; «انقطع» means nothing heard for 60 s. Old cars are faded (opacity 0.7 / 0.4, as on the web), their name chip says «آخر موقع» or «انقطع», and they never glide: only a live, confident fix is animated, and only up to the real fix. A fix worse than 60 m is drawn as a spot marked «تقريبي», never as a car.
 - **Latest fix only.** While offline only the newest fix is kept, and it is dropped once it is older than 55 s (the server refuses anything over 60 s). The server stores only the latest fix anyway.
 - **Consent before sharing.** Joining an outing shares nothing. «شارك موقعي» first shows an Arabic consent sheet that says who sees your location, that sharing continues with the screen locked, when it stops, the battery cost, and the optional "Always" permission. Consent is remembered per outing.
 - **Visible indicator.** A green «تشارك موقعك الآن» banner is shown while sharing, and the iOS blue location pill is on (`showsBackgroundLocationIndicator = true`).
@@ -99,7 +104,7 @@ Paste something like this in *App Review Information → Notes*, together with a
 >
 > **Scope:** Location is shared only after the user taps "Share my location" inside an active outing and accepts an in-app Arabic explanation (who sees it, that it continues while locked, how it stops). Background updates are enabled only during that sharing and are switched off automatically when the user stops, leaves the outing, or the organiser pauses or ends it. The blue location indicator is always shown while sharing, and the app shows its own "you are sharing" banner.
 >
-> **Data:** Positions go only to members of that outing. The server keeps only the latest position per member (no history) and deletes it when the outing ends. No ads, no tracking, no third-party SDKs.
+> **Data:** Positions go only to members of that outing. The server keeps only the latest position per member (no history) and deletes it when the outing ends. No ads, no tracking. The map is drawn with the Mapbox Maps SDK.
 >
 > **"Always" permission** is optional and requested only after the user has started sharing. It lets iOS relaunch the app to continue an ongoing share if it was terminated. Without it, the app works with "While Using".
 >

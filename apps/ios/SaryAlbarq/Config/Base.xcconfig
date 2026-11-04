@@ -1,0 +1,6 @@
+// Shared build settings. The Mapbox public token is read from the gitignored
+// Secrets.xcconfig next to this file (copy Secrets.example.xcconfig). The `?`
+// makes the include optional, so a fresh clone still builds (the map then
+// shows a token message instead of tiles).
+MAPBOX_ACCESS_TOKEN =
+#include? "Secrets.xcconfig"
