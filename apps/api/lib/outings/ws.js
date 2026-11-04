@@ -14,6 +14,8 @@
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
  *   → { type: 'note', id, text }         ← { type: 'note_ack', id, ok, note }  (everyone: member_note)
  *   ← position · presence · member_* · sos · rally · voice_clip · outing_status · owner_changed · closed
+ *   ← return_timer · member_stuck · stuck_reply · stuck_clear · waypoint_added · waypoint_removed
+ *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
  *   (voice clips themselves go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  */
 

@@ -37,6 +37,8 @@ const APNS_ORIGINS = Object.freeze({
   production: 'https://api.push.apple.com',
   sandbox: 'https://api.sandbox.push.apple.com',
 });
+const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue']);
+const ACTIVE = new Set(['stuck_reply']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;
 const BUNDLE_RE = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
@@ -118,16 +120,18 @@ function utf8Cut(s, maxBytes) {
  */
 function apnsRequestFor(payload = {}, outingId, { now = Date.now(), bundleId } = {}) {
   const type = payload.type || 'event';
-  const sos = type === 'sos';
+  /* Someone in trouble (SOS, «غرّزت», a missed return time) breaks through Focus; a reply
+   * to the stuck person is an ordinary alert; everything else stays passive. */
+  const sos = TIME_SENSITIVE.has(type);
   const ttl = Math.max(0, Math.round(Number(payload.ttl ?? 900)));
   const tag = payload.tag || `sary-${type}-${outingId}`;
   const aps = {
     alert: { title: String(payload.title || 'سَرى البارق'), body: String(payload.body || '') },
     'thread-id': `sary-outing-${outingId}`,
-    'interruption-level': sos ? 'time-sensitive' : 'passive',
+    'interruption-level': sos ? 'time-sensitive' : ACTIVE.has(type) ? 'active' : 'passive',
   };
+  if (sos || ACTIVE.has(type)) aps.sound = 'default';
   if (sos) {
-    aps.sound = 'default';
     aps['relevance-score'] = 1;
   }
   const body = JSON.stringify({
@@ -317,10 +321,11 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
          FROM sary.apns_tokens t
          JOIN sary.outing_members m ON m.user_id = t.user_id
          JOIN sary.outings o ON o.id = m.outing_id
-         WHERE m.outing_id = $1 AND m.status = 'active' AND o.status <> 'ended'
+         WHERE m.outing_id = $1 AND m.status = 'active' AND ($4::boolean OR o.status <> 'ended')
            AND t.bundle_id = $3
-           AND ($2::uuid IS NULL OR t.user_id <> $2::uuid)`,
-        [outingId, exceptUserId || null, config.bundleId],
+           AND ($2::uuid IS NULL OR t.user_id <> $2::uuid)
+           AND ($5::uuid IS NULL OR t.user_id = $5::uuid)`,
+        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {

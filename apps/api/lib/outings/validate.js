@@ -225,7 +225,189 @@ function sameDigest(a, b) {
   return crypto.timingSafeEqual(a, b);
 }
 
+
+/* ---------- outing features (return timer, waypoints, convoy, plan, checklist) ---------- */
+
+function latLng(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { lat, lng } = raw;
+  if (!finite(lat) || !finite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (lat === 0 && lng === 0) return null;
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6 };
+}
+
+const CONTACT_NAME_MAX = 40;
+/** A return timer may be set from one minute to seven days ahead. */
+const TIMER_MIN_AHEAD_MS = 60_000;
+const TIMER_MAX_AHEAD_MS = 7 * 24 * 3600_000;
+
+/** { due_at: ISO, contact_name } → { ok, value } or { ok:false, reason }. */
+function returnTimer(raw, now = Date.now()) {
+  if (!raw || typeof raw !== 'object') return { ok: false, reason: 'invalid_timer' };
+  if (typeof raw.due_at !== 'string' || raw.due_at.length > 40) return { ok: false, reason: 'invalid_due_at' };
+  const due = Date.parse(raw.due_at);
+  if (!Number.isFinite(due)) return { ok: false, reason: 'invalid_due_at' };
+  if (due < now + TIMER_MIN_AHEAD_MS || due > now + TIMER_MAX_AHEAD_MS) return { ok: false, reason: 'invalid_due_at' };
+  const contact = cleanText(raw.contact_name, CONTACT_NAME_MAX);
+  if (!contact) return { ok: false, reason: 'invalid_contact_name' };
+  return { ok: true, value: { due_at: new Date(due), contact_name: contact } };
+}
+
+const WAYPOINT_KINDS = ['camp', 'water', 'danger', 'passable', 'stuck_spot', 'other'];
+const WAYPOINT_TITLE_MAX = 40;
+const WAYPOINT_NOTE_MAX = 140;
+const WAYPOINT_PHOTO_MAX_BYTES = 150 * 1024;
+const JPEG_PREFIX = 'data:image/jpeg;base64,';
+
+/** A JPEG data URL of at most 150 KB of image bytes, or null. undefined = invalid. */
+function waypointPhoto(raw) {
+  if (raw == null || raw === '') return null;
+  if (typeof raw !== 'string' || !raw.startsWith(JPEG_PREFIX)) return undefined;
+  const b64 = raw.slice(JPEG_PREFIX.length);
+  if (b64.length > Math.ceil(WAYPOINT_PHOTO_MAX_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return undefined;
+  const bytes = Buffer.from(b64, 'base64');
+  if (bytes.length > WAYPOINT_PHOTO_MAX_BYTES || bytes.length < 4) return undefined;
+  /* JPEG SOI marker: what the data URL says it is. */
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return undefined;
+  return raw;
+}
+
+function waypoint(raw) {
+  if (!raw || typeof raw !== 'object') return { ok: false, reason: 'invalid_waypoint' };
+  if (!WAYPOINT_KINDS.includes(raw.kind)) return { ok: false, reason: 'invalid_kind' };
+  const title = cleanText(raw.title, WAYPOINT_TITLE_MAX);
+  if (!title) return { ok: false, reason: 'invalid_title' };
+  let noteText = null;
+  if (raw.note != null && raw.note !== '') {
+    noteText = cleanText(raw.note, WAYPOINT_NOTE_MAX);
+    if (noteText === null) return { ok: false, reason: 'invalid_note' };
+  }
+  const p = latLng(raw);
+  if (!p) return { ok: false, reason: 'invalid_coordinates' };
+  const photo = waypointPhoto(raw.photo);
+  if (photo === undefined) return { ok: false, reason: 'invalid_photo' };
+  return { ok: true, value: { kind: raw.kind, title, note: noteText, lat: p.lat, lng: p.lng, photo } };
+}
+
+/** Optional stuck note: '' / null / undefined → null; too long is cut like a car note. */
+function stuckNote(raw) {
+  if (raw == null || raw === '') return { ok: true, value: null };
+  const t = cleanText(raw, NOTE_MAX);
+  return t === null ? { ok: false } : { ok: true, value: t };
+}
+
+const STUCK_REPLY_KINDS = ['coming', 'have_rope', 'cant'];
+
+const CONVOY_GAP_MIN = 200;
+const CONVOY_GAP_MAX = 5000;
+
+/** PATCH body → { lead?, tail?, gap? } (undefined = keep), or null when invalid. */
+function convoyPatch(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const out = {};
+  for (const [k, key] of [['lead_user_id', 'lead'], ['tail_user_id', 'tail']]) {
+    if (raw[k] === undefined) continue;
+    if (raw[k] !== null && !isUuid(raw[k])) return null;
+    out[key] = raw[k] === null ? null : raw[k].toLowerCase();
+  }
+  if (raw.max_gap_m !== undefined) {
+    if (!finite(raw.max_gap_m) || raw.max_gap_m < CONVOY_GAP_MIN || raw.max_gap_m > CONVOY_GAP_MAX) return null;
+    out.gap = Math.round(raw.max_gap_m);
+  }
+  if (!Object.keys(out).length) return null;
+  return out;
+}
+
+const PLAN_MAX_POINTS = 5000;
+const PLAN_NOTES_MAX = 1000;
+const DESTINATION_NAME_MAX = 40;
+
+/** Notes keep their line breaks (a packing list reads better that way) but nothing else odd. */
+function planNotes(raw) {
+  if (raw == null || raw === '') return '';
+  if (typeof raw !== 'string') return null;
+  const t = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f‪-‮⁦-⁩]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return [...t].slice(0, PLAN_NOTES_MAX).join('');
+}
+
+/** A GeoJSON LineString of [lng, lat] pairs (2..5000), or null. undefined = invalid. */
+function planRoute(raw) {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object' || raw.type !== 'LineString' || !Array.isArray(raw.coordinates)) return undefined;
+  const c = raw.coordinates;
+  if (c.length < 2 || c.length > PLAN_MAX_POINTS) return undefined;
+  const coords = [];
+  for (const pt of c) {
+    if (!Array.isArray(pt) || pt.length < 2 || pt.length > 3) return undefined;
+    const [lng, lat] = pt;
+    if (!finite(lng) || !finite(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) return undefined;
+    coords.push([Math.round(lng * 1e6) / 1e6, Math.round(lat * 1e6) / 1e6]);
+  }
+  return { type: 'LineString', coordinates: coords };
+}
+
+/** «الوجهة»: { name ≤40, lat, lng } or null. undefined = invalid. */
+function destination(raw) {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return undefined;
+  const name = cleanText(raw.name, DESTINATION_NAME_MAX);
+  if (!name) return undefined;
+  const p = latLng(raw);
+  if (!p) return undefined;
+  return { name, lat: p.lat, lng: p.lng };
+}
+
+/** PUT body → { route?, notes?, destination? } (undefined = keep), or { error }. */
+function planPut(raw) {
+  if (!raw || typeof raw !== 'object') return { error: 'invalid_plan' };
+  const out = {};
+  if (raw.route !== undefined) {
+    const r = planRoute(raw.route);
+    if (r === undefined) return { error: 'invalid_route' };
+    out.route = r;
+  }
+  if (raw.notes !== undefined) {
+    const n = planNotes(raw.notes);
+    if (n === null) return { error: 'invalid_notes' };
+    out.notes = n;
+  }
+  if (raw.destination !== undefined) {
+    const d = destination(raw.destination);
+    if (d === undefined) return { error: 'invalid_destination' };
+    out.destination = d;
+  }
+  if (!Object.keys(out).length) return { error: 'invalid_plan' };
+  return { value: out };
+}
+
+const CHECKLIST_TITLE_MAX = 40;
+function checklistTitle(raw) {
+  return cleanText(raw, CHECKLIST_TITLE_MAX);
+}
+
 module.exports = {
+  latLng,
+  returnTimer,
+  TIMER_MAX_AHEAD_MS,
+  WAYPOINT_KINDS,
+  WAYPOINT_PHOTO_MAX_BYTES,
+  waypoint,
+  waypointPhoto,
+  stuckNote,
+  STUCK_REPLY_KINDS,
+  convoyPatch,
+  PLAN_MAX_POINTS,
+  planRoute,
+  planNotes,
+  destination,
+  planPut,
+  checklistTitle,
+  cleanText,
   NAME_MAX,
   OUTING_NAME_MAX,
   AVATAR_MAX_CHARS,
