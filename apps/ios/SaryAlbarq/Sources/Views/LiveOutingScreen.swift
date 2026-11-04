@@ -177,6 +177,10 @@ struct LiveOutingScreen: View {
                     if !rowMode {
                         SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil || controller.nav.isActive ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
+                        if !controller.nav.isActive {
+                            /* «في قناة الطلعة» notices; folded away during guidance (the banner leads). */
+                            MediaNoticeLane(center: MediaCenters.of(controller))
+                        }
                         /* Guidance: the maneuver banner leads; the lane keeps one card and the plan pills
                          * fold away, leaving only the weather chip (never hidden). */
                         LivePlanStrip(controller: controller, weatherOnly: controller.nav.isActive)
@@ -309,7 +313,7 @@ struct LiveOutingScreen: View {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
         return SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
                                                backTracking: controller.backTrack != nil)
-            + [.safetyStuck(active: controller.safety.myStuck != nil), .navigate, .addWaypoint, .copyMyLocation, .search]
+            + [.safetyStuck(active: controller.safety.myStuck != nil), .navigate, .youtube, .addWaypoint, .copyMyLocation, .search]
     }
 
     /// On the map: «موقعي», «المجموعة», «رسالة», «طريق العودة» + «المزيد»
@@ -325,7 +329,7 @@ struct LiveOutingScreen: View {
         return all.filter { SaryMapControlItem.primaryIDs.contains($0.id) } + [more]
     }
 
-    /// Behind «المزيد»: أقرب محطة، غرّزت، ملاحة، أضف نقطة، انسخ موقعي، ابحث.
+    /// Behind «المزيد»: أقرب محطة، غرّزت، ملاحة، يوتيوب، أضف نقطة، انسخ موقعي، ابحث.
     private func moreItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         allControls(ui).filter { !SaryMapControlItem.primaryIDs.contains($0.id) }
     }
@@ -345,6 +349,7 @@ struct LiveOutingScreen: View {
         case "copyme": controller.modal = .plan(.me)
         case "search": controller.modal = .plan(.search)
         case "navigate": controller.openNavPicker()
+        case "youtube": MediaCenters.of(controller).open()
         default: controller.navControlTapped(id)
         }
     }
