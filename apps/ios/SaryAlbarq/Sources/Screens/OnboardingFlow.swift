@@ -14,17 +14,21 @@ struct SplashView: View {
         let p = theme.palette
         ZStack {
             Color("LaunchBackground").ignoresSafeArea()
-            VStack(spacing: theme.space(.l)) {
-                SaryMark(size: 112)
-                    .scaleEffect(shown || theme.reduceMotion ? 1 : 0.92)
-                Text("سَرى البارق")
-                    .font(.sary(34, .heavy))
-                    .foregroundStyle(Color(rgb: 0xF4EFE6))
-                Text("طلعات البر مع أصحابك")
-                    .saryText(.callout)
-                    .foregroundStyle(Color(rgb: 0xB9AE9C))
-            }
-            .opacity(shown ? 1 : 0)
+            /* The mark sits exactly where the launch screen drew it (centre, 112 pt): no jump. */
+            SaryMark(size: 112)
+                .overlay(alignment: .top) {
+                    VStack(spacing: theme.space(.s)) {
+                        Text("سَرى البارق")
+                            .font(.sary(34, .heavy))
+                            .foregroundStyle(Color(rgb: 0xF4EFE6))
+                        Text("طلعات البر مع أصحابك")
+                            .saryText(.callout)
+                            .foregroundStyle(Color(rgb: 0xB9AE9C))
+                    }
+                    .fixedSize()
+                    .offset(y: 112 + theme.space(.l))
+                    .opacity(shown ? 1 : 0)
+                }
         }
         .onAppear { withAnimation(theme.animation(.smooth)) { shown = true } }
         .accessibilityElement(children: .combine)
