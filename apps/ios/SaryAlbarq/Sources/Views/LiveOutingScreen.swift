@@ -220,7 +220,7 @@ struct LiveOutingScreen: View {
                         .padding(.bottom, theme.space(.s))
                 }
                 HStack(alignment: .bottom) {
-                    SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
+                    SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode, level: controller.pttLevel)
                         .chromeFrame("ptt")
                         .overlay(alignment: .top) {
                             /* «سرعة المركبة»: right above «اضغط وتكلم», on the other side from the control

@@ -91,8 +91,33 @@ final class AppModel: ObservableObject {
         })
         #if DEBUG
         if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
+        /* Local end-to-end lab (with -SaryAPIBase): `-SaryLabIdentity "<token>|<user id>|<name>"` signs in as
+         * a test identity made against the local API, `-SaryLabOuting <id>` opens that outing at once. */
+        if !isDemo, let i = arguments.firstIndex(of: "-SaryLabIdentity"), i + 1 < arguments.count {
+            let p = arguments[i + 1].split(separator: "|").map(String.init)
+            if p.count >= 3 {
+                let lab = Identity(token: p[0], user: PublicUser(id: p[1], display_name: p[2], avatar: nil, phone: nil))
+                IdentityStore.save(lab)
+                identity = lab
+            }
+        }
         #endif
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        #if DEBUG
+        if !isDemo, let i = arguments.firstIndex(of: "-SaryLabOuting"), i + 1 < arguments.count { open(arguments[i + 1]) }
+        #endif
+        #if canImport(PushToTalk) && !targetEnvironment(simulator)
+        /* «قناة الطلعة»: Apple wants the channel manager up as early as possible, so a channel the
+         * system kept is restored and a pushtotalk push that launched us in the background is delivered. */
+        Task { @MainActor [weak self] in
+            await PTTSystemRoute.shared.setUp()
+            PTTSystemRoute.shared.onWokenByPush = { outingId, _ in
+                guard let self else { return }
+                if self.session?.id != outingId { self.open(outingId) }
+                self.session?.walkie.wokenByPush()
+            }
+        }
+        #endif
         activity.endOrphans()
         #if DEBUG
         if let i = arguments.firstIndex(of: "-SaryActivity"), i + 1 < arguments.count {

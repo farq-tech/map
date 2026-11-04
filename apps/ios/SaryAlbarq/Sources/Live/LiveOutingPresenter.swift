@@ -26,6 +26,10 @@ struct LivePresenterInput {
     var nightMode: TriModeUI = .automatic
     var notificationsOn = true
     var batterySharing = false
+    /// «اكتم القناة».
+    var pttMuted = false
+    /// Who is on air in «قناة الطلعة» (me included), for the speaking badge on the car.
+    var speakingUserId: String?
     /// Clips already played (no waveform icon over that car).
     var heardClips: Set<String> = []
     /// Map rotation, degrees: arrows are relative to the top of the screen.
@@ -71,6 +75,7 @@ enum LiveOutingPresenter {
                 myPhone: me?.phone.flatMap(localPhone),
                 notificationsOn: i.notificationsOn,
                 batterySharingOn: i.batterySharing,
+                pttMuted: i.pttMuted,
                 offline: OfflineAreasUIState(areas: []),
                 isLeader: v?.iOwn == true,
                 outingStatus: status(v?.status)

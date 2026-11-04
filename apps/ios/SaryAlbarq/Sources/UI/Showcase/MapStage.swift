@@ -156,8 +156,8 @@ struct MapStage: View {
 
     private var pttActions: PTTActions {
         PTTActions(
-            pressBegan: { ptt = .recording(seconds: 3) },
-            pressEnded: { ptt = .sending; Task { try? await Task.sleep(nanoseconds: 800_000_000); ptt = .idle } },
+            pressBegan: { ptt = .talking(seconds: 3, remaining: 57) },
+            pressEnded: { ptt = .idle },
             cancelled: { ptt = .idle }
         )
     }

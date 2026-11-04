@@ -74,7 +74,6 @@ final class LiveOutingController: ObservableObject {
     @Published var sheetDetent: SheetDetentUI = .peek
     @Published var selectedTab: LiveTabUI = .participants
     @Published var alerts: [LiveAlertUI] = []
-    @Published var ptt: PTTStateUI = .idle
     @Published var acknowledgedSOS: Set<String> = []
     @Published var heardClips: Set<String> = []
     @Published var clipPlayback: [String: VoicePlaybackUI] = [:]
@@ -108,9 +107,8 @@ final class LiveOutingController: ObservableObject {
     private var bag = Set<AnyCancellable>()
     private var lastView: OutingView?
     private var stationList: [OutdoorAPI.Station] = []
-    private let recorder = VoiceRecorder()
+    /// Plays clips that members on older builds still send («اضغط وتكلم» before «قناة الطلعة»).
     private let player = VoicePlayer()
-    private var pttTimer: Timer?
     private var alertTimers: [String: Timer] = [:]
     /// Last note shown per member, so a note heard nearby and then from the server alerts once.
     private var alertedNotes: [String: (text: String, at: Date)] = [:]
@@ -145,6 +143,8 @@ final class LiveOutingController: ObservableObject {
         features.pushAlert = { [weak self] a, ttl in self?.pushAlert(a, ttl: ttl) }
         features.dismissAlert = { [weak self] id in self?.dismissAlert(id) }
         features.toast = { [weak self] t in self?.toast(t) }
+        /* «فهد يتكلم الآن — انتظر دورك» and friends, as the usual toast. */
+        session.walkie.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
         features.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
@@ -200,7 +200,7 @@ final class LiveOutingController: ObservableObject {
             sosSending: session.sosSending,
             acknowledgedSOS: acknowledgedSOS,
             alerts: alerts,
-            ptt: ptt,
+            ptt: pttUI,
             sheetDetent: sheetDetent,
             selectedTab: selectedTab,
             inviteLink: inviteLink,
@@ -209,6 +209,8 @@ final class LiveOutingController: ObservableObject {
             nightMode: appearance.prefs.nightMode.ui,
             notificationsOn: notificationsOn,
             batterySharing: session.batterySharing,
+            pttMuted: session.walkie.muted,
+            speakingUserId: speakingUserId,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,
             now: Date(),
@@ -243,7 +245,8 @@ final class LiveOutingController: ObservableObject {
             let convoyRole = features.convoyRole(m.id)
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
-                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby)
+                                    stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
+                                    speaking: i.speakingUserId == m.id)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -574,7 +577,7 @@ final class LiveOutingController: ObservableObject {
         a.ptt = PTTActions(
             pressBegan: { [weak self] in self?.pttBegan() },
             pressEnded: { [weak self] in self?.pttEnded() },
-            cancelled: { [weak self] in self?.pttCancelled() }
+            cancelled: { [weak self] in self?.pttEnded() }
         )
         a.setSheetDetent = { [weak self] d in self?.sheetDetent = d }
         a.selectTab = { [weak self] t in self?.selectedTab = t }
@@ -617,6 +620,7 @@ final class LiveOutingController: ObservableObject {
                 if on && !self.pushExplained() { self.modal = .notify } else { self.setPush(on) }
             },
             setBatterySharing: { [weak self] on in self?.session.batterySharing = on },
+            setPTTMuted: { [weak self] on in self?.session.walkie.setMuted(on) },
             pauseOrResumeOuting: { [weak self] in
                 guard let self, let st = self.session.view?.status else { return }
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
@@ -805,61 +809,55 @@ final class LiveOutingController: ObservableObject {
         )
     }
 
-    // MARK: push-to-talk
+    // MARK: «قناة الطلعة» (live walkie-talkie)
+
+    /// The button's one state, from the session's walkie-talkie.
+    var pttUI: PTTStateUI {
+        let w = session.walkie
+        if w.muted { return .muted }
+        switch w.floor.state {
+        case .idle:
+            return w.mode == .unavailable && session.view?.status != .ended ? .unavailable : .idle
+        case .requesting:
+            return .arming
+        case .talking:
+            let s = w.floor.talkingSeconds(nowMs: w.nowMs)
+            return .talking(seconds: s, remaining: max(0, Int(w.floor.maxTalkMs / 1000) - s))
+        case .listening(let t):
+            let v = session.displayView
+            return .listening(name: v?.members[t.userId]?.display_name ?? (t.name.isEmpty ? "عضو" : t.name), color: v?.colors[t.userId] ?? 0xFFFFFF)
+        }
+    }
+
+    var pttLevel: Float { session.walkie.level }
+
+    /// On air right now (me or a friend): the speaking badge over that car.
+    var speakingUserId: String? {
+        switch session.walkie.floor.state {
+        case .talking: return session.myUserId
+        case .listening(let t): return t.userId
+        default: return nil
+        }
+    }
 
     private func pttBegan() {
-        guard ptt == .idle else { return }
         guard session.view?.status != .ended else { return }
-        ptt = .arming
+        if MicPermission.granted || PTTAudioEngine.testToneRequested {
+            session.walkie.pressBegan()
+            return
+        }
+        /* First time: iOS asks; they hold again once it is allowed. */
         Task {
-            let ok = recorder.hasPermission ? true : await recorder.requestPermission()
-            guard ok else {
-                ptt = .idle
-                toast("اسمح بالميكروفون من الإعدادات لتستخدم «اضغط وتكلم»")
-                return
-            }
-            /* The finger lifted while iOS asked: nothing to record, they press again. */
-            guard ptt == .arming else { return }
-            let started = await recorder.start()
-            guard started else {
-                ptt = .idle
-                toast("تعذّر تشغيل الميكروفون")
-                return
-            }
-            ptt = .recording(seconds: 0)
-            pttTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    guard let self, case .recording = self.ptt else { return }
-                    if self.recorder.isRecording { self.ptt = .recording(seconds: self.recorder.elapsed) } else { self.pttEnded() }
-                }
+            if await MicPermission.request() {
+                toast("جاهز — اضغط مطولًا وتكلم")
+            } else {
+                toast("اسمح بالميكروفون من الإعدادات لتتكلم في «قناة الطلعة»")
             }
         }
     }
 
     private func pttEnded() {
-        pttTimer?.invalidate()
-        pttTimer = nil
-        if ptt == .arming { ptt = .idle; return }
-        guard case .recording = ptt else { return }
-        let got = recorder.stop()
-        guard let clip = got else {
-            ptt = .idle
-            toast("اضغط مطولًا وتكلّم، ثم ارفع إصبعك")
-            return
-        }
-        ptt = .sending
-        Task {
-            let sent = await session.sendClip(clip.data, durationMs: clip.durationMs)
-            ptt = .idle
-            if sent != nil { toast("وصل صوتك للمجموعة") }
-        }
-    }
-
-    private func pttCancelled() {
-        pttTimer?.invalidate()
-        pttTimer = nil
-        recorder.cancel()
-        ptt = .idle
+        session.walkie.pressEnded()
     }
 
     private func togglePlay(_ clipId: String) {

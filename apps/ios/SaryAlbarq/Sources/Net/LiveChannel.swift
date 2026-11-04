@@ -21,6 +21,10 @@ final class LiveChannel {
         var onAck: (Bool, String?) -> Void = { _, _ in }
         /// server_now from acks/pongs, to keep the clock offset honest.
         var onServerNow: (String) -> Void = { _ in }
+        /// «قناة الطلعة»: floor-control signals (ptt_*).
+        var onPTT: (PTTSignal) -> Void = { _ in }
+        /// «قناة الطلعة»: a binary audio frame relayed by the server.
+        var onAudio: (Data) -> Void = { _ in }
     }
 
     struct Deps {
@@ -56,6 +60,8 @@ final class LiveChannel {
     private var slot = LatestFixSlot()
     private var seq = 0
     private var away = false
+    /// In «قناة الطلعة» (re-sent after every reconnect).
+    private var pttJoined = false
 
     init(outingId: String, token: String, url: URL = Endpoints.liveSocket, handlers: Handlers = Handlers(), deps: Deps) {
         self.outingId = outingId
@@ -112,6 +118,29 @@ final class LiveChannel {
         seq += 1
         return sendFrame(["type": "note", "id": seq, "text": text])
     }
+
+    // MARK: «قناة الطلعة»
+
+    /// Join (or mute = leave) the outing's live voice channel. Survives reconnects.
+    func setPTTJoined(_ on: Bool) {
+        pttJoined = on
+        sendFrame(["type": on ? "ptt_join" : "ptt_leave"])
+    }
+
+    @discardableResult
+    func pttStart(id: Int) -> Bool { sendFrame(["type": "ptt_start", "id": id]) }
+
+    func pttStop() { sendFrame(["type": "ptt_stop"]) }
+
+    /// One encoded audio frame. False when the socket is not live (nothing is queued: it is live audio).
+    @discardableResult
+    func sendAudio(_ frame: Data) -> Bool {
+        guard state == .live, let b = socket as? LiveBinarySocket else { return false }
+        b.send(data: frame)
+        return true
+    }
+
+    var isLive: Bool { state == .live }
 
     /// Network came back, or the app came to the foreground.
     func reconnectNow() {
@@ -221,6 +250,7 @@ final class LiveChannel {
                     self.handlers.onSnapshot(snap)
                 }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
+                if self.pttJoined { self.sendFrame(["type": "ptt_join"]) }
                 self.flush()
                 self.schedulePing()
             case "ack":
@@ -230,9 +260,16 @@ final class LiveChannel {
                 if let now = msg["server_now"] as? String { self.handlers.onServerNow(now) }
             case "error", "closed", "note_ack":
                 break
+            case _ where type.hasPrefix("ptt_"):
+                if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
             default:
                 if let e = LiveEvent.decode(msg) { self.handlers.onEvent(e) }
             }
+        }
+        (s as? LiveBinarySocket)?.onBinary = { [weak self, weak s] data in
+            guard let self, let s, self.socket === s else { return }
+            self.lastFrameAtMs = self.deps.scheduler.nowMs
+            self.handlers.onAudio(data)
         }
         s.onClose = { [weak self, weak s] code in
             guard let self, let s, self.socket === s else { return }
@@ -345,8 +382,15 @@ protocol LiveSocket: AnyObject {
     func close(code: Int)
 }
 
-final class URLSessionLiveSocket: NSObject, LiveSocket, URLSessionWebSocketDelegate {
+/// A socket that also carries binary frames (the walkie-talkie's audio).
+protocol LiveBinarySocket: AnyObject {
+    var onBinary: (Data) -> Void { get set }
+    func send(data: Data)
+}
+
+final class URLSessionLiveSocket: NSObject, LiveSocket, LiveBinarySocket, URLSessionWebSocketDelegate {
     var onOpen: () -> Void = {}
+    var onBinary: (Data) -> Void = { _ in }
     var onMessage: (String) -> Void = { _ in }
     var onClose: (Int) -> Void = { _ in }
 
@@ -379,7 +423,8 @@ final class URLSessionLiveSocket: NSObject, LiveSocket, URLSessionWebSocketDeleg
                     self.onMessage(s)
                     self.receive()
                 case let .success(.data(d)):
-                    if let s = String(data: d, encoding: .utf8) { self.onMessage(s) }
+                    /* The server's only binary frames are walkie-talkie audio. */
+                    self.onBinary(d)
                     self.receive()
                 case .success:
                     self.receive()
@@ -393,6 +438,10 @@ final class URLSessionLiveSocket: NSObject, LiveSocket, URLSessionWebSocketDeleg
 
     func send(_ text: String) {
         task?.send(.string(text)) { _ in }
+    }
+
+    func send(data: Data) {
+        task?.send(.data(data)) { _ in }
     }
 
     func close(code: Int) {

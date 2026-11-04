@@ -451,6 +451,10 @@ private struct SettingsTab: View {
                 SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الأصحاب", systemImage: "bell.fill",
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
             }
+            SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على الميكروفون وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
+                SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
+                              isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+            }
             TrailSettingsSection(controller: controller, card: controller.trailCard)
             SpeedSettingsSection()
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {

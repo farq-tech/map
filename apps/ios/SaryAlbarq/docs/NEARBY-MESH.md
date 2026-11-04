@@ -80,6 +80,19 @@ signed rather than tagged with a shared-root HMAC.
   Notes and SOS sent while offline went nearby only and are not queued for the
   server, so they are never sent twice.
 
+* **«قناة الطلعة» voice** (`MeshVoice.swift`). When the server cannot be reached
+  and a member's phone is connected directly, the walkie-talkie sends its live
+  AAC-ELD frames over the same session. A voice frame starts with `0xA1` (JSON
+  frames start with `{`) and is compact binary: outing tag, sender clock, sender
+  id, then an AES-GCM box. The key is derived from the **sender's** member key
+  (`ptt-voice`), and the whole header is the additional data. Audio goes
+  unreliably and start/stop go reliably, to direct neighbours only. Voice is
+  never relayed, because a hop adds too much delay. Frames older than 5 s are
+  dropped. A separate limiter allows 50 frames/s with a burst of 80. Floor
+  control has no server here: you may talk if nobody nearby was heard in the
+  last 1.5 s, and if two people press at once, the lower user id keeps the
+  floor. Nothing is recorded.
+
 ## Proof
 
 | What | How | Status |
@@ -92,6 +105,7 @@ signed rather than tagged with a shared-root HMAC.
 | Gate: off without consent, off at once on stop | unit tests | proven |
 | Discovery + encrypted exchange between two app instances | two iPhone 17 Pro Max simulators (`-demo -SaryMeshTest -SaryOffline`, B with `-SaryDemoMe`) | proven on simulators (`docs/app-shots/mesh-*.jpg`) |
 | SOS / note delivered live between instances | — | not shown on simulators (unit tests only) |
+| «قناة الطلعة» voice between two app instances, no server | same two simulators, `-SaryPTTTone` test tone, `-SaryPTTAutoTalk` | proven on simulators: 163 frames decoded on B at 440 Hz, 0 gaps |
 | Bluetooth-only and AWDL range, battery, background behaviour, 3-car relay | — | **needs real devices in the desert** |
 
 On the simulators the connection uses the Mac's network (Bonjour over loopback or
