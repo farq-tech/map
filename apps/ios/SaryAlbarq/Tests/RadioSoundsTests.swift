@@ -102,6 +102,35 @@ final class RadioSoundsTests: XCTestCase {
         XCTAssertNotNil(PTTRadioSynth.buffer(.talkPermit))
     }
 
+    func testStartCuesOpenWithTheRecordedSquelch() throws {
+        let rec = try XCTUnwrap(PTTRadioSynth.recordedSquelch(), "radio-squelch.caf ships in the app bundle")
+        XCTAssertEqual(Double(rec.count) / PTTRadioSynth.sampleRate, 0.16, accuracy: 0.02)
+        XCTAssertEqual(rec.reduce(0) { max($0, abs($1)) }, 0.355, accuracy: 0.02, "levelled to about −9 dBFS")
+        XCTAssertNil(Bundle.main.url(forResource: "source-walkie-talkie-83500", withExtension: "mp3"), "the source mp3 is not shipped")
+        for cue in [PTTRadioCue.talkPermit, .incomingStart] {
+            let withRec = PTTRadioSynth.samples(cue, squelch: rec)
+            XCTAssertEqual(PTTRadioSynth.samples(cue), withRec, "\(cue) uses the recording")
+            XCTAssertNotEqual(withRec, PTTRadioSynth.samples(cue, squelch: nil))
+            /* The recording leads, the chirp follows: same shape as the recording (it is only rescaled). */
+            let head = Array(withRec[100..<1_000]), src = Array(rec[100..<1_000])
+            let dot = zip(head, src).reduce(0) { $0 + Double($1.0 * $1.1) }
+            XCTAssertGreaterThan(dot / (energy(head) * energy(src)).squareRoot(), 0.99, "\(cue)")
+        }
+        /* End cues stay synthesised. */
+        XCTAssertEqual(PTTRadioSynth.samples(.talkEnd), PTTRadioSynth.samples(.talkEnd, squelch: nil))
+        XCTAssertEqual(PTTRadioSynth.samples(.incomingEnd), PTTRadioSynth.samples(.incomingEnd, squelch: nil))
+    }
+
+    func testFallsBackToTheSynthesisedSquelch() {
+        XCTAssertNil(PTTRadioSynth.recordedSquelch(bundle: Bundle(for: RadioSoundsTests.self)), "not in the test bundle")
+        for cue in PTTRadioCue.allCases {
+            let s = PTTRadioSynth.samples(cue, squelch: nil)
+            XCTAssertLessThanOrEqual(Double(s.count) / PTTRadioSynth.sampleRate, PTTRadioSynth.maxDuration)
+            XCTAssertEqual(s.reduce(0) { max($0, abs($1)) }, PTTRadioSynth.peak, accuracy: 0.01)
+        }
+        XCTAssertEqual(PTTRadioSynth.samples(.talkPermit, squelch: []), PTTRadioSynth.samples(.talkPermit, squelch: nil))
+    }
+
     func testSquelchIsBandLimitedNoise() {
         let s = PTTRadioSynth.squelch(ms: 200, seed: 5, decay: 0)
         let total = energy(s)

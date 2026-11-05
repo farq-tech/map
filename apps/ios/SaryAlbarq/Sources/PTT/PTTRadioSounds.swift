@@ -9,8 +9,12 @@ import Foundation
 ///     they stop;
 ///   * their voice band-limited (≈300–3400 Hz) and lightly compressed.
 ///
-/// Every sound is synthesised here at run time (seeded noise, sine tones and
-/// biquad filters): nothing is copied from any radio maker or app. One switch
+/// The opening «كشش» is a recorded squelch the owner chose
+/// (`Resources/Sounds/radio-squelch.caf`, Pixabay Content License — see
+/// docs/SOUNDS-LICENSE.md), trimmed and levelled; if it cannot be loaded a
+/// synthesised one stands in. Everything else (chirps, roger, squelch tails)
+/// is synthesised here at run time (seeded noise, sine tones and biquad
+/// filters): nothing is copied from any radio maker or app. One switch
 /// in «الإعدادات» turns all of it off (`enabledKey`, on by default).
 enum PTTRadioSounds {
     static let enabledKey = "sary.ptt.radioSounds"
@@ -109,22 +113,34 @@ struct PTTRadioCueSequencer: Equatable {
 
 // MARK: - what
 
-/// The synthesised cues, 16 kHz mono float (the walkie-talkie's own format).
+/// The cues, 16 kHz mono float (the walkie-talkie's own format).
 enum PTTRadioSynth {
     static let sampleRate = PTTAudioFormat.sampleRate
     /// Loudest sample of any cue (≈ −9 dBFS): audible next to a voice, never harsh.
     static let peak: Float = 0.35
     static let maxDuration = 0.4
+    static let squelchResource = "radio-squelch"
 
-    static func samples(_ cue: PTTRadioCue) -> [Float] {
+    /// Each cue, built once (the recorded squelch when the bundle has it).
+    private static let cache: [PTTRadioCue: [Float]] = {
+        let rec = recordedSquelch()
+        return Dictionary(uniqueKeysWithValues: PTTRadioCue.allCases.map { ($0, samples($0, squelch: rec)) })
+    }()
+
+    static func samples(_ cue: PTTRadioCue) -> [Float] { cache[cue] ?? [] }
+
+    /// `squelch`: the recorded opening burst (nil: synthesise one).
+    static func samples(_ cue: PTTRadioCue, squelch rec: [Float]?) -> [Float] {
+        /* The recording at the tones' level, so the mix normalises the same. */
+        let opening = rec.flatMap { $0.isEmpty ? nil : scaled($0, to: 0.6) }
         var out: [Float]
         switch cue {
         case .talkPermit:
-            out = squelch(ms: 140, seed: 11, decay: 0.5) + silence(ms: 12) + tone(1_450, ms: 34) + silence(ms: 8) + tone(1_950, ms: 46)
+            out = (opening ?? squelch(ms: 140, seed: 11, decay: 0.5)) + silence(ms: 12) + tone(1_450, ms: 34) + silence(ms: 8) + tone(1_950, ms: 46)
         case .talkEnd:
             out = tone(1_850, ms: 55) + silence(ms: 10) + tone(1_250, ms: 70) + silence(ms: 15) + squelch(ms: 110, seed: 23, decay: 1)
         case .incomingStart:
-            out = squelch(ms: 165, seed: 37, decay: 0.45) + silence(ms: 12) + tone(1_650, ms: 55)
+            out = (opening ?? squelch(ms: 165, seed: 37, decay: 0.45)) + silence(ms: 12) + tone(1_650, ms: 55)
         case .incomingEnd:
             out = tone(1_300, ms: 85) + silence(ms: 15) + squelch(ms: 150, seed: 51, decay: 1)
         }
@@ -134,6 +150,23 @@ enum PTTRadioSynth {
     }
 
     static func duration(_ cue: PTTRadioCue) -> TimeInterval { Double(samples(cue).count) / sampleRate }
+
+    /// `radio-squelch.caf` (16 kHz mono) as floats; nil when missing or unreadable.
+    static func recordedSquelch(bundle: Bundle = .main) -> [Float]? {
+        guard let url = bundle.url(forResource: squelchResource, withExtension: "caf"),
+              let f = try? AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false),
+              f.processingFormat.sampleRate == sampleRate, f.processingFormat.channelCount == 1, f.length > 0,
+              let b = AVAudioPCMBuffer(pcmFormat: f.processingFormat, frameCapacity: AVAudioFrameCount(f.length)),
+              (try? f.read(into: b)) != nil, let d = b.floatChannelData?[0] else { return nil }
+        let s = Array(UnsafeBufferPointer(start: d, count: Int(b.frameLength)))
+        /* Leave room for the chirp after it. */
+        return Double(s.count) / sampleRate <= 0.25 ? s : nil
+    }
+
+    private static func scaled(_ s: [Float], to target: Float) -> [Float] {
+        let m = s.reduce(0) { max($0, abs($1)) }
+        return m > 0 ? s.map { $0 * target / m } : s
+    }
 
     static func buffer(_ cue: PTTRadioCue) -> AVAudioPCMBuffer? {
         let s = samples(cue)
