@@ -57,6 +57,8 @@ function phone(raw) {
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
     .replace(/[\s\-().]/g, '');
   if (t.startsWith('00')) t = '+' + t.slice(2);
+  /* Contacts often keep the trunk 0 after the country code: +966 05… */
+  if (/^\+?96605\d{8}$/.test(t)) t = '+966' + t.replace(/^\+?9660/, '');
   if (/^05\d{8}$/.test(t)) t = '+966' + t.slice(1);
   else if (/^5\d{8}$/.test(t)) t = '+966' + t;
   else if (/^9665\d{8}$/.test(t)) t = '+' + t;

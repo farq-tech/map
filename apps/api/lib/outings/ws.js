@@ -87,7 +87,8 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
           if (m.outing_status === 'ended') return ws.close(4410, 'outing_ended');
           clearTimeout(authTimer);
           conn.userId = user.id;
-          conn.user = user;
+          /* In this trip they carry the inviter's name for them, if any (PTT «يتكلم …»). */
+          conn.user = m.invited_name ? { ...user, display_name: m.invited_name } : user;
           hub.join(msg.outing_id, conn);
           /* A reload loop must not pile up sockets: keep the newest few. */
           const mine = hub.connectionsOf(msg.outing_id, user.id);

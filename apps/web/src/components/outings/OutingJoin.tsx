@@ -65,10 +65,16 @@ export default function OutingJoin() {
 	useEffect(() => {
 		if (!token) return;
 		OutingsApi.previewInvite(token).then(
-			(r) => setPreview(r.invite),
+			(r) => {
+				/* A personal invite someone else already used: say so before anyone types a name. */
+				if (r.invite.claim === "taken") setError("invite_taken");
+				else setPreview(r.invite);
+				if (r.invite.kind === "personal" && r.invite.invitee_name) setName((n) => n || r.invite.invitee_name || "");
+			},
 			(e) => setError(e instanceof OutingApiError ? e.code : "network"),
 		);
 	}, [token]);
+	const personal = preview?.kind === "personal" ? preview.invitee_name || null : null;
 
 	/* One tap: create the identity if there is none, then join. */
 	const join = async () => {
@@ -115,6 +121,13 @@ export default function OutingJoin() {
 						{isRTL ? `${formatNumber(preview.member_count, true)} مشارك` : `${preview.member_count} members`} ·{" "}
 						{statusLabel(preview.status, isRTL)}
 					</p>
+					{personal ? (
+						<p className="sary-o-note" data-testid="outing-join-personal">
+							{isRTL
+								? `هذه دعوة شخصية لـ«${personal}». ستظهر في الطلعة بهذا الاسم كما سمّاك ${preview.owner_name}.`
+								: `A personal invite for “${personal}”. You will appear in the outing under this name, as ${preview.owner_name} saved you.`}
+						</p>
+					) : null}
 					{preview.join_locked ? (
 						<p className="sary-o-error" role="status" data-testid="outing-join-locked">
 							{outingErrorText("join_locked", isRTL)}
@@ -145,7 +158,11 @@ export default function OutingJoin() {
 						{!identity ? (
 							<>
 								<label>
-									<span>{isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}</span>
+									<span>
+										{personal
+											? isRTL ? "لقبك (يظهر بجانب اسمك في الطلعة)" : "Your nickname (shown beside your name)"
+											: isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}
+									</span>
 									<input
 										value={name}
 										onChange={(e) => setName(e.target.value)}
@@ -178,9 +195,11 @@ export default function OutingJoin() {
 						>
 							{busy
 								? "…"
-								: identity
-									? isRTL ? `انضم للطلعة باسم ${identity.user.display_name}` : `Join as ${identity.user.display_name}`
-									: isRTL ? "انضم للطلعة" : "Join the outing"}
+								: personal
+									? isRTL ? `انضم باسم «${personal}»` : `Join as “${personal}”`
+									: identity
+										? isRTL ? `انضم للطلعة باسم ${identity.user.display_name}` : `Join as ${identity.user.display_name}`
+										: isRTL ? "انضم للطلعة" : "Join the outing"}
 						</button>
 						{!identity ? (
 							<button type="button" className="sary-o-link-btn" onClick={() => setRecovering(true)} data-testid="outing-recover-open">

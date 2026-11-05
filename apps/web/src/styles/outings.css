@@ -1618,3 +1618,9 @@
 .sary-watch-list a { color: #e8a865; margin-inline-start: auto; direction: ltr; unicode-bidi: isolate; }
 .sary-watch-foot { text-align: center; }
 .sary-watch-foot a { color: #e8a865; }
+
+/* «دعوة شخصية»: the person's own name, beside the name the inviter gave them. */
+.sary-o-nick {
+	font-weight: 400;
+	opacity: 0.7;
+}

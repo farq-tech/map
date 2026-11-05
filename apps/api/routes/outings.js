@@ -167,9 +167,13 @@ function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = 
     res.status(201).json({ ok: true, ...r });
   }));
 
+  /* Anonymous works (build 9–11, the web join page); with a token the answer
+   * also says whether a used personal invite is the viewer's own. */
   router.post('/invites/preview', asyncHandler(async (req, res) => {
     if (!inviteLimit(clientKey(req))) return res.status(429).json({ ok: false, error: 'rate_limited' });
-    const invite = await service.previewInvite(req.body?.token);
+    const m = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
+    const viewer = m ? await service.authenticate(m[1]) : null;
+    const invite = await service.previewInvite(req.body?.token, viewer);
     res.json({ ok: true, invite });
   }));
 
@@ -229,6 +233,30 @@ function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = 
   router.post('/:id/invites', auth, asyncHandler(async (req, res) => {
     const invite = await service.rotateInvite(req.user, req.params.id, req.body || {});
     res.status(201).json({ ok: true, invite });
+  }));
+
+  /* «دعوة شخصية»: one single-use link per person — lib/outings/invites.js. */
+  router.get('/:id/invites/personal', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.listPersonal(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/invites/personal', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.createPersonal(req.user, req.params.id, req.body || {})) });
+  }));
+
+  router.post('/:id/invites/personal/:inviteId/resend', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.resendPersonal(req.user, req.params.id, req.params.inviteId, req.body || {})) });
+  }));
+
+  router.delete('/:id/invites/personal/:inviteId', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.revokePersonal(req.user, req.params.id, req.params.inviteId)) });
+  }));
+
+  /* «الرابط المفتوح» on/off. Off revokes the open link; personal invites stay. */
+  router.patch('/:id/invites/settings', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setOpenLinks(req.user, req.params.id, req.body?.open_links)) });
   }));
 
   router.delete('/:id/invites', auth, asyncHandler(async (req, res) => {
