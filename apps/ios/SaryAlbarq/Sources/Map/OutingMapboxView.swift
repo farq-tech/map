@@ -1611,7 +1611,9 @@ enum ArabicBasemap {
 
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
-        guard let u = fileURL(layer), let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        guard let u = fileURL(layer), var s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        /* A copy saved before build 12 has the untuned imagery: tune it (idempotent). */
+        if layer == .satellite { s = SatelliteImagery.tune(s) }
         cache[layer] = s
         return s
     }
@@ -1646,7 +1648,8 @@ enum ArabicBasemap {
         URLSession.shared.dataTask(with: url) { data, resp, _ in
             var out: String?
             if let data, (resp as? HTTPURLResponse)?.statusCode == 200, let s = String(data: data, encoding: .utf8), s.contains("name_en") {
-                out = layer.isImport ? wrap(transform(s)) : transform(s)
+                let t = transform(s)
+                out = layer.isImport ? wrap(layer == .satellite ? SatelliteImagery.tune(t) : t) : t
             }
             DispatchQueue.main.async { finish(layer, out) }
         }.resume()

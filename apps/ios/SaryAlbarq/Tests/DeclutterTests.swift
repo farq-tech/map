@@ -181,6 +181,25 @@ final class DeclutterTests: XCTestCase {
         XCTAssertGreaterThan(MapLayer.topo.maxZoom, MapLayer.satellite.maxZoom)
     }
 
+    /// Build 12 imagery clarity: only Mapbox raster paint properties, on the imported satellite layer, idempotent.
+    func testSatelliteImageryTuning() throws {
+        let inner = #"{"version":8,"sources":{},"layers":[{"id":"bg","type":"background"},{"id":"mapbox-satellite","type":"raster","source":"mapbox://mapbox.satellite","paint":{"raster-emissive-strength":0.5}}]}"#
+        let style = ArabicBasemap.wrap(inner)
+        let once = SatelliteImagery.tune(style)
+        XCTAssertEqual(SatelliteImagery.tune(once), once, "idempotent")
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(once.utf8)) as? [String: Any])
+        let imp = try XCTUnwrap((root["imports"] as? [[String: Any]])?.first?["data"] as? [String: Any])
+        let layers = try XCTUnwrap(imp["layers"] as? [[String: Any]])
+        let paint = try XCTUnwrap(layers[1]["paint"] as? [String: Any])
+        XCTAssertEqual(paint["raster-contrast"] as? Double, 0.12)
+        XCTAssertEqual(paint["raster-saturation"] as? Double, 0.08)
+        XCTAssertEqual(paint["raster-resampling"] as? String, "linear")
+        XCTAssertEqual(paint["raster-emissive-strength"] as? Double, 0.5, "the style's own paint is kept")
+        XCTAssertNil(layers[0]["paint"], "non-raster layers untouched")
+        XCTAssertLessThanOrEqual(SatelliteImagery.paint["raster-saturation"] as? Double ?? 1, 0.15, "natural, not oversaturated")
+        XCTAssertEqual(SatelliteImagery.tune("not json"), "not json")
+    }
+
     func testRouterNarrationIsSpokenOnlyInArabic() {
         XCTAssertFalse(NavText.isArabic("Turn left onto طريق الملك فهد."), "Valhalla's English narration")
         XCTAssertTrue(NavText.isArabic("انعطف يسارًا إلى طريق الملك فهد"))

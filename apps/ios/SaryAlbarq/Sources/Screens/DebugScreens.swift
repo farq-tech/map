@@ -64,6 +64,9 @@ struct DebugScreen: View {
                 } message: {
                     Text((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.message ?? "")
                 }
+        #if DEBUG
+        case "imagery": SatelliteImageryProbe().ignoresSafeArea()
+        #endif
         case "plan-details": HomeView(initial: [.details("demo-new")])
         case "plan-editor", "plan-editor-draw":
             PlanEditorView(plan: model.plans.model(DemoData.outingId), outingName: "طلعة الثمامة (عرض تجريبي)", canEdit: true, myFix: nil, close: {})
