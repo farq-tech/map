@@ -11,6 +11,7 @@
 		00F55CEAAB1773620F7C2E18 /* CarPlayWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8182A276F271D81E93BEDA5 /* CarPlayWiringTests.swift */; };
 		019374D50EBDF5297ED1282D /* LiveOutingController+Speed.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA2327527A8033DBDF4BEB7C /* LiveOutingController+Speed.swift */; };
 		02CE1FBA75860269420A052B /* ShowcaseMocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35455B0FA230E73A9455A6F2 /* ShowcaseMocks.swift */; };
+		039F0FA6693F70B787A5E24C /* radio-squelch.caf in Resources */ = {isa = PBXBuildFile; fileRef = 4C3C6ADB78B865A680C5A2DC /* radio-squelch.caf */; };
 		04A8AD51CEC86F1644592CAD /* TrailMatching.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC378DBA5C797B0A053E99D1 /* TrailMatching.swift */; };
 		04AEC006F0D7113B47C5A993 /* CarPlayPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A022F20DA4CEBB0A0B4B328 /* CarPlayPresenter.swift */; };
 		0581A59CAA10795150F85050 /* MemberSilenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8723F363C9B425AF658764E3 /* MemberSilenceTests.swift */; };
@@ -441,6 +442,7 @@
 		49A3565CAFC838A5267BB20F /* SaryAlbarq-CarPlay.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryAlbarq-CarPlay.entitlements"; sourceTree = "<group>"; };
 		49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speed.swift; sourceTree = "<group>"; };
 		4BB1804ED435C480DA2259A2 /* FeatureContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureContracts.swift; sourceTree = "<group>"; };
+		4C3C6ADB78B865A680C5A2DC /* radio-squelch.caf */ = {isa = PBXFileReference; path = "radio-squelch.caf"; sourceTree = "<group>"; };
 		4D5DE21DF8A6B652B7B423C3 /* CommonContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonContract.swift; sourceTree = "<group>"; };
 		4E4DA569491A9F892B75F507 /* NavRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavRouting.swift; sourceTree = "<group>"; };
 		4F0F094E60D61FC178749D4E /* LiveOutingController+Weather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveOutingController+Weather.swift"; sourceTree = "<group>"; };
@@ -1043,6 +1045,7 @@
 				77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */,
 				2E34D73B37A06B558F2BA4B2 /* Fonts */,
 				D1F55DF995866060A02C7E28 /* InfoPlist.strings */,
+				ACC0A6B2F49E5727204434CA /* Sounds */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1121,6 +1124,14 @@
 				38DA1D694DA79F92A99941CD /* WaypointsUITests.swift */,
 			);
 			path = UITests;
+			sourceTree = "<group>";
+		};
+		ACC0A6B2F49E5727204434CA /* Sounds */ = {
+			isa = PBXGroup;
+			children = (
+				4C3C6ADB78B865A680C5A2DC /* radio-squelch.caf */,
+			);
+			path = Sounds;
 			sourceTree = "<group>";
 		};
 		ADD138F359247B5C5630A357 /* ShareExtension */ = {
@@ -1434,6 +1445,7 @@
 				808DCD3C26D893B0F099B7BA /* Tajawal-ExtraBold.ttf in Resources */,
 				5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */,
 				A7F4AD5D6CF4BCD5C02A66F5 /* Tajawal-Regular.ttf in Resources */,
+				039F0FA6693F70B787A5E24C /* radio-squelch.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
