@@ -35,16 +35,16 @@ final class ExploreUITests: XCTestCase {
         }
     }
 
-    func testEnterFromHeaderAndExitInOneTap() {
+    func testEnterFromToolsAndExitInOneTap() {
         let app = launch()
-        let enter = app.buttons["trip.explore"]
-        XCTAssertTrue(enter.waitForExistence(timeout: 10), "«استكشاف» next to the trip header")
-        enter.tap()
-        for id in ["explore.header", "explore-exit", "explore-layers", "explore-terrain", "explore-places", "explore-tracks", "outing-locate",
+        /* «تخفيف الزحمة» ٤: «أدوات» → «استكشاف وطبقات» (the binoculars left the header). */
+        XCTAssertTrue(app.openTool("outing-explore"), "«استكشاف» two taps from the trip map")
+        for id in ["explore.header", "explore-exit", "explore-layers", "explore-places", "outing-locate",
                    "explore.readout", "explore-copy", "explore-save", "outing-sos", "outing-ptt"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in exploration")
         }
-        XCTAssertFalse(app.buttons["outing-actions"].exists, "the trip's «+» waits behind «ارجع للرحلة»")
+        XCTAssertFalse(app.buttons["outing-actions"].exists, "the trip's «أدوات» waits behind the back button")
+        XCTAssertFalse(app.buttons["explore-terrain"].exists, "three buttons only: 3D terrain is in «الطبقات»")
         let elev = any(app, "explore.elevation")
         XCTAssertTrue(elev.label.contains("الارتفاع"), "elevation line, a value or «غير متاح»")
         /* Decimal ↔ DMS. */
@@ -121,18 +121,28 @@ final class ExploreUITests: XCTestCase {
 
     func testTracksSheetAndTerrain() {
         let app = launch(["-SaryExplore"])
-        XCTAssertTrue(app.buttons["explore-tracks"].waitForExistence(timeout: 10))
+        /* «أماكني ومساراتي»: one button, the tracks are its second tab. */
+        XCTAssertTrue(app.buttons["explore-places"].waitForExistence(timeout: 25))
+        app.buttons["explore-places"].tap()
+        XCTAssertTrue(app.buttons["explore-tracks"].waitForExistence(timeout: 5))
         app.buttons["explore-tracks"].tap()
         XCTAssertTrue(any(app, "tracks.sheet").waitForExistence(timeout: 5))
         XCTAssertTrue(any(app, "tracks.import").exists, "import a GPX / KML")
         any(app, "page-close").tap()
-        let t = app.buttons["explore-terrain"]
+        /* «تخفيف الزحمة» ١٠: 3D terrain is a switch in «الطبقات»; the layers button lights up. */
+        let layers = app.buttons["explore-layers"]
+        XCTAssertTrue(layers.waitForExistence(timeout: 5))
+        layers.tap()
+        let t = app.buttons["explore-terrain3d"].firstMatch
+        XCTAssertTrue(t.waitForExistence(timeout: 5))
+        t.scrollIntoView(in: app)
         t.tap()
         XCTAssertTrue(t.isSelected, "3D terrain on")
+        any(app, "page-close").tap()
+        XCTAssertTrue(layers.waitForExistence(timeout: 5))
+        XCTAssertTrue(layers.isSelected, "3D terrain on: «الطبقات» shows it")
         sleep(2)
         shot(app, "explore-terrain3d")
-        t.tap()
-        XCTAssertFalse(t.isSelected)
     }
 
     /// Screenshots of the topographic layer over relief (Abha), for review.

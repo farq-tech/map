@@ -155,6 +155,12 @@ final class LiveOutingController: ObservableObject {
     @Published var statusExpanded = false
     /// The trip header's bell: the queued alerts open under the header.
     @Published var bellOpen = false
+    /// «إذاعة الطلعة»'s small control under the header, opened from the header's ♪ («تخفيف الزحمة» ٢).
+    @Published var radioBarOpen = false
+    /// Tapping «أنت» on the map: my note, or copy / share my location.
+    @Published var meMenuOpen = false
+    /// «الوضع الواقعي» asked from «الطبقات» (the live screen presents it).
+    @Published var realisticRequest = 0
     /// Every alert this screen showed, newest first (behind the bell): nothing is just dropped.
     @Published var alertHistory: [AlertHistoryEntry] = []
     /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
@@ -1004,9 +1010,9 @@ final class LiveOutingController: ObservableObject {
 
     func openParticipant(_ id: String) {
         if id == session.view?.myId {
-            /* «رسالة فوق سيارتك» only while the outing runs: after the end nobody would see it. */
-            guard !tripEnded else { return }
-            modal = .note
+            /* «أنت»: «رسالة فوق سيارتي» (only while the outing runs: after the end nobody would see it)
+             * and «انسخ أو شارك موقعي» (moved here from «+», «تخفيف الزحمة» ١٣). */
+            meMenuOpen = true
         } else {
             modal = .participant(id)
         }

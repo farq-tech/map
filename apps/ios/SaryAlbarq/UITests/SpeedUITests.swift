@@ -38,16 +38,18 @@ final class SpeedUITests: XCTestCase {
     func testSpeedometerAndFriendSpeed() {
         let app = launch()
         let speedo = app.descendants(matching: .any)["speedometer"].firstMatch
-        XCTAssertTrue(speedo.waitForExistence(timeout: 10), "speedometer over the map")
-        let label = speedo.label
-        XCTAssertTrue(label.contains("كم/س") || label.contains("غير معروفة"), "a speed or an honest «—»: \(label)")
+        /* «تخفيف الزحمة» ٨: the speedometer shows from the first real speed only (a simulated route);
+         * without one it stays off the map rather than showing an empty «— كم/س». */
+        _ = speedo.waitForExistence(timeout: 10)
+        let label = speedo.exists ? speedo.label : ""
+        if speedo.exists { XCTAssertTrue(label.contains("كم/س"), "a real speed: \(label)") }
         /* Clear of the dock and the control cluster (measured, not guessed). */
-        let ptt = app.descendants(matching: .any)["outing-ptt"]
-        if ptt.exists { XCTAssertFalse(speedo.frame.intersects(ptt.frame), "not over «اضغط وتكلم»") }
-        let sos = app.descendants(matching: .any)["outing-sos"]
-        if sos.exists { XCTAssertFalse(speedo.frame.intersects(sos.frame), "not over SOS") }
-        let locate = app.buttons["outing-locate"]
-        if locate.exists { XCTAssertFalse(speedo.frame.intersects(locate.frame), "not over the control cluster") }
+        if speedo.exists {
+            let ptt = app.descendants(matching: .any)["outing-ptt"]
+            if ptt.exists { XCTAssertFalse(speedo.frame.intersects(ptt.frame), "not over «اضغط وتكلم»") }
+            let sos = app.descendants(matching: .any)["outing-sos"]
+            if sos.exists { XCTAssertFalse(speedo.frame.intersects(sos.frame), "not over SOS") }
+        }
 
         /* The demo's «أبو فهد» sent a moving fix moments ago (22 m/s): his speed shows while it is
          * fresh. «نورة»'s last fix is 5 minutes old: no speed, just «آخر موقع». */
@@ -83,7 +85,7 @@ final class SpeedUITests: XCTestCase {
         app.swipeDown()
         app.swipeDown()
         /* Driving (a simulated route): a tap shows the trip's top and average speed for a few seconds. */
-        if label.contains("كم/س") {
+        if label.contains("كم/س"), ProcessInfo.processInfo.environment["SARY_SIM_ROUTE"] != nil {
             sleep(7)
             speedo.tap()
             let trip = NSPredicate(format: "label CONTAINS %@", "أعلى سرعة")

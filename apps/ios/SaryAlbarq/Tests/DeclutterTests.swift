@@ -145,23 +145,26 @@ final class DeclutterTests: XCTestCase {
     // MARK: «+»
 
     func testActionCatalogHoldsEveryFeature() {
+        /* «تخفيف الزحمة» ١٣: tiles in sections; «اتبع الخطة» moved to «الرحلة», «انسخ موقعي» to «أنت». */
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "المجموعة", "الخريطة", "الخدمات", "الترفيه"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الترفيه", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
-        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-note-open", "outing-stuck",
-                                  "outing-waypoint-add", "outing-copyme", "outing-nearest-open", "outing-weather", "outing-radio", "outing-youtube", "outing-explore", "outing-chat"])
+        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "outing-note-open", "outing-stuck", "outing-enjad",
+                                  "outing-waypoint-add", "outing-nearest-open", "outing-weather", "outing-radio", "outing-youtube",
+                                  "outing-explore", "outing-fit", "outing-chat"])
+        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"])
         XCTAssertFalse(LiveActionCatalog.groups(.init(chat: false)).flatMap(\.items).contains { $0.id == "chat" }, "no chat on an older server")
         XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
-        XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق العودة")
-        XCTAssertEqual(active.first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
+        XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق الرجعة")
+        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init(following: true)).first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
     }
 
     /// Build 11: an ended trip kept offering «رسالة فوق سيارتي», «غرّزت»… to a group that is gone.
     func testActionCatalogOnAnEndedTrip() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather", "copyme"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather"]))
         XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).contains { $0.items.isEmpty }, "no empty group")
     }
 

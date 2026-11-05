@@ -281,6 +281,11 @@ struct NavBottomBar: View {
     var end: () -> Void
     /// «الخطوات» (moved here from the map in build 8, with the voice: the map keeps two buttons).
     var steps: (() -> Void)? = nil
+    /// «نظرة عامة» (moved here from the map's side in «تخفيف الزحمة» ١: no side column while driving).
+    var overview: (() -> Void)? = nil
+    var overviewOn = false
+    /// The map camera's mode (free / north / heading): VoiceOver value of «نظرة عامة».
+    var cameraMode = ""
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -317,6 +322,9 @@ struct NavBottomBar: View {
                 barIcon(nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: nav.muted ? "الصوت مكتوم" : "الصوت",
                         id: "nav.mute", active: nav.muted) { nav.muted.toggle() }
             }
+            if nav.phase != .arrived, let overview {
+                barIcon("map.fill", label: overviewOn ? "رجّعني لسيارتي" : "نظرة عامة", id: "nav.overview", active: overviewOn, value: cameraMode, action: overview)
+            }
             if nav.phase == .guiding, let steps {
                 barIcon("list.bullet", label: "الخطوات", id: "nav.stepsButton", action: steps)
             }
@@ -336,7 +344,7 @@ struct NavBottomBar: View {
         .accessibilityIdentifier("nav.bottomBar")
     }
 
-    private func barIcon(_ symbol: String, label: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+    private func barIcon(_ symbol: String, label: String, id: String, active: Bool = false, value: String = "", action: @escaping () -> Void) -> some View {
         let p = theme.palette
         let d: CGFloat = theme.drive ? 52 : 44
         return Button(action: action) {
@@ -348,6 +356,7 @@ struct NavBottomBar: View {
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text(label))
+        .accessibilityValue(Text(value))
         .accessibilityAddTraits(active ? .isSelected : [])
         .accessibilityIdentifier(id)
     }

@@ -37,6 +37,18 @@ extension LiveOutingController {
         return s
     }
 
+    /// What «أدوات الطلعة» and the «الرحلة» tab's route actions offer right now.
+    var actionState: LiveActionCatalog.State {
+        .init(backTracking: backTrack != nil,
+              following: planModel?.following == true,
+              hasRoute: planModel?.plan.hasRoute ?? false,
+              stuck: safety.myStuck != nil,
+              ended: tripEnded,
+              guideAllTarget: canGuideAll && session.view?.status == .active ? autoNavNextTarget?.name : nil,
+              chat: chat.isAvailable,
+              channels: session.walkie.showsChannels)
+    }
+
     /// One row of the «+» sheet was chosen: close it, then act (most actions open their own sheet).
     func performAction(_ id: String) {
         modal = nil
@@ -44,7 +56,7 @@ extension LiveOutingController {
         if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { return }
         let run: () -> Void = { [weak self] in self?.runAction(id) }
         switch id {
-        case "backtrack", "follow": run()
+        case "backtrack", "follow", "fit": run()
         default: DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: run)
         }
     }
@@ -72,6 +84,9 @@ extension LiveOutingController {
         case "youtube": MediaCenters.of(self).open()
         case "radio": GroupAudioCenters.of(self).open()
         case "explore": enterExplore()
+        case "channels": modal = .pttChannels
+        case "enjad": openEnjad(.emergency)
+        case "fit": a.fitGroup()
         default: break
         }
     }

@@ -44,7 +44,7 @@ final class SaryAlbarqUITests: XCTestCase {
         // Tap the status bar, not the map centre: a demo car sits there and would open its card.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the interruption monitor answer a permission prompt
         XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "trip header")
-        XCTAssertTrue(app.buttons["outing-fit"].exists, "control cluster")
+        XCTAssertTrue(app.buttons["outing-actions"].exists, "«أدوات» on the map's side")
         XCTAssertTrue(app.buttons["outing-locate"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["outing-sos"].exists, "SOS dock")
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]

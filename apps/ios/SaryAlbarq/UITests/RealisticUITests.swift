@@ -38,11 +38,14 @@ final class RealisticUITests: XCTestCase {
     }
 
     private func openFromExploration(_ app: XCUIApplication) {
-        let enter = app.buttons["trip.explore"]
-        XCTAssertTrue(enter.waitForExistence(timeout: 10))
-        enter.tap()
-        let entry = app.buttons["explore-realistic"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 5), "«الوضع الواقعي» in exploration's controls")
+        /* «تخفيف الزحمة»: «أدوات» → «استكشاف وطبقات» → «الطبقات» → «الوضع الواقعي». */
+        XCTAssertTrue(app.openTool("outing-explore"))
+        let layers = app.buttons["explore-layers"]
+        XCTAssertTrue(layers.waitForExistence(timeout: 5))
+        layers.tap()
+        let entry = app.descendants(matching: .any)["explore-realistic"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "«الوضع الواقعي» in «الطبقات»")
+        entry.scrollIntoView(in: app)
         entry.tap()
         XCTAssertTrue(any(app, "realistic.screen").waitForExistence(timeout: 8))
     }

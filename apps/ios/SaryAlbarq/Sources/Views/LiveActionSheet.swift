@@ -9,6 +9,9 @@ struct LiveActionItem: Identifiable, Equatable {
     var accessibilityID: String
     var subtitle: String?
     var isActive = false
+    var tone: Tone = .normal
+
+    enum Tone: Equatable { case normal, emergency }
 }
 
 struct LiveActionGroup: Identifiable, Equatable {
@@ -17,7 +20,9 @@ struct LiveActionGroup: Identifiable, Equatable {
     var items: [LiveActionItem]
 }
 
-/// «+»: every less frequent action of the live screen, grouped (docs/IA-REDESIGN.md §2.3).
+/// «أدوات الطلعة» («+»): every less frequent action of the live screen, as tiles in sections
+/// («تخفيف الزحمة» ١٣, styled after the owner's Lovable prototype). Nothing was dropped:
+/// «وجّه الكل» and «اتبع الخطة» live in the «الرحلة» tab, «انسخ موقعي» on «أنت».
 enum LiveActionCatalog {
     struct State: Equatable {
         var backTracking = false
@@ -26,54 +31,49 @@ enum LiveActionCatalog {
         var stuck = false
         /// The trip ended: only what still makes sense on this phone (map, search, weather…).
         var ended = false
-        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone).
+        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone) — in «الرحلة» now.
         var guideAllTarget: String?
         /// «المحادثات» only when the server has it (an older server: hidden, see ChatStore.availability).
         var chat = true
+        /// «الترددات» only when the server has walkie-talkie channels.
+        var channels = false
     }
 
     /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
-    static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll"]
+    static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll", "channels", "enjad"]
 
     static func groups(_ s: State) -> [LiveActionGroup] {
         let all = [
             LiveActionGroup(title: "الطريق", items: [
-                .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate",
-                      subtitle: "لصاحب، للوجهة أو لنقطة التجمع"),
-            ] + (s.guideAllTarget.map { t in
-                [LiveActionItem(id: "guideAll", title: "وجّه الكل إلى \(t)", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
-                                subtitle: "يبدأ التوجيه على جوال كل عضو · يقدر كل واحد يوقفه عنده")]
-            } ?? []) + [
+                .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate"),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
-                .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق العودة" : "طريق العودة", systemImage: SaryIcon.backTrack,
-                      accessibilityID: "outing-backtrack", subtitle: s.backTracking ? nil : "ارجع من نفس مسارك", isActive: s.backTracking),
-                .init(id: "follow", title: s.following ? "أوقف اتباع الخطة" : "اتبع الخطة",
-                      systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", accessibilityID: "plan.follow",
-                      subtitle: s.hasRoute ? nil : "ارسم المسار في الخطة أولًا", isActive: s.following),
+                .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق الرجعة" : "طريق الرجعة", systemImage: SaryIcon.backTrack,
+                      accessibilityID: "outing-backtrack", isActive: s.backTracking),
             ]),
-            LiveActionGroup(title: "المجموعة", items: (s.chat ? [
-                LiveActionItem(id: "chat", title: "المحادثات", systemImage: "bubble.left.and.bubble.right.fill", accessibilityID: "outing-chat",
-                               subtitle: "دردشة الطلعة ورسائل خاصة"),
+            LiveActionGroup(title: "الجماعة", items: (s.chat ? [
+                LiveActionItem(id: "chat", title: "المحادثات", systemImage: "bubble.left.and.bubble.right.fill", accessibilityID: "outing-chat"),
+            ] : []) + (s.channels ? [
+                LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
             ] : []) + [
                 .init(id: "note", title: "رسالة فوق سيارتي", systemImage: SaryIcon.note, accessibilityID: "outing-note-open"),
-                .init(id: "stuck", title: s.stuck ? "أنا مغرّز · التفاصيل" : "غرّزت", systemImage: SafetyIcon.stuck,
-                      accessibilityID: "outing-stuck", isActive: s.stuck),
+            ]),
+            LiveActionGroup(title: "السلامة", items: [
+                .init(id: "stuck", title: s.stuck ? "أنا مغرّز" : "غرّزت", systemImage: SafetyIcon.stuck,
+                      accessibilityID: "outing-stuck", isActive: s.stuck, tone: .emergency),
+                .init(id: "enjad", title: "اطلب فزعة (إنجاد)", systemImage: "cross.case.fill", accessibilityID: "outing-enjad", tone: .emergency),
+            ]),
+            LiveActionGroup(title: "المكان", items: [
                 .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
-                .init(id: "copyme", title: "انسخ أو شارك موقعي", systemImage: "location.viewfinder", accessibilityID: "outing-copyme"),
-            ]),
-            LiveActionGroup(title: "الخريطة", items: [
-                .init(id: "explore", title: "استكشاف", systemImage: "binoculars.fill", accessibilityID: "outing-explore",
-                      subtitle: "الطبقات، التضاريس، الإحداثيات، أماكني، GPX، بلا إنترنت"),
-            ]),
-            LiveActionGroup(title: "الخدمات", items: [
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
                 .init(id: "weather", title: "الطقس", systemImage: "cloud.sun.fill", accessibilityID: "outing-weather"),
             ]),
             LiveActionGroup(title: "الترفيه", items: [
-                .init(id: "radio", title: "إذاعة الطلعة", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-radio",
-                      subtitle: "للكل، والشاشة مقفلة، وفي السيارة"),
-                .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube",
-                      subtitle: "والتطبيق مفتوح فقط"),
+                .init(id: "radio", title: "إذاعة الطلعة", systemImage: "music.note", accessibilityID: "outing-radio"),
+                .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube"),
+            ]),
+            LiveActionGroup(title: "الخريطة", items: [
+                .init(id: "explore", title: "استكشاف وطبقات", systemImage: "square.3.layers.3d", accessibilityID: "outing-explore"),
+                .init(id: "fit", title: "شوف الكل", systemImage: SaryIcon.fitGroup, accessibilityID: "outing-fit"),
             ]),
         ]
         guard s.ended else { return all }
@@ -82,6 +82,19 @@ enum LiveActionCatalog {
             g.items.removeAll { needsRunningTrip.contains($0.id) }
             return g.items.isEmpty ? nil : g
         }
+    }
+
+    /// What moved out of «+» into the «الرحلة» tab: «اتبع الخطة» and, for the leader, «وجّه الكل».
+    static func tripRouteActions(_ s: State) -> [LiveActionItem] {
+        guard !s.ended else { return [] }
+        return (s.guideAllTarget.map { t in
+            [LiveActionItem(id: "guideAll", title: "وجّه الكل إلى \(t)", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
+                            subtitle: "يبدأ التوجيه على جوال كل عضو · يقدر كل واحد يوقفه عنده")]
+        } ?? []) + [
+            .init(id: "follow", title: s.following ? "أوقف اتباع الخطة" : "اتبع الخطة",
+                  systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", accessibilityID: "plan.follow",
+                  subtitle: s.hasRoute ? nil : "ارسم المسار في الخطة أولًا", isActive: s.following),
+        ]
     }
 }
 
@@ -93,8 +106,10 @@ struct LiveActionSheet: View {
 
     var body: some View {
         let p = theme.palette
+        let columns = Array(repeating: GridItem(.flexible(), spacing: theme.space(.s), alignment: .top), count: 4)
+        /* Tiles fit one screen; the scroll view is only for the largest text sizes. */
         ScrollView {
-            VStack(alignment: .leading, spacing: theme.space(.l)) {
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
                 HStack {
                     Text("أدوات الطلعة").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
@@ -102,51 +117,54 @@ struct LiveActionSheet: View {
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "outing-actions-close", action: close)
                 }
                 ForEach(groups) { g in
-                    VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(g.title).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                             .accessibilityAddTraits(.isHeader)
                             .padding(.horizontal, theme.space(.xs))
-                        VStack(spacing: 0) {
-                            ForEach(Array(g.items.enumerated()), id: \.element.id) { i, item in
-                                row(item)
-                                if i < g.items.count - 1 { SaryDivider().padding(.leading, 56) }
-                            }
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: theme.space(.s)) {
+                            ForEach(g.items) { tile($0) }
                         }
-                        .padding(.horizontal, theme.space(.m))
-                        .sarySurface(radius: SaryRadius.l)
                     }
                 }
             }
-            .padding(theme.space(.l))
+            .padding(.horizontal, theme.space(.l))
+            .padding(.vertical, theme.space(.s))
         }
         .scrollBounceBehavior(.basedOnSize)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("outing-actions-sheet")
     }
 
-    private func row(_ item: LiveActionItem) -> some View {
+    private func tile(_ item: LiveActionItem) -> some View {
         let p = theme.palette
+        let tint = item.tone == .emergency ? p.emergency : p.accent
+        let ink = item.tone == .emergency ? p.emergencyText : p.accentText
         return Button { action(item.id) } label: {
-            HStack(spacing: theme.space(.m)) {
+            VStack(spacing: 4) {
                 Image(systemName: item.systemImage)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(item.isActive ? p.onAccent : p.accentText)
+                    .foregroundStyle(item.isActive ? p.onAccent : ink)
                     .frame(width: 40, height: 40)
-                    .background(Circle().fill(item.isActive ? p.accent : p.accent.opacity(0.14)))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                    if let s = item.subtitle {
-                        Text(s).saryText(.footnote).foregroundStyle(p.textSecondary)
-                    }
-                }
-                Spacer(minLength: 0)
+                    .background(Circle().fill(item.isActive ? tint : tint.opacity(0.14)))
+                Text(item.title)
+                    .saryText(.caption, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(minHeight: 56)
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .top)
+            .padding(.vertical, theme.space(.xs) + 2)
+            .padding(.horizontal, 2)
+            .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.surface))
+            .contentShape(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous))
         }
-        .buttonStyle(SaryRowPressStyle())
+        .buttonStyle(SaryPressStyle())
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(item.title))
+        .accessibilityHint(Text(item.subtitle ?? ""))
         .accessibilityAddTraits(item.isActive ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier(item.accessibilityID)
     }

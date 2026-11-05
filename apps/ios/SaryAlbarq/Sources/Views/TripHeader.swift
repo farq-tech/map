@@ -61,6 +61,14 @@ enum TripHeaderPresenter {
     }
 }
 
+/// The header's ♪: what «إذاعة الطلعة» is doing, in one glyph.
+struct RadioHeaderUI: Equatable {
+    var title: String
+    var playing: Bool
+    var muted: Bool
+    var open: Bool
+}
+
 /// The single top bar of the live screen (docs/IA-REDESIGN.md §2.2):
 /// back · [dot] destination / «باقي … · نوصل …» · weather · bell.
 struct TripHeader: View {
@@ -77,6 +85,9 @@ struct TripHeader: View {
     var hasHistory = false
     /// «استكشاف» (stopped only): the round map button after the header.
     var exploreTapped: (() -> Void)? = nil
+    /// «إذاعة الطلعة» plays: a small ♪ in the header instead of a wide bar («تخفيف الزحمة» ٢).
+    var radio: RadioHeaderUI? = nil
+    var radioTapped: () -> Void = {}
     @Environment(\.sary) private var theme
 
     private var barHeight: CGFloat { theme.drive ? 64 : 52 }
@@ -135,6 +146,23 @@ struct TripHeader: View {
                 .accessibilityHint(Text("يفتح تفاصيل الرحلة"))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("trip.header")
+
+                if let r = radio {
+                    Button(action: radioTapped) {
+                        Image(systemName: r.muted ? "speaker.slash.fill" : (r.playing ? "music.note" : SaryIcon.pause))
+                            .font(.system(size: theme.drive ? 18 : 15, weight: .bold))
+                            .foregroundStyle(r.muted ? p.textSecondary : p.accentText)
+                            .symbolEffect(.pulse, isActive: r.playing && !r.muted && !theme.reduceMotion)
+                            .frame(width: 36, height: barHeight)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text("إذاعة الطلعة"))
+                    .accessibilityValue(Text(r.muted ? "ساكت عندك · \(r.title)" : (r.playing ? "يشغّل الآن · \(r.title)" : "موقّفة · \(r.title)")))
+                    .accessibilityHint(Text(r.open ? "يخفي التحكم" : "يفتح التحكم: إيقاف وكتم"))
+                    .accessibilityIdentifier("radio.header")
+                    .transition(.scale.combined(with: .opacity))
+                }
 
                 if let w = weather, w.phase != .unavailable {
                     Button(action: weatherTapped) {

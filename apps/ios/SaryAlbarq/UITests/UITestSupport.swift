@@ -66,3 +66,24 @@ extension XCUIApplication {
         }
     }
 }
+
+extension XCUIApplication {
+    /// «أدوات الطلعة» (the map's «+» / «أدوات») → one tile («تخفيف الزحمة» ١٣: every tool two taps away).
+    @discardableResult
+    func openTool(_ id: String, timeout: TimeInterval = 10) -> Bool {
+        let plus = buttons["outing-actions"]
+        guard plus.waitForExistence(timeout: timeout) else { return false }
+        plus.tap()
+        let tile = descendants(matching: .any)[id].firstMatch
+        guard tile.waitForExistence(timeout: 5) else { return false }
+        tile.tap()
+        return true
+    }
+
+    /// «المزيد» → «متقدم» (screen shape, driving realism) opened.
+    func openAdvancedSettings() {
+        let adv = descendants(matching: .any)["settings-advanced"].firstMatch
+        adv.scrollIntoView(in: self)
+        if (adv.value as? String) != "مفتوح" { adv.tap() }
+    }
+}
