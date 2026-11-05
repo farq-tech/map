@@ -192,10 +192,16 @@ final class PushRegistrar: ObservableObject {
     static func outingId(from userInfo: [AnyHashable: Any]) -> String? {
         if let id = userInfo["outing_id"] as? String, !id.isEmpty { return id }
         if let u = userInfo["url"] as? String, let r = u.range(of: "/outings/") {
-            let id = u[r.upperBound...].split(separator: "/").first.map(String.init) ?? ""
+            let id = u[r.upperBound...].split(whereSeparator: { $0 == "/" || $0 == "?" }).first.map(String.init) ?? ""
             return id.isEmpty ? nil : id
         }
         return nil
+    }
+
+    /// «المحادثات»: which conversation a tapped chat notification is about ('group' or the sender's id).
+    static func chatWith(from userInfo: [AnyHashable: Any]) -> ChatWith? {
+        guard userInfo["type"] as? String == "chat_message", let w = userInfo["chat_with"] as? String, !w.isEmpty else { return nil }
+        return ChatWith(wire: w)
     }
 }
 

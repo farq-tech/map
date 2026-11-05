@@ -160,6 +160,8 @@ struct SarySheetSummary: View {
 
 struct SaryTabBar: View {
     @Binding var selection: LiveTabUI
+    /// «المحادثات»: unread chat messages, shown on «المجموعة».
+    var groupBadge: Int = 0
     var body: some View {
         SarySegmented(
             options: LiveTabUI.allCases,
@@ -172,6 +174,7 @@ struct SaryTabBar: View {
                 case .more: return "ellipsis.circle"
                 }
             },
+            badge: { $0 == .group ? groupBadge : 0 },
             optionID: { tab in
                 switch tab {
                 case .trip: return "tab.trip"

@@ -22,7 +22,7 @@ struct LiveSheet: View {
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
             }
             if ui.sheetDetent != .peek {
-                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
+                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
                     .padding(.horizontal, theme.space(.l))
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
@@ -71,11 +71,16 @@ struct LiveSheet: View {
     @ViewBuilder
     private func modal(_ m: LiveModal) -> some View {
         switch m {
+        case let .chat(w):
+            ChatHomeView(chat: controller.chat, context: controller.chatContext, close: { controller.modal = nil }, path: w.map { [$0] } ?? [])
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         case .actions:
             LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
                                                                   following: controller.planModel?.following == true,
                                                                   hasRoute: controller.planModel?.plan.hasRoute ?? false,
-                                                                  stuck: controller.safety.myStuck != nil)),
+                                                                  stuck: controller.safety.myStuck != nil,
+                                                                  chat: controller.chat.isAvailable)),
                             action: controller.performAction, close: { controller.modal = nil })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -219,6 +224,8 @@ private struct GroupTab: View {
         let actions = controller.actions
         let v = controller.session.view
         Group {
+            /* «المحادثات»: first in the Group tab (≤ 2 taps from anywhere: «المجموعة» → here, or «+» → المحادثات). */
+            ChatEntryRow(chat: controller.chat) { controller.openChat() }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in

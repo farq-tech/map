@@ -25,6 +25,8 @@ final class LiveChannel {
         var onPTT: (PTTSignal) -> Void = { _ in }
         /// «قناة الطلعة»: a binary audio frame relayed by the server.
         var onAudio: (Data) -> Void = { _ in }
+        /// «المحادثات»: chat_message / chat_ack / chat_read / chat_typing / chat_deleted frames.
+        var onChat: ([String: Any]) -> Void = { _ in }
     }
 
     struct Deps {
@@ -112,6 +114,13 @@ final class LiveChannel {
         self.away = away
         sendFrame(["type": "presence", "away": away])
         if !away && state == .offline && deps.online() { reconnectNow() }
+    }
+
+    /// «المحادثات»: one chat frame (chat_message / chat_read / chat_typing). False when not live.
+    @discardableResult
+    func sendChat(_ frame: [String: Any]) -> Bool {
+        guard let type = frame["type"] as? String, type.hasPrefix("chat_") else { return false }
+        return sendFrame(frame)
     }
 
     func sendNote(_ text: String) -> Bool {
@@ -266,6 +275,8 @@ final class LiveChannel {
                 if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
             case "media_state":
                 MediaEvents.post(outingId: self.outingId, raw: msg["state"])
+            case _ where type.hasPrefix("chat_"):
+                self.handlers.onChat(msg)
             default:
                 if let e = LiveEvent.decode(msg) { self.handlers.onEvent(e) }
             }
