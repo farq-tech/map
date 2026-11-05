@@ -51,6 +51,8 @@ struct PointCard: View {
     @State private var toast: String?
     @State private var copied = ""
     @State private var share: ShareItem?
+    /// «الوضع الواقعي» on this point (Apple 3D imagery).
+    @State private var realistic: RealisticScene?
 
     private var point: LngLat {
         switch subject {
@@ -74,6 +76,7 @@ struct PointCard: View {
         }
         .animation(theme.animation(.snappy), value: toast)
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
+        .realisticCover($realistic)
     }
 
     @ViewBuilder
@@ -148,6 +151,7 @@ struct PointCard: View {
         if let f = actions.addPoint { out.append(Extra(id: "point.add", title: "أضف نقطة", icon: "mappin.and.ellipse") { f(pt) }) }
         if let f = actions.rally { out.append(Extra(id: "point.rally", title: "نقطة تجمع", icon: SaryIcon.rally) { f(pt) }) }
         if let f = actions.savePlace { out.append(Extra(id: "point.save", title: "احفظ في أماكني", icon: "star.fill") { f(pt, name) }) }
+        out.append(Extra(id: "point.realistic", title: "الوضع الواقعي", icon: RealisticEntryButton.icon) { realistic = .point(pt, name: name) })
         return out
     }
 
