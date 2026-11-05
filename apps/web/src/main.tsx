@@ -20,6 +20,7 @@ const OutingsHome = lazy(() => import("./components/outings/OutingsHome"));
 const OutingJoin = lazy(() => import("./components/outings/OutingJoin"));
 const OutingLive = lazy(() => import("./components/outings/OutingLive"));
 const PrivacyPolicy = lazy(() => import("./components/outings/PrivacyPolicy"));
+const SupportPage = lazy(() => import("./components/outings/SupportPage"));
 const WatchPage = lazy(() => import("./components/outings/WatchPage"));
 
 function RootLayout() {
@@ -129,6 +130,17 @@ const privacyRoute = createRoute({
 	),
 });
 
+/* الدعم — the App Store "Support URL" for the iPhone app. */
+const supportRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/support",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<SupportPage />
+		</Suspense>
+	),
+});
+
 /* «مؤقت الرجوع» — public watch link; the capability token rides in the fragment (/watch#…). */
 const watchRoute = createRoute({
 	getParentRoute: () => rootRoute,
@@ -197,6 +209,7 @@ const routeTree = rootRoute.addChildren([
 	outingJoinRoute,
 	outingLiveRoute,
 	privacyRoute,
+	supportRoute,
 	watchRoute,
 ]);
 
