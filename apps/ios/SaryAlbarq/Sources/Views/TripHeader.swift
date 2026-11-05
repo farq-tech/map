@@ -9,15 +9,13 @@ struct TripHeaderUI: Equatable {
 }
 
 enum TripHeaderPresenter {
-    /// Title: the destination (the outing's name when there is none, the trip is off, or it
-    /// ended: after «انتهت الطلعة» nobody is heading anywhere, e.g. a return trip's «نقطة البداية»).
+    /// Title (Lovable): the outing's name — «كشتة النفود الكبير». Where to is the second line.
     static func title(outingName: String, trip: TripPanelUI?, ended: Bool = false) -> String {
-        guard !ended, let t = trip else { return outingName }
-        if case .needsDestination = t.phase { return outingName }
-        return t.destinationName.isEmpty ? outingName : t.destinationName
+        outingName
     }
 
-    /// Second line: «باقي ١٢ كم · نوصل ٧:١١», the trip's phase, or (following the plan) its status.
+    /// Second line (Lovable): «إلى مخيم النفود · باقي ١٢ كم · نوصل ٧:١١», the trip's phase, or
+    /// (following the plan) its status.
     static func line(status: OutingStatusUI, trip: TripPanelUI?, follow: String?, connection: ConnectionStateUI, nearbyCars: Int) -> String? {
         if let follow { return follow }
         if status == .paused { return "الطلعة متوقفة مؤقتًا" }
@@ -27,11 +25,12 @@ enum TripHeaderPresenter {
             case let .needsDestination(canSet): return canSet ? "حدّد الوجهة" : "بانتظار الوجهة"
             case .notStarted: return "لم تبدأ"
             case .waitingFix: return "ننتظر موقعك"
-            case .arrived: return "وصلت"
+            case .arrived: return t.destinationName.isEmpty ? "وصلت" : "وصلت \(t.destinationName)"
             case .ended: return "انتهت الرحلة"
             case .underway:
                 if let s = t.myFixStaleSince { return SaryFormat.lastUpdate(since: s, now: Date()) }
-                let parts = [t.remainingLine, t.etaLine].compactMap { $0 }
+                let to = t.destinationName.isEmpty ? nil : "إلى \(t.destinationName)"
+                let parts = [to, t.remainingLine, t.etaLine].compactMap { $0 }
                 if !parts.isEmpty { return parts.joined(separator: " · ") }
             }
         }
