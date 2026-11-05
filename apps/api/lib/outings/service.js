@@ -23,6 +23,7 @@ const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
 const { createMedia } = require('./media');
 const { createPersonalInvites } = require('./invites');
+const { createChat } = require('./chat');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -65,6 +66,8 @@ function defaultConfig() {
      * idleEndHours). Ending the outing deletes it. */
     positionRetentionHours: envNumber('OUTING_POSITION_RETENTION_HOURS', 24, { min: 0.1, max: 24 * 7 }),
     idleEndHours: envNumber('OUTING_IDLE_END_HOURS', 24, { min: 1, max: 24 * 30 }),
+    /* «المحادثات»: messages of an ended trip are deleted this many days after it ended. */
+    chatRetentionDays: envNumber('OUTING_CHAT_RETENTION_DAYS', 30, { min: 1, max: 90 }),
     membershipCacheMs: 15_000,
     authCacheMs: 60_000,
   };
@@ -144,6 +147,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     requireLeader: (...a) => requireLeader(...a),
     forgetOuting: (...a) => forgetOuting(...a),
   });
+
+  /* «المحادثات»: group + direct trip chat, stored, 30-day retention — see chat.js. */
+  const chat = createChat({ q, tx, now, err, cfg, push, canLead, events: () => hub });
 
   function dropLatest(outingId, userId) {
     const room = latest.get(outingId);
@@ -674,6 +680,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       leads ? inviteState(outingId, m.open_links) : Promise.resolve(null),
     ]);
     const personalInvites = leads && outing.status !== 'ended' ? await personal.personalOf(outingId) : null;
+    const chatUnread = await chat.unreadTotal(outingId, user.id).catch(() => 0);
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
@@ -700,6 +707,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       invite: inv,
       /* Leaders only: one line per person invited — «أُرسلت / فتحها / انضم / لم يفتحها». */
       personal_invites: personalInvites,
+      /* «المحادثات»: unread messages for me in this trip (the Group-tab badge). */
+      chat_unread: chatUnread,
       /* Offline car-to-car mesh secret: active members only (requireMember above). */
       mesh_key: meshKey,
       server_now: new Date(now()).toISOString(),
@@ -893,7 +902,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
    *      are re-attributed to the outing's current owner, so a group's live
    *      link keeps working;
    *   4. DELETE the user: memberships, positions, trip summaries, web push
-   *      subscriptions and APNs tokens go with it (ON DELETE CASCADE), recovery
+   *      subscriptions, APNs tokens, every chat message they sent, every direct
+   *      chat message sent to them and their read markers go with it
+   *      (ON DELETE CASCADE, migration 012), recovery
    *      code columns live on the row itself, rally_set_by is SET NULL.
    * Memory-only state (notes, SOS, voice clips they sent, latest fixes, auth
    * cache, sockets) is dropped after commit. The token is 401 from then on.
@@ -1392,6 +1403,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     }
     for (const [k, at] of lastPersist) if (at < cutoff) lastPersist.delete(k);
     clips.sweep();
+    /* Trip chat: ended more than 30 days ago → every message and read marker deleted. */
+    await chat.purge().catch((e) => console.warn('[outings-chat] purge', e.code || e.message));
     await features.sweepFeatures();
     media.sweepMedia();
     return { ended: ended.length };
@@ -1403,6 +1416,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     ...features.api,
     ...media.api,
     ...personal.api,
+    ...chat.api,
     memberNames,
     setEvents(next) {
       hub = next || noopEvents();

@@ -6,6 +6,7 @@ import { watchBattery } from "../../lib/outings/safety";
 import { clearCachedView, loadCachedView, saveCachedView } from "../../lib/outings/lastKnown";
 import { applyEvent, mergeSnapshot, type OutingView } from "../../lib/outings/outingState";
 import { diag } from "../../lib/outings/fieldDiagnostics";
+import { chatBus } from "../../lib/outings/chat";
 import type { FieldDiag } from "./useFieldDiagnostics";
 import {
 	FixFilter,
@@ -72,6 +73,8 @@ export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: Fie
 		const ch = new LiveChannel(outingId, id.token, {
 			onSnapshot,
 			onEvent: (e) => {
+				/* «المحادثات»: chat_* frames go to the chat panel, not the map state. */
+				if (chatBus.emit(e as { type?: unknown })) return;
 				setView((prev) => (prev ? applyEvent(prev, e) : prev));
 				/* A new role changes what the server shows me (the invite state): fetch it. */
 				if ((e.type === "member_role" && e.user_id === id.user.id) || e.type === "owner_changed") void reload();
