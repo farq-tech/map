@@ -30,6 +30,12 @@ protocol PTTRoute: AnyObject {
     func endTransmit()
     /// Someone else is on air (nil: nobody). `callbacks.playbackReady` when the speaker is ready.
     func setRemote(_ name: String?)
+    /// «ترددات»: the channel name the system UI shows («قناة الطلعة · تردد ٣»).
+    func setChannelName(_ name: String)
+}
+
+extension PTTRoute {
+    func setChannelName(_ name: String) {}
 }
 
 struct PTTRouteCallbacks {
@@ -127,6 +133,7 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     private(set) var manager: PTChannelManager?
     private(set) var channelUUID: UUID?
     private var outingId: String?
+    /// What the system PTT UI calls the channel: «قناة الطلعة · تردد ٣».
     private var outingName = "قناة الطلعة"
     /// Set by the delegate when a push names the speaker: who to show.
     private(set) var joinedSystem = false
@@ -159,7 +166,7 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     func join(outingId: String, name: String) {
         guard let m = manager, let u = Self.uuid(for: outingId) else { return }
         self.outingId = outingId
-        outingName = name.isEmpty ? "قناة الطلعة" : "قناة الطلعة · \(name)"
+        outingName = name.isEmpty ? "قناة الطلعة" : name
         if channelUUID == u, joinedSystem { return }
         /* Another outing's channel is still up: leave it first (one channel per system). */
         if let old = channelUUID, old != u {
@@ -223,6 +230,21 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     nonisolated static func describe(_ e: Error) -> String {
         let n = e as NSError
         return "\(n.domain)#\(n.code)"
+    }
+
+    /// The radio was tuned to another channel: the Lock Screen / Dynamic Island says which.
+    func setChannelName(_ name: String) {
+        guard !name.isEmpty, name != outingName else { return }
+        outingName = name
+        guard let m = manager, let u = channelUUID, joinedSystem else { return }
+        Task {
+            do {
+                try await m.setChannelDescriptor(descriptor(), channelUUID: u)
+                Self.diag("channel descriptor updated")
+            } catch {
+                Self.diag("setChannelDescriptor failed: \(Self.describe(error))")
+            }
+        }
     }
 
     private func descriptor() -> PTChannelDescriptor {

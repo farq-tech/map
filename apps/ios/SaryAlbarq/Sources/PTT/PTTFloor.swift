@@ -193,6 +193,24 @@ struct PTTFloor: Equatable {
         }
     }
 
+    /// «ترددات»: we tuned to another channel. What we heard there ends for us (quietly), and a
+    /// transmission or request of ours there is over (the server releases the floor too).
+    mutating func channelSwitched() -> [Effect] {
+        switch state {
+        case .listening:
+            state = .idle
+            return [.stopPlayback]
+        case .talking:
+            state = .idle
+            return [.stopCapture, .sendStop]
+        case .requesting:
+            state = .idle
+            return [.sendStop]
+        case .idle:
+            return []
+        }
+    }
+
     /// The socket dropped: whatever was on air is over for us.
     mutating func linkLost() -> [Effect] {
         switch state {

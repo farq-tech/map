@@ -221,6 +221,7 @@ final class PTTAudioEngine {
             guard jitter.burst != b else { return }
             draining = false
             jitter.reset(burst: b)
+            firstFrameAt = nil
             decoder?.reset()
             voiceFX.reset()
             radioVoiceOn = radioVoice()
@@ -239,12 +240,28 @@ final class PTTAudioEngine {
                 try ensureEngine()
                 playing = true
                 player.play()
-                if let cue, PTTCueWarmup.isReady, let lead = Self.silence(seconds: PTTRadioSynth.duration(cue)) {
-                    player.scheduleBuffer(lead, completionHandler: nil)
+                /* The squelch opens now; the voice waits for at most `PTTPlayout.maxVoiceLead` of it
+                   (the rest of the cue sounds under the first syllable) while the jitter buffer fills
+                   in parallel. The pull chain starts when the lead is consumed — not behind two more
+                   silent buffers — so the first packet plays right after it (≤ 150 ms budget). */
+                let leadSeconds = cue != nil && PTTCueWarmup.isReady ? PTTPlayout.voiceLead(cue: PTTRadioSynth.duration(cue!)) : 0
+                if leadSeconds > 0, let lead = Self.silence(seconds: leadSeconds) {
+                    firstVoiceAt = nil
+                    leadStartedAt = Date().timeIntervalSince1970
+                    player.scheduleBuffer(lead, completionCallbackType: .dataConsumed) { [weak self] _ in
+                        self?.queue.async {
+                            guard let self, self.playing else { return }
+                            self.scheduleNext()
+                            self.scheduleNext()
+                        }
+                    }
+                } else {
+                    firstVoiceAt = nil
+                    leadStartedAt = Date().timeIntervalSince1970
+                    /* Two buffers in flight keep the chain pulling at the audio clock. */
+                    scheduleNext()
+                    scheduleNext()
                 }
-                /* Two buffers in flight keep the chain pulling at the audio clock. */
-                scheduleNext()
-                scheduleNext()
             } catch {
                 Self.log.error("[PTT] playback failed: \(String(describing: error), privacy: .public)")
                 PTTDiagnosticsLog.shared.add("audio", "speaker failed: \((error as NSError).domain)#\((error as NSError).code)")
@@ -321,14 +338,28 @@ final class PTTAudioEngine {
 
     /// An audio frame from the socket or the nearby link (any thread).
     func receive(_ f: PTTFrame) {
-        queue.async { [self] in jitter.push(f) }
+        queue.async { [self] in
+            if jitter.burst == f.burst, jitter.stats.received == 0 { firstFrameAt = Date().timeIntervalSince1970 }
+            jitter.push(f)
+        }
     }
+
+    /// Latency probes for «سجل القناة» (audio queue only).
+    private var leadStartedAt: TimeInterval?
+    private var firstFrameAt: TimeInterval?
+    private var firstVoiceAt: TimeInterval?
 
     private func scheduleNext() {
         guard playing else { return }
         let buf: AVAudioPCMBuffer
         switch jitter.pop() {
         case .frame(let f):
+            if firstVoiceAt == nil, let t0 = leadStartedAt, let first = firstFrameAt {
+                /* Diagnostics: squelch start → first voice packet scheduled, and first frame → it. */
+                let now = Date().timeIntervalSince1970
+                firstVoiceAt = now
+                PTTDiagnosticsLog.shared.add("audio", "first voice: \(Int((now - t0) * 1000)) ms after the squelch, \(Int((now - first) * 1000)) ms after its first frame")
+            }
             if f.codec == .aacELD16k, let pcm = decoder?.decode(f.payload) {
                 rx.add(pcm)
                 if radioVoiceOn { voiceFX.process(pcm) }

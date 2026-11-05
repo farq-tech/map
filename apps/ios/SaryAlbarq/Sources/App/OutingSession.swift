@@ -158,6 +158,9 @@ final class OutingSession: ObservableObject, Identifiable {
         meshSink = mesh.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
         walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
+        /* «ترددات»: private channels over REST; the demo keeps them on this phone (its owner is the leader). */
+        walkie.channelBackend = demo == nil ? api : nil
+        walkie.demoLeader = { [weak self] in self?.view?.snapshot.me.role == "owner" }
         walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
@@ -259,6 +262,8 @@ final class OutingSession: ObservableObject, Identifiable {
             onAck: { [weak self] ok, reason in MainActor.assumeIsolated { self?.ack(ok, reason) } },
             onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } },
             onPTT: { [weak self] sig in MainActor.assumeIsolated { self?.walkie.receive(sig) } },
+            onPTTOnChannel: { [weak self] sig, c in MainActor.assumeIsolated { self?.walkie.receive(sig, channel: c) } },
+            onPTTChannel: { [weak self] e in MainActor.assumeIsolated { self?.walkie.receiveChannel(e) } },
             onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } },
             onDiagnostics: { [weak self] d in MainActor.assumeIsolated { if self?.linkDiag != d { self?.linkDiag = d } } }
         )
