@@ -271,9 +271,9 @@ enum SuvModel {
 
     // MARK: the bundled expedition SUV (Resources/Models/SuvExpedition.glb)
 
-    /// The modelled car (scripts/suv/build_suv.py): an original boxy expedition 4×4 with
-    /// bevelled edges, a contact shadow and a light rim, styled to read like a navigation
-    /// puck. The procedural car above stays as the fallback if the asset cannot be used.
+    /// The modelled car (scripts/suv/blender_suv.py, from the CC0 "Offroader SUV"): a boxy
+    /// overland 4×4 with a roof rack, awning bag and rear spare, plus a contact shadow and a
+    /// light rim for the map. The procedural car above stays as the fallback.
     static let assetName = "SuvExpedition"
     /// Material that takes the member's colour, and the parts that stay black.
     static let bodyMaterial = "BODY"
