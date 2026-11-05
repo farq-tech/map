@@ -258,8 +258,10 @@ enum TrackGradient {
 
     /// Progress → colour stops for the whole line (gaps transparent: the dashed layer shows there).
     /// nil when there is nothing to colour by (no speed anywhere): draw one colour instead.
-    static func stops(_ line: TrackLine) -> [Stop]? {
-        guard line.isDrawable, line.hasSpeeds else { return nil }
+    /// `uniform`: colour every recorded stretch with this one colour instead (a GPX track, a
+    /// friend's trail), still with the gaps cut out.
+    static func stops(_ line: TrackLine, uniform: String? = nil) -> [Stop]? {
+        guard line.isDrawable, line.hasSpeeds || uniform != nil else { return nil }
         let p = progress(line.points)
         /* Unknown speeds inside a run take the nearest known one before them (or after, at the start). */
         var known = line.speeds
@@ -284,7 +286,7 @@ enum TrackGradient {
                 add(b - edge, transparent)
                 continue
             }
-            let c = known[i].map { hex(kmh: Speed.kmh($0)) } ?? hex(kmh: 0)
+            let c = uniform ?? known[i].map { hex(kmh: Speed.kmh($0)) } ?? hex(kmh: 0)
             let prevGap = i > 0 && line.gaps[i - 1]
             let nextGap = i + 1 < line.gaps.count && line.gaps[i + 1]
             if i == 0 || prevGap { add(a, c) }
