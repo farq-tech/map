@@ -20,7 +20,7 @@
 | --- | --- |
 | `NSLocationWhenInUseUsageDescription` | the outing map and sharing, only after «شارك موقعي», app in front |
 | `NSMicrophoneUsageDescription` | «اضغط وتكلم», only while held |
-| `NSCameraUsageDescription` | scanning a QR (invite / recovery code) |
+| `NSCameraUsageDescription` | scanning a QR (invite / recovery code); a photo for a shared waypoint, only when the person takes one |
 
 | `NSLocationAlwaysAndWhenInUseUsageDescription` | «مساري» only: keep recording my on-device trail with the screen locked |
 | `UIBackgroundModes: location` | the same, and nothing else |

@@ -34,6 +34,7 @@ struct LiveSheet: View {
         }
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .modifier(FeatureModals(controller: controller, features: controller.features))
         .background(MediaSheetHost(center: MediaCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
@@ -127,6 +128,7 @@ private struct ParticipantsTab: View {
             if ui.status != .ended {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
             }
+            ConvoySection(controller: controller, features: controller.features)
             TrailCard(controller: controller, card: controller.trailCard)
             MediaEntryCard(center: MediaCenters.of(controller))
             VStack(spacing: 0) {
@@ -139,6 +141,7 @@ private struct ParticipantsTab: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
+            WaypointsSection(controller: controller, features: controller.features)
         }
     }
 }

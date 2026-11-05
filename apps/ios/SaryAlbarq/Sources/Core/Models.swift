@@ -119,6 +119,8 @@ struct OutingInfo: Codable, Equatable {
     var ended_at: String?
     var rally: RallyInfo?
     var join_locked: Bool?
+    /// «وضع القافلة» (contract §4); nil or both ids nil = off.
+    var convoy: ConvoyInfo?
 }
 
 struct SnapshotMe: Codable, Equatable {
@@ -146,6 +148,8 @@ struct OutingSnapshot: Codable, Equatable {
     var voice_clips: [VoiceClip]?
     /// Totals members chose to share once the outing ended (never points).
     var summaries: [TripShare]?
+    /// Tolerated at the top level too, in case the server sends it there.
+    var convoy: ConvoyInfo?
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

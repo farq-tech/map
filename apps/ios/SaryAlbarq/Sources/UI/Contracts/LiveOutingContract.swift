@@ -86,6 +86,8 @@ enum LiveAlertKindUI: Equatable {
     case voice(VoiceClipUI)
     /// Short neutral toast (e.g. «تم نسخ الرابط»).
     case toast(String)
+    /// Convoy mode: someone out of the column (see `ConvoyAlertUI`).
+    case convoy(ConvoyAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
