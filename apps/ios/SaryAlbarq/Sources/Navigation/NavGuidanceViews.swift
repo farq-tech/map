@@ -3,9 +3,10 @@ import SwiftUI
 /// Panels over the live map while navigating. Drive mode: opaque, bigger, readable in sun.
 private extension View {
     func navPanel(_ theme: SaryTheme, stroke: Color? = nil) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous)
+        /* The Lovable header: 22 pt corners, dark and nearly opaque over the map. */
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return self
-            .background { if theme.drive { shape.fill(theme.palette.chromeOpaque) } }
+            .background { shape.fill(theme.palette.chromeOpaque.opacity(theme.drive ? 1 : 0.88)) }
             .saryGlass(shape, role: .panel)
             .overlay { if let stroke { shape.stroke(stroke, lineWidth: 3) } }
     }
@@ -16,13 +17,14 @@ struct NavManeuverGlyph: View {
     var maneuver: NavManeuver
     var size: CGFloat
     var tint = Color(rgb: 0x2B7BF0)
+    var ink = Color.white
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(tint)
+            RoundedRectangle(cornerRadius: size * 0.43, style: .continuous).fill(tint)
             Image(systemName: NavGlyph.symbol(maneuver))
                 .font(.system(size: size * 0.56, weight: .heavy))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(ink)
             if maneuver.kind == .roundabout, let e = maneuver.exit {
                 Text(SaryFormat.number(e))
                     .font(.system(size: size * 0.22, weight: .black))
@@ -45,7 +47,7 @@ struct NavManeuverBanner: View {
 
     var body: some View {
         let p = theme.palette
-        let glyph: CGFloat = theme.drive ? 76 : 60
+        let glyph: CGFloat = theme.drive ? 64 : 56
         VStack(spacing: 0) {
             if nav.rerouting {
                 HStack(spacing: theme.space(.m)) {
@@ -60,20 +62,19 @@ struct NavManeuverBanner: View {
                 .padding(theme.space(.m))
             } else if let step = nav.currentStep {
                 let d = nav.progress?.distanceToManeuverM ?? step.distanceM
+                /* Lovable: the manoeuvre in an orange tile at the right, the distance big, the instruction under it. */
                 HStack(alignment: .center, spacing: theme.space(.m)) {
-                    NavManeuverGlyph(maneuver: step.maneuver, size: glyph)
+                    NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: p.accent, ink: p.onAccent)
                     VStack(alignment: .leading, spacing: 2) {
-                        if let inD = NavText.inDistance(d) {
-                            Text(inD)
-                                .saryNumber(theme.drive ? .display : .title, weight: .heavy)
-                                .foregroundStyle(p.textPrimary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                                .accessibilityIdentifier("nav.distance")
-                        }
-                        Text(NavText.instruction(step, targetName: nav.target?.name))
-                            .saryText(theme.drive ? .title2 : .headline, weight: .bold)
+                        Text(SaryFormat.distance(meters: d))
+                            .font(.sary(theme.drive ? 34 : 28, .heavy))
                             .foregroundStyle(p.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .accessibilityIdentifier("nav.distance")
+                        Text(NavText.instruction(step, targetName: nav.target?.name))
+                            .saryText(theme.drive ? .callout : .subhead)
+                            .foregroundStyle(p.textSecondary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.8)
                             .fixedSize(horizontal: false, vertical: true)
@@ -81,7 +82,9 @@ struct NavManeuverBanner: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(theme.space(.m))
+                .padding(.horizontal, 13)
+                .padding(.top, 13)
+                .padding(.bottom, theme.space(.s))
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
                 if !step.lanes.isEmpty, d < 1500 {
@@ -90,36 +93,15 @@ struct NavManeuverBanner: View {
                         .padding(.bottom, theme.space(.s))
                 }
                 if let next = nav.nextStep, step.maneuver.kind != .arrive {
+                    /* «ثم …»: ours (not in Lovable), one small line — the next turn is safety information. */
                     nextRow(next)
                 }
-                if nav.auto, let eta = nav.etaDate {
-                    etaRow(eta)
-                }
+                NavETARow(nav: nav)
             }
         }
         .navPanel(theme)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.banner")
-    }
-
-    /// The trip's guidance: where to and when, in the one header («إلى روضة الثمامة · الوصول ٤:٣٥ م · ١٨ كم»).
-    private func etaRow(_ eta: Date) -> some View {
-        let p = theme.palette
-        let parts = [nav.target.map { "إلى \($0.name)" }, "الوصول \(NavText.clock(eta))", nav.remainingMeters.map { SaryFormat.distance(meters: $0) }]
-        return HStack(spacing: theme.space(.s)) {
-            Image(systemName: nav.target?.source == .tripStop ? "mappin.circle.fill" : "flag.checkered")
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(p.liveText)
-            Text(parts.compactMap { $0 }.joined(separator: " · "))
-                .saryNumber(theme.drive ? .callout : .footnote, weight: .bold)
-                .foregroundStyle(p.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, theme.space(.m))
-        .padding(.bottom, theme.space(.s))
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("nav.banner.eta")
     }
 
     private func nextRow(_ next: NavStep) -> some View {
@@ -134,10 +116,53 @@ struct NavManeuverBanner: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, theme.space(.m))
-        .padding(.vertical, theme.space(.s))
-        .background(p.sunken.opacity(theme.drive ? 1 : 0.6))
-        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: SaryRadius.l, bottomTrailingRadius: SaryRadius.l, style: .continuous))
+        .padding(.bottom, theme.space(.s))
         .accessibilityIdentifier("nav.next")
+    }
+}
+
+/// The header's bottom line (Lovable): «١٨ د · وصول ٧:٤٢ م» on the right, «باقي ١٢٫٤ كم» on the left.
+struct NavETARow: View {
+    @ObservedObject var nav: NavSession
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let size: CGFloat = theme.drive ? 16 : 14
+        if nav.etaDate != nil || nav.remainingMeters != nil {
+            VStack(spacing: 0) {
+                Rectangle().fill(p.separator).frame(height: 0.75).padding(.horizontal, 13)
+                HStack(spacing: 4) {
+                    if let s = nav.remainingSeconds {
+                        Text(NavText.remaining(seconds: s)).font(.sary(size, .bold)).foregroundStyle(p.liveText)
+                            .accessibilityIdentifier("nav.remainingTime")
+                    }
+                    if let eta = nav.etaDate {
+                        Text("· وصول \(NavText.clock(eta))").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                            .accessibilityIdentifier("nav.eta")
+                    }
+                    Spacer(minLength: theme.space(.s))
+                    if let m = nav.remainingMeters {
+                        Text("باقي").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                        Text(SaryFormat.distance(meters: m)).font(.sary(size, .bold)).foregroundStyle(p.textPrimary)
+                            .accessibilityIdentifier("nav.remainingDistance")
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text(label))
+            .accessibilityIdentifier("nav.banner.eta")
+        }
+    }
+
+    private var label: String {
+        [nav.target.map { "إلى \($0.name)" }, nav.remainingSeconds.map { NavText.remaining(seconds: $0) },
+         nav.etaDate.map { "الوصول \(NavText.clock($0))" }, nav.remainingMeters.map { "باقي \(SaryFormat.distance(meters: $0))" }]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -202,40 +227,46 @@ struct NavOffRoadPanel: View {
         let leg = nav.offRoad
         let dist = nav.offRoadNow?.distanceM ?? leg?.distanceM ?? 0
         let bearing = nav.offRoadNow?.bearing ?? leg?.bearing ?? 0
-        let arrow: CGFloat = theme.drive ? 88 : 66
-        HStack(spacing: theme.space(.m)) {
-            ZStack {
-                Circle().fill(Color(rgb: 0xF5B83D))
-                Image(systemName: "arrow.up")
-                    .font(.system(size: arrow * 0.5, weight: .black))
-                    .foregroundStyle(Color(rgb: 0x16110B))
-                    .rotationEffect(.degrees(NavOffRoad.arrowDegrees(bearing: bearing, reference: reference)))
-                    .animation(theme.animation(.smooth), value: bearing)
+        let arrow: CGFloat = theme.drive ? 64 : 56
+        VStack(spacing: 0) {
+            /* Lovable: «٣٠٠ م» big, «بدون طريق معبّد: اتجه مع السهم», the arrow in the orange tile. */
+            HStack(spacing: theme.space(.m)) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: arrow * 0.43, style: .continuous).fill(p.accent)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: arrow * 0.5, weight: .black))
+                        .foregroundStyle(p.onAccent)
+                        .rotationEffect(.degrees(NavOffRoad.arrowDegrees(bearing: bearing, reference: reference)))
+                        .animation(theme.animation(.smooth), value: bearing)
+                }
+                .frame(width: arrow, height: arrow)
+                .environment(\.layoutDirection, .leftToRight)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(SaryFormat.distance(meters: dist))
+                        .font(.sary(theme.drive ? 34 : 28, .heavy))
+                        .foregroundStyle(p.textPrimary)
+                        .accessibilityIdentifier("nav.offroad.distance")
+                    Text(NavOffRoad.title(direct: nav.direct, fallback: nav.fallback))
+                        .saryText(theme.drive ? .callout : .subhead)
+                        .foregroundStyle(p.textSecondary)
+                        .accessibilityIdentifier("nav.offroad.title")
+                    Text(NavOffRoad.note(fallback: nav.fallback, bearing: bearing))
+                        .saryText(.footnote)
+                        .foregroundStyle(p.textTertiary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("nav.offroad.note")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: arrow, height: arrow)
-            .overlay(Circle().stroke(Color.white, lineWidth: 3))
-            .environment(\.layoutDirection, .leftToRight)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(NavOffRoad.title(direct: nav.direct, fallback: nav.fallback))
-                    .saryText(theme.drive ? .title2 : .headline, weight: .bold)
-                    .foregroundStyle(p.textPrimary)
-                    .accessibilityIdentifier("nav.offroad.title")
-                Text(SaryFormat.distance(meters: dist))
-                    .saryNumber(theme.drive ? .display : .title, weight: .heavy)
-                    .foregroundStyle(p.textPrimary)
-                    .accessibilityIdentifier("nav.offroad.distance")
-                Text(NavOffRoad.note(fallback: nav.fallback, bearing: bearing))
-                    .saryText(theme.drive ? .callout : .footnote, weight: .medium)
-                    .foregroundStyle(p.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("nav.offroad.note")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 13)
+            .padding(.top, 13)
+            .padding(.bottom, theme.space(.s))
+            NavETARow(nav: nav)
         }
-        .padding(theme.space(.m))
-        .navPanel(theme, stroke: Color(rgb: 0xF5B83D))
-        .accessibilityElement(children: .combine)
+        .navPanel(theme)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.offroad")
     }
 }
@@ -294,27 +325,10 @@ struct NavBottomBar: View {
             if nav.phase == .arrived {
                 Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
             } else {
+                /* Arrival time and what is left are in the header now (Lovable); here: where to. */
                 VStack(alignment: .leading, spacing: 0) {
-                    if let eta = nav.etaDate, nav.phase == .guiding {
-                        Text("الوصول \(NavText.clock(eta))")
-                            .saryNumber(theme.drive ? .title2 : .headline, weight: .heavy)
-                            .foregroundStyle(p.liveText)
-                            .accessibilityIdentifier("nav.eta")
-                    } else {
-                        Text(nav.target?.name ?? "").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
-                    }
-                    HStack(spacing: 6) {
-                        if let s = nav.remainingSeconds, nav.phase == .guiding {
-                            Text(NavText.remaining(seconds: s)).accessibilityIdentifier("nav.remainingTime")
-                            Text("·")
-                        }
-                        if let m = nav.remainingMeters {
-                            Text(SaryFormat.distance(meters: m)).accessibilityIdentifier("nav.remainingDistance")
-                        }
-                    }
-                    .saryNumber(theme.drive ? .callout : .footnote, weight: .bold)
-                    .foregroundStyle(p.textSecondary)
-                    .lineLimit(1)
+                    Text("إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                    Text(nav.target?.name ?? "").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)

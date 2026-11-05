@@ -57,14 +57,17 @@ final class LiveCalmTests: XCTestCase {
         let groups = LiveActionCatalog.groups(.init(channels: true))
         XCTAssertEqual(groups.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الترفيه", "الخريطة"])
         let grid = Set(groups.flatMap(\.items).map(\.id))
-        let moved = Set(LiveActionCatalog.tripRouteActions(.init(guideAllTarget: "روضة")).map(\.id))
-        XCTAssertEqual(moved, ["follow", "guideAll"], "«اتبع الخطة» and «وجّه الكل» live in «الرحلة»")
-        XCTAssertTrue(grid.isDisjoint(with: moved))
+        let trip = Set(LiveActionCatalog.tripRouteActions(.init(guideAllTarget: "روضة")).map(\.id))
+        XCTAssertEqual(trip, ["follow", "guideAll"], "«اتبع الخطة» and «وجّه الكل» in «الرحلة» too")
+        XCTAssertTrue(Set(LiveActionCatalog.groups(.init(guideAllTarget: "روضة")).flatMap(\.items).map(\.id)).isSuperset(of: trip),
+                      "and in the tools, as in Lovable")
+        /* Lovable's tiles, in its sections. */
+        XCTAssertEqual(groups.first { $0.title == "السلامة" }?.items.map(\.title), ["غرّزت", "اطلب فزعة (إنجاد)", "مؤقت الرجوع"])
+        XCTAssertEqual(groups.first { $0.title == "الخريطة" }?.items.prefix(4).map(\.title), ["الطبقات", "صور عالية الوضوح", "الوضع الواقعي", "المؤثرات"])
         /* Every action the old «+» had is still one or two taps away. */
         let old: Set<String> = ["navigate", "search", "backtrack", "chat", "note", "stuck", "waypoint", "nearest", "weather", "radio", "youtube", "explore"]
         XCTAssertTrue(grid.isSuperset(of: old), "\(old.subtracting(grid))")
-        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad"]))
-        XCTAssertLessThanOrEqual(groups.flatMap(\.items).count, 16, "a grid that fits one screen")
+        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "rally", "convoy", "timer", "brief", "savePlace", "hires", "realistic", "effects"]))
     }
 
     func testToolsGridAfterTheEnd() {
@@ -79,6 +82,19 @@ final class LiveCalmTests: XCTestCase {
     }
 
     // MARK: auto-hiding bits
+
+    func testChipAgeOnlyAfterTwoMinutes() {
+        let now = Date()
+        XCTAssertFalse(NameChipAge.shows(.live, now: now))
+        XCTAssertFalse(NameChipAge.shows(.stale(since: now.addingTimeInterval(-90)), now: now), "«قبل ١ د» is noise")
+        XCTAssertTrue(NameChipAge.shows(.stale(since: now.addingTimeInterval(-240)), now: now), "«خالد · قبل ٤ د»")
+        XCTAssertTrue(NameChipAge.shows(.paused, now: now))
+    }
+
+    func testCompassBearingWrap() {
+        XCTAssertEqual(LiveSideButtons.wrap(350), -10, accuracy: 1e-9)
+        XCTAssertEqual(LiveSideButtons.wrap(-190), 170, accuracy: 1e-9)
+    }
 
     func testTimings() {
         XCTAssertEqual(VisualsSourceView.sourceSeconds, 5, "«الأجواء من الطقس» folds after 5 s")

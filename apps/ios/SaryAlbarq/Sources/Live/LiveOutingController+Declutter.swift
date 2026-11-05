@@ -56,7 +56,7 @@ extension LiveOutingController {
         if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { return }
         let run: () -> Void = { [weak self] in self?.runAction(id) }
         switch id {
-        case "backtrack", "follow", "fit": run()
+        case "backtrack", "follow", "fit", "rally", "timer", "effects", "realistic": run()
         default: DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: run)
         }
     }
@@ -87,6 +87,18 @@ extension LiveOutingController {
         case "channels": modal = .pttChannels
         case "enjad": openEnjad(.emergency)
         case "fit": a.fitGroup()
+        case "rally": selectedTab = .group; sheetDetent = .half
+        case "timer": selectedTab = .trip; sheetDetent = .half
+        case "convoy": modal = .convoyAlerts
+        case "brief":
+            if let f = location.lastFix { modal = .plan(.brief(LngLat(lng: f.lng, lat: f.lat), name: nil)) } else { toast("ننتظر أول قراءة من GPS") }
+        case "savePlace":
+            if let f = location.lastFix { modal = .placeEdit(SavedPlaceDraft(id: nil, point: LngLat(lng: f.lng, lat: f.lat), name: "", icon: .pin)) } else { toast("ننتظر أول قراءة من GPS") }
+        case "hires":
+            enterExplore()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.modal = .layers }
+        case "realistic": realisticRequest += 1
+        case "effects": settingsAdvanced = true; selectedTab = .more; sheetDetent = .full
         default: break
         }
     }

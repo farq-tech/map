@@ -17,14 +17,19 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    /// «الرحلة» (default) · «المجموعة» · «المزيد» (docs/IA-REDESIGN.md §2.4).
-    case trip, group, more
+    /// Lovable: «الخريطة» · «العيال» · «الرحلة» in the sheet; «المزيد» (the settings) behind the
+    /// header's gear.
+    case trip, group, more, map
+
+    /// The sheet's segmented tabs, right to left.
+    static let sheetTabs: [LiveTabUI] = [.map, .group, .trip]
 
     var label: String {
         switch self {
+        case .map: return "الخريطة"
         case .trip: return "الرحلة"
-        case .group: return "المجموعة"
-        case .more: return "المزيد"
+        case .group: return "العيال"
+        case .more: return "الإعدادات"
         }
     }
 }

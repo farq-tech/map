@@ -39,8 +39,9 @@ final class ExploreUITests: XCTestCase {
         let app = launch()
         /* «تخفيف الزحمة» ٤: «أدوات» → «استكشاف وطبقات» (the binoculars left the header). */
         XCTAssertTrue(app.openTool("outing-explore"), "«استكشاف» two taps from the trip map")
-        for id in ["explore.header", "explore-exit", "explore-layers", "explore-places", "outing-locate",
-                   "explore.readout", "explore-copy", "explore-save", "outing-sos", "outing-ptt"] {
+        /* Lovable: the layer bar and coordinates on top, «درون» / «واقعي» / «أماكني» on the right, SOS on the left. */
+        for id in ["explore.header", "explore-exit", "explore-layers", "explore-places", "explore-drone", "explore-realistic",
+                   "explore.readout", "explore-copy", "explore-save", "outing-sos", "explore.hint"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in exploration")
         }
         XCTAssertFalse(app.buttons["outing-actions"].exists, "the trip's «أدوات» waits behind the back button")

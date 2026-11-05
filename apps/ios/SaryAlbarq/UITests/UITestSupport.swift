@@ -80,10 +80,8 @@ extension XCUIApplication {
         return true
     }
 
-    /// «المزيد» → «متقدم» (screen shape, driving realism) opened.
+    /// «الإعدادات» → «متقدم» (screen shape, driving realism) scrolled into view.
     func openAdvancedSettings() {
-        let adv = descendants(matching: .any)["settings-advanced"].firstMatch
-        adv.scrollIntoView(in: self)
-        if (adv.value as? String) != "مفتوح" { adv.tap() }
+        descendants(matching: .any)["settings-advanced"].firstMatch.scrollIntoView(in: self)
     }
 }

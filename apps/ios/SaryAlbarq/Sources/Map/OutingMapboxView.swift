@@ -168,7 +168,8 @@ struct OutingMapboxView: UIViewRepresentable {
         context.coordinator.terrain3D = terrain3D
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
-        map.ornaments.options.compass.visibility = .adaptive
+        /* «تخفيف الزحمة» ١٦ (Lovable has no compass): the north lives in the camera button. */
+        map.ornaments.options.compass.visibility = .hidden
         /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme

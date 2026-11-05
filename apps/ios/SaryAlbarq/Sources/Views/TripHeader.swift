@@ -90,150 +90,157 @@ struct TripHeader: View {
     var radioTapped: () -> Void = {}
     @Environment(\.sary) private var theme
 
-    private var barHeight: CGFloat { theme.drive ? 64 : 52 }
+    /// «الإعدادات» (Lovable's gear): the trip's settings.
+    var settingsTapped: (() -> Void)? = nil
 
+    private var barHeight: CGFloat { theme.drive ? 80 : 70 }
+
+    /// Lovable: ONE dark card, 22 pt corners — title and «إلى … · ١٢٫٤ كم» on the right; the weather
+    /// pill, the alerts' history and the gear on the left. «رجوع» is a small chevron before the title.
     var body: some View {
         let p = theme.palette
-        let shape = RoundedRectangle(cornerRadius: barHeight / 2, style: .continuous)
-        HStack(spacing: theme.space(.s)) {
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        HStack(spacing: 6) {
             Button(action: back) {
                 Image(systemName: SaryIcon.back)
-                    .font(.system(size: theme.drive ? 22 : 17, weight: .semibold))
-                    .foregroundStyle(p.textPrimary)
-                    .frame(width: barHeight, height: barHeight)
-                    .saryGlass(Circle(), role: .chrome, interactive: true)
+                    .font(.system(size: theme.drive ? 18 : 15, weight: .semibold))
+                    .foregroundStyle(p.textSecondary)
+                    .frame(width: 28, height: barHeight)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text("رجوع"))
             .accessibilityIdentifier("outing-back")
 
-            HStack(spacing: 0) {
-                Button(action: statusTapped) {
-                    Circle().fill(ui.level.color(p))
-                        .frame(width: theme.drive ? 14 : 11, height: theme.drive ? 14 : 11)
-                        .overlay(Circle().stroke(p.background.opacity(0.6), lineWidth: 1.5))
-                        .frame(width: 40, height: barHeight)
+            statusDot
+
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(ui.title)
+                        .font(.sary(theme.drive ? 19 : 16, .bold))
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .accessibilityIdentifier("outing-title")
+                    if let line = ui.line {
+                        Text(line)
+                            .font(.sary(theme.drive ? 14 : 12, .regular))
+                            .foregroundStyle(p.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .accessibilityIdentifier("trip.header.line")
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: barHeight, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(accessibility))
+            .accessibilityHint(Text("يفتح تفاصيل الرحلة"))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("trip.header")
+
+            if let r = radio {
+                Button(action: radioTapped) {
+                    Image(systemName: r.muted ? "speaker.slash.fill" : (r.playing ? "music.note" : SaryIcon.pause))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(r.muted ? p.textSecondary : p.accentText)
+                        .symbolEffect(.pulse, isActive: r.playing && !r.muted && !theme.reduceMotion)
+                        .frame(width: 32, height: 44)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("حالة الاتصال"))
-                .accessibilityValue(Text(levelText))
-                .accessibilityIdentifier("outing-link-state")
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("إذاعة الطلعة"))
+                .accessibilityValue(Text(r.muted ? "ساكت عندك · \(r.title)" : (r.playing ? "يشغّل الآن · \(r.title)" : "موقّفة · \(r.title)")))
+                .accessibilityHint(Text(r.open ? "يخفي التحكم" : "يفتح التحكم: إيقاف وكتم"))
+                .accessibilityIdentifier("radio.header")
+                .transition(.scale.combined(with: .opacity))
+            }
 
-                Button(action: open) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(ui.title)
-                            .saryText(theme.drive ? .title2 : .headline, weight: .bold)
-                            .foregroundStyle(p.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .accessibilityIdentifier("outing-title")
-                        if let line = ui.line {
-                            Text(line)
-                                .saryNumber(theme.drive ? .callout : .footnote, weight: .bold)
-                                .foregroundStyle(p.textSecondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .accessibilityIdentifier("trip.header.line")
+            if let w = weather, w.phase != .unavailable {
+                Button(action: weatherTapped) {
+                    HStack(spacing: 4) {
+                        if w.phase == .loading {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: w.symbol).symbolRenderingMode(.multicolor)
+                                .font(.system(size: 13, weight: .semibold))
                         }
+                        Text(w.temp).font(.sary(12, .regular))
+                            .foregroundStyle(w.alertLevel >= 2 ? p.emergencyText : (w.alertLevel == 1 ? p.warningText : p.textPrimary))
                     }
-                    .frame(maxWidth: .infinity, minHeight: barHeight, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(Capsule().fill(p.sunken.opacity(0.7)))
+                    .frame(minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(accessibility))
-                .accessibilityHint(Text("يفتح تفاصيل الرحلة"))
+                .accessibilityLabel(Text(w.accessibility))
+                .accessibilityHint(Text("يفتح تفاصيل الطقس"))
                 .accessibilityAddTraits(.isButton)
-                .accessibilityIdentifier("trip.header")
-
-                if let r = radio {
-                    Button(action: radioTapped) {
-                        Image(systemName: r.muted ? "speaker.slash.fill" : (r.playing ? "music.note" : SaryIcon.pause))
-                            .font(.system(size: theme.drive ? 18 : 15, weight: .bold))
-                            .foregroundStyle(r.muted ? p.textSecondary : p.accentText)
-                            .symbolEffect(.pulse, isActive: r.playing && !r.muted && !theme.reduceMotion)
-                            .frame(width: 36, height: barHeight)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text("إذاعة الطلعة"))
-                    .accessibilityValue(Text(r.muted ? "ساكت عندك · \(r.title)" : (r.playing ? "يشغّل الآن · \(r.title)" : "موقّفة · \(r.title)")))
-                    .accessibilityHint(Text(r.open ? "يخفي التحكم" : "يفتح التحكم: إيقاف وكتم"))
-                    .accessibilityIdentifier("radio.header")
-                    .transition(.scale.combined(with: .opacity))
-                }
-
-                if let w = weather, w.phase != .unavailable {
-                    Button(action: weatherTapped) {
-                        HStack(spacing: 3) {
-                            if w.phase == .loading {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                Image(systemName: w.symbol).symbolRenderingMode(.multicolor)
-                                    .font(.system(size: theme.drive ? 18 : 15, weight: .semibold))
-                            }
-                            Text(w.temp).saryNumber(theme.drive ? .headline : .subhead, weight: .heavy)
-                                .foregroundStyle(w.alertLevel >= 2 ? p.emergencyText : (w.alertLevel == 1 ? p.warningText : p.textPrimary))
-                        }
-                        .padding(.horizontal, 6)
-                        .frame(minWidth: 44, minHeight: barHeight)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(Text(w.accessibility))
-                    .accessibilityHint(Text("يفتح تفاصيل الطقس"))
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityIdentifier("weather.chip")
-                }
-
-                if ui.bell > 0 || bellOpen || hasHistory {
-                    Button(action: bellTapped) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: bellOpen ? "bell.slash.fill" : "bell.fill")
-                                .font(.system(size: theme.drive ? 19 : 16, weight: .semibold))
-                                .foregroundStyle(p.textPrimary)
-                                .frame(width: 30, height: 30)
-                            if ui.bell > 0 && !bellOpen {
-                                Text(SaryFormat.number(ui.bell))
-                                    .saryNumber(.micro, weight: .heavy)
-                                    .foregroundStyle(p.onAccent)
-                                    .padding(.horizontal, 4)
-                                    .frame(minWidth: 17, minHeight: 17)
-                                    .background(Capsule().fill(p.accent))
-                                    .offset(x: 6, y: -4)
-                            }
-                        }
-                        .frame(width: 44, height: barHeight)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : (ui.bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")")))
-                    .accessibilityIdentifier("alerts.bell")
-                    .transition(.scale.combined(with: .opacity))
-                }
+                .accessibilityIdentifier("weather.chip")
             }
-            .padding(.trailing, theme.space(.xs))
-            .saryGlass(shape, role: .chrome)
 
-            if let exploreTapped {
-                Button(action: exploreTapped) {
-                    Image(systemName: "binoculars.fill")
-                        .font(.system(size: 16, weight: .semibold))
+            /* The alerts' history (Lovable): always here; a count while some wait. */
+            Button(action: bellTapped) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: bellOpen ? "xmark" : "clock.arrow.circlepath")
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(p.textPrimary)
-                        .frame(width: barHeight, height: barHeight)
-                        .saryGlass(Circle(), role: .chrome, interactive: true)
+                        .frame(width: 36, height: 44)
+                    if ui.bell > 0 && !bellOpen {
+                        Text(SaryFormat.number(ui.bell))
+                            .font(.sary(10, .heavy))
+                            .foregroundStyle(p.onAccent)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Capsule().fill(p.accent))
+                            .offset(x: 2, y: 4)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text(bellOpen ? "أخفِ التنبيهات" : (ui.bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(ui.bell)) \(ui.bell == 1 ? "تنبيه" : "تنبيهات")")))
+            .accessibilityIdentifier("alerts.bell")
+
+            if let settingsTapped {
+                Button(action: settingsTapped) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(p.textPrimary)
+                        .frame(width: 36, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text("استكشاف"))
-                .accessibilityHint(Text("الطبقات والتضاريس والإحداثيات وأماكنك"))
-                .accessibilityIdentifier("trip.explore")
-                .transition(.scale.combined(with: .opacity))
+                .accessibilityLabel(Text("الإعدادات"))
+                .accessibilityIdentifier("tab.more")
             }
         }
+        .padding(.leading, 6)
+        .padding(.trailing, 12)
+        .frame(minHeight: barHeight)
+        .background { shape.fill(p.chromeOpaque.opacity(0.88)) }
+        .saryGlass(shape, role: .chrome)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .animation(theme.animation(.snappy), value: ui.bell)
+    }
+
+    /// The connection dot, small, after the title (it opens the status details).
+    private var statusDot: some View {
+        Button(action: statusTapped) {
+            Circle().fill(ui.level.color(theme.palette))
+                .frame(width: 8, height: 8)
+                .frame(width: 20, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("حالة الاتصال"))
+        .accessibilityValue(Text(levelText))
+        .accessibilityIdentifier("outing-link-state")
     }
 
     private var levelText: String {

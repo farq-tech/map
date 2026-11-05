@@ -168,6 +168,8 @@ final class LiveOutingController: ObservableObject {
     @Published var meMenuOpen = false
     /// «الوضع الواقعي» asked from «الطبقات» (the live screen presents it).
     @Published var realisticRequest = 0
+    /// «المزيد» → «متقدم» open (the tools' «المؤثرات» opens it there).
+    @Published var settingsAdvanced = false
     /// Every alert this screen showed, newest first (behind the bell): nothing is just dropped.
     @Published var alertHistory: [AlertHistoryEntry] = []
     /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
@@ -298,7 +300,7 @@ final class LiveOutingController: ObservableObject {
         /* «المحادثات»: `-SaryChat home|group`, `-SaryChatMoving` (the driving block without a car). */
         if let c = arg("-SaryChat") { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .chat(c == "group" ? .group : nil) } }
         if shotArgs.contains("-SaryChatMoving") { debugChatMoving = true }
-        if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
+        if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : t == "map" ? .map : .trip }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif

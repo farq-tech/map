@@ -100,6 +100,15 @@ struct SaryInlineMessage: View {
 
 // MARK: - Toggle row
 
+/// The switches' «on» colour where it differs (Lovable's settings: green).
+private struct SaryToggleTintKey: EnvironmentKey { static let defaultValue: Color? = nil }
+extension EnvironmentValues {
+    var saryToggleTint: Color? {
+        get { self[SaryToggleTintKey.self] }
+        set { self[SaryToggleTintKey.self] = newValue }
+    }
+}
+
 struct SaryToggleRow: View {
     var title: String
     var subtitle: String?
@@ -107,6 +116,7 @@ struct SaryToggleRow: View {
     @Binding var isOn: Bool
     var id: String?
     @Environment(\.sary) private var theme
+    @Environment(\.saryToggleTint) private var toggleTint
 
     var body: some View {
         Toggle(isOn: $isOn) {
@@ -120,7 +130,7 @@ struct SaryToggleRow: View {
                 }
             }
         }
-        .tint(theme.palette.accent)
+        .tint(toggleTint ?? theme.palette.accent)
         .frame(minHeight: theme.minTarget)
         .padding(.vertical, theme.space(.xs))
         .sensoryFeedback(.selection, trigger: isOn)

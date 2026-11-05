@@ -32,31 +32,115 @@ enum LiveCalmRules {
     }
 }
 
-/// Separate round glass buttons, each with its caption under it («تتبعني»، «أدوات»).
+/// Lovable's caption under a round button: 10 pt on a dark pill.
+struct LovableCaption: View {
+    var text: String
+    @Environment(\.sary) private var theme
+    var body: some View {
+        Text(text)
+            .font(.sary(10, .regular))
+            .foregroundStyle(theme.palette.textSecondary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .frame(height: 15)
+            .background(Capsule().fill(Color.black.opacity(0.6)))
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Separate 48 pt round buttons, each with its caption under it («تتبعني»، «أدوات»). The tools
+/// button is filled orange (Lovable); the others are dark glass.
 struct LiveSideButtons: View {
     var items: [SaryMapControlItem]
     var action: (String) -> Void
+    /// The map's bearing: when it is turned, the camera button shows the north (it was a separate compass).
+    var bearing: Double = 0
     @Environment(\.sary) private var theme
 
     var body: some View {
-        VStack(spacing: theme.space(.s)) {
+        let p = theme.palette
+        VStack(spacing: 10) {
             ForEach(items) { item in
-                VStack(spacing: 3) {
-                    SaryMapControlButton(item: item) { action(item.id) }
-                    Text(item.label)
-                        .saryText(.micro, weight: .bold)
-                        .foregroundStyle(theme.palette.textPrimary)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .saryGlass(Capsule(), role: .chrome)
-                        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                        .accessibilityHidden(true)
+                let filled = item.id == "actions" || item.isActive
+                VStack(spacing: 4) {
+                    Button { action(item.id) } label: {
+                        let turned = item.id == "locate" && !item.isActive && abs(Self.wrap(bearing)) > 3
+                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : "scope") : item.systemImage))
+                            .rotationEffect(.degrees(turned ? -bearing : 0))
+                            .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
+                            .foregroundStyle(filled ? p.onAccent : p.textPrimary)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: theme.drive ? 60 : 48, height: theme.drive ? 60 : 48)
+                            .background { if filled { Circle().fill(p.accent) } }
+                            .saryGlass(Circle(), role: .chrome, interactive: true)
+                            .overlay(alignment: .topTrailing) {
+                                if let b = item.badge, b > 0 {
+                                    Text(SaryFormat.number(b)).font(.sary(10, .heavy)).foregroundStyle(Color.white)
+                                        .frame(minWidth: 17, minHeight: 17)
+                                        .background(Circle().fill(p.emergency))
+                                        .offset(x: 3, y: -3)
+                                }
+                            }
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text(item.label))
+                    .accessibilityHint(Text(item.hint ?? ""))
+                    .accessibilityValue(Text(item.value ?? ""))
+                    .accessibilityAddTraits(item.isActive ? .isSelected : [])
+                    .accessibilityIdentifier(item.accessibilityID)
+                    LovableCaption(text: item.label)
                 }
             }
         }
         .animation(theme.animation(.snappy), value: items)
+    }
+
+    static func wrap(_ d: Double) -> Double { var x = d.truncatingRemainder(dividingBy: 360); if x > 180 { x -= 360 }; if x < -180 { x += 360 }; return x }
+}
+
+/// SOS (Lovable): a red disc with «SOS» under the header on the left, «اضغط ثانية» under it.
+/// Fires after a 1 s hold (unchanged). Never hidden while the trip runs.
+struct LovableSOS: View {
+    var state: MySOSUI
+    var size: CGFloat
+    var trigger: () -> Void
+
+    var body: some View {
+        VStack(spacing: 4) {
+            SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true)
+                .padding(4)
+                .chromeFrame("sos")
+            LovableCaption(text: "اضغط ثانية")
+        }
+    }
+}
+
+/// The speed (Lovable): a 76 pt dark disc, the number big, «كم/س» under it.
+struct LovableSpeedBubble: View {
+    var ui: SpeedometerUI
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let kmh = ui.current.kmh.map { Int($0.rounded()) }
+        VStack(spacing: 0) {
+            Text(kmh.map { SaryFormat.number($0) } ?? "—")
+                .font(.sary(26, .heavy))
+                .foregroundStyle(ui.overLimit ? p.emergencyText : p.textPrimary)
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text("كم/س").font(.sary(11, .regular)).foregroundStyle(p.textSecondary)
+        }
+        .frame(width: 76, height: 76)
+        .background(Circle().fill(p.chromeOpaque.opacity(0.88)))
+        .saryGlass(Circle(), role: .chrome)
+        .overlay { if ui.overLimit { Circle().stroke(p.emergency, lineWidth: 3) } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(kmh.map { "السرعة \(SaryFormat.number($0)) كم/س" } ?? "السرعة غير معروفة"))
+        .accessibilityIdentifier("speedometer")
     }
 }
 
@@ -71,12 +155,12 @@ struct ConvoyLinePill: View {
             HStack(spacing: 6) {
                 Circle().fill(theme.palette.live).frame(width: 8, height: 8)
                 Text(text)
-                    .saryNumber(theme.drive ? .callout : .footnote, weight: .bold)
+                    .font(.sary(12, .medium))
                     .foregroundStyle(theme.palette.textPrimary)
                     .lineLimit(1)
             }
-            .padding(.horizontal, theme.space(.m))
-            .frame(minHeight: 34)
+            .padding(.horizontal, 14)
+            .frame(height: 32)
             .saryGlass(Capsule(), role: .chrome, interactive: true)
         }
         .buttonStyle(SaryPressStyle())
@@ -96,10 +180,12 @@ struct AlertHistoryButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: open ? "xmark" : "clock.arrow.circlepath")
-                .font(.system(size: theme.drive ? 20 : 17, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.palette.textPrimary)
-                .frame(width: theme.drive ? 56 : 46, height: theme.drive ? 56 : 46)
+                .frame(width: 36, height: 36)
                 .saryGlass(Circle(), role: .chrome, interactive: true)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text(open ? "أخفِ التنبيهات" : "سجل التنبيهات"))

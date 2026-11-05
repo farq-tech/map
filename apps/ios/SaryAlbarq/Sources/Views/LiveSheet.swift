@@ -27,14 +27,42 @@ struct LiveSheet: View {
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
             }
             if ui.sheetDetent != .peek {
-                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
+                if ui.selectedTab == .more {
+                    /* «الإعدادات» (Lovable: its own page, from the header's gear). */
+                    HStack(spacing: theme.space(.s)) {
+                        Button { actions.selectTab(.trip) } label: {
+                            Image(systemName: SaryIcon.back).font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(theme.palette.textPrimary)
+                                .frame(width: 36, height: 36).background(Circle().fill(theme.palette.sunken))
+                        }
+                        .buttonStyle(SaryPressStyle())
+                        .accessibilityLabel(Text("رجوع"))
+                        .accessibilityIdentifier("settings.back")
+                        Text("الإعدادات").font(.sary(20, .bold)).foregroundStyle(theme.palette.textPrimary)
+                            .accessibilityAddTraits(.isHeader)
+                        Spacer()
+                    }
                     .padding(.horizontal, theme.space(.l))
+                } else {
+                    HStack(spacing: theme.space(.s)) {
+                        SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
+                        Button { actions.selectTab(.more); actions.setSheetDetent(.full) } label: {
+                            Image(systemName: "gearshape").font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(theme.palette.textPrimary).frame(width: 40, height: 40)
+                        }
+                        .buttonStyle(SaryPressStyle())
+                        .accessibilityLabel(Text("الإعدادات"))
+                        .accessibilityIdentifier("sheet.settings")
+                    }
+                    .padding(.horizontal, theme.space(.l))
+                }
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
                         switch ui.selectedTab {
                         case .trip: TripTab(controller: controller, ui: ui)
                         case .group: GroupTab(controller: controller, ui: ui)
                         case .more: SettingsTab(controller: controller, ui: ui)
+                        case .map: MapTab(controller: controller)
                         }
                     }
                     .padding(.horizontal, theme.space(.l))
@@ -107,7 +135,8 @@ struct LiveSheet: View {
         case .actions:
             LiveActionSheet(groups: LiveActionCatalog.groups(controller.actionState),
                             action: controller.performAction, close: { controller.modal = nil })
-                .presentationDetents([.large])
+                /* Lovable: two thirds of the screen (SOS and the header stay in view), scrolls; pull up for all. */
+                .presentationDetents([.fraction(0.66), .large])
                 .presentationDragIndicator(.visible)
         case let .participant(id):
             if let s = controller.participantCard(id) {
@@ -279,6 +308,41 @@ private struct TripRouteActions: View {
                 }
             }
             .sarySurface(radius: SaryRadius.l)
+        }
+    }
+}
+
+// MARK: - «الخريطة»
+
+/// Lovable's «الخريطة» tab: the layers (exploration), high-res imagery, the realistic view, offline maps
+/// and the visual effects.
+private struct MapTab: View {
+    @ObservedObject var controller: LiveOutingController
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Group {
+            SarySection(title: "الطبقة") {
+                SaryNavRow(title: controller.mapLayer.label, detail: "قمر صناعي، طبوغرافي، عادي · في الاستكشاف",
+                           systemImage: "square.3.layers.3d", id: "map.layers") {
+                    controller.sheetDetent = .peek
+                    controller.enterExplore()
+                }
+                .padding(.horizontal, theme.space(.m))
+            }
+            HiResLayerSection()
+            SarySection(title: "الوضع الواقعي") {
+                SaryNavRow(title: "الوضع الواقعي", detail: "شوف المكان مجسّم من فوق", systemImage: "mountain.2", id: "map.realistic") {
+                    controller.sheetDetent = .peek
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { controller.realisticRequest += 1 }
+                }
+                .padding(.horizontal, theme.space(.m))
+                SaryDivider()
+                SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تطلع من التغطية", systemImage: "arrow.down.circle.fill",
+                           id: "map.offline") { controller.modal = .offlineMaps }
+                    .padding(.horizontal, theme.space(.m))
+            }
+            VisualEffectsSection()
         }
     }
 }
@@ -730,7 +794,6 @@ private struct SettingsTab: View {
     @Environment(\.sary) private var theme
     @State private var confirm: Kind?
     @State private var phone = ""
-    @State private var advanced = false
 
     enum Kind: Identifiable { case pause, end, leave; var id: Self { self } }
 
@@ -738,9 +801,9 @@ private struct SettingsTab: View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
         Group {
-            /* «تخفيف الزحمة» ١٤: the current trip first, then four sections and «متقدم». Every switch
-             * kept, each in one place. */
-            SarySection(title: "الطلعة الحالية") {
+            /* Lovable's «الإعدادات»: الطلعة، الخريطة، الصوت واللاسلكي، الخصوصية، متقدم. Every switch kept,
+             * each in one place. */
+            SarySection(title: "الطلعة") {
                 if ui.participantsTab.myPhoneMissing {
                     Button(action: controller.actions.participantsTab.addMyPhone) {
                         SaryBanner(text: "ما أضفت رقمك · أضفه عشان يتصل بك العيال", tone: .info, systemImage: SaryIcon.phone)
@@ -750,11 +813,11 @@ private struct SettingsTab: View {
                     SaryDivider()
                 }
                 if s.outingStatus != .ended {
-                    actionRow("رابط الدعوة", icon: "link", id: "settings-invite") { controller.selectedTab = .group }
+                    actionRow("رابط الدعوة", icon: "link", id: "settings-invite") { controller.selectedTab = .group; controller.sheetDetent = .half }
                     SaryDivider()
                 }
-                SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
-                              isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+                SaryNavRow(title: "تنبيه لما أحد يتأخر", detail: "تنبيهات القافلة: الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
+                           systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }
                     .padding(.horizontal, theme.space(.m))
                 SaryDivider()
                 if s.isLeader && s.outingStatus != .ended {
@@ -768,15 +831,7 @@ private struct SettingsTab: View {
                 actionRow("غادر الطلعة", icon: "rectangle.portrait.and.arrow.right", destructive: true, id: "settings-leave") { confirm = .leave }
             }
 
-            groupTitle("الصوت والقناة", number: 1)
-            SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على «اضغط وتكلم» وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
-                PTTLinkRow(line: s.pttLink)
-            }
-            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
-            MediaEntryCard(center: MediaCenters.of(controller))
-
-            groupTitle("القيادة والملاحة", number: 2)
-            SarySection(title: "القيادة") {
+            SarySection(title: "الخريطة") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     segmentTitle("وضع القيادة (خط وأزرار أكبر)")
                     SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
@@ -789,21 +844,11 @@ private struct SettingsTab: View {
                               systemImage: "location.north.line.fill",
                               isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
                 SaryDivider()
-                SaryToggleRow(title: "رجّعني للتوجيه تلقائيًا", subtitle: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس",
+                SaryToggleRow(title: "اتجاه الخريطة أثناء القيادة: رجّعني تلقائيًا", subtitle: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس",
                               systemImage: "location.north.line.fill",
                               isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
                                             set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
-            }
-            SpeedSettingsSection()
-            SarySection(title: "القافلة") {
-                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
-                           systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }
-                    .padding(.horizontal, theme.space(.m))
-            }
-
-            groupTitle("الخريطة ومساري", number: 3)
-            TrailSettingsSection(controller: controller, card: controller.trailCard)
-            SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
+                SaryDivider()
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {
                         SaryRowIcon(systemImage: "arrow.down.circle.fill")
@@ -811,15 +856,27 @@ private struct SettingsTab: View {
                         Spacer()
                         Image(systemName: "chevron.forward").font(.system(size: 13, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
                     }
+                    .padding(.horizontal, theme.space(.m))
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryRowPressStyle())
                 .accessibilityIdentifier("settings-offline")
             }
+            SpeedSettingsSection()
+            TrailSettingsSection(controller: controller, card: controller.trailCard)
 
-            groupTitle("الخصوصية والمشاركة", number: 4)
-            SarySection(title: "مشاركتي", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع».") {
+            SarySection(title: "الصوت واللاسلكي", footer: "اضغط مطولًا على «اضغط وتكلم» وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
+                SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
+                              isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+                    .padding(.horizontal, theme.space(.m))
+                SaryDivider()
+                PTTLinkRow(line: s.pttLink)
+            }
+            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
+            MediaEntryCard(center: MediaCenters.of(controller))
+
+            SarySection(title: "الخصوصية", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع».") {
                 SaryToggleRow(title: "شارك البطارية", subtitle: "نسبة الشحن تظهر لأعضاء الطلعة", systemImage: SaryIcon.battery(60),
                               isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) }), id: "settings-battery")
                 SaryDivider()
@@ -837,33 +894,19 @@ private struct SettingsTab: View {
             }
             .onAppear { phone = s.myPhone ?? "" }
 
-            Button { withAnimation(theme.animation(.smooth)) { advanced.toggle() } } label: {
-                HStack(spacing: theme.space(.m)) {
-                    SaryRowIcon(systemImage: "slider.horizontal.3")
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("متقدم").saryText(.body, weight: .bold).foregroundStyle(theme.palette.textPrimary)
-                        Text("شكل الشاشة، واقعية القيادة").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: advanced ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
-                }
-                .padding(.horizontal, theme.space(.m))
-                .frame(minHeight: theme.minTarget + 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(SaryRowPressStyle())
-            .sarySurface(radius: SaryRadius.l)
-            .accessibilityValue(Text(advanced ? "مفتوح" : "مقفل"))
-            .accessibilityIdentifier("settings-advanced")
-            if advanced {
-                SarySection(title: "شكل الشاشة", footer: "أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
+            SarySection(title: "متقدم", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    segmentTitle("شكل الشاشة")
                     SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
-                        .padding(theme.space(.s))
                 }
-                DrivingRealismSection()
+                .padding(theme.space(.s))
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("settings-advanced")
             }
+            DrivingRealismSection()
+            VisualEffectsSection()
         }
+        .environment(\.saryToggleTint, theme.palette.live)
         .confirmationDialog(title, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible, presenting: confirm) { k in
                 switch k {
                 case .pause: Button(s.outingStatus == .paused ? "استأنف" : "أوقف مؤقتًا", action: a.pauseOrResumeOuting)

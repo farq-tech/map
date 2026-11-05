@@ -194,8 +194,9 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(any(app, "settings-pause-sharing").exists, "no stop switch in «المزيد» either")
         shot("4-more-no-toggle", app)
 
-        /* «غادر الطلعة» asks first. */
-        app.buttons["tab.trip"].tap()
+        /* «غادر الطلعة» asks first (back from «الإعدادات» to «الرحلة»). */
+        app.buttons["settings.back"].tap()
+        if app.buttons["tab.trip"].waitForExistence(timeout: 3) { app.buttons["tab.trip"].tap() }
         XCTAssertTrue(app.buttons["live.leave"].waitForExistence(timeout: 5))
         app.buttons["live.leave"].tap()
         XCTAssertTrue(app.staticTexts["تغادر الطلعة؟"].waitForExistence(timeout: 5) || app.sheets.firstMatch.waitForExistence(timeout: 2), "confirmation first")
