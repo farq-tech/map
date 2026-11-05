@@ -18,6 +18,7 @@ const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
 const { createPttRelay } = require('./ptt');
 const { createPttChannels } = require('./ptt-channels');
+const { createVoiceNotes } = require('./voice-notes');
 const { getOutingsPool, migrate } = require('./db');
 const { createPushNotifier, pushConfigFromEnv } = require('./push');
 const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./apns');
@@ -71,7 +72,21 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     : null;
   service?.setPttChannels(pttChannels);
   const ptt = service ? createPttRelay({ hub, service, apns, channels: pttChannels, ...(now ? { now } : {}), options: pttOpts }) : null;
-  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, limits, routing });
+  /* «رسالة صوتية»: the walkie-talkie as stored voice notes per channel (lib/outings/voice-notes.js). */
+  const voiceNotes = service
+    ? createVoiceNotes({
+        q: (text, params) => pool.query(text, params).then((r) => r.rows),
+        hub,
+        requireMember: (...a) => service.requireMember(...a),
+        err: (code, status) => new OutingError(code, status),
+        pttChannels,
+        relay: ptt,
+        apns,
+        push: fanout,
+        ...(now ? { now } : {}),
+      })
+    : null;
+  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, voiceNotes, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;
@@ -88,17 +103,19 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     push,
     apns,
     ptt,
+    voiceNotes,
     router,
     ready,
     /** Live-socket lifetimes and close codes, plus the walkie-talkie relay's counters (numbers only). */
     socketStats() {
-      return socket ? { ...socket.stats(), ptt: ptt ? { ...ptt.stats } : null } : null;
+      return socket ? { ...socket.stats(), ptt: ptt ? { ...ptt.stats } : null, voice_notes: voiceNotes ? { ...voiceNotes.stats } : null } : null;
     },
     attach(server) {
       if (!service) return;
       socket = attachOutingsSocket(server, { service, hub, ptt });
       sweepTimer = setInterval(() => {
         service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message));
+        voiceNotes?.sweep().catch((e) => console.warn('[outings] voice notes sweep:', e.code || e.message));
       }, 10 * 60_000);
       sweepTimer.unref?.();
       /* Return timers: armed + past due → overdue, snapshot, pushes. Every minute. */

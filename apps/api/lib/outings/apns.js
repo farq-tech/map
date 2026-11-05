@@ -46,7 +46,8 @@ const APNS_ORIGINS = Object.freeze({
   production: 'https://api.push.apple.com',
   sandbox: 'https://api.sandbox.push.apple.com',
 });
-const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent']);
+/* 'voice_note': a walkie-talkie message for a phone the Push to Talk path could not wake. */
+const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent', 'voice_note']);
 const ACTIVE = new Set(['stuck_reply', 'chat_message', 'ptt_channel_invite']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;
@@ -169,22 +170,25 @@ function apnsRequestFor(payload = {}, outingId, { now = Date.now(), bundleId } =
  * dropped rather than delivered after the talker stopped. Payload keys beyond
  * `activeSpeaker` (Apple's example key) are ours, read by the app.
  */
-function pttRequestFor({ outingId, talkerId, name, burst, channel }, { bundleId } = {}) {
+function pttRequestFor({ outingId, talkerId, name, burst, channel, type = 'ptt_talker', extra = null, expiresInS = 0 }, { bundleId, now = Date.now() } = {}) {
   const body = JSON.stringify({
     aps: {},
     activeSpeaker: utf8Cut(String(name || 'عضو'), 120),
     v: 1,
-    type: 'ptt_talker',
+    type,
     outing_id: outingId,
     user_id: talkerId,
     burst: Number.isInteger(burst) ? burst : null,
     /* «ترددات»: which channel is on air ('1'…'5' or a private channel id). Older apps ignore it. */
     ...(channel ? { channel: String(channel) } : {}),
+    /* A voice note («رسالة صوتية»): which one to fetch and play (lib/outings/voice-notes.js). */
+    ...(extra && typeof extra === 'object' ? extra : {}),
   });
   const headers = {
     'apns-push-type': 'pushtotalk',
     'apns-priority': '10',
-    'apns-expiration': '0',
+    /* Live: 0 (a late push is useless). A voice note: as long as it may still play by itself. */
+    'apns-expiration': expiresInS > 0 ? String(Math.floor(now / 1000) + Math.round(expiresInS)) : '0',
   };
   if (bundleId) headers['apns-topic'] = `${bundleId}.voip-ptt`;
   return { headers, body };
@@ -197,7 +201,8 @@ function parsePttRegistration(raw) {
   if (!TOKEN_RE.test(token)) return { error: 'invalid_token' };
   const environment = typeof raw.environment === 'string' ? raw.environment.trim().toLowerCase() : '';
   if (!ENVIRONMENTS.has(environment)) return { error: 'invalid_environment' };
-  return { token, environment };
+  /* «رسالة صوتية»: this build plays the voice notes it is woken for. */
+  return { token, environment, voice_notes: raw.voice_notes === true };
 }
 
 /**
@@ -373,8 +378,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
            AND t.bundle_id = $3
            AND ($2::uuid IS NULL OR t.user_id <> $2::uuid)
            AND ($5::uuid IS NULL OR t.user_id = $5::uuid)
-           AND NOT (t.user_id = ANY($6::uuid[]))`,
-        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : []],
+           AND NOT (t.user_id = ANY($6::uuid[]))
+           AND ($7::uuid[] IS NULL OR t.user_id = ANY($7::uuid[]))`,
+        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : [], Array.isArray(payload.only_users) ? payload.only_users : null],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {
@@ -430,10 +436,10 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
     const reg = parsePttRegistration(raw);
     if (reg.error) return { ok: false, error: reg.error };
     await q(
-      `INSERT INTO sary.ptt_tokens (user_id, outing_id, token, environment, bundle_id) VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO sary.ptt_tokens (user_id, outing_id, token, environment, bundle_id, voice_notes) VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, outing_id = EXCLUDED.outing_id,
-         environment = EXCLUDED.environment, bundle_id = EXCLUDED.bundle_id, updated_at = now()`,
-      [user.id, outingId, reg.token, reg.environment, config.bundleId],
+         environment = EXCLUDED.environment, bundle_id = EXCLUDED.bundle_id, voice_notes = EXCLUDED.voice_notes, updated_at = now()`,
+      [user.id, outingId, reg.token, reg.environment, config.bundleId, reg.voice_notes === true],
     );
     /* A few devices per person per outing; the oldest token goes. */
     await q(
@@ -462,8 +468,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
    */
   /** `include(userId)`: may this member be woken for this channel at all (their radio is on it,
    * and a private channel lists them)? Default: everyone. */
-  async function notifyPtt(outingId, talkerId, { name, burst, channel = null, skipUsers = new Set(), include = null } = {}) {
-    const result = { sent: 0, removed: 0, failed: 0, skipped: 0 };
+  async function notifyPtt(outingId, talkerId, { name, burst, channel = null, skipUsers = new Set(), include = null, type, extra = null, expiresInS = 0 } = {}) {
+    /* `users`: who a push actually went to (voice notes fall back to an alert for the rest). */
+    const result = { sent: 0, removed: 0, failed: 0, skipped: 0, users: new Set() };
     if (!enabled || !outingId) return result;
     try {
       const rows = await q(
@@ -472,8 +479,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
          JOIN sary.outing_members m ON m.user_id = t.user_id AND m.outing_id = t.outing_id
          JOIN sary.outings o ON o.id = t.outing_id
          WHERE t.outing_id = $1 AND m.status = 'active' AND o.status <> 'ended'
-           AND t.bundle_id = $3 AND t.user_id <> $2::uuid`,
-        [outingId, talkerId, config.bundleId],
+           AND t.bundle_id = $3 AND t.user_id <> $2::uuid
+           AND (NOT $4::boolean OR t.voice_notes)`,
+        [outingId, talkerId, config.bundleId, type === 'voice_note'],
       );
       const targets = rows.filter((r) => {
         if (skipUsers.has(r.user_id) || (include && !include(r.user_id))) {
@@ -483,13 +491,16 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
         return true;
       });
       if (!targets.length) return result;
-      const req = pttRequestFor({ outingId, talkerId, name, burst, channel }, { bundleId: config.bundleId });
+      const req = pttRequestFor({ outingId, talkerId, name, burst, channel, type, extra, expiresInS }, { bundleId: config.bundleId, now: now() });
       const dead = [];
       await Promise.all(
         targets.map(async (t) => {
           try {
             const r = await out.send({ token: t.token, environment: t.environment }, req);
-            if (r.status === 200) result.sent += 1;
+            if (r.status === 200) {
+              result.sent += 1;
+              result.users.add(t.user_id);
+            }
             else if (isGone(r)) {
               dead.push(t.id);
               result.removed += 1;

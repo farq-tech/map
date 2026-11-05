@@ -464,6 +464,10 @@ final class OutingWalkieTalkie: ObservableObject {
         c.playbackReady = { [weak self] in
             guard let self else { return }
             self.audioReady = true
+            if let r = self.noteSpeakerReady {
+                self.noteSpeakerReady = nil
+                r()
+            }
             if let b = self.pendingPlayback {
                 self.pendingPlayback = nil
                 self.startPlayback(burst: b)
@@ -502,6 +506,38 @@ final class OutingWalkieTalkie: ObservableObject {
         c.leftChannel = { [weak self] in self?.forgetToken() }
         return c
     }
+
+    // MARK: «رسالة صوتية» — the system speaker for a voice note (phone locked)
+
+    private var noteSpeakerReady: (() -> Void)?
+
+    /// The PushToTalk system channel is joined (a voice note can play with the screen locked).
+    var hasSystemChannel: Bool { route.isSystemChannel }
+
+    /// Ask the system to activate its walkie-talkie session for a voice note from `name` (the Lock
+    /// Screen shows them speaking). `ready` runs once it is active — at once if it already is.
+    /// False when there is no system channel to borrow.
+    @discardableResult
+    func borrowSystemSpeaker(name: String, ready: @escaping () -> Void) -> Bool {
+        guard route.isSystemChannel, !muted else { return false }
+        route.setRemote(name)
+        if audioReady {
+            ready()
+        } else {
+            noteSpeakerReady = ready
+        }
+        return true
+    }
+
+    /// The voice note is over: the system may close its session (unless a live talker took it meanwhile).
+    func returnSystemSpeaker() {
+        noteSpeakerReady = nil
+        guard route.isSystemChannel else { return }
+        if case .idle = floor.state { route.setRemote(nil) }
+    }
+
+    /// A voice note may play now: nobody is on air live and we are not talking.
+    var isQuiet: Bool { floor.state == .idle }
 
     private func joinSystemChannelIfNeeded() {
         guard !muted, !route.isSystemChannel else { return }

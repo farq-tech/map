@@ -11,11 +11,13 @@ struct LiveSettingsPage: View {
     @State private var path: [Page] = []
     @State private var confirmClear = false
     @ObservedObject private var convoy = ConvoyAlertPrefs.shared
-    @AppStorage(VoiceAutoplay.key) private var voiceAutoplay = false
+    @AppStorage(VoiceAutoplay.key) private var voiceAutoplay = VoiceAutoplay.default
+    /// «طريقة اللاسلكي»: «رسالة صوتية» (default) or «مباشر (تجريبي)».
+    @AppStorage(PTTTalkMode.key) private var talkMode = PTTTalkMode.default
     @AppStorage(OutingSession.modeKey) private var shareMode: String = ShareMode.balanced.rawValue
 
     enum Page: Hashable {
-        case tripType, sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, volume, media, whoSees, diagnostics
+        case tripType, sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, talkMode, volume, media, whoSees, diagnostics
     }
 
     var body: some View {
@@ -35,6 +37,7 @@ struct LiveSettingsPage: View {
                 }
                 group("الصوت واللاسلكي") {
                     row("التردد الافتراضي", id: "settings.defaultChannel") { path.append(.defaultChannel) }
+                    row("طريقة اللاسلكي", id: "settings.talkMode") { path.append(.talkMode) }
                     toggle("تشغيل تلقائي للرسائل الصوتية", isOn: $voiceAutoplay, id: "settings.voiceAutoplay")
                     row("مستوى الصوت", id: "settings.volume") { path.append(.volume) }
                     row("الإذاعة ويوتيوب", id: "settings.media", last: true) { path.append(.media) }
@@ -133,6 +136,15 @@ struct LiveSettingsPage: View {
                 ForEach(Array(PTTChannels.publicIds.enumerated()), id: \.element) { i, c in
                     choice(PTTChannels.publicName(c), on: PTTChannels.preferredDefault == c, id: "settings.channel.\(c)", last: i == PTTChannels.publicIds.count - 1) {
                         PTTChannels.preferredDefault = c
+                        controller.objectWillChange.send()
+                    }
+                }
+            }
+        case .talkMode:
+            sub("طريقة اللاسلكي", footer: "«رسالة صوتية»: اضغط وسجّل (لين دقيقة)، ثم «أرسل». توصل لكل اللي على ترددك وتشتغل عندهم لحالها، ولو انقطع النت شوي توصل أول ما يرجع. «مباشر (تجريبي)»: اضغط مطولًا وتكلم على الهواء، ويحتاج اتصال قوي عند الكل.") {
+                ForEach(Array(PTTTalkMode.allCases.enumerated()), id: \.element) { i, m in
+                    choice(m.label, on: talkMode == m, id: "settings.talkMode.\(m.rawValue)", last: i == PTTTalkMode.allCases.count - 1) {
+                        talkMode = m
                         controller.objectWillChange.send()
                     }
                 }
@@ -371,9 +383,13 @@ enum DistanceUnits {
 }
 
 /// «تشغيل تلقائي للرسائل الصوتية»: a friend's voice message plays as it arrives.
+/// «تشغيل تلقائي للرسائل الصوتية»: on by default. Off: a new «رسالة صوتية» waits on a card with a
+/// play button instead of playing by itself (older builds' voice_clip banners follow it too).
 enum VoiceAutoplay {
     static let key = "sary.voice.autoplay.v1"
-    static var on: Bool { UserDefaults.standard.bool(forKey: key) }
+    static let `default` = true
+    static var on: Bool { isOn() }
+    static func isOn(_ d: UserDefaults = .standard) -> Bool { d.object(forKey: key) as? Bool ?? `default` }
 }
 
 /// «مسح سجل الطلعات»: the trails and speed logs this phone kept for past outings (the current one stays).

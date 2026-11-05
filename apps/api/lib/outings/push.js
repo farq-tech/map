@@ -157,8 +157,9 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
          WHERE m.outing_id = $1 AND m.status = 'active' AND ($3::boolean OR o.status <> 'ended')
            AND ($2::uuid IS NULL OR s.user_id <> $2::uuid)
            AND ($4::uuid IS NULL OR s.user_id = $4::uuid)
-           AND NOT (s.user_id = ANY($5::uuid[]))`,
-        [outingId, exceptUserId || null, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : []],
+           AND NOT (s.user_id = ANY($5::uuid[]))
+           AND ($6::uuid[] IS NULL OR s.user_id = ANY($6::uuid[]))`,
+        [outingId, exceptUserId || null, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : [], Array.isArray(payload.only_users) ? payload.only_users : null],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {

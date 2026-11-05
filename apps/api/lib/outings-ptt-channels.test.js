@@ -325,9 +325,9 @@ test('private channels end to end: leader-only routes, invited-only join/listen/
   await api('POST', `/${O}/status`, A.token, { action: 'end' });
   assert.equal((await pool.query(`SELECT count(*)::int AS n FROM sary.ptt_channels WHERE outing_id = $1`, [O])).rows[0].n, 0);
   assert.equal((await pool.query(`SELECT count(*)::int AS n FROM sary.ptt_channel_members`)).rows[0].n, 0);
-  /* No audio anywhere. */
+  /* No live audio anywhere (voice notes, migration 015, are the one stored kind). */
   const bytea = (await pool.query(`SELECT table_name FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea'`)).rows;
-  assert.ok(!bytea.some((c) => /ptt/.test(c.table_name)));
+  assert.ok(!bytea.some((c) => /ptt/.test(c.table_name) && c.table_name !== 'ptt_voice_notes'));
   for (const l of [la, lb, lc, ld]) l.ws.close();
 });
 

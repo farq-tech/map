@@ -159,6 +159,12 @@ final class AppModel: ObservableObject {
                 if self.session?.id != outingId { self.open(outingId) }
                 self.session?.walkie.wokenByPush()
             }
+            /* «رسالة صوتية»: the system shows the speaker and opens its session; we fetch and play the note. */
+            PTTSystemRoute.shared.onVoiceNotePush = { p in
+                guard let self else { return }
+                if self.session?.id != p.outingId { self.open(p.outingId) }
+                self.session?.voiceNotes.pushed(p)
+            }
         }
         #endif
         activity.endOrphans()

@@ -125,6 +125,8 @@ struct SettingsView: View {
     @AppStorage(PTTRadioSounds.enabledKey) private var radioSounds = true
     /// «صوت اللاسلكي»: how loud a friend's voice plays («عالي» by default).
     @AppStorage(PTTVoiceLevel.key) private var voiceLevel = PTTVoiceLevel.default
+    /// «طريقة اللاسلكي»: «رسالة صوتية» (default) or «مباشر (تجريبي)».
+    @AppStorage(PTTTalkMode.key) private var talkMode = PTTTalkMode.default
 
     var body: some View {
         /* Four clear sections (docs/IA-REDESIGN.md §2.7). */
@@ -141,6 +143,20 @@ struct SettingsView: View {
                            id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
             SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت العيال بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    HStack(spacing: theme.space(.m)) {
+                        SaryRowIcon(systemImage: "waveform")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("طريقة اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
+                            Text(talkMode == .notes ? "اضغط وسجّل، ثم «أرسل»: توصل لكل اللي على ترددك ولو انقطع النت شوي"
+                                                    : "اضغط مطولًا وتكلم مباشرة — يحتاج اتصال قوي عند الكل")
+                                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                        }
+                    }
+                    SarySegmented(options: PTTTalkMode.allCases, selection: $talkMode, label: { $0.label }, id: "settings.talkMode")
+                }
+                .padding(.vertical, theme.space(.xs))
+                SaryDivider()
                 SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
                               isOn: $radioSounds, id: "settings.radioSounds")
                 SaryDivider()

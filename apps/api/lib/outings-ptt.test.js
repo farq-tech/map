@@ -270,7 +270,8 @@ test('pushtotalk request: headers and payload as Apple documents them', () => {
 });
 
 test('ptt token registration: hex token + environment', () => {
-  assert.deepEqual(parsePttRegistration({ token: 'AB'.repeat(32), environment: 'sandbox' }), { token: 'ab'.repeat(32), environment: 'sandbox' });
+  assert.deepEqual(parsePttRegistration({ token: 'AB'.repeat(32), environment: 'sandbox' }), { token: 'ab'.repeat(32), environment: 'sandbox', voice_notes: false });
+  assert.equal(parsePttRegistration({ token: 'ab'.repeat(32), environment: 'sandbox', voice_notes: true }).voice_notes, true);
   assert.equal(parsePttRegistration({ token: 'xyz', environment: 'sandbox' }).error, 'invalid_token');
   assert.equal(parsePttRegistration({ token: 'ab'.repeat(32), environment: 'dev' }).error, 'invalid_environment');
   assert.equal(parsePttRegistration(null).error, 'invalid_token');
@@ -318,7 +319,7 @@ test('notifyPtt over HTTP/2: pushtotalk headers on the wire, skips listeners, de
   };
   const n = createApnsNotifier({ pool, config, sender, info: () => {}, log: () => {} });
   const r = await n.notifyPtt(OUTING, '00000000-0000-4000-8000-00000000000a', { name: 'فهد', burst: 3, skipUsers: new Set(['D']) });
-  assert.deepEqual(r, { sent: 1, removed: 1, failed: 0, skipped: 1 });
+  assert.deepEqual({ ...r, users: [...r.users] }, { sent: 1, removed: 1, failed: 0, skipped: 1, users: ['B'] });
   assert.equal(apns.seen.length, 2);
   for (const s of apns.seen) {
     assert.equal(s.headers['apns-push-type'], 'pushtotalk');
@@ -521,9 +522,9 @@ test('ptt end to end: token routes, live relay over the outing socket, pushtotal
   ld.ws.close();
   assert.equal((await la.next((m) => m.type === 'ptt_idle' && m.user_id === D.user.id)).reason, 'left');
 
-  /* No audio anywhere in the database. */
+  /* The live relay keeps no audio in the database (only «رسالة صوتية» notes, migration 015, are stored). */
   const cols = (await pool.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea'`)).rows;
-  assert.ok(!cols.some((c) => /ptt/.test(c.table_name)), 'the PTT table holds tokens only');
+  assert.ok(!cols.some((c) => /ptt/.test(c.table_name) && c.table_name !== 'ptt_voice_notes'), 'the PTT table holds tokens only');
 
   /* Ending the outing drops every PTT token. */
   await api('POST', `/${O}/status`, A.token, { action: 'end' });

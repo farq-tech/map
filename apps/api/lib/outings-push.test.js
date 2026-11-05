@@ -117,7 +117,7 @@ test('notifyMembers: sends to everyone but the sender, skips viewers, deletes 40
   const r = await n.notifyMembers('o-1', 'u-sender', { type: 'note', title: 'سعد · الثمامة', body: 'بوقف عند المحطة', ttl: 900 });
   assert.deepEqual(r, { sent: 1, removed: 2, failed: 1, skipped: 1 });
   assert.equal(sent.length, 4, 'the viewer is not pushed');
-  assert.deepEqual(pool.calls[0].params, ['o-1', 'u-sender', false, null, []], 'sender excluded in SQL, scoped to the outing; not an ended outing, not narrowed to one person, nobody opted out');
+  assert.deepEqual(pool.calls[0].params, ['o-1', 'u-sender', false, null, [], null], 'sender excluded in SQL, scoped to the outing; not an ended outing, not narrowed to one person, nobody opted out, not narrowed to a set');
   assert.match(pool.calls[0].text, /m\.status = 'active' AND \(\$3::boolean OR o\.status <> 'ended'\)/, 'active members of an open outing only (unless the payload says include_ended)');
   const del = pool.calls.find((c) => c.text.startsWith('DELETE'));
   assert.deepEqual(del.params[0].sort(), ['id-404', 'id-gone']);

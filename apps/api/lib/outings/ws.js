@@ -5,7 +5,8 @@
  *
  * Browsers cannot set headers on a WebSocket, and a token in the URL ends up
  * in proxy logs, so the first frame authenticates:
- *   → { type: 'auth', token, outing_id }
+ *   → { type: 'auth', token, outing_id, caps? }   caps: ['voice_notes'] → voice_note events instead of
+ *                                                  the old voice_clip ones (lib/outings/voice-notes.js)
  *   ← { type: 'ready', snapshot }        (or close 4401 / 4404)
  * then
  *   → { type: 'position', id, fix }      ← { type: 'ack', id, ok, reason? }
@@ -13,7 +14,7 @@
  *   → { type: 'heartbeat', gps, battery? } (no coordinates; "I am still here"; battery only where the phone can tell)
  *   → { type: 'ping' }                   ← { type: 'pong', server_now }
  *   → { type: 'note', id, text }         ← { type: 'note_ack', id, ok, note }  (everyone: member_note)
- *   ← position · presence · member_* · sos · rally · voice_clip · outing_status · owner_changed · closed
+ *   ← position · presence · member_* · sos · rally · voice_clip · voice_note · outing_status · owner_changed · closed
  *   ← return_timer · member_stuck · stuck_reply · stuck_clear · waypoint_added · waypoint_removed
  *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
  *   ← member_silent · member_resumed · member_going_offline   (see lib/outings/silence.js)
@@ -177,6 +178,8 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
            * (it would count as "online" and as one of this person's sockets forever). */
           if (ws.readyState !== OPEN) return;
           conn.userId = user.id;
+          /* What this client understands beyond the basics: 'voice_notes' (lib/outings/voice-notes.js). */
+          conn.caps = new Set(Array.isArray(msg.caps) ? msg.caps.filter((c) => typeof c === 'string' && c.length <= 32).slice(0, 8) : []);
           /* In this trip they carry the inviter's name for them, if any (PTT «يتكلم …»). */
           conn.user = m.invited_name ? { ...user, display_name: m.invited_name } : user;
           hub.join(msg.outing_id, conn);

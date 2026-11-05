@@ -114,6 +114,11 @@ struct PTTChannelSheet: View {
                              : "يفتحها أمير الرحلة لمن يدعوهم فقط.")
                     }
                 }
+
+                /* «رسالة صوتية»: this channel's recent notes, ▶︎ each (after the channels, so the knob and rows stay where they were). */
+                if let vn = VoiceNoteCenters.of(walkie.outingId) {
+                    VoiceNoteSection(center: vn)
+                }
             }
             .navigationTitle("الترددات")
             .navigationBarTitleDisplayMode(.inline)

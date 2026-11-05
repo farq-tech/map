@@ -191,7 +191,12 @@ final class TripAutoNavUITests: XCTestCase {
         let app = launch(Self.on + ["-SaryNavOfflineFor", "12", "-SaryNavRetry", "4"])
         let panel = el(app, "nav.offroad")
         XCTAssertTrue(panel.waitForExistence(timeout: 15), "bearing guidance at once")
-        XCTAssertTrue(panel.label.contains("بلا إنترنت · اتجاه مباشر"), panel.label)
+        /* Lovable (#95): the panel is a container now (distance, title and note read one by one),
+         * so the offline title is checked on its own element — the same words, the same moment. */
+        let title = el(app, "nav.offroad.title")
+        XCTAssertTrue(title.exists, "the panel's title")
+        XCTAssertTrue(title.label.contains("بلا إنترنت · اتجاه مباشر"), title.label)
+        XCTAssertTrue(el(app, "nav.offroad.distance").exists, "how far, with the arrow")
         XCTAssertFalse(el(app, "nav.banner").exists, "no made-up route")
         sleep(1)
         shot(app, "autonav-7-offline-arrow")

@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql', '014_sary_group_audio.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql', '014_sary_group_audio.sql', '015_sary_ptt_voice_notes.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -735,8 +735,8 @@ test('voice clips (memory only) and opt-in trip summaries (totals only)', { skip
   assert.equal((await upload(a.token, o.outing_id, mp4(), { ms: '60000' })).body.error, 'invalid_clip_duration', 'max 15 s');
   assert.equal((await upload(a.token, o.outing_id, mp4(500 * 1024))).status, 413, 'size cap');
   assert.equal((await upload(a.token, o.outing_id, mp4())).status, 429, 'rate limited per person');
-  const stored = await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea' AND column_name NOT IN ('token_hash', 'recovery_hash')`);
-  assert.equal(stored.rows[0].n, 0, 'no table can hold audio');
+  const stored = await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea' AND column_name NOT IN ('token_hash', 'recovery_hash') AND table_name <> 'ptt_voice_notes'`);
+  assert.equal(stored.rows[0].n, 0, 'no table but «رسالة صوتية» (migration 015, 24 h) can hold audio: the old clips stay in memory');
 
   /* --- summaries: only after the end, only totals, only for members --- */
   const summary = { distance_m: 18_400, duration_s: 2, moving_s: 1 };

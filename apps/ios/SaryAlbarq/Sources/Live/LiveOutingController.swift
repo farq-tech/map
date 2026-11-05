@@ -323,6 +323,7 @@ final class LiveOutingController: ObservableObject {
         features.toast = { [weak self] t in self?.toast(t) }
         /* «فهد يتكلم الآن — انتظر دورك» and friends, as the usual toast. */
         session.walkie.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
+        session.voiceNotes.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
         features.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
@@ -1179,6 +1180,8 @@ final class LiveOutingController: ObservableObject {
     var pttUI: PTTStateUI {
         let w = session.walkie
         if w.muted { return .muted }
+        /* «رسالة صوتية» (the default): recording / a note playing; idle even with the socket down (the outbox sends later). */
+        if PTTTalkMode.current() == .notes, case .idle = w.floor.state { return session.voiceNotes.buttonState() ?? .idle }
         switch w.floor.state {
         case .idle:
             return w.mode == .unavailable && session.view?.status != .ended ? .unavailable : .idle
@@ -1225,6 +1228,8 @@ final class LiveOutingController: ObservableObject {
 
     private func pttBegan() {
         guard session.view?.status != .ended else { return }
+        /* «رسالة صوتية»: a tap records, the next tap (or «أرسل») sends. «مباشر (تجريبي)» below. */
+        if PTTTalkMode.current() == .notes { return session.voiceNotes.talkTapped() }
         if MicPermission.granted || PTTAudioEngine.testToneRequested {
             session.walkie.pressBegan()
             return
@@ -1240,6 +1245,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     private func pttEnded() {
+        if PTTTalkMode.current() == .notes, session.walkie.floor.state == .idle { return }
         session.walkie.pressEnded()
     }
 

@@ -252,6 +252,12 @@ struct LiveOutingScreen: View {
                             .chromeFrame("convoy")
                             .transition(.opacity)
                     }
+                    /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock. */
+                    VoiceNoteDock(center: controller.session.voiceNotes, openList: { controller.modal = .pttChannels })
+                        .chromeFrame("voice-note")
+                        .padding(.horizontal, theme.space(.m))
+                        .opacity(controller.sheetDetent == .full ? 0 : 1)
+                        .allowsHitTesting(controller.sheetDetent != .full)
                     HStack(alignment: .center, spacing: theme.space(.s)) {
                         if driving && controller.speed.everRead {
                             LovableSpeedBubble(ui: controller.speedometerUI)
