@@ -18,11 +18,11 @@ struct LiveSheet: View {
                 NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
             } else {
                 /* One line: the people. The trip's numbers are in the header above. */
-                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
+                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
             }
             if ui.sheetDetent != .peek {
-                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
+                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
                     .padding(.horizontal, theme.space(.l))
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
@@ -43,6 +43,7 @@ struct LiveSheet: View {
         .background(SafetyPrompts(safety: controller.safety))
         .modifier(FeatureModals(controller: controller, features: controller.features))
         .background(MediaSheetHost(center: MediaCenters.of(controller)))
+        .background(GroupAudioSheetHost(center: GroupAudioCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -71,11 +72,19 @@ struct LiveSheet: View {
     @ViewBuilder
     private func modal(_ m: LiveModal) -> some View {
         switch m {
+        case let .chat(w):
+            ChatHomeView(chat: controller.chat, context: controller.chatContext, close: { controller.modal = nil }, path: w.map { [$0] } ?? [])
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         case .actions:
             LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
                                                                   following: controller.planModel?.following == true,
                                                                   hasRoute: controller.planModel?.plan.hasRoute ?? false,
-                                                                  stuck: controller.safety.myStuck != nil)),
+                                                                  stuck: controller.safety.myStuck != nil,
+                                                                  ended: controller.tripEnded,
+                                                                  guideAllTarget: controller.canGuideAll && controller.session.view?.status == .active
+                                                                      ? controller.autoNavNextTarget?.name : nil,
+                                                                  chat: controller.chat.isAvailable)),
                             action: controller.performAction, close: { controller.modal = nil })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -148,8 +157,19 @@ struct LiveSheet: View {
         case .navOptions:
             NavOptionsSheet(nav: controller.nav, start: controller.startNav, cancel: { controller.modal = nil },
                             openInAppleMaps: controller.openInAppleMaps)
+        case .navStartChoice:
+            NavStartChoiceSheet(target: controller.autoNavNextTarget?.name ?? controller.tripDestination?.name ?? "الوجهة",
+                                forAll: controller.startGuidanceForAll, onlyMe: controller.startGuidanceForMe,
+                                later: { controller.modal = nil })
         case .navSteps:
             NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
+        case .pttChannels:
+            PTTChannelSheet(walkie: controller.session.walkie,
+                            members: (controller.session.displayView?.orderedMembers ?? []).map { PTTChannelSheet.Person(id: $0.user_id, name: $0.display_name) },
+                            me: controller.session.myUserId,
+                            close: { controller.modal = nil })
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         case .layers:
             ExploreLayersSheet(controller: controller)
                 .presentationDetents([.medium, .large])
@@ -219,6 +239,8 @@ private struct GroupTab: View {
         let actions = controller.actions
         let v = controller.session.view
         Group {
+            /* «المحادثات»: first in the Group tab (≤ 2 taps from anywhere: «المجموعة» → here, or «+» → المحادثات). */
+            ChatEntryRow(chat: controller.chat) { controller.openChat() }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
@@ -673,7 +695,10 @@ private struct SettingsTab: View {
             SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على الميكروفون وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
                 SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
                               isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+                SaryDivider()
+                PTTLinkRow(line: s.pttLink)
             }
+            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
             MediaEntryCard(center: MediaCenters.of(controller))
             SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
@@ -685,6 +710,10 @@ private struct SettingsTab: View {
                     SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
                 }
                 .padding(theme.space(.s))
+                SaryDivider()
+                SaryToggleRow(title: "ابدأ التوجيه تلقائيًا مع الرحلة", subtitle: "إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة · على جوالك فقط",
+                              systemImage: "location.north.line.fill",
+                              isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
             }
             SpeedSettingsSection()
             DrivingRealismSection()
@@ -922,4 +951,42 @@ struct ShareSheet: UIViewControllerRepresentable {
     var items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - «قناة الطلعة» diagnostics
+
+/// The live link in one line, and «سجل القناة» to share with whoever is fixing it.
+private struct PTTLinkRow: View {
+    var line: String
+    @Environment(\.sary) private var theme
+    @State private var file: URL?
+
+    var body: some View {
+        HStack(spacing: theme.space(.m)) {
+            SaryRowIcon(systemImage: "antenna.radiowaves.left.and.right")
+            Text(line)
+                .saryText(.footnote)
+                .foregroundStyle(theme.palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("settings-ptt-link")
+            Button {
+                file = PTTDiagnosticsLog.shared.exportFile()
+            } label: {
+                Label("سجل القناة", systemImage: "square.and.arrow.up")
+                    .saryText(.footnote, weight: .medium)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("settings-ptt-log")
+        }
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .sheet(item: Binding(get: { file.map(ShareFile.init) }, set: { file = $0?.url })) { f in
+            ShareSheet(items: [f.url])
+        }
+    }
+
+    struct ShareFile: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
 }

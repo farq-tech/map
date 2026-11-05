@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import os
+import UIKit
 
 /// «قناة الطلعة» for one outing: hold to talk, everyone in the outing hears you
 /// live, one person at a time — like a radio.
@@ -33,11 +34,37 @@ final class OutingWalkieTalkie: ObservableObject {
     /// Ticks once a second while talking (the button's clock).
     @Published private(set) var nowMs = Date().timeIntervalSince1970 * 1000
 
+    // «ترددات»: which channel we are on, and what the server says about all of them.
+    /// "1"…"5" or a private channel's id. Saved per outing.
+    @Published private(set) var channelId: String
+    @Published private(set) var channels: [PTTChannelInfo] = PTTChannels.publicList
+    /// «+ تردد خاص»: the server says I may (the trip's leader).
+    @Published private(set) var canCreatePrivate = false
+    /// The server knows «ترددات» (it sent a channel list or a channel-tagged signal). Until then —
+    /// a production server before the channels deploy — everyone is on one channel, the chip is
+    /// hidden and nothing about channels is sent that could change what we hear.
+    @Published private(set) var channelsSupported = false
+    /// An invitation not looked at yet (a dot on the chip until the sheet opens).
+    @Published private(set) var pendingInvite: PTTChannelInfo?
+    /// REST for private channels (nil: the demo — everything stays on this phone).
+    var channelBackend: PTTChannelBackend?
+    /// The demo: may I play the leader (no server to say so).
+    var demoLeader: () -> Bool = { false }
+
     let outingId: String
     let me: String
     private let defaults: UserDefaults
     private let audio: PTTAudioEngine
     private var route: PTTRoute
+    /// Audio session owner when the system channel is not (yet) joined, or refused us: a
+    /// `PTTSystemRoute` that is not joined does nothing, and the mic then recorded silence
+    /// (no session category) and a friend's voice followed the silent switch.
+    private let inApp = PTTInAppRoute()
+    private var forceInAppAudio = false
+    private var audioRoute: PTTRoute { route.isSystemChannel && !forceInAppAudio ? route : inApp }
+    /// The system's talk button started this transmission (Lock Screen, Dynamic Island, headset).
+    private var systemTransmit = false
+    private let diag: (String, String) -> Void
     private var channel: LiveChannel?
     private weak var mesh: NearbyMesh?
     private let tokenBackend: PTTTokenBackend?
@@ -57,10 +84,17 @@ final class OutingWalkieTalkie: ObservableObject {
     var outingName: () -> String = { "" }
 
     static let mutedKeyPrefix = "sary.ptt.muted."
+    static let channelKeyPrefix = "sary.ptt.channel."
 
-    /// Account deletion / `-resetState`: every outing's «كتم» choice.
+    /// Account deletion / `-resetState`: every outing's «كتم» choice and channel.
     static func forgetAll(defaults: UserDefaults = .standard) {
-        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(mutedKeyPrefix) { defaults.removeObject(forKey: k) }
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(mutedKeyPrefix) || k.hasPrefix(channelKeyPrefix) { defaults.removeObject(forKey: k) }
+    }
+
+    /// The saved channel for this outing, if it still looks like one ("1"…"5" or a uuid).
+    static func savedChannel(_ outingId: String, defaults: UserDefaults) -> String {
+        guard let s = defaults.string(forKey: channelKeyPrefix + outingId) else { return PTTChannels.defaultId }
+        return PTTChannels.isPublic(s) || UUID(uuidString: s) != nil ? s : PTTChannels.defaultId
     }
 
     #if DEBUG
@@ -73,7 +107,9 @@ final class OutingWalkieTalkie: ObservableObject {
     }
     #endif
 
-    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard) {
+    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard,
+         diag: @escaping (String, String) -> Void = { PTTDiagnosticsLog.shared.add($0, $1) }) {
+        self.diag = diag
         self.outingId = outingId
         self.me = me
         self.tokenBackend = tokenBackend
@@ -83,7 +119,9 @@ final class OutingWalkieTalkie: ObservableObject {
         var f = PTTFloor(me: me)
         _ = f.setMuted(defaults.bool(forKey: Self.mutedKeyPrefix + outingId))
         floor = f
+        channelId = Self.savedChannel(outingId, defaults: defaults)
         self.route.callbacks = callbacks()
+        inApp.callbacks = callbacks()
         audio.onFrame = { [weak self] frame in
             let bytes = frame.encoded()
             DispatchQueue.main.async { self?.sendFrame(bytes) }
@@ -106,8 +144,23 @@ final class OutingWalkieTalkie: ObservableObject {
         self.channel = channel
         self.mesh = mesh
         mesh?.onVoice = { [weak self] m in self?.nearbyVoice(m) }
+        demo = channel == nil && channelBackend == nil
+        if demo { channelsSupported = false }
+        channel?.setPTTChannel(channelId)
         channel?.setPTTJoined(!muted)
+        if demo { refreshDemoChannels() }
         refreshMode()
+        #if canImport(PushToTalk) && !targetEnvironment(simulator)
+        PTTSystemRoute.shared.onRemoteFailed = { [weak self] in
+            guard let self, let b = self.pendingPlayback, case let .listening(t) = self.floor.state, t.burst == b,
+                  UIApplication.shared.applicationState == .active else { return }
+            self.diag("audio", "system refused the speaker: in-app speaker")
+            self.forceInAppAudio = true
+            self.pendingPlayback = nil
+            self.inApp.setRemote(self.displayName(t))
+            self.startPlayback(burst: b)
+        }
+        #endif
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -151,17 +204,32 @@ final class OutingWalkieTalkie: ObservableObject {
     func pressBegan() {
         refreshMode()
         joinSystemChannelIfNeeded()
-        let fx = floor.pressDown(nowMs: Self.now(), online: mode != .unavailable)
-        apply(fx)
+        systemTransmit = false
+        let fx = request(source: "button")
         /* The mic opens while the server decides (pre-roll), so the first word is not cut. */
         if fx.contains(where: { if case .sendStart = $0 { return true }; return false }) {
-            route.beginTransmit()
+            audioRoute.beginTransmit()
         }
     }
 
     func pressEnded() {
+        diag("floor", "release (button)")
         apply(floor.pressUp())
-        route.endTransmit()
+        audioRoute.endTransmit()
+    }
+
+    /// A press, from our button or the system's. With the socket down it still asks: the request
+    /// waits for the reconnect (LiveChannel queues it) instead of an instant «لا اتصال».
+    @discardableResult
+    private func request(source: String) -> [PTTFloor.Effect] {
+        let live = channel?.isLive == true
+        let canReconnect = !live && channel.map { !$0.isStopped } == true && mode != .nearby
+        if canReconnect { channel?.ensureLive(reason: "press") }
+        let fx = floor.pressDown(nowMs: Self.now(), online: mode != .unavailable || canReconnect,
+                                 waitMs: canReconnect ? PTTFloor.reconnectRequestTimeoutMs : PTTFloor.requestTimeoutMs)
+        diag("floor", "press (\(source)) link=\(live ? "live" : canReconnect ? "reconnecting" : String(describing: mode)) → \(fx.map(Self.short).joined(separator: ","))")
+        apply(fx)
+        return fx
     }
 
     /// «اكتم القناة»: nothing in, nothing out, no Lock Screen wake-ups.
@@ -181,19 +249,63 @@ final class OutingWalkieTalkie: ObservableObject {
 
     // MARK: inbound
 
+    /// A ptt_* signal tagged with its channel («ترددات»). One for another channel (in flight
+    /// while we switched) is dropped: it is not what this radio is tuned to.
+    func receive(_ s: PTTSignal, channel ch: String?) {
+        if ch != nil, !channelsSupported { channelsSupported = true }
+        if let ch, ch != channelId {
+            diag("ptt", "\(Self.short(s)) for another channel: dropped")
+            return
+        }
+        if case let .idle(_, _, reason) = s, [.switched, .removed, .closed].contains(reason) { quietEnd = true }
+        receive(s)
+        quietEnd = false
+    }
+
     func receive(_ s: PTTSignal) {
-        PTTAudioEngine.log.notice("[PTT] signal \(String(describing: s), privacy: .public)")
-        apply(floor.receive(s, nowMs: Self.now()))
+        let fx = floor.receive(s, nowMs: Self.now())
+        diag("ptt", "\(Self.short(s)) → \(fx.map(Self.short).joined(separator: ","))")
+        apply(fx)
+    }
+
+    private var rxFrames = 0
+
+    /// Signal / effect in a few words for «سجل القناة» (no names, no ids).
+    static func short(_ s: PTTSignal) -> String {
+        switch s {
+        case let .grant(_, burst, _): return "grant b\(burst)"
+        case let .deny(_, reason, _): return "deny \(reason)"
+        case let .state(t, _): return t == nil ? "state idle" : "state talker b\(t!.burst)"
+        case let .talker(t): return "talker b\(t.burst)"
+        case let .idle(_, burst, reason): return "idle b\(burst) \(reason)"
+        }
+    }
+
+    static func short(_ e: PTTFloor.Effect) -> String {
+        switch e {
+        case .sendStart: return "sendStart"
+        case .sendStop: return "sendStop"
+        case let .startCapture(b): return "mic b\(b)"
+        case .stopCapture: return "micOff"
+        case let .startPlayback(t): return "play b\(t.burst)"
+        case .stopPlayback: return "playOff"
+        case let .refused(r): return "refused \(r)"
+        case let .cutOff(r): return "cutOff \(r)"
+        }
     }
 
     func receiveAudio(_ d: Data) {
-        guard playbackOn, let f = PTTFrame.decode(d) else { return }
+        guard let f = PTTFrame.decode(d) else { return diag("audio", "undecodable frame (\(d.count) bytes)") }
+        rxFrames += 1
+        if rxFrames == 1 || rxFrames % 100 == 0 { diag("audio", "rx frames=\(rxFrames) playback=\(playbackOn) ready=\(audioReady)") }
+        guard playbackOn else { return }
         audio.receive(f)
     }
 
-    /// iOS woke us with a pushtotalk push: make sure the socket comes back and joins.
+    /// iOS woke us with a pushtotalk push: make sure the socket comes back (now, not after a backoff) and joins.
     func wokenByPush() {
-        channel?.reconnectNow()
+        diag("push", "pushtotalk wake (link=\(channel?.isLive == true ? "live" : "down"))")
+        channel?.ensureLive(reason: "push")
         channel?.setPTTJoined(!muted)
     }
 
@@ -221,29 +333,40 @@ final class OutingWalkieTalkie: ObservableObject {
                 startCaptureIfReady()
                 /* "Speak now": once the floor is ours *and* the session is live. The engine sends
                    silence while it sounds, so the chirp never goes on air. */
-                if let c = cues.talkGranted(audioReady: audioReady || !route.isSystemChannel, cueContext) { audio.playCue(c) }
+                if let c = cues.talkGranted(audioReady: audioReady || !audioRoute.isSystemChannel, cueContext) { audio.playCue(c) }
             case .stopCapture:
                 /* Roger first (the mic is gated while it sounds), then the mic closes. */
                 if let c = cues.talkEnded(cueContext) { audio.playCue(c) }
                 stopMic()
-                route.endTransmit()
+                audioRoute.endTransmit()
+                systemTransmit = false
+                if forceInAppAudio, !playbackOn { forceInAppAudio = false }
             case let .startPlayback(t):
                 playbackOn = true
                 audio.armReceive(burst: t.burst)
-                route.setRemote(displayName(t))
+                audioRoute.setRemote(displayName(t))
                 /* The system route activates the session asynchronously (didActivate). */
-                if audioReady || !route.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst }
+                if audioReady || !audioRoute.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst; armPlaybackFallback(t) }
             case .stopPlayback:
                 PTTAudioEngine.log.notice("[PTT] stop playback (mode=\(String(describing: self.mode), privacy: .public) live=\(self.channel?.isLive == true))")
                 playbackOn = false
                 pendingPlayback = nil
-                /* Muted or the link dropped: no roger for a transmission we did not hear end. */
-                let quiet = leaving || muted || (channel?.isLive != true && mode != .nearby)
+                /* Muted, the link dropped, or we tuned away: no roger for a transmission we did not hear end. */
+                let quiet = leaving || muted || quietEnd || (channel?.isLive != true && mode != .nearby)
                 audio.stopPlayback(cue: cues.incomingEnded(quiet: quiet, cueContext))
-                route.setRemote(nil)
+                audioRoute.setRemote(nil)
+                if forceInAppAudio, !micWanted { forceInAppAudio = false }
             case let .refused(r):
                 if !isTalking { stopMic() }
-                show(Self.text(for: r, name: { self.nameOf($0 ?? "") }))
+                let text = Self.text(for: r, name: { self.nameOf($0 ?? "") })
+                show(text)
+                /* Hand the system's talk UI back at once, and say why where the person is looking. */
+                audioRoute.endTransmit()
+                if systemTransmit, audioRoute !== route { route.endTransmit() }
+                if systemTransmit, UIApplication.shared.applicationState != .active {
+                    Notifier.post(title: "قناة الطلعة", body: "ما انرسل صوتك: \(text)", outingId: outingId, kind: "ptt")
+                }
+                systemTransmit = false
             case let .cutOff(reason):
                 show(reason == .maxDuration ? "انتهت الدقيقة — اضغط مرة ثانية لتكمل" : "انقطع الإرسال")
             }
@@ -263,18 +386,32 @@ final class OutingWalkieTalkie: ObservableObject {
     private func startCaptureIfReady() {
         guard micWanted, !micOn else { return }
         /* The in-app route activates the session synchronously; the system one on didActivate. */
-        if audioReady || !route.isSystemChannel {
+        if audioReady || !audioRoute.isSystemChannel {
             micOn = true
             audio.startCapture(burst: capturingBurst ?? 0)
         }
     }
 
     private var cueContext: PTTRadioCueSequencer.Context {
-        .init(enabled: PTTRadioSounds.enabled(defaults), systemRoute: route.isSystemChannel)
+        .init(enabled: PTTRadioSounds.enabled(defaults), systemRoute: audioRoute.isSystemChannel)
     }
 
     private func startPlayback(burst: UInt8) {
+        diag("audio", "speaker on b\(burst) via \(audioRoute.isSystemChannel ? "system" : "app")")
         audio.startPlayback(burst: burst, cue: cues.incomingStarted(burst: burst, cueContext))
+    }
+
+    /// The system should activate the session for a friend's voice (didActivate). If it has not
+    /// within a moment and we are on screen, open the speaker ourselves rather than stay silent.
+    private func armPlaybackFallback(_ t: PTTTalker) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, self.pendingPlayback == t.burst, UIApplication.shared.applicationState == .active else { return }
+            self.diag("audio", "no didActivate after 1.2 s: in-app speaker")
+            self.forceInAppAudio = true
+            self.pendingPlayback = nil
+            self.inApp.setRemote(self.displayName(t))
+            self.startPlayback(burst: t.burst)
+        }
     }
 
     private func stopMic() {
@@ -331,13 +468,30 @@ final class OutingWalkieTalkie: ObservableObject {
         }
         c.audioDeactivated = { [weak self] in self?.audioReady = false }
         c.systemBeganTransmit = { [weak self] in
-            /* The Lock Screen / headset button: same as ours. */
+            /* The Lock Screen / headset button: same as ours — and the socket may need to come back first
+             * (the system keeps the transmission open meanwhile; we end it if the floor is refused). */
             guard let self else { return }
             self.refreshMode()
-            self.apply(self.floor.pressDown(nowMs: Self.now(), online: self.mode != .unavailable))
+            self.systemTransmit = true
+            self.request(source: "system")
         }
         c.transmitEnded = { [weak self] in
             guard let self else { return }
+            self.diag("floor", "release (system)")
+            self.systemTransmit = false
+            if case .talking = self.floor.state { self.apply(self.floor.pressUp()) }
+            if case .requesting = self.floor.state { self.apply(self.floor.pressUp()) }
+        }
+        c.transmitFailed = { [weak self] in
+            guard let self else { return }
+            /* The system would not start (another call, a restriction): on screen, our own button still works in-app. */
+            if !self.systemTransmit, UIApplication.shared.applicationState == .active, self.micWanted {
+                self.diag("audio", "system transmit refused: in-app mic")
+                self.forceInAppAudio = true
+                self.inApp.beginTransmit()
+                return
+            }
+            self.systemTransmit = false
             if case .talking = self.floor.state { self.apply(self.floor.pressUp()) }
             if case .requesting = self.floor.state { self.apply(self.floor.pressUp()) }
         }
@@ -352,7 +506,7 @@ final class OutingWalkieTalkie: ObservableObject {
         if let sys = route as? PTTSystemRoute ?? (PTTSystemRoute.shared.available ? PTTSystemRoute.shared : nil) {
             route = sys
             sys.callbacks = callbacks()
-            sys.join(outingId: outingId, name: outingName())
+            sys.join(outingId: outingId, name: systemChannelName)
         }
         #endif
     }
@@ -402,6 +556,131 @@ final class OutingWalkieTalkie: ObservableObject {
     }
 
     // MARK: nearby (no internet)
+
+    // MARK: «ترددات» — channels
+
+    /// Set while a transmission ends because we changed channel (no roger beep for it).
+    private var quietEnd = false
+
+    var currentChannel: PTTChannelInfo? { channels.first { $0.id == channelId } }
+
+    /// «غيّر التردد»: the knob clicks at once; whatever we heard or said on the old channel ends
+    /// for us; the server tunes us in and sends the new channel's current sentence from its start.
+    func switchChannel(_ id: String) {
+        guard id != channelId else { return }
+        guard PTTChannels.isPublic(id) || channels.contains(where: { $0.id == id && $0.isPrivate }) else { return }
+        diag("channel", "switch → \(PTTChannels.isPublic(id) ? id : "private")")
+        quietEnd = true
+        apply(floor.channelSwitched())
+        quietEnd = false
+        channelId = id
+        defaults.set(id, forKey: Self.channelKeyPrefix + outingId)
+        channel?.setPTTChannel(id)
+        if PTTRadioSounds.enabled(defaults) { audio.playCue(.channelClick) }
+        updateSystemChannelName()
+        if demo { refreshDemoChannels() }
+        if pendingInvite?.id == id { pendingInvite = nil }
+        objectWillChange.send()
+    }
+
+    /// The sheet was opened: the invitation was seen.
+    func invitationSeen() { pendingInvite = nil }
+
+    /// ptt_channels / ptt_channel_kicked / ptt_channel_invite.
+    func receiveChannel(_ ev: PTTChannelEvent) {
+        switch ev {
+        case let .list(_, canCreate, list):
+            channelsSupported = true
+            channels = list.isEmpty ? PTTChannels.publicList : list
+            canCreatePrivate = canCreate
+            /* Our private channel is gone from the list (closed while we were away): back to ١. */
+            if !PTTChannels.isPublic(channelId), !channels.contains(where: { $0.id == channelId }) { fallBack() }
+        case let .kicked(ch, reason):
+            let name = channels.first { $0.id == ch }?.name
+            if ch == channelId { fallBack() }
+            if reason != "not_invited" || ch == channelId { show(PTTChannels.kickedText(reason, name: name)) }
+        case let .invited(ch, name, _):
+            pendingInvite = PTTChannelInfo(id: ch, kind: .private, name: name)
+            show(PTTChannels.inviteText(name))
+        }
+        objectWillChange.send()
+    }
+
+    /// Off a private channel (removed, closed, not invited): the server already put us on ١.
+    private func fallBack() {
+        quietEnd = true
+        apply(floor.channelSwitched())
+        quietEnd = false
+        channelId = PTTChannels.defaultId
+        defaults.set(channelId, forKey: Self.channelKeyPrefix + outingId)
+        channel?.pttChannelReset()
+        updateSystemChannelName()
+    }
+
+    /// «قناة الطلعة · تردد ٣» on the Lock Screen / Dynamic Island.
+    private func updateSystemChannelName() {
+        route.setChannelName(systemChannelName)
+    }
+
+    var systemChannelName: String {
+        channelsSupported || demo ? PTTChannels.systemLabel(PTTChannels.chipLabel(currentChannel)) : "قناة الطلعة"
+    }
+
+    /// Show the channel chip: the server has channels (or the demo, which keeps them on the phone).
+    var showsChannels: Bool { channelsSupported || demo }
+
+    /// «+ تردد خاص» (the leader): name + the members he picks. The server checks everything again.
+    func createPrivate(name: String, members: [String]) async throws -> PTTChannelInfo {
+        if let b = channelBackend {
+            let c = try await b.createPTTChannel(outingId, name: name, members: members)
+            if !channels.contains(where: { $0.id == c.id }) { channels.append(c) }
+            return c
+        }
+        /* The demo: a channel on this phone only. */
+        let c = PTTChannelInfo(id: UUID().uuidString.lowercased(), kind: .private, name: name, members: [me] + members.filter { $0 != me }, createdBy: me, canManage: true)
+        demoPrivate.append(c)
+        refreshDemoChannels()
+        return c
+    }
+
+    func updatePrivate(_ id: String, name: String?, add: [String], remove: [String]) async throws {
+        if let b = channelBackend {
+            let c = try await b.updatePTTChannel(outingId, channel: id, name: name, add: add, remove: remove)
+            if let i = channels.firstIndex(where: { $0.id == id }) { channels[i] = c }
+            return
+        }
+        guard let i = demoPrivate.firstIndex(where: { $0.id == id }) else { return }
+        if let name { demoPrivate[i].name = name }
+        demoPrivate[i].members = demoPrivate[i].members.filter { !remove.contains($0) } + add.filter { !demoPrivate[i].members.contains($0) }
+        refreshDemoChannels()
+    }
+
+    func closePrivate(_ id: String) async throws {
+        if let b = channelBackend {
+            try await b.closePTTChannel(outingId, channel: id)
+            channels.removeAll { $0.id == id }
+        } else {
+            demoPrivate.removeAll { $0.id == id }
+            refreshDemoChannels()
+        }
+        if channelId == id { fallBack() }
+        objectWillChange.send()
+    }
+
+    private var demoPrivate: [PTTChannelInfo] = []
+    /// Attached without a server (the demo outing): channels live on this phone.
+    private var demo = false
+
+    /// No server (the demo): the five public channels and ours, with only me listening where I am.
+    private func refreshDemoChannels() {
+        guard demo else { return }
+        channels = (PTTChannels.publicList + demoPrivate).map { c in
+            var c = c
+            c.listeners = c.id == channelId && !muted ? [me] : []
+            return c
+        }
+        canCreatePrivate = demoLeader()
+    }
 
     private var lastNearbyBurst: UInt8?
     private var nearbyTalker: (id: String, burst: UInt8, atMs: Double)?

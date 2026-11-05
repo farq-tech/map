@@ -16,6 +16,8 @@ enum NavTargetSource: String, Equatable, CaseIterable {
     case member
     /// The end of the plan's drawn route.
     case planRouteEnd
+    /// A planned stop on the way to the destination (`TripPlan.stops`, automatic guidance).
+    case tripStop
 }
 
 /// A place to drive to.

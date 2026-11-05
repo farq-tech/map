@@ -48,10 +48,12 @@ struct RealisticScene: Identifiable, Equatable {
     var navigating = false
     /// Where the scene came from (analytics-free; for the accessibility value of the screen).
     var origin: String = ""
+    /// Open at this camera (the trip map's own, «اعرضها بالوضع الواقعي»); nil: frame the scene.
+    var camera: RealisticRules.Camera?
 
     static func == (a: RealisticScene, b: RealisticScene) -> Bool {
         a.id == b.id && a.title == b.title && a.focus == b.focus && a.members == b.members && a.track == b.track
-            && a.plan == b.plan && a.markers == b.markers && a.navigating == b.navigating
+            && a.plan == b.plan && a.markers == b.markers && a.navigating == b.navigating && a.camera == b.camera
     }
 
     /// Every point the scene draws (for the first framing).
@@ -195,6 +197,12 @@ enum RealisticRules {
 
     /// The first view: tilted 3D on the focus, or on the middle of everything drawn, far enough to see it all.
     static func initialCamera(_ scene: RealisticScene) -> Camera? {
+        if var c = scene.camera {
+            /* The trip map's camera, within what MapKit can show. */
+            c.distance = min(max(c.distance, minDistance), maxDistance)
+            c.pitch = min(max(c.pitch, 0), tiltedPitch)
+            return c
+        }
         let pts = scene.allPoints
         guard let center = scene.focus ?? bboxCenter(pts) else { return nil }
         var span = 0.0
@@ -203,6 +211,18 @@ enum RealisticRules {
          * in (≈65° at 1–2 km, ≈34° from 4 km up). A group / track: ~2.6× its radius so it all fits. */
         let d = scene.focus != nil ? 1_200 : span * 2.6
         return Camera(center: center, distance: min(max(d, minDistance), maxDistance), heading: 0, pitch: tiltedPitch)
+    }
+
+    /// Mapbox's vertical field of view (36.87°): the camera sits 1.5 view-heights from the centre, in pixels.
+    static let mapboxCameraToCenter = 0.5 / tan(36.8699 * .pi / 360)
+
+    /// A Mapbox camera (zoom on 512-pt tiles, pitch, bearing) as MapKit's: same centre, heading and
+    /// tilt, and the camera-to-centre distance that zoom means on a view `viewHeight` points tall.
+    static func camera(fromMapbox center: LngLat, zoom: Double, pitch: Double, bearing: Double, viewHeight: Double) -> Camera {
+        let metresPerPoint = 40_075_016.686 * cos(center.lat * .pi / 180) / (512 * pow(2, zoom))
+        let d = mapboxCameraToCenter * max(viewHeight, 1) * metresPerPoint
+        let heading = (bearing.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+        return Camera(center: center, distance: d, heading: heading, pitch: pitch)
     }
 
     static func bboxCenter(_ pts: [LngLat]) -> LngLat? {

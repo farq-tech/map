@@ -184,6 +184,8 @@ struct OutingSnapshot: Codable, Equatable {
     var silent: [SilentInfo]? = nil
     /// Leaders only: the personal invites of this trip (nil from older servers / for members).
     var personal_invites: [PersonalInvite]? = nil
+    /// «المحادثات»: my unread chat messages in this trip (nil from older servers).
+    var chat_unread: Int? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).

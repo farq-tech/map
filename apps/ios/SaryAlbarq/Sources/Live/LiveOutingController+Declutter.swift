@@ -26,6 +26,9 @@ extension LiveOutingController {
         return false
     }
 
+    /// The outing has ended («انتهت الطلعة»): the screen shows the end, not live controls.
+    var tripEnded: Bool { session.displayView?.status == .ended || session.closedReason == .outingEnded }
+
     /// Members in an alert state (SOS, «غرّز», silent): their edge arrows always show.
     var alertingMemberIds: Set<String> {
         var s = Set(ui.sos.incoming.map(\.participantId))
@@ -37,6 +40,8 @@ extension LiveOutingController {
     /// One row of the «+» sheet was chosen: close it, then act (most actions open their own sheet).
     func performAction(_ id: String) {
         modal = nil
+        /* An entry that needs a running trip is not offered after the end (the catalog drops it). */
+        if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { return }
         let run: () -> Void = { [weak self] in self?.runAction(id) }
         switch id {
         case "backtrack", "follow": run()
@@ -48,6 +53,7 @@ extension LiveOutingController {
         let a = actions
         switch id {
         case "navigate": openNavPicker()
+        case "guideAll": startGuidanceForAll()
         case "search": modal = .plan(.search)
         case "backtrack": backTrack == nil ? startBackTrack() : stopBackTrack()
         case "follow":
@@ -57,12 +63,14 @@ extension LiveOutingController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.modal = .plan(.editor) }
             }
         case "note": a.openNoteComposer()
+        case "chat": if chat.isAvailable { openChat() }
         case "stuck": stuckControlTapped()
         case "waypoint": features.composeAtMe(location.lastFix)
         case "copyme": modal = .plan(.me)
         case "nearest": a.openNearestStations()
         case "weather": modal = .weather
         case "youtube": MediaCenters.of(self).open()
+        case "radio": GroupAudioCenters.of(self).open()
         case "explore": enterExplore()
         default: break
         }

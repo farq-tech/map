@@ -60,6 +60,8 @@ struct PTTTalker: Equatable {
 /// Why the floor came free (server `ptt_idle.reason`).
 enum PTTIdleReason: String, Equatable {
     case released, maxDuration = "max_duration", silence, left
+    /// «ترددات»: we tuned to another channel / were taken off a private one / it was closed.
+    case switched, removed, closed
 }
 
 /// Server → phone ptt_* signals.
@@ -93,6 +95,14 @@ enum PTTSignal: Equatable {
         default:
             return nil
         }
+    }
+}
+
+extension PTTSignal {
+    /// «ترددات»: the channel a ptt_* message is about (servers before channels send none).
+    static func channel(of m: [String: Any]) -> String? {
+        if let s = m["channel"] as? String { return s }
+        return (m["channel"] as? NSNumber).map { $0.stringValue }
     }
 }
 

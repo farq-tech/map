@@ -95,6 +95,9 @@ extension View {
 struct SarySheetSummary: View {
     var participants: [ParticipantUI]
     var detent: SheetDetentUI
+    /// The trip ended: «انتهت الطلعة» in place of «… مباشر» (nobody is live any more,
+    /// though my own car still moves with this phone's GPS).
+    var ended = false
     var expand: () -> Void = {}
     @Environment(\.sary) private var theme
 
@@ -125,7 +128,7 @@ struct SarySheetSummary: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(SaryFormat.peekSummary(participants)))
+        .accessibilityLabel(Text(ended ? "\(SaryFormat.number(participants.count)) في الطلعة، انتهت الطلعة" : SaryFormat.peekSummary(participants)))
         .accessibilityHint(Text(detent == .peek ? "اضغط لعرض المشاركين" : ""))
         .accessibilityIdentifier("outing-sheet-summary")
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -136,14 +139,18 @@ struct SarySheetSummary: View {
         return HStack(spacing: 6) {
             Text("\(SaryFormat.number(count)) في الطلعة").foregroundStyle(p.textPrimary)
             dot
-            HStack(spacing: 4) {
-                Circle().fill(p.live).frame(width: 7, height: 7)
-                Text("\(SaryFormat.number(live)) مباشر").foregroundStyle(p.liveText)
-            }
-            if let nearest {
-                dot
-                Text("الأقرب \(SaryFormat.distance(meters: nearest))").foregroundStyle(p.textSecondary)
-                    .saryNumber(.callout, weight: .bold)
+            if ended {
+                Text("انتهت الطلعة").foregroundStyle(p.textSecondary)
+            } else {
+                HStack(spacing: 4) {
+                    Circle().fill(p.live).frame(width: 7, height: 7)
+                    Text("\(SaryFormat.number(live)) مباشر").foregroundStyle(p.liveText)
+                }
+                if let nearest {
+                    dot
+                    Text("الأقرب \(SaryFormat.distance(meters: nearest))").foregroundStyle(p.textSecondary)
+                        .saryNumber(.callout, weight: .bold)
+                }
             }
         }
         .saryText(.callout, weight: .bold)
@@ -160,6 +167,8 @@ struct SarySheetSummary: View {
 
 struct SaryTabBar: View {
     @Binding var selection: LiveTabUI
+    /// «المحادثات»: unread chat messages, shown on «المجموعة».
+    var groupBadge: Int = 0
     var body: some View {
         SarySegmented(
             options: LiveTabUI.allCases,
@@ -172,6 +181,7 @@ struct SaryTabBar: View {
                 case .more: return "ellipsis.circle"
                 }
             },
+            badge: { $0 == .group ? groupBadge : 0 },
             optionID: { tab in
                 switch tab {
                 case .trip: return "tab.trip"

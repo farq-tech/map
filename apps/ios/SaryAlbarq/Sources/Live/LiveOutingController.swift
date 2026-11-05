@@ -35,6 +35,8 @@ enum LiveModal: Identifiable, Equatable {
     case navPicker
     case navOptions
     case navSteps
+    /// After «ابدأ الطلعة» (the leader): «ابدأ التوجيه للكل» / «لي فقط».
+    case navStartChoice
     /// «+»: every less frequent action, grouped (docs/IA-REDESIGN.md §2.3).
     case actions
     /// Exploration: the layer switcher (+ 3D terrain, offline coverage).
@@ -49,6 +51,10 @@ enum LiveModal: Identifiable, Equatable {
     case convoyAlerts
     /// «اطلب إنجاد»: the prefilled help request (the person sends it).
     case enjad(Enjad.Situation)
+    /// «المحادثات»: the conversation list, or straight into one conversation.
+    case chat(ChatWith?)
+    /// «ترددات»: the walkie-talkie's channels (five public + private ones).
+    case pttChannels
 
     var id: String {
         switch self {
@@ -59,6 +65,7 @@ enum LiveModal: Identifiable, Equatable {
         case .tracks: return "tracks"
         case .convoyAlerts: return "convoyAlerts"
         case let .enjad(s): return "enjad:\(s.label)"
+        case let .chat(w): return "chat:\(w?.wire ?? "")"
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
@@ -74,6 +81,8 @@ enum LiveModal: Identifiable, Equatable {
         case .navPicker: return "navPicker"
         case .navOptions: return "navOptions"
         case .navSteps: return "navSteps"
+        case .navStartChoice: return "navStartChoice"
+        case .pttChannels: return "pttChannels"
         }
     }
 }
@@ -153,6 +162,8 @@ final class LiveOutingController: ObservableObject {
     var lastConvoyBuzz = Date.distantPast
     /// Moving > 15 km/h (with hysteresis), from the GPS.
     @Published private(set) var motion = MotionHysteresis()
+    /// DEBUG `-SaryChatMoving`: the chat behaves as if the car were moving.
+    var debugChatMoving = false
     @Published var confirm: LiveConfirm?
     @Published var stations: LoadPhaseUI<[StationUI]> = .loading
     @Published var toastText: String?
@@ -197,6 +208,18 @@ final class LiveOutingController: ObservableObject {
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
+    /// The trip's automatic guidance on this phone (`TripAutoNav`, LiveOutingController+AutoNav.swift).
+    @Published var autoNavState = TripAutoNavState()
+    /// The live link was up on the last change (the network coming back retries the road route).
+    var autoNavWasOnline = true
+    /// «اسلك هذا المسار» started by the off-road leg of the automatic guidance (stopped with it).
+    var autoNavFollowId: String?
+    /// The person left this screen: no automatic guidance from it any more (reopening starts it again).
+    var autoNavLeft = false
+    /// The outing closing (ended / left / removed) was handled: the sheet open at that moment
+    /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
+    /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
+    var closeHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -236,6 +259,9 @@ final class LiveOutingController: ObservableObject {
             let n = at.split(separator: ",").compactMap { Double($0) }
             if n.count == 2 { DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.ask(.point(LngLat(lng: n[1], lat: n[0]))) } }
         }
+        /* «المحادثات»: `-SaryChat home|group`, `-SaryChatMoving` (the driving block without a car). */
+        if let c = arg("-SaryChat") { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .chat(c == "group" ? .group : nil) } }
+        if shotArgs.contains("-SaryChatMoving") { debugChatMoving = true }
         if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
@@ -258,6 +284,7 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
         features.start()
+        wireChatToasts()
         nav.myFix = { [weak location] in location?.lastFix }
         nav.toast = { [weak self] t in self?.toast(t) }
         /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
@@ -301,9 +328,11 @@ final class LiveOutingController: ObservableObject {
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
         registerCarPlay()
         registerTrip()
+        registerAutoNav()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
+        placeBriefDebugLaunch()
         #endif
     }
 
@@ -342,6 +371,7 @@ final class LiveOutingController: ObservableObject {
             notificationsOn: notificationsOn,
             batterySharing: session.batterySharing,
             pttMuted: session.walkie.muted,
+            pttLink: PTTLinkText.line(session.linkDiag, nowMs: Date().timeIntervalSince1970 * 1000),
             speakingUserId: speakingUserId,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,
@@ -406,6 +436,7 @@ final class LiveOutingController: ObservableObject {
     private func sessionChanged() {
         updateSpeed()
         updateTrip()
+        autoNavSessionChanged()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -415,6 +446,8 @@ final class LiveOutingController: ObservableObject {
            same note heard first from a nearby car and then from the server is one card. */
         for (uid, m) in v.members where uid != v.myId {
             if let n = m.note, prev.members[uid]?.note != n, LiveOutingPresenter.activeNote(n, view: v, now: Date()) != nil {
+                /* The leader's «ابدأ التوجيه للكل» is a command, not a card (`receiveBroadcasts` says it). */
+                if NavBroadcast.isBroadcast(n.text), NavBroadcast.mayBroadcast(senderId: uid, ownerId: v.snapshot.outing.owner_id, senderIsDeputy: m.co_leader == true) { continue }
                 if let last = alertedNotes[uid], last.text == n.text, Date().timeIntervalSince(last.at) < LiveOutingPresenter.noteTTL { continue }
                 alertedNotes[uid] = (n.text, Date())
                 if RallyRecall.isRecall(n.text), let prompt = recallPrompt(from: uid, at: n.at, view: v) {
@@ -441,7 +474,10 @@ final class LiveOutingController: ObservableObject {
         exploreDrivingCheck()
         checkConvoy()
         feedWeather()
-        if session.closedReason != nil, modal != nil { modal = nil }
+        if session.closedReason != nil, !closeHandled {
+            closeHandled = true
+            if modal != nil { modal = nil }
+        }
         objectWillChange.send()
     }
 
@@ -452,6 +488,7 @@ final class LiveOutingController: ObservableObject {
         updateBackTrack()
         updateFollow()
         updateTrip()
+        autoNavTick()
         updateAuto()
         if let f = location.lastFix {
             var m = motion
@@ -833,6 +870,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }
@@ -920,13 +958,19 @@ final class LiveOutingController: ObservableObject {
             chooseTripDestination()
             return
         }
-        Task { await session.setStatus("start") }
+        Task {
+            await session.setStatus("start")
+            /* Guidance is the leader's choice: for everyone, or only for him. */
+            if session.view?.status == .active { offerGuidanceChoice() }
+        }
     }
 
     // MARK: participants
 
     func openParticipant(_ id: String) {
         if id == session.view?.myId {
+            /* «رسالة فوق سيارتك» only while the outing runs: after the end nobody would see it. */
+            guard !tripEnded else { return }
             modal = .note
         } else {
             modal = .participant(id)

@@ -166,4 +166,65 @@ final class PersonalInvitesTests: XCTestCase {
         XCTAssertEqual(rows.first { $0.id == "me" }?.neverShared, false)
         XCTAssertNil(rows.first { $0.id == "s" }?.nickname)
     }
+
+    // MARK: Production before the server update (no PR #61 routes)
+
+    func testOlderServerFallsBackToTheOpenLinkWithoutAnError() async throws {
+        /* Create on an older server: `invites: "personal"` is ignored and an open link comes back. */
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [OldServerProtocol.self]
+        let api = OutingsAPI(base: URL(string: "https://old.example")!, session: URLSession(configuration: cfg), tokenProvider: { "t" })
+        let created = try await api.create(name: "طلعة")
+        XCTAssertEqual(created.invite?.token, "open-token", "the old open link is what the wizard shows")
+        XCTAssertNil(created.open_links)
+
+        /* The personal routes are missing (Express «Cannot POST», no JSON): silent fallback. */
+        let d = UserDefaults(suiteName: "pi-old-\(UUID().uuidString)")!
+        let m = PersonalInvitesModel(outingId: "o1", outingName: "طلعة", api: api, isDemo: false, defaults: d)
+        await m.load()
+        XCTAssertTrue(m.serverLacksPersonal)
+        XCTAssertNil(m.errorText)
+        let m2 = PersonalInvitesModel(outingId: "o1", outingName: "طلعة", api: api, isDemo: false, defaults: d)
+        let draft = await m2.invite(name: "فهد", phone: nil)
+        XCTAssertNil(draft)
+        XCTAssertNil(m2.errorText, "no error for the leader — the open-link card replaces the section")
+        XCTAssertTrue(m2.serverLacksPersonal)
+
+        /* A JSON 404 is a real answer from a server that has the feature: it is shown. */
+        XCTAssertFalse(PersonalInvitesModel.isMissingRoute(OutingAPIError(code: "invite_not_found", status: 404)))
+        XCTAssertTrue(PersonalInvitesModel.isMissingRoute(OutingAPIError(code: "http_404", status: 404)))
+    }
+
+    func testLeaderSnapshotTellsWhetherTheServerHasPersonalInvites() throws {
+        let old = try JSONDecoder().decode(InviteState.self, from: Data(#"{"active":true,"expires_at":null}"#.utf8))
+        let new = try JSONDecoder().decode(InviteState.self, from: Data(#"{"active":false,"expires_at":null,"open_links":false}"#.utf8))
+        XCTAssertFalse(PersonalInvitesSupport.serverHasPersonal(loaded: true, invite: old, personalInvites: nil, iLead: true, isDemo: false))
+        XCTAssertFalse(PersonalInvitesSupport.serverHasPersonal(loaded: true, invite: nil, personalInvites: nil, iLead: true, isDemo: false))
+        XCTAssertTrue(PersonalInvitesSupport.serverHasPersonal(loaded: true, invite: new, personalInvites: [], iLead: true, isDemo: false))
+        XCTAssertTrue(PersonalInvitesSupport.serverHasPersonal(loaded: true, invite: nil, personalInvites: nil, iLead: false, isDemo: false), "members keep the new state")
+        XCTAssertTrue(PersonalInvitesSupport.serverHasPersonal(loaded: true, invite: old, personalInvites: nil, iLead: true, isDemo: true))
+    }
+}
+
+/// An `/api/outings` server from before «دعوة شخصية»: open links only, no personal routes.
+final class OldServerProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let path = request.url?.path ?? ""
+        let method = request.httpMethod ?? "GET"
+        let (status, body): (Int, String) = {
+            if path.contains("/invites/personal") || path.hasSuffix("/invites/settings") {
+                return (404, "<!DOCTYPE html><html><body><pre>Cannot \(method) \(path)</pre></body></html>")
+            }
+            if method == "POST", path == "/api/outings" {
+                return (201, #"{"ok":true,"outing_id":"o1","invite":{"token":"open-token","expires_at":"2026-11-06T12:00:00.000Z"}}"#)
+            }
+            return (404, #"{"ok":false,"error":"not_found"}"#)
+        }()
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

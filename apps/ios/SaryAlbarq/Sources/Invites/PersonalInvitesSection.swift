@@ -287,7 +287,25 @@ struct LivePersonalInvites<Legacy: View>: View {
 
     var body: some View {
         let v = session.view
-        PersonalInvitesSection(model: model, canLead: v?.iLead == true, ended: v?.status == .ended) { legacy }
-            .onChange(of: v?.members.count ?? 0) { _, _ in Task { await model.load() } }
+        if PersonalInvitesSupport.serverHasPersonal(loaded: v != nil, invite: v?.snapshot.invite, personalInvites: v?.snapshot.personal_invites,
+                                                  iLead: v?.iLead == true, isDemo: session.isDemo), !model.serverLacksPersonal {
+            PersonalInvitesSection(model: model, canLead: v?.iLead == true, ended: v?.status == .ended) { legacy }
+                .onChange(of: v?.members.count ?? 0) { _, _ in Task { await model.load() } }
+        } else {
+            /* Older server (no «دعوة شخصية» yet): exactly the build-11 open-link card, no error. */
+            legacy
+        }
+    }
+
+}
+
+/// «دعوة شخصية» against an older production server (no PR #61 routes yet).
+enum PersonalInvitesSupport {
+    /// A leader's snapshot from a server with personal invites always carries `invite.open_links`
+    /// (and `personal_invites`); an older server sends neither. Members never get either, so they
+    /// keep the new «الدعوات عند أمير الرحلة» state.
+    static func serverHasPersonal(loaded: Bool, invite: InviteState?, personalInvites: [PersonalInvite]?, iLead: Bool, isDemo: Bool) -> Bool {
+        if isDemo || !iLead || !loaded { return true }
+        return invite?.open_links != nil || personalInvites != nil
     }
 }

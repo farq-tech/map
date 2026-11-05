@@ -29,6 +29,10 @@ struct TripPlan: Codable, Equatable {
     var notes: String
     var destination: OutingDestination?
     var updated_at: String?
+    /// Planned stops on the way, in order («محطات الخطة»). Optional on the wire: a server
+    /// that has no stops sends none, and we send them back only when there are some, so a
+    /// save never wipes stops another client set. Auto-navigation drives through them in order.
+    var stops: [OutingDestination] = []
 
     static let maxPoints = 5000
     static let notesMax = 1000
@@ -53,6 +57,8 @@ struct TripPlan: Codable, Equatable {
         notes = (try? c.decodeIfPresent(String.self, forKey: .notes)) ?? ""
         destination = try? c.decodeIfPresent(OutingDestination.self, forKey: .destination)
         updated_at = try? c.decodeIfPresent(String.self, forKey: .updated_at)
+        stops = ((try? c.decodeIfPresent([OutingDestination].self, forKey: .stops)) ?? [])
+            .filter { PlanGeo.valid(lat: $0.lat, lng: $0.lng) }
     }
 
     func encode(to e: Encoder) throws {
@@ -60,9 +66,10 @@ struct TripPlan: Codable, Equatable {
         try c.encode(route, forKey: .route) // explicit null clears the route
         try c.encode(notes, forKey: .notes)
         try c.encode(destination, forKey: .destination)
+        if !stops.isEmpty { try c.encode(stops, forKey: .stops) }
     }
 
-    private enum CodingKeys: String, CodingKey { case route, notes, destination, updated_at }
+    private enum CodingKeys: String, CodingKey { case route, notes, destination, updated_at, stops }
 
     /// What a PUT sends: route capped/simplified to ≤ 5000 points, notes and name trimmed to the limits.
     func cleanedForUpload() -> TripPlan {

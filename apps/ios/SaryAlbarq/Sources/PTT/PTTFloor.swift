@@ -46,6 +46,8 @@ struct PTTFloor: Equatable {
     static let maxTalkMs = 60_000.0
     /// No answer to a floor request within this → give up.
     static let requestTimeoutMs = 3_000.0
+    /// …when the socket first has to come back (a press from the Lock Screen after the link dropped).
+    static let reconnectRequestTimeoutMs = 7_000.0
 
     let me: String
     private(set) var state: State = .idle
@@ -57,12 +59,14 @@ struct PTTFloor: Equatable {
     private(set) var muted = false
     private(set) var maxTalkMs = PTTFloor.maxTalkMs
     private var nextId = 0
+    private var requestWaitMs = PTTFloor.requestTimeoutMs
 
     init(me: String) { self.me = me }
 
     // MARK: my button
 
-    mutating func pressDown(nowMs: Double, online: Bool) -> [Effect] {
+    /// `waitMs`: how long to wait for the server's answer (longer while the socket reconnects).
+    mutating func pressDown(nowMs: Double, online: Bool, waitMs: Double = PTTFloor.requestTimeoutMs) -> [Effect] {
         switch state {
         case .listening(let t): return [.refused(.busy(talkerId: t.userId))]
         case .requesting, .talking: return []
@@ -71,6 +75,7 @@ struct PTTFloor: Equatable {
         if muted { return [.refused(.muted)] }
         if !online { return [.refused(.offline)] }
         nextId += 1
+        requestWaitMs = waitMs
         state = .requesting(id: nextId, atMs: nowMs)
         return [.sendStart(id: nextId)]
     }
@@ -160,7 +165,7 @@ struct PTTFloor: Equatable {
         case let .talking(_, since) where nowMs - since >= maxTalkMs:
             state = .idle
             return [.stopCapture, .sendStop, .cutOff(.maxDuration)]
-        case let .requesting(_, at) where nowMs - at >= Self.requestTimeoutMs:
+        case let .requesting(_, at) where nowMs - at >= requestWaitMs:
             state = .idle
             return [.sendStop, .refused(.offline)]
         default:
@@ -173,6 +178,24 @@ struct PTTFloor: Equatable {
         guard on != muted else { return [] }
         muted = on
         guard on else { return [] }
+        switch state {
+        case .listening:
+            state = .idle
+            return [.stopPlayback]
+        case .talking:
+            state = .idle
+            return [.stopCapture, .sendStop]
+        case .requesting:
+            state = .idle
+            return [.sendStop]
+        case .idle:
+            return []
+        }
+    }
+
+    /// «ترددات»: we tuned to another channel. What we heard there ends for us (quietly), and a
+    /// transmission or request of ours there is over (the server releases the floor too).
+    mutating func channelSwitched() -> [Effect] {
         switch state {
         case .listening:
             state = .idle

@@ -159,6 +159,9 @@ final class PersonalInvitesModel: ObservableObject {
     @Published private(set) var openLinks: Bool?
     /// Set after create / resend: the send options sheet shows it.
     @Published var draft: InviteDraft?
+    /// The server has no «دعوة شخصية» routes yet (production before PR #61): the
+    /// section falls back to the old open link, silently — no error for the leader.
+    @Published private(set) var serverLacksPersonal = false
 
     let outingId: String
     let outingName: String
@@ -192,8 +195,12 @@ final class PersonalInvitesModel: ObservableObject {
 
     func load() async {
         guard let api, !isDemo else { return }
-        if let rows = try? await api.personalInvites(outingId) { invites = rows }
+        do { invites = try await api.personalInvites(outingId) } catch let e as OutingAPIError where Self.isMissingRoute(e) { serverLacksPersonal = true } catch {}
     }
+
+    /// An Express "Cannot GET …" 404 (no JSON `error`): the route does not exist on this server.
+    /// A JSON 404 (`invite_not_found`, `not_found`) is a real answer from a server that has it.
+    nonisolated static func isMissingRoute(_ e: OutingAPIError) -> Bool { e.status == 404 && e.code == "http_404" }
 
     /// Invite one person. `phone` is whatever the contact card / field holds; nil or "" = no number.
     @discardableResult
@@ -297,7 +304,9 @@ final class PersonalInvitesModel: ObservableObject {
     private func run(_ key: String, _ work: () async throws -> Void) async {
         busy.insert(key)
         defer { busy.remove(key) }
-        do { try await work() } catch let e as OutingAPIError { errorText = e.arabic } catch { errorText = OutingAPIError(code: "network", status: 0).arabic }
+        do { try await work() } catch let e as OutingAPIError where Self.isMissingRoute(e) {
+            serverLacksPersonal = true
+        } catch let e as OutingAPIError { errorText = e.arabic } catch { errorText = OutingAPIError(code: "network", status: 0).arabic }
     }
 
     private static func demoToken() -> String {

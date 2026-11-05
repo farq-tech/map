@@ -34,6 +34,8 @@ enum PTTRadioCue: CaseIterable, Equatable {
     case incomingStart
     /// They let go: roger beep + squelch tail.
     case incomingEnd
+    /// «ترددات»: the channel knob turned — a detent click and a breath of static between channels.
+    case channelClick
 }
 
 // MARK: - when
@@ -140,9 +142,12 @@ enum PTTRadioSynth {
         case .talkEnd:
             out = tone(1_850, ms: 55) + silence(ms: 10) + tone(1_250, ms: 70) + silence(ms: 15) + squelch(ms: 110, seed: 23, decay: 1)
         case .incomingStart:
-            out = (opening ?? squelch(ms: 165, seed: 37, decay: 0.45)) + silence(ms: 12) + tone(1_650, ms: 55)
+            /* Short chirp: the voice starts ≤ 120 ms into this cue (PTTPlayout), the chirp sits under its first syllable. */
+            out = (opening ?? squelch(ms: 165, seed: 37, decay: 0.45)) + silence(ms: 12) + tone(1_650, ms: 40)
         case .incomingEnd:
             out = tone(1_300, ms: 85) + silence(ms: 15) + squelch(ms: 150, seed: 51, decay: 1)
+        case .channelClick:
+            out = silence(ms: 3) + click(ms: 9) + silence(ms: 14) + squelch(ms: 140, seed: 61, decay: 1).map { $0 * 0.55 }
         }
         normalise(&out, to: peak)
         fade(&out, ms: 2)
@@ -198,6 +203,19 @@ enum PTTRadioSynth {
             else if i >= decayFrom { env = Float(exp(-4 * Double(i - decayFrom) / Double(max(1, n - decayFrom)))) }
             else { env = 1 }
             return x * env
+        }
+    }
+
+    /// A knob detent: a few ms of a damped 2.2 kHz ring over a falling noise burst.
+    static func click(ms: Double) -> [Float] {
+        let n = count(ms)
+        var rng: UInt32 = 71
+        return (0..<n).map { i in
+            rng = rng &* 1_664_525 &+ 1_013_904_223
+            let noise = Float(rng >> 8) / Float(1 << 24) * 2 - 1
+            let t = Double(i) / sampleRate
+            let env = Float(exp(-t * 900)) * Float(min(1, Double(i) / 8))
+            return (Float(sin(2 * .pi * 2_200 * t)) * 0.8 + noise * 0.4) * env
         }
     }
 
@@ -294,5 +312,38 @@ struct Biquad: Equatable {
         x2 = x1; x1 = x
         y2 = y1; y1 = y
         return y
+    }
+}
+
+/// The cues are built once (the recorded squelch is read from the bundle). Built on the audio
+/// queue at the first press, that took seconds on a cold start: the mic tap, the 440 Hz test
+/// tone and every received frame waited behind it, and a short press went out as a few frames
+/// («ما يوصل، وأحيانًا يوصل»). Now they are built in the background at launch, and a cue that is
+/// not ready yet is skipped rather than waited for.
+enum PTTCueWarmup {
+    private static let lock = NSLock()
+    private static var started = false
+    private static var ready = false
+
+    static func warm() {
+        lock.lock()
+        let go = !started
+        started = true
+        lock.unlock()
+        guard go else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let t0 = Date()
+            _ = PTTRadioSynth.samples(.talkPermit)
+            lock.lock()
+            ready = true
+            lock.unlock()
+            PTTDiagnosticsLog.shared.add("audio", "radio cues ready in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        }
+    }
+
+    static var isReady: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return ready
     }
 }

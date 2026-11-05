@@ -87,6 +87,8 @@ enum LocalAccountData {
             NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
             /* Build 9: exploration and convoy-alert rules. */
             MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
+            /* The trip's automatic guidance (setting + per-outing progress). */
+            TripAutoNavPrefs.enabledKey, TripAutoNavState.storeKey,
         ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys
     }
 
@@ -97,6 +99,8 @@ enum LocalAccountData {
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
+        /* «المحادثات»: messages still waiting to be sent (the server deletes everything else). */
+        ChatOutbox.wipeAll(defaults)
         MediaShareInbox.forget()
         /* «أماكني المحفوظة» and the GPX list (on-device files). */
         if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {

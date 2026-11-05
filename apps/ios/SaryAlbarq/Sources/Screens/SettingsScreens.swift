@@ -376,8 +376,20 @@ struct NotificationSettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @State private var explaining = false
+    /// «رسائل المحادثات» on the server (PUT /push/chat): the other members' pushes respect it.
+    @State private var chatPush = true
+    /// Shown only once the server answered (an older server has no chat: no toggle).
+    @State private var chatPrefsLoaded = false
     @Environment(AppearanceSettings.self) private var appearance
     private var push: PushRegistrar { model.push }
+
+    private func setChatPush(_ on: Bool) {
+        let before = chatPush
+        chatPush = on
+        Task {
+            do { chatPush = try await model.api.setChatPrefs(on).chat_push } catch { chatPush = before }
+        }
+    }
 
     var body: some View {
         let p = theme.palette
@@ -389,10 +401,18 @@ struct NotificationSettingsView: View {
                               }), id: "notify.toggle")
             }
             stateCard
+            if chatPrefsLoaded {
+            SarySection(footer: "تقدر توقف تنبيهات المحادثات وحدها وتبقى تنبيهات الطوارئ.") {
+                SaryToggleRow(title: "رسائل المحادثات", subtitle: "دردشة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
+                              isOn: Binding(get: { chatPush }, set: { on in setChatPush(on) }), id: "notify.chat")
+                    .disabled(!model.signedIn || model.isDemo)
+            }
+            }
             SarySection(title: "ما الذي يصلك") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     kind(SaryIcon.sos, p.emergency, "طوارئ", "تنبيه عاجل بصوت، حتى في وضع التركيز إذا سمحت بالتنبيهات العاجلة. يُستبدل بـ«أنا بخير» إذا انتهت.")
-                    kind(SaryIcon.note, nil, "رسالة من المجموعة", "بهدوء، بدون صوت.")
+                    kind(SaryIcon.note, nil, "رسالة فوق السيارة", "بهدوء، بدون صوت.")
+                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل دردشة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
                     kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت أصحابك مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
                 }
                 .padding(.vertical, theme.space(.s))
@@ -400,7 +420,10 @@ struct NotificationSettingsView: View {
             Text("الضغط على أي تنبيه يفتح الطلعة نفسها. وأنت داخل الطلعة تظهر الرسائل والطوارئ على الخريطة مباشرة.")
                 .saryText(.footnote).foregroundStyle(p.textTertiary)
         }
-        .task { await push.refresh(signedIn: model.signedIn) }
+        .task {
+            await push.refresh(signedIn: model.signedIn)
+            if model.signedIn, !model.isDemo, let p = try? await model.api.chatPrefs() { chatPush = p.chat_push; chatPrefsLoaded = true }
+        }
         .sheet(isPresented: $explaining) {
             NotifyExplainerSheet(done: { explaining = false }).saryPresented(appearance)
         }

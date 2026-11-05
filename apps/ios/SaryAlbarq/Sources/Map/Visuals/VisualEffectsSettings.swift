@@ -10,6 +10,7 @@ enum VisualEffectsKeys {
     static let sky = "sary.visuals.sky.v1"
     static let glow = "sary.visuals.glow.v1"
     static let slope = "sary.visuals.slope.v1"
+    static let buildings = "sary.visuals.buildings.v1"
 }
 
 struct VisualEffectsSettings: Equatable {
@@ -24,12 +25,15 @@ struct VisualEffectsSettings: Equatable {
     var glow = true
     /// «انحدار تقريبي» along routes and tracks.
     var slope = true
+    /// Neutral 3D buildings (Mapbox Streets heights) over the satellite imagery in cities, when tilted.
+    var buildings = true
 
     static var current: VisualEffectsSettings {
         let d = UserDefaults.standard
         func b(_ k: String) -> Bool { d.object(forKey: k) as? Bool ?? true }
         return VisualEffectsSettings(master: b(VisualEffectsKeys.master), terrain: b(VisualEffectsKeys.terrain), atmosphere: b(VisualEffectsKeys.atmosphere),
-                                     sky: b(VisualEffectsKeys.sky), glow: b(VisualEffectsKeys.glow), slope: b(VisualEffectsKeys.slope))
+                                     sky: b(VisualEffectsKeys.sky), glow: b(VisualEffectsKeys.glow), slope: b(VisualEffectsKeys.slope),
+                                     buildings: b(VisualEffectsKeys.buildings))
     }
 }
 
@@ -45,6 +49,8 @@ struct VisualContext: Equatable {
     var pitch = 0.0
     /// Camera zoom (16 and above: no extra lift; the dunes get more at z11–z14).
     var zoom = 16.0
+    /// How much the camera centre is in a city (`UrbanAreas.weight`): 1 inside, 0 in the open.
+    var urban = 0.0
 }
 
 /// What is actually on, after Low Power Mode, driving and Reduce Motion had their say.
@@ -57,6 +63,8 @@ struct EffectiveVisuals: Equatable {
     var sky: Bool
     var glow: Bool
     var slope: Bool
+    /// Neutral 3D buildings over the satellite imagery (cities only, never while driving).
+    var buildings: Bool
     var drone: Bool
     var stars: Bool
     /// Fog / light transitions (0 with Reduce Motion: changes are instant, nothing glides).
@@ -71,9 +79,15 @@ enum VisualBudget {
     /// The map's terrain before this pack: 1.15, 1.6 in the 3D terrain view.
     static func legacyExaggeration(terrain3D: Bool) -> Double { terrain3D ? 1.6 : 1.15 }
 
+    /// Zoom from which the terrain is at its true height everywhere (faded in from `exaggerationFadeFrom`).
+    static let trueHeightZoom = 13.0
+    static let exaggerationFadeFrom = 12.0
+
     /// 1.0 while driving (true heights under a moving car); 1.15 flat; up to 1.5 in exploration
     /// / the 3D view / a drone flight (1.3 elsewhere) as the camera tilts, + up to 0.5 when tilted
-    /// and zoomed out (z ≤ 12) — never a jump.
+    /// and zoomed out (z ≤ 12) — never a jump. That lift is for open dunes seen from afar: it fades
+    /// to true heights (1.0) by z13 everywhere, and is never applied over a city — a stretched DEM
+    /// under draped imagery pulls buildings, towers and their shadows into leaning smears.
     static func exaggeration(_ c: VisualContext) -> Double {
         if c.driving { return 1.0 }
         let maxEx = c.exploring || c.terrain3D || c.flying ? 1.5 : 1.3
@@ -81,13 +95,26 @@ enum VisualBudget {
         /* Farther out the ~30 m DEM's dunes flatten to nothing: a little more lift at z11–z14,
            none from z15.5 (close up they already stand). Smooth in zoom and pitch alike. */
         let far = 1 - Smooth.step(12, 15.5, c.zoom)
-        return Smooth.lerp(1.15, maxEx, tilt) + 0.5 * far * tilt
+        let lifted = Smooth.lerp(1.15, maxEx, tilt) + 0.5 * far * tilt
+        /* Close in, or over a city: true heights. Smooth in zoom and at the city's edge alike. */
+        let flat = max(Smooth.step(exaggerationFadeFrom, trueHeightZoom, c.zoom), min(1, max(0, c.urban)))
+        return Smooth.lerp(lifted, 1.0, flat)
     }
+
+    /// Neutral 3D buildings: satellite in a city, not while driving (the road is the subject),
+    /// not in Low Power Mode (an extra 3D pass).
+    static func buildings(_ s: VisualEffectsSettings, _ c: VisualContext) -> Bool {
+        s.master && s.buildings && c.layer == .satellite && c.urban >= 0.5 && !c.driving && !c.lowPower
+    }
+
+    /// The buildings' opacity: none looking straight down (the imagery's own roofs stay as they
+    /// are in 2D), solid from 40° of tilt, where the draped photo stops reading as a city.
+    static func buildingsOpacity(pitch: Double) -> Double { Smooth.step(18, 40, pitch) }
 
     static func resolve(_ s: VisualEffectsSettings, _ c: VisualContext) -> EffectiveVisuals {
         guard s.master else {
             return EffectiveVisuals(managed: false, exaggeration: legacyExaggeration(terrain3D: c.terrain3D), hillshade: false, atmosphere: false,
-                                    sky: false, glow: false, slope: false, drone: false, stars: false, transitionMs: 0, orbit: false, maxFps: 60)
+                                    sky: false, glow: false, slope: false, buildings: false, drone: false, stars: false, transitionMs: 0, orbit: false, maxFps: 60)
         }
         let lean = c.lowPower
         return EffectiveVisuals(
@@ -101,6 +128,7 @@ enum VisualBudget {
             glow: s.glow && !lean,
             /* Not while driving: the road is the subject, not a colour legend. */
             slope: s.slope && !lean && !c.driving,
+            buildings: buildings(s, c),
             drone: DroneOrbit.allowed(driving: c.driving),
             stars: !lean,
             transitionMs: c.reduceMotion ? 0 : 1_800,
@@ -128,6 +156,8 @@ final class MapVisualsHub: ObservableObject {
     @Published private(set) var flying = false
     /// A live map is on screen (the drone buttons are hidden otherwise).
     @Published private(set) var mapAttached = false
+    /// Tilted over a city (`CityBuildings.offerRealistic`): «اعرضها بالوضع الواقعي» is offered.
+    @Published var cityTilt = false
     /// DEBUG / UI tests: the last flight's measured frame pacing.
     @Published var lastFlightStats: String = ""
 
@@ -143,6 +173,9 @@ final class MapVisualsHub: ObservableObject {
 
     func stopFlight() { director?.stopDrone() }
 
+    /// The live map's camera, framed for «الوضع الواقعي».
+    func realisticCamera() -> RealisticRules.Camera? { director?.realisticCamera() }
+
     func setFlying(_ on: Bool) { if flying != on { flying = on } }
 }
 
@@ -156,6 +189,7 @@ struct VisualEffectsSection: View {
     @AppStorage(VisualEffectsKeys.sky) private var sky = true
     @AppStorage(VisualEffectsKeys.glow) private var glow = true
     @AppStorage(VisualEffectsKeys.slope) private var slope = true
+    @AppStorage(VisualEffectsKeys.buildings) private var buildings = true
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     var body: some View {
@@ -178,6 +212,9 @@ struct VisualEffectsSection: View {
                 SaryDivider()
                 SaryToggleRow(title: "انحدار تقريبي", subtitle: "يلوّن المقاطع الحادة من نموذج ارتفاع ~٣٠ م", systemImage: "chart.line.uptrend.xyaxis",
                               isOn: $slope, id: "settings.visuals.slope")
+                SaryDivider()
+                SaryToggleRow(title: "مبانٍ ثلاثية الأبعاد في المدن", subtitle: "مجسّمات بارتفاعاتها عند إمالة صور القمر الصناعي", systemImage: "building.2.fill",
+                              isOn: $buildings, id: "settings.visuals.buildings")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in

@@ -49,7 +49,8 @@ final class VisualsUITests: XCTestCase {
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.56)).press(forDuration: 1.3)
         XCTAssertTrue(app.buttons["point.copy"].waitForExistence(timeout: 6), "the long-press card")
         let drone = app.buttons["point.drone"]
-        if !drone.waitForExistence(timeout: 3) { app.swipeUp() }
+        /* «بريف المكان» (#60) sits above the actions: scroll until the drone row shows. */
+        for _ in 0..<5 where !(drone.exists && drone.isHittable) { app.swipeUp() }
         shot(app, "visuals-point-card")
         XCTAssertTrue(drone.waitForExistence(timeout: 4), "«طيران درون استكشافي» in the point card")
         XCTAssertTrue(drone.isEnabled, "enabled when not driving")
@@ -118,5 +119,31 @@ final class VisualsUITests: XCTestCase {
         let ended = NSPredicate { _, _ in !self.flying(map) }
         expectation(for: ended, evaluatedWith: nil)
         waitForExpectations(timeout: 25)
+    }
+
+    // MARK: cities
+
+    /// Tilted over Al-Masjid al-Haram: neutral 3D buildings over the imagery, «اعرضها بالوضع الواقعي»
+    /// offered, and it opens Apple's realistic view at the same camera.
+    func testCityTiltOffersRealisticAtTheSameCamera() {
+        let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsClock", "2026-11-05T08:30:00Z",
+                          "-SaryVisualsCamera", "21.4200,39.8262,15.3,58,170"])
+        let chip = app.buttons["explore.city-realistic"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 20), "offered when tilted over a city")
+        XCTAssertTrue(chip.label.contains("اعرضها بالوضع الواقعي"))
+        sleep(8)
+        shot(app, "city-makkah-buildings")
+        chip.tap()
+        XCTAssertTrue(any(app, "realistic.screen").waitForExistence(timeout: 8))
+        XCTAssertTrue(any(app, "realistic.map").waitForExistence(timeout: 8), "online and stopped: the map opens")
+        sleep(14)
+        shot(app, "city-makkah-realistic")
+    }
+
+    func testCityRealisticNotOfferedInTheDesert() {
+        let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsCamera", "28.0,41.5,13.4,62,250"])
+        XCTAssertTrue(any(app, "outing.map").waitForExistence(timeout: 10))
+        sleep(8)
+        XCTAssertFalse(app.buttons["explore.city-realistic"].exists, "the desert: no offer")
     }
 }

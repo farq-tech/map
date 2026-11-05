@@ -94,6 +94,9 @@ struct OutingActivityDisplay: Equatable {
     var tripLine: String?
     /// Compact island: "١٢ كم" left to the destination.
     var tripShort: String?
+    /// «الملاحة»: the next manoeuvre; hidden once the picture is old (it would point the wrong way).
+    var navLine: String? = nil
+    var navSymbol: String = "location.north.line.fill"
 
     static func make(_ s: OutingActivityState, now: Date, systemStale: Bool = false) -> OutingActivityDisplay {
         let stale = systemStale || now.timeIntervalSince(s.updatedAt) > OutingActivityState.staleAfter
@@ -113,7 +116,9 @@ struct OutingActivityDisplay: Equatable {
             speedText: stale ? "—" : (s.speedKmh.map { "\(ActivityFormat.number(max(0, $0))) كم/س" } ?? "—"),
             tripFraction: trip(s, stale: stale).fraction,
             tripLine: trip(s, stale: stale).line,
-            tripShort: trip(s, stale: stale).short
+            tripShort: trip(s, stale: stale).short,
+            navLine: stale ? nil : s.navLine,
+            navSymbol: s.navSymbol ?? "location.north.line.fill"
         )
     }
 
