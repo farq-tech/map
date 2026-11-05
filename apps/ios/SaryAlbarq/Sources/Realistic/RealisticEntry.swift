@@ -58,6 +58,7 @@ extension View {
 /// The «الوضع الواقعي» glass button used over maps (track detail).
 struct RealisticEntryButton: View {
     var id = "realistic-open"
+    var title = "الوضع الواقعي"
     var action: () -> Void
     @Environment(\.sary) private var theme
 
@@ -65,7 +66,7 @@ struct RealisticEntryButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: RealisticEntryButton.icon).font(.system(size: 14, weight: .bold))
-                Text("الوضع الواقعي").saryText(.subhead, weight: .bold).lineLimit(1)
+                Text(title).saryText(.subhead, weight: .bold).lineLimit(1)
             }
             .foregroundStyle(theme.palette.textPrimary)
             .padding(.horizontal, theme.space(.m))

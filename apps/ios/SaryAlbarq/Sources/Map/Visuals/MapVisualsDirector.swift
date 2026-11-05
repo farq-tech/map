@@ -56,6 +56,8 @@ final class MapVisualsDirector: NSObject {
     private var slopeKey: String?
     private var slopeAt: CFTimeInterval = 0
     private var slopeSegments: [SlopeProfile.Segment] = []
+    /// The buildings' opacity we set last (nil: no buildings layer).
+    private var appliedBuildingsOpacity: Double?
     private let overlay = VisualsSourceView()
 
     private var flight: DroneOrbit?
@@ -72,6 +74,8 @@ final class MapVisualsDirector: NSObject {
     static let hillshadeBroadLayer = "wow-hillshade-broad"
     static let ambientLight = "wow-ambient"
     static let directionalLight = "wow-directional"
+    static let buildingsSource = "wow-buildings-streets"
+    static let buildingsLayer = "wow-buildings-3d"
     static let slopeSource = "wow-slope"
     static let slopeLayer = "wow-slope-line"
     static let glowPrefix = "wow-glow-"
@@ -146,9 +150,10 @@ final class MapVisualsDirector: NSObject {
 
     // MARK: inputs → effects
 
-    private func context(_ i: MapVisualInputs, pitch: Double, zoom: Double) -> VisualContext {
+    private func context(_ i: MapVisualInputs, pitch: Double, zoom: Double, center: CLLocationCoordinate2D) -> VisualContext {
         VisualContext(driving: i.driving, exploring: i.exploring, terrain3D: i.terrain3D, flying: flight != nil, lowPower: lowPower,
-                      reduceMotion: UIAccessibility.isReduceMotionEnabled, layer: i.layer, pitch: pitch, zoom: zoom)
+                      reduceMotion: UIAccessibility.isReduceMotionEnabled, layer: i.layer, pitch: pitch, zoom: zoom,
+                      urban: UrbanAreas.weight(lat: center.latitude, lng: center.longitude))
     }
 
     private func tick() {
@@ -168,7 +173,7 @@ final class MapVisualsDirector: NSObject {
         let i = inputs()
         lastInputs = i
         let st = map.mapboxMap.cameraState
-        let e = VisualBudget.resolve(settings, context(i, pitch: st.pitch, zoom: st.zoom))
+        let e = VisualBudget.resolve(settings, context(i, pitch: st.pitch, zoom: st.zoom, center: st.center))
         let was = effective
         effective = e
         guard styleReady else { return }
@@ -185,6 +190,8 @@ final class MapVisualsDirector: NSObject {
             if !e.slope { clearSlope() }
             layoutOverlay()
         }
+        applyBuildings(pitch: st.pitch)
+        publishCityTilt(st)
     }
 
     private func styleLoaded() {
@@ -197,6 +204,7 @@ final class MapVisualsDirector: NSObject {
         fogSet = false
         slopeKey = nil
         appliedExaggeration = nil
+        appliedBuildingsOpacity = nil
         let m: MapboxMap = map.mapboxMap
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
@@ -208,12 +216,64 @@ final class MapVisualsDirector: NSObject {
 
     private func cameraChanged() {
         guard styleReady, let map else { return }
+        let st = map.mapboxMap.cameraState
+        let c = context(lastInputs, pitch: st.pitch, zoom: st.zoom, center: st.center)
         if effective.managed, settings.terrain {
-            let st = map.mapboxMap.cameraState
-            let c = context(lastInputs, pitch: st.pitch, zoom: st.zoom)
             effective.exaggeration = VisualBudget.exaggeration(c)
             applyExaggeration()
         }
+        /* Panning into / out of a city: the buildings come and go with it. */
+        let b = VisualBudget.buildings(settings, c)
+        if b != effective.buildings { effective.buildings = b }
+        applyBuildings(pitch: st.pitch)
+        publishCityTilt(st)
+    }
+
+    // MARK: city buildings
+
+    /// Neutral 3D buildings from Mapbox Streets' footprints and heights, over the satellite imagery
+    /// in a city. Sand walls, light roofs, ambient occlusion at their feet and the real sun's shadows
+    /// (the scene's directional light casts them) — they stand where the draped photo only smears.
+    /// Faded in with the tilt, so the 2D map looking down is the imagery as before.
+    private func applyBuildings(pitch: Double) {
+        guard styleReady, let m = map?.mapboxMap else { return }
+        guard effective.buildings else {
+            if appliedBuildingsOpacity != nil || m.layerExists(withId: Self.buildingsLayer) {
+                if m.layerExists(withId: Self.buildingsLayer) { try? m.removeLayer(withId: Self.buildingsLayer) }
+                appliedBuildingsOpacity = nil
+            }
+            return
+        }
+        /* Steps of 0.05: a gesture does not restyle the layer every frame. */
+        let opacity = (VisualBudget.buildingsOpacity(pitch: pitch) * 20).rounded() / 20
+        if !m.layerExists(withId: Self.buildingsLayer) {
+            if !m.sourceExists(withId: Self.buildingsSource) {
+                try? m.addSource(withId: Self.buildingsSource, properties: ["type": "vector", "url": "mapbox://mapbox.mapbox-streets-v8"])
+            }
+            var layer = CityBuildings.layer(id: Self.buildingsLayer, source: Self.buildingsSource, opacity: opacity)
+            if lastInputs.layer.isImport { layer["slot"] = "middle" }
+            try? m.addLayer(with: layer, layerPosition: nil)
+            appliedBuildingsOpacity = opacity
+            return
+        }
+        guard opacity != appliedBuildingsOpacity else { return }
+        appliedBuildingsOpacity = opacity
+        try? m.setLayerProperty(for: Self.buildingsLayer, property: "fill-extrusion-opacity", value: opacity)
+    }
+
+    /// «اعرضها بالوضع الواقعي»: tilted over a city, the photoreal view is one tap away.
+    private func publishCityTilt(_ st: CameraState) {
+        let on = CityBuildings.offerRealistic(pitch: st.pitch, zoom: st.zoom,
+                                              urban: UrbanAreas.weight(lat: st.center.latitude, lng: st.center.longitude))
+        if MapVisualsHub.shared.cityTilt != on { MapVisualsHub.shared.cityTilt = on }
+    }
+
+    /// The live camera as «الوضع الواقعي» frames it (same centre, heading, tilt and distance).
+    func realisticCamera() -> RealisticRules.Camera? {
+        guard let map else { return nil }
+        let st = map.mapboxMap.cameraState
+        return RealisticRules.camera(fromMapbox: LngLat(lng: st.center.longitude, lat: st.center.latitude), zoom: st.zoom,
+                                     pitch: st.pitch, bearing: st.bearing, viewHeight: Double(map.bounds.height))
     }
 
     private func applyExaggeration() {
@@ -233,6 +293,7 @@ final class MapVisualsDirector: NSObject {
 
     private func idle() {
         guard styleReady else { return }
+        refresh(force: false)
         updateSun(force: false)
         updateWeatherIfDue(force: false)
         ensureGlow()

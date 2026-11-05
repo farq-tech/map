@@ -118,4 +118,28 @@ final class RealisticTests: XCTestCase {
     func testExplorationOffersTheRealisticEntry() {
         XCTAssertTrue(SaryMapControlItem.explore(terrain3D: false, tracksShown: 0).contains { $0.accessibilityID == "explore-realistic" })
     }
+
+    // MARK: «اعرضها بالوضع الواقعي»
+
+    func testMapboxCameraBecomesTheSameRealisticCamera() {
+        let haram = LngLat(lng: 39.8262, lat: 21.4225)
+        let c = RealisticRules.camera(fromMapbox: haram, zoom: 15.3, pitch: 58, bearing: -190, viewHeight: 874)
+        XCTAssertEqual(c.center, haram)
+        XCTAssertEqual(c.pitch, 58)
+        XCTAssertEqual(c.heading, 170, accuracy: 1e-9, "bearing normalised to 0…360")
+        /* z15.3 on an 874-pt view: ≈ 1.5 × 874 × 1.77 m/pt ≈ 2.3 km from the camera to the centre. */
+        XCTAssertEqual(c.distance, 2_320, accuracy: 120)
+        let closer = RealisticRules.camera(fromMapbox: haram, zoom: 16.3, pitch: 58, bearing: 0, viewHeight: 874)
+        XCTAssertEqual(closer.distance, c.distance / 2, accuracy: 1, "one zoom level: half the distance")
+    }
+
+    func testSceneCameraWinsAndIsClampedToMapKit() {
+        var s = RealisticScene.point(LngLat(lng: 39.8262, lat: 21.4225), name: "المسجد الحرام")
+        s.camera = RealisticRules.Camera(center: LngLat(lng: 39.8262, lat: 21.42), distance: 120, heading: 170, pitch: 80)
+        let c = RealisticRules.initialCamera(s)
+        XCTAssertEqual(c?.center, LngLat(lng: 39.8262, lat: 21.42), "the trip map's own centre, not the point")
+        XCTAssertEqual(c?.heading, 170)
+        XCTAssertEqual(c?.distance, RealisticRules.minDistance)
+        XCTAssertEqual(c?.pitch, RealisticRules.tiltedPitch)
+    }
 }

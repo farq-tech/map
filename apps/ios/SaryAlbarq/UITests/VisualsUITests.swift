@@ -119,4 +119,30 @@ final class VisualsUITests: XCTestCase {
         expectation(for: ended, evaluatedWith: nil)
         waitForExpectations(timeout: 25)
     }
+
+    // MARK: cities
+
+    /// Tilted over Al-Masjid al-Haram: neutral 3D buildings over the imagery, «اعرضها بالوضع الواقعي»
+    /// offered, and it opens Apple's realistic view at the same camera.
+    func testCityTiltOffersRealisticAtTheSameCamera() {
+        let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsClock", "2026-11-05T08:30:00Z",
+                          "-SaryVisualsCamera", "21.4200,39.8262,15.3,58,170"])
+        let chip = app.buttons["explore.city-realistic"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 20), "offered when tilted over a city")
+        XCTAssertTrue(chip.label.contains("اعرضها بالوضع الواقعي"))
+        sleep(8)
+        shot(app, "city-makkah-buildings")
+        chip.tap()
+        XCTAssertTrue(any(app, "realistic.screen").waitForExistence(timeout: 8))
+        XCTAssertTrue(any(app, "realistic.map").waitForExistence(timeout: 8), "online and stopped: the map opens")
+        sleep(14)
+        shot(app, "city-makkah-realistic")
+    }
+
+    func testCityRealisticNotOfferedInTheDesert() {
+        let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsCamera", "28.0,41.5,13.4,62,250"])
+        XCTAssertTrue(any(app, "outing.map").waitForExistence(timeout: 10))
+        sleep(8)
+        XCTAssertFalse(app.buttons["explore.city-realistic"].exists, "the desert: no offer")
+    }
 }
