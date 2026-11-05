@@ -70,7 +70,10 @@ enum LiveActionCatalog {
                 .init(id: "weather", title: "الطقس", systemImage: "cloud.sun.fill", accessibilityID: "outing-weather"),
             ]),
             LiveActionGroup(title: "الترفيه", items: [
-                .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube"),
+                .init(id: "radio", title: "إذاعة الطلعة", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-radio",
+                      subtitle: "للكل، والشاشة مقفلة، وفي السيارة"),
+                .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube",
+                      subtitle: "والتطبيق مفتوح فقط"),
             ]),
         ]
         guard s.ended else { return all }

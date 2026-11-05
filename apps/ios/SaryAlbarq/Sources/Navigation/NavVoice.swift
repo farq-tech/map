@@ -45,9 +45,14 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
         lastText = t
         lastAt = Date()
         guard !muted, canSpeak() else { return }
-        let s = AVAudioSession.sharedInstance()
-        try? s.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
-        try? s.setActive(true)
+        /* «إذاعة الطلعة» playing: keep its `.playback` session (changing the category or
+         * deactivating it would stop the music) and let it duck itself (GroupAudioDuck). */
+        GroupAudioDuck.began(.nav)
+        if !GroupAudioDuck.musicOwnsSession {
+            let s = AVAudioSession.sharedInstance()
+            try? s.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+            try? s.setActive(true)
+        }
         let u = AVSpeechUtterance(string: t)
         u.voice = Self.voice
         u.rate = AVSpeechUtteranceDefaultSpeechRate * 1.02
@@ -57,11 +62,14 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
 
     func stop() {
         synth.stopSpeaking(at: .immediate)
+        GroupAudioDuck.ended(.nav)
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
             guard !self.synth.isSpeaking else { return }
+            GroupAudioDuck.ended(.nav)
+            guard !GroupAudioDuck.musicOwnsSession else { return }
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }

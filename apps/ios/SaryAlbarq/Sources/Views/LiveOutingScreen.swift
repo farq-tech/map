@@ -404,6 +404,8 @@ private struct LiveTopStack: View {
                 GuidancePromptRow(prompt: prompt, leaderName: controller.leaderName, start: controller.startGuidanceForMe)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+            /* «إذاعة الطلعة»: what the trip listens to, also while navigating (Sources/Media/GroupAudio). */
+            GroupAudioMiniBar(center: GroupAudioCenters.of(controller))
             if let bt = controller.backTrackUI {
                 BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
                     .transition(.move(edge: .top).combined(with: .opacity))

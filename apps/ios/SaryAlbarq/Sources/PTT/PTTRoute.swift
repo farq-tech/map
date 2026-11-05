@@ -86,6 +86,8 @@ final class PTTInAppRoute: PTTRoute {
 
     private func activate() {
         guard !sessionActive else { return }
+        /* «إذاعة الطلعة» pauses while the walkie-talkie has the speaker, and resumes after. */
+        GroupAudioDuck.began(.ptt)
         let s = AVAudioSession.sharedInstance()
         do {
             try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
@@ -112,7 +114,9 @@ final class PTTInAppRoute: PTTRoute {
         pendingDeactivate?.cancel()
         guard sessionActive else { return }
         sessionActive = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        let music = GroupAudioDuck.musicOwnsSession
+        if !music { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+        GroupAudioDuck.ended(.ptt)
     }
 }
 
@@ -309,6 +313,7 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
         Self.diag("didActivate audio session (category=\(audioSession.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")))")
         Task { @MainActor in
             /* The system decides whether this is for talking or listening; both callbacks are idempotent. */
+            GroupAudioDuck.began(.ptt)
             self.callbacks.transmitReady()
             self.callbacks.playbackReady()
         }
@@ -316,7 +321,10 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, didDeactivate audioSession: AVAudioSession) {
         Self.diag("didDeactivate audio session")
-        Task { @MainActor in self.callbacks.audioDeactivated() }
+        Task { @MainActor in
+            self.callbacks.audioDeactivated()
+            GroupAudioDuck.ended(.ptt)
+        }
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, failedToJoinChannel channelUUID: UUID, error: Error) {

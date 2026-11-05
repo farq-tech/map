@@ -128,6 +128,13 @@ struct MediaSheet: View {
                           label: { $0.title }, systemImage: { $0 == .mine ? "person.fill" : "person.3.fill" }, id: "media.tabs")
             ScrollView {
                 VStack(spacing: theme.space(.m)) {
+                    /* «إذاعة الطلعة» first: it is what works in the car (background, locked, CarPlay audio). */
+                    if let radio = GroupAudioCenters.existing(center.outingId) {
+                        GroupAudioPromoCard {
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { radio.open() }
+                        }
+                    }
                     if center.onCarPlay {
                         SaryBanner(text: "الجوال متصل بـ CarPlay: يوتيوب ما يشتغل على شاشة السيارة ولا من خلالها.", tone: .warning, systemImage: "car.fill")
                             .accessibilityIdentifier("media.carplay")
