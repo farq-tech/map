@@ -129,6 +129,18 @@ final class WalkieTalkieTests: XCTestCase {
         XCTAssertEqual(fl.pressDown(nowMs: 0, online: false), [.refused(.offline)])
     }
 
+    /// A press while the socket comes back (Lock Screen talk after the link dropped) waits longer
+    /// for the grant instead of «لا اتصال» after 3 s.
+    func testFloorRequestWaitsLongerWhileReconnecting() {
+        var fl = PTTFloor(me: "me")
+        _ = fl.pressDown(nowMs: 0, online: true, waitMs: PTTFloor.reconnectRequestTimeoutMs)
+        XCTAssertEqual(fl.tick(nowMs: PTTFloor.requestTimeoutMs + 100), [])
+        XCTAssertEqual(fl.receive(.grant(id: 1, burst: 9, maxMs: 60000), nowMs: 4_000), [.startCapture(burst: 9)])
+        _ = fl.pressUp()
+        _ = fl.pressDown(nowMs: 10_000, online: true)
+        XCTAssertEqual(fl.tick(nowMs: 10_000 + PTTFloor.requestTimeoutMs), [.sendStop, .refused(.offline)], "the normal wait is unchanged")
+    }
+
     func testFloorLateGrantIsHandedBack() {
         var fl = PTTFloor(me: "me")
         _ = fl.pressDown(nowMs: 0, online: true)

@@ -45,6 +45,8 @@ final class PTTAudioEngine {
     private var playing = false
     private var draining = false
     private var attached = false
+    /// The input node has been part of the running graph since the last start.
+    private var inputWired = false
     private var toneTimer: DispatchSourceTimer?
     private var tonePhase = 0.0
     private var levelAt = 0.0
@@ -53,6 +55,17 @@ final class PTTAudioEngine {
 
     init(testTone: Bool = PTTAudioEngine.testToneRequested) {
         useTestTone = testTone
+        PTTCueWarmup.warm()
+        /* The AAC-ELD codecs load on first use (≈1 s on a cold start): that second used to come
+         * out of the first transmission. Load them now, before anyone presses. */
+        queue.async { [self] in
+            let t0 = Date()
+            let pcm = Self.silence()
+            if let packet = encoder?.encode(pcm) { _ = decoder?.decode(packet) }
+            encoder?.reset()
+            decoder?.reset()
+            PTTDiagnosticsLog.shared.add("audio", "codec ready in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        }
     }
 
     static var testToneRequested: Bool {
@@ -74,14 +87,19 @@ final class PTTAudioEngine {
             attached = true
         }
         if !engine.isRunning {
+            let t0 = Date()
             engine.prepare()
             try engine.start()
+            let ms = Int(Date().timeIntervalSince(t0) * 1000)
+            /* Field logs: a slow start here holds every frame and cue queued behind it. */
+            if ms > 150 { PTTDiagnosticsLog.shared.add("audio", "engine start took \(ms) ms") }
         }
     }
 
     private func stopEngineIfIdle() {
         guard !capturing, !playing, cuesInFlight == 0 else { return }
         engine.stop()
+        inputWired = false
     }
 
     // MARK: talking
@@ -102,6 +120,14 @@ final class PTTAudioEngine {
                 let hw = input.outputFormat(forBus: 0)
                 guard hw.sampleRate > 0, hw.channelCount > 0 else { throw PTTError.noMicrophone }
                 inputConverter = AVAudioConverter(from: hw, to: PTTAudioFormat.pcm)
+                /* An engine already running for a cue or a friend's voice was started without the
+                 * input in its graph: a tap added now may never be called. Restart it with the mic. */
+                if engine.isRunning, !inputWired, !playing {
+                    cuePlayer.stop()
+                    cuesInFlight = 0
+                    engine.stop()
+                }
+                inputWired = true
                 input.removeTap(onBus: 0)
                 input.installTap(onBus: 0, bufferSize: 1024, format: hw) { [weak self] buf, _ in
                     self?.queue.async { self?.captured(buf) }
@@ -109,6 +135,7 @@ final class PTTAudioEngine {
                 try ensureEngine()
             } catch {
                 Self.log.error("[PTT] capture failed: \(String(describing: error), privacy: .public)")
+                PTTDiagnosticsLog.shared.add("audio", "mic failed: \((error as NSError).domain)#\((error as NSError).code)")
                 capturing = false
             }
         }
@@ -212,7 +239,7 @@ final class PTTAudioEngine {
                 try ensureEngine()
                 playing = true
                 player.play()
-                if let cue, let lead = Self.silence(seconds: PTTRadioSynth.duration(cue)) {
+                if let cue, PTTCueWarmup.isReady, let lead = Self.silence(seconds: PTTRadioSynth.duration(cue)) {
                     player.scheduleBuffer(lead, completionHandler: nil)
                 }
                 /* Two buffers in flight keep the chain pulling at the audio clock. */
@@ -220,6 +247,7 @@ final class PTTAudioEngine {
                 scheduleNext()
             } catch {
                 Self.log.error("[PTT] playback failed: \(String(describing: error), privacy: .public)")
+                PTTDiagnosticsLog.shared.add("audio", "speaker failed: \((error as NSError).domain)#\((error as NSError).code)")
             }
         }
     }
@@ -264,6 +292,11 @@ final class PTTAudioEngine {
     }
 
     private func startCue(_ cue: PTTRadioCue) {
+        /* Never build the cues here: this queue carries the mic and the friend's voice. */
+        guard PTTCueWarmup.isReady else {
+            PTTCueWarmup.warm()
+            return PTTDiagnosticsLog.shared.add("audio", "cue skipped (still warming)")
+        }
         guard let buf = PTTRadioSynth.buffer(cue) else { return }
         do { try ensureEngine() } catch {
             Self.log.error("[PTT] cue failed: \(String(describing: error), privacy: .public)")
@@ -278,7 +311,7 @@ final class PTTAudioEngine {
         cuePlayer.scheduleBuffer(buf, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             self?.queue.async {
                 guard let self else { return }
-                self.cuesInFlight -= 1
+                self.cuesInFlight = max(0, self.cuesInFlight - 1)
                 if self.cuesInFlight == 0 { self.cuePlayer.stop() }
                 self.stopEngineIfIdle()
             }

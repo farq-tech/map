@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import os
+import UIKit
 
 /// «قناة الطلعة» for one outing: hold to talk, everyone in the outing hears you
 /// live, one person at a time — like a radio.
@@ -38,6 +39,15 @@ final class OutingWalkieTalkie: ObservableObject {
     private let defaults: UserDefaults
     private let audio: PTTAudioEngine
     private var route: PTTRoute
+    /// Audio session owner when the system channel is not (yet) joined, or refused us: a
+    /// `PTTSystemRoute` that is not joined does nothing, and the mic then recorded silence
+    /// (no session category) and a friend's voice followed the silent switch.
+    private let inApp = PTTInAppRoute()
+    private var forceInAppAudio = false
+    private var audioRoute: PTTRoute { route.isSystemChannel && !forceInAppAudio ? route : inApp }
+    /// The system's talk button started this transmission (Lock Screen, Dynamic Island, headset).
+    private var systemTransmit = false
+    private let diag: (String, String) -> Void
     private var channel: LiveChannel?
     private weak var mesh: NearbyMesh?
     private let tokenBackend: PTTTokenBackend?
@@ -73,7 +83,9 @@ final class OutingWalkieTalkie: ObservableObject {
     }
     #endif
 
-    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard) {
+    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard,
+         diag: @escaping (String, String) -> Void = { PTTDiagnosticsLog.shared.add($0, $1) }) {
+        self.diag = diag
         self.outingId = outingId
         self.me = me
         self.tokenBackend = tokenBackend
@@ -84,6 +96,7 @@ final class OutingWalkieTalkie: ObservableObject {
         _ = f.setMuted(defaults.bool(forKey: Self.mutedKeyPrefix + outingId))
         floor = f
         self.route.callbacks = callbacks()
+        inApp.callbacks = callbacks()
         audio.onFrame = { [weak self] frame in
             let bytes = frame.encoded()
             DispatchQueue.main.async { self?.sendFrame(bytes) }
@@ -108,6 +121,17 @@ final class OutingWalkieTalkie: ObservableObject {
         mesh?.onVoice = { [weak self] m in self?.nearbyVoice(m) }
         channel?.setPTTJoined(!muted)
         refreshMode()
+        #if canImport(PushToTalk) && !targetEnvironment(simulator)
+        PTTSystemRoute.shared.onRemoteFailed = { [weak self] in
+            guard let self, let b = self.pendingPlayback, case let .listening(t) = self.floor.state, t.burst == b,
+                  UIApplication.shared.applicationState == .active else { return }
+            self.diag("audio", "system refused the speaker: in-app speaker")
+            self.forceInAppAudio = true
+            self.pendingPlayback = nil
+            self.inApp.setRemote(self.displayName(t))
+            self.startPlayback(burst: b)
+        }
+        #endif
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -151,17 +175,32 @@ final class OutingWalkieTalkie: ObservableObject {
     func pressBegan() {
         refreshMode()
         joinSystemChannelIfNeeded()
-        let fx = floor.pressDown(nowMs: Self.now(), online: mode != .unavailable)
-        apply(fx)
+        systemTransmit = false
+        let fx = request(source: "button")
         /* The mic opens while the server decides (pre-roll), so the first word is not cut. */
         if fx.contains(where: { if case .sendStart = $0 { return true }; return false }) {
-            route.beginTransmit()
+            audioRoute.beginTransmit()
         }
     }
 
     func pressEnded() {
+        diag("floor", "release (button)")
         apply(floor.pressUp())
-        route.endTransmit()
+        audioRoute.endTransmit()
+    }
+
+    /// A press, from our button or the system's. With the socket down it still asks: the request
+    /// waits for the reconnect (LiveChannel queues it) instead of an instant «لا اتصال».
+    @discardableResult
+    private func request(source: String) -> [PTTFloor.Effect] {
+        let live = channel?.isLive == true
+        let canReconnect = !live && channel.map { !$0.isStopped } == true && mode != .nearby
+        if canReconnect { channel?.ensureLive(reason: "press") }
+        let fx = floor.pressDown(nowMs: Self.now(), online: mode != .unavailable || canReconnect,
+                                 waitMs: canReconnect ? PTTFloor.reconnectRequestTimeoutMs : PTTFloor.requestTimeoutMs)
+        diag("floor", "press (\(source)) link=\(live ? "live" : canReconnect ? "reconnecting" : String(describing: mode)) → \(fx.map(Self.short).joined(separator: ","))")
+        apply(fx)
+        return fx
     }
 
     /// «اكتم القناة»: nothing in, nothing out, no Lock Screen wake-ups.
@@ -182,18 +221,49 @@ final class OutingWalkieTalkie: ObservableObject {
     // MARK: inbound
 
     func receive(_ s: PTTSignal) {
-        PTTAudioEngine.log.notice("[PTT] signal \(String(describing: s), privacy: .public)")
-        apply(floor.receive(s, nowMs: Self.now()))
+        let fx = floor.receive(s, nowMs: Self.now())
+        diag("ptt", "\(Self.short(s)) → \(fx.map(Self.short).joined(separator: ","))")
+        apply(fx)
+    }
+
+    private var rxFrames = 0
+
+    /// Signal / effect in a few words for «سجل القناة» (no names, no ids).
+    static func short(_ s: PTTSignal) -> String {
+        switch s {
+        case let .grant(_, burst, _): return "grant b\(burst)"
+        case let .deny(_, reason, _): return "deny \(reason)"
+        case let .state(t, _): return t == nil ? "state idle" : "state talker b\(t!.burst)"
+        case let .talker(t): return "talker b\(t.burst)"
+        case let .idle(_, burst, reason): return "idle b\(burst) \(reason)"
+        }
+    }
+
+    static func short(_ e: PTTFloor.Effect) -> String {
+        switch e {
+        case .sendStart: return "sendStart"
+        case .sendStop: return "sendStop"
+        case let .startCapture(b): return "mic b\(b)"
+        case .stopCapture: return "micOff"
+        case let .startPlayback(t): return "play b\(t.burst)"
+        case .stopPlayback: return "playOff"
+        case let .refused(r): return "refused \(r)"
+        case let .cutOff(r): return "cutOff \(r)"
+        }
     }
 
     func receiveAudio(_ d: Data) {
-        guard playbackOn, let f = PTTFrame.decode(d) else { return }
+        guard let f = PTTFrame.decode(d) else { return diag("audio", "undecodable frame (\(d.count) bytes)") }
+        rxFrames += 1
+        if rxFrames == 1 || rxFrames % 100 == 0 { diag("audio", "rx frames=\(rxFrames) playback=\(playbackOn) ready=\(audioReady)") }
+        guard playbackOn else { return }
         audio.receive(f)
     }
 
-    /// iOS woke us with a pushtotalk push: make sure the socket comes back and joins.
+    /// iOS woke us with a pushtotalk push: make sure the socket comes back (now, not after a backoff) and joins.
     func wokenByPush() {
-        channel?.reconnectNow()
+        diag("push", "pushtotalk wake (link=\(channel?.isLive == true ? "live" : "down"))")
+        channel?.ensureLive(reason: "push")
         channel?.setPTTJoined(!muted)
     }
 
@@ -221,18 +291,20 @@ final class OutingWalkieTalkie: ObservableObject {
                 startCaptureIfReady()
                 /* "Speak now": once the floor is ours *and* the session is live. The engine sends
                    silence while it sounds, so the chirp never goes on air. */
-                if let c = cues.talkGranted(audioReady: audioReady || !route.isSystemChannel, cueContext) { audio.playCue(c) }
+                if let c = cues.talkGranted(audioReady: audioReady || !audioRoute.isSystemChannel, cueContext) { audio.playCue(c) }
             case .stopCapture:
                 /* Roger first (the mic is gated while it sounds), then the mic closes. */
                 if let c = cues.talkEnded(cueContext) { audio.playCue(c) }
                 stopMic()
-                route.endTransmit()
+                audioRoute.endTransmit()
+                systemTransmit = false
+                if forceInAppAudio, !playbackOn { forceInAppAudio = false }
             case let .startPlayback(t):
                 playbackOn = true
                 audio.armReceive(burst: t.burst)
-                route.setRemote(displayName(t))
+                audioRoute.setRemote(displayName(t))
                 /* The system route activates the session asynchronously (didActivate). */
-                if audioReady || !route.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst }
+                if audioReady || !audioRoute.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst; armPlaybackFallback(t) }
             case .stopPlayback:
                 PTTAudioEngine.log.notice("[PTT] stop playback (mode=\(String(describing: self.mode), privacy: .public) live=\(self.channel?.isLive == true))")
                 playbackOn = false
@@ -240,10 +312,19 @@ final class OutingWalkieTalkie: ObservableObject {
                 /* Muted or the link dropped: no roger for a transmission we did not hear end. */
                 let quiet = leaving || muted || (channel?.isLive != true && mode != .nearby)
                 audio.stopPlayback(cue: cues.incomingEnded(quiet: quiet, cueContext))
-                route.setRemote(nil)
+                audioRoute.setRemote(nil)
+                if forceInAppAudio, !micWanted { forceInAppAudio = false }
             case let .refused(r):
                 if !isTalking { stopMic() }
-                show(Self.text(for: r, name: { self.nameOf($0 ?? "") }))
+                let text = Self.text(for: r, name: { self.nameOf($0 ?? "") })
+                show(text)
+                /* Hand the system's talk UI back at once, and say why where the person is looking. */
+                audioRoute.endTransmit()
+                if systemTransmit, audioRoute !== route { route.endTransmit() }
+                if systemTransmit, UIApplication.shared.applicationState != .active {
+                    Notifier.post(title: "قناة الطلعة", body: "ما انرسل صوتك: \(text)", outingId: outingId, kind: "ptt")
+                }
+                systemTransmit = false
             case let .cutOff(reason):
                 show(reason == .maxDuration ? "انتهت الدقيقة — اضغط مرة ثانية لتكمل" : "انقطع الإرسال")
             }
@@ -263,18 +344,32 @@ final class OutingWalkieTalkie: ObservableObject {
     private func startCaptureIfReady() {
         guard micWanted, !micOn else { return }
         /* The in-app route activates the session synchronously; the system one on didActivate. */
-        if audioReady || !route.isSystemChannel {
+        if audioReady || !audioRoute.isSystemChannel {
             micOn = true
             audio.startCapture(burst: capturingBurst ?? 0)
         }
     }
 
     private var cueContext: PTTRadioCueSequencer.Context {
-        .init(enabled: PTTRadioSounds.enabled(defaults), systemRoute: route.isSystemChannel)
+        .init(enabled: PTTRadioSounds.enabled(defaults), systemRoute: audioRoute.isSystemChannel)
     }
 
     private func startPlayback(burst: UInt8) {
+        diag("audio", "speaker on b\(burst) via \(audioRoute.isSystemChannel ? "system" : "app")")
         audio.startPlayback(burst: burst, cue: cues.incomingStarted(burst: burst, cueContext))
+    }
+
+    /// The system should activate the session for a friend's voice (didActivate). If it has not
+    /// within a moment and we are on screen, open the speaker ourselves rather than stay silent.
+    private func armPlaybackFallback(_ t: PTTTalker) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, self.pendingPlayback == t.burst, UIApplication.shared.applicationState == .active else { return }
+            self.diag("audio", "no didActivate after 1.2 s: in-app speaker")
+            self.forceInAppAudio = true
+            self.pendingPlayback = nil
+            self.inApp.setRemote(self.displayName(t))
+            self.startPlayback(burst: t.burst)
+        }
     }
 
     private func stopMic() {
@@ -331,13 +426,30 @@ final class OutingWalkieTalkie: ObservableObject {
         }
         c.audioDeactivated = { [weak self] in self?.audioReady = false }
         c.systemBeganTransmit = { [weak self] in
-            /* The Lock Screen / headset button: same as ours. */
+            /* The Lock Screen / headset button: same as ours — and the socket may need to come back first
+             * (the system keeps the transmission open meanwhile; we end it if the floor is refused). */
             guard let self else { return }
             self.refreshMode()
-            self.apply(self.floor.pressDown(nowMs: Self.now(), online: self.mode != .unavailable))
+            self.systemTransmit = true
+            self.request(source: "system")
         }
         c.transmitEnded = { [weak self] in
             guard let self else { return }
+            self.diag("floor", "release (system)")
+            self.systemTransmit = false
+            if case .talking = self.floor.state { self.apply(self.floor.pressUp()) }
+            if case .requesting = self.floor.state { self.apply(self.floor.pressUp()) }
+        }
+        c.transmitFailed = { [weak self] in
+            guard let self else { return }
+            /* The system would not start (another call, a restriction): on screen, our own button still works in-app. */
+            if !self.systemTransmit, UIApplication.shared.applicationState == .active, self.micWanted {
+                self.diag("audio", "system transmit refused: in-app mic")
+                self.forceInAppAudio = true
+                self.inApp.beginTransmit()
+                return
+            }
+            self.systemTransmit = false
             if case .talking = self.floor.state { self.apply(self.floor.pressUp()) }
             if case .requesting = self.floor.state { self.apply(self.floor.pressUp()) }
         }
