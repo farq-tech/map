@@ -51,16 +51,18 @@ final class SOSAnchorView: UIView {
     }
 }
 
-/// A pass-through window over the sheets that holds only the SOS button.
+/// A small window over the sheets that holds only the SOS button, in the dock's corner
+/// (bottom left). It covers nothing else: the rest of the screen — touches and accessibility
+/// alike — belongs to the sheets beneath.
 final class SOSOverlayWindow: UIWindow {
     private let host = UIHostingController(rootView: AnyView(EmptyView()))
-    private var buttonFrame: CGRect = .zero
 
     override init(windowScene: UIWindowScene) {
         super.init(windowScene: windowScene)
         windowLevel = .alert - 1
         backgroundColor = .clear
         host.view.backgroundColor = .clear
+        host.safeAreaRegions = []
         rootViewController = host
         isHidden = true
     }
@@ -71,25 +73,19 @@ final class SOSOverlayWindow: UIWindow {
     override var canBecomeKey: Bool { false }
 
     func update(_ m: SOSAnchorView.Model) {
+        let side = m.theme.bigButton + 16
+        let screen = windowScene?.coordinateSpace.bounds ?? UIScreen.main.bounds
+        let safeBottom = windowScene?.windows.first(where: { $0 !== self && $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
+        let f = CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.l) - 56 - side,
+                       width: side, height: side)
+        if frame != f { frame = f }
         host.rootView = AnyView(
-            ZStack(alignment: .bottomLeading) {
-                Color.clear
-                SarySOSButton(state: m.state, trigger: m.trigger)
-                    .accessibilityIdentifier("sos.overlay")
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [weak self] in self?.buttonFrame = $0 }
-                    .padding(.leading, m.theme.space(.l))
-                    .padding(.bottom, m.theme.space(.l) + 64)
-            }
-            .ignoresSafeArea(.keyboard)
-            .environment(\.sary, m.theme)
-            .environment(\.layoutDirection, .leftToRight)
+            SarySOSButton(state: m.state, trigger: m.trigger)
+                .accessibilityIdentifier("sos.overlay")
+                .frame(width: side, height: side)
+                .environment(\.sary, m.theme)
+                .environment(\.layoutDirection, .leftToRight)
         )
         isHidden = !m.visible
-    }
-
-    /// Only the button takes touches; the rest falls through to the sheet below.
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard !isHidden, buttonFrame.insetBy(dx: -6, dy: -6).contains(point) else { return nil }
-        return super.hitTest(point, with: event)
     }
 }

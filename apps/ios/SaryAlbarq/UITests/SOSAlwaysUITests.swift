@@ -33,17 +33,28 @@ final class SOSAlwaysUITests: XCTestCase {
             _ = overlay.waitForExistence(timeout: 2)
         }
         XCTAssertTrue(overlay.waitForExistence(timeout: 6), "SOS over the full sheet")
-        XCTAssertTrue(overlay.isHittable)
+        assertOnScreen(app, overlay)
 
         /* A sheet on top («+» the actions): still there. */
         let summary = any(app, "outing-sheet-summary").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         summary.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
         if app.buttons["outing-actions"].waitForExistence(timeout: 5) { app.buttons["outing-actions"].tap() }
         XCTAssertTrue(any(app, "outing-actions-sheet").waitForExistence(timeout: 6))
-        XCTAssertTrue(overlay.waitForExistence(timeout: 4) && overlay.isHittable, "SOS over a sheet on top")
+        XCTAssertTrue(overlay.waitForExistence(timeout: 4), "SOS over a sheet on top")
+        assertOnScreen(app, overlay)
         let a = XCTAttachment(screenshot: app.screenshot())
         a.name = "sos-over-sheet"
         a.lifetime = .keepAlways
         add(a)
+    }
+
+    /// Big enough and fully on screen, in the bottom-left corner where the dock's SOS sits.
+    /// (Not `isHittable`: XCUITest's hit test does not look into the app's extra overlay window.)
+    private func assertOnScreen(_ app: XCUIApplication, _ e: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let f = e.frame, screen = app.frame
+        XCTAssertGreaterThanOrEqual(f.width, 60, "a big target", file: file, line: line)
+        XCTAssertTrue(screen.contains(f), "fully on screen: \(f)", file: file, line: line)
+        XCTAssertLessThan(f.midX, screen.midX, "bottom left, like the dock", file: file, line: line)
+        XCTAssertGreaterThan(f.midY, screen.midY, file: file, line: line)
     }
 }
