@@ -9,10 +9,11 @@
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
-		<!-- Precise location: shared with the members of an outing you chose to share in —
-		     on screen, and (with «دائمًا», after «شارك موقعي» and consent) also in the background
-		     with the screen locked, until you stop sharing, leave, are removed, or the outing ends.
-		     The server keeps only your latest fix and deletes it when the outing ends.
+		<!-- Precise location: shared with the members of an outing you joined (joining is the
+		     consent; sharing is automatic while you are a member of an active outing) — on screen,
+		     and with «دائمًا» also in the background with the screen locked, until you leave, are
+		     removed, or the outing is paused or ends. The server keeps only your latest fix and
+		     deletes it on leave / removal / pause / end (and after 24 h at most).
 		     «مساري» (the breadcrumb trail, also recorded with the screen locked when the
 		     person allows «دائمًا») stays on the device and is never sent: not collected. -->
 		<dict>

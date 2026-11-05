@@ -103,7 +103,7 @@ What we do about it:
 
 The CarPlay screen showing the app counts as "the app is open in front of you"
 (`AppModel.carPlayVisible`): with CarPlay up, the session stays visible even with the phone
-locked, so «شارك موقعي» keeps sending while the driver sees the live map in the car. Every other
+locked, so the member's share keeps sending while the driver sees the live map in the car. Every other
 `SendGate` condition still applies (consent, the share switch, an active outing). If the owner
 prefers the phone-only rule, remove the call in `CarPlayHub.setActive` and CarPlay will only show
 (not send) while the phone is locked.

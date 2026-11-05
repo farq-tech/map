@@ -58,46 +58,81 @@ struct JoinByLinkSheet: View {
     }
 }
 
-// MARK: - Invite preview → join
+// MARK: - Invite preview → join (one step)
 
-/// The invite as the server sees it: valid (name, who invited, members, state),
-/// expired / revoked, invalid, or a retryable error. Joining needs a name the first time.
+/// The invitee's whole onboarding (owner decision, build 14; `JoinMachine`): who invited you,
+/// the trip, «انضم للطلعة» and one honest line. One tap makes the identity silently (the name
+/// the inviter gave), asks iOS for the location, and — granted — joins and enters the live trip
+/// with sharing on. Refused / imprecise: not joined; one calm «افتح الإعدادات» screen that joins
+/// by itself the moment iOS says yes. Expired / taken / invalid / retryable error as before.
 struct InviteJoinSheet: View {
     let token: String
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var location: LocationSharer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.sary) private var theme
     @State private var phase: InvitePhaseUI = .loading
     @State private var name = ""
-    @State private var busy = false
-    @State private var error: String?
+    @State private var step: JoinStep = .ready
     var preset: InvitePhaseUI?
+    /// DEBUG screenshots: open on this step (e.g. the calm «افتح الإعدادات» screen).
+    var presetStep: JoinStep?
 
     var body: some View {
+        Group {
+            if case let .needsLocation(p) = step {
+                JoinNeedsLocationView(permission: p, openSettings: openSettings, cancel: { send(.cancel) })
+                    .transition(.opacity)
+            } else {
+                page
+            }
+        }
+        .animation(theme.animation(.smooth), value: step)
+        .interactiveDismissDisabled(step.busy)
+        .task {
+            if let presetStep { step = presetStep }
+            if let preset { phase = preset } else { await load() }
+        }
+        .onChange(of: scenePhase) { _, p in
+            /* Back from Settings: iOS may say yes now → join and enter by itself. */
+            guard p == .active else { return }
+            location.refreshAuthorization()
+            send(.sceneActive(currentPermission))
+        }
+        .onReceive(location.$authorization.combineLatest(location.$accuracyAuthorization).dropFirst()) { _ in
+            if case .needsLocation = step { send(.permission(currentPermission)) }
+        }
+    }
+
+    private var currentPermission: JoinPermission { JoinPermission.from(location.authorization, location.accuracyAuthorization) }
+
+    private var page: some View {
         let p = theme.palette
-        SaryPage(title: "دعوة طلعة", close: close) {
+        return SaryPage(title: "دعوة طلعة", close: { send(.cancel) }) {
             switch phase {
             case .loading:
                 SaryStateView(kind: .loading("نقرأ الدعوة…"))
             case .ready(let inv):
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
-                    HStack {
-                        SaryOutingStatusPill(status: status(inv.status))
+                    HStack(spacing: theme.space(.s)) {
+                        Image(systemName: SaryIcon.crown).foregroundStyle(p.accentText)
+                        Text("دعاك \(inv.inviterName)").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                            .accessibilityIdentifier("invite.inviter")
                         Spacer()
+                        SaryOutingStatusPill(status: status(inv.status))
                     }
                     Text(inv.outingName).saryText(.display, weight: .bold).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("invite.name")
-                    Label {
-                        Text("دعاك \(inv.inviterName)").saryText(.callout)
-                    } icon: { Image(systemName: SaryIcon.crown) }
-                        .foregroundStyle(p.textSecondary)
                     Label {
                         Text("\(SaryFormat.number(inv.participantCount)) في الطلعة الآن").saryText(.callout)
                     } icon: { Image(systemName: "person.2.fill") }
                         .foregroundStyle(p.textSecondary)
                     if let invitee = inv.inviteeName {
-                        SaryBanner(text: "دعوة شخصية لـ«\(invitee)». تظهر في الطلعة بهذا الاسم كما حفظك \(inv.inviterName)، والرابط لك وحدك.",
-                                   tone: .info, systemImage: "person.fill.checkmark")
+                        Label {
+                            Text("تظهر في الطلعة باسم «\(invitee)» كما حفظك \(inv.inviterName)").saryText(.callout)
+                        } icon: { Image(systemName: "person.fill.checkmark") }
+                            .foregroundStyle(p.textSecondary)
                             .accessibilityIdentifier("invite.personal")
                     }
                 }
@@ -107,28 +142,24 @@ struct InviteJoinSheet: View {
                 if inv.status == .ended {
                     SaryBanner(text: "انتهت هذه الطلعة، فلا يمكن الانضمام لها.", tone: .warning)
                 } else {
-                    if model.identity == nil {
-                        if inv.inviteeName != nil {
-                            SaryTextField(title: "لقبك (يظهر بجانب اسمك)", placeholder: "مثال: أبو سعود", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax,
-                                          help: "اسمك في الطلعة يبقى كما سمّاك أمير الرحلة.")
-                        } else {
-                            SaryTextField(title: "اسمك", placeholder: "كما يراه أصحابك", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
-                        }
+                    if needsTypedName(inv) {
+                        /* An open link and no identity yet: the only thing we cannot know is your name. */
+                        SaryTextField(title: "اسمك", placeholder: "كما يراه أصحابك", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
                     }
-                    if let error { SaryInlineMessage(text: error, tone: .error) }
-                    Button { join() } label: {
-                        SaryButtonLabel(title: inv.inviteeName.map { "انضم باسم «\($0)»" } ?? model.identity.map { "انضم باسم \($0.user.display_name)" } ?? "انضم للطلعة",
-                                        busy: busy, busyTitle: "ننضم…")
+                    if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
+                    Button { join(inv) } label: {
+                        SaryButtonLabel(title: JoinCopy.button, systemImage: SaryIcon.locate, busy: step.busy, busyTitle: "ننضم…")
                     }
                     .buttonStyle(.sary(.primary))
-                    .disabled(busy || (model.identity == nil && name.trimmingCharacters(in: .whitespaces).isEmpty))
+                    .disabled(step.busy || (needsTypedName(inv) && name.trimmingCharacters(in: .whitespaces).isEmpty))
                     .accessibilityIdentifier("invite.join")
-                    Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                    Text(JoinCopy.statement)
                         .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("join.shareStatement")
                 }
-                Button("ليس الآن", action: close).buttonStyle(.sary(.plain))
             case .expired:
                 SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الرحلة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
@@ -146,8 +177,10 @@ struct InviteJoinSheet: View {
                               actionTitle: "حاول مرة ثانية", actionID: "invite.retry") { Task { await load() } }
             }
         }
-        .task { if let preset { phase = preset } else { await load() } }
     }
+
+    /// Personal invite: the inviter named you. Already on this phone: your name. Otherwise ask.
+    private func needsTypedName(_ inv: InvitePreviewUI) -> Bool { model.identity == nil && inv.inviteeName == nil }
 
     private func status(_ s: OutingStatusUI) -> OutingStatus {
         switch s {
@@ -163,6 +196,10 @@ struct InviteJoinSheet: View {
         dismiss()
     }
 
+    private func openSettings() {
+        if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
+    }
+
     private func load() async {
         phase = .loading
         do {
@@ -176,7 +213,6 @@ struct InviteJoinSheet: View {
                 }
             }()
             if p.isPersonal, p.claim == "taken" { phase = .taken; return }
-            if p.isPersonal, let n = p.invitee_name, model.identity == nil, name.isEmpty { name = n }
             phase = .ready(InvitePreviewUI(outingName: p.name, inviterName: p.owner_name, participantCount: p.member_count, status: st,
                                            inviteeName: p.isPersonal ? p.invitee_name : nil))
         } catch let e as OutingAPIError {
@@ -191,29 +227,107 @@ struct InviteJoinSheet: View {
         }
     }
 
-    private func join() {
-        busy = true
-        error = nil
-        Task {
-            if model.identity == nil {
-                _ = await model.createIdentity(name: name, phone: "")
-                if model.identity != nil { OnboardingProgress.done = true }
+    /// The one tap. Each step's work runs where the machine enters it (`run`).
+    private func join(_ inv: InvitePreviewUI) {
+        pendingName = model.identity == nil ? (inv.inviteeName ?? name.trimmingCharacters(in: .whitespaces)) : nil
+        send(.tapJoin(hasIdentity: model.identity != nil))
+    }
+
+    @State private var pendingName: String?
+
+    private func send(_ e: JoinEvent) {
+        let before = step
+        let after = JoinMachine.next(before, e)
+        guard after != before else { return }
+        step = after
+        run(after)
+    }
+
+    private func run(_ s: JoinStep) {
+        switch s {
+        case .preparing:
+            Task {
+                /* First time on this phone: the identity is made silently with the name the inviter gave. */
+                let ok = await model.createIdentity(name: pendingName ?? "", phone: "")
+                if ok {
+                    OnboardingProgress.done = true
+                    send(.identityReady)
+                } else {
+                    let m = model.errorText ?? "تعذّر الحفظ. أعد المحاولة."
+                    model.errorText = nil
+                    send(.identityFailed(m))
+                }
             }
-            if model.identity != nil, await model.join(token) {
-                busy = false
-                dismiss()
-                return
+        case .askingLocation:
+            Task {
+                /* The only prompt at join: When In Use (precise). Already answered → what iOS says now. */
+                _ = await location.requestWhenInUse()
+                send(.permission(currentPermission))
             }
-            if model.errorText == OutingAPIError(code: "invite_taken", status: 409).arabic {
+        case .joining:
+            Task {
+                if await model.join(token) {
+                    send(.joined)
+                    return
+                }
+                if model.errorText == OutingAPIError(code: "invite_taken", status: 409).arabic {
+                    model.errorText = nil
+                    step = .ready
+                    phase = .taken
+                    return
+                }
+                let m = model.errorText ?? "تعذّر الانضمام."
                 model.errorText = nil
-                busy = false
-                phase = .taken
-                return
+                send(.joinFailed(m))
             }
-            error = model.errorText ?? "تعذّر الانضمام."
-            model.errorText = nil
-            busy = false
+        case .entered:
+            dismiss()
+        case .cancelled:
+            close()
+        case .ready, .needsLocation, .failed:
+            break
         }
+    }
+}
+
+/// Refused, or «الموقع الدقيق» off: not joined. One calm screen; it joins by itself once iOS says yes.
+struct JoinNeedsLocationView: View {
+    var permission: JoinPermission
+    var openSettings: () -> Void
+    var cancel: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(spacing: theme.space(.l)) {
+            Spacer(minLength: theme.space(.xl))
+            Image(systemName: permission == .reduced ? "location.circle" : "location.slash.circle.fill")
+                .font(.system(size: 64, weight: .semibold))
+                .foregroundStyle(p.accentText)
+                .accessibilityHidden(true)
+            Text(JoinCopy.needsTitle)
+                .saryText(.title, weight: .bold)
+                .foregroundStyle(p.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("join.needsLocation")
+            Text(JoinCopy.needsMessage(permission))
+                .saryText(.callout)
+                .foregroundStyle(p.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: theme.space(.xl))
+            Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
+                .buttonStyle(.sary(.primary))
+                .accessibilityIdentifier("join.openSettings")
+            Button(JoinCopy.cancel, action: cancel)
+                .buttonStyle(.sary(.plain))
+                .accessibilityIdentifier("join.cancel")
+        }
+        .padding(.horizontal, theme.space(.l))
+        .padding(.bottom, theme.space(.l))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.palette.background.ignoresSafeArea())
     }
 }
 

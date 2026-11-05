@@ -14,7 +14,6 @@ enum LiveModal: Identifiable, Equatable {
     case participant(String)
     case note
     case stations
-    case consent
     case rallyLabel(LngLat, moving: Bool)
     /// Our explainer before the notification permission prompt.
     case notify
@@ -69,7 +68,6 @@ enum LiveModal: Identifiable, Equatable {
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
-        case .consent: return "consent"
         case .rallyLabel: return "rally"
         case .notify: return "notify"
         case .offlineMaps: return "offline"
@@ -105,6 +103,8 @@ final class LiveOutingController: ObservableObject {
     /// «تخطيط الطلعة» for this outing (set by the host; the weather reads destination + route).
     weak var planModel: PlanModel?
     var onExit: () -> Void = {}
+    /// Back to «طلعاتي» while still a member (the share stays armed for when the trip opens again).
+    lazy var onBackToList: () -> Void = { [weak self] in self?.onExit() }
     /// «حفظ» my number (wired to the profile endpoint by the host).
     var savePhone: (String?) -> Void = { _ in }
     /// The in-app notifications switch (registers / unregisters this device for push).
@@ -725,6 +725,7 @@ final class LiveOutingController: ObservableObject {
     // MARK: alerts
 
     func pushAlert(_ a: LiveAlertUI, ttl: TimeInterval) {
+        offerNotificationsInContext(a)
         AlertQueue.record(a, at: Date(), into: &alertHistory)
         alerts.removeAll { $0.id == a.id }
         alerts.insert(a, at: 0)
@@ -860,7 +861,6 @@ final class LiveOutingController: ObservableObject {
             revokeLink: { [weak self] in self?.newLink() }
         )
         a.settingsTab = SettingsTabActions(
-            setSharingPaused: { [weak self] paused in self?.setSharingPaused(paused) },
             setDriveMode: { [weak self] m in self?.appearance.prefs.driveMode = SaryTriMode(m) },
             setNightMode: { [weak self] m in self?.appearance.prefs.nightMode = SaryTriMode(m) },
             saveMyPhone: { [weak self] p in self?.savePhone(p) },
@@ -877,10 +877,7 @@ final class LiveOutingController: ObservableObject {
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
             },
             endOuting: { [weak self] in Task { await self?.session.setStatus("end") } },
-            leaveOuting: { [weak self] in
-                guard let self else { return }
-                Task { if await self.session.leave() { self.onExit() } }
-            }
+            leaveOuting: { [weak self] in self?.leaveOuting() }
         )
         return a
     }
@@ -888,30 +885,37 @@ final class LiveOutingController: ObservableObject {
     func back() {
         autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
-        if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
+        /* Build 14: no «أوقف المشاركة» — back to the list only pauses sending until the trip is
+         * opened again; stopping for good is «غادر الطلعة». Say so before leaving the map. */
+        if session.isSharingNow || (session.wantsToShare && session.view?.status == .active) { confirm = .backWhileSharing } else { onExit() }
     }
 
-    func setSharingPaused(_ paused: Bool) {
-        if paused {
-            Task { await session.stopSharing() }
-        } else if session.hasConsent {
-            Task {
-                await session.beginSharing()
-                offerShareAlwaysIfNeeded()
-            }
-        } else {
-            modal = .consent
+    /// «ارجع للقائمة» from the back dialog: still a member, the share stays armed.
+    func backToList() {
+        confirm = nil
+        onBackToList()
+    }
+
+    /// «غادر الطلعة» — the only way to stop sharing (confirmed first by the caller's dialog).
+    func leaveOuting() {
+        confirm = nil
+        Task { if await session.leave() { onExit() } }
+    }
+
+    /// The first alert worth a notification, after an invite join: our explainer, then iOS's prompt.
+    /// Never at join itself (owner decision, build 14: location is the only prompt there).
+    var notifyOfferPending = false
+
+    private func offerNotificationsInContext(_ a: LiveAlertUI) {
+        guard notifyOfferPending, !pushExplained() else { return }
+        switch a.kind {
+        case .note, .voice, .safety, .silent, .convoy: break
+        default: return
         }
-    }
-
-    /// The consent sheet already explained that sharing keeps going with the screen locked:
-    /// share, then ask iOS for «دائمًا» right away (it shows its prompt at most once).
-    func acceptConsent() {
-        modal = nil
-        Task {
-            await session.beginSharing()
-            guard session.wantsToShare else { return }
-            await askAlwaysForSharing()
+        notifyOfferPending = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, self.modal == nil, !self.pushExplained() else { return }
+            self.modal = .notify
         }
     }
 
@@ -927,7 +931,8 @@ final class LiveOutingController: ObservableObject {
         objectWillChange.send()
     }
 
-    /// Consent given before this version: explain the background sharing once, then ask for «دائمًا».
+    /// The app was off screen while sharing with «أثناء الاستخدام» only (sending paused): now it
+    /// is back, explain «دائمًا» once, then ask iOS. The contextual upgrade (build 14).
     func offerShareAlwaysIfNeeded() {
         guard !session.hasAlwaysPermission, location.canLocate,
               !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) else { return }
@@ -947,16 +952,18 @@ final class LiveOutingController: ObservableObject {
         modal = nil
     }
 
-    /// Joined (consent given by joining) but iOS location is refused or restricted.
+    /// A member (joining is the consent) but iOS location is refused or restricted (e.g. turned
+    /// off in Settings after joining): the calm fix on the trip tab.
     var locationDenied: Bool {
         session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
     }
 
-    /// Right after «انضم»: once iOS answered the When-In-Use prompt, the «دائمًا» explainer
-    /// (the always-share flow) follows; a refusal leaves the member joined with the Settings fix.
+    /// Right after «انضم» nothing more is asked (the one-step join asked for the location).
+    /// «دائمًا» comes in context: the first time the person is back after sending paused off screen.
     func followUpJoin() {
-        guard session.joinedJustNow, location.authorization != .notDetermined else { return }
-        session.joinedJustNow = false
+        if session.joinedJustNow { session.joinedJustNow = false }
+        guard session.askAlwaysOnReturn, session.isVisible, UIApplication.shared.applicationState == .active else { return }
+        session.askAlwaysOnReturn = false
         if location.canLocate { offerShareAlwaysIfNeeded() }
     }
 
@@ -1225,7 +1232,9 @@ final class LiveOutingController: ObservableObject {
 /// Destructive questions asked before acting.
 enum LiveConfirm: Identifiable, Equatable {
     case backWhileSharing
-    var id: Int { 0 }
+    /// «غادر الطلعة» from the trip tab's sharing row.
+    case leave
+    var id: Int { self == .leave ? 1 : 0 }
 }
 
 /// Directions in Apple Maps (no third party sees the request from us).

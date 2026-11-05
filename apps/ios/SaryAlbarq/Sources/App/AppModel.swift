@@ -125,7 +125,18 @@ final class AppModel: ObservableObject {
             }
         }
         #endif
+        #if DEBUG
+        /* `-SaryDemoInvite personal|group` (+ `-SaryNoIdentity`): an invite link just opened, no trip yet
+         * (the one-step join, UI tests and screenshots; the demo preview and join stand in for the server). */
+        if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInvite") {
+            demoInviteKind = i + 1 < arguments.count ? arguments[i + 1] : "personal"
+            if arguments.contains("-SaryNoIdentity") { identity = nil }
+            seedDemoLists()
+            pendingInvite = "demo-invite"
+        } else if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        #else
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        #endif
         #if DEBUG
         if !isDemo, let i = arguments.firstIndex(of: "-SaryLabOuting"), i + 1 < arguments.count { open(arguments[i + 1]) }
         #endif
@@ -162,6 +173,9 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// `-SaryDemoInvite`: which demo invite the link stands for ("personal" or "group").
+    private var demoInviteKind: String?
+
     /// DEBUG screenshot hook: `-SaryScreen <name>` opens one screen with demo data.
     @Published var debugScreen: String?
 
@@ -181,6 +195,11 @@ final class AppModel: ObservableObject {
         if !p.isEmpty && ServerRules.normalizePhone(p) == nil {
             errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
             return false
+        }
+        if isDemo {
+            /* `-demo` has no server: the identity is local (the one-step join's silent identity). */
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: clean, avatar: nil, phone: nil))
+            return true
         }
         loading = true
         defer { loading = false }
@@ -398,13 +417,32 @@ final class AppModel: ObservableObject {
         return isDemo ? InviteLink.url(for: "demo-invite") : nil
     }
 
-    func preview(_ token: String) async throws -> InvitePreview { try await api.preview(token: token) }
+    func preview(_ token: String) async throws -> InvitePreview {
+        if isDemo {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let personal = demoInviteKind != "group"
+            return InvitePreview(outing_id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_name: "راشد", member_count: 4,
+                                 expires_at: ISODate.string(Date().addingTimeInterval(86400)), join_locked: false,
+                                 kind: personal ? "personal" : "group", invitee_name: personal ? "فهد أخوي" : nil, claim: "open")
+        }
+        return try await api.preview(token: token)
+    }
 
+    /// «انضم للطلعة» once iOS allowed the location (the one-step join, `JoinMachine`): join,
+    /// open the trip and share at once — no toggle, no consent sheet (joining is the consent).
     func join(_ token: String) async -> Bool {
+        if isDemo {
+            pendingInvite = nil
+            openDemoSession()
+            consentByJoining(DemoData.outingId)
+            startSharingAfterJoin(DemoData.outingId)
+            if !push.explained { offerNotifications = true }
+            return true
+        }
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
-            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: share by default. */
+            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: sharing is on, forced. */
             consentByJoining(r.outing_id)
             await refresh()
             open(r.outing_id)
@@ -487,12 +525,20 @@ final class AppModel: ObservableObject {
         guard let id = identity else { return }
         if session?.id == outingId { return }
         session?.close()
+        /* Build 14: a member of a trip shares while it runs — opening it is the same as joining
+         * (no «شارك موقعي»). The gate still needs iOS permission, an active trip and the server's
+         * sharing flag; ended / left / removed close the session and stop it. */
+        consentByJoining(outingId)
         let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
         session = s
         s.open()
+        s.resumeIfPreviouslySharing()
     }
 
-    func closeSession() {
+    /// `keepShare`: back to «طلعاتي» while still a member — the share stays armed, so opening the
+    /// trip again (or a relaunch) picks it up. Leaving / sign-out forget it.
+    func closeSession(keepShare: Bool = false) {
+        session?.keepShareOnClose = keepShare
         session?.close()
         session = nil
         Task { await refresh() }
