@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '014_sary_group_audio.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
