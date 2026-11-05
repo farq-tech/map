@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Build 8 «ترتيب الشاشة» (docs/IA-REDESIGN.md): the context mode, the «+» actions,
 /// and what the trip header and the map show.
@@ -35,6 +36,20 @@ extension LiveOutingController {
         for r in safety.friendsStuck { s.insert(r.userId) }
         for p in LiveOutingPresenter.participants(input) where p.silentSince != nil { s.insert(p.id) }
         return s
+    }
+
+    /// «الإعدادات» as a pushed page: the full-screen cover appears without its slide-up, the page
+    /// slides in itself (`SettingsPushHost`).
+    func openSettings() {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { settingsOpen = true }
+    }
+
+    func closeSettings() {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { settingsOpen = false }
     }
 
     /// What «أدوات الطلعة» and the «الرحلة» tab's route actions offer right now.
@@ -98,7 +113,7 @@ extension LiveOutingController {
             enterExplore()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.modal = .layers }
         case "realistic": realisticRequest += 1
-        case "effects": settingsAdvanced = true; selectedTab = .more; sheetDetent = .full
+        case "effects": openSettings()
         default: break
         }
     }

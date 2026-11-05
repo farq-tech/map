@@ -39,6 +39,7 @@ enum SaryFormat {
     /// under 100 km with one decimal ("٦٫١ كم", "١ كم" when the decimal is 0),
     /// otherwise whole kilometres ("١٢٣ كم").
     static func distance(meters: Double) -> String {
+        if DistanceUnits.miles { return distanceMiles(meters: meters) }
         let m = max(0, meters)
         let rounded10 = (m / 10).rounded() * 10
         if rounded10 < 1000 {
@@ -52,6 +53,21 @@ enum SaryFormat {
             return "\(digits(String(format: "%.1f", one))) كم"
         }
         return "\(number(Int(km.rounded()))) كم"
+    }
+
+    /// «وحدات المسافة» → ميل: feet under a tenth of a mile, then miles (one decimal under 100).
+    static func distanceMiles(meters: Double) -> String {
+        let mi = max(0, meters) / 1609.344
+        if mi < 0.1 {
+            let ft = (max(0, meters) * 3.28084 / 10).rounded() * 10
+            return "\(number(Int(ft))) قدم"
+        }
+        if mi < 100 {
+            let one = (mi * 10).rounded() / 10
+            if one == one.rounded() { return "\(number(Int(one))) ميل" }
+            return "\(digits(String(format: "%.1f", one))) ميل"
+        }
+        return "\(number(Int(mi.rounded()))) ميل"
     }
 
     /// Time since `since` as a short label: "الآن" under a minute,

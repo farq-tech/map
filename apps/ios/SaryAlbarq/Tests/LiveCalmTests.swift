@@ -96,6 +96,44 @@ final class LiveCalmTests: XCTestCase {
         XCTAssertEqual(LiveSideButtons.wrap(-190), 170, accuracy: 1e-9)
     }
 
+    // MARK: Lovable's settings rows
+
+    func testMilesForEveryDistance() {
+        defer { DistanceUnits.miles = false }
+        XCTAssertEqual(SaryFormat.distance(meters: 1_240), "١٫٢ كم")
+        DistanceUnits.miles = true
+        XCTAssertEqual(SaryFormat.distance(meters: 1_609.344 * 2.5), "٢٫٥ ميل")
+        XCTAssertEqual(SaryFormat.distance(meters: 30), "١٠٠ قدم")
+        XCTAssertEqual(SaryFormat.distance(meters: 1_609.344 * 150), "١٥٠ ميل")
+    }
+
+    @MainActor func testDefaultChannelStartsANewOuting() {
+        let d = UserDefaults(suiteName: "calm-channel")!
+        d.removePersistentDomain(forName: "calm-channel")
+        XCTAssertEqual(OutingWalkieTalkie.savedChannel("o1", defaults: d), "1")
+        d.set("3", forKey: PTTChannels.preferredKey)
+        XCTAssertEqual(OutingWalkieTalkie.savedChannel("o1", defaults: d), "3", "a new outing starts on «التردد الافتراضي»")
+        d.set("5", forKey: OutingWalkieTalkie.channelKeyPrefix + "o1")
+        XCTAssertEqual(OutingWalkieTalkie.savedChannel("o1", defaults: d), "5", "a channel chosen in this outing wins")
+        d.set("9", forKey: PTTChannels.preferredKey)
+        XCTAssertEqual(OutingWalkieTalkie.savedChannel("o2", defaults: d), "1", "only a public channel")
+    }
+
+    func testClearHistoryKeepsTheCurrentOuting() throws {
+        let d = UserDefaults(suiteName: "calm-history")!
+        d.removePersistentDomain(forName: "calm-history")
+        TripLogStore.update("old", defaults: d) { _ in }
+        TripLogStore.update("now", defaults: d) { _ in }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("calm-trails-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        for id in ["old", "now"] { try Data("x".utf8).write(to: dir.appendingPathComponent(TrailStore.fileName(id))) }
+        LocalTripHistory.clear(keeping: "now", defaults: d, trailsDir: dir)
+        XCTAssertNil(TripLogStore.load("old", defaults: d))
+        XCTAssertNotNil(TripLogStore.load("now", defaults: d))
+        let left = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        XCTAssertEqual(left, [TrailStore.fileName("now")])
+    }
+
     func testTimings() {
         XCTAssertEqual(VisualsSourceView.sourceSeconds, 5, "«الأجواء من الطقس» folds after 5 s")
         XCTAssertEqual(NoteFold.seconds, 10, "a note bubble folds to an icon after 10 s")

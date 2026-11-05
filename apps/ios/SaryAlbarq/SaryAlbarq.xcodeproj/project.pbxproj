@@ -84,6 +84,7 @@
 		2EAB185D80F63C1539158767 /* CarIcon-e8eef0.png in Resources */ = {isa = PBXBuildFile; fileRef = 706AD935009018DA0626E8F3 /* CarIcon-e8eef0.png */; };
 		2EBEA95EE43CA164861A4C21 /* PlanMapLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A29F2A211EB5C443FC4D85 /* PlanMapLayer.swift */; };
 		2F360A6DD9C12B2BB04D8175 /* CommonContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5DE21DF8A6B652B7B423C3 /* CommonContract.swift */; };
+		2F53B1048F428082EF87169C /* LiveSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */; };
 		2F5472EBB008D3DB87307CD2 /* LiveOutingController+Trip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ED140A77D1089CF6F2D87EA /* LiveOutingController+Trip.swift */; };
 		2F7CB1EAD4ADF08D52B7BE14 /* OutingSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D946A6C4BA372259FDBA0CB /* OutingSheets.swift */; };
 		2F8F190AEC4682EBB4977F9E /* ScreensUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */; };
@@ -492,6 +493,7 @@
 		045023FD183A9121FEFAF6FE /* MapLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayer.swift; sourceTree = "<group>"; };
 		051727DD1152CBFFC71F0478 /* SpeedModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedModel.swift; sourceTree = "<group>"; };
 		06228EED7F4332FE3814E788 /* SunPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunPosition.swift; sourceTree = "<group>"; };
+		0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSettingsPage.swift; sourceTree = "<group>"; };
 		0770F4C24CEEC9C2B35D8095 /* RecoveryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryScreens.swift; sourceTree = "<group>"; };
 		0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointLayout.swift; sourceTree = "<group>"; };
 		087D07928C7AC61627BD3A63 /* SaryPTT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryPTT.swift; sourceTree = "<group>"; };
@@ -1302,6 +1304,7 @@
 				5F9CFC01A92F8600D0137AF6 /* LiveActionSheet.swift */,
 				7087625DE9A0A4783B82C03B /* LiveCalmChrome.swift */,
 				369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */,
+				0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */,
 				ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */,
 				E1EB5A63D0A8DAA5F932FD3A /* PTTChannelViews.swift */,
 				52B545614818C7F89DCDD20D /* RootView.swift */,
@@ -2215,6 +2218,7 @@
 				1FA64AB181BA37FCE46FAC6E /* LiveOutingScreen.swift in Sources */,
 				0DE0211F7641DC919CDE20EC /* LivePlaceBrief.swift in Sources */,
 				50443BC7D769962FC54573B3 /* LivePlan.swift in Sources */,
+				2F53B1048F428082EF87169C /* LiveSettingsPage.swift in Sources */,
 				7106AAFF960B91D1859F66A7 /* LiveSheet.swift in Sources */,
 				5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */,
 				1918FDC15D475DEA5AF47FE1 /* LocalDestination.swift in Sources */,

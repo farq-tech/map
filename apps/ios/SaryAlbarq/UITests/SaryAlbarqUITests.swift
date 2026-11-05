@@ -190,11 +190,16 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("3-in-trip-sharing-on", app)
 
         app.buttons["tab.more"].tap()
+        let who = any(app, "settings.whoSees")
+        XCTAssertTrue(who.waitForExistence(timeout: 5))
+        who.tap()
         XCTAssertTrue(any(app, "settings-battery").waitForExistence(timeout: 5))
         XCTAssertFalse(any(app, "settings-pause-sharing").exists, "no stop switch in «المزيد» either")
         shot("4-more-no-toggle", app)
 
         /* «غادر الطلعة» asks first (back from «الإعدادات» to «الرحلة»). */
+        app.buttons["settings.sub.back"].tap()
+        XCTAssertTrue(app.buttons["settings.back"].waitForExistence(timeout: 3))
         app.buttons["settings.back"].tap()
         if app.buttons["tab.trip"].waitForExistence(timeout: 3) { app.buttons["tab.trip"].tap() }
         XCTAssertTrue(app.buttons["live.leave"].waitForExistence(timeout: 5))

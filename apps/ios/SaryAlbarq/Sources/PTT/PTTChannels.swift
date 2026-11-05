@@ -87,6 +87,12 @@ enum PTTChannelEvent: Equatable {
 enum PTTChannels {
     static let publicIds = ["1", "2", "3", "4", "5"]
     static let defaultId = "1"
+    static let preferredKey = "sary.ptt.defaultChannel.v1"
+    /// «التردد الافتراضي» (الإعدادات): where a new outing starts; one of the public channels.
+    static var preferredDefault: String {
+        get { UserDefaults.standard.string(forKey: preferredKey).flatMap { isPublic($0) ? $0 : nil } ?? defaultId }
+        set { UserDefaults.standard.set(isPublic(newValue) ? newValue : defaultId, forKey: preferredKey) }
+    }
     /// The leader's limit, as the server has it (`PTT_MAX_PRIVATE`).
     static let maxPrivate = 5
     static let nameMax = 40

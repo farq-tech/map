@@ -107,7 +107,7 @@ struct LiveOutingScreen: View {
         .ignoresSafeArea(.keyboard)
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
          * its own window (the dock's copy is hidden or covered then). */
-        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded,
+        .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
                                    frame: frames["sos"], size: controller.liveContext(drive: theme.drive) == .driving ? 60 : 52))
         .sheet(isPresented: .constant(true)) {
@@ -545,7 +545,7 @@ private struct LiveTopStack: View {
                        radioTapped: {
                            if driving { radio.open() } else { controller.radioBarOpen.toggle() }
                        },
-                       settingsTapped: { controller.statusExpanded = false; controller.selectedTab = .more; controller.sheetDetent = .full })
+                       settingsTapped: { controller.statusExpanded = false; controller.openSettings() })
         }
         .task { controller.feedWeather(force: true) }
     }

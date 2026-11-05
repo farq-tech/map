@@ -100,6 +100,10 @@ final class SpeedUITests: XCTestCase {
         let tab = app.buttons["tab.more"]
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.tap()
+        /* «الإعدادات» → «القيادة والعرض». */
+        let driving = app.descendants(matching: .any)["settings.driving"]
+        XCTAssertTrue(driving.waitForExistence(timeout: 5))
+        driving.tap()
         let toggle = app.switches["speed.alert"]
         /* The «المزيد» list grew (auto-guidance, driving realism): bring the switch clear of the
          * bottom edge, not just barely on screen, before tapping it. */

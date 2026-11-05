@@ -80,18 +80,20 @@ final class ReachabilityUITests: XCTestCase {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
         let tabs: [(String, [String])] = [
-            ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "plan.follow", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends"]),
+            ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "plan.follow", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends",
+                          "settings-invite", "settings-leave", "settings-phone"]),
             ("tab.group", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
             ("tab.map", ["map.layers", "map.realistic", "map.offline"]),
-            ("tab.more", ["settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
-                        "settings-context", "settings-drive", "settings-night", "speed.alert", "settings-convoy-alerts", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),
+            /* Lovable's «الإعدادات» page (the header's gear): five groups of one-line rows. */
+            ("tab.more", ["settings.tripType", "settings.sharing", "settings.lateAlert", "settings.defaultLayer", "settings.mapDirection", "settings.units",
+                          "settings.driving", "settings.trail", "settings.defaultChannel", "settings.voiceAutoplay", "settings.volume", "settings.media",
+                          "settings.whoSees", "settings.clearHistory", "settings.gpsPrecise", "settings-offline", "settings.diagnostics"]),
         ]
         for (tab, ids) in tabs {
             let b = app.buttons[tab]
             XCTAssertTrue(b.waitForExistence(timeout: 5), "tab «\(tab)»")
             b.tap()
             sleep(1)
-            if tab == "tab.more" { app.openAdvancedSettings() }
             for id in ids {
                 XCTAssertTrue(any(app, id).waitForExistence(timeout: 3), "\(id) in «\(tab)»")
             }
@@ -132,11 +134,8 @@ final class ReachabilityUITests: XCTestCase {
     /// «تنبيهات القافلة»: from the live sheet («المزيد») and from Settings; every rule there.
     func testConvoyAlertRulesReachable() {
         let app = launch()
-        any(app, "outing-sheet-summary").tap()
-        app.buttons["tab.more"].tap()
-        let row = any(app, "settings-convoy-alerts")
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        row.tap()
+        /* «أدوات» → «القافلة» (Lovable's settings keep only «تنبيه لما أحد يتأخر»). */
+        XCTAssertTrue(app.openTool("outing-convoy"))
         for id in ["rules.separation", "rules.separation.km", "rules.separation.grace", "rules.stop", "rules.stop.minutes",
                    "rules.silent", "rules.silent.minutes", "rules.tail", "rules.tail.grace"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «تنبيهات القافلة»")

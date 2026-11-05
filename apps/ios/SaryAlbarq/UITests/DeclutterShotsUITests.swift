@@ -10,8 +10,20 @@ final class DeclutterShotsUITests: XCTestCase {
         try XCTSkipIf(ProcessInfo.processInfo.environment["SARY_SHOTS"] == nil, "screenshots only (SARY_SHOTS)")
     }
 
-    private let here = CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744)
-    private let look = ["-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryNight", "0", "-SaryDrive", "0"]
+    /// SARY_SHOT_DESERT=1: the demo group, its plan and the simulator in the Great Nafud
+    /// (demo-only launch arguments; the app code is the same).
+    private var desert: Bool { ProcessInfo.processInfo.environment["SARY_SHOT_DESERT"] != nil }
+    private var here: CLLocationCoordinate2D {
+        desert ? CLLocationCoordinate2D(latitude: 28.30, longitude: 41.40) : CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744)
+    }
+    private var look: [String] {
+        ["-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryNight", "0", "-SaryDrive", "0"]
+            + (desert ? ["-SaryDemoShift", "3.5895,-5.2748", "-SaryDemoPlanName", "مخيم النفود", "-SaryDemoOutingName", "كشتة النفود الكبير"] : [])
+    }
+    private var navTarget: [String] {
+        desert ? ["-SaryNavTo", "28.3485,41.4743,مخيم النفود", "-SaryNavState", "offroad", "-SaryNavOffRoad"]
+            : ["-SaryNavTo", "24.7220,46.6650,حطين", "-SaryNavState", "guiding"]
+    }
 
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
@@ -33,14 +45,14 @@ final class DeclutterShotsUITests: XCTestCase {
             app.launch()
             app.allowLocationIfAsked()
         }
-        let ids = ["outing-sheet-summary", "nav.banner", "outing-actions-sheet"]
+        let ids = ["outing-sheet-summary", "nav.banner", "nav.offroad", "outing-actions-sheet"]
         let ready = NSPredicate { _, _ in ids.contains { app.descendants(matching: .any)[$0].exists } }
         _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 40)
         return app
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
-        let s = app.screenshot()
+        let s = XCUIScreen.main.screenshot()
         let a = XCTAttachment(screenshot: s)
         a.name = name
         a.lifetime = .keepAlways
@@ -53,9 +65,9 @@ final class DeclutterShotsUITests: XCTestCase {
     }
 
     func test1Driving() {
-        let app = launch(["-SaryContext", "driving", "-SaryNavDemo", "-SaryNavTo", "24.7220,46.6650,حطين", "-SaryNavDelay", "3",
-                          "-SaryNavState", "guiding", "-SaryRadioRemote"])
-        _ = app.descendants(matching: .any)["nav.banner"].waitForExistence(timeout: 20)
+        let app = launch(["-SaryContext", "driving", "-SaryNavDemo", "-SaryNavDelay", "3", "-SaryRadioRemote"] + navTarget)
+        let ids = ["nav.banner", "nav.offroad"]
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in ids.contains { app.descendants(matching: .any)[$0].exists } }, object: nil)], timeout: 20)
         sleep(4)
         shot(app, "1-driving")
     }
@@ -74,7 +86,7 @@ final class DeclutterShotsUITests: XCTestCase {
     }
 
     func test4Exploring() {
-        let app = launch(["-SaryContext", "stopped", "-SaryExplore", "-SaryHiRes"])
+        let app = launch(["-SaryContext", "stopped", "-SaryExplore", "-SaryHiRes"] + (desert ? ["-SaryExploreAt", "28.30,41.40"] : []))
         sleep(6)
         shot(app, "4-exploring")
     }
@@ -95,7 +107,7 @@ final class DeclutterShotsUITests: XCTestCase {
     }
 
     func test6Settings() {
-        let app = launch(["-SaryContext", "stopped", "-SaryLiveTab", "more", "-SaryLiveSheet", "full"])
+        let app = launch(["-SaryContext", "stopped", "-SaryLiveTab", "more"])
         sleep(3)
         shot(app, "6-settings")
         app.swipeUp()
