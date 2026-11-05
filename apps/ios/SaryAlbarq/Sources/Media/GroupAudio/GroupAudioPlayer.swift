@@ -16,8 +16,13 @@ enum GroupAudioDuck {
     /// change the category to theirs nor deactivate the session (that stops the music).
     static var musicOwnsSession = false
 
-    static func began(_ k: Kind) { post(k, true) }
-    static func ended(_ k: Kind) { post(k, false) }
+    /// The walkie-talkie holds the `.playAndRecord` session: the nav voice must not switch it
+    /// to `.playback` (that cut the mic and sent the friend's voice to a ducked/other route) nor
+    /// deactivate it under the friend's voice.
+    private(set) static var pttActive = false
+
+    static func began(_ k: Kind) { if k == .ptt { pttActive = true }; post(k, true) }
+    static func ended(_ k: Kind) { if k == .ptt { pttActive = false }; post(k, false) }
 
     private static func post(_ k: Kind, _ on: Bool) {
         NotificationCenter.default.post(name: name, object: nil, userInfo: ["kind": k == .nav ? "nav" : "ptt", "on": on])

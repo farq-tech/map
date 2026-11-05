@@ -93,6 +93,7 @@ final class PTTInAppRoute: PTTRoute {
             try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
             try s.setActive(true)
             PTTDiagnosticsLog.shared.add("audio", "in-app session active")
+            PTTSpeaker.engage(s, why: "in-app")
         } catch {
             PTTDiagnosticsLog.shared.add("audio", "in-app session failed: \((error as NSError).domain)#\((error as NSError).code)")
         }
@@ -114,6 +115,7 @@ final class PTTInAppRoute: PTTRoute {
         pendingDeactivate?.cancel()
         guard sessionActive else { return }
         sessionActive = false
+        PTTSpeaker.disengage()
         let music = GroupAudioDuck.musicOwnsSession
         if !music { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
         GroupAudioDuck.ended(.ptt)
@@ -314,6 +316,8 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
         Task { @MainActor in
             /* The system decides whether this is for talking or listening; both callbacks are idempotent. */
             GroupAudioDuck.began(.ptt)
+            PTTSpeaker.prepareSystemSession(audioSession)
+            PTTSpeaker.engage(audioSession, why: "system")
             self.callbacks.transmitReady()
             self.callbacks.playbackReady()
         }
@@ -322,6 +326,7 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     nonisolated func channelManager(_ channelManager: PTChannelManager, didDeactivate audioSession: AVAudioSession) {
         Self.diag("didDeactivate audio session")
         Task { @MainActor in
+            PTTSpeaker.disengage()
             self.callbacks.audioDeactivated()
             GroupAudioDuck.ended(.ptt)
         }
@@ -349,3 +354,70 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     }
 }
 #endif
+
+// MARK: - the loud speaker
+
+/// A friend's voice always comes out of the loud speaker, never the earpiece, unless the
+/// person chose another output (headphones, Bluetooth, CarPlay, AirPlay…). `.playAndRecord`
+/// sends audio to the receiver (the earpiece, used for calls held to the ear) unless told
+/// otherwise; the PushToTalk system session is configured by iOS (`.voiceChat`-like), so on
+/// that path we check the route after `didActivate` and override it to the speaker — and
+/// again on every route change while the walkie-talkie holds the session (headphones out).
+@MainActor
+enum PTTSpeaker {
+    /// Pure, unit-tested: override only when every output is the built-in receiver.
+    nonisolated static func needsSpeakerOverride(outputs: [AVAudioSession.Port]) -> Bool {
+        !outputs.isEmpty && outputs.allSatisfy { $0 == .builtInReceiver }
+    }
+
+    /// The options our session wants (the system one is given `.defaultToSpeaker` too).
+    nonisolated static let options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
+
+    /// Pure, unit-tested: whether the system's session must be re-categorised for the speaker.
+    nonisolated static func needsCategoryFix(category: AVAudioSession.Category, mode: AVAudioSession.Mode,
+                                 options current: AVAudioSession.CategoryOptions) -> Bool {
+        category != .playAndRecord || !current.contains(.defaultToSpeaker) || mode == .voiceChat
+    }
+
+    private static var engaged = false
+    private static var observer: NSObjectProtocol?
+
+    /// PushToTalk activated the session: `.playAndRecord` + `.default` mode + `.defaultToSpeaker`
+    /// (`.voiceChat` prefers the earpiece). «إذاعة الطلعة» owning the session: leave it.
+    static func prepareSystemSession(_ s: AVAudioSession) {
+        guard !GroupAudioDuck.musicOwnsSession,
+              needsCategoryFix(category: s.category, mode: s.mode, options: s.categoryOptions) else { return }
+        do {
+            try s.setCategory(.playAndRecord, mode: .default, options: options)
+            PTTDiagnosticsLog.shared.add("audio", "system session → playAndRecord/default + speaker")
+        } catch {
+            PTTDiagnosticsLog.shared.add("audio", "system session category failed: \((error as NSError).code)")
+        }
+    }
+
+    static func engage(_ s: AVAudioSession = .sharedInstance(), why: String) {
+        engaged = true
+        if observer == nil {
+            observer = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    guard engaged else { return }
+                    ensure(.sharedInstance(), why: "route change")
+                }
+            }
+        }
+        ensure(s, why: why)
+        PTTDiagnosticsLog.shared.add("audio", "route \(s.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: "+")) mic gain \(String(format: "%.2f", s.inputGain))")
+    }
+
+    static func disengage() { engaged = false }
+
+    static func ensure(_ s: AVAudioSession, why: String) {
+        guard needsSpeakerOverride(outputs: s.currentRoute.outputs.map(\.portType)) else { return }
+        do {
+            try s.overrideOutputAudioPort(.speaker)
+            PTTDiagnosticsLog.shared.add("audio", "earpiece → speaker (\(why))")
+        } catch {
+            PTTDiagnosticsLog.shared.add("audio", "speaker override failed (\(why)): \((error as NSError).code)")
+        }
+    }
+}

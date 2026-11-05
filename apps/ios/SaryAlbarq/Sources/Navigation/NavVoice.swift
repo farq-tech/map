@@ -48,7 +48,7 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
         /* «إذاعة الطلعة» playing: keep its `.playback` session (changing the category or
          * deactivating it would stop the music) and let it duck itself (GroupAudioDuck). */
         GroupAudioDuck.began(.nav)
-        if !GroupAudioDuck.musicOwnsSession {
+        if !GroupAudioDuck.musicOwnsSession, !GroupAudioDuck.pttActive {
             let s = AVAudioSession.sharedInstance()
             try? s.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
             try? s.setActive(true)
@@ -69,7 +69,7 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
         Task { @MainActor in
             guard !self.synth.isSpeaking else { return }
             GroupAudioDuck.ended(.nav)
-            guard !GroupAudioDuck.musicOwnsSession else { return }
+            guard !GroupAudioDuck.musicOwnsSession, !GroupAudioDuck.pttActive else { return }
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
     }
