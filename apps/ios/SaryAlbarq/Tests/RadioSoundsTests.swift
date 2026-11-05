@@ -92,9 +92,10 @@ final class RadioSoundsTests: XCTestCase {
             XCTAssertGreaterThan(seconds, 0.15, "\(cue)")
             XCTAssertLessThanOrEqual(seconds, PTTRadioSynth.maxDuration, "\(cue)")
             let peak = s.reduce(0) { max($0, abs($1)) }
-            XCTAssertEqual(peak, PTTRadioSynth.peak, accuracy: 0.01, "\(cue)")
+            XCTAssertLessThanOrEqual(peak, PTTRadioSynth.peak + 0.001, "\(cue)")
             let rms = (s.reduce(0) { $0 + Double($1 * $1) } / Double(s.count)).squareRoot()
             XCTAssertGreaterThan(rms, 0.03, "\(cue) is audible")
+            XCTAssertLessThanOrEqual(PTTLoudness.db(Float(rms)), PTTRadioSynth.cueRMSDB + 0.5, "\(cue) stays under the voice")
             XCTAssertEqual(abs(s.first ?? 1), 0, accuracy: 0.001, "\(cue) starts without a click")
             XCTAssertEqual(abs(s.last ?? 1), 0, accuracy: 0.001, "\(cue) ends without a click")
             XCTAssertEqual(s, PTTRadioSynth.samples(cue), "\(cue) is the same every time")
@@ -126,7 +127,8 @@ final class RadioSoundsTests: XCTestCase {
         for cue in PTTRadioCue.allCases {
             let s = PTTRadioSynth.samples(cue, squelch: nil)
             XCTAssertLessThanOrEqual(Double(s.count) / PTTRadioSynth.sampleRate, PTTRadioSynth.maxDuration)
-            XCTAssertEqual(s.reduce(0) { max($0, abs($1)) }, PTTRadioSynth.peak, accuracy: 0.01)
+            XCTAssertLessThanOrEqual(s.reduce(0) { max($0, abs($1)) }, PTTRadioSynth.peak + 0.001)
+            XCTAssertEqual(PTTLoudness.db(PTTRadioSynth.rmsOf(s)), PTTRadioSynth.cueRMSDB, accuracy: 1.5)
         }
         XCTAssertEqual(PTTRadioSynth.samples(.talkPermit, squelch: []), PTTRadioSynth.samples(.talkPermit, squelch: nil))
     }
@@ -158,6 +160,143 @@ final class RadioSoundsTests: XCTestCase {
         let peak = y.reduce(0) { max($0, abs($1)) }
         XCTAssertLessThan(peak, 0.75, "a near-full-scale voice comes out tamer")
         XCTAssertGreaterThan(peak, 0.2)
+    }
+
+    // MARK: loudness («صوت اللاسلكي»)
+
+    /// Speech-like test signal: a 130 Hz voice (harmonics to 3.5 kHz, two formants) in
+    /// syllables at 4 Hz, a pause every second, at `db` dBFS of speech loudness.
+    static func speech(seconds: Double, db: Float) -> [Float] {
+        let rate = PTTAudioFormat.sampleRate
+        let n = Int(seconds * rate)
+        var out = [Float](repeating: 0, count: n)
+        for i in 0..<n {
+            let t = Double(i) / rate
+            let f0 = 130 * (1 + 0.06 * sin(2 * .pi * 0.7 * t))
+            var v = 0.0
+            for h in 1...26 {
+                let f = f0 * Double(h)
+                guard f < 3_500 else { break }
+                let formant = exp(-pow((f - 600) / 300, 2)) + 0.6 * exp(-pow((f - 1_800) / 400, 2)) + 0.15
+                v += formant / Double(h).squareRoot() * sin(2 * .pi * f * t + Double(h))
+            }
+            let syllable = pow(max(0, sin(.pi * 4 * t)), 1.5)
+            let speaking = t.truncatingRemainder(dividingBy: 1) < 0.8 ? 1.0 : 0.0
+            out[i] = Float(v * syllable * speaking)
+        }
+        let g = PTTLoudness.linear(db - PTTLoudness.speechLoudnessDB(out))
+        return out.map { $0 * g }
+    }
+
+    /// mic → [tx level] → AAC-ELD → decode → [radio voice] → [rx level], in 30 ms packets.
+    private func chain(_ input: [Float], tx: Bool, rx: PTTVoiceLevel?, radio: Bool) throws -> [Float] {
+        let enc = try XCTUnwrap(PTTEncoder()), dec = try XCTUnwrap(PTTDecoder())
+        var txLevel = PTTTxLevel(), fx = PTTRadioVoiceFX(), rxLevel = rx.map { PTTRxLevel($0) }
+        var out: [Float] = []
+        let n = Int(PTTAudioFormat.samplesPerPacket)
+        var i = 0
+        while i + n <= input.count {
+            let pcm = try XCTUnwrap(AVAudioPCMBuffer.ptt(Array(input[i..<(i + n)])))
+            if tx { txLevel.process(pcm) }
+            if let packet = enc.encode(pcm), let y = dec.decode(packet) {
+                if radio { fx.process(y) }
+                rxLevel?.process(y)
+                out += Array(UnsafeBufferPointer(start: y.floatChannelData![0], count: Int(y.frameLength)))
+            }
+            i += n
+        }
+        return out
+    }
+
+    /// Settled part (the first 2 s are the gain finding its level).
+    private func measure(_ y: [Float]) -> (lufs: Float, peak: Float) {
+        let tail = Array(y.dropFirst(32_000))
+        return (PTTLoudness.speechLoudnessDB(tail), PTTLoudness.db(PTTLoudness.peak(y)))
+    }
+
+    func testQuietMicComesOutLoudThroughTheWholeChain() throws {
+        /* A phone mic at arm's length in a car: ≈ −32 dBFS of speech. */
+        let mic = Self.speech(seconds: 8, db: -32)
+        for radio in [true, false] {
+            let before = measure(try chain(mic, tx: false, rx: nil, radio: radio))
+            for level in PTTVoiceLevel.allCases {
+                let after = measure(try chain(mic, tx: true, rx: level, radio: radio))
+                print("[loudness] radio=\(radio) \(level): before \(before.lufs) dB (peak \(before.peak)) → after \(after.lufs) dB (peak \(after.peak))")
+                XCTAssertGreaterThanOrEqual(after.lufs, level.targetDB - 2, "\(level) radio=\(radio)")
+                XCTAssertLessThanOrEqual(after.peak, -1 + 0.01, "\(level) never clips")
+                XCTAssertGreaterThan(after.lufs - before.lufs, 12, "much louder than build 15")
+            }
+        }
+    }
+
+    func testOlderSenderIsBoostedByTheReceiverAlone() throws {
+        /* A build-15 sender (raw mic, no tx level): the receiver alone still lifts it. */
+        let mic = Self.speech(seconds: 8, db: -30)
+        let y = measure(try chain(mic, tx: false, rx: .high, radio: true))
+        XCTAssertGreaterThanOrEqual(y.lufs, PTTVoiceLevel.high.targetDB - 2)
+        XCTAssertLessThanOrEqual(y.peak, -0.99)
+    }
+
+    func testLoudTalkerIsNotPushedIntoClipping() throws {
+        let shout = Self.speech(seconds: 6, db: -6).map { min(1, max(-1, $0)) }
+        let y = measure(try chain(shout, tx: true, rx: .veryHigh, radio: false))
+        XCTAssertLessThanOrEqual(y.peak, -0.99)
+        XCTAssertGreaterThanOrEqual(y.lufs, PTTVoiceLevel.veryHigh.targetDB - 2)
+    }
+
+    func testPausesAreNotPumpedUp() {
+        /* Hiss at −60 dBFS between transmissions stays hiss. */
+        var rx = PTTRxLevel(.veryHigh)
+        var rng: UInt32 = 3
+        let hiss: [Float] = (0..<32_000).map { _ in
+            rng = rng &* 1_664_525 &+ 1_013_904_223
+            return (Float(rng >> 8) / Float(1 << 24) * 2 - 1) * 0.001
+        }
+        let y = hiss.map { rx.process($0) }
+        XCTAssertLessThan(PTTLoudness.db(PTTRadioSynth.rmsOf(Array(y.suffix(16_000)))), -40)
+    }
+
+    func testCuesSitAboutSixDBUnderTheVoice() {
+        for c in PTTRadioCue.allCases {
+            let x = PTTRadioSynth.samples(c), rms = PTTRadioSynth.rmsOf(x)
+            print("[loudness] cue \(c): now \(PTTLoudness.db(rms)) dB RMS, build 15 \(PTTLoudness.db(rms * 0.35 / PTTLoudness.peak(x))) dB RMS")
+        }
+        for level in PTTVoiceLevel.allCases {
+            let cue = PTTRadioSynth.cueRMSDB + PTTLoudness.db(level.cueVolume)
+            XCTAssertLessThanOrEqual(cue, level.targetDB - 5.9, "\(level)")
+            XCTAssertGreaterThan(cue, level.targetDB - 13, "\(level): still audible")
+        }
+    }
+
+    func testVoiceLevelSettingDefaultsHigh() throws {
+        let d = try XCTUnwrap(UserDefaults(suiteName: "voice-level-\(UUID())"))
+        XCTAssertEqual(PTTVoiceLevel.current(d), .high)
+        d.set(PTTVoiceLevel.veryHigh.rawValue, forKey: PTTVoiceLevel.key)
+        XCTAssertEqual(PTTVoiceLevel.current(d), .veryHigh)
+        XCTAssertEqual(PTTVoiceLevel.veryHigh.targetDB - PTTVoiceLevel.high.targetDB, 6)
+        XCTAssertEqual(PTTVoiceLevel.allCases.map(\.label), ["عادي", "عالي", "عالي جداً"])
+    }
+
+    // MARK: the loud speaker
+
+    func testEarpieceIsOverriddenToTheSpeaker() {
+        XCTAssertTrue(PTTSpeaker.needsSpeakerOverride(outputs: [.builtInReceiver]))
+        XCTAssertFalse(PTTSpeaker.needsSpeakerOverride(outputs: [.builtInSpeaker]))
+        XCTAssertFalse(PTTSpeaker.needsSpeakerOverride(outputs: []))
+    }
+
+    func testHeadphonesBluetoothAndCarPlayAreLeftAlone() {
+        for port: AVAudioSession.Port in [.headphones, .bluetoothHFP, .bluetoothA2DP, .bluetoothLE, .carAudio, .airPlay, .usbAudio, .HDMI] {
+            XCTAssertFalse(PTTSpeaker.needsSpeakerOverride(outputs: [port]), port.rawValue)
+            XCTAssertFalse(PTTSpeaker.needsSpeakerOverride(outputs: [.builtInReceiver, port]), port.rawValue)
+        }
+    }
+
+    func testSystemSessionIsRecategorisedForTheSpeaker() {
+        XCTAssertTrue(PTTSpeaker.needsCategoryFix(category: .playAndRecord, mode: .voiceChat, options: PTTSpeaker.options))
+        XCTAssertTrue(PTTSpeaker.needsCategoryFix(category: .playAndRecord, mode: .default, options: [.allowBluetoothHFP]))
+        XCTAssertTrue(PTTSpeaker.needsCategoryFix(category: .soloAmbient, mode: .default, options: []))
+        XCTAssertFalse(PTTSpeaker.needsCategoryFix(category: .playAndRecord, mode: .default, options: PTTSpeaker.options))
     }
 
     private func energy<S: Sequence>(_ s: S) -> Double where S.Element == Float { s.reduce(0) { $0 + Double($1 * $1) } }

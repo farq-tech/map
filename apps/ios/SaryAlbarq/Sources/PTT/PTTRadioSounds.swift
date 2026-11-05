@@ -118,8 +118,11 @@ struct PTTRadioCueSequencer: Equatable {
 /// The cues, 16 kHz mono float (the walkie-talkie's own format).
 enum PTTRadioSynth {
     static let sampleRate = PTTAudioFormat.sampleRate
-    /// Loudest sample of any cue (≈ −9 dBFS): audible next to a voice, never harsh.
-    static let peak: Float = 0.35
+    /// Loudest sample any cue may have (≈ −6 dBFS).
+    static let peak: Float = 0.5
+    /// Each cue's loudness (dBFS RMS): ≈ 6 dB under a voice at «عالي» (`PTTVoiceLevel`). They
+    /// used to be built to a 0.35 peak (≈ −13 dBFS RMS) — louder than the voice that followed.
+    static let cueRMSDB: Float = -20
     static let maxDuration = 0.4
     static let squelchResource = "radio-squelch"
 
@@ -149,7 +152,7 @@ enum PTTRadioSynth {
         case .channelClick:
             out = silence(ms: 3) + click(ms: 9) + silence(ms: 14) + squelch(ms: 140, seed: 61, decay: 1).map { $0 * 0.55 }
         }
-        normalise(&out, to: peak)
+        normalise(&out, rmsDB: cueRMSDB, peakCap: peak)
         fade(&out, ms: 2)
         return out
     }
@@ -233,11 +236,17 @@ enum PTTRadioSynth {
 
     private static func count(_ ms: Double) -> Int { Int(sampleRate * ms / 1000) }
 
-    private static func normalise(_ s: inout [Float], to target: Float) {
+    private static func normalise(_ s: inout [Float], rmsDB: Float, peakCap: Float) {
         let m = s.reduce(0) { max($0, abs($1)) }
-        guard m > 0 else { return }
-        let g = target / m
+        let rms = rmsOf(s)
+        guard m > 0, rms > 0 else { return }
+        let g = min(PTTLoudness.linear(rmsDB) / rms, peakCap / m)
         for i in s.indices { s[i] *= g }
+    }
+
+    static func rmsOf(_ s: [Float]) -> Float {
+        guard !s.isEmpty else { return 0 }
+        return Float((s.reduce(0) { $0 + Double($1 * $1) } / Double(s.count)).squareRoot())
     }
 
     private static func fade(_ s: inout [Float], ms: Double) {
@@ -345,5 +354,163 @@ enum PTTCueWarmup {
         lock.lock()
         defer { lock.unlock() }
         return ready
+    }
+}
+
+// MARK: - loudness («صوت اللاسلكي»)
+
+/// «صوت اللاسلكي» in «الإعدادات»: how loud a friend's voice comes out of the speaker.
+/// The level is the speech loudness the receiver normalises to (RMS of the voiced
+/// parts, ≈ LUFS for band-limited speech); a limiter keeps every peak under −1 dBFS.
+enum PTTVoiceLevel: String, CaseIterable, Hashable {
+    case normal, high, veryHigh
+
+    static let key = "sary.ptt.voiceLevel"
+    /// «عالي» by default: the walkie-talkie is used in a car, with wind and engine.
+    static let `default` = PTTVoiceLevel.high
+
+    static func current(_ defaults: UserDefaults = .standard) -> PTTVoiceLevel {
+        defaults.string(forKey: key).flatMap(PTTVoiceLevel.init(rawValue:)) ?? .default
+    }
+
+    var label: String {
+        switch self {
+        case .normal: "عادي"
+        case .high: "عالي"
+        case .veryHigh: "عالي جداً"
+        }
+    }
+
+    /// Speech loudness at the speaker, dBFS RMS.
+    var targetDB: Float {
+        switch self {
+        case .normal: -17
+        case .high: -14
+        case .veryHigh: -8   // +6 dB over «عالي»; the limiter takes the peaks
+        }
+    }
+
+    /// The most the receiver boosts a quiet sender (an older build that sends the raw mic).
+    var maxGainDB: Float {
+        switch self {
+        case .normal: 15
+        case .high: 20
+        case .veryHigh: 26
+        }
+    }
+
+    /// The radio cues sit ≈ 6 dB under the voice (they are built at `PTTRadioSynth.cueRMSDB`).
+    var cueVolume: Float {
+        min(1, PTTLoudness.linear(targetDB - 6 - PTTRadioSynth.cueRMSDB))
+    }
+}
+
+enum PTTLoudness {
+    /// −1 dBFS: nothing leaves the chain above this.
+    static let ceiling: Float = 0.891
+    /// What the sender normalises the mic to before encoding (dBFS RMS of speech).
+    static let txTargetDB: Float = -16
+
+    static func linear(_ db: Float) -> Float { pow(10, db / 20) }
+    static func db(_ x: Float) -> Float { 20 * log10(max(x, 1e-9)) }
+
+    /// Speech loudness of `s` (dBFS): RMS over 100 ms blocks louder than −50 dBFS (pauses
+    /// do not count, like the LUFS gate). −120 for silence.
+    static func speechLoudnessDB(_ s: [Float], rate: Double = PTTAudioFormat.sampleRate) -> Float {
+        let block = Int(rate / 10)
+        var sum = 0.0, n = 0
+        var i = 0
+        while i + block <= s.count {
+            var e = 0.0
+            for j in i..<(i + block) { e += Double(s[j] * s[j]) }
+            if (e / Double(block)).squareRoot() > 0.00316 { sum += e; n += block }
+            i += block
+        }
+        return n > 0 ? db(Float((sum / Double(n)).squareRoot())) : -120
+    }
+
+    static func peak(_ s: [Float]) -> Float { s.reduce(0) { max($0, abs($1)) } }
+}
+
+/// Brings speech to `targetDB`: a slow RMS follower (≈ 200 ms), gain that falls fast and
+/// rises slowly, held through pauses (the hiss between words is never pumped up).
+struct PTTAutoGain {
+    let target: Float
+    let maxGain: Float
+    private let minGain: Float = 0.25
+    private let gate: Float = 0.003       // ≈ −50 dBFS: below it is a pause
+    private var power: Float
+    private(set) var gain: Float
+
+    private static let rate = Float(PTTAudioFormat.sampleRate)
+    private static let follow = exp(-1 / (0.2 * rate))
+    private static let down = 1 - exp(-1 / (0.04 * rate))
+    private static let up = 1 - exp(-1 / (0.5 * rate))
+
+    init(targetDB: Float, maxGainDB: Float, startGainDB: Float) {
+        target = PTTLoudness.linear(targetDB)
+        maxGain = PTTLoudness.linear(maxGainDB)
+        gain = min(PTTLoudness.linear(startGainDB), maxGain)
+        /* As if the speech so far were exactly at the start gain's level. */
+        power = pow(target / gain, 2)
+    }
+
+    mutating func process(_ x: Float) -> Float {
+        power = Self.follow * power + (1 - Self.follow) * x * x
+        let rms = power.squareRoot()
+        if rms > gate {
+            let want = min(maxGain, max(minGain, target / rms))
+            gain += (want - gain) * (want < gain ? Self.down : Self.up)
+        }
+        return x * gain
+    }
+}
+
+/// Peak limiter at `PTTLoudness.ceiling`: instant attack (never over), 80 ms release.
+struct PTTLimiter {
+    private var gain: Float = 1
+    private static let release = 1 - exp(-1 / (0.08 * Float(PTTAudioFormat.sampleRate)))
+
+    mutating func process(_ x: Float) -> Float {
+        let c = PTTLoudness.ceiling
+        let a = abs(x)
+        if a * gain > c { gain = c / a }
+        let y = x * gain
+        gain += (1 - gain) * Self.release
+        return min(c, max(-c, y))
+    }
+}
+
+/// The sender: mic → `txTargetDB` → limiter → encoder. A quiet phone mic (≈ −30 dBFS of
+/// speech at arm's length) used to go on air as it was.
+struct PTTTxLevel {
+    private var agc = PTTAutoGain(targetDB: PTTLoudness.txTargetDB, maxGainDB: 24, startGainDB: 12)
+    private var limiter = PTTLimiter()
+
+    mutating func process(_ x: Float) -> Float { limiter.process(agc.process(x)) }
+
+    mutating func process(_ b: AVAudioPCMBuffer) {
+        guard let d = b.floatChannelData?[0] else { return }
+        for i in 0..<Int(b.frameLength) { d[i] = process(d[i]) }
+    }
+}
+
+/// The receiver, after the decoder and the radio voice: make-up to the «صوت اللاسلكي»
+/// level (+3…+26 dB for a quiet sender) and a limiter so it never clips.
+struct PTTRxLevel {
+    private var agc: PTTAutoGain
+    private var limiter = PTTLimiter()
+
+    init(_ level: PTTVoiceLevel = .default) {
+        /* A sender on this build arrives at ≈ −16 dBFS: start at the gain that needs. */
+        agc = PTTAutoGain(targetDB: level.targetDB, maxGainDB: level.maxGainDB,
+                          startGainDB: max(0, level.targetDB - PTTLoudness.txTargetDB))
+    }
+
+    mutating func process(_ x: Float) -> Float { limiter.process(agc.process(x)) }
+
+    mutating func process(_ b: AVAudioPCMBuffer) {
+        guard let d = b.floatChannelData?[0] else { return }
+        for i in 0..<Int(b.frameLength) { d[i] = process(d[i]) }
     }
 }

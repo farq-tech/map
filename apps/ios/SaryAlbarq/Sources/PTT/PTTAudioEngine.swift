@@ -34,6 +34,12 @@ final class PTTAudioEngine {
     /// Read on the audio queue for each new transmission.
     var radioVoice: () -> Bool = { PTTRadioSounds.enabled() }
     private var radioVoiceOn = false
+    /// «صوت اللاسلكي»: read on the audio queue for each new transmission.
+    var voiceLevel: () -> PTTVoiceLevel = { PTTVoiceLevel.current() }
+    /// Mic → a steady speech level before the encoder (kept between presses: same mic, same mouth).
+    private var txLevel = PTTTxLevel()
+    /// Decoded voice → the «صوت اللاسلكي» level, limited under −1 dBFS.
+    private var rxLevel = PTTRxLevel()
     private var encoder = PTTEncoder()
     private var decoder = PTTDecoder()
     private var chunker = PTTChunker()
@@ -86,6 +92,9 @@ final class PTTAudioEngine {
             engine.connect(cuePlayer, to: engine.mainMixerNode, format: PTTAudioFormat.pcm)
             attached = true
         }
+        /* Full scale on our own nodes: the walkie voice is never the thing ducked. */
+        player.volume = 1
+        engine.mainMixerNode.outputVolume = 1
         if !engine.isRunning {
             let t0 = Date()
             engine.prepare()
@@ -206,7 +215,9 @@ final class PTTAudioEngine {
 
     private func feedChunks(_ samples: UnsafeBufferPointer<Float>) {
         for chunk in chunker.push(samples) {
-            guard let pcm = AVAudioPCMBuffer.ptt(chunk), let packet = encoder?.encode(pcm) else { continue }
+            guard let pcm = AVAudioPCMBuffer.ptt(chunk) else { continue }
+            txLevel.process(pcm)
+            guard let packet = encoder?.encode(pcm) else { continue }
             let f = PTTFrame(burst: burst, seq: seq, codec: .aacELD16k, payload: packet)
             seq &+= 1
             onFrame(f)
@@ -250,6 +261,8 @@ final class PTTAudioEngine {
             decoder?.reset()
             voiceFX.reset()
             radioVoiceOn = radioVoice()
+            let level = voiceLevel()
+            rxLevel = PTTRxLevel(level)
             endCue = nil
             rx = RxProbe()
         }
@@ -349,6 +362,8 @@ final class PTTAudioEngine {
             /* Room for the cues already queued, plus the speaker's latency. */
             micGateUntil = max(micGateUntil, Date().timeIntervalSince1970) + seconds + 0.08
         }
+        /* ≈ 6 dB under the voice at every «صوت اللاسلكي» level. */
+        cuePlayer.volume = voiceLevel().cueVolume
         cuesInFlight += 1
         cuePlayer.scheduleBuffer(buf, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             self?.queue.async {
@@ -386,8 +401,9 @@ final class PTTAudioEngine {
                 PTTDiagnosticsLog.shared.add("audio", "first voice: \(Int((now - t0) * 1000)) ms after the squelch, \(Int((now - first) * 1000)) ms after its first frame")
             }
             if f.codec == .aacELD16k, let pcm = decoder?.decode(f.payload) {
-                rx.add(pcm)
                 if radioVoiceOn { voiceFX.process(pcm) }
+                rxLevel.process(pcm)
+                rx.add(pcm)
                 if rx.frames % 33 == 0 { rx.report(final: false, stats: jitter.stats) }
                 buf = pcm
             } else {

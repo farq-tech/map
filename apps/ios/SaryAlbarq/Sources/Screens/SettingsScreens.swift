@@ -123,6 +123,8 @@ struct SettingsView: View {
     @Environment(\.sary) private var theme
     /// «قناة الطلعة» squelch / chirp / roger and the radio-voice filter (on by default).
     @AppStorage(PTTRadioSounds.enabledKey) private var radioSounds = true
+    /// «صوت اللاسلكي»: how loud a friend's voice plays («عالي» by default).
+    @AppStorage(PTTVoiceLevel.key) private var voiceLevel = PTTVoiceLevel.default
 
     var body: some View {
         /* Four clear sections (docs/IA-REDESIGN.md §2.7). */
@@ -141,6 +143,18 @@ struct SettingsView: View {
             SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الأصحاب بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
                 SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
                               isOn: $radioSounds, id: "settings.radioSounds")
+                SaryDivider()
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    HStack(spacing: theme.space(.m)) {
+                        SaryRowIcon(systemImage: "speaker.wave.3.fill")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("صوت اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
+                            Text("قوة صوت أصحابك من السماعة الخارجية").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                        }
+                    }
+                    SarySegmented(options: PTTVoiceLevel.allCases, selection: $voiceLevel, label: { $0.label }, id: "settings.voiceLevel")
+                }
+                .padding(.vertical, theme.space(.xs))
             }
             IntroSettingsSection()
             SarySection(title: "الخصوصية والموقع") {
