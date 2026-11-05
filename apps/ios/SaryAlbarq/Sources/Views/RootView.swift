@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct RootView: View {
@@ -30,7 +31,9 @@ struct RootView: View {
             }
         }
         .animation(theme.animation(.smooth), value: model.launching)
-        .sheet(item: Binding(get: { model.pendingInvite.map(InviteToken.init) }, set: { model.pendingInvite = $0?.id })) { inv in
+        /* During a trip the live sheet is always presented: the invite is shown from inside it
+         * (`LiveSheet`), never from here, where a second sheet would silently not appear. */
+        .sheet(item: Binding(get: { model.session == nil ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }
         .sheet(isPresented: Binding(get: { model.offerNotifications && model.session == nil && model.pendingInvite == nil },
@@ -50,6 +53,18 @@ struct RootView: View {
     }
 }
 
+extension LiveOutingHost {
+    /// «ابدأ الطلعة» at the end of «طلعة جديدة»: once the outing has loaded, start it if it
+    /// has not started yet (never in the demo, which has no server).
+    fileprivate func startIfAsked() {
+        guard model.pendingStart == controller.session.id, let v = controller.session.view else { return }
+        /* The destination is saved with the outing; wait until the plan has it (never start without one). */
+        guard controller.tripDestination != nil || v.status != .created else { return }
+        model.pendingStart = nil
+        if v.status == .created, !controller.session.isDemo { controller.startOuting() }
+    }
+}
+
 struct InviteToken: Identifiable { let id: String }
 
 /// Owns the live screen's controller for as long as that outing is open.
@@ -58,13 +73,23 @@ struct LiveOutingHost: View {
 
     init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
         _controller = StateObject(wrappedValue: {
-            let c = LiveOutingController(session: session, location: model.location, appearance: appearance)
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
             c.onExit = { [weak model] in model?.closeSession() }
+            c.onBackToList = { [weak model] in model?.parkSession() }
+            /* «تخطيط الطلعة»: the weather reads the plan's destination and route. */
+            c.planModel = model.plans.model(session.id)
             c.setPush = { [weak model] on in
                 guard let model else { return }
                 Task { await model.push.setEnabled(on, signedIn: model.signedIn) }
             }
             c.pushExplained = { [weak model] in model?.push.explained ?? true }
+            c.openSummary = { [weak model] in model?.showSummaryAfterClose(session.id) }
+            c.startReturnTrip = { [weak model, weak c] in
+                guard let model else { return }
+                Task {
+                    if await model.startReturnTrip(from: session.id) == nil, let e = model.errorText { c?.toast(e); model.errorText = nil }
+                }
+            }
             c.savePhone = { [weak model, weak c] phone in
                 guard let model else { return }
                 Task {
@@ -80,11 +105,22 @@ struct LiveOutingHost: View {
 
     var body: some View {
         LiveOutingScreen(controller: controller)
+            /* A new destination (or one kept on this phone) moves the weather chip at once. */
+            .onReceive(model.plans.model(controller.session.id).$plan.map(\.destination).removeDuplicates()) { _ in
+                controller.feedWeather(force: true)
+                controller.updateTrip()
+                DispatchQueue.main.async { startIfAsked() }
+            }
+            .onReceive(controller.session.objectWillChange) { _ in
+                DispatchQueue.main.async { startIfAsked() }
+            }
+            .onAppear { startIfAsked() }
             .onReceive(model.$offerNotifications) { offer in
-                /* First join: our notification explainer, over the live map, once things settle. */
-                guard offer, controller.modal == nil else { return }
+                /* First join: notifications are NOT asked at join (build 14). Our explainer comes with
+                 * the first alert worth sending in this trip (a friend's message, SOS, convoy alert). */
+                guard offer else { return }
                 model.offerNotifications = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if controller.modal == nil { controller.modal = .notify } }
+                controller.notifyOfferPending = true
             }
     }
 }

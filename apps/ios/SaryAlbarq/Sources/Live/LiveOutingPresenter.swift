@@ -13,24 +13,45 @@ struct LivePresenterInput {
     var closed: LiveCloseReason?
     var wantsToShare = false
     var isSharingNow = false
+    /// iOS location permission is «دائمًا»: sharing keeps going with the screen locked.
+    var hasAlways = false
     var sosSending = false
     /// `userId|sos.at` of incoming SOS alerts the person already saw («أظهره»).
     var acknowledgedSOS: Set<String> = []
     var alerts: [LiveAlertUI] = []
     var ptt: PTTStateUI = .idle
     var sheetDetent: SheetDetentUI = .peek
-    var selectedTab: LiveTabUI = .participants
+    var selectedTab: LiveTabUI = .trip
     var inviteLink: String?
     var isRevoking = false
     var driveMode: TriModeUI = .automatic
     var nightMode: TriModeUI = .automatic
     var notificationsOn = true
     var batterySharing = false
+    /// «اكتم القناة».
+    var pttMuted = false
+    var pttLink = ""
+    /// Who is on air in «قناة الطلعة» (me included), for the speaking badge on the car.
+    var speakingUserId: String?
     /// Clips already played (no waveform icon over that car).
     var heardClips: Set<String> = []
     /// Map rotation, degrees: arrows are relative to the top of the screen.
     var mapBearing: Double = 0
     var now = Date()
+    /// Members whose shown position came phone to phone (`NearbyMesh`).
+    var nearbyVia: Set<String> = []
+    /// Members' cars heard directly phone to phone right now.
+    var nearbyCars = 0
+    /// iOS «الموقع الدقيق» is off (reduced accuracy: km-level fixes).
+    var preciseOff = false
+    /// «الرحلة»: the destination, who arrived (as this phone saw it) and my own remaining distance.
+    var tripDestination: OutingDestination?
+    var tripArrivals: [String: Double] = [:]
+    var myTripRemaining: RemainingDistance?
+    /// «ذكاء القافلة»: who distances are measured from, and who has been standing still since when.
+    var convoyLeaderId: String?
+    var convoyLeaderTitle = "أمير الرحلة"
+    var stoppedSince: [String: Date] = [:]
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -67,11 +88,14 @@ enum LiveOutingPresenter {
                 myPhone: me?.phone.flatMap(localPhone),
                 notificationsOn: i.notificationsOn,
                 batterySharingOn: i.batterySharing,
+                pttMuted: i.pttMuted,
+                pttLink: i.pttLink,
                 offline: OfflineAreasUIState(areas: []),
                 isLeader: v?.iOwn == true,
                 outingStatus: status(v?.status)
             ),
-            now: i.now
+            now: i.now,
+            nearbyCars: i.nearbyCars
         )
     }
 
@@ -84,6 +108,13 @@ enum LiveOutingPresenter {
         case .paused?: return .paused
         case .ended?: return .ended
         }
+    }
+
+    /// «متصل مباشرة بـ ٢ سيارات» — nil when no car is directly connected.
+    static func nearbyLabel(_ n: Int) -> String? {
+        guard n > 0 else { return nil }
+        if n == 1 { return "متصل مباشرة بسيارة واحدة" }
+        return "متصل مباشرة بـ \(ArabicFormat.number(Double(n))) سيارات"
     }
 
     static func connection(_ l: LiveChannel.State, closed: LiveCloseReason?) -> ConnectionStateUI {
@@ -105,10 +136,12 @@ enum LiveOutingPresenter {
     static func warnings(_ i: LivePresenterInput) -> [LiveWarningUI] {
         var w: [LiveWarningUI] = []
         if !i.locationAuthorized && i.gpsState == .denied { w.append(.locationOff) }
+        /* Reduced accuracy is kilometres off: the map, the trail and «طريق العودة» are all wrong. */
+        if i.locationAuthorized && i.preciseOff { w.append(.preciseOff) }
         if i.link == .offline { w.append(.noInternet) }
         if i.wantsToShare && i.gpsState == .weak { w.append(.weakGPS) }
-        /* Positions go out only while the app is on screen. */
-        if i.isSharingNow { w.append(.keepScreenOn) }
+        /* «أثناء الاستخدام» only: positions go out only while the app is on screen. */
+        if i.isSharingNow && !i.hasAlways { w.append(.keepScreenOn) }
         return w
     }
 
@@ -188,8 +221,36 @@ enum LiveOutingPresenter {
                 note: activeNote(m.note, view: v, now: i.now),
                 hasVoice: hasVoice,
                 hasPhone: !(m.phone ?? "").isEmpty,
-                photo: nil
+                photo: nil,
+                viaNearby: !isMe && i.nearbyVia.contains(m.user_id),
+                speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now),
+                silentSince: isMe ? nil : silentSince(m.user_id, in: v),
+                nickname: m.nickname.flatMap { $0.isEmpty || $0 == m.display_name ? nil : $0 },
+                neverShared: !isMe && v.status == .active && m.sharing && v.positions[m.user_id] == nil && !i.nearbyVia.contains(m.user_id)
             ), idx))
+            if i.tripDestination != nil {
+                let live = !isMe && m.sharing && v.freshness(of: m.user_id, deviceNow: i.now) == .live
+                var t = TripPresenter.member(id: m.user_id, position: isMe ? nil : v.positions[m.user_id].map { Geo.LatLng(lat: $0.lat, lng: $0.lng) },
+                                             live: live, destination: i.tripDestination, arrivals: i.tripArrivals)
+                var approx = true
+                if isMe, !t.arrived, let r = i.myTripRemaining { t.remainingM = r.meters; approx = r.source.approximate }
+                out[out.count - 1].0.tripRemainingMeters = t.remainingM
+                out[out.count - 1].0.tripRemainingApprox = approx
+                out[out.count - 1].0.tripArrived = t.arrived
+            }
+        }
+        /* Distance from the leader, from two LIVE positions only (never an old fix). */
+        /* When I am the reference, the row's own distance (from me) already says it. */
+        if let lid = i.convoyLeaderId, lid != v.myId, let lp = livePosition(lid, i) {
+            for k in out.indices {
+                let id = out[k].0.id
+                out[k].0.leaderTitle = i.convoyLeaderTitle
+                if id == lid { out[k].0.isConvoyLeader = true; continue }
+                if let p = livePosition(id, i) { out[k].0.leaderDistanceMeters = Geo.haversineMeters(p, lp) }
+            }
+        }
+        for k in out.indices where out[k].0.presence.isLive {
+            out[k].0.stoppedSince = i.stoppedSince[out[k].0.id]
         }
         /* Me first, then nearest, then the ones with no distance in join order. */
         return out.sorted { a, b in
@@ -201,6 +262,24 @@ enum LiveOutingPresenter {
             default: return a.1 < b.1
             }
         }.map(\.0)
+    }
+
+    /// A member's position only while it is live (me: sharing with a fresh fix).
+    static func livePosition(_ uid: String, _ i: LivePresenterInput) -> Geo.LatLng? {
+        guard let v = i.view else { return nil }
+        if uid == v.myId {
+            guard let f = i.myFix, i.now.timeIntervalSince1970 * 1000 - f.atMs <= myLiveMaxAgeMs else { return nil }
+            return f.coordinate
+        }
+        guard v.members[uid]?.sharing == true, v.freshness(of: uid, deviceNow: i.now) == .live else { return nil }
+        return position(of: uid, in: v, myFix: i.myFix)
+    }
+
+    /// A friend's speed, only while their position is live (Policy freshness); never from an old fix.
+    static func friendSpeedKmh(_ uid: String, in v: OutingView, now: Date) -> Double? {
+        guard v.members[uid]?.sharing == true, v.freshness(of: uid, deviceNow: now) == .live,
+              let s = v.positions[uid]?.speed, s.isFinite, s >= 0, s <= Policy.maxPlausibleMps else { return nil }
+        return Speed.kmh(s)
     }
 
     // MARK: SOS
@@ -247,14 +326,18 @@ enum LiveOutingPresenter {
             bearing = relative(Geo.bearingDeg(a, p), mapBearing: i.mapBearing)
         }
         var arrived = 0
-        for m in v.members.values {
+        var names: [String] = []
+        for m in v.orderedMembers {
             let isMe = m.user_id == v.myId
             let live: Bool
             if isMe { live = i.isSharingNow } else { live = v.freshness(of: m.user_id, deviceNow: i.now) == .live }
             guard live, let at = position(of: m.user_id, in: v, myFix: i.myFix) else { continue }
-            if Geo.haversineMeters(at, p) <= arrivedRadiusM { arrived += 1 }
+            if Geo.haversineMeters(at, p) <= arrivedRadiusM {
+                arrived += 1
+                names.append(isMe ? "أنت" : m.display_name)
+            }
         }
-        return RallyPointUI(distanceMeters: dist, bearingDegrees: bearing, arrivedCount: arrived, totalCount: v.members.count, label: r.label)
+        return RallyPointUI(distanceMeters: dist, bearingDegrees: bearing, arrivedCount: arrived, totalCount: v.members.count, label: r.label, arrivedNames: names)
     }
 
     // MARK: map
@@ -275,14 +358,14 @@ enum LiveOutingPresenter {
                 let fr: Policy.Freshness = i.gpsState == .denied ? .lost : Policy.freshness(fixAgeMs: max(0, age), speedMps: f.speed, lastSeenAgeMs: 0)
                 out.append(MapMember(id: m.user_id, position: LngLat(lng: f.lng, lat: f.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                      presence: fr, heading: fr == .live ? Policy.trustedHeading(f.heading, speed: f.speed) : nil,
-                                     accuracyM: f.accuracy, atMs: f.atMs, note: note, isMe: true))
+                                     accuracyM: f.accuracy, speedMps: f.speed, atMs: f.atMs, note: note, isMe: true))
                 continue
             }
             guard let p = v.positions[m.user_id], let fr = v.freshness(of: m.user_id, deviceNow: i.now) else { continue }
             let at = (ISODate.parse(p.recorded_at)?.timeIntervalSince1970 ?? 0) * 1000
             out.append(MapMember(id: m.user_id, position: LngLat(lng: p.lng, lat: p.lat), color: colors[m.user_id] ?? 0xFFFFFF, name: m.display_name,
                                  presence: fr, heading: fr == .live ? Policy.trustedHeading(p.heading, speed: p.speed) : nil,
-                                 accuracyM: p.accuracy, atMs: at, note: note, isMe: false))
+                                 accuracyM: p.accuracy, speedMps: p.speed, atMs: at, note: note, isMe: false, viaNearby: i.nearbyVia.contains(m.user_id)))
         }
         return out
     }
@@ -318,6 +401,20 @@ enum EdgeArrows {
     enum Edge: Equatable { case top, right, bottom, left }
 
     static let margin: CGFloat = 6
+    /// At most this many arrows at the edge (docs/IA-REDESIGN.md §2.6).
+    static let maxArrows = 3
+
+    /// Which off-screen members get an arrow: members in an alert state (SOS, stuck,
+    /// silent) first, then the nearest; at most `maxArrows`. Driving: alert members only.
+    static func pick(candidates: [(id: String, distance: Double?)], alerting: Set<String>, driving: Bool, max n: Int = maxArrows) -> [String] {
+        let pool = driving ? candidates.filter { alerting.contains($0.id) } : candidates
+        return pool.sorted { a, b in
+            let aa = alerting.contains(a.id), ba = alerting.contains(b.id)
+            if aa != ba { return aa }
+            return (a.distance ?? .infinity, a.id) < (b.distance ?? .infinity, b.id)
+        }
+        .prefix(n).map(\.id)
+    }
 
     static func screenAngle(dx: CGFloat, dy: CGFloat) -> Double {
         (atan2(Double(dx), Double(-dy)) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)

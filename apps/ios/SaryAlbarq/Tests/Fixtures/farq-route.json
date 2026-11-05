@@ -1,0 +1,427 @@
+{
+ "code": "Ok",
+ "uuid": "farq-fixture-1",
+ "provider": "farq-valhalla",
+ "waypoints": [
+  {
+   "name": "طريق الملك فهد",
+   "location": [
+    46.68,
+    24.7
+   ],
+   "distance": 3.2
+  },
+  {
+   "name": "طريق العروبة",
+   "location": [
+    46.695,
+    24.71
+   ],
+   "distance": 4.1
+  }
+ ],
+ "routes": [
+  {
+   "distance": 2627.1501014112123,
+   "duration": 164.19688133820077,
+   "weight": 164.19688133820077,
+   "weight_name": "auto",
+   "geometry": "_eqbn@_{b`xAo}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@??w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A",
+   "voiceLocale": "ar",
+   "legs": [
+    {
+     "distance": 2627.1501014112123,
+     "duration": 164.19688133820077,
+     "weight": 164.19688133820077,
+     "summary": "طريق الملك فهد، طريق العروبة",
+     "steps": [
+      {
+       "distance": 1111.9492664457612,
+       "duration": 69.49682915286007,
+       "weight": 69.49682915286007,
+       "name": "طريق الملك فهد",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_eqbn@_{b`xAo}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?",
+       "maneuver": {
+        "location": [
+         46.68,
+         24.7
+        ],
+        "bearing_before": 0,
+        "bearing_after": 0,
+        "type": "depart",
+        "instruction": "اتجه على طريق الملك فهد"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.68,
+          24.7
+         ],
+         "bearings": [
+          0
+         ],
+         "entry": [
+          true
+         ],
+         "out": 0
+        }
+       ],
+       "voiceInstructions": [
+        {
+         "distanceAlongGeometry": 1111.9492664457612,
+         "announcement": "اتجه على طريق الملك فهد",
+         "ssmlAnnouncement": "<speak>اتجه على طريق الملك فهد</speak>"
+        },
+        {
+         "distanceAlongGeometry": 400.0,
+         "announcement": "بعد 400 متر، انعطف يمينًا إلى طريق العروبة",
+         "ssmlAnnouncement": "<speak>بعد 400 متر، انعطف يمينًا إلى طريق العروبة</speak>"
+        }
+       ],
+       "bannerInstructions": [
+        {
+         "distanceAlongGeometry": 1111.9492664457612,
+         "primary": {
+          "text": "طريق العروبة",
+          "type": "turn",
+          "modifier": "right",
+          "components": [
+           {
+            "text": "طريق العروبة",
+            "type": "text"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "distance": 1515.2008349654511,
+       "duration": 94.7000521853407,
+       "weight": 94.7000521853407,
+       "name": "طريق العروبة",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_vdcn@_{b`xA?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A",
+       "maneuver": {
+        "location": [
+         46.68,
+         24.71
+        ],
+        "bearing_before": 0,
+        "bearing_after": 90,
+        "type": "turn",
+        "modifier": "right",
+        "instruction": "انعطف يمينًا إلى طريق العروبة"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.68,
+          24.71
+         ],
+         "bearings": [
+          180,
+          90
+         ],
+         "entry": [
+          false,
+          true
+         ],
+         "in": 0,
+         "out": 1,
+         "lanes": [
+          {
+           "valid": false,
+           "active": false,
+           "indications": [
+            "left"
+           ]
+          },
+          {
+           "valid": false,
+           "active": false,
+           "indications": [
+            "straight"
+           ]
+          },
+          {
+           "valid": true,
+           "active": true,
+           "indications": [
+            "straight",
+            "right"
+           ]
+          }
+         ]
+        }
+       ],
+       "voiceInstructions": [
+        {
+         "distanceAlongGeometry": 300.0,
+         "announcement": "بعد 300 متر تصل إلى وجهتك",
+         "ssmlAnnouncement": "<speak>بعد 300 متر تصل إلى وجهتك</speak>"
+        }
+       ],
+       "bannerInstructions": [
+        {
+         "distanceAlongGeometry": 1515.2008349654511,
+         "primary": {
+          "text": "وجهتك",
+          "type": "arrive",
+          "components": [
+           {
+            "text": "وجهتك",
+            "type": "text"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "distance": 0,
+       "duration": 0,
+       "weight": 0,
+       "name": "طريق العروبة",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_vdcn@od`axA??",
+       "maneuver": {
+        "location": [
+         46.695,
+         24.71
+        ],
+        "bearing_before": 90,
+        "bearing_after": 0,
+        "type": "arrive",
+        "instruction": "وصلت إلى وجهتك"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.695,
+          24.71
+         ],
+         "bearings": [
+          270
+         ],
+         "entry": [
+          true
+         ],
+         "in": 0
+        }
+       ],
+       "voiceInstructions": [],
+       "bannerInstructions": []
+      }
+     ],
+     "via_waypoints": []
+    }
+   ]
+  },
+  {
+   "distance": 2627.271768786802,
+   "duration": 187.6622691990573,
+   "weight": 187.6622691990573,
+   "weight_name": "auto",
+   "geometry": "_eqbn@_{b`xA?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|Ao}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?",
+   "voiceLocale": "ar",
+   "legs": [
+    {
+     "distance": 2627.271768786802,
+     "duration": 187.6622691990573,
+     "weight": 187.6622691990573,
+     "summary": "طريق مكة المكرمة، طريق العليا",
+     "steps": [
+      {
+       "distance": 1515.322502341041,
+       "duration": 108.23732159578864,
+       "weight": 108.23732159578864,
+       "name": "طريق مكة المكرمة",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_eqbn@_{b`xA?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A?w|A",
+       "maneuver": {
+        "location": [
+         46.68,
+         24.7
+        ],
+        "bearing_before": 0,
+        "bearing_after": 90,
+        "type": "depart",
+        "instruction": "اتجه على طريق مكة المكرمة"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.68,
+          24.7
+         ],
+         "bearings": [
+          90
+         ],
+         "entry": [
+          true
+         ],
+         "out": 0
+        }
+       ],
+       "voiceInstructions": [
+        {
+         "distanceAlongGeometry": 1515.322502341041,
+         "announcement": "اتجه على طريق مكة المكرمة",
+         "ssmlAnnouncement": "<speak>اتجه على طريق مكة المكرمة</speak>"
+        },
+        {
+         "distanceAlongGeometry": 400.0,
+         "announcement": "بعد 400 متر، انعطف يسارًا إلى طريق العليا",
+         "ssmlAnnouncement": "<speak>بعد 400 متر، انعطف يسارًا إلى طريق العليا</speak>"
+        }
+       ],
+       "bannerInstructions": [
+        {
+         "distanceAlongGeometry": 1515.322502341041,
+         "primary": {
+          "text": "طريق العليا",
+          "type": "turn",
+          "modifier": "left",
+          "components": [
+           {
+            "text": "طريق العليا",
+            "type": "text"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "distance": 1111.9492664457612,
+       "duration": 79.42494760326865,
+       "weight": 79.42494760326865,
+       "name": "طريق العليا",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_eqbn@od`axAo}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?o}@?",
+       "maneuver": {
+        "location": [
+         46.695,
+         24.7
+        ],
+        "bearing_before": 90,
+        "bearing_after": 0,
+        "type": "turn",
+        "modifier": "left",
+        "instruction": "انعطف يسارًا إلى طريق العليا"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.695,
+          24.7
+         ],
+         "bearings": [
+          270,
+          0
+         ],
+         "entry": [
+          false,
+          true
+         ],
+         "in": 0,
+         "out": 1,
+         "lanes": [
+          {
+           "valid": true,
+           "active": true,
+           "indications": [
+            "left"
+           ]
+          },
+          {
+           "valid": false,
+           "active": false,
+           "indications": [
+            "straight"
+           ]
+          },
+          {
+           "valid": false,
+           "active": false,
+           "indications": [
+            "straight",
+            "right"
+           ]
+          }
+         ]
+        }
+       ],
+       "voiceInstructions": [
+        {
+         "distanceAlongGeometry": 300.0,
+         "announcement": "بعد 300 متر تصل إلى وجهتك",
+         "ssmlAnnouncement": "<speak>بعد 300 متر تصل إلى وجهتك</speak>"
+        }
+       ],
+       "bannerInstructions": [
+        {
+         "distanceAlongGeometry": 1111.9492664457612,
+         "primary": {
+          "text": "وجهتك",
+          "type": "arrive",
+          "components": [
+           {
+            "text": "وجهتك",
+            "type": "text"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      {
+       "distance": 0,
+       "duration": 0,
+       "weight": 0,
+       "name": "طريق العليا",
+       "mode": "driving",
+       "driving_side": "right",
+       "geometry": "_vdcn@od`axA??",
+       "maneuver": {
+        "location": [
+         46.695,
+         24.71
+        ],
+        "bearing_before": 0,
+        "bearing_after": 0,
+        "type": "arrive",
+        "instruction": "وصلت إلى وجهتك"
+       },
+       "intersections": [
+        {
+         "location": [
+          46.695,
+          24.71
+         ],
+         "bearings": [
+          180
+         ],
+         "entry": [
+          true
+         ],
+         "in": 0
+        }
+       ],
+       "voiceInstructions": [],
+       "bannerInstructions": []
+      }
+     ],
+     "via_waypoints": []
+    }
+   ]
+  }
+ ]
+}

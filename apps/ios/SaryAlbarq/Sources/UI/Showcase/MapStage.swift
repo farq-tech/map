@@ -14,7 +14,7 @@ struct MapStage: View {
     @State private var alerts = Array(Mock.alerts.prefix(2))
     @State private var sheetShown = true
     @State private var detent: SheetDetentUI = .peek
-    @State private var tab: LiveTabUI = .participants
+    @State private var tab: LiveTabUI = .group
     @State private var sheetHeight: CGFloat = 0
     @State private var following = true
     @State private var ptt: PTTStateUI = .idle
@@ -107,7 +107,7 @@ struct MapStage: View {
                 SaryStatusCapsule(outingName: "طلعة الثمامة", status: .active, connection: .connected, sharing: .sharing,
                                   warnings: theme.drive ? [] : [.keepScreenOn], expanded: $expanded, back: close)
                 if !rowMode {
-                    SaryAlertLane(alerts: alerts, limit: theme.drive ? 1 : 3, dismiss: { id in alerts.removeAll { $0.id == id } })
+                    SaryAlertLane(alerts: alerts, limit: theme.drive ? 1 : SaryAlertLane.defaultLimit, dismiss: { id in alerts.removeAll { $0.id == id } })
                 }
                 Spacer()
             }
@@ -156,8 +156,8 @@ struct MapStage: View {
 
     private var pttActions: PTTActions {
         PTTActions(
-            pressBegan: { ptt = .recording(seconds: 3) },
-            pressEnded: { ptt = .sending; Task { try? await Task.sleep(nanoseconds: 800_000_000); ptt = .idle } },
+            pressBegan: { ptt = .talking(seconds: 3, remaining: 57) },
+            pressEnded: { ptt = .idle },
             cancelled: { ptt = .idle }
         )
     }

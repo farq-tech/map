@@ -1,0 +1,380 @@
+import MapboxDirections
+@_spi(MapboxInternal) import MapboxNavigationCore
+import UIKit
+import XCTest
+@testable import SaryAlbarq
+
+// «الملاحة»: option mapping, destination sources, off-road last leg, Arabic
+// instructions, and the routing-provider seam (Mapbox / the company's Valhalla).
+
+private let riyadh = LngLat(lng: 46.6753, lat: 24.7136)
+
+private func req(_ o: NavRouteOptions = .init(), to t: LngLat = LngLat(lng: 46.695, lat: 24.71)) -> NavRouteRequest {
+    NavRouteRequest(origin: LngLat(lng: 46.68, lat: 24.70), heading: 10, target: NavTarget(source: .point, name: "هنا", position: t), options: o)
+}
+
+final class NavOptionMappingTests: XCTestCase {
+    func testSpecFromOptions() {
+        let d = NavRouteSpec.from(.init())
+        XCTAssertEqual(d.profile, .drivingTraffic)
+        XCTAssertEqual(d.exclude, [])
+        XCTAssertEqual(d.language, "ar")
+        XCTAssertTrue(d.metric)
+        XCTAssertTrue(d.alternatives)
+        let all = NavRouteSpec.from(.init(fastest: false, avoidUnpaved: true, avoidTolls: true))
+        XCTAssertEqual(all.profile, .driving)
+        XCTAssertEqual(Set(all.exclude), ["toll", "unpaved"])
+    }
+
+    @MainActor
+    func testMapboxRequestCarriesArabicMetricAndExclusions() {
+        let o = MapboxNavRoutingProvider.options(req(.init(fastest: true, avoidUnpaved: true, avoidTolls: true)))
+        let q = Dictionary(o.urlQueryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
+        XCTAssertEqual(q["language"], "ar")
+        XCTAssertEqual(q["voice_units"], "metric")
+        XCTAssertEqual(q["alternatives"], "true")
+        XCTAssertEqual(q["steps"], "true")
+        XCTAssertEqual(q["voice_instructions"], "true")
+        XCTAssertEqual(q["banner_instructions"], "true")
+        XCTAssertEqual(Set((q["exclude"] ?? "").split(separator: ",").map(String.init)), ["toll", "unpaved"])
+        XCTAssertEqual(o.profileIdentifier, .automobileAvoidingTraffic)
+        XCTAssertEqual(o.waypoints.count, 2)
+        XCTAssertEqual(o.waypoints[0].heading, 10)
+        let plain = MapboxNavRoutingProvider.options(req(.init(fastest: false)))
+        XCTAssertEqual(plain.profileIdentifier, .automobile)
+        XCTAssertNil(plain.urlQueryItems.first { $0.name == "exclude" }?.value.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    func testFarqBodyMapsTheSameOptions() throws {
+        let b = FarqValhallaRouteProvider.body(req(.init(fastest: true, avoidUnpaved: true, avoidTolls: false)))
+        XCTAssertEqual(b["costing"] as? String, "auto")
+        XCTAssertEqual(b["language"] as? String, "ar-SA")
+        XCTAssertEqual(b["alternates"] as? Int, 2)
+        let opts = try XCTUnwrap(b["options"] as? [String: Any])
+        XCTAssertEqual(opts["avoid_unpaved"] as? Bool, true)
+        XCTAssertEqual(opts["avoid_tolls"] as? Bool, false)
+        XCTAssertEqual(opts["use_tracks"] as? Bool, false)
+        let locs = try XCTUnwrap(b["locations"] as? [[String: Double]])
+        XCTAssertEqual(locs.count, 2)
+        XCTAssertEqual(locs[1]["lat"], 24.71)
+    }
+
+    func testOptionsPersist() {
+        let d = UserDefaults(suiteName: "nav-tests")!
+        d.removePersistentDomain(forName: "nav-tests")
+        XCTAssertEqual(NavRouteOptions.load(d), NavRouteOptions())
+        NavRouteOptions(fastest: false, avoidUnpaved: true, avoidTolls: true).save(d)
+        /* No toll roads in KSA (#76): a saved «تجنّب الرسوم» from an older build is dropped on load. */
+        XCTAssertEqual(NavRouteOptions.load(d), NavRouteOptions(fastest: false, avoidUnpaved: true, avoidTolls: false))
+    }
+
+    func testChoiceOrdersByTimeOrDistance() {
+        let a = NavRoute(id: "a", coordinates: [], distanceM: 9000, durationS: 600, steps: [])
+        let b = NavRoute(id: "b", coordinates: [], distanceM: 7000, durationS: 840, steps: [])
+        XCTAssertEqual(NavRouteChoice.order([b, a], options: .init(fastest: true)).map(\.id), ["a", "b"])
+        XCTAssertEqual(NavRouteChoice.order([a, b], options: .init(fastest: false)).map(\.id), ["b", "a"])
+        XCTAssertEqual(NavRouteChoice.delta(b, best: a), "أبطأ ٤ د")
+    }
+}
+
+final class NavTargetSourceTests: XCTestCase {
+    func testDestinationRallyPointPlanEnd() throws {
+        let d = try NavTargets.destination(OutingDestination(name: "روضة الثمامة", lat: 25.0, lng: 46.7)).get()
+        XCTAssertEqual(d.source, .destination)
+        XCTAssertEqual(d.name, "روضة الثمامة")
+        XCTAssertEqual(d.position, LngLat(lng: 46.7, lat: 25.0))
+        XCTAssertEqual(NavTargets.destination(nil), .failure(.missing))
+        XCTAssertEqual(try NavTargets.rally(MapRallyPoint(position: riyadh, label: "")).get().name, "نقطة التجمع")
+        XCTAssertEqual(try NavTargets.point(riyadh).get().name, "النقطة المحددة")
+        XCTAssertEqual(try NavTargets.point(riyadh, name: "مطعم").get().name, "مطعم")
+        XCTAssertEqual(NavTargets.planRouteEnd([riyadh]), .failure(.missing))
+        XCTAssertEqual(try NavTargets.planRouteEnd([riyadh, LngLat(lng: 46.8, lat: 24.9)]).get().position, LngLat(lng: 46.8, lat: 24.9))
+    }
+
+    func testMemberLiveIsAccepted() throws {
+        let t = try NavTargets.member(id: "u2", name: "فهد", isMe: false, position: riyadh, presence: .live).get()
+        XCTAssertEqual(t.source, .member)
+        XCTAssertEqual(t.memberId, "u2")
+        XCTAssertEqual(t.position, riyadh)
+    }
+
+    func testMemberStaleIsRefusedNeverEstimated() {
+        let since = Date(timeIntervalSinceNow: -300)
+        let r = NavTargets.member(id: "u3", name: "سعد", isMe: false, position: riyadh, presence: .stale(since: since))
+        XCTAssertEqual(r, .failure(.memberStale(name: "سعد", since: since)))
+        if case let .failure(e) = r { XCTAssertTrue(e.message.contains("قديم")) }
+        XCTAssertEqual(NavTargets.member(id: "u4", name: "نورة", isMe: false, position: riyadh, presence: .paused), .failure(.memberHidden(name: "نورة")))
+        XCTAssertEqual(NavTargets.member(id: "u5", name: "أنا", isMe: true, position: riyadh, presence: .live), .failure(.isMe))
+        XCTAssertEqual(NavTargets.member(id: "u6", name: "علي", isMe: false, position: nil, presence: .live), .failure(.memberHidden(name: "علي")))
+    }
+
+    func testMemberMovedSuggestsRefreshOnlyPastThreshold() {
+        let t = NavTarget(source: .member, name: "فهد", position: riyadh, memberId: "u2")
+        XCTAssertNil(NavTargets.memberMoved(t, now: LngLat(lng: riyadh.lng + 0.001, lat: riyadh.lat)))
+        XCTAssertNotNil(NavTargets.memberMoved(t, now: LngLat(lng: riyadh.lng + 0.01, lat: riyadh.lat)))
+        XCTAssertNil(NavTargets.memberMoved(NavTarget(source: .rally, name: "", position: riyadh), now: LngLat(lng: 47, lat: 25)))
+    }
+}
+
+final class NavOffRoadTests: XCTestCase {
+    /// A point `m` metres from `p` on `bearing`.
+    private func offset(_ p: LngLat, _ m: Double, bearing: Double) -> LngLat {
+        let r = Double.pi / 180, R = 6_371_000.0
+        let lat1 = p.lat * r, lng1 = p.lng * r, d = m / R, b = bearing * r
+        let lat2 = asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(b))
+        let lng2 = lng1 + atan2(sin(b) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2))
+        return LngLat(lng: lng2 / r, lat: lat2 / r)
+    }
+
+    func testNoLegWhenTheRoadReachesTheTarget() {
+        XCTAssertNil(NavOffRoad.lastLeg(routeEnd: riyadh, target: offset(riyadh, 60, bearing: 10)))
+        XCTAssertNil(NavOffRoad.lastLeg(routeEnd: nil, target: riyadh))
+    }
+
+    func testDesertTargetGivesStraightLineDistanceAndBearing() throws {
+        let target = offset(riyadh, 3200, bearing: 225)
+        let leg = try XCTUnwrap(NavOffRoad.lastLeg(routeEnd: riyadh, target: target))
+        XCTAssertEqual(leg.distanceM, 3200, accuracy: 2)
+        XCTAssertEqual(leg.bearing, 225, accuracy: 0.5)
+        XCTAssertEqual(leg.from, riyadh)
+        XCTAssertEqual(NavOffRoad.summary(leg), "آخر جزء بدون طريق: ٣٫٢ كم باتجاه الجنوب الغربي")
+    }
+
+    func testRemainingAndArrival() throws {
+        let target = offset(riyadh, 3200, bearing: 90)
+        let leg = try XCTUnwrap(NavOffRoad.lastLeg(routeEnd: riyadh, target: target))
+        let half = NavOffRoad.remaining(leg, me: offset(riyadh, 1600, bearing: 90))
+        XCTAssertEqual(half.distanceM, 1600, accuracy: 2)
+        XCTAssertEqual(half.bearing, 90, accuracy: 0.5)
+        XCTAssertFalse(half.arrived)
+        XCTAssertTrue(NavOffRoad.remaining(leg, me: offset(target, 20, bearing: 0)).arrived)
+        let direct = NavOffRoad.direct(from: riyadh, to: target)
+        XCTAssertEqual(direct.distanceM, 3200, accuracy: 2)
+    }
+
+    func testArrowIsRelativeAndWraps() {
+        XCTAssertEqual(NavOffRoad.arrowDegrees(bearing: 10, reference: 350), 20, accuracy: 1e-9)
+        XCTAssertEqual(NavOffRoad.arrowDegrees(bearing: 350, reference: 10), -20, accuracy: 1e-9)
+        XCTAssertEqual(NavOffRoad.arrowDegrees(bearing: 225, reference: 45), 180, accuracy: 1e-9)
+    }
+}
+
+final class NavTextTests: XCTestCase {
+    private func step(_ k: NavManeuverKind, _ d: NavTurnDirection? = nil, road: String? = nil, exit: Int? = nil) -> NavStep {
+        NavStep(maneuver: NavManeuver(kind: k, direction: d, exit: exit), roadName: road, location: riyadh, distanceM: 100, durationS: 10)
+    }
+
+    func testBannerWithArabicDigits() {
+        XCTAssertEqual(NavText.banner(step(.turn, .right, road: "طريق الملك فهد"), distanceM: 500), "بعد ٥٠٠ م انعطف يمينًا إلى طريق الملك فهد")
+        XCTAssertEqual(NavText.banner(step(.turn, .left, road: "طريق العروبة"), distanceM: 1230), "بعد ١٫٢ كم انعطف يسارًا إلى طريق العروبة")
+        XCTAssertEqual(NavText.banner(step(.turn, .right), distanceM: 12), "انعطف يمينًا")
+        XCTAssertEqual(NavText.banner(step(.roundabout, exit: 2), distanceM: 260), "بعد ٢٥٠ م في الدوّار خذ المخرج الثاني")
+        XCTAssertEqual(NavText.banner(step(.continue, road: "طريق 40"), distanceM: 3000), "بعد ٣ كم استمر على طريق ٤٠")
+        XCTAssertEqual(NavText.banner(step(.arrive), distanceM: 5, targetName: "روضة خريم"), "وصلت إلى روضة خريم")
+        XCTAssertEqual(NavText.banner(step(.fork, .slightRight, road: "الدائري الشرقي"), distanceM: 700), "بعد ٧٠٠ م التزم باليمين عند التفرّع إلى الدائري الشرقي")
+    }
+
+    func testRoundingAndUnits() {
+        XCTAssertEqual(NavText.distance(47), "٥٠ م")
+        XCTAssertEqual(NavText.distance(523), "٥٠٠ م")
+        XCTAssertEqual(NavText.distance(980), "١ كم")
+        XCTAssertEqual(NavText.distance(18_340), "١٨٫٣ كم")
+        XCTAssertNil(NavText.inDistance(20))
+        XCTAssertEqual(NavText.spokenInDistance(400), "بعد ٤٠٠ متر")
+        XCTAssertEqual(NavText.spokenInDistance(2500), "بعد ٢٫٥ كيلومتر")
+        XCTAssertFalse(NavText.banner(step(.turn, .right, road: "Exit 9"), distanceM: 800).contains { $0.isASCII && $0.isNumber })
+    }
+
+    func testClockAndRemaining() {
+        var c = DateComponents()
+        c.year = 2026; c.month = 11; c.day = 4; c.hour = 16; c.minute = 35
+        c.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        let d = Calendar(identifier: .gregorian).date(from: c)!
+        XCTAssertEqual(NavText.clock(d), "٤:٣٥ م")
+        c.hour = 0; c.minute = 5
+        XCTAssertEqual(NavText.clock(Calendar(identifier: .gregorian).date(from: c)!), "١٢:٠٥ ص")
+        XCTAssertEqual(NavText.remaining(seconds: 30), "أقل من دقيقة")
+        XCTAssertEqual(NavText.remaining(seconds: 23 * 60), "٢٣ د")
+        XCTAssertEqual(NavText.remaining(seconds: 65 * 60), "١ س ٥ د")
+        XCTAssertEqual(NavText.compassDefinite(225), "الجنوب الغربي")
+    }
+
+    func testGlyphsExist() {
+        let kinds: [NavManeuverKind] = [.depart, .turn, .continue, .merge, .onRamp, .offRamp, .fork, .endOfRoad, .roundabout, .exitRoundabout, .arrive]
+        let dirs: [NavTurnDirection?] = [nil, .sharpRight, .right, .slightRight, .straight, .slightLeft, .left, .sharpLeft, .uTurn]
+        for k in kinds { for d in dirs {
+            let name = NavGlyph.symbol(NavManeuver(kind: k, direction: d))
+            XCTAssertNotNil(UIImage(systemName: name), name)
+        } }
+    }
+}
+
+// MARK: the routing-provider seam
+
+/// Answers requests from a table (path → status, body); records what was asked.
+final class StubURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var routes: [String: (Int, Data)] = [:]
+    nonisolated(unsafe) static var seen: [URLRequest] = []
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.seen.append(request)
+        let (code, body) = Self.routes[request.url?.path ?? ""] ?? (404, Data("{\"error\":\"not_found\"}".utf8))
+        let resp = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+/// Stands in for Mapbox Directions.
+final class FakeMapbox: NavRoutingProvider {
+    let name = "Mapbox"
+    var calls = 0
+    func routes(_ r: NavRouteRequest) async throws -> NavRoutePlan {
+        calls += 1
+        return NavRoutePlan(routes: [NavRoute(id: "mapbox-0", coordinates: [r.origin, r.target.position], distanceM: 1000, durationS: 100, steps: [])])
+    }
+}
+
+final class NavRoutingProviderTests: XCTestCase {
+    private var fixture: Data!
+
+    override func setUpWithError() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "farq-route", withExtension: "json"))
+        fixture = try Data(contentsOf: url)
+        StubURLProtocol.routes = [:]
+        StubURLProtocol.seen = []
+    }
+
+    private func farq() -> FarqValhallaRouteProvider {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubURLProtocol.self]
+        return FarqValhallaRouteProvider(base: URL(string: "https://api.test")!, token: { "tok123" }, session: URLSession(configuration: cfg))
+    }
+
+    func testFixtureDecodesIntoArabicStepsLanesAndVoice() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        let p = try await farq().routes(req())
+        XCTAssertEqual(p.routes.count, 2, "main + alternative")
+        let r = p.routes[0]
+        XCTAssertEqual(r.id, "farq-0")
+        XCTAssertEqual(r.distanceM, 2627, accuracy: 2)
+        XCTAssertEqual(r.coordinates.count, 21)
+        XCTAssertEqual(r.coordinates.first!.lat, 24.70, accuracy: 1e-6, "polyline6")
+        XCTAssertEqual(r.steps.map(\.maneuver.kind), [.depart, .turn, .arrive])
+        XCTAssertEqual(r.steps[1].maneuver.direction, .right)
+        XCTAssertEqual(r.steps[1].roadName, "طريق العروبة")
+        XCTAssertEqual(r.steps[1].lanes.map(\.valid), [false, false, true])
+        /* The voice line about the turn is spoken along step 0 and belongs to the turn. */
+        XCTAssertEqual(r.steps[1].spoken.last?.text, "بعد 400 متر، انعطف يمينًا إلى طريق العروبة")
+        XCTAssertEqual(NavText.banner(r.steps[1], distanceM: 400), "بعد ٤٠٠ م انعطف يمينًا إلى طريق العروبة")
+        XCTAssertTrue(p.native is FarqRoutesBox)
+        let sent = try XCTUnwrap(StubURLProtocol.seen.first)
+        XCTAssertEqual(sent.httpMethod, "POST")
+        XCTAssertEqual(sent.value(forHTTPHeaderField: "Authorization"), "Bearer tok123")
+    }
+
+    @MainActor
+    func testTheNavigationSDKAcceptsTheValhallaRoute() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        let p = try await farq().routes(req())
+        let box = try XCTUnwrap(p.native as? FarqRoutesBox)
+        let nr = try await box.navigationRoutes(routeId: "farq-1")
+        XCTAssertEqual(nr.mainRoute.route.distance, p.routes[1].distanceM, accuracy: 1)
+        XCTAssertEqual(nr.mainRoute.route.legs.first?.steps.count, 3)
+    }
+
+    func testFallsBackToMapboxWhenNotDeployed() async throws {
+        let mb = FakeMapbox()
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+        let p = try await sw.routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0")
+        XCTAssertEqual(sw.lastFallbackReason, .notDeployed)
+        XCTAssertEqual(mb.calls, 1)
+    }
+
+    func testFallsBackOnRoutingUnavailableAndNoRoute() async throws {
+        for code in ["routing_unavailable", "no_route"] {
+            StubURLProtocol.routes["/api/outings/routing/route"] = (code == "no_route" ? 422 : 503, Data("{\"error\":\"\(code)\"}".utf8))
+            let mb = FakeMapbox()
+            let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+            let p = try await sw.routes(req())
+            XCTAssertEqual(p.routes.first?.id, "mapbox-0", code)
+            XCTAssertEqual(sw.lastFallbackReason, code == "no_route" ? .noRoute : .unavailable)
+        }
+    }
+
+    func testAutoUsesValhallaOnlyWhenTheServerSaysEnabled() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":false}".utf8))
+        let mb = FakeMapbox()
+        var p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0", "disabled → Mapbox")
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
+        p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "farq-0", "enabled → Valhalla")
+    }
+
+    func testMapboxChoiceNeverCallsTheCompanyServer() async throws {
+        let mb = FakeMapbox()
+        _ = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .mapbox }).routes(req())
+        XCTAssertTrue(StubURLProtocol.seen.isEmpty)
+        XCTAssertEqual(mb.calls, 1)
+    }
+
+    func testDefaultChoiceIsMapbox() {
+        UserDefaults.standard.removeObject(forKey: NavProviderChoice.key)
+        XCTAssertEqual(NavProviderChoice.current, .mapbox)
+    }
+}
+
+/// Our own guidance along a route (the engine any provider can use).
+@MainActor
+final class LocalGuidanceTests: XCTestCase {
+    private func route() -> NavRoute {
+        let a = LngLat(lng: 46.68, lat: 24.70), k = LngLat(lng: 46.68, lat: 24.71), b = LngLat(lng: 46.695, lat: 24.71)
+        let c = (0...10).map { LngLat(lng: 46.68, lat: 24.70 + 0.001 * Double($0)) } + (1...10).map { LngLat(lng: 46.68 + 0.0015 * Double($0), lat: 24.71) }
+        let d1 = Vehicle.distanceMeters(a, k), d2 = Vehicle.distanceMeters(k, b)
+        return NavRoute(id: "r", coordinates: c, distanceM: d1 + d2, durationS: 300, steps: [
+            NavStep(maneuver: .init(kind: .depart, direction: nil), roadName: "أ", location: a, distanceM: d1, durationS: 150),
+            NavStep(maneuver: .init(kind: .turn, direction: .right), roadName: "ب", location: k, distanceM: d2, durationS: 150),
+            NavStep(maneuver: .init(kind: .arrive, direction: nil), roadName: nil, location: b, distanceM: 0, durationS: 0),
+        ])
+    }
+
+    private func fix(_ lat: Double, _ lng: Double) -> DeviceFix { DeviceFix(lat: lat, lng: lng, accuracy: 5, heading: nil, speed: 10, atMs: 0) }
+
+    func testProgressSpeaksAndArrives() async throws {
+        let e = LocalGuidanceEngine()
+        var events: [NavGuidanceEvent] = []
+        e.onEvent = { events.append($0) }
+        let r = route()
+        try await e.start(route: r, plan: .init(routes: [r]), target: NavTarget(source: .point, name: "هنا", position: r.end!))
+        e.ingest(fix(24.705, 46.68))
+        guard case let .progress(p) = events.first else { return XCTFail("progress") }
+        XCTAssertEqual(p.stepIndex, 1)
+        XCTAssertEqual(p.distanceToManeuverM, 556, accuracy: 15)
+        XCTAssertTrue(events.contains { if case let .speak(t) = $0 { return t.contains("انعطف يمينًا") } else { return false } })
+        e.ingest(fix(24.71, 46.6949))
+        XCTAssertTrue(events.contains(.arrivedAtRouteEnd))
+    }
+
+    func testOffRouteThreeFixesInARowReroutes() async throws {
+        let e = LocalGuidanceEngine()
+        var events: [NavGuidanceEvent] = []
+        e.onEvent = { events.append($0) }
+        let r = route()
+        let exp = expectation(description: "reroute asked")
+        e.reroute = { _, _ in exp.fulfill(); return r }
+        try await e.start(route: r, plan: .init(routes: [r]), target: NavTarget(source: .point, name: "هنا", position: r.end!))
+        e.ingest(fix(24.705, 46.685)) // ~500 m off
+        e.ingest(fix(24.705, 46.6851))
+        XCTAssertFalse(events.contains(.offRoute), "two bad fixes are not a detour")
+        e.ingest(fix(24.705, 46.6852))
+        XCTAssertTrue(events.contains(.offRoute))
+        await fulfillment(of: [exp], timeout: 2)
+    }
+}

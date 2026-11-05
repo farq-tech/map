@@ -17,13 +17,14 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    case participants, invite, settings
+    /// «الرحلة» (default) · «المجموعة» · «المزيد» (docs/IA-REDESIGN.md §2.4).
+    case trip, group, more
 
     var label: String {
         switch self {
-        case .participants: return "المشاركون"
-        case .invite: return "الدعوة"
-        case .settings: return "الإعدادات"
+        case .trip: return "الرحلة"
+        case .group: return "المجموعة"
+        case .more: return "المزيد"
         }
     }
 }
@@ -39,13 +40,46 @@ enum LiveWarningUI: Equatable, Hashable {
     case keepScreenOn
     /// Location permission is off; sharing cannot work.
     case locationOff
+    /// iOS «الموقع الدقيق» is off: positions and «مساري» are kilometres off.
+    case preciseOff
 
     var label: String {
         switch self {
         case .weakGPS: return "إشارة الموقع ضعيفة"
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
-        case .keepScreenOn: return "خلّ الشاشة شغالة لدقة أعلى"
+        case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
         case .locationOff: return "إذن الموقع مقفل · افتح الإعدادات"
+        case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
+        }
+    }
+}
+
+/// One persistent line under my sharing row: what happens off screen.
+enum ShareBackgroundHint: Equatable {
+    /// «أثناء الاستخدام» only: sharing stops when the screen locks. Tapping opens Settings.
+    case needsAlways
+    /// «دائمًا»: sharing keeps going; the one thing that stops it is swiping the app away.
+    case dontForceQuit
+    /// «دائمًا» + Low Power Mode: still sharing, a little less often.
+    case lowPower
+    /// Joined (sharing by default) but iOS location is refused: the one-line fix. Tapping opens Settings.
+    case denied
+
+    var text: String {
+        switch self {
+        case .denied: return "ما سمحت بالموقع، فأعضاء الطلعة ما يشوفونك. افتح الإعدادات ← الموقع ← «أثناء الاستخدام»."
+        case .needsAlways: return "تتوقف المشاركة إذا قفلت الشاشة. اختر «دائمًا» من الإعدادات لتستمر."
+        case .dontForceQuit: return "تستمر والشاشة مقفلة. لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة."
+        case .lowPower: return "وضع توفير الطاقة: تستمر والشاشة مقفلة، لكن أقل تكرارًا (كل ٣٠ ثانية تقريبًا)."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .denied: return "location.slash.fill"
+        case .needsAlways: return "gearshape.fill"
+        case .dontForceQuit: return "lock.iphone"
+        case .lowPower: return "battery.25percent"
         }
     }
 }
@@ -86,6 +120,16 @@ enum LiveAlertKindUI: Equatable {
     case voice(VoiceClipUI)
     /// Short neutral toast (e.g. «تم نسخ الرابط»).
     case toast(String)
+    /// Return timer, «غرّزت», sunset & way back (`Sources/Safety`).
+    case safety(SafetyAlertUI)
+    /// Convoy mode: someone out of the column (see `ConvoyAlertUI`).
+    case convoy(ConvoyAlertUI)
+    /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
+    case weather(WeatherAlertUI)
+    /// «انقطع إرسال فهد منذ ١٠ د» with «اتجه» / «اتصال» (SarySilentCard.swift).
+    case silent(SilentAlertUI)
+    /// «اسلك هذا المسار»: more than 50 m off the followed track for over 10 s.
+    case offTrack(FollowDeviationAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -95,15 +139,20 @@ struct LiveAlertUI: Equatable, Identifiable {
 
 // MARK: - Push-to-talk
 
-/// ONE enum for the push-to-talk button. No extra flags.
+/// ONE enum for the walkie-talkie button («قناة الطلعة»). No extra flags.
 enum PTTStateUI: Equatable {
+    /// Nobody on air: hold to talk.
     case idle
-    /// Pressed; mic is starting («جارٍ التجهيز…»).
+    /// Pressed; asking for the floor («جارٍ فتح القناة…»).
     case arming
-    /// Recording; elapsed whole seconds.
-    case recording(seconds: Int)
-    /// Released; uploading the clip.
-    case sending
+    /// I am on air, live; elapsed and remaining whole seconds (60 s max).
+    case talking(seconds: Int, remaining: Int)
+    /// Someone else is on air: «فلان يتكلم» (the button is busy, not disabled).
+    case listening(name: String, color: UInt32)
+    /// «اكتم القناة» is on.
+    case muted
+    /// No server and no nearby car: nothing to talk to.
+    case unavailable
 }
 
 // MARK: - SOS
@@ -146,6 +195,8 @@ struct RallyPointUI: Equatable {
     var totalCount: Int
     /// Optional label, e.g. «عند الطعس الكبير».
     var label: String?
+    /// Who is there now (live fix inside the radius).
+    var arrivedNames: [String] = []
 }
 
 struct ParticipantsTabUIState: Equatable {
@@ -185,7 +236,7 @@ struct OfflineAreasUIState: Equatable {
 }
 
 struct SettingsTabUIState: Equatable {
-    /// My sharing switch: true = paused («أوقف مشاركة موقعي» is on).
+    /// Not sharing right now (no switch since build 14: a member shares while the trip runs).
     var isSharingPaused: Bool
     var driveMode: TriModeUI
     var nightMode: TriModeUI
@@ -193,6 +244,10 @@ struct SettingsTabUIState: Equatable {
     var myPhone: String?
     var notificationsOn: Bool
     var batterySharingOn: Bool
+    /// «اكتم القناة»: no live voice in or out for this outing on this phone.
+    var pttMuted: Bool = false
+    /// The live link in one Arabic line («متصل منذ 3 د» / «يعيد الاتصال…» · last close code).
+    var pttLink: String = ""
     var offline: OfflineAreasUIState
     /// Leader-only actions: «أوقف مؤقتًا» / «استأنف» and «أنهِ الطلعة».
     var isLeader: Bool
@@ -220,6 +275,8 @@ struct LiveOutingUIState: Equatable {
     var settingsTab: SettingsTabUIState
     /// Clock for "قبل ٤ د" labels. Tick it (e.g. every 15 s) from the wiring layer.
     var now: Date
+    /// Members' cars heard directly phone to phone in the last 30 s (0 = none / link off).
+    var nearbyCars: Int = 0
 }
 
 struct LiveOutingActions {
@@ -236,6 +293,8 @@ struct LiveOutingActions {
     var dismissAlert: (_ id: String) -> Void = { _ in }
     /// Voice banners in the lane.
     var voice: VoiceBannerActions = .init()
+    /// «انقطع الإرسال» cards: «اتجه» / «اتصال».
+    var silent: SilentAlertActions = .init()
 
     // Side buttons
     /// «موقعي» (`outing-locate`). Expect: centre the map on me.
@@ -277,11 +336,11 @@ struct SOSActions {
 }
 
 struct PTTActions {
-    /// Finger down on «اضغط وتكلم». Expect: `ptt = .arming` → `.recording(0)`.
+    /// Finger down. Expect: `ptt = .arming` → `.talking` once the floor is granted (live audio).
     var pressBegan: () -> Void = {}
-    /// Finger up on the button. Expect: `ptt = .sending` → `.idle`.
+    /// Finger up (or dragged away — live audio cannot be taken back). Expect: off the air, `.idle`.
     var pressEnded: () -> Void = {}
-    /// Finger dragged far off the button before release. Expect: discard, `ptt = .idle`.
+    /// Same as `pressEnded` for live talk (kept for the contract's older callers).
     var cancelled: () -> Void = {}
 }
 
@@ -308,6 +367,8 @@ struct ParticipantsTabActions {
     var rallyRemove: () -> Void = {}
     /// «حدد نقطة تجمع» (leader/co-leader, when there is none).
     var rallyCreate: () -> Void = {}
+    /// «ارجعوا لنقطة التجمع» (leaders; nil hides it).
+    var rallyRecall: (() -> Void)? = nil
 }
 
 struct InviteTabActions {
@@ -321,14 +382,14 @@ struct InviteTabActions {
 }
 
 struct SettingsTabActions {
-    /// My sharing switch. `paused == true` means stop sharing my location.
-    var setSharingPaused: (_ paused: Bool) -> Void = { _ in }
     var setDriveMode: (_ mode: TriModeUI) -> Void = { _ in }
     var setNightMode: (_ mode: TriModeUI) -> Void = { _ in }
     /// «حفظ» my number: normalised "05XXXXXXXX", or nil to remove it.
     var saveMyPhone: (_ phone: String?) -> Void = { _ in }
     var setNotifications: (_ on: Bool) -> Void = { _ in }
     var setBatterySharing: (_ on: Bool) -> Void = { _ in }
+    /// «اكتم القناة».
+    var setPTTMuted: (_ on: Bool) -> Void = { _ in }
     /// Offline maps section (same actions as `OfflineAreasScreen`).
     var offline: OfflineAreasActions = .init()
     /// Leader: «أوقف مؤقتًا» / «استأنف الطلعة», after confirmation.
@@ -346,4 +407,90 @@ struct OfflineAreasActions {
     var deleteArea: (_ id: String) -> Void = { _ in }
     /// Standalone `OfflineAreasScreen` only: «تم».
     var close: () -> Void = {}
+}
+
+// MARK: - «مساري» and «طريق العودة»
+
+/// The back-track panel (big arrow + distance back to «نقطة البداية» along my trail).
+struct BackTrackUI: Equatable {
+    enum Phase: Equatable {
+        /// No recent GPS fix yet.
+        case waitingFix
+        case onTrail
+        /// More than ~60 m from my trail: «خرجت عن الطريق».
+        case offTrack
+        case arrived
+    }
+
+    var phase: Phase
+    /// Along the trail back to the start (plus the way back onto it).
+    var remainingMeters: Double?
+    /// My distance from the trail.
+    var offsetMeters: Double?
+    /// Arrow rotation, degrees clockwise from the top of the screen (or from my heading when `relativeToCourse`).
+    var arrowDegrees: Double
+    /// The compass direction to go, in words («شمال غرب»).
+    var directionLabel: String
+    var relativeToCourse: Bool
+    /// I am on a stretch that was not recorded (straight dashed line).
+    var onGap: Bool
+}
+
+/// «اسلك هذا المسار»: the follow panel (off-road, along any saved track).
+struct FollowTrackUI: Equatable {
+    enum Phase: Equatable {
+        /// No recent GPS fix yet (an old one is never used).
+        case waitingFix
+        case onTrack
+        /// More than 50 m from the track for over 10 s: «خرجت عن المسار».
+        case offTrack
+        /// More than 2 km from the whole track: offer to navigate to its nearest point (online).
+        case far
+        case arrived
+    }
+
+    var name: String
+    var phase: Phase
+    /// Along the track to its end.
+    var remainingMeters: Double?
+    /// 0…1 of the track behind me.
+    var progress: Double?
+    /// My distance from the track.
+    var offsetMeters: Double?
+    var arrowDegrees: Double
+    var directionLabel: String
+    var relativeToCourse = false
+    /// On a stretch that was not recorded (straight dashed line).
+    var onGap: Bool
+    /// Followed backwards («اعكس الاتجاه»).
+    var reversed: Bool
+    /// Navigating to the track needs the internet (routing); the follow itself does not.
+    var online: Bool
+}
+
+/// The one «خرجت عن المسار» card in the alert queue.
+struct FollowDeviationAlertUI: Equatable {
+    var trackName: String
+    var meters: Double
+}
+
+/// «مساري» card in the sheet and its settings.
+struct TrailCardUIState: Equatable {
+    var recordedMeters: Double
+    var pointCount: Int
+    var gapCount: Int
+    /// Straight-line distance from me to «نقطة البداية».
+    var startDistanceMeters: Double?
+    var isRecording: Bool
+    var recordingOn: Bool
+    var backgroundOn: Bool
+    /// iOS allows «دائمًا» (needed for the screen-locked trail).
+    var backgroundAllowed: Bool
+    var recordingInBackground: Bool
+    var showFriends: Bool
+    var backTrackActive: Bool
+    /// While recording: «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    var health: TrailHealth? = nil
+    /// «طابق مساري مع الطرق».
+    var matchOn = true
 }

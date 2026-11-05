@@ -5,7 +5,8 @@ import XCTest
 final class ChipDeclutterUITests: XCTestCase {
     func testParkedFriendsFoldIntoAGroupThatExpands() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-demoCrowd"]
+        /* Calm synthetic weather (DEBUG): a live dust/wind alert sliding into the lane mid-tap made this flaky. */
+        app.launchArguments = ["-resetState", "-demo", "-demoCrowd", "-SaryWeatherDemo", "calm"]
         app.launch()
         let group = app.buttons["car.group"].exists ? app.buttons["car.group"] : app.descendants(matching: .any)["car.group"]
         XCTAssertTrue(group.waitForExistence(timeout: 20), "a crowd folds into a group chip")

@@ -2,33 +2,59 @@ import XCTest
 @testable import SaryAlbarq
 
 /// The owner's rule, locked: no position leaves the phone before location
-/// consent AND sharing is on for that member, and never from the background.
+/// consent AND «شارك موقعي» AND sharing on for that member in an active outing.
+/// Off screen (owner decision 2026-11) only with «دائمًا»; never with «أثناء الاستخدام».
 final class SendGateTests: XCTestCase {
     private let open = SendGate(consent: true, osAuthorized: true, userWantsShare: true, serverSharing: true, outingActive: true, foreground: true, closed: false)
 
     func testOpenOnlyWhenEverythingHolds() {
         XCTAssertTrue(open.allowsPosition)
+        XCTAssertFalse(open.allowsBackgroundPosition, "on screen: the socket path, not the background sender")
         let flips: [(String, (inout SendGate) -> Void)] = [
             ("no consent", { $0.consent = false }),
             ("no iOS permission", { $0.osAuthorized = false }),
             ("did not press share", { $0.userWantsShare = false }),
             ("server says sharing off", { $0.serverSharing = false }),
             ("outing not active", { $0.outingActive = false }),
-            ("app in background", { $0.foreground = false }),
+            ("app in background with «أثناء الاستخدام» only", { $0.foreground = false; $0.alwaysAuthorized = false }),
             ("session closed", { $0.closed = true }),
         ]
         for (why, f) in flips {
             var g = open
             f(&g)
             XCTAssertFalse(g.allowsPosition, why)
+            XCTAssertFalse(g.allowsBackgroundPosition, why)
             XCTAssertFalse(g.allowsSosFix, "SOS carries no position either: \(why)")
         }
     }
 
+    func testBackgroundAllowedOnlyWithAlwaysConsentSharingAndActiveOuting() {
+        var bg = open
+        bg.foreground = false
+        bg.alwaysAuthorized = true
+        XCTAssertTrue(bg.allowsPosition)
+        XCTAssertTrue(bg.allowsBackgroundPosition)
+        let flips: [(String, (inout SendGate) -> Void)] = [
+            ("no «دائمًا»", { $0.alwaysAuthorized = false }),
+            ("no consent", { $0.consent = false }),
+            ("no iOS permission", { $0.osAuthorized = false }),
+            ("stopped sharing", { $0.userWantsShare = false }),
+            ("server sharing off", { $0.serverSharing = false }),
+            ("outing paused / ended", { $0.outingActive = false }),
+            ("left / removed / signed out", { $0.closed = true }),
+        ]
+        for (why, f) in flips {
+            var g = bg
+            f(&g)
+            XCTAssertFalse(g.allowsBackgroundPosition, why)
+            XCTAssertFalse(g.allowsPosition, why)
+        }
+    }
+
     func testServerDefaultSharingIsNotConsent() {
-        /* The server turns `sharing` on at join; that alone must send nothing. */
-        let g = SendGate(serverSharing: true, outingActive: true, foreground: true)
-        XCTAssertFalse(g.allowsPosition)
+        /* The server turns `sharing` on at join; that alone must send nothing, on screen or off. */
+        XCTAssertFalse(SendGate(serverSharing: true, outingActive: true, foreground: true).allowsPosition)
+        XCTAssertFalse(SendGate(serverSharing: true, outingActive: true, foreground: false, alwaysAuthorized: true).allowsPosition)
     }
 }
 
@@ -87,6 +113,9 @@ final class SessionPrivacyTests: XCTestCase {
         env.defaults = defaults
         env.timers = false
         env.authorizationOverride = authorized
+        /* «أثناء الاستخدام» here, whatever the simulator granted the test host; «دائمًا» is in BackgroundShareTests. */
+        env.alwaysOverride = false
+        location.testAuthorization = authorized ? .authorizedWhenInUse : .denied
         let s = OutingSession(id: "o1", myUserId: user, api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43), location: location, env: env)
         s.open()
         return s
@@ -111,11 +140,72 @@ final class SessionPrivacyTests: XCTestCase {
         sockets.flatMap(\.sent).filter { $0["type"] as? String == "position" }.count
     }
 
-    func testJoinedButNeverPressedShareSendsNothing() {
+    /// Before this phone joined (no «انضم» tapped here): the server's default `sharing=true` sends nothing.
+    func testNotJoinedHereSendsNothing() {
         let s = session()
         serverReady(sockets[0])
         XCTAssertEqual(s.view?.snapshot.me.sharing, true, "server default after join")
+        s.resumeIfPreviouslySharing()
         for _ in 0..<5 { s.handleFix(freshFix()) }
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    /// Owner decision (build 6): tapping «انضم» is the consent; sharing starts without «شارك موقعي».
+    func testJoiningIsConsentAndSharesByDefault() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        XCTAssertTrue(s.wantsToShare)
+        XCTAssertTrue(s.gate.allowsPosition, "joined + permission + active outing + server sharing: visible at once")
+        s.handleFix(freshFix())
+        XCTAssertEqual(positionsSent, 1)
+    }
+
+    func testJoinedThenStoppedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        s.stopSharingLocally()
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults), "a relaunch does not resume a stopped share")
+    }
+
+    func testJoinedThenOutingEndedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        sockets[0].serverSays(["type": "outing_status", "status": "ended"])
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    func testJoinedThenLeftOrRemovedSendsNothing() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        sockets[0].serverSays(["type": "member_left", "user_id": "u1"])
+        s.handleFix(freshFix())
+        XCTAssertFalse(s.gate.allowsPosition)
+        XCTAssertEqual(positionsSent, 0)
+    }
+
+    func testDeletingTheAccountForgetsJoinConsent() {
+        ShareMemory.consentByJoining(user: "u1", outing: "o1", defaults: defaults)
+        LocalAccountData.wipe(defaults: defaults)
+        XCTAssertFalse(ShareMemory.hasConsent(user: "u1", outing: "o1", defaults: defaults))
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults))
+        let s = session()
+        serverReady(sockets[0])
+        s.resumeIfPreviouslySharing()
+        s.handleFix(freshFix())
         XCTAssertFalse(s.gate.allowsPosition)
         XCTAssertEqual(positionsSent, 0)
     }
@@ -132,7 +222,7 @@ final class SessionPrivacyTests: XCTestCase {
         XCTAssertEqual(positionsSent, 0)
     }
 
-    func testOwnEarlierShareResumesOnlyInForeground() {
+    func testWithWhenInUseOnlyAnEarlierShareResumesOnlyInForeground() {
         ShareMemory.recordConsent(user: "u1", outing: "o1", defaults: defaults)
         ShareMemory.setActiveShare(user: "u1", outing: "o1", defaults: defaults)
         foreground = false
@@ -140,7 +230,7 @@ final class SessionPrivacyTests: XCTestCase {
         serverReady(sockets[0])
         s.resumeIfPreviouslySharing()
         XCTAssertTrue(s.wantsToShare, "the intent survives a relaunch")
-        XCTAssertFalse(s.gate.allowsPosition, "but nothing goes out while the app is in the background")
+        XCTAssertFalse(s.gate.allowsPosition, "«أثناء الاستخدام»: nothing goes out while the app is in the background")
         s.handleFix(freshFix())
         XCTAssertEqual(positionsSent, 0)
         foreground = true

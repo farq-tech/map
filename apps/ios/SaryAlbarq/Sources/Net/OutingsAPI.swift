@@ -5,8 +5,39 @@ enum Endpoints {
     /// The Railway API, called directly (the Vercel `/api` rewrite proxies the
     /// same server but cannot carry a WebSocket). No key: identity is a per-device
     /// Bearer token the server issues.
-    static let apiBase = URL(string: "https://api-production-ddc84.up.railway.app")!
-    static let liveSocket = URL(string: "wss://api-production-ddc84.up.railway.app/api/outings/live")!
+    static let production = URL(string: "https://api-production-ddc84.up.railway.app")!
+
+    static var apiBase: URL {
+        #if DEBUG
+        if let o = debugOverride { return o }
+        #endif
+        return production
+    }
+
+    static var liveSocket: URL {
+        var c = URLComponents(url: apiBase, resolvingAgainstBaseURL: false)!
+        c.scheme = c.scheme == "http" ? "ws" : "wss"
+        c.path = "/api/outings/live"
+        return c.url!
+    }
+
+    #if DEBUG
+    /// DEBUG builds only: `-SaryAPIBase http://127.0.0.1:PORT` points the app at a local API
+    /// (background-sharing verification on the simulator). Remembered so a background
+    /// relaunch by iOS (no launch arguments then) talks to the same server; `-SaryAPIBase prod` clears it.
+    static let debugKey = "sary.debug.apiBase"
+    static var debugOverride: URL? {
+        let d = UserDefaults.standard
+        if let arg = d.volatileDomain(forName: UserDefaults.argumentDomain)["SaryAPIBase"] as? String {
+            if arg == "prod" { d.removeObject(forKey: debugKey); return nil }
+            d.set(arg, forKey: debugKey)
+        }
+        /* Local servers only (never a remote host from a launch argument). */
+        guard let u = d.string(forKey: debugKey).flatMap(URL.init(string:)), let h = u.host,
+              h == "127.0.0.1" || h == "localhost" else { return nil }
+        return u
+    }
+    #endif
 }
 
 struct OutingAPIError: Error, Equatable {
@@ -17,13 +48,13 @@ struct OutingAPIError: Error, Equatable {
     var arabic: String {
         let t: [String: String] = [
             "invite_invalid": "رابط الدعوة غير صحيح.",
-            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من صاحب الطلعة رابطًا جديدًا.",
-            "invite_revoked": "ألغى صاحب الطلعة هذا الرابط. اطلب رابطًا جديدًا.",
+            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من أمير الرحلة رابطًا جديدًا.",
+            "invite_revoked": "ألغى أمير الرحلة هذا الرابط. اطلب رابطًا جديدًا.",
             "outing_ended": "انتهت هذه الطلعة.",
             "outing_full": "اكتمل عدد المشاركين في هذه الطلعة.",
-            "removed_from_outing": "أزالك صاحب الطلعة منها، فلا يمكنك الانضمام مرة ثانية.",
+            "removed_from_outing": "أزالك أمير الرحلة منها، فلا يمكنك الانضمام مرة ثانية.",
             "not_a_member": "لست عضوًا في هذه الطلعة.",
-            "owner_only": "هذا الإجراء لصاحب الطلعة فقط.",
+            "owner_only": "هذا الإجراء لأمير الرحلة فقط.",
             "invalid_name": "اكتب اسمًا يظهر لأصحابك.",
             "invalid_outing_name": "اكتب اسمًا للطلعة.",
             "rate_limited": "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
@@ -35,7 +66,7 @@ struct OutingAPIError: Error, Equatable {
             "timeout": "الشبكة بطيئة. أعد المحاولة.",
             "outings_unconfigured": "الطلعات المشتركة غير مفعّلة على الخادم.",
             "unauthorized": "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
-            "leader_only": "هذا الإجراء لصاحب الطلعة أو مساعده فقط.",
+            "leader_only": "هذا الإجراء لأمير الرحلة أو نائبه فقط.",
             "cannot_remove_self": "لا يمكنك إزالة نفسك. استخدم «غادر الطلعة».",
             "invalid_rally": "تعذّر وضع نقطة التجمع هنا.",
             "sos_fix_stale": "موقعك قديم، أُرسلت الطوارئ بدون موقع.",
@@ -43,7 +74,7 @@ struct OutingAPIError: Error, Equatable {
             "invalid_clip_duration": "التسجيل قصير جدًا.",
             "too_large": "التسجيل أطول من المسموح.",
             "clip_gone": "انتهت صلاحية هذا التسجيل.",
-            "join_locked": "صاحب الطلعة قفل الانضمام.",
+            "join_locked": "أمير الرحلة قفل الانضمام.",
             "recovery_invalid": "رمز الاسترجاع غير صحيح أو استُخدم من قبل. تأكد منه وحاول مرة ثانية.",
             "invalid_avatar": "الصورة كبيرة أو بصيغة غير مدعومة. جرّب صورة ثانية.",
             "outing_not_ended": "تقدر تشارك ملخصك بعد ما تنتهي الطلعة.",
@@ -51,6 +82,14 @@ struct OutingAPIError: Error, Equatable {
             "implausible_summary": "أرقام الرحلة على هذا الجهاز غير منطقية، فلم نرسلها.",
             "invalid_summary": "تعذّر إرسال الملخص.",
             "server_busy": "الخادم مشغول. أعد المحاولة بعد قليل.",
+            "invite_taken": "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.",
+            "open_links_disabled": "أوقف أمير الرحلة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
+            "invite_used": "استُخدمت هذه الدعوة، وصاحبها في الطلعة.",
+            "invite_replaced": "أُرسلت لهذا الشخص دعوة أحدث.",
+            "invite_not_found": "لم نجد هذه الدعوة.",
+            "invalid_invitee_name": "اكتب اسم الشخص كما تعرفه.",
+            "too_many_invites": "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
+            "invalid_open_links": "تعذّر تغيير الرابط المفتوح.",
         ]
         return t[code] ?? "حدث خطأ. أعد المحاولة."
     }
@@ -105,8 +144,15 @@ final class OutingsAPI {
 
     private struct Empty: Encodable {}
 
-    private func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12) async throws -> T {
-        var req = URLRequest(url: base.appendingPathComponent("api/outings" + path), timeoutInterval: timeout)
+    /// Internal (not private) so the feature clients in other files (waypoints, convoy, plan) use the same path.
+    func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12, query: String? = nil) async throws -> T {
+        var url = base.appendingPathComponent("api/outings" + path)
+        /* «المحادثات»: cursor pagination (?before=/?after=). Never anything personal in a query. */
+        if let query, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.percentEncodedQuery = query
+            url = c.url ?? url
+        }
+        var req = URLRequest(url: url, timeoutInterval: timeout)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
@@ -136,7 +182,8 @@ final class OutingsAPI {
     struct UserBox: Decodable { var user: PublicUser }
     struct IdentityBox: Decodable { var user: PublicUser; var token: String }
     struct ListBox: Decodable { var current: [OutingSummary]; var history: [OutingSummary] }
-    struct CreatedBox: Decodable { var outing_id: String; var invite: CreatedInvite }
+    /// `invite` is nil for a personal-only trip (`invites: "personal"`): people are invited one by one.
+    struct CreatedBox: Decodable { var outing_id: String; var invite: CreatedInvite?; var open_links: Bool? }
     struct InviteBox: Decodable { var invite: CreatedInvite }
     struct PreviewBox: Decodable { var invite: InvitePreview }
     struct JoinBox: Decodable { var outing_id: String; var already: Bool? }
@@ -206,12 +253,59 @@ final class OutingsAPI {
     func registerApns(token: String, environment: String, bundleId: String) async throws {
         let _: OkBox = try await call("POST", "/push/apns", body: ["token": token, "environment": environment, "bundle_id": bundleId])
     }
+    // MARK: «قناة الطلعة» — this device's PushToTalk channel token for one outing
+
+    func registerPTTToken(_ outingId: String, token: String, environment: String) async throws {
+        let _: OkBox = try await call("POST", "/\(outingId)/ptt/token", body: ["token": token, "environment": environment])
+    }
+
+    /// Muted the channel or left the outing: no more wake-ups for this phone (every token of mine for it).
+    func unregisterPTTToken(_ outingId: String) async throws {
+        let _: OkBox = try await call("DELETE", "/\(outingId)/ptt/token", body: [String: String]())
+    }
+
     func unregisterApns(token: String) async throws {
         let _: OkBox = try await call("DELETE", "/push/apns", body: ["token": token])
     }
 
     func list() async throws -> ListBox { try await call("GET", "") }
-    func create(name: String) async throws -> CreatedBox { try await call("POST", "", body: ["name": name]) }
+    /// `personal: true` (build 12+): no open link — the leader invites people one by one.
+    /// An older server ignores the field and still returns an open link.
+    func create(name: String, personal: Bool = true) async throws -> CreatedBox {
+        var b = ["name": name]
+        if personal { b["invites"] = "personal" }
+        return try await call("POST", "", body: b)
+    }
+
+    // MARK: «دعوة شخصية» — one single-use link per person
+
+    struct PersonalBox: Decodable { var invite: PersonalInvite; var replaced: String? }
+    struct PersonalListBox: Decodable { var invites: [PersonalInvite] }
+    struct OpenLinksBox: Decodable { var open_links: Bool }
+
+    func personalInvites(_ id: String) async throws -> [PersonalInvite] {
+        let r: PersonalListBox = try await call("GET", "/\(id)/invites/personal")
+        return r.invites
+    }
+    /// `phone`: E.164 or nil. The server keeps only its last 4 digits and a salted digest.
+    func createPersonalInvite(_ id: String, name: String, phone: String?) async throws -> PersonalInvite {
+        var b = ["name": name]
+        if let phone { b["phone"] = phone }
+        let r: PersonalBox = try await call("POST", "/\(id)/invites/personal", body: b)
+        return r.invite
+    }
+    func resendPersonalInvite(_ id: String, invite: String) async throws -> PersonalInvite {
+        let r: PersonalBox = try await call("POST", "/\(id)/invites/personal/\(invite)/resend", body: [String: String]())
+        return r.invite
+    }
+    func revokePersonalInvite(_ id: String, invite: String) async throws -> PersonalInvite {
+        let r: PersonalBox = try await call("DELETE", "/\(id)/invites/personal/\(invite)")
+        return r.invite
+    }
+    func setOpenLinks(_ id: String, on: Bool) async throws -> Bool {
+        let r: OpenLinksBox = try await call("PATCH", "/\(id)/invites/settings", body: ["open_links": on])
+        return r.open_links
+    }
     func get(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)") }
     func poll(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)/live") }
     func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil) async throws {
@@ -252,7 +346,7 @@ final class OutingsAPI {
     func cancelSos(_ id: String) async throws {
         let _: SosBox = try await call("DELETE", "/\(id)/sos")
     }
-    /// Drop or move the meeting point (owner or «مساعد»).
+    /// Drop or move the meeting point (owner or «نائب الأمير»).
     func setRally(_ id: String, lat: Double, lng: Double, label: String?) async throws -> RallyInfo? {
         struct B: Encodable { var lat: Double; var lng: Double; var label: String? }
         let r: RallyBox = try await call("PUT", "/\(id)/rally", body: B(lat: lat, lng: lng, label: label))
@@ -318,7 +412,8 @@ final class OutingsAPI {
         let _: OkBox = try await call("DELETE", "/me")
     }
     func preview(token: String) async throws -> InvitePreview {
-        let r: PreviewBox = try await call("POST", "/invites/preview", body: ["token": token], auth: false)
+        /* With this phone's identity when there is one: a used personal invite then says «yours» or «taken». */
+        let r: PreviewBox = try await call("POST", "/invites/preview", body: ["token": token])
         return r.invite
     }
     func join(token: String) async throws -> JoinBox { try await call("POST", "/invites/join", body: ["token": token]) }

@@ -17,6 +17,17 @@ enum RoadSnap {
         return max(minSnapM, min(maxSnapM, a * 1.5))
     }
 
+    /// Driving (speed and course known): a city-canyon fix 30–80 m off still belongs on the street.
+    static let drivingMps = 3.0
+    static let maxDrivingSnapM = 100.0
+
+    /// The search radius for this fix: `snapRadius`, widened up to 100 m when the car is clearly driving.
+    static func searchRadius(accuracy: Double?, speed: Double?, course: Double?) -> Double {
+        let base = snapRadius(accuracy)
+        guard let v = speed, v >= drivingMps, course != nil else { return base }
+        return min(maxDrivingSnapM, max(base, (accuracy ?? 40) * 1.5 + 10))
+    }
+
     static let drivable = [
         "motorway", "motorway_link", "trunk", "trunk_link", "primary", "primary_link",
         "secondary", "secondary_link", "tertiary", "tertiary_link", "street", "street_limited", "service",
@@ -54,10 +65,19 @@ enum RoadSnap {
         return best
     }
 
-    /// Only lines with a vertex within ~150 m of p (the web's cheap box).
-    static func nearby(_ lines: [RoadLine], _ p: LngLat) -> [RoadLine] {
-        let pad = 0.0015
-        return lines.filter { l in l.coords.contains { $0.count >= 2 && abs($0[0] - p.lng) < pad && abs($0[1] - p.lat) < pad } }
+    /// Only lines with a segment passing within ~170 m of p. (Build 4 looked at vertices only: a long
+    /// straight Riyadh street whose vertices are far apart was dropped, and the car stayed on the roofs.)
+    static func nearby(_ lines: [RoadLine], _ p: LngLat, padM: Double = 170) -> [RoadLine] {
+        let padLat = padM / 110_540, padLng = padM / (111_320 * cos(p.lat * Double.pi / 180))
+        return lines.filter { l in
+            let c = l.coords
+            guard c.count >= 2 else { return false }
+            for i in 0 ..< c.count - 1 where c[i].count >= 2 && c[i + 1].count >= 2 {
+                if p.lng >= min(c[i][0], c[i + 1][0]) - padLng, p.lng <= max(c[i][0], c[i + 1][0]) + padLng,
+                   p.lat >= min(c[i][1], c[i + 1][1]) - padLat, p.lat <= max(c[i][1], c[i + 1][1]) + padLat { return true }
+            }
+            return false
+        }
     }
 
     // MARK: matching across fixes
@@ -166,6 +186,50 @@ enum RoadSnap {
             return r
         }
 
+        /// Clearly off-road (good fixes far from any street): never pulled onto one by a noisy fix.
+        private(set) var offRoad = false
+        /// The current fix's accuracy (nil from the legacy entry point).
+        private var accuracyNow: Double?
+        private var offRoadCount = 0
+        private var stillSince: Double?
+
+        /// Fixes this good that are this far from every street, in a row, mean off-road.
+        static let offRoadGoodAccM = 20.0
+        static let offRoadFixes = 3
+        /// Parked this long: only a street right beside the car counts.
+        static let parkedS = 30.0
+
+        /// The full decision for one fix: radius from accuracy and motion, off-road and parked rules,
+        /// then the same-road matcher. `p` is the best position we have (Kalman for «أنت»).
+        func match(_ p: LngLat, _ lines: [RoadLine], course: Double?, speed: Double?, accuracy: Double?, atMs: Double) -> Match {
+            if let l = last, l.p == p { return l.result }
+            accuracyNow = accuracy
+            if let v = speed, v < 0.5 { stillSince = stillSince ?? atMs } else if speed != nil { stillSince = nil }
+            let parked = stillSince.map { atMs - $0 >= Self.parkedS * 1000 } ?? false
+            let radius = parked ? RoadSnap.minSnapM : RoadSnap.searchRadius(accuracy: accuracy, speed: speed, course: course)
+            if let a = accuracy, a <= Self.offRoadGoodAccM {
+                let nearest = RoadSnap.candidates(p, lines, maxM: RoadSnap.maxDrivingSnapM).first?.distM ?? .infinity
+                if nearest > max(35, 2 * a) {
+                    offRoadCount += 1
+                    if offRoadCount >= Self.offRoadFixes { offRoad = true }
+                } else if nearest <= max(15, a) {
+                    offRoadCount = 0
+                    offRoad = false
+                }
+            }
+            let r: Match
+            if offRoad {
+                road = nil
+                challenger = nil
+                challengerCount = 0
+                r = Match(point: p, key: nil, heading: course)
+            } else {
+                r = step(p, lines, course, radius)
+            }
+            last = (p, r)
+            return r
+        }
+
         private func step(_ p: LngLat, _ lines: [RoadLine], _ course: Double?, _ maxM: Double) -> Match {
             let cands = RoadSnap.candidates(p, lines, maxM: maxM)
             guard var best = cands.first else {
@@ -183,7 +247,9 @@ enum RoadSnap {
             let held = road.flatMap { r in cands.first { $0.key == r } }
             var chosen = best
             if let held, held.key != best.key {
-                let clearlyBetter = bestCost + RoadSnap.switchMarginM < RoadSnap.cost(held, course: course)
+                /* A poor fix must be much clearer, for longer, before the car changes street. */
+                let margin = max(RoadSnap.switchMarginM, 0.6 * (accuracyNow ?? 0))
+                let clearlyBetter = bestCost + margin < RoadSnap.cost(held, course: course)
                 if clearlyBetter {
                     challengerCount = challenger == best.key ? challengerCount + 1 : 1
                     challenger = best.key
@@ -191,7 +257,7 @@ enum RoadSnap {
                     challenger = nil
                     challengerCount = 0
                 }
-                if challengerCount < RoadSnap.switchFixes { chosen = held }
+                if challengerCount < ((accuracyNow ?? 0) > 25 ? 4 : RoadSnap.switchFixes) { chosen = held }
             }
             if chosen.key != road {
                 road = chosen.key

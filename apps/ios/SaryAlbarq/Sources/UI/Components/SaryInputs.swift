@@ -152,7 +152,11 @@ struct SarySegmented<Value: Hashable>: View {
     @Binding var selection: Value
     var label: (Value) -> String
     var systemImage: ((Value) -> String?)? = nil
+    /// A small count on an option (e.g. unread chat messages on «المجموعة»); 0 hides it.
+    var badge: ((Value) -> Int)? = nil
     var id: String?
+    /// Per-option identifiers (e.g. the sheet's tabs: `tab.trip`), when the labels are not unique on screen.
+    var optionID: ((Value) -> String)? = nil
 
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -177,6 +181,16 @@ struct SarySegmented<Value: Hashable>: View {
                             .saryText(.subhead, weight: selected ? .bold : .medium)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
+                        if let n = badge?(option), n > 0 {
+                            Text(n > 99 ? "+٩٩" : SaryFormat.digits(String(n)))
+                                .saryNumber(.micro, weight: .bold)
+                                .foregroundStyle(p.onEmergency)
+                                .padding(.horizontal, 5)
+                                .frame(minWidth: 18, minHeight: 18)
+                                .background(Capsule().fill(p.emergency))
+                                .accessibilityLabel("\(SaryFormat.digits(String(n))) غير مقروءة")
+                                .accessibilityIdentifier("tab.badge")
+                        }
                     }
                     .foregroundStyle(selected ? p.textPrimary : p.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: max(theme.minTarget - 8, 36))
@@ -193,6 +207,7 @@ struct SarySegmented<Value: Hashable>: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected ? .isSelected : [])
+                .modifier(OptionalIdentifier(id: optionID?(option)))
             }
         }
         .padding(3)

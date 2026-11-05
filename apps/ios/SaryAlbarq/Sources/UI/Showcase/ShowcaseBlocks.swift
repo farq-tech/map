@@ -397,12 +397,13 @@ private struct PTTBlocks: View {
                 HStack(spacing: 18) {
                     SaryPTTButton(state: .idle)
                     SaryPTTButton(state: .arming)
-                    SaryPTTButton(state: .recording(seconds: 7))
-                    SaryPTTButton(state: .sending)
+                    SaryPTTButton(state: .talking(seconds: 7, remaining: 53))
+                    SaryPTTButton(state: .listening(name: "فهد", color: SaryCarColors.palette[1]))
+                    SaryPTTButton(state: .muted)
                 }
             }
         }
-        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار · اسحب بعيدًا للإلغاء") {
+        ShowcaseBlock(index: 1, title: "جرّبه", note: "اضغط مع الاستمرار وتكلم · ارفع إصبعك لتتوقف") {
             ShowcaseMapStrip(height: 190) {
                 SaryPTTButton(state: state, actions: .init(
                     pressBegan: {
@@ -412,7 +413,7 @@ private struct PTTBlocks: View {
                             try? await Task.sleep(nanoseconds: 350_000_000)
                             var s = 0
                             while !Task.isCancelled {
-                                state = .recording(seconds: s)
+                                state = .talking(seconds: s, remaining: max(0, 60 - s))
                                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                                 s += 1
                             }
@@ -420,8 +421,7 @@ private struct PTTBlocks: View {
                     },
                     pressEnded: {
                         task?.cancel()
-                        state = .sending
-                        Task { try? await Task.sleep(nanoseconds: 900_000_000); state = .idle }
+                        state = .idle
                     },
                     cancelled: { task?.cancel(); state = .idle }
                 ))
@@ -434,7 +434,7 @@ private struct PTTBlocks: View {
 
 private struct SheetBlocks: View {
     @Environment(\.sary) private var theme
-    @State private var tab: LiveTabUI = .participants
+    @State private var tab: LiveTabUI = .group
 
     var body: some View {
         ShowcaseBlock(index: 0, title: "مصغّرة", note: "سطر الملخص فقط — الخريطة تبقى قابلة للمس") {
@@ -480,7 +480,7 @@ struct SheetBody: View {
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
                         switch tab {
-                        case .participants:
+                        case .group:
                             SaryRallyCard(rally: Mock.rally, canManage: true)
                             VStack(spacing: 0) {
                                 ForEach(participants) { p in
@@ -490,7 +490,7 @@ struct SheetBody: View {
                             }
                             .padding(.vertical, theme.space(.xs))
                             .sarySurface(radius: SaryRadius.l)
-                        case .invite:
+                        case .trip:
                             SaryQRCode(text: "https://sary.sa/j/7H2KQ", size: 150)
                             Text("sary.sa/j/7H2KQ").font(.system(size: 15, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(theme.palette.textPrimary).environment(\.layoutDirection, .leftToRight)
@@ -498,7 +498,7 @@ struct SheetBody: View {
                                 Button {} label: { SaryButtonLabel(title: "نسخ", systemImage: SaryIcon.copy) }.buttonStyle(.sarySecondary)
                                 Button {} label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }.buttonStyle(.saryPrimary)
                             }
-                        case .settings:
+                        case .more:
                             SarySection(title: "مشاركتي") {
                                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause, isOn: .constant(false))
                                 SaryDivider()
@@ -568,7 +568,7 @@ private struct RallyBlocks: View {
             SaryRallyCard(rally: Mock.rally, canManage: true)
             SaryRallyCard(rally: Mock.rallyDone, canManage: false)
         }
-        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "صاحب الطلعة · عضو") {
+        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الرحلة · عضو") {
             SaryRallyCard(rally: nil, canManage: true)
             SaryRallyCard(rally: nil, canManage: false)
         }

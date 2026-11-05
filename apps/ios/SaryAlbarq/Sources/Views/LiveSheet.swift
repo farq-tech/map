@@ -1,29 +1,38 @@
 import SwiftUI
 
-/// The native 3-detent sheet: summary line, then the tabs المشاركون / الدعوة /
-/// الإعدادات. Everything presented over the live screen (participant card,
+/// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
+/// المزيد (docs/IA-REDESIGN.md §2.4). Everything presented over the live screen (participant card,
 /// note composer, stations, consent, rally label, a friend's SOS) is presented
 /// from here, because the sheet is the top-most presentation.
 struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var model: AppModel
+    /// An invite link opened during this trip, shown once the sheet on top (if any) is gone.
+    @State private var invite: InviteToken?
 
     var body: some View {
         let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
-            SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
-                             expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
+            if controller.nav.isActive {
+                /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
+                NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
+            } else {
+                /* One line: the people. The trip's numbers are in the header above. */
+                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
+                                 expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
+            }
             if ui.sheetDetent != .peek {
-                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }))
+                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
                     .padding(.horizontal, theme.space(.l))
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
                         switch ui.selectedTab {
-                        case .participants: ParticipantsTab(controller: controller, ui: ui)
-                        case .invite: InviteTab(controller: controller, ui: ui)
-                        case .settings: SettingsTab(controller: controller, ui: ui)
+                        case .trip: TripTab(controller: controller, ui: ui)
+                        case .group: GroupTab(controller: controller, ui: ui)
+                        case .more: SettingsTab(controller: controller, ui: ui)
                         }
                     }
                     .padding(.horizontal, theme.space(.l))
@@ -34,6 +43,10 @@ struct LiveSheet: View {
         }
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(SafetyPrompts(safety: controller.safety))
+        .modifier(FeatureModals(controller: controller, features: controller.features))
+        .background(MediaSheetHost(center: MediaCenters.of(controller)))
+        .background(GroupAudioSheetHost(center: GroupAudioCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -43,16 +56,32 @@ struct LiveSheet: View {
                 .saryAppearance(appearance)
                 .accessibilityIdentifier("friend-sos-alert")
         }
+        .sheet(item: $invite, onDismiss: { if model.pendingInvite == invite?.id { model.pendingInvite = nil } }) { inv in
+            InviteJoinSheet(token: inv.id).saryPresented(appearance)
+        }
+        .onReceive(model.$pendingInvite.removeDuplicates()) { t in
+            guard let t, invite?.id != t else { if t == nil { invite = nil }; return }
+            /* One sheet at a time: close whatever is up, then show the invite. */
+            let busy = controller.modal != nil || controller.shareItem != nil
+            controller.modal = nil
+            controller.shareItem = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + (busy ? 0.6 : 0.05)) { if model.pendingInvite == t { invite = InviteToken(id: t) } }
+        }
         .sheet(item: Binding(get: { controller.shareItem.map(ShareURL.init) }, set: { if $0 == nil { controller.shareItem = nil } })) { s in
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
         }
-        .confirmationDialog("أنت تشارك موقعك الآن", isPresented: Binding(get: { controller.confirm == .backWhileSharing }, set: { if !$0 { controller.confirm = nil } }), titleVisibility: .visible) {
-            Button("أوقف المشاركة وارجع", role: .destructive) {
-                Task { await controller.session.stopSharing(); controller.onExit() }
-            }
+        .confirmationDialog("أنت في طلعة شغّالة", isPresented: Binding(get: { controller.confirm == .backWhileSharing }, set: { if !$0 && controller.confirm == .backWhileSharing { controller.confirm = nil } }), titleVisibility: .visible) {
+            Button("ارجع للقائمة", action: controller.backToList)
+            Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("الرجوع إلى قائمة الطلعات يوقف مشاركة موقعك.")
+            Text("أعضاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
+        }
+        .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
+            Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
         }
         .alert("تنبيه", isPresented: Binding(get: { controller.session.errorText != nil }, set: { if !$0 { controller.session.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
@@ -62,9 +91,39 @@ struct LiveSheet: View {
     @ViewBuilder
     private func modal(_ m: LiveModal) -> some View {
         switch m {
+        case let .chat(w):
+            ChatHomeView(chat: controller.chat, context: controller.chatContext, close: { controller.modal = nil }, path: w.map { [$0] } ?? [])
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case .actions:
+            LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
+                                                                  following: controller.planModel?.following == true,
+                                                                  hasRoute: controller.planModel?.plan.hasRoute ?? false,
+                                                                  stuck: controller.safety.myStuck != nil,
+                                                                  ended: controller.tripEnded,
+                                                                  guideAllTarget: controller.canGuideAll && controller.session.view?.status == .active
+                                                                      ? controller.autoNavNextTarget?.name : nil,
+                                                                  chat: controller.chat.isAvailable)),
+                            action: controller.performAction, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case let .participant(id):
             if let s = controller.participantCard(id) {
-                ScrollView { SaryParticipantCard(state: s, actions: controller.participantActions(id)) }
+                ScrollView {
+                    SaryParticipantCard(state: s, actions: controller.participantActions(id))
+                    /* Build 10: their recent trail (as this phone saw it) can be followed too. */
+                    if let f = controller.friendFollowSubject(id) {
+                        Button {
+                            controller.modal = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.startFollow(f) }
+                        } label: {
+                            SaryButtonLabel(title: "اسلك مساره (\(SaryFormat.distance(meters: f.stats.distanceM)))", systemImage: FollowIcon.follow)
+                        }
+                        .buttonStyle(.sary(.secondary))
+                        .padding(.horizontal)
+                        .accessibilityIdentifier("participant.followTrail")
+                    }
+                }
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                     .accessibilityIdentifier("participant-card")
@@ -80,9 +139,6 @@ struct LiveSheet: View {
         case .stations:
             NearestStationsView(state: NearestStationsUIState(phase: controller.stations), actions: controller.stationActions)
                 .presentationDetents([.medium, .large])
-        case .consent:
-            ConsentView(accept: controller.acceptConsent, cancel: { controller.modal = nil })
-                .presentationDetents([.large])
         case let .rallyLabel(p, moving):
             RallyLabelView(moving: moving, save: { controller.saveRally(p, label: $0) }, cancel: { controller.modal = nil })
                 .presentationDetents([.medium])
@@ -91,6 +147,68 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case .weather:
+            WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
+                         changeDestination: controller.session.view?.iLead == true ? { controller.changeDestinationFromWeather() } : nil,
+                         destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil)
+                .presentationDetents([.large])
+        case let .weatherAt(point):
+            WeatherPointSheet(point: point, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
+        case .trailAlways:
+            TrailAlwaysExplainer(allow: controller.allowAlways, later: controller.laterAlways)
+                .presentationDetents([.large])
+                .interactiveDismissDisabled()
+        case let .plan(m):
+            LivePlanModalView(controller: controller, modal: m)
+        case .shareAlways:
+            ShareAlwaysExplainer(allow: controller.allowShareAlways, later: controller.laterShareAlways)
+                .presentationDetents([.large])
+                .interactiveDismissDisabled()
+        case .navPicker:
+            NavTargetPicker(rows: controller.navPickerRows,
+                            pick: { t in controller.modal = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.navigate(to: t) } },
+                            refused: { _ in },
+                            close: { controller.modal = nil })
+        case .navOptions:
+            NavOptionsSheet(nav: controller.nav, start: controller.startNav, cancel: { controller.modal = nil },
+                            openInAppleMaps: controller.openInAppleMaps)
+        case .navStartChoice:
+            NavStartChoiceSheet(target: controller.autoNavNextTarget?.name ?? controller.tripDestination?.name ?? "الوجهة",
+                                forAll: controller.startGuidanceForAll, onlyMe: controller.startGuidanceForMe,
+                                later: { controller.modal = nil })
+        case .navSteps:
+            NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
+        case .pttChannels:
+            PTTChannelSheet(walkie: controller.session.walkie,
+                            members: (controller.session.displayView?.orderedMembers ?? []).map { PTTChannelSheet.Person(id: $0.user_id, name: $0.display_name) },
+                            me: controller.session.myUserId,
+                            close: { controller.modal = nil })
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case .layers:
+            ExploreLayersSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case .places:
+            SavedPlacesSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case let .placeEdit(d):
+            SavedPlaceEditSheet(draft: d, done: { controller.savePlace($0) }, cancel: { controller.modal = nil })
+                .presentationDetents([.large])
+        case .convoyAlerts:
+            ConvoyAlertSettingsView(close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case let .enjad(situation):
+            EnjadSheet(input: controller.enjadInput(situation), online: controller.followOnline,
+                       addPhone: { controller.modal = nil; controller.actions.participantsTab.addMyPhone() },
+                       close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case .tracks:
+            TracksSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -101,9 +219,34 @@ extension IncomingSOSUI: @retroactive Hashable {
     func hash(into h: inout Hasher) { h.combine(id) }
 }
 
-// MARK: - Participants tab
+// MARK: - «الرحلة»
 
-private struct ParticipantsTab: View {
+/// Where we are going and how it goes: my sharing, the trip, the destination and plan,
+/// the weather there, safety (return timer, «غرّزت») and my trail.
+private struct TripTab: View {
+    @ObservedObject var controller: LiveOutingController
+    var ui: LiveOutingUIState
+
+    var body: some View {
+        Group {
+            ShareCallout(controller: controller, ui: ui)
+            if controller.showsTripStrip, ui.status != .notStarted {
+                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            }
+            TripPlanCard(controller: controller)
+            if ui.status != .ended {
+                LiveWeatherCard(controller: controller, weather: controller.weather)
+                SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
+            }
+            TrailCard(controller: controller, card: controller.trailCard)
+        }
+    }
+}
+
+// MARK: - «المجموعة»
+
+/// The people: who is where, the convoy, the rally point, shared points, and the invite.
+private struct GroupTab: View {
     @ObservedObject var controller: LiveOutingController
     var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
@@ -112,16 +255,8 @@ private struct ParticipantsTab: View {
         let actions = controller.actions
         let v = controller.session.view
         Group {
-            ShareCallout(controller: controller, ui: ui)
-            if ui.participantsTab.myPhoneMissing {
-                Button(action: actions.participantsTab.addMyPhone) {
-                    SaryBanner(text: "لم تضف رقمك · أضف رقمك ليتصل بك أصحابك", tone: .info, systemImage: SaryIcon.phone)
-                }
-                .buttonStyle(.plain)
-            }
-            if ui.status != .ended {
-                SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
-            }
+            /* «المحادثات»: first in the Group tab (≤ 2 taps from anywhere: «المجموعة» → here, or «+» → المحادثات). */
+            ChatEntryRow(chat: controller.chat) { controller.openChat() }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
@@ -132,6 +267,21 @@ private struct ParticipantsTab: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
+            ConvoySection(controller: controller, features: controller.features)
+            if ui.status != .ended {
+                SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("rally-card")
+            }
+            WaypointsSection(controller: controller, features: controller.features)
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
+                Text("ادعُ ربعك").saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+                    .accessibilityAddTraits(.isHeader)
+                /* «دعوة شخصية»: one link per person; the open link only while the leader keeps it on. */
+                LivePersonalInvites(session: controller.session) { InviteTab(controller: controller, ui: ui) }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("invite-section")
         }
     }
 }
@@ -150,11 +300,23 @@ private struct ShareCallout: View {
             switch ui.status {
             case .notStarted:
                 VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ صاحب الطلعة.", tone: .info)
-                    if v?.iLead == true {
-                        Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-                            .buttonStyle(.saryPrimary)
-                            .accessibilityIdentifier("live.start")
+                    if controller.tripDestination == nil {
+                        /* «لا يوجد رحلة من غير نهاية»: no start without a destination. */
+                        SaryBanner(text: v?.iLead == true ? "حدّد الوجهة أولًا، وبعدها ابدأ الطلعة." : "بانتظار الوجهة من أمير الرحلة.",
+                                   tone: .warning, systemImage: "flag.slash")
+                            .accessibilityIdentifier("live.waitingDestination")
+                        if v?.iLead == true {
+                            Button { controller.chooseTripDestination() } label: { SaryButtonLabel(title: "حدّد الوجهة", systemImage: "flag.checkered") }
+                                .buttonStyle(.saryPrimary)
+                                .accessibilityIdentifier("live.setDestination")
+                        }
+                    } else {
+                        SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ أمير الرحلة.", tone: .info)
+                        if v?.iLead == true {
+                            Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
+                                .buttonStyle(.saryPrimary)
+                                .accessibilityIdentifier("live.start")
+                        }
                     }
                 }
             case .paused:
@@ -162,24 +324,36 @@ private struct ShareCallout: View {
             case .ended:
                 SaryBanner(text: "انتهت هذه الطلعة.", tone: .info)
             case .active:
-                if ui.sharing == .paused {
-                    Button { controller.setSharingPaused(false) } label: { SaryButtonLabel(title: "شارك موقعي", systemImage: SaryIcon.locate) }
-                        .buttonStyle(.saryPrimary)
-                        .accessibilityIdentifier("live.share")
+                /* Build 14: sharing is automatic for every member of an active trip — no «شارك موقعي»
+                 * and no «أوقف». The only way to stop is «غادر الطلعة», right here and in «المزيد». */
+                if controller.locationDenied {
+                    /* iOS location turned off after joining: still a member, the calm fix. */
+                    ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
                 } else {
-                    HStack(spacing: theme.space(.s)) {
-                        Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
-                        Text(ui.sharing == .sharing ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "جارٍ تحديد موقعك…")
-                            .saryText(.callout, weight: .bold)
-                            .foregroundStyle(theme.palette.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityIdentifier("live.sharing")
-                        Button { controller.setSharingPaused(true) } label: { Text("أوقف") }
-                            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
-                            .accessibilityIdentifier("live.stopSharing")
+                    VStack(alignment: .leading, spacing: theme.space(.s)) {
+                        HStack(spacing: theme.space(.s)) {
+                            Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
+                            Text(ui.sharing == .sharing ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "جارٍ تحديد موقعك…")
+                                .saryText(.callout, weight: .bold)
+                                .foregroundStyle(theme.palette.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("live.sharing")
+                        }
+                        HStack(spacing: theme.space(.s)) {
+                            Text("تتوقف المشاركة إذا غادرت الطلعة أو انتهت.")
+                                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button { controller.confirm = .leave } label: { Text("غادر الطلعة") }
+                                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                                .accessibilityIdentifier("live.leave")
+                        }
                     }
                     .padding(theme.space(.m))
                     .sarySurface(radius: SaryRadius.l)
+                    if let hint = controller.shareBackgroundHint {
+                        ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
+                    }
                 }
             }
         }
@@ -188,11 +362,258 @@ private struct ShareCallout: View {
     private func closedText(_ r: LiveCloseReason) -> String {
         switch r {
         case .outingEnded: return "انتهت هذه الطلعة."
-        case .removed: return "أزالك صاحب الطلعة منها."
+        case .removed: return "أزالك أمير الرحلة منها."
         case .left: return "غادرت هذه الطلعة."
         case .notAMember: return "لست عضوًا في هذه الطلعة."
         case .unauthorized: return "انتهت جلستك على هذا الجهاز."
         case .replaced: return "فتحت الطلعة من جهاز آخر."
+        }
+    }
+}
+
+// MARK: - «مساري»
+
+/// My trail at a glance, with «طريق العودة» and the friends' trails switch.
+private struct TrailCard: View {
+    @ObservedObject var controller: LiveOutingController
+    var card: TrailCardUIState
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("مساري").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text(summary).saryText(.footnote).foregroundStyle(p.textSecondary)
+                        .accessibilityIdentifier("trail.summary")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button {
+                card.backTrackActive ? controller.stopBackTrack() : controller.startBackTrack()
+            } label: {
+                SaryButtonLabel(title: card.backTrackActive ? "أنهِ طريق العودة" : "طريق العودة", systemImage: SaryIcon.backTrack)
+            }
+            .buttonStyle(card.backTrackActive ? .sarySecondary : .saryPrimary)
+            .disabled(card.pointCount < 2 && !card.backTrackActive)
+            .accessibilityIdentifier("trail.backtrack")
+            if let h = card.health {
+                Text(h.line).saryNumber(.caption).foregroundStyle(p.textSecondary)
+                    .accessibilityIdentifier("trail.health")
+                ForEach(h.warnings, id: \.self) { w in
+                    Text(w).saryText(.caption).foregroundStyle(p.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if h.preciseOff {
+                    Button("فعّل الموقع الدقيق", action: controller.openAppSettings)
+                        .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                        .accessibilityIdentifier("trail.precise")
+                }
+            }
+            if card.gapCount > 0 {
+                Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة GPS لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
+                    .saryText(.caption).foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            SaryDivider()
+            SaryToggleRow(title: "أظهر مسارات الأصحاب", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
+                          isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends")
+        }
+        .padding(theme.space(.m))
+        .sarySurface(radius: SaryRadius.l)
+    }
+
+    private var summary: String {
+        guard card.recordingOn else { return "التسجيل متوقف من الإعدادات" }
+        guard card.pointCount >= 2 else { return card.isRecording ? "يبدأ التسجيل أول ما تتحرك" : "يُسجَّل مسارك والطلعة شغالة" }
+        var parts = ["سجّلنا \(SaryFormat.distance(meters: card.recordedMeters))"]
+        if let d = card.startDistanceMeters { parts.append("البداية على بعد \(SaryFormat.distance(meters: d))") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// «مساري» in the settings tab: recording, the screen-locked trail, friends' trails, clear.
+private struct TrailSettingsSection: View {
+    @ObservedObject var controller: LiveOutingController
+    var card: TrailCardUIState
+    @Environment(\.sary) private var theme
+    @State private var confirmClear = false
+
+    var body: some View {
+        let p = theme.palette
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل لأصحابك ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه إلى Mapbox فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+            SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
+                          isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
+            SaryDivider()
+            SaryToggleRow(title: "سجّل مساري والشاشة مقفلة", subtitle: backgroundSubtitle, systemImage: "lock.fill",
+                          isOn: Binding(get: { card.backgroundOn }, set: { controller.setBackgroundTrail($0) }), id: "trail.background")
+                .disabled(!card.recordingOn)
+            if card.recordingOn && card.backgroundOn && !card.backgroundAllowed {
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    Text("إذن الموقع مقفل، فما نقدر نسجّل والشاشة مقفلة. الإعدادات ← سَرى البارق ← الموقع ← «دائمًا» أو «أثناء الاستخدام».")
+                        .saryText(.caption).foregroundStyle(p.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("افتح الإعدادات", action: controller.openAppSettings)
+                        .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                        .accessibilityIdentifier("trail.openSettings")
+                }
+                .padding(.bottom, theme.space(.s))
+            }
+            SaryDivider()
+            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها (Mapbox) · في البر يبقى كما سجّله GPS", systemImage: "road.lanes",
+                          isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
+                .disabled(!card.recordingOn)
+            SaryDivider()
+            SaryToggleRow(title: "أظهر مسارات الأصحاب", systemImage: SaryIcon.fitGroup,
+                          isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends.settings")
+            SaryDivider()
+            Button { confirmClear = true } label: {
+                HStack(spacing: theme.space(.m)) {
+                    SaryRowIcon(systemImage: "trash", color: p.emergency)
+                    Text("امسح مساري لهذه الطلعة").saryText(.body, weight: .bold).foregroundStyle(p.emergency)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: theme.minTarget + 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(card.pointCount == 0)
+            .accessibilityIdentifier("trail.clear")
+        }
+        .confirmationDialog("امسح مسارك؟", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("امسح مساري", role: .destructive, action: controller.clearTrail)
+            Button("إلغاء", role: .cancel) {}
+        } message: { Text("يُحذف مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق العودة» يبدأ من جديد.") }
+    }
+
+    private var backgroundSubtitle: String {
+        if !card.backgroundOn { return "متوقف: يُسجَّل والتطبيق مفتوح فقط" }
+        if !card.backgroundAllowed { return "يحتاج إذن الموقع من iOS" }
+        return card.recordingInBackground ? "يُسجَّل الآن والشاشة مقفلة" : "على جوالك فقط · يستهلك بطارية أكثر"
+    }
+}
+
+/// Before iOS asks for «دائمًا»: what it is for, honestly.
+struct TrailAlwaysExplainer: View {
+    var allow: () -> Void
+    var later: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    Image(systemName: "point.topleft.down.to.point.bottomright.curvepath.fill").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
+                    Text("سجّل مسارك حتى والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
+                    Text("عشان «طريق العودة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
+                        .saryText(.body).foregroundStyle(theme.palette.textSecondary)
+                    bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أعضاء الطلعة تستمر والشاشة مقفلة.")
+                    bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
+                    bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
+                    Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
+                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                }
+            }
+            Button(action: allow) { SaryButtonLabel(title: "تمام، اسمح دائمًا", systemImage: SaryIcon.check) }
+                .buttonStyle(.saryPrimary)
+                .accessibilityIdentifier("trail.always.allow")
+            Button("لاحقًا، والتطبيق مفتوح فقط", action: later).buttonStyle(.saryPlain)
+                .accessibilityIdentifier("trail.always.later")
+        }
+        .padding(theme.space(.l))
+    }
+
+    private func bullet(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
+            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
+        }
+    }
+}
+
+/// The persistent one-liner under «موقعك مُشارَك»: with «أثناء الاستخدام» it is a link to
+/// Settings (choose «دائمًا»); with «دائمًا» a gentle note not to swipe the app away.
+struct ShareBackgroundHintRow: View {
+    var hint: ShareBackgroundHint
+    var openSettings: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        if hint == .needsAlways || hint == .denied {
+            Button(action: openSettings) { row(link: true) }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("live.shareHint.settings")
+                .accessibilityHint("يفتح إعدادات سَرى البارق")
+        } else {
+            row(link: false).accessibilityIdentifier("live.shareHint")
+        }
+    }
+
+    private func row(link: Bool) -> some View {
+        HStack(spacing: theme.space(.s)) {
+            Image(systemName: hint.systemImage).foregroundStyle(link ? theme.palette.warning : theme.palette.accentText).frame(width: 20)
+            Text(hint.text).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            if link { Image(systemName: "chevron.left").font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
+        }
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .contentShape(Rectangle())
+    }
+}
+
+/// For someone who consented before sharing kept going off screen: say so, then ask iOS for «دائمًا».
+struct ShareAlwaysExplainer: View {
+    var allow: () -> Void
+    var later: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: theme.space(.l)) {
+                    Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
+                    Text("المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
+                    Text("لما طلعت من التطبيق توقف إرسال موقعك لأصحابك. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                        .saryText(.body).foregroundStyle(theme.palette.textSecondary)
+                    ShareAlwaysBullets()
+                    Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
+                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                }
+            }
+            Button(action: allow) { SaryButtonLabel(title: "تمام، اسمح دائمًا", systemImage: SaryIcon.check) }
+                .buttonStyle(.saryPrimary)
+                .accessibilityIdentifier("share.always.allow")
+            Button("لاحقًا، والتطبيق مفتوح فقط", action: later).buttonStyle(.saryPlain)
+                .accessibilityIdentifier("share.always.later")
+        }
+        .padding(theme.space(.l))
+    }
+}
+
+/// The facts on the «دائمًا» explainer.
+struct ShareAlwaysBullets: View {
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: theme.space(.l)) {
+            bullet("lock.iphone", "تستمر المشاركة في الخلفية والشاشة مقفلة، حتى تغادر الطلعة أو تنتهي.")
+            bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة ما دامت المشاركة شغالة.")
+            bullet("gearshape.fill", "تحتاج إذن «دائمًا». إذا اخترت «أثناء الاستخدام» فقط، تتوقف المشاركة إذا قفلت الشاشة.")
+            bullet("xmark.app", "لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة: iOS قد لا يعيد فتحه، فتتوقف المشاركة.")
+            bullet("battery.50percent", "يستهلك بطارية أكثر؛ يخفف الدقة وأنت واقف، ويقل التكرار في وضع توفير الطاقة.")
+        }
+    }
+
+    private func bullet(_ icon: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
+            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -240,7 +661,7 @@ private struct InviteTab: View {
                 SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
-                SaryStateView(kind: .empty(title: "اطلب الرابط من صاحب الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
+                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الرحلة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
             }
             if s.canRevoke {
                 Button { if s.link == nil { actions.revokeLink() } else { confirmRevoke = true } } label: {
@@ -276,16 +697,55 @@ private struct SettingsTab: View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
         Group {
-            SarySection(title: "مشاركتي", footer: "يُرسل موقعك فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة يتوقف الإرسال ويظهر لأصحابك «آخر موقع».") {
-                SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause,
-                              isOn: Binding(get: { s.isSharingPaused }, set: { a.setSharingPaused($0) }), id: "settings-pause-sharing")
-                SaryDivider()
+            if ui.participantsTab.myPhoneMissing {
+                Button(action: controller.actions.participantsTab.addMyPhone) {
+                    SaryBanner(text: "لم تضف رقمك · أضفه ليتصل بك أصحابك", tone: .info, systemImage: SaryIcon.phone)
+                }
+                .buttonStyle(.plain)
+            }
+            SarySection(title: "مشاركتي", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر لأصحابك «آخر موقع».") {
                 SaryToggleRow(title: "شارك البطارية", subtitle: "نسبة الشحن تظهر لأعضاء الطلعة", systemImage: SaryIcon.battery(60),
                               isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) }), id: "settings-battery")
                 SaryDivider()
                 SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الأصحاب", systemImage: "bell.fill",
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
             }
+            SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على الميكروفون وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
+                SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
+                              isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+                SaryDivider()
+                PTTLinkRow(line: s.pttLink)
+            }
+            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
+            MediaEntryCard(center: MediaCenters.of(controller))
+            SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    segmentTitle("شكل الشاشة")
+                    SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
+                    segmentTitle("وضع القيادة (خط وأزرار أكبر)")
+                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
+                    segmentTitle("الوضع الليلي")
+                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
+                }
+                .padding(theme.space(.s))
+                SaryDivider()
+                SaryToggleRow(title: "ابدأ التوجيه تلقائيًا مع الرحلة", subtitle: "إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة · على جوالك فقط",
+                              systemImage: "location.north.line.fill",
+                              isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
+                SaryDivider()
+                SaryToggleRow(title: "رجّعني للتوجيه تلقائيًا", subtitle: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس",
+                              systemImage: "location.north.line.fill",
+                              isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
+                                            set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
+            }
+            SpeedSettingsSection()
+            DrivingRealismSection()
+            SarySection(title: "القافلة") {
+                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
+                           systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }
+                    .padding(.horizontal, theme.space(.m))
+            }
+            TrailSettingsSection(controller: controller, card: controller.trailCard)
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {
@@ -299,14 +759,6 @@ private struct SettingsTab: View {
                 }
                 .buttonStyle(SaryRowPressStyle())
                 .accessibilityIdentifier("settings-offline")
-            }
-            SarySection(title: "وضع القيادة") {
-                SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
-                    .padding(theme.space(.s))
-            }
-            SarySection(title: "الوضع الليلي") {
-                SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
-                    .padding(theme.space(.s))
             }
             SarySection(title: "رقمي", footer: "يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب.") {
                 VStack(spacing: theme.space(.s)) {
@@ -344,6 +796,10 @@ private struct SettingsTab: View {
                 }
             }
         }
+    }
+
+    private func segmentTitle(_ t: String) -> some View {
+        Text(t).saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
     }
 
     private var title: String {
@@ -451,41 +907,6 @@ struct NearestStationsView: View {
     }
 }
 
-// MARK: - Consent
-
-struct ConsentView: View {
-    var accept: () -> Void
-    var cancel: () -> Void
-    @Environment(\.sary) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: theme.space(.l)) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: theme.space(.l)) {
-                    Image(systemName: "location.circle.fill").font(.system(size: 52)).foregroundStyle(theme.palette.accent)
-                    Text("مشاركة موقعك في هذه الطلعة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    bullet("lock.fill", "يرى موقعك أعضاء هذه الطلعة فقط، ولا أحد غيرهم.")
-                    bullet("iphone", "يُرسل موقعك فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة أو خرجت من التطبيق يتوقف الإرسال، ويظهر لأصحابك «آخر موقع» بعمره.")
-                    bullet("stop.circle.fill", "تتوقف إذا أوقفتها، أو غادرت، أو أوقف صاحب الطلعة الطلعة أو أنهاها.")
-                    bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة.")
-                }
-            }
-            Button(action: accept) { SaryButtonLabel(title: "أوافق، شارك موقعي", systemImage: SaryIcon.locate) }
-                .buttonStyle(.saryPrimary)
-                .accessibilityIdentifier("consent.accept")
-            Button("ليس الآن", action: cancel).buttonStyle(.saryPlain)
-        }
-        .padding(theme.space(.l))
-    }
-
-    private func bullet(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: theme.space(.m)) {
-            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
-            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
-        }
-    }
-}
-
 // MARK: - Rally label
 
 private struct RallyLabelView: View {
@@ -515,4 +936,42 @@ struct ShareSheet: UIViewControllerRepresentable {
     var items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - «قناة الطلعة» diagnostics
+
+/// The live link in one line, and «سجل القناة» to share with whoever is fixing it.
+private struct PTTLinkRow: View {
+    var line: String
+    @Environment(\.sary) private var theme
+    @State private var file: URL?
+
+    var body: some View {
+        HStack(spacing: theme.space(.m)) {
+            SaryRowIcon(systemImage: "antenna.radiowaves.left.and.right")
+            Text(line)
+                .saryText(.footnote)
+                .foregroundStyle(theme.palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("settings-ptt-link")
+            Button {
+                file = PTTDiagnosticsLog.shared.exportFile()
+            } label: {
+                Label("سجل القناة", systemImage: "square.and.arrow.up")
+                    .saryText(.footnote, weight: .medium)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("settings-ptt-log")
+        }
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .sheet(item: Binding(get: { file.map(ShareFile.init) }, set: { file = $0?.url })) { f in
+            ShareSheet(items: [f.url])
+        }
+    }
+
+    struct ShareFile: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
 }

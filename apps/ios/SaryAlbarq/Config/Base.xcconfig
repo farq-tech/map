@@ -4,3 +4,22 @@
 // shows a token message instead of tiles).
 MAPBOX_ACCESS_TOKEN =
 #include? "Secrets.xcconfig"
+
+// CarPlay (Navigation category, com.apple.developer.carplay-maps). The entitlement must be
+// granted by Apple to the account before a signed device build / archive may carry it, so it
+// is OFF for devices and archives and ON in the Simulator (where CarPlay works without Apple).
+// Once Apple approves (docs/CARPLAY-ENTITLEMENT.md), set CARPLAY_ENABLED = YES on the first line.
+CARPLAY_ENABLED = NO
+CARPLAY_ENABLED[sdk=iphonesimulator*] = YES
+// STILL PENDING at build 8 (checked via the App Store Connect API, 2026-11-05): the App ID
+// Build 9: App Store Connect API (bundleIdCapabilities) shows sa.sary.albarq with PUSH_TO_TALK and
+// APP_GROUPS (plus push, time-sensitive, associated domains), and sa.sary.albarq.share with APP_GROUPS,
+// so device/archive builds sign with the full entitlements again. Set YES only if the portal loses them.
+SARY_PORTAL_PENDING = NO
+SARY_PORTAL_PENDING[sdk=iphonesimulator*] = NO
+SARY_APP_ENTITLEMENTS_PENDING_NO = Sources/App/SaryAlbarq.entitlements
+SARY_APP_ENTITLEMENTS_PENDING_YES = Sources/App/SaryAlbarq-PortalPending.entitlements
+SARY_SHARE_ENTITLEMENTS_PENDING_NO = ShareExtension/SaryShare.entitlements
+SARY_SHARE_ENTITLEMENTS_PENDING_YES = ShareExtension/SaryShare-PortalPending.entitlements
+SARY_ENTITLEMENTS_NO = $(SARY_APP_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))
+SARY_ENTITLEMENTS_YES = Sources/App/SaryAlbarq-CarPlay.entitlements

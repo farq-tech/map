@@ -21,6 +21,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var history: [OutingSummary] = []
     @Published private(set) var listPhase: ListPhase = .loading
     @Published var session: OutingSession?
+    /// Back in «طلعاتي» while still a member of an active trip (build 15): the trip's session keeps
+    /// running off the map — sharing is forced and stops only by «غادر الطلعة» or the trip's end.
+    @Published private(set) var parkedSession: OutingSession?
+    private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
     @Published var errorText: String?
@@ -33,33 +37,60 @@ final class AppModel: ObservableObject {
     @Published private(set) var recovery: OutingsAPI.RecoveryStatus?
     /// After a first join: offer notifications with our explainer (never at launch).
     @Published var offerNotifications = false
+    /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
+    @Published var pendingStart: String?
+    /// «ملخص الرحلة» from the live map after the end: «طلعاتي» opens this summary.
+    @Published var pendingSummary: String?
 
     let api: OutingsAPI
     let location: LocationSharer
     let push: PushRegistrar
+    /// The outing's Live Activity (Lock Screen + Dynamic Island), follows `session`.
+    let activity: OutingActivityCoordinator
     let isDemo: Bool
+    /// «تخطيط الطلعة»: one plan + checklist model per outing (demo data under `-demo`).
+    lazy var plans = PlanCenter(backend: isDemo ? DemoPlanBackend() : api)
     private let monitor = NWPathMonitor()
     private var observers: [NSObjectProtocol] = []
     private var pushSink: AnyCancellable?
+    private var sessionSink: AnyCancellable?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let api = OutingsAPI(tokenProvider: { IdentityStore.load()?.token })
         self.api = api
         location = LocationSharer()
         push = PushRegistrar(backend: api)
+        activity = OutingActivityCoordinator(location: location)
+        activity.stuck = { $0.stuckMarks }
+        activity.speed = { $0.speedSnapshot() }
+        activity.trip = { $0.tripSnapshot() }
+        activity.nav = { $0.navSnapshot() }
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] {
+            TripStore.forgetAll()
+            ReturnTripStore.forgetAll()
+            WaypointCache.wipeAll()
+            TrailStore.forgetAll()
+            LocalDestinationStore.forgetAll()
+            RecentPlaces.forget()
+            /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
+            LocalAccountData.wipe()
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,
+                      "sary.dev.unlocked", LiveContextOverride.key] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
+            #if DEBUG
+            /* A remembered -SaryAPIBase must not leak into the next test (it is set again by its own argument). */
+            if !arguments.contains("-SaryAPIBase") { UserDefaults.standard.removeObject(forKey: Endpoints.debugKey) }
+            #endif
         }
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()
         if isDemo {
-            identity = Identity(token: "", user: PublicUser(id: DemoData.meId, display_name: "أنا", avatar: nil, phone: nil))
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: "أنا", avatar: nil, phone: nil))
         } else {
             identity = IdentityStore.load()
         }
@@ -68,20 +99,76 @@ final class AppModel: ObservableObject {
         }
         let forcedOffline = arguments.contains("-SaryOffline")
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in self?.online = forcedOffline ? false : path.status == .satisfied }
+            Task { @MainActor in
+                guard let self else { return }
+                let now = forcedOffline ? false : path.status == .satisfied
+                if now && !self.online { self.session?.networkBack(); self.parkedSession?.networkBack() }
+                self.online = now
+            }
         }
         if forcedOffline { online = false }
         monitor.start(queue: DispatchQueue(label: "sary.net"))
         /* Screens observe the model; the registrar's state is part of it. */
         pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        push.accountId = { [weak self] in self?.identity?.user.id }
+        sessionSink = $session.combineLatest($parkedSession).sink { [activity] s, parked in activity.attach(s ?? parked) }
         observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
             guard let id = n.object as? String else { return }
             Task { @MainActor in self?.open(id) }
         })
         #if DEBUG
         if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
+        /* Local end-to-end lab (with -SaryAPIBase): `-SaryLabIdentity "<token>|<user id>|<name>"` signs in as
+         * a test identity made against the local API, `-SaryLabOuting <id>` opens that outing at once. */
+        if !isDemo, let i = arguments.firstIndex(of: "-SaryLabIdentity"), i + 1 < arguments.count {
+            let p = arguments[i + 1].split(separator: "|").map(String.init)
+            if p.count >= 3 {
+                let lab = Identity(token: p[0], user: PublicUser(id: p[1], display_name: p[2], avatar: nil, phone: nil))
+                IdentityStore.save(lab)
+                identity = lab
+            }
+        }
         #endif
+        #if DEBUG
+        /* `-SaryDemoInvite personal|group` (+ `-SaryNoIdentity`): an invite link just opened, no trip yet
+         * (the one-step join, UI tests and screenshots; the demo preview and join stand in for the server). */
+        if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInvite") {
+            demoInviteKind = i + 1 < arguments.count ? arguments[i + 1] : "personal"
+            if arguments.contains("-SaryNoIdentity") { identity = nil }
+            seedDemoLists()
+            pendingInvite = "demo-invite"
+        } else if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        /* `-SaryDemoInviteDuringTrip <s>`: an invite link opened s seconds into the demo trip (UI tests). */
+        if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInviteDuringTrip"), i + 1 < arguments.count, let s = Double(arguments[i + 1]) {
+            demoInviteKind = "group"
+            DispatchQueue.main.asyncAfter(deadline: .now() + s) { [weak self] in self?.pendingInvite = "demo-invite" }
+        }
+        #else
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        #endif
+        #if DEBUG
+        if !isDemo, let i = arguments.firstIndex(of: "-SaryLabOuting"), i + 1 < arguments.count { open(arguments[i + 1]) }
+        #endif
+        #if canImport(PushToTalk) && !targetEnvironment(simulator)
+        /* «قناة الطلعة»: Apple wants the channel manager up as early as possible, so a channel the
+         * system kept is restored and a pushtotalk push that launched us in the background is delivered. */
+        Task { @MainActor [weak self] in
+            await PTTSystemRoute.shared.setUp()
+            PTTSystemRoute.shared.onWokenByPush = { outingId, _ in
+                guard let self else { return }
+                if self.session?.id != outingId { self.open(outingId) }
+                self.session?.walkie.wokenByPush()
+            }
+        }
+        #endif
+        activity.endOrphans()
+        #if DEBUG
+        if let i = arguments.firstIndex(of: "-SaryActivity"), i + 1 < arguments.count {
+            let name = arguments[i + 1]
+            /* ActivityKit starts one only from the foreground: wait for the scene. */
+            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); activity.debugStart(name) }
+        }
+        #endif
         Task {
             /* A short branded beat, never a wait: the list loads behind it. */
             try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
@@ -95,10 +182,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// `-SaryDemoInvite`: which demo invite the link stands for ("personal" or "group").
+    private var demoInviteKind: String?
+
     /// DEBUG screenshot hook: `-SaryScreen <name>` opens one screen with demo data.
     @Published var debugScreen: String?
 
     var signedIn: Bool { identity != nil }
+
+    /// Waypoints / convoy: the real API, or the demo's in-memory one.
+    var featuresBackend: OutingFeaturesBackend { isDemo ? DemoFeatures.backend : api }
 
     // MARK: identity
 
@@ -111,6 +204,11 @@ final class AppModel: ObservableObject {
         if !p.isEmpty && ServerRules.normalizePhone(p) == nil {
             errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
             return false
+        }
+        if isDemo {
+            /* `-demo` has no server: the identity is local (the one-step join's silent identity). */
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: clean, avatar: nil, phone: nil))
+            return true
         }
         loading = true
         defer { loading = false }
@@ -247,8 +345,16 @@ final class AppModel: ObservableObject {
         if let u = identity?.user.id { ShareMemory.setActiveShare(user: u, outing: nil) }
         session?.close()
         session = nil
+        closeParked()
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
+        /* «الرحلة» (start point, arrivals) is about where I went: it goes with the identity too. */
+        TripStore.forgetAll()
+        ReturnTripStore.forgetAll()
+        /* Outing data of this identity (shared waypoints read offline) goes with it. */
+        WaypointCache.wipeAll()
+        /* «مساري» is about where I went: it goes with the identity. */
+        TrailStore.forgetAll()
         identity = nil
         recovery = nil
         current = []
@@ -273,29 +379,85 @@ final class AppModel: ObservableObject {
         } catch {}
     }
 
-    func createOuting(name: String) async -> String? {
+    /// Creates the outing (and keeps its invite token on this phone). `openNow: false`
+    /// leaves the map closed: «طلعة جديدة» shows the invite step first.
+    func createOuting(name: String, openNow: Bool = true) async -> String? {
         guard let clean = ServerRules.cleanText(name, max: ServerRules.outingNameMax) else {
             errorText = OutingAPIError(code: "invalid_outing_name", status: 400).arabic
             return nil
         }
+        if isDemo {
+            /* `-demo`: no server. The demo outing stands in (its link is a clearly fake demo link). */
+            if openNow { open(DemoData.outingId) }
+            return DemoData.outingId
+        }
         do {
             let r = try await api.create(name: clean)
-            InviteTokenStore.save(r.outing_id, r.invite.token)
+            /* Personal-only trips have no open link: people are invited one by one (PersonalInvites). */
+            InviteTokenStore.save(r.outing_id, r.invite?.token)
             await refresh()
-            open(r.outing_id)
+            if openNow {
+                /* The quick create (no wizard): the creator joins it, same default as «انضم». */
+                consentByJoining(r.outing_id)
+                open(r.outing_id)
+                startSharingAfterJoin(r.outing_id)
+            }
             return r.outing_id
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
     }
 
-    func preview(_ token: String) async throws -> InvitePreview { try await api.preview(token: token) }
+    /// Joining (or creating) is the consent: stored for this identity + outing now.
+    func consentByJoining(_ outingId: String) {
+        guard let me = identity?.user.id else { return }
+        ShareMemory.consentByJoining(user: me, outing: outingId)
+    }
 
+    /// Right after joining: the open session asks iOS for the location and shares by itself
+    /// (the «دائمًا» explainer follows once When-In-Use is granted; a refusal shows the fix).
+    func startSharingAfterJoin(_ outingId: String) {
+        guard let s = session, s.id == outingId else { return }
+        s.joinedJustNow = true
+        s.resumeIfPreviouslySharing()
+    }
+
+    /// The invite link for an outing this phone created (`-demo`: a demo link that joins nothing).
+    func inviteURL(_ outingId: String) -> URL? {
+        if let t = InviteTokenStore.load(outingId) { return InviteLink.url(for: t) }
+        return isDemo ? InviteLink.url(for: "demo-invite") : nil
+    }
+
+    func preview(_ token: String) async throws -> InvitePreview {
+        if isDemo {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let personal = demoInviteKind != "group"
+            return InvitePreview(outing_id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_name: "راشد", member_count: 4,
+                                 expires_at: ISODate.string(Date().addingTimeInterval(86400)), join_locked: false,
+                                 kind: personal ? "personal" : "group", invitee_name: personal ? "فهد أخوي" : nil, claim: "open",
+                                 destination_name: "روضة الثمامة")
+        }
+        return try await api.preview(token: token)
+    }
+
+    /// «انضم للطلعة» once iOS allowed the location (the one-step join, `JoinMachine`): join,
+    /// open the trip and share at once — no toggle, no consent sheet (joining is the consent).
     func join(_ token: String) async -> Bool {
+        if isDemo {
+            pendingInvite = nil
+            openDemoSession()
+            consentByJoining(DemoData.outingId)
+            startSharingAfterJoin(DemoData.outingId)
+            if !push.explained { offerNotifications = true }
+            return true
+        }
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
+            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: sharing is on, forced. */
+            consentByJoining(r.outing_id)
             await refresh()
             open(r.outing_id)
+            startSharingAfterJoin(r.outing_id)
             if !push.explained { offerNotifications = true }
             return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
@@ -313,6 +475,7 @@ final class AppModel: ObservableObject {
         do {
             try await api.leave(id)
             if session?.id == id { closeSession() }
+            if parkedSession?.id == id { closeParked() }
             await refresh()
             return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
@@ -325,9 +488,37 @@ final class AppModel: ObservableObject {
         return TripLogStore.load(id)?.totals
     }
 
+    /// My trail for this outing, from this device only (never sent).
+    func myTrailPoints(_ id: String) -> Trail? {
+        if isDemo { return id == "demo-old" || id == DemoData.outingId ? DemoTrail.mine(now: Date()) : nil }
+        if let s = session, s.id == id { return s.trail }
+        return TrailStore.load(id)
+    }
+
+    /// My trail for this outing, from this device only (for «قصة الطلعة»): the same
+    /// «مساري» the details page draws (live session in memory, else trails-v1/<id>.json).
+    func storyTrail(_ id: String) -> [StoryPoint] {
+        if isDemo {
+            #if DEBUG
+            return StoryFixtures.trail(start: Date().addingTimeInterval(-(86400 * 3 + 4 * 3600) + 10 * 60))
+            #else
+            return []
+            #endif
+        }
+        return myTrailPoints(id).map(StoryTrailSource.points) ?? []
+    }
+
+    /// Shared waypoints for the story (icons only), from the device's waypoint cache.
+    func storyWaypoints(_ id: String) -> [StoryWaypoint] {
+        #if DEBUG
+        if isDemo { return StoryFixtures.waypoints() }
+        #endif
+        return (WaypointCache.load(id)?.waypoints ?? []).map { StoryWaypoint(kind: $0.kind.rawValue, lat: $0.lat, lng: $0.lng) }
+    }
+
     func shareSummary(_ id: String) async -> TripShare? {
         guard let t = myTrip(id) else { return nil }
-        if isDemo { return TripShare(user_id: DemoData.meId, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
+        if isDemo { return TripShare(user_id: DemoData.currentMe, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
         do { return try await api.shareSummary(id, t) } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
     }
@@ -339,6 +530,10 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ outingId: String) {
+        if let p = parkedSession {
+            if p.id == outingId, session == nil { return unpark() }
+            if p.id != outingId { closeParked() }
+        }
         if isDemo {
             if outingId == DemoData.outingId { openDemoSession() }
             return
@@ -346,30 +541,126 @@ final class AppModel: ObservableObject {
         guard let id = identity else { return }
         if session?.id == outingId { return }
         session?.close()
+        /* Build 14: a member of a trip shares while it runs — opening it is the same as joining
+         * (no «شارك موقعي»). The gate still needs iOS permission, an active trip and the server's
+         * sharing flag; ended / left / removed close the session and stop it. */
+        consentByJoining(outingId)
         let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
         session = s
         s.open()
+        s.resumeIfPreviouslySharing()
     }
 
-    func closeSession() {
+    /// «ارجع للقائمة»: the map closes, the trip's session (and its sharing) keeps running.
+    func parkSession() {
+        guard let s = session else { return }
+        closeParked()
+        session = nil
+        parkedSession = s
+        /* The trip ended, or I left / was removed: the parked session closes for good. */
+        parkedSink = s.$closedReason.compactMap { $0 }.first().receive(on: DispatchQueue.main).sink { [weak self] _ in
+            guard let self, self.parkedSession === s else { return }
+            self.closeParked()
+            Task { await self.refresh() }
+        }
+        Task { await refresh() }
+    }
+
+    private func unpark() {
+        guard let s = parkedSession else { return }
+        parkedSink = nil
+        parkedSession = nil
+        session = s
+    }
+
+    private func closeParked() {
+        parkedSink = nil
+        parkedSession?.close()
+        parkedSession = nil
+    }
+
+    /// `keepShare`: back to «طلعاتي» while still a member — the share stays armed, so opening the
+    /// trip again (or a relaunch) picks it up. Leaving / sign-out forget it.
+    func closeSession(keepShare: Bool = false) {
+        session?.keepShareOnClose = keepShare
         session?.close()
         session = nil
         Task { await refresh() }
     }
 
+    /// The trip ended: close the map and open its summary in «طلعاتي».
+    func showSummaryAfterClose(_ outingId: String) {
+        pendingSummary = outingId
+        closeSession()
+    }
+
+    /// «طريق العودة» as a NEW trip: from the destination back to my start point (kept on this
+    /// phone only). The new outing's destination is that point; its live screen also offers to
+    /// follow my old trail back. Opens and starts it like «ابدأ الطلعة» in «طلعة جديدة».
+    @discardableResult
+    func startReturnTrip(from outingId: String) async -> String? {
+        guard !isDemo else {
+            errorText = "«طريق العودة» كرحلة جديدة يحتاج الخادم؛ في العرض التجريبي استخدم «طريق العودة» في «مساري»."
+            return nil
+        }
+        guard let start = TripStore.load(outingId)?.start?.position ?? myTrailPoints(outingId)?.start?.position else {
+            errorText = "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."
+            return nil
+        }
+        let from = plans.model(outingId).plan.destination?.name
+        let name = String((from.map { "العودة من \($0)" } ?? "طريق العودة").prefix(ServerRules.outingNameMax))
+        guard let id = await createOuting(name: name, openNow: false) else { return nil }
+        ReturnTripStore.link(id, returnsFrom: outingId)
+        let plan = plans.model(id)
+        if plan.planPhase == .loading { await plan.loadPlan() }
+        _ = await plan.setDestination(OutingDestination(name: "نقطة البداية", lat: start.lat, lng: start.lng))
+        consentByJoining(id)
+        pendingStart = id
+        pendingSummary = nil
+        open(id)
+        startSharingAfterJoin(id)
+        return id
+    }
+
     func handle(url: URL) {
+        /* A tap on the Live Activity: back to that outing. */
+        if let id = OutingActivityState.outingId(from: url) { return open(id) }
         if let t = InviteLink.token(from: url) { pendingInvite = t }
     }
 
     func foreground(_ active: Bool) {
-        session?.foreground(active)
+        /* Only a real change. The scene can report .active again without having left the
+         * screen (the system PushToTalk UI, a banner): each of those used to re-run the list
+         * load, the APNs registration (GET+POST /push/apns) and a socket restart. */
+        let changed = active != phoneActive
+        phoneActive = active
+        guard changed else { return }
+        PTTDiagnosticsLog.shared.add("app", active ? "foreground" : "background")
+        session?.foreground(active || CarPlayHub.active)
+        parkedSession?.foreground(active || CarPlayHub.active)
         if active {
             Task { await refresh() }
             Task { await push.refresh(signedIn: signedIn && !isDemo) }
         }
     }
 
-    /// The app restarted mid-share: pick the share back up (this identity, this outing, consent given; foreground only).
+    /// The phone's own screen is up (SwiftUI scene phase).
+    /* Launched by iOS in the background (location, a pushtotalk push): not on screen yet, so the
+     * first .active is a real change. */
+    private var phoneActive = UIApplication.shared.applicationState != .background
+
+    /// CARPLAY HOOK: the CarPlay screen showing the app counts as the app being open in
+    /// front of you (the driver sees the live map there), so the session stays "visible"
+    /// while CarPlay shows it even with the phone locked. Sharing still needs every other
+    /// `SendGate` condition (consent, «شارك موقعي», active outing). See docs/CARPLAY-ENTITLEMENT.md.
+    func carPlayVisible(_ on: Bool) {
+        session?.foreground(phoneActive || on)
+        parkedSession?.foreground(phoneActive || on)
+    }
+
+    /// The app restarted mid-share — by the person, or by iOS in the background after a
+    /// significant location change / region exit: pick the share back up (this identity,
+    /// this outing, consent given). Off screen it sends only with «دائمًا» (SendGate).
     private func resumeActiveShare() {
         guard let me = identity?.user.id, let id = ShareMemory.activeShare(user: me) else { return }
         open(id)
@@ -398,10 +689,30 @@ final class AppModel: ObservableObject {
 
     private func openDemoSession() {
         let crowd = ProcessInfo.processInfo.arguments.contains("-demoCrowd")
-        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
+        let silent = ProcessInfo.processInfo.arguments.contains("-demoSilent")
+        let demo = DemoData.view(crowd: crowd, me: DemoData.currentMe, silent: silent)
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.currentMe, api: api, token: "", location: location,
+                              demo: ProcessInfo.processInfo.arguments.contains("-demoConvoy") ? DemoFeatures.convoyView(demo) : demo)
         session = s
         s.open()
+        #if DEBUG
+        /* Screenshots: the demo outing already shared (consent given), e.g. for the «دائمًا» hint. */
+        if ProcessInfo.processInfo.arguments.contains("-demoSharing") {
+            ShareMemory.recordConsent(user: DemoData.meId, outing: DemoData.outingId)
+            ShareMemory.setActiveShare(user: DemoData.meId, outing: DemoData.outingId)
+            s.resumeIfPreviouslySharing()
+        }
+        if silent { DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak s] in s?.seedDemoSilence() } }
+        #endif
     }
+}
+
+/// The one `AppModel`, created on first use: by SwiftUI at a normal launch, or by the
+/// app delegate when iOS relaunches the app in the background for location (no UI then),
+/// so an active share resumes either way.
+@MainActor
+enum AppBoot {
+    static let model = AppModel()
 }
 
 /// Onboarding finished on this device (name saved AND the location step seen).
@@ -418,20 +729,33 @@ enum OnboardingProgress {
 enum DemoData {
     static let meId = "00000000-0000-4000-8000-000000000001"
     static let outingId = "00000000-0000-4000-8000-0000000000aa"
+    /// «دعوة شخصية» demo: «فهد أخوي» joined through a personal invite (own name «جوس»), no fix yet.
+    static let invitedId = "00000000-0000-4000-8000-000000000005"
+
+    /// The demo identity. DEBUG `-SaryDemoMe <user id>` plays another member of
+    /// the same demo outing (two simulators testing the nearby link).
+    static var currentMe: String {
+        #if DEBUG
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SaryDemoMe"), i + 1 < a.count { return a[i + 1] }
+        #endif
+        return meId
+    }
 
     /// `crowd`: three more friends parked right next to «سلطان» (the chip declutter case).
-    static func view(now: Date = Date(), crowd: Bool = false) -> OutingView {
+    /// `silent`: «نورة»'s last fix is 11 min old (paired with the `-demoSilent` event).
+    static func view(now: Date = Date(), crowd: Bool = false, me: String = meId, silent: Bool = false) -> OutingView {
         func ago(_ s: Double) -> String { ISODate.string(now.addingTimeInterval(-s)) }
         var members: [Member] = [
-            Member(user_id: meId, display_name: "أنا", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
+            Member(user_id: meId, display_name: me == meId ? "أنا" : "راشد", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
             Member(user_id: "00000000-0000-4000-8000-000000000002", display_name: "أبو فهد", phone: "+966500000001", role: "member", sharing: true, joined_at: "2026-11-03T10:01:00.000Z", online: true, last_seen_at: ago(2), note: MemberNote(text: "بوقف عند المحطة", at: ago(30))),
             Member(user_id: "00000000-0000-4000-8000-000000000003", display_name: "سلطان", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:02:00.000Z", online: true, last_seen_at: ago(20)),
-            Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(240)),
+            Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(silent ? 660 : 240)),
         ]
         var positions: [Position] = [
             Position(user_id: members[1].user_id, lat: 24.7128, lng: 46.67395, accuracy: 8, heading: 340, speed: 22, mode: .balanced, recorded_at: ago(3)),
             Position(user_id: members[2].user_id, lat: 24.7105, lng: 46.6747, accuracy: 15, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(95)),
-            Position(user_id: members[3].user_id, lat: 24.7119, lng: 46.6770, accuracy: 25, heading: 180, speed: 10, mode: .saver, recorded_at: ago(300)),
+            Position(user_id: members[3].user_id, lat: 24.7119, lng: 46.6770, accuracy: 25, heading: 180, speed: 10, mode: .saver, recorded_at: ago(silent ? 660 : 300)),
         ]
         if crowd {
             for (i, name) in ["سعد", "ريم", "خالد"].enumerated() {
@@ -441,10 +765,28 @@ enum DemoData {
                 positions.append(Position(user_id: id, lat: 24.71052 + Double(i) * 0.00004, lng: 46.67478 + Double(i) * 0.00005, accuracy: 6, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(4)))
             }
         }
+        #if DEBUG
+        /* `-SaryDemoInvites`: one member who joined by a personal invite and has not shared yet. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryDemoInvites") {
+            members.append(Member(user_id: invitedId, display_name: "فهد أخوي", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:05:00.000Z",
+                                  online: true, last_seen_at: ago(5), nickname: "جوس", invited: true, phone_last4: "4567"))
+        }
+        /* Screenshots: `-SaryDemoShift "dLat,dLng"` moves the demo group (e.g. next to a mapped wadi). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryDemoShift"), i + 1 < args.count {
+            let d = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if d.count == 2 { positions = positions.map { var p = $0; p.lat += d[0]; p.lng += d[1]; return p } }
+        }
+        #endif
+        var demoStatus = OutingStatus.active
+        #if DEBUG
+        /* `-demoNotStarted`: the leader has not pressed «ابدأ الطلعة» yet (auto-navigation UI tests). */
+        if args.contains("-demoNotStarted") { demoStatus = .created }
+        #endif
         let snap = OutingSnapshot(
-            outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
-            me: SnapshotMe(user_id: meId, role: "owner", sharing: true),
-            members: members, positions: positions, invite: InviteState(active: true, expires_at: nil),
+            outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: demoStatus, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
+            me: SnapshotMe(user_id: me, role: me == meId ? "owner" : "member", sharing: true),
+            members: members, positions: positions.filter { $0.user_id != me }, invite: InviteState(active: true, expires_at: nil),
             server_now: ISODate.string(now)
         )
         return OutingView(snap, deviceNow: now)

@@ -19,6 +19,11 @@ struct TripLog: Codable, Equatable {
     /// The previous accepted fix (kept only to measure the next step; overwritten every fix).
     var lastLat: Double?
     var lastLng: Double?
+    /// Top speed so far (local only; see `Speed.swift`). Optional so older saved logs still decode.
+    var peak: SpeedPeak?
+    /// «أطول وقفة»: when the current stop began, and the longest one so far (seconds). Optional: older logs decode.
+    var stopStartMs: Double?
+    var longestStopS: Double?
 
     /// Faster than any car here: a GPS jump, not driving.
     static let maxSpeedMps = 70.0
@@ -26,6 +31,14 @@ struct TripLog: Codable, Equatable {
     /// A gap longer than this is not counted as moving time.
     static let maxGapS = 60.0
     static let movingSpeedMps = 1.5
+    /// A silence that ended farther than this from where it began was driving, not a stop.
+    static let stopMaxDriftM = 150.0
+
+    private mutating func closeStop() {
+        guard let s = stopStartMs, let t = lastAtMs else { return }
+        longestStopS = max(longestStopS ?? 0, (t - s) / 1000)
+        stopStartMs = nil
+    }
 
     var totals: TripTotals? {
         guard let a = firstAtMs, let b = lastAtMs, b > a else { return nil }
@@ -33,9 +46,12 @@ struct TripLog: Codable, Equatable {
         return TripTotals(distanceM: Int(distanceM.rounded()), durationS: Int(dur.rounded()), movingS: Int(min(movingS, dur).rounded()))
     }
 
-    mutating func add(lat: Double, lng: Double, accuracy: Double?, speed: Double?, atMs: Double) {
+    mutating func add(lat: Double, lng: Double, accuracy: Double?, speed: Double?, atMs: Double, speedAccuracy: Double? = nil) {
         guard (accuracy ?? 0) <= Self.maxAccuracyM else { return }
         if let t = lastAtMs, atMs <= t { return }
+        var pk = peak ?? SpeedPeak()
+        pk.add(DeviceFix(lat: lat, lng: lng, accuracy: accuracy, heading: nil, speed: speed, atMs: atMs, speedAccuracy: speedAccuracy))
+        peak = pk
         defer {
             lastLat = lat
             lastLng = lng
@@ -49,7 +65,16 @@ struct TripLog: Codable, Equatable {
         /* Jitter while parked is not distance. */
         if d >= 8 { distanceM += d }
         let v = speed ?? d / max(gap, 0.5)
-        if gap <= Self.maxGapS, v >= Self.movingSpeedMps { movingS += gap }
+        if gap <= Self.maxGapS, v >= Self.movingSpeedMps {
+            movingS += gap
+            closeStop()
+        } else if gap > Self.maxGapS, d >= Self.stopMaxDriftM {
+            /* A long silence that ended far away: not a stop (we just did not hear). */
+            closeStop()
+        } else {
+            /* Standing (or a silence that ended where it began: parked with the screen locked). */
+            if stopStartMs == nil { stopStartMs = pt }
+        }
     }
 }
 

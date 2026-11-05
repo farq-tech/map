@@ -6,7 +6,7 @@ import UserNotifications
 @main
 struct SaryAlbarqApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @StateObject private var model = AppModel()
+    @StateObject private var model = AppBoot.model
     @State private var appearance = AppearanceSettings.launch()
     @Environment(\.scenePhase) private var phase
 
@@ -18,20 +18,34 @@ struct SaryAlbarqApp: App {
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "ar"))
-                .onOpenURL { model.handle(url: $0) }
+                .onOpenURL { IntroController.shared.interrupt(); model.handle(url: $0) }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { a in
+                    IntroController.shared.interrupt()
                     if let u = a.webpageURL { model.handle(url: u) }
                 }
+                .saryCinematicIntro(model) // CINEMATIC INTRO HOOK: cold launch only, rules in Sources/Intro/IntroPolicy.swift
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
+                .saryCarPlayPreviewIfRequested() // CARPLAY PREVIEW HOOK: DEBUG + `-SaryCarPlayPreview` only (Sources/CarPlay)
         }
-        .onChange(of: phase) { p in model.foreground(p == .active) }
+        /* Only .background is "left the screen". `.inactive` (Control Center, notification shade,
+         * an incoming-call banner, a system prompt) used to stop the GPS and cut «مساري» into gaps. */
+        .onChange(of: phase) { p in
+            switch p {
+            case .active: model.foreground(true)
+            case .background: model.foreground(false)
+            default: break
+            }
+        }
     }
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The app's model, for the push callbacks UIKit delivers here.
-    @MainActor static weak var model: AppModel?
+    @MainActor static weak var model: AppModel? {
+        /* CarPlay may connect before the phone UI: it waits for this. */
+        didSet { NotificationCenter.default.post(name: .saryModelReady, object: nil) }
+    }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in
@@ -49,7 +63,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let info = response.notification.request.content.userInfo
         let id = PushRegistrar.outingId(from: info) ?? Self.localOutingId(response.notification.request)
         guard let id else { return }
-        await MainActor.run { NotificationCenter.default.post(name: .saryOpenOuting, object: id) }
+        let chat = PushRegistrar.chatWith(from: info)
+        await MainActor.run {
+            /* «المحادثات»: a chat notification opens that conversation, inside its trip. */
+            if let chat { ChatDeepLink.request(outingId: id, with: chat) }
+            NotificationCenter.default.post(name: .saryOpenOuting, object: id)
+        }
     }
 
     /// Local notifications carry the outing in their thread id ("outing-<id>").
@@ -63,7 +82,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
         UIView.appearance().semanticContentAttribute = .forceRightToLeft
-        /* No background location: nothing to resume for a location relaunch. */
+        /* Relaunched by iOS in the background for location (significant change / region exit
+         * while sharing with «دائمًا»): build the model now so the share resumes without UI. */
+        if launchOptions?[.location] != nil {
+            MainActor.assumeIsolated {
+                let m = AppBoot.model
+                Self.model = m
+            }
+        }
         return true
     }
 
@@ -78,6 +104,11 @@ extension AppearanceSettings {
     /// The app's one settings object. DEBUG builds accept screenshot overrides:
     /// `-SaryScheme light|dark`, `-SaryDrive 1`, `-SaryNight 1`, `-SaryFallback 1`.
     static func launch(_ args: [String] = ProcessInfo.processInfo.arguments) -> AppearanceSettings {
+        #if DEBUG
+        /* Test isolation: `-SaryDrive 1` etc. are saved like the person's own choice, so a
+           `-resetState` run starts from the default appearance, not the previous test's. */
+        if args.contains("-resetState") { UserDefaults.standard.removeObject(forKey: storageKey) }
+        #endif
         let s = AppearanceSettings()
         #if DEBUG
         func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
@@ -94,6 +125,10 @@ extension AppearanceSettings {
         #endif
         return s
     }
+}
+
+extension Notification.Name {
+    static let saryModelReady = Notification.Name("sary.model.ready")
 }
 
 enum Theme {

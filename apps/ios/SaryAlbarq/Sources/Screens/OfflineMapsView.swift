@@ -57,6 +57,7 @@ struct OfflineMapsView: View {
             SarySection(title: "كيف تعمل") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text("• تحفظ صور الأقمار والطرق والتضاريس من مستوى الحي حتى مستوى الشارع (تكبير ١١–١٦).")
+                    Text("• الطبقة «الطبوغرافي» (خطوط الكنتور) تُحفظ فقط إذا اخترتها عند التنزيل. الطبقة «العادي» تحتاج إنترنت دائمًا.")
                     Text("• بلا إنترنت تعرض الخريطة المحفوظ تلقائيًا. مواقع أصحابك تحتاج إنترنت لتتحدث، لكن مكانك أنت يظهر من GPS.")
                     Text("• الحد: \(SaryFormat.bytes(OfflinePlan.totalCapBytes)) لكل المناطق معًا، وكل منطقة حتى \(SaryFormat.number(Int(OfflinePlan.maxSideKm))) كم في \(SaryFormat.number(Int(OfflinePlan.maxSideKm))) كم، حتى لا تملأ جوالك.")
                     Text("• تُحدّث المنطقة عند تنزيلها مرة ثانية. يفضّل التنزيل على واي فاي.")
@@ -121,6 +122,7 @@ struct OfflineMapsView: View {
     private func detail(_ a: OfflineArea) -> String {
         var parts = [SaryFormat.bytes(a.bytes)]
         if let b = a.box { parts.append("\(SaryFormat.number(Int(b.widthKm.rounded()))) × \(SaryFormat.number(Int(b.heightKm.rounded()))) كم") }
+        parts.append(a.layers.contains(.topo) ? "قمر صناعي + طبوغرافي" : "قمر صناعي")
         parts.append(a.isComplete ? "جاهزة بلا إنترنت" : "ناقصة \(SaryFormat.percent(Int(Double(a.completed) / Double(max(1, a.required)) * 100))) — نزّلها مرة ثانية")
         if let d = a.createdAt { parts.append(SaryFormat.elapsed(since: d, now: Date())) }
         return parts.joined(separator: " · ")
@@ -138,6 +140,8 @@ struct OfflineAreaPicker: View {
     @ObservedObject private var store = OfflineMaps.shared
     @Environment(\.sary) private var theme
     @State private var box: OfflinePlan.Box?
+    /// Also save the topographic layer (Mapbox Outdoors) for this area.
+    @State private var withTopo = false
     @State private var estimate: Int64?
     @State private var estimating = false
     @State private var name = ""
@@ -209,9 +213,12 @@ struct OfflineAreaPicker: View {
             default: EmptyView()
             }
             SaryTextField(title: "اسم المنطقة", placeholder: "مثل: نفود الثويرات", text: $name, id: "offline.name", maxLength: 40)
+            SaryToggleRow(title: "مع الخريطة الطبوغرافية", subtitle: "خطوط الكنتور والارتفاعات بلا إنترنت · يزيد الحجم",
+                          systemImage: MapLayer.topo.systemImage, isOn: $withTopo, id: "offline.topo")
+                .onChange(of: withTopo) { _, _ in if let b = box { scheduleEstimate(b) } }
             Button {
                 guard let b = box else { return }
-                store.download(b, name: name.trimmingCharacters(in: .whitespaces).isEmpty ? "منطقة" : name, outing: outingName)
+                store.download(b, name: name.trimmingCharacters(in: .whitespaces).isEmpty ? "منطقة" : name, outing: outingName, topo: withTopo)
                 close()
             } label: { SaryButtonLabel(title: "نزّل المنطقة", systemImage: "arrow.down.circle.fill") }
                 .buttonStyle(.sary(.primary))
@@ -231,7 +238,7 @@ struct OfflineAreaPicker: View {
         estimateTask = Task {
             try? await Task.sleep(nanoseconds: 700_000_000)
             guard !Task.isCancelled else { return }
-            let e = await store.estimate(b)
+            let e = await store.estimate(b, topo: withTopo)
             guard !Task.isCancelled else { return }
             estimate = e
             estimating = false
