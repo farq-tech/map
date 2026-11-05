@@ -423,7 +423,8 @@ final class AppModel: ObservableObject {
             let personal = demoInviteKind != "group"
             return InvitePreview(outing_id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_name: "راشد", member_count: 4,
                                  expires_at: ISODate.string(Date().addingTimeInterval(86400)), join_locked: false,
-                                 kind: personal ? "personal" : "group", invitee_name: personal ? "فهد أخوي" : nil, claim: "open")
+                                 kind: personal ? "personal" : "group", invitee_name: personal ? "فهد أخوي" : nil, claim: "open",
+                                 destination_name: "روضة الثمامة")
         }
         return try await api.preview(token: token)
     }

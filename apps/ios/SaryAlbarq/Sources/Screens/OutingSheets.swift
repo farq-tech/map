@@ -124,6 +124,13 @@ struct InviteJoinSheet: View {
                     }
                     Text(inv.outingName).saryText(.display, weight: .bold).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("invite.name")
+                    if let dest = inv.destinationName {
+                        Label {
+                            Text("الوجهة: \(dest)").saryText(.callout, weight: .bold)
+                        } icon: { Image(systemName: "mappin.and.ellipse") }
+                            .foregroundStyle(p.textPrimary)
+                            .accessibilityIdentifier("invite.destination")
+                    }
                     Label {
                         Text("\(SaryFormat.number(inv.participantCount)) في الطلعة الآن").saryText(.callout)
                     } icon: { Image(systemName: "person.2.fill") }
@@ -214,7 +221,8 @@ struct InviteJoinSheet: View {
             }()
             if p.isPersonal, p.claim == "taken" { phase = .taken; return }
             phase = .ready(InvitePreviewUI(outingName: p.name, inviterName: p.owner_name, participantCount: p.member_count, status: st,
-                                           inviteeName: p.isPersonal ? p.invitee_name : nil))
+                                           inviteeName: p.isPersonal ? p.invitee_name : nil,
+                                           destinationName: InvitePreviewUI.destination(p.destination_name)))
         } catch let e as OutingAPIError {
             switch e.code {
             case "invite_expired", "invite_revoked", "open_links_disabled": phase = .expired

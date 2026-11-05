@@ -226,6 +226,8 @@ struct InvitePreview: Codable, Equatable {
     /// open · yours (used by me: rejoin) · taken (someone else used it) · claimed (used; asked anonymously).
     var claim: String? = nil
     var already_member: Bool? = nil
+    /// The trip's destination («روضة الثمامة»), when the server sends it (newer servers only).
+    var destination_name: String? = nil
 
     var isPersonal: Bool { kind == "personal" }
 }
