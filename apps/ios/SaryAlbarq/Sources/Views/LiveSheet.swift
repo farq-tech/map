@@ -43,6 +43,7 @@ struct LiveSheet: View {
         .background(SafetyPrompts(safety: controller.safety))
         .modifier(FeatureModals(controller: controller, features: controller.features))
         .background(MediaSheetHost(center: MediaCenters.of(controller)))
+        .background(GroupAudioSheetHost(center: GroupAudioCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -674,6 +675,7 @@ private struct SettingsTab: View {
                 SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
                               isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
             }
+            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
             MediaEntryCard(center: MediaCenters.of(controller))
             SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {

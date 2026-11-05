@@ -251,6 +251,8 @@ final class LiveChannel {
                 }
                 /* «قناة الطلعة» (Sources/Media): only when the server sends it, so an older server reads as "not there". */
                 if let snap = msg["snapshot"] as? [String: Any], snap.keys.contains("media") { MediaEvents.post(outingId: self.outingId, raw: snap["media"]) }
+                /* «إذاعة الطلعة» (Sources/Media/GroupAudio): a late joiner starts in sync. */
+                if let snap = msg["snapshot"] as? [String: Any], let ga = snap["group_audio"], !(ga is NSNull) { GroupAudioEvents.post(outingId: self.outingId, raw: ga) }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
                 if self.pttJoined { self.sendFrame(["type": "ptt_join"]) }
                 self.flush()
@@ -266,6 +268,10 @@ final class LiveChannel {
                 if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
             case "media_state":
                 MediaEvents.post(outingId: self.outingId, raw: msg["state"])
+            case "group_audio_state":
+                GroupAudioEvents.post(outingId: self.outingId, raw: msg["state"], serverNow: msg["server_now"] as? String)
+            case "group_audio_ack":
+                break
             default:
                 if let e = LiveEvent.decode(msg) { self.handlers.onEvent(e) }
             }

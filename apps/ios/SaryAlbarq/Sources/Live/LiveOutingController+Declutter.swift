@@ -63,6 +63,7 @@ extension LiveOutingController {
         case "nearest": a.openNearestStations()
         case "weather": modal = .weather
         case "youtube": MediaCenters.of(self).open()
+        case "radio": GroupAudioCenters.of(self).open()
         case "explore": enterExplore()
         default: break
         }

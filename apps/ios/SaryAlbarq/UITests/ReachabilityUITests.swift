@@ -62,7 +62,7 @@ final class ReachabilityUITests: XCTestCase {
         }
         let entries = ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow",
                        "outing-note-open", "outing-stuck", "outing-waypoint-add", "outing-copyme",
-                       "outing-nearest-open", "outing-weather", "outing-youtube", "outing-explore"]
+                       "outing-nearest-open", "outing-weather", "outing-radio", "outing-youtube", "outing-explore"]
         for id in entries {
             XCTAssertTrue(any(app, id).exists, "\(id) in the actions sheet")
         }
