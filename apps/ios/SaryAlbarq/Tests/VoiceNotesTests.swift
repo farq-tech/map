@@ -294,6 +294,36 @@ final class VoiceNotesTests: XCTestCase {
         XCTAssertTrue(c.list.contains { $0.id == "n2" })
     }
 
+    func testAutoplayOffShowsACardWithPlayInstead() async throws {
+        let d = tempDefaults()
+        XCTAssertTrue(VoiceAutoplay.isOn(d), "on by default")
+        d.set(false, forKey: VoiceAutoplay.key)
+        let b = FakeBackend()
+        b.audio["n1"] = try Data(contentsOf: try toneFile(1))
+        let c = VoiceNoteCenter(outingId: "o-off", me: "me", backend: b, walkie: nil, defaults: d,
+                                recorder: VoiceNoteRecorder(testTone: true),
+                                outboxDir: FileManager.default.temporaryDirectory.appendingPathComponent("vn-\(UUID().uuidString)"))
+        c.nameOf = { _ in "فهد" }
+        c.isForeground = { true }
+        c.attach()
+        defer { c.close(leftOuting: true) }
+        c.receive(note("n1"))
+        try await Task.sleep(nanoseconds: 700_000_000)
+        XCTAssertNil(c.playing, "does not play by itself")
+        XCTAssertEqual(c.offer?.id, "n1", "waits on a card with ▶︎")
+        XCTAssertEqual(c.offer?.name, "فهد")
+        /* A stale one never makes a card. */
+        c.dismissOffer()
+        c.receive(note("old", age: 600_000))
+        XCTAssertNil(c.offer)
+        /* ▶︎ plays it. */
+        c.receive(note("n2"))
+        b.audio["n2"] = b.audio["n1"]
+        c.playOffer()
+        XCTAssertNil(c.offer)
+        await waitFor("playing after ▶︎") { c.playing?.id == "n2" }
+    }
+
     func testDeleteSendsNothing() async throws {
         let b = FakeBackend()
         let c = VoiceNoteCenter(outingId: "o-del", me: "me", backend: b, walkie: nil, defaults: tempDefaults(),

@@ -55,6 +55,9 @@ struct VoiceNoteDock: View {
             } else if let p = center.playing {
                 VoiceNotePlayingCard(playing: p, stop: center.stopPlaying)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let o = center.offer {
+                VoiceNoteOfferCard(offer: o, play: center.playOffer, dismiss: center.dismissOffer)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if center.unheard > 0 || center.sending > 0 {
                 VoiceNoteStatusPill(unheard: center.unheard, sending: center.sending, open: openList)
                     .transition(.opacity)
@@ -62,6 +65,7 @@ struct VoiceNoteDock: View {
         }
         .animation(.snappy(duration: 0.25), value: center.isRecording)
         .animation(.snappy(duration: 0.25), value: center.playing?.id)
+        .animation(.snappy(duration: 0.25), value: center.offer?.id)
     }
 }
 
@@ -178,6 +182,48 @@ struct VoiceNotePlayingCard: View {
         .saryGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .chrome)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voice-note-playing")
+    }
+}
+
+/// «تشغيل تلقائي» off: «فهد أرسل رسالة صوتية» with ▶︎ (and ✕).
+struct VoiceNoteOfferCard: View {
+    var offer: VoiceNoteCenter.Playing
+    var play: () -> Void
+    var dismiss: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        HStack(spacing: theme.space(.s)) {
+            Button(action: play) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(SaryCarColors.ink(on: offer.color))
+                    .frame(width: 52, height: 52)
+                    .background(Circle().fill(Color(rgb: offer.color)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("شغّل رسالة \(offer.name)"))
+            .accessibilityIdentifier("voice-note-offer-play")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(offer.name) أرسل رسالة صوتية").font(.sary(16, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(SaryFormat.clock(seconds: offer.seconds)).font(.sary(13, .medium)).monospacedDigit().foregroundStyle(p.textSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: dismiss) {
+                Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
+                    .frame(width: 44, height: 44).background(Circle().fill(p.sunken))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("لاحقًا"))
+            .accessibilityIdentifier("voice-note-offer-dismiss")
+        }
+        .padding(.horizontal, theme.space(.s))
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p.chromeOpaque.opacity(0.88)))
+        .saryGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .chrome)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("voice-note-offer")
     }
 }
 

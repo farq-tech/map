@@ -11,7 +11,7 @@ struct LiveSettingsPage: View {
     @State private var path: [Page] = []
     @State private var confirmClear = false
     @ObservedObject private var convoy = ConvoyAlertPrefs.shared
-    @AppStorage(VoiceAutoplay.key) private var voiceAutoplay = false
+    @AppStorage(VoiceAutoplay.key) private var voiceAutoplay = VoiceAutoplay.default
     /// «طريقة اللاسلكي»: «رسالة صوتية» (default) or «مباشر (تجريبي)».
     @AppStorage(PTTTalkMode.key) private var talkMode = PTTTalkMode.default
     @AppStorage(OutingSession.modeKey) private var shareMode: String = ShareMode.balanced.rawValue
@@ -383,9 +383,13 @@ enum DistanceUnits {
 }
 
 /// «تشغيل تلقائي للرسائل الصوتية»: a friend's voice message plays as it arrives.
+/// «تشغيل تلقائي للرسائل الصوتية»: on by default. Off: a new «رسالة صوتية» waits on a card with a
+/// play button instead of playing by itself (older builds' voice_clip banners follow it too).
 enum VoiceAutoplay {
     static let key = "sary.voice.autoplay.v1"
-    static var on: Bool { UserDefaults.standard.bool(forKey: key) }
+    static let `default` = true
+    static var on: Bool { isOn() }
+    static func isOn(_ d: UserDefaults = .standard) -> Bool { d.object(forKey: key) as? Bool ?? `default` }
 }
 
 /// «مسح سجل الطلعات»: the trails and speed logs this phone kept for past outings (the current one stays).

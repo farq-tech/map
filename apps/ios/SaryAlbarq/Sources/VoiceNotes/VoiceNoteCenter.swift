@@ -78,6 +78,8 @@ final class VoiceNoteCenter: ObservableObject {
     @Published private(set) var list: [VoiceNote] = []
     /// Others' notes on this channel not heard yet.
     @Published private(set) var unheard = 0
+    /// «تشغيل تلقائي» off: the newest fresh note waits here, on a card with a play button.
+    @Published private(set) var offer: Playing?
     /// A short sentence for a toast.
     @Published private(set) var notice: String?
     let meter = VoiceNoteMeter()
@@ -272,15 +274,38 @@ final class VoiceNoteCenter: ObservableObject {
     /// A note from the socket (or a sync, or a push).
     func receive(_ n: VoiceNote) {
         guard !closed else { return }
-        let queued = inbox.receive(n, nowMs: Self.monoMs(), me: me, channel: channel, muted: muted)
+        let auto = autoplay
+        let known = list.contains { $0.id == n.id } || inbox.heard.contains(n.id)
+        let queued = inbox.receive(n, nowMs: Self.monoMs(), me: me, channel: channel, muted: muted || !auto)
         refreshList()
-        if queued { pump() }
+        if queued { return pump() }
+        /* «تشغيل تلقائي» off: what would have played waits on a card with ▶︎. */
+        if !auto, !known, VoiceNotePolicy.shouldAutoPlay(note: n, ageMs: inbox.ageMs(n.id, nowMs: Self.monoMs()), me: me, channel: channel, muted: muted, heard: false) {
+            offer = Playing(id: n.id, userId: n.user_id, name: nameOf(n.user_id) ?? "عضو", color: colorOf(n.user_id), progress: 0, loading: false, waveform: [], seconds: n.seconds)
+        }
     }
+
+    /// «تشغيل تلقائي للرسائل الصوتية» (الإعدادات › الصوت واللاسلكي), on by default.
+    var autoplay: Bool { VoiceAutoplay.isOn(defaults) }
+
+    /// The card's ▶︎.
+    func playOffer() {
+        guard let o = offer else { return }
+        offer = nil
+        play(o.id)
+    }
+
+    func dismissOffer() { offer = nil }
 
     /// iOS woke us with a voice-note push: the system already shows the speaker and opens its
     /// session; fetch the note and play it there.
     func pushed(_ p: VoiceNotePush) {
         guard p.outingId == outingId else { return }
+        if !autoplay, !isForeground() {
+            /* Woken for it, but it must not play by itself: give the system its session back and say it waits. */
+            walkie?.returnSystemSpeaker()
+            Notifier.post(title: "\(p.speaker) · قناة الطلعة", body: "🎙️ رسالة صوتية — افتح الطلعة وتسمعها", outingId: outingId, kind: "voice_note")
+        }
         receive(p.note)
     }
 
@@ -313,6 +338,7 @@ final class VoiceNoteCenter: ObservableObject {
     }
 
     private func start(_ n: VoiceNote) {
+        if offer?.id == n.id { offer = nil }
         let name = nameOf(n.user_id) ?? "عضو"
         playing = Playing(id: n.id, userId: n.user_id, name: name, color: colorOf(n.user_id), progress: 0, loading: true, waveform: [], seconds: n.seconds)
         Task {
