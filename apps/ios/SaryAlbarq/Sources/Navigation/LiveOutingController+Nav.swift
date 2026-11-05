@@ -274,8 +274,13 @@ extension LiveOutingController {
             self.navigate(NavTargets.point(LngLat(lng: lng, lat: lat), name: name))
             guard args.contains("-SaryNavStart") || arg("-SaryNavState") != nil else { return }
             self.navWhenRoutesIn(tries: 40) { [weak self] in
-                guard let self else { return }
-                if let st = arg("-SaryNavState") { self.navFreeze(st) } else { self.startNav() }
+                /* The demo router answers at once, while the options sheet is still sliding in:
+                 * clearing `modal` mid-presentation leaves the sheet up over the guidance. Start
+                 * once it is on screen, as a person tapping «ابدأ» would. */
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    guard let self else { return }
+                    if let st = arg("-SaryNavState") { self.navFreeze(st) } else { self.startNav() }
+                }
             }
         }
     }

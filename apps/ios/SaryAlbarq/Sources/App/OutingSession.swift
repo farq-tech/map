@@ -253,6 +253,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
         guard !isDemo else {
             walkie.attach(channel: nil, mesh: mesh)
+            debugKeepDemoFixLive()
             return debugAutoTalk()
         }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
@@ -306,6 +307,22 @@ final class OutingSession: ObservableObject, Identifiable {
             timers.append(hb)
         }
         location.onFix = { [weak self] f in self?.handleFix(f) }
+    }
+
+    /// UI tests: `-SaryDemoKeepLive` re-sends «أبو فهد»'s demo fix every few seconds (as his phone
+    /// would), so «live» checks do not race the ~15 s freshness window on a slow simulator.
+    private func debugKeepDemoFixLive() {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-SaryDemoKeepLive") else { return }
+        let uid = "00000000-0000-4000-8000-000000000002"
+        Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] t in
+            Task { @MainActor in
+                guard let self, var p = self.view?.positions[uid] else { t.invalidate(); return }
+                p.recorded_at = ISODate.string(Date())
+                self.debugApply(.position(p))
+            }
+        }
+        #endif
     }
 
     private func debugAutoTalk() {

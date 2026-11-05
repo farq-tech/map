@@ -374,17 +374,29 @@ final class HiResBadgeView: UIView {
         addSubview(label)
         layer.cornerRadius = 13
         layer.masksToBounds = true
-        isAccessibilityElement = true
-        accessibilityIdentifier = "hires.badge"
         accessibilityLabel = "مُحسّنة"
         accessibilityHint = "المس مطولاً لعرض الصورة الأصلية"
         accessibilityTraits = .staticText
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
         hold.minimumPressDuration = 0.15
         addGestureRecognizer(hold)
+        syncAccessibility()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// VoiceOver (and UI tests) see the badge only while it is really on screen: the badge stays
+    /// in the hierarchy between decisions, and a hidden view that keeps its identifier still
+    /// shows up in the accessibility snapshot as «hires.badge».
+    override var isHidden: Bool { didSet { syncAccessibility() } }
+    override var alpha: CGFloat { didSet { syncAccessibility() } }
+
+    private func syncAccessibility() {
+        let shown = !isHidden && alpha > 0.01
+        isAccessibilityElement = shown
+        accessibilityIdentifier = shown ? "hires.badge" : nil
+        accessibilityElementsHidden = !shown
+    }
 
     @objc private func held(_ g: UILongPressGestureRecognizer) {
         switch g.state {

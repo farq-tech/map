@@ -87,8 +87,7 @@ final class ExploreUITests: XCTestCase {
         save.tap()
         let name = any(app, "placeEdit.name")
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
-        name.typeText("مخيم الشتاء")
+        name.focusAndType("مخيم الشتاء")
         any(app, "placeEdit.icon.camp").tap()
         any(app, "placeEdit.save").tap()
         app.buttons["explore-places"].tap()
@@ -98,9 +97,17 @@ final class ExploreUITests: XCTestCase {
         shot(app, "explore-places")
         /* Delete via the row's menu. */
         any(app, "places.menu").tap()
-        app.buttons["احذف"].firstMatch.tap()
+        /* The menu animates in: wait until «احذف» can take a tap, then the confirmation. */
+        let delete = app.buttons["احذف"].firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 5), "«احذف» in the row's menu")
+        let hittable = NSPredicate(format: "hittable == true")
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: hittable, object: delete)], timeout: 3)
+        delete.tap()
         let confirm = app.buttons["احذف"].firstMatch
-        if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+        if confirm.waitForExistence(timeout: 3) {
+            _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: hittable, object: confirm)], timeout: 3)
+            confirm.tap()
+        }
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForNonExistence(timeout: 5), "deleted")
     }
 

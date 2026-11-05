@@ -17,7 +17,9 @@ final class ChatUITests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(any(app, "outing-sheet-summary").waitForExistence(timeout: 20))
+        /* «-SaryChat» opens a thread over the live sheet, which may hide its summary. */
+        let ready = NSPredicate { _, _ in self.any(app, "outing-sheet-summary").exists || self.any(app, "chat.thread").exists }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 30), .completed, "the live screen (or the chat over it)")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         return app
     }

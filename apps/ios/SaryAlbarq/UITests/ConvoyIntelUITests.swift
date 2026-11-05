@@ -69,7 +69,7 @@ final class ConvoyIntelUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(any(app, "rules.stop.minutes").exists)
         shot(app, "convoy-rules")
-        toggle.switches.firstMatch.exists ? toggle.switches.firstMatch.tap() : toggle.tap()
+        XCTAssertTrue(toggle.flipSwitch(until: { !self.any(app, "rules.stop.minutes").exists }), "the «وقف فجأة» switch flips")
         XCTAssertTrue(any(app, "rules.stop.minutes").waitForNonExistence(timeout: 3), "rule off hides its threshold")
         any(app, "rules.reset").tap()
         XCTAssertTrue(any(app, "rules.stop.minutes").waitForExistence(timeout: 3))

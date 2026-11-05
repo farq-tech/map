@@ -24,7 +24,11 @@ final class NavigationUITests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["outing-sheet-summary"].waitForExistence(timeout: 20))
+        /* The live screen — or, with `-SaryNavDelay` short and a slow launch, the navigation UI
+         * already over it (a presented sheet hides the live sheet's summary). */
+        let ids = ["outing-sheet-summary", "nav.options", "nav.banner", "nav.rerouting", "nav.offroad", "nav.arrived", "nav.offroad.note"]
+        let ready = NSPredicate { _, _ in ids.contains { app.descendants(matching: .any)[$0].exists } }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 30), .completed, "the live screen")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         return app
     }

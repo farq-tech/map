@@ -138,8 +138,7 @@ final class RealisticUITests: XCTestCase {
         save.tap()
         let name = any(app, "placeEdit.name")
         XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
-        name.typeText("المخيم")
+        name.focusAndType("المخيم")
         any(app, "placeEdit.save").tap()
         app.buttons["explore-places"].tap()
         let entry = app.buttons["places.realistic"]
