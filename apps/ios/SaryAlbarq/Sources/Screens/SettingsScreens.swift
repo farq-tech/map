@@ -121,21 +121,55 @@ struct SettingsView: View {
     var open: (HomeRoute) -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    /// «قناة الطلعة» squelch / chirp / roger and the radio-voice filter (on by default).
+    @AppStorage(PTTRadioSounds.enabledKey) private var radioSounds = true
+    /// «صوت اللاسلكي»: how loud a friend's voice plays («عالي» by default).
+    @AppStorage(PTTVoiceLevel.key) private var voiceLevel = PTTVoiceLevel.default
 
     var body: some View {
+        /* Four clear sections (docs/IA-REDESIGN.md §2.7). */
         SaryPage(title: "الإعدادات", back: back) {
-            SarySection {
-                SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
+            SarySection(title: "الحساب") {
+                SaryNavRow(title: "ملفي", detail: model.identity?.user.display_name, systemImage: "person.fill", id: "settings.profile") { open(.profile) }
                 SaryDivider()
-                SaryNavRow(title: "الخصوصية", detail: "ما الذي يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
+                SaryNavRow(title: "رمز الاسترجاع", detail: model.recovery?.active == true ? "محفوظ" : "لم تحفظه بعد",
+                           systemImage: "key.fill", tint: model.recovery?.active == true ? nil : theme.palette.warning, id: "settings.recovery") { open(.recoveryCode) }
                 SaryDivider()
                 SaryNavRow(title: "التنبيهات", detail: pushDetail, systemImage: "bell.fill", id: "settings.notifications") { open(.notifications) }
                 SaryDivider()
-                SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
+                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
+                           id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
-            SarySection {
-                SaryNavRow(title: "ملفي", detail: model.identity?.user.display_name, systemImage: "person.fill") { open(.profile) }
+            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الأصحاب بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+                SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
+                              isOn: $radioSounds, id: "settings.radioSounds")
                 SaryDivider()
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    HStack(spacing: theme.space(.m)) {
+                        SaryRowIcon(systemImage: "speaker.wave.3.fill")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("صوت اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
+                            Text("قوة صوت أصحابك من السماعة الخارجية").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                        }
+                    }
+                    SarySegmented(options: PTTVoiceLevel.allCases, selection: $voiceLevel, label: { $0.label }, id: "settings.voiceLevel")
+                }
+                .padding(.vertical, theme.space(.xs))
+            }
+            IntroSettingsSection()
+            SarySection(title: "الخصوصية والموقع") {
+                SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
+            }
+            SarySection(title: "المظهر والقيادة") {
+                SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
+            }
+            SarySection(title: "الخرائط والبيانات") {
+                SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
+                SaryDivider()
+                SaryNavRow(title: "متقدم", detail: "سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
+            }
+            VisualEffectsSection()
+            SarySection {
                 SaryNavRow(title: "حول سَرى البارق", systemImage: "info.circle.fill", id: "settings.about") { open(.about) }
             }
         }
@@ -183,10 +217,16 @@ struct PrivacySettingsView: View {
         SaryPage(title: "الخصوصية", back: back) {
             SarySection(title: "متى يُشارك موقعي؟") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    fact("hand.tap.fill", "فقط بعد ما تضغط «شارك موقعي» داخل طلعة، وتوافق أول مرة على شاشة الموافقة.")
-                    fact("iphone", "فقط والتطبيق مفتوح أمامك. إذا قفلت الشاشة أو خرجت يتوقف الإرسال. لا يوجد تتبع في الخلفية.")
+                    fact("hand.tap.fill", "المشاركة تلقائية ما دمت عضوًا في طلعة شغّالة: بانضمامك لطلعة (أو إنشائك لها) يشوف أعضاؤها موقعك المباشر، بدون زر «شارك» أو «أوقف».")
+                    fact("rectangle.portrait.and.arrow.right", "لإيقاف المشاركة غادر الطلعة. وتتوقف أيضًا إذا أزالك أمير الرحلة، أو أوقف الطلعة مؤقتًا، أو انتهت.")
+                    fact("lock.iphone", "بإذن «دائمًا» تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى تغادر، أو يزيلك أمير الرحلة، أو تتوقف الطلعة أو تنتهي. لا نطلب «دائمًا» عند الانضمام؛ نعرضه لاحقًا إذا قفلت الشاشة أثناء الطلعة.")
+                    fact("iphone", "بإذن «أثناء الاستخدام» فقط: تُرسل والتطبيق مفتوح أمامك، وتتوقف إذا قفلت الشاشة.")
+                    fact("xmark.app", "إذا قفلت التطبيق من قائمة التطبيقات، قد لا يعيد iOS فتحه، فتتوقف المشاركة حتى تفتحه.")
+                    fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل لأصحابك ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
+                    fact("person.wave.2.fill", "«انقطع الإرسال»: إذا كنت تشارك وتوقف وصول موقعك ١٠ دقائق، يخبر الخادم أعضاء الطلعة بذلك مع آخر موقع معروف لك.")
                     fact("person.2.fill", "يراه أعضاء تلك الطلعة فقط، لا أحد غيرهم.")
-                    fact("trash", "الخادم يحفظ آخر موقع فقط، ويحذفه إذا أوقفت المشاركة أو أُوقفت الطلعة أو انتهت.")
+                    fact(SaryNearbyMark.icon, "إذا انقطع الإنترنت وأنت تشارك، يتبادل جوالك موقعك مباشرة مع جوالات أعضاء الطلعة القريبين (بلوتوث وواي فاي مباشر)، مشفّرًا ولا يقرؤه غيرهم، ويمرّر لهم آخر مواقع الباقين بعمرها الحقيقي. يتوقف مع توقف المشاركة، ولا يُرسل للخادم شيء مما يصل بهذه الطريقة.")
+                    fact("trash", "الخادم يحفظ آخر موقع لك فقط (لا مسارك)، ويحذفه إذا غادرت الطلعة أو أزالك أمير الرحلة أو أُوقفت الطلعة أو انتهت، ولا يبقى أي موقع أكثر من ٢٤ ساعة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
@@ -205,12 +245,22 @@ struct PrivacySettingsView: View {
             SarySection(title: "ما الذي يُرسل للخادم", footer: "لا إعلانات، لا تتبع، ولا بيع بيانات.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("person.text.rectangle", "اسمك وصورتك (إن وضعتها) ورقمك (إن كتبته): يراها أعضاء طلعاتك.")
-                    fact("location.fill", "موقعك أثناء المشاركة: آخر موقع فقط.")
+                    fact("location.fill", "موقعك ما دمت في طلعة شغّالة: آخر موقع فقط.")
                     fact(SaryIcon.note, "رسائلك القصيرة: ١٥ دقيقة ثم تختفي.")
-                    fact(SaryIcon.mic, "مقاطع «اضغط وتكلم»: في ذاكرة الخادم ١٠ دقائق فقط.")
+                    fact(SaryIcon.mic, "صوتك في «قناة الطلعة»: يمرّ عبر الخادم مباشرة لأعضاء الطلعة وأنت ضاغط على الزر فقط، ولا يُسجَّل ولا يُحفظ في أي مكان.")
                     fact(SaryIcon.sos, "الطوارئ: مع آخر موقع حقيقي لك، وتنتهي خلال ساعة أو بـ«أنا بخير».")
                     fact("flag.checkered", "ملخص رحلتك: مجاميع فقط، ولا يُرسل إلا إذا اخترت «شارك ملخصي».")
                     fact("map", "الخرائط من Mapbox: تطلب صور الخريطة للمنطقة المعروضة، دون اسمك أو حسابك.")
+                    fact(SaryIcon.directions, "«الملاحة»: نقطة البداية والوجهة تُرسل لـ Mapbox (أو لخادم الشركة إذا اخترته) لحساب الطريق فقط، دون اسمك أو حسابك. الصوت يُنطق على جوالك.")
+                    fact("play.rectangle.fill", "«يوتيوب»: الفيديو يعمل بمشغّل YouTube الرسمي (تطبّق عليه سياسة Google). في «قناة الطلعة» يرى أعضاء الطلعة الفيديو الذي شغّلته؛ «قناتي» لك وحدك.")
+                }
+                .padding(.vertical, theme.space(.s))
+            }
+            SarySection(title: "الطقس (Open-Meteo)", footer: "خدمة طقس مفتوحة بلا حساب ولا مفتاح. التنبيهات تقدير؛ التحذيرات الرسمية من المركز الوطني للأرصاد.") {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    fact("cloud.sun.fill", "منطقة الطلعة: نرسل إحداثيات تقريبية فقط، مقرّبة إلى ٠٫١° (نحو ١١ كم). لا نرسل أبدًا مواقع الأعضاء الحية.")
+                    fact("flag.checkered", "الوجهة، أو نقطة تختارها لـ«الطقس هنا»: نرسل إحداثياتها كما حُددت، لأنها مكان اخترتموه لا موقع شخص.")
+                    fact("person.crop.circle.badge.xmark", "لا يُرسل اسمك ولا حسابك ولا رقمك، ونحفظ آخر رد على جوالك ليعمل بلا إنترنت.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
@@ -272,8 +322,8 @@ struct DeleteAccountView: View {
             SarySection(title: "يُحذف من الخادم") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("person.text.rectangle", "اسمك وصورتك ورقم جوالك.")
-                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت صاحبها تنتقل لمساعدك أو لأقدم عضو، وإذا ما بقي أحد تنتهي.")
-                    fact("location.fill", "آخر موقع محفوظ لك، ورسائلك القصيرة، ونداء الطوارئ، ومقاطعك الصوتية.")
+                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت أمير الرحلة تنتقل الإمارة لنائبك أو لأقدم مشارك، وإذا ما بقي أحد تنتهي.")
+                    fact("location.fill", "آخر موقع محفوظ لك، ورسائلك القصيرة، ونداء الطوارئ، ورمز «قناة الطلعة» الذي يوقظ جوالك.")
                     fact("flag.checkered", "ملخصات رحلاتك التي شاركتها.")
                     fact("bell.fill", "تنبيهات هذا الجهاز وأي جهاز آخر، ورمز الاسترجاع.")
                 }
@@ -341,8 +391,20 @@ struct NotificationSettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @State private var explaining = false
+    /// «رسائل المحادثات» on the server (PUT /push/chat): the other members' pushes respect it.
+    @State private var chatPush = true
+    /// Shown only once the server answered (an older server has no chat: no toggle).
+    @State private var chatPrefsLoaded = false
     @Environment(AppearanceSettings.self) private var appearance
     private var push: PushRegistrar { model.push }
+
+    private func setChatPush(_ on: Bool) {
+        let before = chatPush
+        chatPush = on
+        Task {
+            do { chatPush = try await model.api.setChatPrefs(on).chat_push } catch { chatPush = before }
+        }
+    }
 
     var body: some View {
         let p = theme.palette
@@ -354,18 +416,29 @@ struct NotificationSettingsView: View {
                               }), id: "notify.toggle")
             }
             stateCard
+            if chatPrefsLoaded {
+            SarySection(footer: "تقدر توقف تنبيهات المحادثات وحدها وتبقى تنبيهات الطوارئ.") {
+                SaryToggleRow(title: "رسائل المحادثات", subtitle: "دردشة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
+                              isOn: Binding(get: { chatPush }, set: { on in setChatPush(on) }), id: "notify.chat")
+                    .disabled(!model.signedIn || model.isDemo)
+            }
+            }
             SarySection(title: "ما الذي يصلك") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     kind(SaryIcon.sos, p.emergency, "طوارئ", "تنبيه عاجل بصوت، حتى في وضع التركيز إذا سمحت بالتنبيهات العاجلة. يُستبدل بـ«أنا بخير» إذا انتهت.")
-                    kind(SaryIcon.note, nil, "رسالة من المجموعة", "بهدوء، بدون صوت.")
-                    kind(SaryIcon.mic, nil, "مقطع صوتي", "بهدوء، بدون صوت.")
+                    kind(SaryIcon.note, nil, "رسالة فوق السيارة", "بهدوء، بدون صوت.")
+                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل دردشة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
+                    kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت أصحابك مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
             Text("الضغط على أي تنبيه يفتح الطلعة نفسها. وأنت داخل الطلعة تظهر الرسائل والطوارئ على الخريطة مباشرة.")
                 .saryText(.footnote).foregroundStyle(p.textTertiary)
         }
-        .task { await push.refresh(signedIn: model.signedIn) }
+        .task {
+            await push.refresh(signedIn: model.signedIn)
+            if model.signedIn, !model.isDemo, let p = try? await model.api.chatPrefs() { chatPush = p.chat_push; chatPrefsLoaded = true }
+        }
         .sheet(isPresented: $explaining) {
             NotifyExplainerSheet(done: { explaining = false }).saryPresented(appearance)
         }
@@ -436,6 +509,8 @@ struct AboutView: View {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")
                     Text("محطات الوقود من OpenStreetMap (ODbL).")
                     Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
+                    Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
+                    HiResLicenseNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))
@@ -445,6 +520,40 @@ struct AboutView: View {
             }
             .buttonStyle(.sary(.secondary))
         }
+    }
+}
+
+/// «متقدم»: what used to hide behind taps on the version — the trail log export (GPX)
+/// for the team, and the route provider.
+struct AdvancedSettingsView: View {
+    var back: () -> Void
+    @Environment(\.sary) private var theme
+    @State private var gpx: [(id: String, url: URL)] = []
+    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.mapbox.rawValue
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "متقدم", back: back) {
+            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) بصيغة GPX، لترسله لفريق سَرى البارق إذا طلبوه.") {
+                if gpx.isEmpty {
+                    Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        .padding(.vertical, theme.space(.s))
+                }
+                ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
+                    ShareLink(item: item.url) {
+                        SaryButtonLabel(title: n == 0 ? "تصدير سجل المسار (GPX)" : "تصدير سجل المسار (GPX) · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("about.gpx.\(n)")
+                }
+            }
+            SarySection(title: "مزوّد المسارات", footer: "Mapbox هو الافتراضي. «فرق» يجرّب خادم الشركة (Valhalla) أولًا، و«تلقائي» يستخدمه فقط إذا كان مفعّلًا على الخادم؛ وإذا ما قدر يرد نرجع لـ Mapbox تلقائيًا.") {
+                SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
+                    get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },
+                    set: { navProvider = $0.rawValue }), label: \.label, id: "dev.navProvider")
+            }
+        }
+        .onAppear { gpx = TrailGPX.outings().prefix(5).compactMap { id in TrailGPX.export(outingId: id).map { (id, $0) } } }
     }
 }
 

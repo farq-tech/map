@@ -42,6 +42,21 @@ enum LocationTuning {
         }
     }
 
+    struct TrailSettings: Equatable {
+        var desiredAccuracy: CLLocationAccuracy
+        var distanceFilter: CLLocationDistance
+        var activityType: CLActivityType
+    }
+
+    /// «مساري» recording (OsmAnd-like): the best the chip can do, every fix (decimated in
+    /// code, smoothed by `TrailKalman`), the automotive model on roads and the generic
+    /// navigation model off-road (no road snapping in the desert).
+    static func trailSettings(onRoad: Bool) -> TrailSettings {
+        TrailSettings(desiredAccuracy: kCLLocationAccuracyBestForNavigation,
+                      distanceFilter: kCLDistanceFilterNone,
+                      activityType: onRoad ? .automotiveNavigation : .otherNavigation)
+    }
+
     /// CoreLocation → our fix. Negative accuracy means "invalid"; negative speed/course "unknown".
     static func deviceFix(_ l: CLLocation) -> DeviceFix? {
         guard l.horizontalAccuracy >= 0 else { return nil }
@@ -51,7 +66,8 @@ enum LocationTuning {
             accuracy: l.horizontalAccuracy,
             heading: l.course >= 0 ? l.course : nil,
             speed: l.speed >= 0 ? l.speed : nil,
-            atMs: l.timestamp.timeIntervalSince1970 * 1000
+            atMs: l.timestamp.timeIntervalSince1970 * 1000,
+            speedAccuracy: l.speedAccuracy >= 0 ? l.speedAccuracy : nil
         )
     }
 

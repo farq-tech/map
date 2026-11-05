@@ -4,11 +4,14 @@ import SwiftUI
 
 extension SheetDetentUI {
     /// Height of the minimized sheet: handle + summary line (+ drive size).
-    static func peekHeight(drive: Bool) -> CGFloat { drive ? 88 : 70 }
+    /// `trip`: the trip strip («قطعنا ٦٢٪ · باقي …») sits under the summary line.
+    static func peekHeight(drive: Bool, trip: Bool = false) -> CGFloat {
+        trip ? (drive ? 140 : 104) : (drive ? 88 : 70)
+    }
 
-    func presentationDetent(drive: Bool) -> PresentationDetent {
+    func presentationDetent(drive: Bool, trip: Bool = false) -> PresentationDetent {
         switch self {
-        case .peek: return .height(Self.peekHeight(drive: drive))
+        case .peek: return .height(Self.peekHeight(drive: drive, trip: trip))
         case .half: return .medium
         case .full: return .large
         }
@@ -35,15 +38,16 @@ extension SheetDetentUI {
 /// in drive mode / solid panel look / fallback.
 private struct SarySheetPresentation: ViewModifier {
     @Binding var detent: SheetDetentUI
+    var trip = false
     @Environment(\.sary) private var theme
 
     func body(content: Content) -> some View {
         let binding = Binding<PresentationDetent>(
-            get: { detent.presentationDetent(drive: theme.drive) },
+            get: { detent.presentationDetent(drive: theme.drive, trip: trip) },
             set: { detent = SheetDetentUI($0, drive: theme.drive) }
         )
         content
-            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: theme.drive) }), selection: binding)
+            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: theme.drive, trip: trip) }), selection: binding)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationDragIndicator(.visible)
             .presentationContentInteraction(.scrolls)
@@ -79,8 +83,8 @@ private struct SheetBackground: ViewModifier {
 
 extension View {
     /// Apply to the content of the live outing `.sheet`.
-    func sarySheetPresentation(detent: Binding<SheetDetentUI>) -> some View {
-        modifier(SarySheetPresentation(detent: detent))
+    func sarySheetPresentation(detent: Binding<SheetDetentUI>, trip: Bool = false) -> some View {
+        modifier(SarySheetPresentation(detent: detent, trip: trip))
     }
 }
 
@@ -91,6 +95,9 @@ extension View {
 struct SarySheetSummary: View {
     var participants: [ParticipantUI]
     var detent: SheetDetentUI
+    /// The trip ended: «انتهت الطلعة» in place of «… مباشر» (nobody is live any more,
+    /// though my own car still moves with this phone's GPS).
+    var ended = false
     var expand: () -> Void = {}
     @Environment(\.sary) private var theme
 
@@ -121,7 +128,7 @@ struct SarySheetSummary: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(SaryFormat.peekSummary(participants)))
+        .accessibilityLabel(Text(ended ? "\(SaryFormat.number(participants.count)) في الطلعة، انتهت الطلعة" : SaryFormat.peekSummary(participants)))
         .accessibilityHint(Text(detent == .peek ? "اضغط لعرض المشاركين" : ""))
         .accessibilityIdentifier("outing-sheet-summary")
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
@@ -130,16 +137,20 @@ struct SarySheetSummary: View {
     private func summaryText(count: Int, live: Int, nearest: Double?) -> some View {
         let p = theme.palette
         return HStack(spacing: 6) {
-            Text("\(SaryFormat.number(count)) مشارك").foregroundStyle(p.textPrimary)
+            Text("\(SaryFormat.number(count)) في الطلعة").foregroundStyle(p.textPrimary)
             dot
-            HStack(spacing: 4) {
-                Circle().fill(p.live).frame(width: 7, height: 7)
-                Text("\(SaryFormat.number(live)) مباشر").foregroundStyle(p.liveText)
-            }
-            if let nearest {
-                dot
-                Text("الأقرب \(SaryFormat.distance(meters: nearest))").foregroundStyle(p.textSecondary)
-                    .saryNumber(.callout, weight: .bold)
+            if ended {
+                Text("انتهت الطلعة").foregroundStyle(p.textSecondary)
+            } else {
+                HStack(spacing: 4) {
+                    Circle().fill(p.live).frame(width: 7, height: 7)
+                    Text("\(SaryFormat.number(live)) مباشر").foregroundStyle(p.liveText)
+                }
+                if let nearest {
+                    dot
+                    Text("الأقرب \(SaryFormat.distance(meters: nearest))").foregroundStyle(p.textSecondary)
+                        .saryNumber(.callout, weight: .bold)
+                }
             }
         }
         .saryText(.callout, weight: .bold)
@@ -156,6 +167,8 @@ struct SarySheetSummary: View {
 
 struct SaryTabBar: View {
     @Binding var selection: LiveTabUI
+    /// «المحادثات»: unread chat messages, shown on «المجموعة».
+    var groupBadge: Int = 0
     var body: some View {
         SarySegmented(
             options: LiveTabUI.allCases,
@@ -163,12 +176,19 @@ struct SaryTabBar: View {
             label: { $0.label },
             systemImage: { tab in
                 switch tab {
-                case .participants: return "person.2.fill"
-                case .invite: return "link"
-                case .settings: return SaryIcon.settings
+                case .trip: return "flag.checkered"
+                case .group: return "person.2.fill"
+                case .more: return "ellipsis.circle"
                 }
             },
-            id: "outing-tabs"
+            badge: { $0 == .group ? groupBadge : 0 },
+            optionID: { tab in
+                switch tab {
+                case .trip: return "tab.trip"
+                case .group: return "tab.group"
+                case .more: return "tab.more"
+                }
+            }
         )
     }
 }

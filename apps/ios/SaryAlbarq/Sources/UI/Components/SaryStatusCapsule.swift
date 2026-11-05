@@ -51,6 +51,8 @@ struct SaryStatusCapsule: View {
     var sharing: MySharingUI
     var warnings: [LiveWarningUI]
     @Binding var expanded: Bool
+    /// Cars of the outing heard directly phone to phone (`LiveOutingUIState.nearbyCars`).
+    var nearbyCars: Int = 0
     var back: () -> Void = {}
     var warningTapped: (LiveWarningUI) -> Void = { _ in }
 
@@ -96,11 +98,12 @@ struct SaryStatusCapsule: View {
                             .foregroundStyle(theme.palette.textPrimary)
                             .lineLimit(2)
                             .accessibilityIdentifier("outing-title")
-                        if status != .active || connection != .connected {
+                        if status != .active || connection != .connected || nearbyCars > 0 {
                             Text(subtitle)
                                 .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
                                 .lineLimit(1)
+                                .accessibilityIdentifier("outing-nearby")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,12 +170,14 @@ struct SaryStatusCapsule: View {
     }
 
     private var subtitle: String {
+        if let n = LiveOutingPresenter.nearbyLabel(nearbyCars) { return n }
         if connection != .connected { return connection.label }
         return status.label
     }
 
     private var accessibilitySummary: String {
         var parts = [outingName, connection.label]
+        if let n = LiveOutingPresenter.nearbyLabel(nearbyCars) { parts.append(n) }
         switch signals.gps {
         case .good: parts.append("الموقع دقيق")
         case .degraded: parts.append("إشارة الموقع ضعيفة")
@@ -189,6 +194,7 @@ struct SaryStatusCapsule: View {
         case .noInternet: return SaryIcon.offline
         case .keepScreenOn: return "iphone"
         case .locationOff: return SaryIcon.gpsOff
+        case .preciseOff: return "location.slash"
         }
     }
 
@@ -196,6 +202,7 @@ struct SaryStatusCapsule: View {
         switch w {
         case .weakGPS: return .degraded
         case .noInternet, .locationOff: return .bad
+        case .preciseOff: return .degraded
         case .keepScreenOn: return .unknown
         }
     }

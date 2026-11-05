@@ -56,7 +56,7 @@ struct OutingRowUI: Equatable, Identifiable {
     var name: String
     var status: OutingStatusUI
     var participantCount: Int
-    /// I own the outing («صاحب الطلعة»).
+    /// I own the outing («أمير الرحلة»).
     var isLeader: Bool
 }
 
@@ -109,6 +109,18 @@ struct InvitePreviewUI: Equatable {
     var inviterName: String
     var participantCount: Int
     var status: OutingStatusUI
+    /// «دعوة شخصية»: the name the leader gave me — I join as this person.
+    var inviteeName: String? = nil
+    /// «الوجهة: …» under the trip name; nil (older server or no destination) shows nothing.
+    var destinationName: String? = nil
+}
+
+extension InvitePreviewUI {
+    /// The server's `destination_name`, trimmed; blank means none.
+    static func destination(_ raw: String?) -> String? {
+        guard let t = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+        return t
+    }
 }
 
 enum InvitePhaseUI: Equatable {
@@ -118,6 +130,8 @@ enum InvitePhaseUI: Equatable {
     case expired
     /// The link is malformed or unknown.
     case invalid
+    /// A personal invite someone else already used: «هذه الدعوة لشخص آخر».
+    case taken
     /// Network or server error, retryable.
     case error(String)
 }

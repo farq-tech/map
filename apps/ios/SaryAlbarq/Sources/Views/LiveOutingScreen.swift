@@ -25,9 +25,20 @@ struct LiveOutingScreen: View {
     @StateObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var app: AppModel
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
     @State private var screenHeight: CGFloat = 0
+    /// While a finger is on the screen the alert lane holds still (a card arriving mid-tap
+    /// must not shift or cover what the person is touching); it catches up just after.
+    @State private var frozenAlerts: [LiveAlertUI]?
+    @State private var touching = false
+    @ObservedObject private var savedPlaces = SavedPlacesStore.shared
+    @ObservedObject private var trackLibrary = TrackLibrary.shared
+    /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
+    @State private var realistic: RealisticScene?
+    /// Tilted over a city: «اعرضها بالوضع الواقعي».
+    @ObservedObject private var visuals = MapVisualsHub.shared
 
     var body: some View {
         let ui = controller.ui
@@ -35,23 +46,55 @@ struct LiveOutingScreen: View {
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
+                let members = controller.mapMembers(theme: theme)
+                let exploring = controller.liveContext(drive: theme.drive) == .exploring
+                PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
-                    members: controller.mapMembers(theme: theme),
+                    members: members,
                     rally: controller.rallyPoint,
+                    trails: controller.mapTrails(members: members, driving: controller.liveContext(drive: theme.drive) == .driving),
                     camera: controller.camera,
                     chrome: chromeInsets(full: full),
                     theme: theme,
                     picking: controller.picking.active,
-                    following: controller.following,
+                    followMode: controller.mapFollowMode,
                     onMemberTap: { controller.openParticipant($0) },
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
+                    onEmptyTap: { controller.mapTappedEmpty($0, name: $1) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: {
+                        controller.cameraUserMoved()
+                        controller.userPannedMap = true
+                        controller.navUserMovedMap()
+                    },
+                    waypoints: controller.mapWaypoints,
+                    onWaypointTap: { controller.features.modal = .waypoint($0) },
+                    plan: plan,
+                    onLongPress: { controller.planLongPress($0, at: $1) },
+                    onWaterways: { controller.weather.setWaterways($0) },
+                    nav: controller.mapNav,
+                    onSelectRoute: { controller.nav.select($0) },
+                    /* The chosen layer and the 3D view are exploration's; the trip map stays on satellite
+                     * (the layer offline areas always cover). */
+                    layer: exploring ? controller.mapLayer : .satellite,
+                    terrain3D: exploring && controller.terrain3D,
+                    explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
+                    /* Build 10: clean imagery when a track is the subject; road names while navigating. */
+                    labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
+                    onCenter: { controller.mapCenterChanged($0) },
+                    hiRes: controller.hiResRequest(ui, exploring: exploring)
                 )
+                }
                 .ignoresSafeArea()
 
-                EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full))
+                if exploring {
+                    ExploreCrosshair(model: controller.exploreReading)
+                        .ignoresSafeArea()
+                }
+
+                EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full),
+                               driving: controller.liveContext(drive: theme.drive) == .driving, alerting: controller.alertingMemberIds)
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
 
@@ -59,9 +102,15 @@ struct LiveOutingScreen: View {
             }
             .onPreferenceChange(ChromeFramesKey.self) { frames = $0 }
         }
+        .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .ignoresSafeArea(.keyboard)
+        /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
+         * its own window (the dock's copy is hidden or covered then). */
+        .background(SOSOverlayHost(visible: controller.sheetDetent == .full || controller.modal != nil,
+                                   state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger))
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
+                .realisticCover($realistic)
                 .background {
                     /* The sheet's real top edge on screen (its content height leaves out the home-indicator area). */
                     GeometryReader { g in
@@ -71,7 +120,22 @@ struct LiveOutingScreen: View {
                     }
                 }
                 .saryAppearance(appearance)
-                .sarySheetPresentation(detent: $controller.sheetDetent)
+                .sarySheetPresentation(detent: $controller.sheetDetent, trip: false)
+        }
+    }
+
+    /// The chip sits level with the button's disc, above its caption.
+    private func showsCaptionPad(_ rowMode: Bool) -> CGFloat { rowMode ? 8 : 34 }
+
+    private func touchChanged(_ down: Bool) {
+        touching = down
+        controller.cameraTouch(down: down)
+        if down {
+            if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                if !touching { frozenAlerts = nil }
+            }
         }
     }
 
@@ -81,7 +145,7 @@ struct LiveOutingScreen: View {
     private var bottomInset: CGFloat {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
-        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive))
+        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: false))
     }
 
     private var topChromeBottom: CGFloat {
@@ -90,12 +154,12 @@ struct LiveOutingScreen: View {
 
     /// What our chrome covers, for the map's keep-group framing and ornaments.
     private func chromeInsets(full: CGSize) -> UIEdgeInsets {
-        let dockTop = ["dock", "cluster-row"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
+        let dockTop = ["dock", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
-        let cluster = frames["cluster"]
-        let left = cluster.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 } ?? 0
-        let right = cluster.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 } ?? 0
+        let side = ["cluster", "speed"].compactMap { frames[$0] }
+        let left = side.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 }.max() ?? 0
+        let right = side.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 }.max() ?? 0
         return UIEdgeInsets(top: topChromeBottom + 4, left: left, bottom: bottom + 4, right: right)
     }
 
@@ -107,7 +171,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed", "speedlimit", "readout", "recenter"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -115,31 +179,35 @@ struct LiveOutingScreen: View {
     @ViewBuilder
     private func chrome(_ ui: LiveOutingUIState, full: CGSize, safeBottom: CGFloat) -> some View {
         let rowMode = controller.sheetDetent == .half
+        let context = controller.liveContext(drive: theme.drive)
+        let driving = context == .driving
+        let exploring = context == .exploring
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
-        let items = controlItems(ui)
+        let items = exploring ? SaryMapControlItem.explore(terrain3D: controller.terrain3D, tracksShown: trackLibrary.shown.count)
+            : groupItems(driving: driving)
         ZStack {
             VStack(spacing: theme.space(.s)) {
-                VStack(spacing: theme.space(.s)) {
-                    if case let .active(since) = ui.sos.mine {
-                        SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
-                                       withLocation: controller.session.view?.me?.sos?.fix != nil)
-                    }
-                    ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
-                        SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
-                    }
-                    SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
-                                      warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
-                                      warningTapped: controller.actions.warningTapped)
-                    if !rowMode {
-                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive ? 1 : 3, tapped: controller.actions.alertTapped,
-                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
-                    }
+                LiveTopStack(controller: controller, ui: ui, alerts: frozenAlerts ?? ui.alerts, driving: driving, exploring: exploring, rowMode: rowMode,
+                             maxListHeight: max(220, full.height * 0.42), weather: controller.weather,
+                             plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller))
+                    .chromeFrame("top")
+                if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
+                    /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. Under the
+                       banner, where «استأنف التوجيه» sits too: never over the speed or the dock. */
+                    RecenterPill(title: title, action: controller.recenterCamera)
+                        .chromeFrame("recenter")
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .chromeFrame("top")
                 if controller.picking.active {
                     PickingBanner(moving: controller.picking.moving, cancel: controller.cancelPicking)
                         .chromeFrame("picking")
+                }
+                if offersCityRealistic(exploring: exploring, driving: driving) {
+                    /* A city tilted on draped imagery smears; Apple's photoreal 3D is one tap away, at the same camera. */
+                    RealisticEntryButton(id: "explore.city-realistic", title: "اعرضها بالوضع الواقعي") { openRealistic(atMapCamera: true) }
+                        .chromeFrame("city-realistic")
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
                 Spacer(minLength: 0)
             }
@@ -149,48 +217,130 @@ struct LiveOutingScreen: View {
             if controller.sheetDetent == .peek {
                 VStack {
                     Spacer()
-                    HStack {
+                    HStack(alignment: .bottom, spacing: theme.space(.s)) {
                         Spacer()
                         SaryControlCluster(items: items, axis: .vertical, action: controlTapped)
                             .chromeFrame("cluster")
                             .transition(.opacity)
                     }
                     .padding(.horizontal, theme.space(.m))
-                    Spacer().frame(height: lift + theme.bigButton + (theme.drive ? 72 : 56))
+                    Spacer().frame(height: lift + theme.bigButton + (theme.drive ? 72 : 56) + (exploring ? 76 : 0))
                 }
             }
 
-            VStack {
+            VStack(spacing: theme.space(.s)) {
                 Spacer()
-                HStack(alignment: .bottom) {
-                    SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
-                        .chromeFrame("ptt")
-                    Spacer()
-                    if rowMode {
-                        SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)
-                            .chromeFrame("cluster-row")
-                            .transition(.opacity)
-                        Spacer()
-                    }
-                    SarySOSButton(state: ui.sos.mine, trigger: controller.actions.sos.trigger)
-                        .chromeFrame("sos")
-                        .padding(.bottom, rowMode ? 0 : 22)
+                if exploring && controller.sheetDetent == .peek {
+                    ExploreReadout(model: controller.exploreReading, format: controller.coordFormat,
+                                   toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
+                                   copy: controller.copyCrosshair, save: controller.saveCrosshair)
+                        .chromeFrame("readout")
+                        .padding(.horizontal, theme.space(.m))
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .chromeFrame("dock")
-                .padding(.horizontal, theme.space(.l))
-                .padding(.bottom, lift + theme.space(.m))
-                .opacity(controller.sheetDetent == .full ? 0 : 1)
-                .allowsHitTesting(controller.sheetDetent != .full)
+                if controller.tripEnded {
+                    /* Build 11: an ended trip kept «اضغط وتكلم» and SOS as if it were still on. */
+                    EndedTripBanner(summary: controller.openSummary, home: controller.onExit)
+                        .chromeFrame("dock")
+                        .padding(.horizontal, theme.space(.m))
+                        .padding(.bottom, lift + theme.space(.m))
+                        .opacity(controller.sheetDetent == .full ? 0 : 1)
+                        .allowsHitTesting(controller.sheetDetent != .full)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    HStack(alignment: .bottom) {
+                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode, level: controller.pttLevel)
+                            .chromeFrame("ptt")
+                            .overlay(alignment: .top) {
+                                /* «سرعة المركبة» only while driving, right above «اضغط وتكلم», on the other side
+                                 * from the map buttons; while guiding the posted limit sits beside it. An overlay,
+                                 * so the dock's measured frame stays as it was. */
+                                HStack(alignment: .center, spacing: theme.space(.s)) {
+                                    if driving {
+                                        SarySpeedometer(ui: controller.speedometerUI)
+                                            .chromeFrame("speed")
+                                            .transition(.opacity)
+                                        if controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
+                                            NavSpeedLimitSign(kmh: k)
+                                                .chromeFrame("speedlimit")
+                                                .transition(.scale.combined(with: .opacity))
+                                        }
+                                    }
+                                }
+                                .fixedSize()
+                                .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
+                            }
+                        /* «ترددات»: which channel the button talks on; tap for all of them. */
+                        if controller.session.walkie.showsChannels {
+                            PTTChannelChip(walkie: controller.session.walkie, open: { controller.modal = .pttChannels })
+                                .chromeFrame("ptt-channel")
+                                .padding(.bottom, showsCaptionPad(rowMode))
+                        }
+                        Spacer()
+                        if rowMode {
+                            SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)
+                                .chromeFrame("cluster-row")
+                                .transition(.opacity)
+                            Spacer()
+                        }
+                        SarySOSButton(state: ui.sos.mine, trigger: controller.actions.sos.trigger)
+                            .chromeFrame("sos")
+                            .padding(.bottom, rowMode ? 0 : 22)
+                    }
+                    .chromeFrame("dock")
+                    .padding(.horizontal, theme.space(.l))
+                    .padding(.bottom, lift + theme.space(.m))
+                    .opacity(controller.sheetDetent == .full ? 0 : 1)
+                    .allowsHitTesting(controller.sheetDetent != .full)
+                }
             }
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
+        .animation(theme.animation(.smooth), value: controller.tripEnded)
         .animation(theme.animation(.smooth), value: sheetTop)
+        .animation(theme.animation(.smooth), value: driving)
+        .animation(theme.animation(.smooth), value: exploring)
+        .animation(theme.animation(.snappy), value: controller.recenterTitle)
+        .environment(\.safetyAlertActions, controller.safety.alertActions)
+        .environment(\.convoyAlertActions, controller.convoyAlertActions)
+        .animation(theme.animation(.smooth), value: controller.backTrack != nil)
+        .animation(theme.animation(.smooth), value: controller.nav.phase)
+        .animation(theme.animation(.smooth), value: visuals.cityTilt)
     }
 
-    private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
-        let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
-        let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil)
-        return theme.drive ? Array(all.prefix(2)) : all
+    /// Exploring, tilted over a city, online, stopped and not guiding (the realistic view's own rules).
+    private func offersCityRealistic(exploring: Bool, driving: Bool) -> Bool {
+        exploring && !driving && visuals.cityTilt && app.online && !controller.nav.isActive && !controller.motion.moving
+            && !controller.picking.active && controller.sheetDetent != .full
+    }
+
+    private func openRealistic(atMapCamera: Bool = false) {
+        /* Looking, not driving: navigation and movement stay on the trip map. */
+        if controller.nav.isActive || controller.motion.moving { controller.toast("الوضع الواقعي متاح وأنت واقف"); return }
+        var scene = RealisticScene.live(controller, plan: app.plans.model(controller.session.id), places: savedPlaces.places)
+        if atMapCamera { scene.camera = visuals.realisticCamera() }
+        realistic = scene
+    }
+
+    /// The one floating group: «موقعي» · «المجموعة» (+ «طريق العودة» when it fits the moment)
+    /// + «+» when stopped. Guiding: the guidance camera takes «موقعي»'s place.
+    private func groupItems(driving: Bool) -> [SaryMapControlItem] {
+        let all = SaryMapControlItem.liveDefaults(following: controller.following, backTracking: controller.backTrack != nil)
+        let pick = { (id: String) in all.first { $0.id == id } }
+        var items: [SaryMapControlItem] = []
+        if controller.nav.isActive {
+            items = controller.navControlItems
+        } else {
+            items = [controller.cameraModeItem] + [pick("fit")].compactMap { $0 }
+            if controller.showsBackTrackShortcut, let b = pick("backtrack") { items.append(b) }
+        }
+        if !driving {
+            var plus = SaryMapControlItem.actions
+            /* I am stuck: «غرّزت» is in there. */
+            if controller.safety.myStuck != nil { plus.badge = 1 }
+            items.append(plus)
+        }
+        return items
     }
 
     private func controlTapped(_ id: String) {
@@ -198,10 +348,314 @@ struct LiveOutingScreen: View {
         switch id {
         case "locate": a.locateMe()
         case "fit": a.fitGroup()
-        case "note": a.openNoteComposer()
-        case "nearest": a.openNearestStations()
-        default: break
+        case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
+        case "actions": controller.modal = .actions
+        case "layers": controller.modal = .layers
+        case "terrain": controller.terrain3D.toggle()
+        case "places": controller.modal = .places
+        case "tracks": controller.modal = .tracks
+        case "realistic": openRealistic()
+        default: controller.navControlTapped(id)
         }
+    }
+}
+
+/// Everything at the top of the live screen: safety strips, then ONE top bar (the trip
+/// header, or the maneuver banner / «طريق العودة» while driving), the status details or
+/// the bell's list, and at most ONE alert card (docs/IA-REDESIGN.md §2.2, §2.5).
+private struct LiveTopStack: View {
+    @ObservedObject var controller: LiveOutingController
+    var ui: LiveOutingUIState
+    var alerts: [LiveAlertUI]
+    var driving: Bool
+    var exploring = false
+    var rowMode: Bool
+    var maxListHeight: CGFloat
+    @ObservedObject var weather: OutingWeather
+    @ObservedObject var plan: PlanModel
+    @ObservedObject var media: MediaCenter
+    @EnvironmentObject private var location: LocationSharer
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let nav = controller.nav
+        let guidance = nav.phase == .guiding || nav.phase == .offRoad || nav.phase == .arrived
+        /* Driving with a banner of its own (guidance or «طريق العودة»): that banner IS the top bar. */
+        let bannerOnly = driving && (guidance || controller.backTrackUI != nil || controller.followUI != nil)
+        let card = rowMode || controller.bellOpen ? nil : AlertQueue.card(alerts, driving: driving)
+        let mediaQueued = media.notice != nil && (driving || card != nil || rowMode)
+        let bell = AlertQueue.ordered(alerts).count - (card == nil ? 0 : 1) + (mediaQueued ? 1 : 0)
+        VStack(spacing: theme.space(.s)) {
+            if case let .active(since) = ui.sos.mine {
+                SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
+                               withLocation: controller.session.displayView?.me?.sos?.fix != nil,
+                               enjad: { controller.openEnjad(.emergency) })
+            }
+            ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
+                SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
+            }
+            if let stuck = controller.safety.myStuck {
+                MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
+                             clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy,
+                             enjad: { controller.openEnjad(.stuck) })
+            }
+            if exploring {
+                ExploreHeader(layer: controller.mapLayer, bell: bell, bellOpen: controller.bellOpen, hasHistory: !controller.alertHistory.isEmpty,
+                              back: controller.actions.back, exit: { controller.exitExplore() },
+                              bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() })
+            } else if !bannerOnly {
+                header(bell: bell)
+                if controller.statusExpanded {
+                    TripStatusDetails(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings, nearbyCars: ui.nearbyCars,
+                                      warningTapped: controller.actions.warningTapped)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            navTop
+            if !exploring, let prompt = controller.guidancePrompt {
+                /* The trip runs without guidance on this phone: one tap, for me only. */
+                GuidancePromptRow(prompt: prompt, leaderName: controller.leaderName, start: controller.startGuidanceForMe)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            /* «إذاعة الطلعة»: what the trip listens to, also while navigating (Sources/Media/GroupAudio). */
+            GroupAudioMiniBar(center: GroupAudioCenters.of(controller))
+            if let bt = controller.backTrackUI {
+                BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            /* «اسلك هذا المسار»; while «الملاحة» guides me to the track, its banner is the one header. */
+            if !guidance, let f = controller.followUI {
+                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.stopFollow, approach: controller.approachFollow)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            if controller.bellOpen {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: theme.space(.s)) {
+                        SaryAlertLane(alerts: AlertQueue.ordered(alerts), limit: 99, tapped: controller.actions.alertTapped,
+                                      dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
+                        MediaNoticeLane(center: media)
+                        let active = Set(alerts.map(\.id))
+                        let past = controller.alertHistory.filter { !active.contains($0.id) }
+                        if !past.isEmpty { AlertHistoryList(entries: past, now: ui.now) }
+                        if past.isEmpty && AlertQueue.ordered(alerts).isEmpty && media.notice == nil {
+                            Text("ما فيه تنبيهات").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                                .frame(maxWidth: .infinity).padding(theme.space(.m))
+                                .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .chrome)
+                        }
+                    }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: maxListHeight)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("alerts.list")
+                .transition(.move(edge: .top).combined(with: .opacity))
+            } else if let card {
+                SaryAlertLane(alerts: [card], limit: 1, tapped: controller.actions.alertTapped,
+                              dismiss: controller.actions.dismissAlert, voice: controller.actions.voice, silent: controller.actions.silent)
+            } else if !driving && !rowMode {
+                /* «في قناة الطلعة»: the lowest tier, shown only when nothing else wants the spot. */
+                MediaNoticeLane(center: media)
+            }
+            if let t = AlertQueue.toast(alerts) {
+                SaryAlertCard(alert: t)
+                    .transition(.opacity)
+            }
+        }
+        .animation(theme.animation(.smooth), value: controller.bellOpen)
+        .animation(theme.animation(.smooth), value: controller.statusExpanded)
+        .animation(theme.animation(.enter), value: card?.id)
+    }
+
+    private func header(bell: Int) -> some View {
+        TimelineView(.periodic(from: .now, by: 15)) { ctx in
+            let trip = controller.showsTripStrip ? controller.tripPanel : nil
+            let follow = plan.following && plan.plan.hasRoute ? TripHeaderPresenter.follow(plan.followStatus(fix: location.lastFix, now: ctx.date)) : nil
+            let h = TripHeaderUI(title: TripHeaderPresenter.title(outingName: ui.outingName, trip: trip, ended: controller.tripEnded),
+                                 line: TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars),
+                                 level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
+                                 bell: bell)
+            TripHeader(ui: h, weather: weather.chip(now: ctx.date),
+                       accessibility: [ui.outingName, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line, ui.connection.label].compactMap { $0 }.joined(separator: "، "),
+                       back: controller.actions.back,
+                       open: controller.openTripDetails,
+                       statusTapped: { controller.bellOpen = false; controller.statusExpanded.toggle() },
+                       weatherTapped: { controller.modal = .weather },
+                       bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() },
+                       bellOpen: controller.bellOpen,
+                       hasHistory: !controller.alertHistory.isEmpty,
+                       exploreTapped: driving || controller.nav.isActive ? nil : { controller.enterExplore() })
+        }
+        .task { controller.feedWeather(force: true) }
+    }
+
+    /// «الملاحة» at the top: the maneuver banner, the off-road leg, or «وصلت».
+    @ViewBuilder
+    private var navTop: some View {
+        let nav = controller.nav
+        switch nav.phase {
+        case .guiding:
+            NavManeuverBanner(nav: nav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            if let moved = controller.navMemberMovedMeters, let t = nav.target {
+                Button { controller.navigateToMember(t.memberId ?? "") } label: {
+                    SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) · حدّث الطريق", systemImage: SaryIcon.retry)
+                }
+                .buttonStyle(.sary(.secondary, compact: true))
+                .accessibilityIdentifier("nav.memberMoved")
+            }
+        case .offRoad:
+            if controller.autoNavFollowId != nil, let f = controller.followUI {
+                /* The trip's off-road leg along the plan's drawn route: the track panel is the one header. */
+                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.endNav, approach: controller.approachFollow)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        case .arrived:
+            NavArrivalCard(nav: nav, end: controller.endNav)
+                .transition(.move(edge: .top).combined(with: .opacity))
+        default:
+            EmptyView()
+        }
+    }
+}
+
+/// «طريق العودة»: big arrow, distance back to «نقطة البداية» along my trail, and the
+/// off-track warning. Opaque and larger in drive mode; works offline (all on the phone).
+struct BackTrackPanel: View {
+    var ui: BackTrackUI
+    var exit: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let off = ui.phase == .offTrack
+        let arrived = ui.phase == .arrived
+        let arrowSize: CGFloat = theme.drive ? 92 : 68
+        let tone: Color = off ? p.emergency : (arrived ? p.live : p.accent)
+        HStack(spacing: theme.space(.m)) {
+            ZStack {
+                Circle().fill(tone)
+                if arrived {
+                    Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(Color.white)
+                } else if ui.phase == .waitingFix {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: arrowSize * 0.5, weight: .black))
+                        .foregroundStyle(Color.white)
+                        .rotationEffect(.degrees(ui.arrowDegrees))
+                        .animation(theme.animation(.smooth), value: ui.arrowDegrees)
+                }
+            }
+            .frame(width: arrowSize, height: arrowSize)
+            /* A real-world direction: never mirrored by the RTL layout. */
+            .environment(\.layoutDirection, .leftToRight)
+            .overlay(Circle().stroke(Color.white, lineWidth: 3))
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .saryText(theme.drive ? .title2 : .headline, weight: .bold)
+                    .foregroundStyle(off ? p.emergencyText : p.textPrimary)
+                    .accessibilityIdentifier("backtrack.title")
+                if let m = ui.remainingMeters, !arrived {
+                    Text(SaryFormat.distance(meters: m))
+                        .saryNumber(theme.drive ? .display : .title, weight: .heavy)
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .accessibilityIdentifier("backtrack.distance")
+                }
+                Text(detail)
+                    .saryText(theme.drive ? .callout : .footnote, weight: .medium)
+                    .foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: exit) {
+                Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold)
+            }
+            .buttonStyle(.sary(.secondary, width: .hug, compact: !theme.drive))
+            .accessibilityIdentifier("backtrack.exit")
+        }
+        .padding(theme.space(.m))
+        .background {
+            /* Drive mode and the warning: fully opaque, readable at a glance in sun. */
+            if theme.drive || off {
+                RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.chromeOpaque)
+            }
+        }
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
+        .overlay {
+            if off { RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.emergency, lineWidth: 3) }
+        }
+        .sensoryFeedback(.warning, trigger: off) { was, now in now && !was }
+        .sensoryFeedback(.success, trigger: arrived) { was, now in now && !was }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("backtrack.panel")
+    }
+
+    private var title: String {
+        switch ui.phase {
+        case .waitingFix: return "طريق العودة"
+        case .onTrail: return "طريق العودة"
+        case .offTrack: return "خرجت عن الطريق"
+        case .arrived: return "وصلت نقطة البداية"
+        }
+    }
+
+    private var detail: String {
+        switch ui.phase {
+        case .waitingFix: return "ننتظر موقعك من GPS…"
+        case .arrived: return "هنا دخلت أول مرة."
+        case .offTrack:
+            let m = ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? ""
+            return "أنت على بعد \(m) من مسارك · ارجع له باتجاه السهم (\(ui.directionLabel))"
+        case .onTrail:
+            if ui.onGap { return "هذا الجزء لم يُسجَّل: خط مستقيم تقريبي، انتبه للطريق" }
+            return "باقي إلى نقطة البداية على مسارك · \(ui.directionLabel)"
+        }
+    }
+}
+
+/// «الرحلة انتهت» in place of the walkie-talkie and SOS once the outing has ended:
+/// the summary, or back to the outings list.
+struct EndedTripBanner: View {
+    var summary: () -> Void
+    var home: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack(spacing: theme.space(.s)) {
+                Image(systemName: "flag.checkered")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(p.accentText)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("الرحلة انتهت").saryText(.headline, weight: .heavy).foregroundStyle(p.textPrimary)
+                    Text("ما أحد يشارك موقعه الآن.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("live.ended.title")
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: theme.space(.s)) {
+                Button(action: summary) { SaryButtonLabel(title: "اعرض الملخص", systemImage: "chart.bar.doc.horizontal") }
+                    .buttonStyle(.sary(.primary, compact: true))
+                    .accessibilityIdentifier("live.ended.summary")
+                Button(action: home) { SaryButtonLabel(title: "ارجع لطلعاتي", systemImage: "list.bullet") }
+                    .buttonStyle(.sary(.secondary, compact: true))
+                    .accessibilityIdentifier("live.ended.home")
+            }
+        }
+        .padding(theme.space(.m))
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("live.ended")
     }
 }
 
@@ -233,6 +687,9 @@ private struct EdgeArrowLayer: View {
     let controller: LiveOutingController
     var area: CGRect
     var avoid: [CGRect]
+    /// Driving: only members in an alert state get an arrow.
+    var driving = false
+    var alerting: Set<String> = []
     @Environment(\.sary) private var theme
 
     static let chip = CGSize(width: 104, height: 38)
@@ -255,7 +712,11 @@ private struct EdgeArrowLayer: View {
     var body: some View {
         let parts = Dictionary(LiveOutingPresenter.participants(controller.input).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let me = controller.session.view?.myId
-        let pts = overlay.projection.points.filter { $0.key != me }.map { (id: $0.key, point: $0.value) }.sorted { $0.id < $1.id }
+        let all = overlay.projection.points.filter { $0.key != me }.map { (id: $0.key, point: $0.value) }.sorted { $0.id < $1.id }
+        /* At most three, alert members first then the nearest (docs/IA-REDESIGN.md §2.6). */
+        let off = all.filter { EdgeArrows.spot(id: $0.id, point: $0.point, area: area, chip: Self.chip) != nil }
+        let keep = Set(EdgeArrows.pick(candidates: off.map { (id: $0.id, distance: parts[$0.id]?.distanceMeters) }, alerting: alerting, driving: driving))
+        let pts = off.filter { keep.contains($0.id) }
         let spots = EdgeArrows.place(points: pts, area: area, chip: Self.chip, avoid: keepOut(me: me, parts: parts))
         SaryMapOverlayLayer {
             ForEach(spots, id: \.id) { s in
@@ -271,5 +732,35 @@ private struct EdgeArrowLayer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(theme.animation(.snappy), value: spots.map(\.id))
+    }
+}
+
+/// «رجّعني للتوجيه»: big, one tap, above the dock (≥ 56 pt while driving).
+struct RecenterPill: View {
+    var title: String
+    var action: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: theme.space(.s)) {
+                Image(systemName: "location.north.line.fill")
+                    .font(.system(size: theme.drive ? 22 : 18, weight: .bold))
+                Text(title)
+                    .saryText(theme.drive ? .headline : .callout, weight: .bold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(theme.palette.onAccent)
+            .padding(.horizontal, theme.space(.l))
+            .frame(minHeight: theme.drive ? 60 : 50)
+            .background(Capsule().fill(theme.palette.accent))
+            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+        }
+        .buttonStyle(SaryPressStyle())
+        .sensoryFeedback(.impact, trigger: title)
+        .accessibilityLabel(Text(title))
+        .accessibilityHint(Text("يرجّع الخريطة خلف سيارتك وباتجاه سيرك"))
+        .accessibilityIdentifier("camera.recenter")
     }
 }

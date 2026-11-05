@@ -11,9 +11,13 @@ struct SaryMapControlItem: Identifiable, Equatable {
     var isActive = false
     /// Small count badge (e.g. unread notes).
     var badge: Int?
+    /// VoiceOver hint (what a tap does next).
+    var hint: String? = nil
+    /// VoiceOver value / UI-test state (e.g. the camera mode).
+    var value: String? = nil
 
     static func == (a: Self, b: Self) -> Bool {
-        a.id == b.id && a.systemImage == b.systemImage && a.isActive == b.isActive && a.badge == b.badge && a.label == b.label
+        a.id == b.id && a.systemImage == b.systemImage && a.isActive == b.isActive && a.badge == b.badge && a.label == b.label && a.value == b.value
     }
 }
 
@@ -32,6 +36,8 @@ struct SaryMapControlButton: View {
         .buttonStyle(SaryPressStyle())
         .sensoryFeedback(.selection, trigger: item.isActive)
         .accessibilityLabel(Text(item.label))
+        .accessibilityHint(Text(item.hint ?? ""))
+        .accessibilityValue(Text(item.value ?? ""))
         .accessibilityAddTraits(item.isActive ? .isSelected : [])
         .accessibilityIdentifier(item.accessibilityID)
     }
@@ -138,6 +144,8 @@ private struct ControlAccessibility: ViewModifier {
     func body(content: Content) -> some View {
         content
             .accessibilityLabel(Text(item.label))
+            .accessibilityHint(Text(item.hint ?? ""))
+            .accessibilityValue(Text(item.value ?? ""))
             .accessibilityAddTraits(item.isActive ? .isSelected : [])
             .accessibilityIdentifier(item.accessibilityID)
             .sensoryFeedback(.selection, trigger: item.isActive)
@@ -146,13 +154,20 @@ private struct ControlAccessibility: ViewModifier {
 
 extension SaryMapControlItem {
     /// The standard live-outing side controls, with the web's identifiers.
-    static func liveDefaults(following: Bool = false, unreadNotes: Int? = nil) -> [SaryMapControlItem] {
+    static func liveDefaults(following: Bool = false, unreadNotes: Int? = nil, backTracking: Bool = false) -> [SaryMapControlItem] {
         [
             .init(id: "locate", systemImage: following ? SaryIcon.locateFollow : SaryIcon.locate,
                   label: "موقعي", accessibilityID: "outing-locate", isActive: following),
             .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "المجموعة", accessibilityID: "outing-fit"),
             .init(id: "note", systemImage: SaryIcon.note, label: "رسالة", accessibilityID: "outing-note-open", badge: unreadNotes),
             .init(id: "nearest", systemImage: SaryIcon.nearest, label: "أقرب محطة", accessibilityID: "outing-nearest-open"),
+            .init(id: "backtrack", systemImage: SaryIcon.backTrack, label: "طريق العودة", accessibilityID: "outing-backtrack", isActive: backTracking),
         ]
     }
+}
+
+extension SaryMapControlItem {
+    /// «+»: opens the grouped actions sheet (`LiveActionSheet`), the only other button
+    /// in the floating group besides «موقعي» and «المجموعة» (docs/IA-REDESIGN.md §2.3).
+    static let actions = SaryMapControlItem(id: "actions", systemImage: "plus", label: "أدوات الطلعة", accessibilityID: "outing-actions")
 }

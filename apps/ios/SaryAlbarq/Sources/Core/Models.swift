@@ -45,12 +45,19 @@ struct Member: Codable, Equatable, Identifiable {
     var last_seen_at: String?
     var gps: GpsState?
     var note: MemberNote?
-    /// «مساعد»: promoted by the owner; may manage the rally point.
+    /// «نائب الأمير»: promoted by the owner; may manage the rally point.
     var co_leader: Bool?
     /// Shared only when that member chose to (heartbeat `battery`).
     var battery: BatteryInfo?
     /// Their SOS, while it stands (memory-only on the server, 60 min TTL).
     var sos: SosInfo?
+    /// «دعوة شخصية»: `display_name` is then the name the inviter gave them («فهد أخوي»);
+    /// `nickname` is their own name, shown secondarily (nil when the same or not invited).
+    var nickname: String? = nil
+    /// Joined through a personal invite.
+    var invited: Bool? = nil
+    /// Last four digits of the number they were invited on (never the full number).
+    var phone_last4: String? = nil
 
     var id: String { user_id }
 }
@@ -119,6 +126,8 @@ struct OutingInfo: Codable, Equatable {
     var ended_at: String?
     var rally: RallyInfo?
     var join_locked: Bool?
+    /// «وضع القافلة» (contract §4); nil or both ids nil = off.
+    var convoy: ConvoyInfo?
 }
 
 struct SnapshotMe: Codable, Equatable {
@@ -134,6 +143,23 @@ struct SnapshotMe: Codable, Equatable {
 struct InviteState: Codable, Equatable {
     var active: Bool
     var expires_at: String?
+    /// «الرابط المفتوح»: may the open group link admit people? nil (older server) = yes.
+    var open_links: Bool? = nil
+}
+
+/// «دعوة شخصية» as the leader sees it: one line per person invited.
+struct PersonalInvite: Codable, Equatable, Identifiable {
+    enum Status: String, Codable { case sent, opened, joined, expired, revoked }
+    var id: String
+    var invitee_name: String
+    var phone_last4: String?
+    var status: Status
+    var opened: Bool?
+    var created_at: String?
+    var expires_at: String
+    var member_user_id: String?
+    /// Only in the answer that created / re-sent it; kept on this phone after that.
+    var token: String?
 }
 
 struct OutingSnapshot: Codable, Equatable {
@@ -146,6 +172,20 @@ struct OutingSnapshot: Codable, Equatable {
     var voice_clips: [VoiceClip]?
     /// Totals members chose to share once the outing ended (never points).
     var summaries: [TripShare]?
+    /// «غرّزت»: who is stuck right now, with the replies (nil while the server does not send it).
+    var stuck: [StuckWire]? = nil
+    /// Tolerated at the top level too, in case the server sends it there.
+    var convoy: ConvoyInfo?
+    /// Optional, members only: 32 random bytes (base64url) keying the
+    /// phone-to-phone link (`MeshKeys`). Until the server sends it, the app
+    /// derives an interim key from the outing id (see docs/NEARBY-MESH.md).
+    var mesh_key: String? = nil
+    /// Members whose sharing went silent ≥10 min (server-decided). Never draw them as live.
+    var silent: [SilentInfo]? = nil
+    /// Leaders only: the personal invites of this trip (nil from older servers / for members).
+    var personal_invites: [PersonalInvite]? = nil
+    /// «المحادثات»: my unread chat messages in this trip (nil from older servers).
+    var chat_unread: Int? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).
@@ -179,6 +219,17 @@ struct InvitePreview: Codable, Equatable {
     var owner_name: String
     var member_count: Int
     var expires_at: String
+    var join_locked: Bool? = nil
+    /// "personal": one link for one person — whoever joins becomes `invitee_name` in the trip.
+    var kind: String? = nil
+    var invitee_name: String? = nil
+    /// open · yours (used by me: rejoin) · taken (someone else used it) · claimed (used; asked anonymously).
+    var claim: String? = nil
+    var already_member: Bool? = nil
+    /// The trip's destination («روضة الثمامة»), when the server sends it (newer servers only).
+    var destination_name: String? = nil
+
+    var isPersonal: Bool { kind == "personal" }
 }
 
 struct CreatedInvite: Codable, Equatable {

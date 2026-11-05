@@ -20,9 +20,9 @@ enum ParticipantPresence: Equatable {
 
 /// Role inside one outing.
 enum ParticipantRole: Equatable {
-    /// Created the outing: «صاحب الطلعة».
+    /// Created the outing: «أمير الرحلة».
     case leader
-    /// Promoted by the leader: «مساعد». Can manage the rally point.
+    /// Promoted by the leader: «نائب الأمير». Can manage the rally point.
     case coLeader
     case member
 
@@ -98,13 +98,40 @@ struct ParticipantUI: Equatable, Identifiable {
     var hasPhone: Bool
     /// Optional photo. Initials on their colour are drawn when nil.
     var photo: UIImage?
+    /// Their position came phone to phone («عبر الأجهزة القريبة»), not from the server.
+    /// `presence` still carries its real age: a relayed old fix is stale like any other.
+    var viaNearby: Bool = false
+    /// Their speed in km/h, only from a fresh (live) position; nil hides it
+    /// (stale: just «آخر موقع قبل …», never an old speed).
+    var speedKmh: Double? = nil
+    /// Their sharing went silent (server-decided): when their last fix arrived. Shows «انقطع منذ ١٠ د».
+    var silentSince: Date? = nil
+    /// «الرحلة»: metres left to the destination, only from a LIVE position (nil hides it:
+    /// an old position shows its age, never an old distance).
+    var tripRemainingMeters: Double? = nil
+    /// The remaining distance is a straight line («تقريبي»).
+    var tripRemainingApprox: Bool = true
+    /// Reached the destination: the «وصل» badge.
+    var tripArrived: Bool = false
+    /// «ذكاء القافلة»: metres from the convoy leader, only when both positions are LIVE (nil hides it).
+    var leaderDistanceMeters: Double? = nil
+    /// This member is the one distances are measured from («القائد»).
+    var isConvoyLeader: Bool = false
+    /// «أمير الرحلة» or «المقدمة»: what the reference is called on the rows.
+    var leaderTitle: String = "أمير الرحلة"
+    /// Live and standing still since (≤ 3 km/h), from this phone's watch; nil while moving / not live.
+    var stoppedSince: Date? = nil
+    /// «دعوة شخصية»: their own name, shown secondarily beside the name the leader gave them.
+    var nickname: String? = nil
+    /// In the trip but no position has ever reached us (the outing is running): «ما شارك موقعه».
+    var neverShared: Bool = false
 
-    /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
+    /// «أمير الرحلة» / «نائب الأمير» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {
         var parts: [String] = []
         switch role {
-        case .leader: parts.append("صاحب الطلعة")
-        case .coLeader: parts.append("مساعد")
+        case .leader: parts.append("أمير الرحلة")
+        case .coLeader: parts.append("نائب الأمير")
         case .member: break
         }
         if isMe { parts.append("أنت") }

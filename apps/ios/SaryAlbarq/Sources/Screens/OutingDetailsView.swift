@@ -37,7 +37,7 @@ struct OutingDetailsView: View {
                 SarySection(title: "الطلعة") {
                     infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     SaryDivider()
-                    infoRow(SaryIcon.crown, "صاحب الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
+                    infoRow(SaryIcon.crown, "أمير الرحلة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
                     if let d = ISODate.parse(s.outing.started_at) {
                         SaryDivider()
                         infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))
@@ -50,6 +50,7 @@ struct OutingDetailsView: View {
                         infoRow("lock.fill", "الانضمام", "مقفول")
                     }
                 }
+                PlanDetailsSections(snapshot: s, plan: model.plans.model(outingId))
                 let colors = CarColors.assign(s.members)
                 SarySection(title: "من في الطلعة") {
                     ForEach(Array(s.members.enumerated()), id: \.element.user_id) { i, m in
@@ -63,6 +64,9 @@ struct OutingDetailsView: View {
                         }
                         .padding(.vertical, theme.space(.xs))
                     }
+                }
+                if s.outing.status != .ended {
+                    DetailsWeatherSection(snapshot: s, myFix: model.location.lastFix, plan: model.plans.model(outingId))
                 }
                 if s.outing.status != .ended {
                     Button { model.open(outingId) } label: { SaryButtonLabel(title: "افتح الخريطة", systemImage: "map.fill") }
@@ -134,9 +138,15 @@ struct TripSummaryView: View {
     var back: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    @Environment(AppearanceSettings.self) private var appearance
     @State private var phase: SnapshotPhase = .loading
     @State private var busy = false
     @State private var shareText: String?
+    @State private var story: StoryFacts?
+    /// Build 10: my trail as a precise, followable track (built once, off the body).
+    @State private var track: FollowSubject?
+    /// One cover for both (two `.fullScreenCover`s on one view do not both present).
+    @State private var trackCover: TrackCover?
 
     var body: some View {
         let p = theme.palette
@@ -157,8 +167,18 @@ struct TripSummaryView: View {
                     stat("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     stat("road.lanes", "مسافتي", (mine.map { $0.distance_m } ?? local.map { Double($0.distanceM) }).map { SaryFormat.distance(meters: $0) } ?? "—")
                     stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
+                    if let sp = model.mySpeed(outingId) {
+                        /* On this device only: never in the shared summary or the share text. */
+                        stat("speedometer", "أعلى سرعة", SaryFormat.speed(kmh: sp.maxKmh))
+                        stat("car.side.fill", "متوسط السرعة أثناء الحركة", SaryFormat.speed(kmh: sp.avgMovingKmh))
+                    }
                 }
                 .accessibilityIdentifier("summary.stats")
+                if let facts = model.tripFacts(outingId) {
+                    TripSummarySection(facts: facts, snapshot: s, destination: model.plans.model(outingId).plan.destination,
+                                       trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
+                }
+                TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
@@ -177,8 +197,39 @@ struct TripSummaryView: View {
                         .padding(.vertical, theme.space(.xs))
                     }
                 }
+                if let track {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                        TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
+                                         open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
+                            .padding(.vertical, theme.space(.s))
+                    }
+                } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                        TrailSketch(trail: trail, color: theme.palette.accent)
+                            .frame(height: 180)
+                            .padding(.vertical, theme.space(.s))
+                            .accessibilityIdentifier("summary.trail")
+                    }
+                }
                 if s.outing.status == .ended {
+                    Button { story = storyFacts(s, mine: mine, local: local) } label: {
+                        SaryButtonLabel(title: "اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("summary.story")
                     mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
+                    if model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
+                        Button {
+                            busy = true
+                            Task {
+                                if await model.startReturnTrip(from: outingId) == nil { busy = false }
+                            }
+                        } label: { SaryButtonLabel(title: "طريق العودة", systemImage: SaryIcon.backTrack, busy: busy) }
+                            .buttonStyle(.sary(.secondary))
+                            .accessibilityIdentifier("summary.returnTrip")
+                        Text("رحلة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
+                            .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Button {
                     shareText = text(s, mine: mine, local: local)
@@ -187,9 +238,46 @@ struct TripSummaryView: View {
             }
         }
         .task { await load() }
+        .task(id: subtitle) {
+            guard track == nil, let name = subtitle else { return }
+            track = await model.trackSubject(outingId, name: name)
+        }
         .sheet(item: Binding(get: { shareText.map(ShareText.init) }, set: { if $0 == nil { shareText = nil } })) { t in
             ShareSheet(items: [t.text]).presentationDetents([.medium, .large])
         }
+        .fullScreenCover(item: Binding(get: { story.map(StorySheet.init) }, set: { if $0 == nil { story = nil } })) { st in
+            StoryComposerView(facts: st.facts) { story = nil }
+                .saryPresented(appearance)
+        }
+        .background {
+            /* Its own host view: a second `.fullScreenCover` on the same view would never present. */
+            Color.clear.fullScreenCover(item: $trackCover) { c in
+                switch c {
+                case let .detail(s):
+                    TrackDetailView(subject: s, close: { trackCover = nil }) { chosen in
+                        trackCover = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { trackCover = TrackFollowModel(chosen).map(TrackCover.follow) }
+                    }
+                    .saryPresented(appearance)
+                case let .follow(m):
+                    TrackFollowScreen(model: m) { trackCover = nil }
+                        .saryPresented(appearance)
+                }
+            }
+        }
+    }
+
+    /// What «قصة الطلعة» may say: the outing's totals, my trail from this device, and only a count of the others.
+    private func storyFacts(_ s: OutingSnapshot, mine: TripShare?, local: TripTotals?) -> StoryFacts {
+        let trail = model.storyTrail(outingId)
+        var len = 0.0
+        for i in trail.indices.dropFirst() where !trail[i].gap { len += Vehicle.distanceMeters(trail[i - 1].position, trail[i].position) }
+        return StoryFacts(outingName: s.outing.name, startedAt: ISODate.parse(s.outing.started_at), endedAt: ISODate.parse(s.outing.ended_at),
+                          distanceM: mine?.distance_m ?? local.map { Double($0.distanceM) } ?? (len > 0 ? len : nil),
+                          durationS: spanSeconds(s), movingS: mine.map { Int($0.moving_s) } ?? local?.movingS,
+                          memberCount: s.members.count,
+                          companionNames: s.members.filter { $0.user_id != s.me.user_id }.map(\.display_name),
+                          trail: trail, waypoints: model.storyWaypoints(outingId))
     }
 
     @ViewBuilder
@@ -259,7 +347,219 @@ struct TripSummaryView: View {
     }
 }
 
+/// «مساري» in the summary (build 10): the track on clean satellite imagery, coloured by speed,
+/// with the three big numbers and «اسلك هذا المسار» on a dark card at its foot. Offline: the
+/// tile-free sketch instead of the imagery (the numbers and the button still work).
+struct TrackSummaryCard: View {
+    var subject: FollowSubject
+    var trail: Trail?
+    var online: Bool
+    var open: () -> Void
+    var follow: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                if online {
+                    TrackMapView(line: subject.line, interactive: false)
+                } else if let trail, trail.points.count >= 2 {
+                    TrailSketch(trail: trail, color: theme.palette.accent)
+                }
+                Button(action: open) {
+                    Label("كبّر", systemImage: "arrow.up.left.and.arrow.down.right")
+                        .saryText(.caption, weight: .bold)
+                        .padding(.horizontal, theme.space(.s)).padding(.vertical, 6)
+                }
+                .foregroundStyle(theme.palette.textPrimary)
+                .saryGlass(Capsule(), role: .control, interactive: true)
+                .padding(theme.space(.s))
+                .accessibilityIdentifier("summary.trackOpen")
+            }
+            .frame(height: 300)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
+            TrackStatsCard(stats: subject.stats, speedLegend: subject.line.hasSpeeds, follow: follow)
+                .padding(.top, -28)
+                .padding(.horizontal, theme.space(.s))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("summary.trail")
+    }
+}
+
+/// My trail drawn small, offline (no map tiles): recorded runs solid, unrecorded stretches dashed,
+/// «نقطة البداية» and the end marked.
+struct TrailSketch: View {
+    var trail: Trail
+    var color: Color
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        GeometryReader { g in
+            let pts = trail.points
+            let ref = pts[0].position
+            let xy = pts.map { TrailGeo.xy($0.position, ref: ref) }
+            let minX = xy.map(\.x).min()!, maxX = xy.map(\.x).max()!
+            let minY = xy.map(\.y).min()!, maxY = xy.map(\.y).max()!
+            let pad: CGFloat = 18
+            let w = g.size.width - pad * 2, h = g.size.height - pad * 2
+            let span = max(maxX - minX, maxY - minY, 1)
+            let k = min(w, h) / CGFloat(span)
+            let ox = pad + (w - CGFloat(maxX - minX) * k) / 2, oy = pad + (h - CGFloat(maxY - minY) * k) / 2
+            /* North up, east right — a map, so it is not mirrored in RTL. */
+            let screen = xy.map { CGPoint(x: ox + CGFloat($0.x - minX) * k, y: oy + CGFloat(maxY - $0.y) * k) }
+            ZStack {
+                RoundedRectangle(cornerRadius: SaryRadius.m).fill(theme.palette.sunken)
+                Path { path in
+                    for (i, p) in screen.enumerated() {
+                        if i == 0 || pts[i].gap { path.move(to: p) } else { path.addLine(to: p) }
+                    }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+                Path { path in
+                    for i in pts.indices where i > 0 && pts[i].gap {
+                        path.move(to: screen[i - 1])
+                        path.addLine(to: screen[i])
+                    }
+                }
+                .stroke(color.opacity(0.8), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [5, 6]))
+                Circle().fill(Color(rgb: 0x16110B)).frame(width: 14, height: 14).overlay(Circle().stroke(.white, lineWidth: 2.5))
+                    .position(screen[0])
+                Circle().fill(color).frame(width: 12, height: 12).overlay(Circle().stroke(.white, lineWidth: 2.5))
+                    .position(screen[screen.count - 1])
+                Text("نقطة البداية").saryText(.micro, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(theme.palette.chromeOpaque))
+                    .position(x: min(max(screen[0].x, 44), g.size.width - 44), y: max(screen[0].y - 16, 10))
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("رسم مسارك: \(SaryFormat.distance(meters: trail.recordedLengthM)) مسجّلة"))
+    }
+}
+
+private enum TrackCover: Identifiable {
+    case detail(FollowSubject)
+    case follow(TrackFollowModel)
+
+    var id: String {
+        switch self {
+        case let .detail(s): return "detail:\(s.id)"
+        case let .follow(m): return "follow:\(m.id)"
+        }
+    }
+}
+
+private struct StorySheet: Identifiable {
+    let facts: StoryFacts
+    var id: String { facts.outingName }
+}
+
 private struct ShareText: Identifiable {
     let text: String
     var id: String { text }
+}
+
+/// «الرحلة» in the summary: from my start point to the destination, the clock (moving,
+/// stopped, the longest stop), the route on the map and who arrived when. All from this
+/// phone; the shared summaries above are the only thing other members ever see.
+struct TripSummarySection: View {
+    var facts: TripSummaryFacts
+    var snapshot: OutingSnapshot
+    var destination: OutingDestination?
+    var trail: Trail?
+    var online: Bool
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let m = facts.motion
+        SarySection(title: "الرحلة", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوبة على جوالك فقط.") {
+            VStack(alignment: .leading, spacing: theme.space(.s)) {
+                row("flag.fill", "البداية", facts.start.map { NavText.clock(Date(timeIntervalSince1970: $0.atMs / 1000)) } ?? "—")
+                SaryDivider()
+                row("flag.checkered", facts.arrivedAt != nil ? "الوصول إلى \(destination?.name ?? "الوجهة")" : "النهاية",
+                    (facts.arrivedAt ?? facts.endedAt).map { NavText.clock($0) } ?? "—")
+                SaryDivider()
+                row("clock.fill", "مدة الرحلة", SaryFormat.duration(seconds: m.elapsedS))
+                SaryDivider()
+                row("car.side.fill", "وقت الحركة", SaryFormat.duration(seconds: m.movingS))
+                SaryDivider()
+                row("pause.circle.fill", "وقت الوقوف", SaryFormat.duration(seconds: m.stoppedS))
+                if let l = m.longestStopS {
+                    SaryDivider()
+                    row("hourglass", "أطول وقفة", SaryFormat.duration(seconds: l))
+                }
+                if let a = m.avgMovingKmh {
+                    SaryDivider()
+                    row("speedometer", "متوسط السرعة · أعلى سرعة", SaryFormat.speed(kmh: a) + (m.maxKmh.map { " · " + SaryFormat.speed(kmh: $0) } ?? ""))
+                }
+            }
+            .padding(.vertical, theme.space(.xs))
+            .accessibilityIdentifier("summary.trip")
+        }
+        if let route = routeLine, route.count >= 2 {
+            SarySection(title: "من البداية إلى النهاية", footer: "مرسوم من مسارك على جوالك فقط.") {
+                Group {
+                    if online {
+                        PlanMapView(route: route, destination: destination, interactive: false,
+                                    camera: PlanCamera(kind: .fit(route + (destination.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])), id: 1), theme: theme)
+                    } else if let trail {
+                        TrailSketch(trail: trail, color: p.accent)
+                    }
+                }
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous))
+                .padding(.vertical, theme.space(.s))
+                .accessibilityIdentifier("summary.route")
+            }
+        }
+        let names = snapshot.members.map { (id: $0.user_id, name: $0.user_id == snapshot.me.user_id ? "\($0.display_name) (أنت)" : $0.display_name) }
+        let order = ArrivalOrder.split(arrivals: facts.arrivals, members: names)
+        if !order.arrived.isEmpty {
+            SarySection(title: "ترتيب الوصول", footer: "كما رآه جوالك من مواقعهم المباشرة.") {
+                VStack(spacing: 0) {
+                    ForEach(Array(order.arrived.enumerated()), id: \.element.id) { i, e in
+                        if i > 0 { SaryDivider() }
+                        HStack(spacing: theme.space(.m)) {
+                            Text(SaryFormat.number(i + 1)).saryNumber(.headline, weight: .heavy).foregroundStyle(i == 0 ? p.accentText : p.textTertiary).frame(width: 22)
+                            Text(e.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                            Spacer()
+                            Text(NavText.clock(Date(timeIntervalSince1970: e.atMs / 1000))).saryNumber(.subhead).foregroundStyle(p.textSecondary)
+                        }
+                        .frame(minHeight: theme.minTarget)
+                    }
+                    if !order.waiting.isEmpty {
+                        SaryDivider()
+                        Text("ما وصلوا (أو ما وصلنا موقعهم): " + order.waiting.joined(separator: "، "))
+                            .saryText(.footnote).foregroundStyle(p.textSecondary).frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, theme.space(.s))
+                    }
+                }
+                .accessibilityIdentifier("summary.arrivalOrder")
+            }
+        }
+    }
+
+    /// My trail from the start point on, thinned for the map.
+    private var routeLine: [LngLat]? {
+        guard let t = trail else { return nil }
+        let from = facts.start?.atMs ?? 0
+        let pts = t.points.filter { $0.t >= from - 1000 }.map(\.position)
+        return PlanSimplify.capped(pts, max: 600)
+    }
+
+    private func row(_ icon: String, _ k: String, _ v: String) -> some View {
+        HStack(spacing: theme.space(.m)) {
+            SaryRowIcon(systemImage: icon)
+            Text(k).saryText(.body).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
+            Spacer()
+            Text(v).saryNumber(.body, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+        }
+        .frame(minHeight: theme.minTarget)
+        .accessibilityElement(children: .combine)
+    }
 }

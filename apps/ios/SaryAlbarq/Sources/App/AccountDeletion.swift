@@ -78,15 +78,39 @@ struct AccountDeleter {
 enum LocalAccountData {
     static var keys: [String] {
         [ShareMemory.consentKey, ShareMemory.activeShareKey] + ShareMemory.legacyKeys + [
-            TripLogStore.key, InviteTokenStore.key, OnboardingProgress.key,
+            TripLogStore.key, TripStore.key, ReturnTripStore.key, InviteTokenStore.key, PersonalInviteBook.key, OnboardingProgress.key,
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
-        ]
+            WatchLinkStore.key, SafetyController.warnedStoreKey,
+            /* Round 3: create flow, «دائمًا» explainer, navigation preferences. */
+            RecentPlaces.key, LiveOutingController.shareAlwaysAskedKey,
+            NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
+            /* Build 9: exploration and convoy-alert rules. */
+            MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
+            /* The trip's automatic guidance (setting + per-outing progress). */
+            TripAutoNavPrefs.enabledKey, TripAutoNavState.storeKey,
+        ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys + FollowCameraPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {
         IdentityStore.save(nil)
         for k in keys { defaults.removeObject(forKey: k) }
+        WaypointCache.wipeAll()
+        TrailStore.forgetAll()
+        LocalDestinationStore.forgetAll(defaults: defaults)
+        OutingWalkieTalkie.forgetAll(defaults: defaults)
+        /* «المحادثات»: messages still waiting to be sent (the server deletes everything else). */
+        ChatOutbox.wipeAll(defaults)
+        MediaShareInbox.forget()
+        /* «أماكني المحفوظة» and the GPX list (on-device files). */
+        if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            for f in ["saved-places-v1.json", "tracks-v1.json"] { try? FileManager.default.removeItem(at: dir.appendingPathComponent(f)) }
+        }
+        Task { @MainActor in
+            SavedPlacesStore.shared.wipe()
+            TrackLibrary.shared.wipe()
+            ConvoyAlertPrefs.shared.reset()
+        }
     }
 }
 

@@ -9,10 +9,17 @@ options:
   developmentLanguage: ar
   createIntermediateGroups: true
 # Mapbox Maps SDK v11 (same renderer family as the web's Mapbox GL v3), pinned exactly.
+# It is pinned to the exact version the Navigation SDK below requires (Navigation
+# 3.27.3 pins Maps 11.27.3 exactly in its Package.swift); move both together.
 packages:
   MapboxMaps:
     url: https://github.com/mapbox/mapbox-maps-ios.git
-    exactVersion: 11.33.1
+    exactVersion: 11.27.3
+  # Mapbox Navigation SDK v3 (turn-by-turn). Only the Core product is used (no
+  # NavigationViewController / CarPlayManager): our own UI over our own map.
+  MapboxNavigation:
+    url: https://github.com/mapbox/mapbox-navigation-ios.git
+    exactVersion: 3.27.3
 # Explicit base settings: these are what XcodeGen's presets would add, spelled
 # out so the project generates the same with any XcodeGen install.
 settings:
@@ -29,7 +36,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "16"
     # Apple Team ID (same account as FarqNavigate).
     DEVELOPMENT_TEAM: MH7J92HV9N
     CODE_SIGN_STYLE: Automatic
@@ -54,9 +61,18 @@ targets:
     sources:
       - Sources
       - Resources
+      - Shared
     dependencies:
       - package: MapboxMaps
         product: MapboxMaps
+      - package: MapboxNavigation
+        product: MapboxNavigationCore
+      - package: MapboxNavigation
+        product: MapboxDirections
+      # The outing's Live Activity (Lock Screen + Dynamic Island).
+      - target: SaryAlbarqWidgets
+      # «شارك إلى سَرى البارق» for YouTube links (Sources/Media).
+      - target: SaryShare
     # Config/Base.xcconfig optionally includes the gitignored Config/Secrets.xcconfig
     # (MAPBOX_ACCESS_TOKEN), which Info.plist hands to Mapbox as MBXAccessToken.
     configFiles:
@@ -69,10 +85,57 @@ targets:
         PRODUCT_NAME: SaryAlbarq
         INFOPLIST_FILE: Sources/App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_ENTITLEMENTS: Sources/App/SaryAlbarq.entitlements
+        # CarPlay entitlement only when CARPLAY_ENABLED=YES (Config/Base.xcconfig).
+        CODE_SIGN_ENTITLEMENTS: $(SARY_ENTITLEMENTS_$(CARPLAY_ENABLED))
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+  # Widget extension: the outing's Live Activity. Shares only Shared/ with the app
+  # (ActivityAttributes + the pure display rules); no App Group needed.
+  SaryAlbarqWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Shared
+      - path: Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        # OWNER: register this App ID (no extra capabilities needed).
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.widgets
+        PRODUCT_NAME: SaryAlbarqWidgets
+        INFOPLIST_FILE: Widgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
+  # Share extension: a shared YouTube link → its video id → the app's «يوتيوب ← قناتي».
+  # OWNER: register sa.sary.albarq.share and the App Group group.sa.sary.albarq
+  # (automatic signing does both). Without the group the link is still copied to the clipboard.
+  SaryShare:
+    type: app-extension
+    platform: iOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - ShareExtension
+      - Sources/Media/YouTubeLink.swift
+      - Sources/Media/MediaShareInbox.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.share
+        PRODUCT_NAME: SaryShare
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        # TEMPORARY (build 6): without the App Group on device/archive builds (Config/Base.xcconfig).
+        CODE_SIGN_ENTITLEMENTS: $(SARY_SHARE_ENTITLEMENTS_PENDING_$(SARY_PORTAL_PENDING))
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
   SaryAlbarqTests:
     type: bundle.unit-test
     platform: iOS

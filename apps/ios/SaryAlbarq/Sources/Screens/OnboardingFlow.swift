@@ -168,7 +168,7 @@ private struct IntroStep: View {
                 .accessibilityIdentifier("onboarding.idea")
             Spacer(minLength: theme.space(.xl))
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                point("location.fill", "موقعك يُشارك فقط في الطلعة التي تختارها، والتطبيق مفتوح أمامك.")
+                point("location.fill", "موقعك يُشارك فقط مع أعضاء الطلعة التي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
                 point("person.crop.circle.badge.checkmark", "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
                 point("sos", "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
             }
@@ -294,9 +294,9 @@ private struct LocationStep: View {
                 .multilineTextAlignment(.center)
             VStack(alignment: .leading, spacing: theme.space(.m)) {
                 line("map.fill", "لنعرض مكانك ومسافة أصحابك عنك على الخريطة.")
-                line("hand.raised.fill", "لا يُرسل موقعك لأحد إلا بعد ما تضغط «شارك موقعي» داخل طلعة.")
-                line("iphone", "فقط والتطبيق مفتوح أمامك. لا نتتبعك في الخلفية.")
-                line("trash", "الخادم يحتفظ بآخر موقع لك فقط، ويحذفه إذا أوقفت المشاركة أو انتهت الطلعة.")
+                line("hand.raised.fill", "لا يُرسل موقعك لأحد إلا لأعضاء طلعة انضممت لها، تلقائيًا ما دامت شغّالة؛ لإيقافه غادر الطلعة.")
+                line("lock.iphone", "بإذن «دائمًا» تستمر المشاركة والشاشة مقفلة حتى تغادر أو تنتهي الطلعة، ويظهر مؤشر الموقع الأزرق. خارج الطلعات لا نتتبعك أبدًا.")
+                line("trash", "الخادم يحتفظ بآخر موقع لك فقط، ويحذفه إذا غادرت الطلعة أو انتهت.")
             }
             .padding(theme.space(.l))
             .sarySurface(radius: SaryRadius.l)

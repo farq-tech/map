@@ -12,7 +12,7 @@ struct ParticipantCardUIState: Equatable {
     var participant: ParticipantUI
     /// For "قبل ٤ د".
     var now: Date
-    /// I am the leader and this is someone else: shows «اجعله مساعدًا» and «أزله من الطلعة».
+    /// I am the leader and this is someone else: shows «اجعله نائبًا للأمير» and «أزله من الطلعة».
     var canManage: Bool
     /// True while promote/remove is in flight: those buttons are disabled.
     var isBusy: Bool = false
@@ -26,7 +26,9 @@ struct ParticipantCardActions {
     var whatsApp: () -> Void = {}
     /// «أظهره على الخريطة». Expect: dismiss the card and centre on them.
     var showOnMap: () -> Void = {}
-    /// «اجعله مساعدًا» (leader only), after the UI's confirmation.
+    /// «روح له»: turn-by-turn to their last LIVE position (refused, with the reason, when it is old).
+    var navigate: () -> Void = {}
+    /// «اجعله نائبًا للأمير» (leader only), after the UI's confirmation.
     var promoteCoLeader: () -> Void = {}
     /// «أزله من الطلعة» (leader only), after the UI's confirmation.
     var removeMember: () -> Void = {}
@@ -114,6 +116,16 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// «غرّزت»: a small stuck icon on the chip until they clear it.
+    var stuck: Bool = false
+    /// «المقدمة» / «المؤخرة» badge in convoy mode.
+    var convoy: ConvoyBadgeUI? = nil
+    /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
+    var viaNearby: Bool = false
+    /// On air in «قناة الطلعة» right now: an animated speaking badge.
+    var speaking: Bool = false
+    /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
+    var silentSince: Date? = nil
 }
 
 struct NoteBubbleUI: Equatable {

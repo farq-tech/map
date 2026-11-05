@@ -17,6 +17,19 @@ enum LiveEvent: Equatable {
     case rally(RallyInfo?)
     case memberRole(userId: String, coLeader: Bool)
     case voiceClip(VoiceClip)
+    /// Return timer and «غرّزت» frames (state lives in `SafetyController`).
+    case safety(SafetyEvent)
+    /// Contract §3/§4: shared waypoints and convoy mode.
+    case waypointAdded(Waypoint)
+    case waypointRemoved(id: String)
+    case convoy(ConvoyInfo?)
+    /// «تخطيط الطلعة»: nil when the frame carries no plan (refetch it).
+    case planUpdated(TripPlan?)
+    case checklistUpdated([ChecklistItem])
+    /// «انقطع الإرسال» (see MemberSilence.swift).
+    case memberSilent(SilentInfo)
+    /// `reason` nil = a fresh fix arrived; else left / removed / sharing_off / going_offline.
+    case memberResumed(userId: String, reason: String?)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -65,8 +78,18 @@ enum LiveEvent: Equatable {
             return .memberRole(userId: uid, coLeader: obj["co_leader"] as? Bool ?? false)
         case "voice_clip":
             return (decodeJSON(obj["clip"]) as VoiceClip?).map(LiveEvent.voiceClip)
+        case "waypoint_added":
+            return (decodeJSON(obj["waypoint"]) as Waypoint?).map(LiveEvent.waypointAdded)
+        case "waypoint_removed":
+            return (obj["id"] as? String).map { .waypointRemoved(id: $0) }
+        case "convoy_updated":
+            return .convoy(decodeJSON(obj["convoy"]))
+        case "plan_updated":
+            return .planUpdated(decodeJSON(obj["plan"]))
+        case "checklist_updated":
+            return (decodeJSON(obj["items"]) as [ChecklistItem]?).map(LiveEvent.checklistUpdated)
         default:
-            return nil
+            return SafetyEvent.decode(type, obj).map(LiveEvent.safety) ?? decodeSilence(type, obj)
         }
     }
 }
@@ -80,6 +103,8 @@ struct OutingView: Equatable {
     var positions: [String: Position]
     /// Voice clips still on the server (newest last).
     var clips: [VoiceClip]
+    /// Friends whose sharing went silent (server-decided), by user id.
+    var silent: [String: SilentInfo]
     /// server clock − device clock, ms; ages are measured on the server's clock.
     var clockOffsetMs: Double
 
@@ -88,6 +113,7 @@ struct OutingView: Equatable {
         members = Dictionary(s.members.map { ($0.user_id, $0) }, uniquingKeysWith: { _, b in b })
         positions = Dictionary(s.positions.map { ($0.user_id, $0) }, uniquingKeysWith: { _, b in b })
         clips = s.voice_clips ?? []
+        silent = Dictionary((s.silent ?? []).map { ($0.user_id, $0) }, uniquingKeysWith: { _, b in b })
         let server = ISODate.parse(s.server_now) ?? deviceNow
         clockOffsetMs = (server.timeIntervalSince1970 - deviceNow.timeIntervalSince1970) * 1000
     }
@@ -109,7 +135,10 @@ struct OutingView: Equatable {
     var me: Member? { members[myId] }
 
     mutating func apply(_ e: LiveEvent) {
+        applySilence(e)
         switch e {
+        case .memberSilent, .memberResumed:
+            break
         case let .position(p):
             guard members[p.user_id]?.sharing == true, status == .active else { return }
             if let old = positions[p.user_id],
@@ -172,10 +201,20 @@ struct OutingView: Equatable {
             guard !clips.contains(where: { $0.id == c.id }) else { return }
             clips.append(c)
             if clips.count > 30 { clips.removeFirst(clips.count - 30) }
+        case let .convoy(c):
+            snapshot.outing.convoy = c
+            snapshot.convoy = nil
+        case .safety, .waypointAdded, .waypointRemoved, .planUpdated, .checklistUpdated:
+            /* Safety state lives in SafetyController; waypoints are kept by OutingFeaturesModel
+               (loaded with GET /waypoints); the plan and checklist by PlanModel. */
+            break
         }
     }
 
-    /// Owner or «مساعد»: may start/pause the outing and manage the rally point.
+    /// «وضع القافلة», wherever the server put it.
+    var convoy: ConvoyInfo? { snapshot.outing.convoy ?? snapshot.convoy }
+
+    /// Owner or «نائب الأمير»: may start/pause the outing and manage the rally point.
     var iLead: Bool { snapshot.me.role == "owner" || snapshot.me.co_leader == true || snapshot.me.can_lead == true }
     var iOwn: Bool { snapshot.me.role == "owner" }
 
@@ -196,6 +235,8 @@ struct OutingView: Equatable {
 
     func freshness(of uid: String, deviceNow: Date = Date()) -> Policy.Freshness? {
         guard let p = positions[uid], let m = members[uid] else { return nil }
+        /* The server says their fixes stopped: never live, whatever the clocks say. */
+        if silent[uid] != nil { return .lost }
         return Policy.freshness(fixAgeMs: positionAgeMs(p, deviceNow: deviceNow), speedMps: p.speed, lastSeenAgeMs: lastSeenAgeMs(m, deviceNow: deviceNow))
     }
 

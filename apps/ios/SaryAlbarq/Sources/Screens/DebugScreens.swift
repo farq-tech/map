@@ -23,22 +23,39 @@ struct DebugScreen: View {
         case "details": HomeView(initial: [.details(DemoData.outingId)])
         case "summary": HomeView(initial: [.summary("demo-old")])
         case "history": HomeView(initial: [.history])
+        #if DEBUG
+        case "story": StoryComposerView(facts: StoryFixtures.facts()) {}
+        case "track-detail":
+            if let s = DemoTrail.dunesSubject() { TrackDetailView(subject: s, close: {}, follow: { _ in }) }
+        case "follow":
+            if let s = DemoTrail.dunesSubject(), let m = TrackFollowModel(s) { TrackFollowScreen(model: m, close: {}) }
+        #endif
         case "profile": HomeView(initial: [.profile])
         case "settings": HomeView(initial: [.settings])
         case "appearance": HomeView(initial: [.settings, .appearance])
         case "privacy": HomeView(initial: [.settings, .privacy])
         case "notifications": HomeView(initial: [.settings, .notifications])
         case "about": HomeView(initial: [.settings, .about])
+        case "advanced": HomeView(initial: [.settings, .advanced])
         case "offline-maps": HomeView(initial: [.settings, .offlineMaps])
         case "offline-flow": NavigationStack { OfflineMapsView(back: {}, suggested: .init(west: 46.666, south: 24.704, east: 46.684, north: 24.719), outingName: "طلعة الثمامة") }
         case "offline-picker": OfflineAreaPicker(initial: .init(west: 46.655, south: 24.70, east: 46.695, north: 24.725), outingName: "طلعة الثمامة", close: {})
-        case "create": CreateOutingSheet()
+        case "create": CreateOutingWizard()
+        case "create-coordinate": CreateOutingWizard(initialText: "24.7590, 46.7491")
+        case "create-search": CreateOutingWizard(initialText: "24°45'32\"N 46°44'57\"E")
         case "join": JoinByLinkSheet()
         case "invite-valid": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "كشتة نفود الثويرات", inviterName: "أبو فهد", participantCount: 5, status: .active)))
         case "invite-expired": InviteJoinSheet(token: "x", preset: .expired)
+        case "invite-personal": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active, inviteeName: "فهد أخوي")))
+        case "invite-taken": InviteJoinSheet(token: "x", preset: .taken)
         case "invite-invalid": InviteJoinSheet(token: "x", preset: .invalid)
         case "invite-error": InviteJoinSheet(token: "x", preset: .error("الشبكة بطيئة. أعد المحاولة."))
         case "notify-explainer": NotifyExplainerSheet(done: {})
+        case "invite-needs-location": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active, inviteeName: "فهد أخوي")),
+                                                      presetStep: .needsLocation(.denied))
+        case "invite-needs-precise": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active)),
+                                                     presetStep: .needsLocation(.reduced))
+        case "share-always-explainer": ShareAlwaysExplainer(allow: {}, later: {})
         case "dialog-leave":
             HomeView().saryDialog($dialog, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",
                                   message: "يتوقف إرسال موقعك وتخرج منها. ترجع فقط برابط دعوة جديد.", confirmTitle: "غادر") {}
@@ -52,6 +69,20 @@ struct DebugScreen: View {
                 } message: {
                     Text((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.message ?? "")
                 }
+        #if DEBUG
+        case "imagery": SatelliteImageryProbe().ignoresSafeArea()
+        #endif
+        case "plan-details": HomeView(initial: [.details("demo-new")])
+        case "plan-editor", "plan-editor-draw":
+            PlanEditorView(plan: model.plans.model(DemoData.outingId), outingName: "طلعة الثمامة (عرض تجريبي)", canEdit: true, myFix: nil, close: {})
+        case "plan-search":
+            CoordinateSearchSheet(near: nil, myFix: nil, actions: PointActions(setDestination: { _, _ in }, addPoint: { _ in }, rally: { _ in }),
+                                  initialText: "24°42'49\"N 46°40'31\"E", close: {})
+        case "plan-point":
+            SaryPage(title: "") { PointCard(subject: .point(LngLat(lng: 46.67530, lat: 24.71360), name: nil), actions: PointActions(setDestination: { _, _ in }, addPoint: { _ in }, rally: { _ in })).sarySurface(radius: SaryRadius.m) }
+        case "plan-me-stale":
+            SaryPage(title: "") { PointCard(subject: .me(.init(point: LngLat(lng: 46.67530, lat: 24.71360), accuracyM: 8, at: Date().addingTimeInterval(-300)))).sarySurface(radius: SaryRadius.m) }
+        case "weather-here": WeatherPointSheet(point: OutingDestination(name: "نفود الثويرات", lat: 25.7712, lng: 45.1043), close: {})
         default: HomeView()
         }
     }

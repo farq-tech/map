@@ -9,8 +9,13 @@
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
-		<!-- Precise location: shared with the members of an outing you chose to share in.
-		     The server keeps only your latest fix and deletes it when the outing ends. -->
+		<!-- Precise location: shared with the members of an outing you joined (joining is the
+		     consent; sharing is automatic while you are a member of an active outing) — on screen,
+		     and with «دائمًا» also in the background with the screen locked, until you leave, are
+		     removed, or the outing is paused or ends. The server keeps only your latest fix and
+		     deletes it on leave / removal / pause / end (and after 24 h at most).
+		     «مساري» (the breadcrumb trail, also recorded with the screen locked when the
+		     person allows «دائمًا») stays on the device and is never sent: not collected. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
@@ -40,6 +45,20 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePhoneNumber</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- «دعوة شخصية»: the leader picks a contact; the invitee's name (as the leader saved it) and
+		     the last digits of the number go to the server to label the personal link. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeContacts</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
@@ -113,13 +132,27 @@
 				<string>35F9.1</string>
 			</array>
 		</dict>
-		<!-- UserDefaults: settings, share mode, consent per outing, invite links this device created, on-device trip totals. App-only. -->
+		<!-- UserDefaults: settings, share mode, consent per outing, invite links this device created,
+		     on-device trip totals (CA92.1, app-only); and the App Group group.sa.sary.albarq that the
+		     share extension writes a shared YouTube link into for the app to pick up (1C8F.1). -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>CA92.1</string>
+				<string>1C8F.1</string>
+			</array>
+		</dict>
+		<!-- File timestamps / attributes of the app's own files only: the newest stored trails are
+		     matched first (Core/TrailMatching.swift), the raw trail log's size is capped
+		     (Core/TrailRawLog.swift). Never shown, never sent. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
 			</array>
 		</dict>
 	</array>
