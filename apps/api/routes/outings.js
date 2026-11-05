@@ -26,7 +26,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = {} }) {
+function createOutingsRouter({ service, hub, push, apns, pttChannels = null, limits = {}, routing = {} }) {
   const router = express.Router();
   /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
   const smallJson = express.json({ limit: '48kb' });
@@ -330,6 +330,34 @@ function createOutingsRouter({ service, hub, push, apns, limits = {}, routing = 
     await service.requireMember(req.user, req.params.id);
     res.json({ ok: true, ...(await apns.unregisterPtt(req.user, req.params.id, req.body?.token)) });
   }));
+
+  /* «ترددات»: the walkie-talkie's channels. GET lists the five public ones and the private ones
+   * I am invited to (who is listening on each, who is talking). POST / PATCH / DELETE are the
+   * trip leader's: open a «تردد خاص» { name, members }, rename it / add / remove members, close
+   * it. A removed member is taken off the air at once; see lib/outings/ptt-channels.js. */
+  if (pttChannels) {
+    const channelLimit = createRateLimiter({ limit: limits.pttChannelWritesPer10Min ?? 60, windowMs: 10 * 60_000 });
+    const writeOk = (req, res) => {
+      if (writeLimit(req.user.id) && channelLimit(req.user.id)) return true;
+      res.status(429).json({ ok: false, error: 'rate_limited' });
+      return false;
+    };
+    router.get('/:id/ptt/channels', auth, asyncHandler(async (req, res) => {
+      res.json({ ok: true, ...(await pttChannels.api.listPttChannels(req.user, req.params.id)) });
+    }));
+    router.post('/:id/ptt/channels', auth, asyncHandler(async (req, res) => {
+      if (!writeOk(req, res)) return;
+      res.status(201).json({ ok: true, ...(await pttChannels.api.createPttChannel(req.user, req.params.id, req.body || {})) });
+    }));
+    router.patch('/:id/ptt/channels/:channelId', auth, asyncHandler(async (req, res) => {
+      if (!writeOk(req, res)) return;
+      res.json({ ok: true, ...(await pttChannels.api.updatePttChannel(req.user, req.params.id, req.params.channelId, req.body || {})) });
+    }));
+    router.delete('/:id/ptt/channels/:channelId', auth, asyncHandler(async (req, res) => {
+      if (!writeOk(req, res)) return;
+      res.json({ ok: true, ...(await pttChannels.api.closePttChannel(req.user, req.params.id, req.params.channelId)) });
+    }));
+  }
 
   /* Opt-in trip summary: totals only, never points. */
   router.put('/:id/summary', auth, asyncHandler(async (req, res) => {

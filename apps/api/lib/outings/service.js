@@ -34,6 +34,10 @@ class OutingError extends Error {
 
 const err = (code, status) => new OutingError(code, status);
 
+/* Leaving / removed: off every «تردد خاص» of that trip (migration 013). */
+const PTT_CHANNEL_MEMBER_DELETE = `DELETE FROM sary.ptt_channel_members cm USING sary.ptt_channels c
+  WHERE c.id = cm.channel_id AND c.outing_id = $1 AND cm.user_id = $2`;
+
 /**
  * May this membership lead the outing — start/pause/resume it, manage the
  * invite link, set rally points? The owner always; a «مساعد» (co-leader) too.
@@ -89,6 +93,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   /* Voice clips: memory only, 10 minutes. See clips.js. */
   const clips = clipsLib.createClipStore({ now });
   let hub = events;
+  /* «ترددات»: the walkie-talkie's private channels (lib/outings/ptt-channels.js), told when a
+   * member leaves or the trip ends so its in-memory copy matches the rows deleted here. */
+  let pttChannels = null;
 
   const q = (text, params) => pool.query(text, params).then((r) => r.rows);
 
@@ -737,6 +744,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   async function endOutingRows(run, outingId) {
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [outingId]);
     await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1`, [outingId]);
+    /* «تردد خاص» channels end with the trip (their member lists cascade). */
+    await run(`DELETE FROM sary.ptt_channels WHERE outing_id = $1`, [outingId]);
     await run(
       `UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL
        WHERE id = $1`,
@@ -778,6 +787,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       silence.drop(outingId);
     }
     if (t.to === 'ended') clips.dropOuting(outingId);
+    if (t.to === 'ended') pttChannels?.outingEnded(outingId);
     hub.emit(outingId, { type: 'outing_status', status: o.status, started_at: o.started_at, ended_at: o.ended_at });
     if (t.to === 'ended') hub.closeRoom(outingId, 'outing_ended');
     return o;
@@ -794,6 +804,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         [outingId, memberId],
       );
       await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, memberId]);
+      await run(PTT_CHANNEL_MEMBER_DELETE, [outingId, memberId]);
       if (r.length) await rotateMeshKeyRows(run, outingId);
       return r;
     });
@@ -806,6 +817,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     clips.dropUser(outingId, memberId);
     void features.dropFromConvoy(outingId, memberId);
     void media.memberGone(outingId, memberId);
+    pttChannels?.memberGone(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -825,6 +837,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
     /* Their phone is no longer in «قناة الطلعة»: no more Push to Talk wake-ups. */
     await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    await run(PTT_CHANNEL_MEMBER_DELETE, [outingId, userId]);
     await rotateMeshKeyRows(run, outingId);
     if (m.role !== 'owner') return { ended: false, owner: null };
     await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
@@ -859,6 +872,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!outcome.ended) void features.dropFromConvoy(outingId, userId);
     if (outcome.ended) media.dropMedia(outingId);
     else void media.memberGone(outingId, userId);
+    if (outcome.ended) pttChannels?.outingEnded(outingId);
+    else pttChannels?.memberGone(outingId, userId);
     hub.kick(outingId, userId, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: userId, reason: 'left' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -1373,6 +1388,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       await q(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [id]);
       await q(`UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`, [id]);
       await q(`UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL WHERE id = $1`, [id]);
+      await q(`DELETE FROM sary.ptt_channels WHERE outing_id = $1`, [id]);
+      pttChannels?.outingEnded(id);
       forgetOuting(id);
       dropLatest(id);
       silence.drop(id);
@@ -1406,6 +1423,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     memberNames,
     setEvents(next) {
       hub = next || noopEvents();
+    },
+    setPttChannels(next) {
+      pttChannels = next || null;
     },
     createUser,
     authenticate,
