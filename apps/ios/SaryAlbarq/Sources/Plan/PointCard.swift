@@ -12,6 +12,8 @@ struct PointActions {
     var navigateHere: ((LngLat) -> Void)? = nil
     /// «احفظ في أماكني» (on-device saved places, live outing only).
     var savePlace: ((LngLat, String?) -> Void)? = nil
+    /// «طيران درون استكشافي» (live map only; disabled while driving — see MapVisualsHub).
+    var droneFlight: ((LngLat) -> Void)? = nil
 
     /// «الطقس هنا»: the weather branch sets this; until then the button is hidden.
     static var weatherHook: ((LngLat) -> Void)?
@@ -51,6 +53,7 @@ struct PointCard: View {
     @State private var toast: String?
     @State private var copied = ""
     @State private var share: ShareItem?
+    @ObservedObject private var visuals = MapVisualsHub.shared
 
     private var point: LngLat {
         switch subject {
@@ -128,6 +131,7 @@ struct PointCard: View {
                     ForEach(extra, id: \.id) { a in
                         Button(action: a.run) { SaryButtonLabel(title: a.title, systemImage: a.icon) }
                             .buttonStyle(.sary(.secondary, compact: true))
+                            .disabled(a.disabled)
                             .accessibilityIdentifier(a.id)
                     }
                 }
@@ -136,7 +140,7 @@ struct PointCard: View {
         .padding(theme.space(.l))
     }
 
-    private struct Extra { var id: String; var title: String; var icon: String; var run: () -> Void }
+    private struct Extra { var id: String; var title: String; var icon: String; var disabled = false; var run: () -> Void }
 
     private var extraActions: [Extra] {
         let pt = point
@@ -148,6 +152,10 @@ struct PointCard: View {
         if let f = actions.addPoint { out.append(Extra(id: "point.add", title: "أضف نقطة", icon: "mappin.and.ellipse") { f(pt) }) }
         if let f = actions.rally { out.append(Extra(id: "point.rally", title: "نقطة تجمع", icon: SaryIcon.rally) { f(pt) }) }
         if let f = actions.savePlace { out.append(Extra(id: "point.save", title: "احفظ في أماكني", icon: "star.fill") { f(pt, name) }) }
+        if let f = actions.droneFlight, visuals.mapAttached {
+            out.append(Extra(id: "point.drone", title: visuals.driving ? "الدرون متوقف أثناء القيادة" : "طيران درون استكشافي", icon: "rotate.3d",
+                             disabled: visuals.driving) { f(pt) })
+        }
         return out
     }
 
