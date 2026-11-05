@@ -32,7 +32,7 @@ async function until(pred, ms = 3000, what = 'condition') {
   throw new Error(`timeout waiting for ${what}`);
 }
 
-async function lab({ authDelayMs = 0, authTimeoutMs = 300, channels } = {}) {
+async function lab({ authDelayMs = 0, authTimeoutMs = 300, channels, membershipDelayMs = 0 } = {}) {
   const users = {
     'tok-a': { id: 'ua', display_name: 'فهد' },
     'tok-b': { id: 'ub', display_name: 'سعد' },
@@ -44,12 +44,29 @@ async function lab({ authDelayMs = 0, authTimeoutMs = 300, channels } = {}) {
       if (authDelayMs) await sleep(authDelayMs);
       return users[token] || null;
     },
+    membershipCalls: 0,
     async membership(outingId, userId) {
+      service.membershipCalls += 1;
+      /* A real database answers in a few ms… or, from a phone on a weak link, much later. */
+      if (membershipDelayMs) await sleep(membershipDelayMs);
       if (outingId !== OUTING || !['ua', 'ub', 'uc', 'ud'].includes(userId)) return null;
       return { status: 'active', outing_status: 'active', role: userId === 'ua' ? 'owner' : 'member' };
     },
     async getOuting(user) {
       return { outing: { id: OUTING, status: 'active' }, me: { user_id: user.id }, members: [], positions: [] };
+    },
+    /* «المحادثات» / «إذاعة الطلعة», just enough to answer: each awaits like the real ones. */
+    async chatSocketFrame(user, outingId, msg) {
+      if (membershipDelayMs) await sleep(membershipDelayMs);
+      return { type: 'chat_ack', id: msg.id ?? null, ok: true, message: { from: user.id, outing_id: outingId, text: msg.text } };
+    },
+    async groupAudioCommand(user, outingId, cmd) {
+      if (membershipDelayMs) await sleep(membershipDelayMs);
+      return { group_audio: { cmd: cmd?.op || null, by: user.id }, server_now: new Date().toISOString() };
+    },
+    async getGroupAudio() {
+      if (membershipDelayMs) await sleep(membershipDelayMs);
+      return { group_audio: null, server_now: new Date().toISOString() };
     },
   };
   const hub = createHub();
@@ -470,6 +487,181 @@ test('latency budget: the first audio frame reaches the listener in ≤ 10 ms (p
     assert.ok(pct(samples.talker, 0.95) < 50, 'listener learns who is on air within 50 ms of the press');
     a.ws.close();
     b.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+/* ---------------- order: a socket's frames are handled in the order they arrived ---------------- */
+
+test('reconnect: ptt_join + the deferred ptt_start sent back to back (slow membership check) → granted, not «مكتوم»', async () => {
+  const L = await lab({ membershipDelayMs: 60 });
+  try {
+    const [a, b] = await seated(L, ['tok-a', 'tok-b']);
+    b.send({ type: 'ptt_join', channels: true });
+    await b.next('ptt_state');
+    /* A drops (tunnel) and comes back: the app re-joins and replays the press it held back. */
+    a.ws.terminate();
+    await sleep(50);
+    const a2 = L.phone('tok-a');
+    await a2.opened;
+    await a2.next('ready');
+    a2.send({ type: 'ptt_join', channels: true });
+    a2.send({ type: 'ptt_start', id: 7 });
+    const g = await a2.next('ptt_grant', 3000);
+    assert.equal(g.id, 7);
+    assert.equal(g.channel, '1');
+    assert.equal(a2.inbox.some((m) => m.type === 'ptt_deny'), false, 'never denied not_joined');
+    /* The join's answer came before the grant, as sent. */
+    assert.equal((await b.next('ptt_talker')).user_id, 'ua');
+    a2.ws.send(frame(g.burst, 0));
+    a2.ws.send(frame(g.burst, 1));
+    await until(() => b.bin.length === 2, 3000, 'audio after the raced grant');
+    a2.send({ type: 'ptt_stop' });
+    assert.equal((await b.next('ptt_idle')).reason, 'released');
+    a2.ws.close();
+    b.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('reconnect: auth + ptt_join + ptt_start in one burst (before `ready`) → seated, joined, granted in that order', async () => {
+  const L = await lab({ membershipDelayMs: 40 });
+  try {
+    const [b] = await seated(L, ['tok-b']);
+    b.send({ type: 'ptt_join' }); // build 9–12 listener
+    await b.next('ptt_state');
+    const a = L.phone('tok-a', { auth: false });
+    await a.opened;
+    a.send({ type: 'auth', token: 'tok-a', outing_id: OUTING });
+    a.send({ type: 'ptt_join' }); // an old build: no channels flag
+    a.send({ type: 'ptt_start', id: 1 });
+    const g = await a.next('ptt_grant', 3000);
+    const order = a.inbox.map((m) => m.type);
+    assert.equal(order.includes('ptt_deny'), false, order.join(','));
+    assert.ok(order.indexOf('ready') !== -1 && order.indexOf('ready') < order.indexOf('ptt_state'), `ready, then the join's state: ${order.join(',')}`);
+    assert.equal((await b.next('ptt_talker')).user_id, 'ua');
+    a.ws.close();
+    b.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('switch channel + ptt_start back to back → granted on the NEW channel, heard only there', async () => {
+  const L = await lab({ membershipDelayMs: 60 });
+  try {
+    const [a, b, c] = await seated(L, ['tok-a', 'tok-b', 'tok-c']);
+    a.send({ type: 'ptt_join', channel: '1', channels: true });
+    b.send({ type: 'ptt_join', channel: '3', channels: true });
+    c.send({ type: 'ptt_join', channel: '1', channels: true });
+    await a.next('ptt_state');
+    await b.next('ptt_state');
+    await c.next('ptt_state');
+    a.send({ type: 'ptt_join_channel', channel: '3' });
+    a.send({ type: 'ptt_start', id: 2 });
+    const g = await a.next('ptt_grant', 3000);
+    assert.equal(g.channel, '3', 'the floor is on the channel just switched to');
+    assert.equal(a.inbox.some((m) => m.type === 'ptt_deny'), false);
+    assert.equal((await b.next('ptt_talker')).channel, '3');
+    a.ws.send(frame(g.burst, 0));
+    await until(() => b.bin.length === 1, 3000, 'heard on ٣');
+    await sleep(80);
+    assert.equal(c.bin.length, 0, 'nothing on ١');
+    assert.equal(c.inbox.some((m) => m.type === 'ptt_talker'), false);
+    assert.equal(L.ptt.state(OUTING, '1'), null);
+    for (const p of [a, b, c]) p.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('private channel isolation holds when join + start race: an uninvited socket is moved to ١ and talks there only', async () => {
+  const reg = fakeChannels(new Set(['ua', 'ub']));
+  const L = await lab({ channels: reg, membershipDelayMs: 60 });
+  try {
+    const [a, b, c] = await seated(L, ['tok-a', 'tok-b', 'tok-c']);
+    a.send({ type: 'ptt_join', channel: PRIVATE, channels: true });
+    b.send({ type: 'ptt_join', channel: '1', channels: true });
+    await a.next('ptt_state');
+    await b.next('ptt_state');
+    /* C (not invited) asks for the private channel and presses at once. */
+    c.send({ type: 'ptt_join', channel: PRIVATE, channels: true });
+    c.send({ type: 'ptt_start', id: 3 });
+    assert.equal((await c.next('ptt_channel_kicked')).reason, 'not_invited');
+    const g = await c.next('ptt_grant', 3000);
+    assert.equal(g.channel, '1', 'refused → its floor is on «تردد ١», never the private one');
+    assert.equal(L.ptt.state(OUTING, PRIVATE), null);
+    c.ws.send(frame(g.burst, 0));
+    await until(() => b.bin.length === 1, 3000, 'B on ١ hears C');
+    await sleep(80);
+    assert.equal(a.bin.length, 0, 'the private channel hears nothing');
+    assert.equal(a.inbox.some((m) => m.type === 'ptt_talker'), false);
+    /* And a switch to it + press, back to back, is still refused. */
+    c.send({ type: 'ptt_stop' });
+    await b.next('ptt_idle');
+    c.send({ type: 'ptt_join_channel', channel: PRIVATE });
+    c.send({ type: 'ptt_start', id: 4 });
+    await c.next('ptt_channel_kicked');
+    const g2 = await c.next('ptt_grant', 3000);
+    assert.equal(g2.channel, '1');
+    assert.equal(L.ptt.state(OUTING, PRIVATE), null);
+    for (const p of [a, b, c]) p.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('chat_* and group_audio_* sent right after auth (before `ready`) are answered, in order, not dropped', async () => {
+  const L = await lab({ membershipDelayMs: 40 });
+  try {
+    const a = L.phone('tok-a', { auth: false });
+    await a.opened;
+    a.send({ type: 'auth', token: 'tok-a', outing_id: OUTING });
+    a.send({ type: 'chat_message', id: 'c1', with: 'group', client_id: 'x1', kind: 'text', text: 'وصلت' });
+    a.send({ type: 'group_audio_cmd', id: 'g1', cmd: { op: 'play' } });
+    a.send({ type: 'group_audio_sync' });
+    a.send({ type: 'chat_message', id: 'c2', with: 'group', client_id: 'x2', kind: 'text', text: 'تمام' });
+    await a.next('ready');
+    await until(() => a.inbox.filter((m) => /^(chat_ack|group_audio_ack|group_audio_state)$/.test(m.type)).length === 4, 3000, 'all four answered');
+    const seen = a.inbox.filter((m) => /^(chat_ack|group_audio_ack|group_audio_state)$/.test(m.type)).map((m) => `${m.type}:${m.id ?? ''}`);
+    assert.deepEqual(seen, ['chat_ack:c1', 'group_audio_ack:g1', 'group_audio_state:', 'chat_ack:c2']);
+    a.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('one socket stuck on a slow frame never delays another socket’s audio, and its own ping still answers', async () => {
+  const L = await lab();
+  try {
+    const [a, b, c] = await seated(L, ['tok-a', 'tok-b', 'tok-c']);
+    a.send({ type: 'ptt_join' });
+    b.send({ type: 'ptt_join' });
+    await a.next('ptt_state');
+    await b.next('ptt_state');
+    a.send({ type: 'ptt_start', id: 1 });
+    const g = await a.next('ptt_grant');
+    /* C's next frame hangs on the "database" for 1.5 s. */
+    let release;
+    const slow = new Promise((r) => (release = r));
+    const orig = L.ptt.handle;
+    L.ptt.handle = async (conn, msg) => {
+      if (conn.userId === 'uc' && msg.type === 'ptt_join') await slow;
+      return orig(conn, msg);
+    };
+    c.send({ type: 'ptt_join' });
+    const t0 = performance.now();
+    c.send({ type: 'ping' });
+    await c.next('pong', 1000);
+    assert.ok(performance.now() - t0 < 200, 'ping is not queued behind the slow frame');
+    for (let i = 0; i < 3; i++) a.ws.send(frame(g.burst, i));
+    await until(() => b.bin.length === 3, 1000, 'A→B audio while C is stuck');
+    release();
+    await c.next('ptt_state', 3000);
+    L.ptt.handle = orig;
+    for (const p of [a, b, c]) p.ws.close();
   } finally {
     await L.close();
   }
