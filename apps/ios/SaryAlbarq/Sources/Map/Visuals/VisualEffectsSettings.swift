@@ -198,7 +198,7 @@ struct VisualEffectsSection: View {
                           isOn: $master, id: "settings.visuals")
             if master {
                 SaryDivider()
-                SaryToggleRow(title: "كثبان ثلاثية الأبعاد", subtitle: "تظليل التضاريس من موقع الشمس الحقيقي", systemImage: "mountain.2.fill",
+                SaryToggleRow(title: "طعوس ثلاثية الأبعاد", subtitle: "تظليل التضاريس من موقع الشمس الحقيقي", systemImage: "mountain.2.fill",
                               isOn: $terrain, id: "settings.visuals.terrain")
                 SaryDivider()
                 SaryToggleRow(title: "السماء والإضاءة", subtitle: "فجر ونهار وغروب وليل حسب ارتفاع الشمس", systemImage: "sun.horizon.fill",

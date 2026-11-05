@@ -194,7 +194,7 @@ final class WeatherThresholdTests: XCTestCase {
 
         let near = WeatherAlerts.evaluate(total, now: now, wadi: WadiContext(distanceM: 1_000, name: nil))
         let flood = try? XCTUnwrap(near.first { $0.kind == .flood })
-        XCTAssertEqual(flood?.title, "احذر السيول في الأودية")
+        XCTAssertEqual(flood?.title, "انتبهوا من السيول في الشعبان والأودية")
         XCTAssertEqual(flood?.level, 1)
         XCTAssertTrue(flood?.detail.contains("تقدير، تابع تحذيرات المركز الوطني للأرصاد") == true)
         XCTAssertFalse(WeatherAlerts.evaluate(total, now: now, wadi: WadiContext(distanceM: 1_001, name: nil)).map(\.kind).contains(.flood))

@@ -151,7 +151,7 @@ struct InviteJoinSheet: View {
                 } else {
                     if needsTypedName(inv) {
                         /* An open link and no identity yet: the only thing we cannot know is your name. */
-                        SaryTextField(title: "اسمك", placeholder: "كما يراه أصحابك", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                        SaryTextField(title: "اسمك", placeholder: "كما يراه العيال", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
                     }
                     if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
                     Button { join(inv) } label: {

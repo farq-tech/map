@@ -537,10 +537,10 @@ enum StoryRenderer {
         let n = max(0, f.memberCount - 1)
         switch n {
         case 0: return "طلعة فردية"
-        case 1: return "مع رفيق واحد"
-        case 2: return "مع رفيقين"
-        case 3...10: return "مع \(SaryFormat.number(n)) رفاق"
-        default: return "مع \(SaryFormat.number(n)) رفيقًا"
+        case 1: return "مع واحد من العيال"
+        case 2: return "مع اثنين من العيال"
+        case 3...10: return "مع \(SaryFormat.number(n)) من العيال"
+        default: return "مع \(SaryFormat.number(n)) من العيال"
         }
     }
 

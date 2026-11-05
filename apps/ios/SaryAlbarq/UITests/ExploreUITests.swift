@@ -99,13 +99,16 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForExistence(timeout: 5), "the saved place is listed")
         for id in ["places.addCenter", "places.row", "places.menu"] { XCTAssertTrue(any(app, id).exists, id) }
         shot(app, "explore-places")
-        /* Delete via the row's menu. */
+        /* Delete via the row's menu. Its actions only take a tap once the menu has settled, which on build 15
+           took longer than the old 6 s window while the map kept the main thread busy re-querying roads (fixed in
+           OutingMapboxView). Under load the opening tap's release can also land on «احذف» (the menu covers the «…»
+           button) and pick it, which goes straight to the confirmation. Either way the confirmation must follow. */
         any(app, "places.menu").tap()
-        /* The menu animates in: wait until «احذف» can take a tap, then the confirmation. */
-        /* «احذف» shows twice in the tree (the menu item, then the confirmation): tap the one that can take it. */
+        let confirm = app.buttons["dialog.confirm"]
         func tapHittableDelete(within seconds: TimeInterval) -> Bool {
             let end = Date().addingTimeInterval(seconds)
             while Date() < end {
+                if confirm.exists { return true }
                 if let b = app.buttons.matching(NSPredicate(format: "label == 'احذف'")).allElementsBoundByIndex.first(where: { $0.isHittable }) {
                     b.tap()
                     return true
@@ -114,8 +117,9 @@ final class ExploreUITests: XCTestCase {
             }
             return false
         }
-        XCTAssertTrue(tapHittableDelete(within: 6), "«احذف» in the row's menu")
-        _ = tapHittableDelete(within: 3) // the confirmation, if asked
+        XCTAssertTrue(tapHittableDelete(within: 30), "«احذف» in the row's menu")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "the confirmation")
+        confirm.tap()
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForNonExistence(timeout: 5), "deleted")
     }
 

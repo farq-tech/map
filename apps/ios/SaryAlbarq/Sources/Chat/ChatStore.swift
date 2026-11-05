@@ -559,7 +559,7 @@ final class DemoChatBackend: ChatBackend, @unchecked Sendable {
             add(sender: a, to: nil, kind: .location, point: ChatPoint(lat: 24.7141, lng: 46.6727, label: "مخيم الشباب"), at: now.addingTimeInterval(-840))
         }
         if ids.count > 1 {
-            add(sender: ids[1], to: nil, kind: .quick, text: "انتظروني", at: now.addingTimeInterval(-600))
+            add(sender: ids[1], to: nil, kind: .quick, text: "اصبروا لي", at: now.addingTimeInterval(-600))
             add(sender: ids[1], to: me, kind: .text, text: "عندك حبل سحب زيادة؟", at: now.addingTimeInterval(-300))
         }
     }

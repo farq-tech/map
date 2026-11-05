@@ -237,7 +237,7 @@ enum WeatherAlerts {
             let lvl = dustNow == .heavy ? 2 : 1
             out.append(WeatherAlertUI(kind: .dust, forDestination: forDestination, level: lvl,
                                       title: prefix + (dustNow == .heavy ? "غبار كثيف يحجب الرؤية" : "\(dustNow.label) يقلل الرؤية"),
-                                      detail: dustNow == .heavy ? "الرؤية قد تقل إلى كيلو أو أقل · خفّف السرعة وشغّل الأنوار" : "خفّف السرعة وشغّل الأنوار وخلّكم قريبين"))
+                                      detail: dustNow == .heavy ? "الرؤية قد تقل إلى كيلو أو أقل · خفّف السرعة وشغّل الأنوار" : "خفّفوا السرعة وشغّلوا الأنوار وتلاحقوا"))
         }
 
         /* Rain, and floods near a wadi */
@@ -253,7 +253,7 @@ enum WeatherAlerts {
         if let w = wadi, w.distanceM <= WeatherThresholds.wadiNearM, WeatherRules.floodRain(r, now: now) {
             let where_ = w.distanceM <= WeatherThresholds.wadiInsideM ? "أنتم في مجرى وادٍ أو بجانبه" : "وادٍ على بعد \(SaryFormat.distance(meters: w.distanceM))"
             out.append(WeatherAlertUI(kind: .flood, forDestination: forDestination, level: w.distanceM <= WeatherThresholds.wadiInsideM ? 2 : 1,
-                                      title: prefix + "احذر السيول في الأودية",
+                                      title: prefix + "انتبهوا من السيول في الشعبان والأودية",
                                       detail: "\(where_) ومطر متوقع \(WeatherFormat.mm(WeatherRules.rainTotal(r, now: now, hours: WeatherThresholds.floodHours))) · لا تخيّموا في بطن الوادي. تقدير، تابع تحذيرات المركز الوطني للأرصاد"))
         }
         return out

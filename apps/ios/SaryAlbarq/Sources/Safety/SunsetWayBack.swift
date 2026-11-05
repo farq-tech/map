@@ -125,7 +125,7 @@ enum SunsetWarning {
         guard way >= toSunset - marginS else { return nil }
         guard let s = step(minutesToSunset: toSunset / 60), !warned.contains(s) else { return nil }
         let wayMin = roundUp5(way / 60)
-        let wayText = "طريق العودة \(SafetyFormat.span(minutes: wayMin)) تقريبًا"
+        let wayText = "طريق الرجعة \(SafetyFormat.span(minutes: wayMin)) تقريبًا"
         let title: String
         if toSunset <= 0 {
             title = "غابت الشمس و\(wayText)"

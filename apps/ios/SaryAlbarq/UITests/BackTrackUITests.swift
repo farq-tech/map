@@ -68,8 +68,22 @@ final class BackTrackUITests: XCTestCase {
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
         let start = app.buttons["trail.backtrack"]
         XCTAssertTrue(start.waitForExistence(timeout: 8), "«مساري» card in the sheet")
-        if !start.isHittable { app.descendants(matching: .any)["outing-sheet-summary"].swipeUp() }
-        XCTAssertTrue(app.switches["trail.friends"].exists || app.descendants(matching: .any)["trail.friends"].exists, "«أظهر مسارات الأصحاب»")
+        /* «مساري» sits below the trip card in «الرحلة», out of view at the sheet's middle height. Scroll it in
+           ourselves and tap only once it stopped moving: XCUITest's own scroll-to-visible taps while the sheet
+           is still decelerating, and a tap on a moving scroll view only stops it (the button never fires). */
+        for _ in 0..<5 where !start.isHittable {
+            /* A drag inside the sheet's lower part (below its middle-height top): grows the sheet, then scrolls it. */
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.86))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+        }
+        var last = start.frame
+        for _ in 0..<20 {
+            usleep(250_000)
+            if start.frame == last { break }
+            last = start.frame
+        }
+        XCTAssertTrue(start.isHittable, "«طريق الرجعة» in the «مساري» card, in view")
+        XCTAssertTrue(app.switches["trail.friends"].exists || app.descendants(matching: .any)["trail.friends"].exists, "«أظهر مسارات العيال»")
         attach(app, "trail-card")
         start.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5), "back-track from the sheet")

@@ -27,7 +27,7 @@ enum FeatureAvailability {
         case "invalid_waypoint", "invalid_title": return "تأكد من اسم النقطة ونوعها."
         case "invalid_photo", "too_large": return "الصورة كبيرة أو بصيغة غير مدعومة. جرّب صورة ثانية."
         case "waypoint_not_found": return "هذه النقطة حُذفت."
-        case "forbidden", "not_allowed": return "يحذف النقطة من أضافها أو قائد الطلعة فقط."
+        case "forbidden", "not_allowed": return "يحذف النقطة من أضافها أو أمير الرحلة فقط."
         case "invalid_convoy": return "تأكد من اختيار المقدمة والمؤخرة والمسافة."
         default: return e.arabic
         }

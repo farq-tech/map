@@ -85,7 +85,7 @@ final class TripUITests: XCTestCase {
 
         let summary = app.buttons["trip.summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10), "«ملخص الرحلة» once it ended")
-        XCTAssertTrue(app.buttons["trip.return"].exists, "«طريق العودة» as a new trip")
+        XCTAssertTrue(app.buttons["trip.return"].exists, "«طريق الرجعة» as a new trip")
         summary.tap()
         let trip = app.descendants(matching: .any)["summary.trip"]
         XCTAssertTrue(trip.waitForExistence(timeout: 15), "the trip section in the summary")

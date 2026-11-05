@@ -246,7 +246,7 @@ struct ExploreLayersSheet: View {
                     .padding(.horizontal, theme.space(.m))
             }
             SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
-                SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والكثبان",
+                SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والطعوس",
                               systemImage: "mountain.2.fill", isOn: $controller.terrain3D, id: "explore-terrain3d")
                     .padding(.horizontal, theme.space(.m))
             }
@@ -357,6 +357,7 @@ struct SavedPlacesSheet: View {
                     }
                 } label: { Label("عدّل الاسم والأيقونة", systemImage: "pencil") }
                 Button(role: .destructive) { deleting = place } label: { Label("احذف", systemImage: "trash") }
+                    .accessibilityIdentifier("places.delete")
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 20, weight: .semibold))
