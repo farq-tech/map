@@ -53,6 +53,8 @@ enum LiveModal: Identifiable, Equatable {
     case enjad(Enjad.Situation)
     /// «المحادثات»: the conversation list, or straight into one conversation.
     case chat(ChatWith?)
+    /// «ترددات»: the walkie-talkie's channels (five public + private ones).
+    case pttChannels
 
     var id: String {
         switch self {
@@ -80,6 +82,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navOptions: return "navOptions"
         case .navSteps: return "navSteps"
         case .navStartChoice: return "navStartChoice"
+        case .pttChannels: return "pttChannels"
         }
     }
 }

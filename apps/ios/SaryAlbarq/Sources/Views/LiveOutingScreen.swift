@@ -118,6 +118,9 @@ struct LiveOutingScreen: View {
         }
     }
 
+    /// The chip sits level with the button's disc, above its caption.
+    private func showsCaptionPad(_ rowMode: Bool) -> CGFloat { rowMode ? 8 : 34 }
+
     private func touchChanged(_ down: Bool) {
         touching = down
         if down {
@@ -247,6 +250,12 @@ struct LiveOutingScreen: View {
                                 .fixedSize()
                                 .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
                             }
+                        /* «ترددات»: which channel the button talks on; tap for all of them. */
+                        if controller.session.walkie.showsChannels {
+                            PTTChannelChip(walkie: controller.session.walkie, open: { controller.modal = .pttChannels })
+                                .chromeFrame("ptt-channel")
+                                .padding(.bottom, showsCaptionPad(rowMode))
+                        }
                         Spacer()
                         if rowMode {
                             SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)

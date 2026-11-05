@@ -23,6 +23,11 @@ final class LiveChannel {
         var onServerNow: (String) -> Void = { _ in }
         /// «قناة الطلعة»: floor-control signals (ptt_*).
         var onPTT: (PTTSignal) -> Void = { _ in }
+        /// «ترددات»: the same signals with the channel they are about (nil from servers before
+        /// channels). When set, it is called instead of `onPTT`.
+        var onPTTOnChannel: ((PTTSignal, String?) -> Void)?
+        /// «ترددات»: the channel list, being taken off a private channel, an invitation.
+        var onPTTChannel: (PTTChannelEvent) -> Void = { _ in }
         /// «قناة الطلعة»: a binary audio frame relayed by the server.
         var onAudio: (Data) -> Void = { _ in }
         /// The link's health for the diagnostics line («متصل» / «يعيد الاتصال» / last close code).
@@ -81,6 +86,8 @@ final class LiveChannel {
     private var away = false
     /// In «قناة الطلعة» (re-sent after every reconnect).
     private var pttJoined = false
+    /// «ترددات»: the channel we listen to (re-sent after every reconnect). "1" = «تردد ١».
+    private(set) var pttChannel = PTTChannels.defaultId
     /// A floor request made while the socket was (re)connecting: sent right after `ready`, if still fresh.
     private var pendingPTTStart: (id: Int, atMs: Double)?
     /// When the current socket was created (a socket still handshaking is not killed by `reconnectNow`).
@@ -174,8 +181,22 @@ final class LiveChannel {
     /// Join (or mute = leave) the outing's live voice channel. Survives reconnects.
     func setPTTJoined(_ on: Bool) {
         pttJoined = on
-        sendFrame(["type": on ? "ptt_join" : "ptt_leave"])
+        sendFrame(on ? joinFrame() : ["type": "ptt_leave"])
     }
+
+    /// «غيّر التردد»: listen (and talk) on `channel` from now on. Sent at once when joined;
+    /// otherwise remembered for the next join.
+    func setPTTChannel(_ channel: String) {
+        guard channel != pttChannel else { return }
+        pttChannel = channel
+        if pttJoined { sendFrame(["type": "ptt_join_channel", "channel": channel]) }
+    }
+
+    /// The server took us off a channel (ptt_channel_kicked): it already put us on ١.
+    func pttChannelReset(to channel: String = PTTChannels.defaultId) { pttChannel = channel }
+
+    /// `channels: true` tells the server this build understands «ترددات» (lists, kicks, invites).
+    private func joinFrame() -> [String: Any] { ["type": "ptt_join", "channel": pttChannel, "channels": true] }
 
     /// Ask for the floor. While the socket is (re)connecting the request waits for `ready`
     /// (≤ `pendingStartMaxMs`) instead of being lost, and the reconnect starts now.
@@ -383,7 +404,7 @@ final class LiveChannel {
                 /* «قناة الطلعة» (Sources/Media): only when the server sends it, so an older server reads as "not there". */
                 if let snap = msg["snapshot"] as? [String: Any], snap.keys.contains("media") { MediaEvents.post(outingId: self.outingId, raw: snap["media"]) }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
-                if self.pttJoined { self.sendFrame(["type": "ptt_join"]) }
+                if self.pttJoined { self.sendFrame(self.joinFrame()) }
                 if let p = self.pendingPTTStart {
                     self.pendingPTTStart = nil
                     if self.deps.scheduler.nowMs - p.atMs <= Self.pendingStartMaxMs {
@@ -403,7 +424,12 @@ final class LiveChannel {
             case "closed", "note_ack":
                 break
             case _ where type.hasPrefix("ptt_"):
-                if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
+                if let sig = PTTSignal.decode(msg) {
+                    if let scoped = self.handlers.onPTTOnChannel { scoped(sig, PTTSignal.channel(of: msg)) } else { self.handlers.onPTT(sig) }
+                } else if let ev = PTTChannelEvent.decode(msg) {
+                    if case .kicked = ev { self.pttChannel = PTTChannels.defaultId }
+                    self.handlers.onPTTChannel(ev)
+                }
             case "media_state":
                 MediaEvents.post(outingId: self.outingId, raw: msg["state"])
             case _ where type.hasPrefix("chat_"):

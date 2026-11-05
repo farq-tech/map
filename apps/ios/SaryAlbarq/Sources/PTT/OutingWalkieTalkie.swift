@@ -34,6 +34,23 @@ final class OutingWalkieTalkie: ObservableObject {
     /// Ticks once a second while talking (the button's clock).
     @Published private(set) var nowMs = Date().timeIntervalSince1970 * 1000
 
+    // «ترددات»: which channel we are on, and what the server says about all of them.
+    /// "1"…"5" or a private channel's id. Saved per outing.
+    @Published private(set) var channelId: String
+    @Published private(set) var channels: [PTTChannelInfo] = PTTChannels.publicList
+    /// «+ تردد خاص»: the server says I may (the trip's leader).
+    @Published private(set) var canCreatePrivate = false
+    /// The server knows «ترددات» (it sent a channel list or a channel-tagged signal). Until then —
+    /// a production server before the channels deploy — everyone is on one channel, the chip is
+    /// hidden and nothing about channels is sent that could change what we hear.
+    @Published private(set) var channelsSupported = false
+    /// An invitation not looked at yet (a dot on the chip until the sheet opens).
+    @Published private(set) var pendingInvite: PTTChannelInfo?
+    /// REST for private channels (nil: the demo — everything stays on this phone).
+    var channelBackend: PTTChannelBackend?
+    /// The demo: may I play the leader (no server to say so).
+    var demoLeader: () -> Bool = { false }
+
     let outingId: String
     let me: String
     private let defaults: UserDefaults
@@ -67,10 +84,17 @@ final class OutingWalkieTalkie: ObservableObject {
     var outingName: () -> String = { "" }
 
     static let mutedKeyPrefix = "sary.ptt.muted."
+    static let channelKeyPrefix = "sary.ptt.channel."
 
-    /// Account deletion / `-resetState`: every outing's «كتم» choice.
+    /// Account deletion / `-resetState`: every outing's «كتم» choice and channel.
     static func forgetAll(defaults: UserDefaults = .standard) {
-        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(mutedKeyPrefix) { defaults.removeObject(forKey: k) }
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(mutedKeyPrefix) || k.hasPrefix(channelKeyPrefix) { defaults.removeObject(forKey: k) }
+    }
+
+    /// The saved channel for this outing, if it still looks like one ("1"…"5" or a uuid).
+    static func savedChannel(_ outingId: String, defaults: UserDefaults) -> String {
+        guard let s = defaults.string(forKey: channelKeyPrefix + outingId) else { return PTTChannels.defaultId }
+        return PTTChannels.isPublic(s) || UUID(uuidString: s) != nil ? s : PTTChannels.defaultId
     }
 
     #if DEBUG
@@ -95,6 +119,7 @@ final class OutingWalkieTalkie: ObservableObject {
         var f = PTTFloor(me: me)
         _ = f.setMuted(defaults.bool(forKey: Self.mutedKeyPrefix + outingId))
         floor = f
+        channelId = Self.savedChannel(outingId, defaults: defaults)
         self.route.callbacks = callbacks()
         inApp.callbacks = callbacks()
         audio.onFrame = { [weak self] frame in
@@ -119,7 +144,11 @@ final class OutingWalkieTalkie: ObservableObject {
         self.channel = channel
         self.mesh = mesh
         mesh?.onVoice = { [weak self] m in self?.nearbyVoice(m) }
+        demo = channel == nil && channelBackend == nil
+        if demo { channelsSupported = false }
+        channel?.setPTTChannel(channelId)
         channel?.setPTTJoined(!muted)
+        if demo { refreshDemoChannels() }
         refreshMode()
         #if canImport(PushToTalk) && !targetEnvironment(simulator)
         PTTSystemRoute.shared.onRemoteFailed = { [weak self] in
@@ -220,6 +249,19 @@ final class OutingWalkieTalkie: ObservableObject {
 
     // MARK: inbound
 
+    /// A ptt_* signal tagged with its channel («ترددات»). One for another channel (in flight
+    /// while we switched) is dropped: it is not what this radio is tuned to.
+    func receive(_ s: PTTSignal, channel ch: String?) {
+        if ch != nil, !channelsSupported { channelsSupported = true }
+        if let ch, ch != channelId {
+            diag("ptt", "\(Self.short(s)) for another channel: dropped")
+            return
+        }
+        if case let .idle(_, _, reason) = s, [.switched, .removed, .closed].contains(reason) { quietEnd = true }
+        receive(s)
+        quietEnd = false
+    }
+
     func receive(_ s: PTTSignal) {
         let fx = floor.receive(s, nowMs: Self.now())
         diag("ptt", "\(Self.short(s)) → \(fx.map(Self.short).joined(separator: ","))")
@@ -309,8 +351,8 @@ final class OutingWalkieTalkie: ObservableObject {
                 PTTAudioEngine.log.notice("[PTT] stop playback (mode=\(String(describing: self.mode), privacy: .public) live=\(self.channel?.isLive == true))")
                 playbackOn = false
                 pendingPlayback = nil
-                /* Muted or the link dropped: no roger for a transmission we did not hear end. */
-                let quiet = leaving || muted || (channel?.isLive != true && mode != .nearby)
+                /* Muted, the link dropped, or we tuned away: no roger for a transmission we did not hear end. */
+                let quiet = leaving || muted || quietEnd || (channel?.isLive != true && mode != .nearby)
                 audio.stopPlayback(cue: cues.incomingEnded(quiet: quiet, cueContext))
                 audioRoute.setRemote(nil)
                 if forceInAppAudio, !micWanted { forceInAppAudio = false }
@@ -464,7 +506,7 @@ final class OutingWalkieTalkie: ObservableObject {
         if let sys = route as? PTTSystemRoute ?? (PTTSystemRoute.shared.available ? PTTSystemRoute.shared : nil) {
             route = sys
             sys.callbacks = callbacks()
-            sys.join(outingId: outingId, name: outingName())
+            sys.join(outingId: outingId, name: systemChannelName)
         }
         #endif
     }
@@ -514,6 +556,131 @@ final class OutingWalkieTalkie: ObservableObject {
     }
 
     // MARK: nearby (no internet)
+
+    // MARK: «ترددات» — channels
+
+    /// Set while a transmission ends because we changed channel (no roger beep for it).
+    private var quietEnd = false
+
+    var currentChannel: PTTChannelInfo? { channels.first { $0.id == channelId } }
+
+    /// «غيّر التردد»: the knob clicks at once; whatever we heard or said on the old channel ends
+    /// for us; the server tunes us in and sends the new channel's current sentence from its start.
+    func switchChannel(_ id: String) {
+        guard id != channelId else { return }
+        guard PTTChannels.isPublic(id) || channels.contains(where: { $0.id == id && $0.isPrivate }) else { return }
+        diag("channel", "switch → \(PTTChannels.isPublic(id) ? id : "private")")
+        quietEnd = true
+        apply(floor.channelSwitched())
+        quietEnd = false
+        channelId = id
+        defaults.set(id, forKey: Self.channelKeyPrefix + outingId)
+        channel?.setPTTChannel(id)
+        if PTTRadioSounds.enabled(defaults) { audio.playCue(.channelClick) }
+        updateSystemChannelName()
+        if demo { refreshDemoChannels() }
+        if pendingInvite?.id == id { pendingInvite = nil }
+        objectWillChange.send()
+    }
+
+    /// The sheet was opened: the invitation was seen.
+    func invitationSeen() { pendingInvite = nil }
+
+    /// ptt_channels / ptt_channel_kicked / ptt_channel_invite.
+    func receiveChannel(_ ev: PTTChannelEvent) {
+        switch ev {
+        case let .list(_, canCreate, list):
+            channelsSupported = true
+            channels = list.isEmpty ? PTTChannels.publicList : list
+            canCreatePrivate = canCreate
+            /* Our private channel is gone from the list (closed while we were away): back to ١. */
+            if !PTTChannels.isPublic(channelId), !channels.contains(where: { $0.id == channelId }) { fallBack() }
+        case let .kicked(ch, reason):
+            let name = channels.first { $0.id == ch }?.name
+            if ch == channelId { fallBack() }
+            if reason != "not_invited" || ch == channelId { show(PTTChannels.kickedText(reason, name: name)) }
+        case let .invited(ch, name, _):
+            pendingInvite = PTTChannelInfo(id: ch, kind: .private, name: name)
+            show(PTTChannels.inviteText(name))
+        }
+        objectWillChange.send()
+    }
+
+    /// Off a private channel (removed, closed, not invited): the server already put us on ١.
+    private func fallBack() {
+        quietEnd = true
+        apply(floor.channelSwitched())
+        quietEnd = false
+        channelId = PTTChannels.defaultId
+        defaults.set(channelId, forKey: Self.channelKeyPrefix + outingId)
+        channel?.pttChannelReset()
+        updateSystemChannelName()
+    }
+
+    /// «قناة الطلعة · تردد ٣» on the Lock Screen / Dynamic Island.
+    private func updateSystemChannelName() {
+        route.setChannelName(systemChannelName)
+    }
+
+    var systemChannelName: String {
+        channelsSupported || demo ? PTTChannels.systemLabel(PTTChannels.chipLabel(currentChannel)) : "قناة الطلعة"
+    }
+
+    /// Show the channel chip: the server has channels (or the demo, which keeps them on the phone).
+    var showsChannels: Bool { channelsSupported || demo }
+
+    /// «+ تردد خاص» (the leader): name + the members he picks. The server checks everything again.
+    func createPrivate(name: String, members: [String]) async throws -> PTTChannelInfo {
+        if let b = channelBackend {
+            let c = try await b.createPTTChannel(outingId, name: name, members: members)
+            if !channels.contains(where: { $0.id == c.id }) { channels.append(c) }
+            return c
+        }
+        /* The demo: a channel on this phone only. */
+        let c = PTTChannelInfo(id: UUID().uuidString.lowercased(), kind: .private, name: name, members: [me] + members.filter { $0 != me }, createdBy: me, canManage: true)
+        demoPrivate.append(c)
+        refreshDemoChannels()
+        return c
+    }
+
+    func updatePrivate(_ id: String, name: String?, add: [String], remove: [String]) async throws {
+        if let b = channelBackend {
+            let c = try await b.updatePTTChannel(outingId, channel: id, name: name, add: add, remove: remove)
+            if let i = channels.firstIndex(where: { $0.id == id }) { channels[i] = c }
+            return
+        }
+        guard let i = demoPrivate.firstIndex(where: { $0.id == id }) else { return }
+        if let name { demoPrivate[i].name = name }
+        demoPrivate[i].members = demoPrivate[i].members.filter { !remove.contains($0) } + add.filter { !demoPrivate[i].members.contains($0) }
+        refreshDemoChannels()
+    }
+
+    func closePrivate(_ id: String) async throws {
+        if let b = channelBackend {
+            try await b.closePTTChannel(outingId, channel: id)
+            channels.removeAll { $0.id == id }
+        } else {
+            demoPrivate.removeAll { $0.id == id }
+            refreshDemoChannels()
+        }
+        if channelId == id { fallBack() }
+        objectWillChange.send()
+    }
+
+    private var demoPrivate: [PTTChannelInfo] = []
+    /// Attached without a server (the demo outing): channels live on this phone.
+    private var demo = false
+
+    /// No server (the demo): the five public channels and ours, with only me listening where I am.
+    private func refreshDemoChannels() {
+        guard demo else { return }
+        channels = (PTTChannels.publicList + demoPrivate).map { c in
+            var c = c
+            c.listeners = c.id == channelId && !muted ? [me] : []
+            return c
+        }
+        canCreatePrivate = demoLeader()
+    }
 
     private var lastNearbyBurst: UInt8?
     private var nearbyTalker: (id: String, burst: UInt8, atMs: Double)?

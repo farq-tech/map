@@ -162,6 +162,13 @@ struct LiveSheet: View {
                                 later: { controller.modal = nil })
         case .navSteps:
             NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
+        case .pttChannels:
+            PTTChannelSheet(walkie: controller.session.walkie,
+                            members: (controller.session.displayView?.orderedMembers ?? []).map { PTTChannelSheet.Person(id: $0.user_id, name: $0.display_name) },
+                            me: controller.session.myUserId,
+                            close: { controller.modal = nil })
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         case .layers:
             ExploreLayersSheet(controller: controller)
                 .presentationDetents([.medium, .large])
