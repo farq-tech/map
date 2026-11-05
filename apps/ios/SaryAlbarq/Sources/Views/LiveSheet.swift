@@ -34,6 +34,8 @@ struct LiveSheet: View {
         }
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(SafetyPrompts(safety: controller.safety))
+        .modifier(FeatureModals(controller: controller, features: controller.features))
         .background(MediaSheetHost(center: MediaCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
@@ -92,10 +94,18 @@ struct LiveSheet: View {
         case .offlineMaps:
             OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
                 .presentationDetents([.large])
+        case .weather:
+            WeatherSheet(weather: controller.weather, close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case let .weatherAt(point):
+            WeatherPointSheet(point: point, close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
         case .trailAlways:
             TrailAlwaysExplainer(allow: controller.allowAlways, later: controller.laterAlways)
                 .presentationDetents([.large])
                 .interactiveDismissDisabled()
+        case let .plan(m):
+            LivePlanModalView(controller: controller, modal: m)
         }
     }
 }
@@ -126,7 +136,10 @@ private struct ParticipantsTab: View {
             }
             if ui.status != .ended {
                 SaryRallyCard(rally: ui.participantsTab.rally, canManage: v?.iLead == true, actions: actions.participantsTab)
+                SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
+                LiveWeatherCard(controller: controller, weather: controller.weather)
             }
+            ConvoySection(controller: controller, features: controller.features)
             TrailCard(controller: controller, card: controller.trailCard)
             MediaEntryCard(center: MediaCenters.of(controller))
             VStack(spacing: 0) {
@@ -139,6 +152,7 @@ private struct ParticipantsTab: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
+            WaypointsSection(controller: controller, features: controller.features)
         }
     }
 }
@@ -440,6 +454,7 @@ private struct SettingsTab: View {
                               isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
             }
             TrailSettingsSection(controller: controller, card: controller.trailCard)
+            SpeedSettingsSection()
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
                     HStack(spacing: theme.space(.m)) {

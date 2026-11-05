@@ -9,7 +9,7 @@ final class BackTrackUITests: XCTestCase {
 
     private func launch(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-demoTrail"] + extra
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-demoTrail"] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()

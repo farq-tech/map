@@ -81,12 +81,14 @@ enum LocalAccountData {
             TripLogStore.key, InviteTokenStore.key, OnboardingProgress.key,
             PushRegistrar.tokenKey, PushRegistrar.explainedKey, PushRegistrar.enabledKey,
             OutingSession.modeKey, OutingSession.batteryKey,
-        ] + TrailPrefs.keys
+            WatchLinkStore.key, SafetyController.warnedStoreKey,
+        ] + TrailPrefs.keys + SpeedPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {
         IdentityStore.save(nil)
         for k in keys { defaults.removeObject(forKey: k) }
+        WaypointCache.wipeAll()
         TrailStore.forgetAll()
     }
 }

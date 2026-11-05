@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 import UIKit
@@ -18,6 +19,8 @@ struct SessionEnv {
     var alwaysOverride: Bool?
     /// Where «مساري» is kept on this device (tests use a temporary folder).
     var trailDirectory: URL? = TrailStore.directory
+    /// The phone-to-phone link (`NearbyMesh`). Needs `timers` too, so unit tests never touch the radios.
+    var nearbyMesh = true
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -47,6 +50,8 @@ final class OutingSession: ObservableObject, Identifiable {
     /// The 1 s SOS hold finished and the alert is on its way.
     @Published private(set) var sosSending = false
     @Published private(set) var busy: Set<String> = []
+    /// Every live event after the reducer applied it (waypoints are kept outside the snapshot).
+    let events = PassthroughSubject<LiveEvent, Never>()
     /// «شارك البطارية»: off unless the person turns it on (per device).
     @Published var batterySharing: Bool {
         didSet { env.defaults.set(batterySharing, forKey: Self.batteryKey) }
@@ -58,6 +63,10 @@ final class OutingSession: ObservableObject, Identifiable {
 
     let isDemo: Bool
     let location: LocationSharer
+    /// Return-timer and «غرّزت» events for `SafetyController`.
+    let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
+    /// The server side of the safety pack (nil in the demo: all local).
+    var safetyBackend: SafetyBackend? { isDemo ? nil : api }
     private let api: OutingsAPI
     private let token: String
     private let env: SessionEnv
@@ -69,6 +78,22 @@ final class OutingSession: ObservableObject, Identifiable {
     private var pendingServerStop = false
     private var trailSavedAt = Date.distantPast
     private var trailUnsaved = 0
+    /// Cars of the same outing nearby, phone to phone, when the internet is gone.
+    let mesh: NearbyMesh
+    private var meshActivation = MeshActivation()
+    private var meshSink: AnyCancellable?
+    /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
+    var stuckMarks: [StuckMark] = []
+    /// «سرعة المركبة» from the live screen's SpeedModel, for the Live Activity.
+    var speedSnapshot: () -> SpeedModel.Snapshot? = { nil }
+    /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
+    var onNearbyEvent: (MeshEvent) -> Void = { _ in }
+    #if DEBUG
+    /// `-SaryMeshTest`: two simulators, no server — consent + share + nearby link forced on.
+    static var meshTest: Bool { ProcessInfo.processInfo.arguments.contains("-SaryMeshTest") }
+    /// `-SaryOffline`: behave as if there were no internet (the live channel never starts).
+    static var forcedOffline: Bool { ProcessInfo.processInfo.arguments.contains("-SaryOffline") }
+    #endif
 
     static let modeKey = "sary.outings.mode.v1"
     static let batteryKey = "sary.outings.battery.v1"
@@ -84,10 +109,20 @@ final class OutingSession: ObservableObject, Identifiable {
         self.view = demo
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
+        self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
         if demo != nil { link = .live }
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
         trail.markGap()
+        #if DEBUG
+        if demo != nil, Self.forcedOffline { link = .offline }
+        #endif
+        mesh.myFix = { [weak self] in
+            guard let self, self.gate.allowsPosition else { return nil }
+            return self.location.lastFix
+        }
+        mesh.onEvents = { [weak self] evs in self?.nearbyEvents(evs) }
+        meshSink = mesh.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: the privacy gate
@@ -124,10 +159,22 @@ final class OutingSession: ObservableObject, Identifiable {
                 Task { @MainActor in
                     guard let self, self.visible else { return }
                     self.tick &+= 1
+                    self.updateMesh()
                 }
             }
             timers.append(t)
         }
+        #if DEBUG
+        if Self.meshTest, isDemo {
+            ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
+            Task { await self.beginSharing() }
+        }
+        if Self.forcedOffline, !isDemo {
+            link = .offline
+            location.onFix = { [weak self] f in self?.handleFix(f) }
+            return
+        }
+        #endif
         guard !isDemo else { return }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
             makeSocket: env.makeSocket,
@@ -164,6 +211,7 @@ final class OutingSession: ObservableObject, Identifiable {
         stopBackgroundTrail()
         saveTrail()
         location.onTrailFix = { _ in }
+        mesh.setRunning(false)
         stopSharingLocally()
         channel?.stop()
         channel = nil
@@ -241,6 +289,8 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// You pressed stop: nothing more leaves the phone, the server deletes your fix.
     func stopSharing() async {
+        /* Tell nearby cars too, so a relay never keeps showing where you were. */
+        mesh.stop(farewell: .stop)
         stopSharingLocally()
         guard !isDemo else { return }
         do {
@@ -287,14 +337,68 @@ final class OutingSession: ObservableObject, Identifiable {
             location.stopSharing()
             channel?.dropPendingFix()
         }
+        updateMesh()
         objectWillChange.send()
+    }
+
+    // MARK: nearby (phone to phone)
+
+    /// The server's picture with what nearby cars said laid over it (newest wins).
+    var displayView: OutingView? { meshOverlay.view }
+
+    var meshOverlay: (view: OutingView?, viaNearby: Set<String>) {
+        guard let v = view else { return (nil, []) }
+        guard !mesh.store.fixes.isEmpty || !mesh.store.events.isEmpty else { return (v, []) }
+        let o = mesh.overlay(v)
+        return (o.view, o.viaNearby)
+    }
+
+    /// Same consent as sharing (`SendGate`); on only while needed.
+    func updateMesh() {
+        guard env.nearbyMesh, env.timers else { return }
+        if let v = view { mesh.setMembers(Set(v.members.keys)) }
+        let now = Date()
+        var friendLost = false
+        if let v = view {
+            for m in v.members.values where m.user_id != v.myId && m.sharing {
+                if v.freshness(of: m.user_id, deviceNow: now) == .lost { friendLost = true; break }
+            }
+        }
+        var forced = false
+        #if DEBUG
+        forced = Self.meshTest
+        #endif
+        let on = meshActivation.update(gateOpen: gate.allowsPosition, linkHealthy: link == .live || link == .polling,
+                                       friendLost: friendLost, forced: forced, nowMs: now.timeIntervalSince1970 * 1000)
+        mesh.setRunning(on)
+    }
+
+    private func nearbyEvents(_ evs: [MeshEvent]) {
+        guard let v = displayView else { return }
+        for e in evs where e.u != v.myId {
+            let name = v.members[e.u]?.display_name ?? ""
+            switch e.k {
+            case .sos:
+                Notifier.post(title: "طوارئ: \(name)", body: "يطلب المساعدة · عبر الأجهزة القريبة", outingId: id, kind: "sos")
+            case .stuck:
+                Notifier.post(title: "\(name) غرّز", body: e.text.map { "\($0) · عبر الأجهزة القريبة" } ?? "عبر الأجهزة القريبة", outingId: id, kind: "sos")
+            default:
+                break
+            }
+            onNearbyEvent(e)
+        }
+    }
+
+    /// A send to the server failed but nearby cars got it: not an error to show.
+    private func deliveredNearby() {
+        if mesh.running && mesh.nearbyCars > 0 { errorText = nil }
     }
 
     /// Every fix from the GPS while sharing. Internal for tests.
     func handleFix(_ f: DeviceFix) {
         guard gate.allowsPosition, location.isSharing || isDemo else { return }
         /* My own totals for «ملخص رحلتي»: on this device only, never points. */
-        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs) } }
+        if !isDemo { TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) } }
         let now = Date().timeIntervalSince1970 * 1000
         let m = location.effectiveMode
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
@@ -376,6 +480,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func linkChanged(_ s: LiveChannel.State) {
         link = s
+        updateMesh()
         if s == .live || s == .polling, pendingServerStop {
             Task { await self.retryServerStop() }
         }
@@ -392,6 +497,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private func applySnapshot(_ s: OutingSnapshot) {
         let previous = view
         view = OutingView.merge(view, s)
+        mesh.setServerKey(s.mesh_key, outingId: id)
         if let previous { notifyChanges(from: previous) }
         if s.outing.status == .ended { closed(.outingEnded) }
         reconcileSharing()
@@ -402,19 +508,29 @@ final class OutingSession: ObservableObject, Identifiable {
         let before = v
         v.apply(e)
         view = v
+        events.send(e)
         switch e {
         case let .memberNote(uid, note?) where uid != v.myId && before.members[uid]?.note != note:
             Notifier.post(title: v.members[uid]?.display_name ?? "ملاحظة جديدة", body: note.text, outingId: id, kind: "note")
         case let .sos(uid, sos?, refresh) where uid != v.myId && !refresh:
             Notifier.post(title: "طوارئ: \(v.members[uid]?.display_name ?? "")", body: sos.fix == nil ? "يطلب المساعدة (بدون موقع)" : "يطلب المساعدة الآن", outingId: id, kind: "sos")
+        case let .sos(uid, nil, _):
+            mesh.serverClearedSOS(uid)
         case let .memberLeft(uid) where uid == v.myId:
             closed(.left)
         case .outingStatus, .memberSharing:
             reconcileSharing()
+        case let .safety(s):
+            safetyEvents.send(s)
+        case .planUpdated, .checklistUpdated:
+            PlanEvents.post(outing: id, e)
         default:
             break
         }
     }
+
+    /// The server's answer to a feature call (convoy), applied like the live event that echoes it.
+    func applyLocal(_ e: LiveEvent) { apply(e) }
 
     private func notifyChanges(from prev: OutingView) {
         guard let v = view else { return }
@@ -472,10 +588,13 @@ final class OutingSession: ObservableObject, Identifiable {
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: clean.isEmpty ? nil : MemberNote(text: clean, at: ISODate.string(Date())))) }
             return true
         }
-        return await run("note") {
+        mesh.announce(.note, text: clean)
+        let ok = await run("note") {
             let n = try await api.note(id, text: clean)
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: n)) }
         }
+        if !ok { deliveredNearby() }
+        return ok || mesh.nearbyCars > 0
     }
 
     func setStatus(_ action: String) async {
@@ -507,23 +626,27 @@ final class OutingSession: ObservableObject, Identifiable {
             let w = Policy.wireFix(f, mode: .precise, nowMs: Date().timeIntervalSince1970 * 1000)
             if w.age_ms <= 25 * 60_000, (f.accuracy ?? 0) <= ServerRules.maxAccuracyM { wire = w }
         }
+        mesh.announce(.sos, sosFix: wire == nil ? nil : location.lastFix)
         if isDemo {
             view?.apply(.sos(userId: me, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
             return
         }
-        _ = await run("sos") {
+        let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
             view?.apply(.sos(userId: me, sos: s, refresh: false))
         }
+        if !ok { deliveredNearby() }
     }
 
     func cancelSOS() async {
         guard let me = view?.myId else { return }
+        mesh.announce(.sosClear)
         if isDemo { view?.apply(.sos(userId: me, sos: nil, refresh: false)); return }
-        _ = await run("sos") {
+        let ok = await run("sos") {
             try await api.cancelSos(id)
             view?.apply(.sos(userId: me, sos: nil, refresh: false))
         }
+        if !ok { deliveredNearby() }
     }
 
     @discardableResult

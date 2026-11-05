@@ -98,6 +98,19 @@ maps `OutingView` + GPS into `LiveOutingUIState` (unit-tested).
 - Chrome frames are measured (window coordinates) and passed to the map as
   insets, so keep-group framing stays clear of the capsule, alert lane,
   controls and the sheet's real top edge.
+- «سرعة المركبة» (`SarySpeedometer`): my speed in whole km/h («كم/س») right
+  above «اضغط وتكلم» (an overlay on the PTT button, so it never shifts the dock),
+  on the other side from the control cluster; compact glass normally, larger and
+  opaque in drive mode, hidden with the full sheet. It reads «—» when there is no
+  trustworthy current speed (invalid / coarse fix, or older than ~5 s), never an
+  old number. A tap shows the trip's top and average moving speed for ~6 s; a red
+  outline when over the optional «نبّهني إذا تجاوزت» limit (sheet → الإعدادات →
+  السرعة; off by default; one soft haptic + one alert-lane line, rate-limited).
+  Friends' speed («٧٩ كم/س» / «واقف») appears on their row and card only while
+  their position is live; it is deliberately not on the map name chips (they
+  already carry name + age, and fold in drive mode). Logic in `Core/Speed.swift`
+  (unit-tested in `Tests/SpeedTests.swift`); the current value lives in
+  `Live/SpeedModel.swift` (`snapshot`) for a future Live Activity.
 - Place labels are Arabic: the Standard Satellite style is fetched once and
   its labels pointed at `name_ar` (`ArabicBasemap`).
 - Real screenshots: `docs/live-shots/`. DEBUG launch overrides:
@@ -118,7 +131,9 @@ components above (`SaryPage` header + scroll, `SarySection`, `SaryNavRow`,
 | «طلعاتي» | `HomeView.swift` | active / paused / not started / ended, empty, loading skeleton, offline strip, error + retry |
 | New outing, join by link, invite preview | `OutingSheets.swift` | invite: valid / expired / invalid / retryable error |
 | Outing details, trip summary, history | `OutingDetailsView.swift` | summary: shared totals from `GET /:id`, my totals from this device (`TripLog`), «شارك ملخصي» = `PUT /:id/summary` |
+| «قصة الطلعة» (trip story) | `Story/` | from the ended outing's summary: 9:16 / square image and a ~7 s video (trail draws itself), Mapbox satellite snapshot, picked photos from the outing window; by default the first/last 500 m are cut (privacy zones) and companions are a count; built on the device, shared only via the share sheet / «احفظ في الصور». Renders: `docs/app-shots/story-*.jpg` (`SARY_STORY_SHOTS=1` unit + UI tests) |
 | Profile, settings, appearance, privacy, notifications, about | `SettingsScreens.swift` | privacy: share precision, battery, what is sent and when, «احذف حسابي» → `DeleteAccountView` (typed confirmation, DELETE /api/outings/me) |
+| Trip plan, checklist, destination, coordinates | `Plan/*` | details: plan preview + «قائمة التجهيز» (any member adds / assigns / ticks, «٧ من ١٠», live via `checklist_updated`, polled every 15 s off the map); editor: tap to add, drag, undo, GPX/KML import (streamed, capped, simplified ≤ 5000), GPX export; dashed plan line on the live map, «اتبع الخطة» (off-route like «طريق العودة»), «الوجهة» with «اتجه»; long-press anywhere = the one coordinate card (copy decimal / DMS in Western digits, share Google / Apple link, «اجعلها الوجهة», «أضف نقطة», «نقطة تجمع», «الطقس هنا» hook); «انسخ موقعي» in the control cluster; «ابحث أو أدخل إحداثية». 404/405 → «غير متاح بعد». |
 
 Push: `App/PushRegistrar.swift` (unit-tested with a fake server) registers the
 APNs token at `POST /api/outings/push/apns` (sandbox in Debug, production in
@@ -129,7 +144,34 @@ A tapped notification opens its outing (`outing_id` / `url`).
 
 Screenshots: `scripts/app-shots.sh <udid> <name> -demo -SaryScreen <screen> -SaryScheme light|dark`
 (`-SaryOffline` forces the offline state). Screens: `splash onboarding onboarding-profile
-onboarding-location recovery-restore recovery-code recovery-code-shown home details summary
+onboarding-location story recovery-restore recovery-code recovery-code-shown home details summary
 history profile settings appearance privacy notifications offline-maps about create join
-invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped`.
+invite-valid invite-expired invite-invalid invite-error notify-explainer dialog-leave privacy-account delete-account delete-account-typed account-deleted account-wiped plan-details plan-editor plan-search plan-point plan-me-stale`
+(`-demoPlanEmpty`, `-demoPlanUnavailable`; `-SaryPlanFollow` turns «اتبع الخطة» on in the live demo).
 Shots: `docs/app-shots/`.
+
+## Safety pack (wired)
+
+`Sources/Safety/` — «مؤقت الرجوع», «غرّزت» and the sunset / way-back warning.
+`SafetyController` owns the state (server via `SafetyBackend`, nil in the demo),
+`ReturnTimer.swift` / `Stuck.swift` / `SunsetWayBack.swift` are pure and unit-tested
+(`Tests/SafetyTests.swift`, plus an opt-in end-to-end test with
+`TEST_RUNNER_SARY_E2E_BASE=http://127.0.0.1:<port>` against a local API).
+Cards go into the shared alert lane as `.safety(SafetyAlertUI)`; the «السلامة»
+section sits in the participants tab; «غرّزت» is in the cluster's «المزيد» menu (and one tap in that section).
+A 404/405 without an error code means the server has no such route yet: the UI
+says «غير متاح بعد», never pretends. DEBUG: `-SarySafety timer|overdue|stuck-me|stuck-friend|sunset|unavailable|confirm-stuck|editor`,
+`-SarySafetySheet half|full`. Shots: `docs/app-shots/safety-*.jpg`.
+## Weather (wired)
+
+`Sources/Weather/`: Open-Meteo forecast + air-quality (dust, PM10), no key. The
+outing area is rounded to 0.1° before it is sent; a destination / «الطقس هنا»
+point is sent as chosen; members' live positions never. Responses are cached on
+disk per area; data older than an hour is never labelled «الآن». Thresholds are
+in `WeatherThresholds` (tested). The live map adds an invisible Streets v8
+`waterway` probe; `WadiProximity` turns it into the «احذر السيول في الأودية»
+hint (an estimate; the app links to the NCM for official warnings).
+DEBUG screenshot flags: `-SaryWeatherDemo rain|dust|calm`, `-SaryWeatherDemoAge <min>`,
+`-SaryDemoDestination "lat,lng,name"`, `-SaryDemoShift "dLat,dLng"`,
+`-SaryLiveSheet half|full`, `-SaryLiveModal weather`, `-SaryScreen weather-here`.
+Shots: `docs/app-shots/weather-*.jpg`.

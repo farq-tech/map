@@ -3,3 +3,5 @@
 "NSMicrophoneUsageDescription" = "Records your voice only while you hold \"Push to talk\", and sends the clip to the outing's members. It is deleted from the server after 10 minutes.";
 "NSCameraUsageDescription" = "The camera is used only to scan a QR code: an outing invite, or the recovery code from your old phone. No photo is kept.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Sary Albarq records your trail during an outing even when the screen is locked, so \"Way back\" can lead you out the way you came. The trail stays on this phone only and is never sent; sharing your location with friends still happens only while the app is open.";
+"NSLocalNetworkUsageDescription" = "When the internet drops, Sary Albarq connects directly to nearby phones of your outing's members (Bluetooth and peer-to-peer Wi-Fi) to exchange encrypted positions and alerts, and only while you are sharing your location.";
+"NSPhotoLibraryAddUsageDescription" = "Saves the trip story (an image or video made on your phone) to Photos only when you tap Save to Photos. The app never reads your photos.";

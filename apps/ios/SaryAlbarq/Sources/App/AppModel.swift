@@ -37,30 +37,39 @@ final class AppModel: ObservableObject {
     let api: OutingsAPI
     let location: LocationSharer
     let push: PushRegistrar
+    /// The outing's Live Activity (Lock Screen + Dynamic Island), follows `session`.
+    let activity: OutingActivityCoordinator
     let isDemo: Bool
+    /// «تخطيط الطلعة»: one plan + checklist model per outing (demo data under `-demo`).
+    lazy var plans = PlanCenter(backend: isDemo ? DemoPlanBackend() : api)
     private let monitor = NWPathMonitor()
     private var observers: [NSObjectProtocol] = []
     private var pushSink: AnyCancellable?
+    private var sessionSink: AnyCancellable?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
         let api = OutingsAPI(tokenProvider: { IdentityStore.load()?.token })
         self.api = api
         location = LocationSharer()
         push = PushRegistrar(backend: api)
+        activity = OutingActivityCoordinator(location: location)
+        activity.stuck = { $0.stuckMarks }
+        activity.speed = { $0.speedSnapshot() }
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
+            WaypointCache.wipeAll()
             TrailStore.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys {
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys + SpeedPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
         }
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()
         if isDemo {
-            identity = Identity(token: "", user: PublicUser(id: DemoData.meId, display_name: "أنا", avatar: nil, phone: nil))
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: "أنا", avatar: nil, phone: nil))
         } else {
             identity = IdentityStore.load()
         }
@@ -75,6 +84,7 @@ final class AppModel: ObservableObject {
         monitor.start(queue: DispatchQueue(label: "sary.net"))
         /* Screens observe the model; the registrar's state is part of it. */
         pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        sessionSink = $session.sink { [activity] in activity.attach($0) }
         observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
             guard let id = n.object as? String else { return }
             Task { @MainActor in self?.open(id) }
@@ -83,6 +93,14 @@ final class AppModel: ObservableObject {
         if let i = arguments.firstIndex(of: "-SaryScreen"), i + 1 < arguments.count { debugScreen = arguments[i + 1] }
         #endif
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        activity.endOrphans()
+        #if DEBUG
+        if let i = arguments.firstIndex(of: "-SaryActivity"), i + 1 < arguments.count {
+            let name = arguments[i + 1]
+            /* ActivityKit starts one only from the foreground: wait for the scene. */
+            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); activity.debugStart(name) }
+        }
+        #endif
         Task {
             /* A short branded beat, never a wait: the list loads behind it. */
             try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
@@ -100,6 +118,9 @@ final class AppModel: ObservableObject {
     @Published var debugScreen: String?
 
     var signedIn: Bool { identity != nil }
+
+    /// Waypoints / convoy: the real API, or the demo's in-memory one.
+    var featuresBackend: OutingFeaturesBackend { isDemo ? DemoFeatures.backend : api }
 
     // MARK: identity
 
@@ -250,6 +271,8 @@ final class AppModel: ObservableObject {
         session = nil
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
+        /* Outing data of this identity (shared waypoints read offline) goes with it. */
+        WaypointCache.wipeAll()
         /* «مساري» is about where I went: it goes with the identity. */
         TrailStore.forgetAll()
         identity = nil
@@ -335,9 +358,30 @@ final class AppModel: ObservableObject {
         return TrailStore.load(id)
     }
 
+    /// My trail for this outing, from this device only (for «قصة الطلعة»): the same
+    /// «مساري» the details page draws (live session in memory, else trails-v1/<id>.json).
+    func storyTrail(_ id: String) -> [StoryPoint] {
+        if isDemo {
+            #if DEBUG
+            return StoryFixtures.trail(start: Date().addingTimeInterval(-(86400 * 3 + 4 * 3600) + 10 * 60))
+            #else
+            return []
+            #endif
+        }
+        return myTrailPoints(id).map(StoryTrailSource.points) ?? []
+    }
+
+    /// Shared waypoints for the story (icons only), from the device's waypoint cache.
+    func storyWaypoints(_ id: String) -> [StoryWaypoint] {
+        #if DEBUG
+        if isDemo { return StoryFixtures.waypoints() }
+        #endif
+        return (WaypointCache.load(id)?.waypoints ?? []).map { StoryWaypoint(kind: $0.kind.rawValue, lat: $0.lat, lng: $0.lng) }
+    }
+
     func shareSummary(_ id: String) async -> TripShare? {
         guard let t = myTrip(id) else { return nil }
-        if isDemo { return TripShare(user_id: DemoData.meId, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
+        if isDemo { return TripShare(user_id: DemoData.currentMe, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
         do { return try await api.shareSummary(id, t) } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
     }
@@ -368,6 +412,8 @@ final class AppModel: ObservableObject {
     }
 
     func handle(url: URL) {
+        /* A tap on the Live Activity: back to that outing. */
+        if let id = OutingActivityState.outingId(from: url) { return open(id) }
         if let t = InviteLink.token(from: url) { pendingInvite = t }
     }
 
@@ -408,7 +454,9 @@ final class AppModel: ObservableObject {
 
     private func openDemoSession() {
         let crowd = ProcessInfo.processInfo.arguments.contains("-demoCrowd")
-        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api, token: "", location: location, demo: DemoData.view(crowd: crowd))
+        let demo = DemoData.view(crowd: crowd, me: DemoData.currentMe)
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.currentMe, api: api, token: "", location: location,
+                              demo: ProcessInfo.processInfo.arguments.contains("-demoConvoy") ? DemoFeatures.convoyView(demo) : demo)
         session = s
         s.open()
     }
@@ -429,11 +477,21 @@ enum DemoData {
     static let meId = "00000000-0000-4000-8000-000000000001"
     static let outingId = "00000000-0000-4000-8000-0000000000aa"
 
+    /// The demo identity. DEBUG `-SaryDemoMe <user id>` plays another member of
+    /// the same demo outing (two simulators testing the nearby link).
+    static var currentMe: String {
+        #if DEBUG
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SaryDemoMe"), i + 1 < a.count { return a[i + 1] }
+        #endif
+        return meId
+    }
+
     /// `crowd`: three more friends parked right next to «سلطان» (the chip declutter case).
-    static func view(now: Date = Date(), crowd: Bool = false) -> OutingView {
+    static func view(now: Date = Date(), crowd: Bool = false, me: String = meId) -> OutingView {
         func ago(_ s: Double) -> String { ISODate.string(now.addingTimeInterval(-s)) }
         var members: [Member] = [
-            Member(user_id: meId, display_name: "أنا", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
+            Member(user_id: meId, display_name: me == meId ? "أنا" : "راشد", phone: nil, role: "owner", sharing: true, joined_at: "2026-11-03T10:00:00.000Z", online: true, last_seen_at: ago(1)),
             Member(user_id: "00000000-0000-4000-8000-000000000002", display_name: "أبو فهد", phone: "+966500000001", role: "member", sharing: true, joined_at: "2026-11-03T10:01:00.000Z", online: true, last_seen_at: ago(2), note: MemberNote(text: "بوقف عند المحطة", at: ago(30))),
             Member(user_id: "00000000-0000-4000-8000-000000000003", display_name: "سلطان", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:02:00.000Z", online: true, last_seen_at: ago(20)),
             Member(user_id: "00000000-0000-4000-8000-000000000004", display_name: "نورة", phone: "+966500000002", role: "member", sharing: true, joined_at: "2026-11-03T10:03:00.000Z", online: false, last_seen_at: ago(240)),
@@ -451,10 +509,18 @@ enum DemoData {
                 positions.append(Position(user_id: id, lat: 24.71052 + Double(i) * 0.00004, lng: 46.67478 + Double(i) * 0.00005, accuracy: 6, heading: nil, speed: 0, mode: .balanced, recorded_at: ago(4)))
             }
         }
+        #if DEBUG
+        /* Screenshots: `-SaryDemoShift "dLat,dLng"` moves the demo group (e.g. next to a mapped wadi). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryDemoShift"), i + 1 < args.count {
+            let d = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if d.count == 2 { positions = positions.map { var p = $0; p.lat += d[0]; p.lng += d[1]; return p } }
+        }
+        #endif
         let snap = OutingSnapshot(
             outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
-            me: SnapshotMe(user_id: meId, role: "owner", sharing: true),
-            members: members, positions: positions, invite: InviteState(active: true, expires_at: nil),
+            me: SnapshotMe(user_id: me, role: me == meId ? "owner" : "member", sharing: true),
+            members: members, positions: positions.filter { $0.user_id != me }, invite: InviteState(active: true, expires_at: nil),
             server_now: ISODate.string(now)
         )
         return OutingView(snap, deviceNow: now)

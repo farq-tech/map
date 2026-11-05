@@ -25,9 +25,16 @@ struct LiveOutingScreen: View {
     @StateObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var app: AppModel
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
     @State private var screenHeight: CGFloat = 0
+    /// «المزيد» menu beside the control cluster.
+    @State private var moreOpen = false
+    /// While a finger is on the screen the alert lane holds still (a card arriving mid-tap
+    /// must not shift or cover what the person is touching); it catches up just after.
+    @State private var frozenAlerts: [LiveAlertUI]?
+    @State private var touching = false
 
     var body: some View {
         let ui = controller.ui
@@ -36,6 +43,7 @@ struct LiveOutingScreen: View {
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
                 let members = controller.mapMembers(theme: theme)
+                PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
                     members: members,
                     rally: controller.rallyPoint,
@@ -49,8 +57,14 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onProjection: { controller.overlay.projection = $0 },
-                    onUserGesture: { controller.following = false }
+                    onUserGesture: { controller.following = false },
+                    waypoints: controller.mapWaypoints,
+                    onWaypointTap: { controller.features.modal = .waypoint($0) },
+                    plan: plan,
+                    onLongPress: { controller.planLongPress($0, at: $1) },
+                    onWaterways: { controller.weather.setWaterways($0) }
                 )
+                }
                 .ignoresSafeArea()
 
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full))
@@ -61,6 +75,7 @@ struct LiveOutingScreen: View {
             }
             .onPreferenceChange(ChromeFramesKey.self) { frames = $0 }
         }
+        .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
@@ -74,6 +89,17 @@ struct LiveOutingScreen: View {
                 }
                 .saryAppearance(appearance)
                 .sarySheetPresentation(detent: $controller.sheetDetent)
+        }
+    }
+
+    private func touchChanged(_ down: Bool) {
+        touching = down
+        if down {
+            if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                if !touching { frozenAlerts = nil }
+            }
         }
     }
 
@@ -95,9 +121,9 @@ struct LiveOutingScreen: View {
         let dockTop = ["dock", "cluster-row"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
-        let cluster = frames["cluster"]
-        let left = cluster.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 } ?? 0
-        let right = cluster.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 } ?? 0
+        let side = ["cluster", "speed"].compactMap { frames[$0] }
+        let left = side.map { $0.minX < full.width / 2 ? $0.maxX + 4 : 0 }.max() ?? 0
+        let right = side.map { $0.minX >= full.width / 2 ? full.width - $0.minX + 4 : 0 }.max() ?? 0
         return UIEdgeInsets(top: topChromeBottom + 4, left: left, bottom: bottom + 4, right: right)
     }
 
@@ -109,7 +135,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "more", "speed"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -120,27 +146,33 @@ struct LiveOutingScreen: View {
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
         let items = controlItems(ui)
+        let more = moreItems(ui)
         ZStack {
             VStack(spacing: theme.space(.s)) {
                 VStack(spacing: theme.space(.s)) {
                     if case let .active(since) = ui.sos.mine {
                         SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
-                                       withLocation: controller.session.view?.me?.sos?.fix != nil)
+                                       withLocation: controller.session.displayView?.me?.sos?.fix != nil)
                     }
                     ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                         SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
                     }
+                    if let stuck = controller.safety.myStuck {
+                        MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
+                                     clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
+                    }
                     SaryStatusCapsule(outingName: ui.outingName, status: ui.status, connection: ui.connection, sharing: ui.sharing,
-                                      warnings: ui.warnings, expanded: $controller.statusExpanded, back: controller.actions.back,
+                                      warnings: ui.warnings, expanded: $controller.statusExpanded, nearbyCars: ui.nearbyCars, back: controller.actions.back,
                                       warningTapped: controller.actions.warningTapped)
                     if let bt = controller.backTrackUI {
                         BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     if !rowMode {
-                        SaryAlertLane(alerts: ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
+                        SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
                         MediaNoticeLane(center: MediaCenters.of(controller))
+                        LivePlanStrip(controller: controller)
                     }
                 }
                 .chromeFrame("top")
@@ -153,11 +185,24 @@ struct LiveOutingScreen: View {
             .padding(.horizontal, theme.space(.m))
             .padding(.top, 4)
 
+            if moreOpen {
+                /* Tap anywhere outside the menu to close it. */
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { moreOpen = false }
+                    .accessibilityHidden(true)
+            }
+
             if controller.sheetDetent == .peek {
                 VStack {
                     Spacer()
-                    HStack {
+                    HStack(alignment: .bottom, spacing: theme.space(.s)) {
                         Spacer()
+                        if moreOpen {
+                            SaryMoreMenu(items: more, action: controlTapped)
+                                .chromeFrame("more")
+                                .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+                        }
                         SaryControlCluster(items: items, axis: .vertical, action: controlTapped)
                             .chromeFrame("cluster")
                             .transition(.opacity)
@@ -169,9 +214,23 @@ struct LiveOutingScreen: View {
 
             VStack {
                 Spacer()
+                if moreOpen && rowMode {
+                    SaryMoreMenu(items: more, action: controlTapped)
+                        .chromeFrame("more")
+                        .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+                        .padding(.bottom, theme.space(.s))
+                }
                 HStack(alignment: .bottom) {
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode)
                         .chromeFrame("ptt")
+                        .overlay(alignment: .top) {
+                            /* «سرعة المركبة»: right above «اضغط وتكلم», on the other side from the control
+                             * cluster. An overlay, so the dock's measured frame stays as it was; its own frame
+                             * («speed») joins the keep-out rects and the map's side inset. */
+                            SarySpeedometer(ui: controller.speedometerUI)
+                                .chromeFrame("speed")
+                                .alignmentGuide(.top) { $0[.bottom] + theme.space(.m) }
+                        }
                     Spacer()
                     if rowMode {
                         SaryControlCluster(items: items, axis: .horizontal, action: controlTapped)
@@ -192,25 +251,51 @@ struct LiveOutingScreen: View {
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: sheetTop)
+        .environment(\.safetyAlertActions, controller.safety.alertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
+        .animation(theme.animation(.snappy), value: moreOpen)
+        .onChange(of: controller.sheetDetent) { _, d in if d == .full { moreOpen = false } }
+        .onChange(of: theme.drive) { _, d in if d { moreOpen = false } }
     }
 
-    private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+    /// Every side control the live screen offers, in order.
+    private func allControls(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
         let unread = ui.alerts.filter { if case .note = $0.kind { return true }; return false }.count
-        let all = SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
-                                                  backTracking: controller.backTrack != nil)
-        /* Drive mode keeps the few that matter on the move: me, the group, and the way back. */
-        return theme.drive ? all.filter { ["locate", "fit", "backtrack"].contains($0.id) } : all
+        return SaryMapControlItem.liveDefaults(following: controller.following, unreadNotes: unread > 0 ? unread : nil,
+                                               backTracking: controller.backTrack != nil)
+            + [.safetyStuck(active: controller.safety.myStuck != nil), .addWaypoint, .copyMyLocation, .search]
+    }
+
+    /// On the map: «موقعي», «المجموعة», «رسالة», «طريق العودة» + «المزيد»
+    /// (drive mode: «موقعي», «المجموعة», «طريق العودة», nothing hidden behind a menu).
+    private func controlItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        let all = allControls(ui)
+        if theme.drive { return all.filter { SaryMapControlItem.driveIDs.contains($0.id) } }
+        var more = SaryMapControlItem.more(open: moreOpen)
+        /* I am stuck: the menu that holds «غرّزت» shows it. */
+        if controller.safety.myStuck != nil && !moreOpen { more.badge = 1 }
+        return all.filter { SaryMapControlItem.primaryIDs.contains($0.id) } + [more]
+    }
+
+    /// Behind «المزيد»: أقرب محطة، غرّزت، أضف نقطة، انسخ موقعي، ابحث.
+    private func moreItems(_ ui: LiveOutingUIState) -> [SaryMapControlItem] {
+        allControls(ui).filter { !SaryMapControlItem.primaryIDs.contains($0.id) }
     }
 
     private func controlTapped(_ id: String) {
         let a = controller.actions
+        if id == "more" { moreOpen.toggle(); return }
+        moreOpen = false
         switch id {
         case "locate": a.locateMe()
         case "fit": a.fitGroup()
         case "note": a.openNoteComposer()
         case "nearest": a.openNearestStations()
+        case "stuck": controller.stuckControlTapped()
+        case "waypoint": controller.features.composeAtMe(controller.location.lastFix)
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
+        case "copyme": controller.modal = .plan(.me)
+        case "search": controller.modal = .plan(.search)
         default: break
         }
     }

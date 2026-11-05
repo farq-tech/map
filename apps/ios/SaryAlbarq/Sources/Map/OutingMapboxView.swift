@@ -22,6 +22,8 @@ struct MapMember: Equatable, Identifiable {
     var chip: NameChipUI? = nil
     /// Note bubble over the car; nil in drive mode or with no live note.
     var bubble: NoteBubbleUI? = nil
+    /// This position came phone to phone, not from the server.
+    var viaNearby = false
 
     /// Worse than 60 m: drawn as an approximate spot, never as a car, never animated (as on the web).
     var approximate: Bool { (accuracyM ?? 0) > Policy.weakAccuracyM }
@@ -112,6 +114,16 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// Shared waypoints (pins join the chip declutter, see `WaypointLayout`).
+    var waypoints: [MapWaypoint] = []
+    var onWaypointTap: (String) -> Void = { _ in }
+    /// «تخطيط الطلعة»: planned route (dashed), destination and the long-pressed point.
+    var plan = MapPlan()
+    /// The only long press on the map: the coordinate and its screen point (the point card,
+    /// which offers «أضف نقطة», «الوجهة», «نقطة التجمع»…); not while picking a rally point.
+    var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
+    /// Watercourses (wadi / stream / river…) in the loaded Streets tiles, after the camera settles (weather: flood hint).
+    var onWaterways: ([WaterwayLine]) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -140,6 +152,9 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onMapTap = onMapTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
+        c.waypointPins.onTap = onWaypointTap
+        c.onLongPress = onLongPress
+        c.onWaterways = onWaterways
         c.picking = picking
         c.following = following
         if c.theme != theme {
@@ -149,7 +164,9 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setChrome(chrome)
         c.sync(members)
         c.setRally(rally)
+        c.setWaypoints(waypoints)
         c.setTrails(trails)
+        c.setPlan(plan)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -175,9 +192,11 @@ struct OutingMapboxView: UIViewRepresentable {
     // MARK: -
 
     final class Coordinator: NSObject, GestureManagerDelegate {
-        private weak var map: MapView?
+        private(set) weak var map: MapView?
         private var cancelables = Set<AnyCancelable>()
-        private var styleReady = false
+        private(set) var styleReady = false
+        let planDrawing = LivePlanDrawing()
+        var onLongPress: (LngLat, CGPoint) -> Void = { _, _ in }
         private var addedModels = Set<String>()
         private var recs: [String: Rec] = [:]
         private var lastCars: [MapMember] = []
@@ -186,6 +205,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var roads: [RoadSnap.RoadLine] = []
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
+        let waypointPins = WaypointPins()
+        private var lastWaypoints: [MapWaypoint] = []
         private var light: SunLight.Preset?
         private var fitting = false
         private var fittedIds = Set<String>()
@@ -194,6 +215,8 @@ struct OutingMapboxView: UIViewRepresentable {
         var onMapTap: (LngLat) -> Void = { _ in }
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
+        var onWaterways: ([WaterwayLine]) -> Void = { _ in }
+        private var waterQuery: Cancelable?
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -254,7 +277,10 @@ struct OutingMapboxView: UIViewRepresentable {
             map.gestures.delegate = self
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
-            map.mapboxMap.onMapIdle.observe { [weak self] _ in self?.refreshRoads() }.store(in: &cancelables)
+            map.mapboxMap.onMapIdle.observe { [weak self] _ in
+                self?.refreshRoads()
+                self?.refreshWaterways()
+            }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 self?.layoutChips()
                 self?.project()
@@ -277,12 +303,32 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 return false
             })
+            waypointPins.onClusterTap = { [weak self] pts in
+                guard let self else { return }
+                self.keepGroup = false
+                self.onUserGesture()
+                self.frame(pts)
+            }
+            /* The ONE long-press handler: the point card («تخطيط الطلعة»), whose «أضف نقطة»
+               opens the shared-waypoint composer. */
+            installLongPress(map)
         }
 
+        func setWaypoints(_ list: [MapWaypoint]) {
+            guard list != lastWaypoints || waypointTheme != theme else { return }
+            lastWaypoints = list
+            waypointTheme = theme
+            waypointPins.set(list, theme: theme, in: overlay)
+            layoutChips()
+        }
+        private var waypointTheme: SaryTheme?
+
         func detach() {
+            planDrawing.longPress?.cancel()
             link?.invalidate()
             link = nil
             roadQuery?.cancel()
+            waterQuery?.cancel()
             tapInteraction?.cancel()
             cancelables.removeAll()
         }
@@ -329,6 +375,7 @@ struct OutingMapboxView: UIViewRepresentable {
             ensureRoadProbe()
             trailLayerKey = nil
             drawTrails()
+            drawPlan(force: true)
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -357,6 +404,43 @@ struct OutingMapboxView: UIViewRepresentable {
                     "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 13,
                     "filter": RoadSnap.drivableFilter, "paint": ["line-opacity": 0, "line-width": 1],
                 ], layerPosition: nil)
+            }
+            /* Same source: an invisible waterway layer so watercourse tiles load too (weather's wadi hint). */
+            if !m.layerExists(withId: Self.waterProbeLayer) {
+                try? m.addLayer(with: [
+                    "id": Self.waterProbeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "waterway", "minzoom": 9,
+                    "filter": WadiProximity.filter, "paint": ["line-opacity": 0, "line-width": 1],
+                ], layerPosition: nil)
+            }
+        }
+
+        static let waterProbeLayer = "sary-waterway-probe"
+
+        /// Watercourses in the loaded tiles (roughly what is on screen), for the wadi flood hint.
+        private func refreshWaterways() {
+            guard styleReady, let m = map?.mapboxMap else { return }
+            waterQuery?.cancel()
+            waterQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["waterway"], filter: WadiProximity.filter)) { [weak self] result in
+                guard let self, case let .success(feats) = result else { return }
+                var lines: [WaterwayLine] = []
+                for q in feats {
+                    let f = q.queriedFeature.feature
+                    let props = f.properties ?? [:]
+                    func str(_ k: String) -> String? {
+                        if case let .string(s)?? = props[k] { return s }
+                        return nil
+                    }
+                    let cls = str("class") ?? str("type") ?? ""
+                    guard WadiProximity.isWatercourse(cls) || str("type") == "wadi" else { continue }
+                    let name = str("name_ar") ?? str("name")
+                    switch f.geometry {
+                    case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
+                    case let .multiLineString(ml)?:
+                        for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
+                    default: break
+                    }
+                }
+                DispatchQueue.main.async { self.onWaterways(lines) }
             }
         }
 
@@ -481,6 +565,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 startPin = nil
                 placeStart(p)
             }
+            drawPlan(force: true)
             for r in recs.values { remove(chipsOf: r) }
             for g in groupBoxes.values { g.removeFromSuperview() }
             groupBoxes = [:]
@@ -731,6 +816,9 @@ struct OutingMapboxView: UIViewRepresentable {
             overlay.leaders.strokeColor = UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor
             overlay.leaderHalo.path = leaders
             overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
+            /* Waypoint pins fit around what the cars' chips took. */
+            let taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
+            waypointPins.layout(screen: screen, bounds: opts.bounds, obstacles: taken)
             CATransaction.commit()
             placeOrnaments(force: false)
         }
@@ -740,17 +828,16 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let map, let g = lastLayout?.groups.first(where: { $0.key == key }) else { return }
             let pts = g.ids.compactMap { recs[$0]?.shown }
             guard !pts.isEmpty else { return }
-            /* How far apart the folded cars really are (the framing bounds are padded). */
-            var spread = 0.0
-            for a in pts { for b in pts { spread = max(spread, Vehicle.distanceMeters(a, b)) } }
             let zoom = map.mapboxMap.cameraState.zoom
             keepGroup = false
             onUserGesture()
             /* Always spread them into a column (tied to their cars by lines), and zoom in
-             * too when they are far enough apart for the zoom to separate them. */
+             * toward them: far apart, the zoom separates them; parked together, it moves
+             * the other cars away so the column is not folded again with newcomers (the
+             * plan's route and destination can keep the map zoomed out). */
             expandedGroups.formUnion(g.ids)
             layoutChips()
-            if spread >= 60 && zoom < GroupFraming.maxZoom - 0.5 { frame(pts) }
+            if zoom < GroupFraming.maxZoom - 0.5 { frame(pts) }
         }
 
         /// Mapbox's logo and attribution: kept together in a free spot of the map (never
@@ -784,6 +871,7 @@ struct OutingMapboxView: UIViewRepresentable {
             if let l = lastLayout {
                 avoid += l.chips.map(\.frame) + l.chips.compactMap(\.noteFrame) + l.groups.map(\.frame)
             }
+            avoid += waypointPins.frames
             /* Keep the current spot while it is still free: no hopping around as cars move. */
             if !force, let cur = cands.first(where: { $0.name == ornamentSpot }), !avoid.contains(where: { $0.intersects(cur.rect) }) { return }
             guard let spot = OrnamentSpot.choose(cands, avoid: avoid), spot.name != ornamentSpot || force else { return }

@@ -23,6 +23,9 @@ struct DebugScreen: View {
         case "details": HomeView(initial: [.details(DemoData.outingId)])
         case "summary": HomeView(initial: [.summary("demo-old")])
         case "history": HomeView(initial: [.history])
+        #if DEBUG
+        case "story": StoryComposerView(facts: StoryFixtures.facts()) {}
+        #endif
         case "profile": HomeView(initial: [.profile])
         case "settings": HomeView(initial: [.settings])
         case "appearance": HomeView(initial: [.settings, .appearance])
@@ -52,6 +55,17 @@ struct DebugScreen: View {
                 } message: {
                     Text((name == "account-deleted" ? AccountDeletionOutcome.deleted : .wipedLocally(leftOutings: 2)).notice?.message ?? "")
                 }
+        case "plan-details": HomeView(initial: [.details("demo-new")])
+        case "plan-editor", "plan-editor-draw":
+            PlanEditorView(plan: model.plans.model(DemoData.outingId), outingName: "طلعة الثمامة (عرض تجريبي)", canEdit: true, myFix: nil, close: {})
+        case "plan-search":
+            CoordinateSearchSheet(near: nil, myFix: nil, actions: PointActions(setDestination: { _, _ in }, addPoint: { _ in }, rally: { _ in }),
+                                  initialText: "24°42'49\"N 46°40'31\"E", close: {})
+        case "plan-point":
+            SaryPage(title: "") { PointCard(subject: .point(LngLat(lng: 46.67530, lat: 24.71360), name: nil), actions: PointActions(setDestination: { _, _ in }, addPoint: { _ in }, rally: { _ in })).sarySurface(radius: SaryRadius.m) }
+        case "plan-me-stale":
+            SaryPage(title: "") { PointCard(subject: .me(.init(point: LngLat(lng: 46.67530, lat: 24.71360), accuracyM: 8, at: Date().addingTimeInterval(-300)))).sarySurface(radius: SaryRadius.m) }
+        case "weather-here": WeatherPointSheet(point: OutingDestination(name: "نفود الثويرات", lat: 25.7712, lng: 45.1043), close: {})
         default: HomeView()
         }
     }

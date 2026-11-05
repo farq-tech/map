@@ -29,7 +29,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "4"
     # Apple Team ID (same account as FarqNavigate).
     DEVELOPMENT_TEAM: MH7J92HV9N
     CODE_SIGN_STYLE: Automatic
@@ -54,9 +54,12 @@ targets:
     sources:
       - Sources
       - Resources
+      - Shared
     dependencies:
       - package: MapboxMaps
         product: MapboxMaps
+      # The outing's Live Activity (Lock Screen + Dynamic Island).
+      - target: SaryAlbarqWidgets
       # «شارك إلى سَرى البارق» for YouTube links (Sources/Media).
       - target: SaryShare
     # Config/Base.xcconfig optionally includes the gitignored Config/Secrets.xcconfig
@@ -75,6 +78,27 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: NO
         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"]
+  # Widget extension: the outing's Live Activity. Shares only Shared/ with the app
+  # (ActivityAttributes + the pure display rules); no App Group needed.
+  SaryAlbarqWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Shared
+      - path: Resources/Fonts
+        buildPhase: resources
+    settings:
+      base:
+        # OWNER: register this App ID (no extra capabilities needed).
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.widgets
+        PRODUCT_NAME: SaryAlbarqWidgets
+        INFOPLIST_FILE: Widgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
   # Share extension: a shared YouTube link → its video id → the app's «يوتيوب ← قناتي».
   # OWNER: register sa.sary.albarq.share and the App Group group.sa.sary.albarq
   # (automatic signing does both). Without the group the link is still copied to the clipboard.

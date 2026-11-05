@@ -58,8 +58,10 @@ struct LiveOutingHost: View {
 
     init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
         _controller = StateObject(wrappedValue: {
-            let c = LiveOutingController(session: session, location: model.location, appearance: appearance)
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
             c.onExit = { [weak model] in model?.closeSession() }
+            /* «تخطيط الطلعة»: the weather reads the plan's destination and route. */
+            c.planModel = model.plans.model(session.id)
             c.setPush = { [weak model] on in
                 guard let model else { return }
                 Task { await model.push.setEnabled(on, signedIn: model.signedIn) }

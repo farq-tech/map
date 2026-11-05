@@ -86,6 +86,12 @@ enum LiveAlertKindUI: Equatable {
     case voice(VoiceClipUI)
     /// Short neutral toast (e.g. «تم نسخ الرابط»).
     case toast(String)
+    /// Return timer, «غرّزت», sunset & way back (`Sources/Safety`).
+    case safety(SafetyAlertUI)
+    /// Convoy mode: someone out of the column (see `ConvoyAlertUI`).
+    case convoy(ConvoyAlertUI)
+    /// Wind / dust / rain / «احذر السيول في الأودية» (Sources/Weather).
+    case weather(WeatherAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -220,6 +226,8 @@ struct LiveOutingUIState: Equatable {
     var settingsTab: SettingsTabUIState
     /// Clock for "قبل ٤ د" labels. Tick it (e.g. every 15 s) from the wiring layer.
     var now: Date
+    /// Members' cars heard directly phone to phone in the last 30 s (0 = none / link off).
+    var nearbyCars: Int = 0
 }
 
 struct LiveOutingActions {

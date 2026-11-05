@@ -114,6 +114,12 @@ struct NameChipUI: Equatable {
     var presence: ParticipantPresence
     var hasVoice: Bool = false
     var now: Date
+    /// «غرّزت»: a small stuck icon on the chip until they clear it.
+    var stuck: Bool = false
+    /// «المقدمة» / «المؤخرة» badge in convoy mode.
+    var convoy: ConvoyBadgeUI? = nil
+    /// Position heard phone to phone: a small «عبر الأجهزة القريبة» marker.
+    var viaNearby: Bool = false
 }
 
 struct NoteBubbleUI: Equatable {

@@ -50,6 +50,7 @@ struct OutingDetailsView: View {
                         infoRow("lock.fill", "الانضمام", "مقفول")
                     }
                 }
+                PlanDetailsSections(snapshot: s, plan: model.plans.model(outingId))
                 let colors = CarColors.assign(s.members)
                 SarySection(title: "من في الطلعة") {
                     ForEach(Array(s.members.enumerated()), id: \.element.user_id) { i, m in
@@ -63,6 +64,9 @@ struct OutingDetailsView: View {
                         }
                         .padding(.vertical, theme.space(.xs))
                     }
+                }
+                if s.outing.status != .ended {
+                    DetailsWeatherSection(snapshot: s, myFix: model.location.lastFix)
                 }
                 if s.outing.status != .ended {
                     Button { model.open(outingId) } label: { SaryButtonLabel(title: "افتح الخريطة", systemImage: "map.fill") }
@@ -134,9 +138,11 @@ struct TripSummaryView: View {
     var back: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    @Environment(AppearanceSettings.self) private var appearance
     @State private var phase: SnapshotPhase = .loading
     @State private var busy = false
     @State private var shareText: String?
+    @State private var story: StoryFacts?
 
     var body: some View {
         let p = theme.palette
@@ -157,8 +163,14 @@ struct TripSummaryView: View {
                     stat("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     stat("road.lanes", "مسافتي", (mine.map { $0.distance_m } ?? local.map { Double($0.distanceM) }).map { SaryFormat.distance(meters: $0) } ?? "—")
                     stat("gauge.with.needle", "وقت الحركة", (mine.map { Int($0.moving_s) } ?? local?.movingS).map { SaryFormat.duration(seconds: $0) } ?? "—")
+                    if let sp = model.mySpeed(outingId) {
+                        /* On this device only: never in the shared summary or the share text. */
+                        stat("speedometer", "أعلى سرعة", SaryFormat.speed(kmh: sp.maxKmh))
+                        stat("car.side.fill", "متوسط السرعة أثناء الحركة", SaryFormat.speed(kmh: sp.avgMovingKmh))
+                    }
                 }
                 .accessibilityIdentifier("summary.stats")
+                TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
@@ -186,6 +198,11 @@ struct TripSummaryView: View {
                     }
                 }
                 if s.outing.status == .ended {
+                    Button { story = storyFacts(s, mine: mine, local: local) } label: {
+                        SaryButtonLabel(title: "اصنع قصة الطلعة", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("summary.story")
                     mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
                 }
                 Button {
@@ -198,6 +215,23 @@ struct TripSummaryView: View {
         .sheet(item: Binding(get: { shareText.map(ShareText.init) }, set: { if $0 == nil { shareText = nil } })) { t in
             ShareSheet(items: [t.text]).presentationDetents([.medium, .large])
         }
+        .fullScreenCover(item: Binding(get: { story.map(StorySheet.init) }, set: { if $0 == nil { story = nil } })) { st in
+            StoryComposerView(facts: st.facts) { story = nil }
+                .saryPresented(appearance)
+        }
+    }
+
+    /// What «قصة الطلعة» may say: the outing's totals, my trail from this device, and only a count of the others.
+    private func storyFacts(_ s: OutingSnapshot, mine: TripShare?, local: TripTotals?) -> StoryFacts {
+        let trail = model.storyTrail(outingId)
+        var len = 0.0
+        for i in trail.indices.dropFirst() where !trail[i].gap { len += Vehicle.distanceMeters(trail[i - 1].position, trail[i].position) }
+        return StoryFacts(outingName: s.outing.name, startedAt: ISODate.parse(s.outing.started_at), endedAt: ISODate.parse(s.outing.ended_at),
+                          distanceM: mine?.distance_m ?? local.map { Double($0.distanceM) } ?? (len > 0 ? len : nil),
+                          durationS: spanSeconds(s), movingS: mine.map { Int($0.moving_s) } ?? local?.movingS,
+                          memberCount: s.members.count,
+                          companionNames: s.members.filter { $0.user_id != s.me.user_id }.map(\.display_name),
+                          trail: trail, waypoints: model.storyWaypoints(outingId))
     }
 
     @ViewBuilder
@@ -317,6 +351,11 @@ struct TrailSketch: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("رسم مسارك: \(SaryFormat.distance(meters: trail.recordedLengthM)) مسجّلة"))
     }
+}
+
+private struct StorySheet: Identifiable {
+    let facts: StoryFacts
+    var id: String { facts.outingName }
 }
 
 private struct ShareText: Identifiable {
