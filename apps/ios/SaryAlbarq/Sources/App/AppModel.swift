@@ -362,7 +362,8 @@ final class AppModel: ObservableObject {
         }
         do {
             let r = try await api.create(name: clean)
-            InviteTokenStore.save(r.outing_id, r.invite.token)
+            /* Personal-only trips have no open link: people are invited one by one (PersonalInvites). */
+            InviteTokenStore.save(r.outing_id, r.invite?.token)
             await refresh()
             if openNow {
                 /* The quick create (no wizard): the creator joins it, same default as «انضم». */
@@ -626,6 +627,8 @@ enum OnboardingProgress {
 enum DemoData {
     static let meId = "00000000-0000-4000-8000-000000000001"
     static let outingId = "00000000-0000-4000-8000-0000000000aa"
+    /// «دعوة شخصية» demo: «فهد أخوي» joined through a personal invite (own name «جوس»), no fix yet.
+    static let invitedId = "00000000-0000-4000-8000-000000000005"
 
     /// The demo identity. DEBUG `-SaryDemoMe <user id>` plays another member of
     /// the same demo outing (two simulators testing the nearby link).
@@ -661,6 +664,11 @@ enum DemoData {
             }
         }
         #if DEBUG
+        /* `-SaryDemoInvites`: one member who joined by a personal invite and has not shared yet. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryDemoInvites") {
+            members.append(Member(user_id: invitedId, display_name: "فهد أخوي", phone: nil, role: "member", sharing: true, joined_at: "2026-11-03T10:05:00.000Z",
+                                  online: true, last_seen_at: ago(5), nickname: "جوس", invited: true, phone_last4: "4567"))
+        }
         /* Screenshots: `-SaryDemoShift "dLat,dLng"` moves the demo group (e.g. next to a mapped wadi). */
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-SaryDemoShift"), i + 1 < args.count {

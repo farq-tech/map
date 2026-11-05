@@ -514,7 +514,7 @@ private struct InviteStep: View {
         }
         HStack(spacing: theme.space(.s)) {
             Image(systemName: SaryIcon.checkCircle).foregroundStyle(p.liveText)
-            Text("أنشأنا «\(flow.trimmedName)». أرسل الدعوة لربعك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
+            Text(link == nil ? "أنشأنا «\(flow.trimmedName)». ادعُ ربعك واحدًا واحدًا." : "أنشأنا «\(flow.trimmedName)». أرسل الدعوة لربعك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("create.created")
@@ -555,6 +555,9 @@ private struct InviteStep: View {
                     .accessibilityIdentifier("create.message")
             }
             .sheet(isPresented: $sharing) { ShareSheet(items: [message]).presentationDetents([.medium, .large]) }
+        } else if let id = flow.outingId {
+            /* «دعوة شخصية» (build 12+): no open link — invite each person by name. */
+            WizardPersonalInvites(outingId: id, outingName: flow.trimmedName)
         } else {
             SaryBanner(text: "ما عندنا رابط الدعوة على هذا الجوال. افتح الطلعة وأنشئ رابطًا جديدًا من «الدعوة».", tone: .warning)
         }
@@ -570,5 +573,23 @@ private struct InviteStep: View {
             .accessibilityIdentifier("create.later")
         Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Step ٣ for a personal-only trip: the same per-person invites as the live trip.
+private struct WizardPersonalInvites: View {
+    @EnvironmentObject private var model: AppModel
+    var outingId: String
+    var outingName: String
+
+    var body: some View {
+        Inner(model: PersonalInvitesModel(outingId: outingId, outingName: outingName, api: model.isDemo ? nil : model.api,
+                                          isDemo: model.isDemo, initial: model.isDemo ? [] : nil, openLinks: false))
+    }
+
+    private struct Inner: View {
+        @StateObject var model: PersonalInvitesModel
+        init(model: @autoclosure @escaping () -> PersonalInvitesModel) { _model = StateObject(wrappedValue: model()) }
+        var body: some View { PersonalInvitesSection(model: model, canLead: true) }
     }
 }

@@ -121,6 +121,10 @@ struct ParticipantUI: Equatable, Identifiable {
     var leaderTitle: String = "أمير الرحلة"
     /// Live and standing still since (≤ 3 km/h), from this phone's watch; nil while moving / not live.
     var stoppedSince: Date? = nil
+    /// «دعوة شخصية»: their own name, shown secondarily beside the name the leader gave them.
+    var nickname: String? = nil
+    /// In the trip but no position has ever reached us (the outing is running): «ما شارك موقعه».
+    var neverShared: Bool = false
 
     /// «أمير الرحلة» / «نائب الأمير» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {

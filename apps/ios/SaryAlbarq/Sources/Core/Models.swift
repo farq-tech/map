@@ -51,6 +51,13 @@ struct Member: Codable, Equatable, Identifiable {
     var battery: BatteryInfo?
     /// Their SOS, while it stands (memory-only on the server, 60 min TTL).
     var sos: SosInfo?
+    /// «دعوة شخصية»: `display_name` is then the name the inviter gave them («فهد أخوي»);
+    /// `nickname` is their own name, shown secondarily (nil when the same or not invited).
+    var nickname: String? = nil
+    /// Joined through a personal invite.
+    var invited: Bool? = nil
+    /// Last four digits of the number they were invited on (never the full number).
+    var phone_last4: String? = nil
 
     var id: String { user_id }
 }
@@ -136,6 +143,23 @@ struct SnapshotMe: Codable, Equatable {
 struct InviteState: Codable, Equatable {
     var active: Bool
     var expires_at: String?
+    /// «الرابط المفتوح»: may the open group link admit people? nil (older server) = yes.
+    var open_links: Bool? = nil
+}
+
+/// «دعوة شخصية» as the leader sees it: one line per person invited.
+struct PersonalInvite: Codable, Equatable, Identifiable {
+    enum Status: String, Codable { case sent, opened, joined, expired, revoked }
+    var id: String
+    var invitee_name: String
+    var phone_last4: String?
+    var status: Status
+    var opened: Bool?
+    var created_at: String?
+    var expires_at: String
+    var member_user_id: String?
+    /// Only in the answer that created / re-sent it; kept on this phone after that.
+    var token: String?
 }
 
 struct OutingSnapshot: Codable, Equatable {
@@ -158,6 +182,8 @@ struct OutingSnapshot: Codable, Equatable {
     var mesh_key: String? = nil
     /// Members whose sharing went silent ≥10 min (server-decided). Never draw them as live.
     var silent: [SilentInfo]? = nil
+    /// Leaders only: the personal invites of this trip (nil from older servers / for members).
+    var personal_invites: [PersonalInvite]? = nil
 }
 
 /// One member's shared trip totals (`PUT /:id/summary`).
@@ -191,6 +217,15 @@ struct InvitePreview: Codable, Equatable {
     var owner_name: String
     var member_count: Int
     var expires_at: String
+    var join_locked: Bool? = nil
+    /// "personal": one link for one person — whoever joins becomes `invitee_name` in the trip.
+    var kind: String? = nil
+    var invitee_name: String? = nil
+    /// open · yours (used by me: rejoin) · taken (someone else used it) · claimed (used; asked anonymously).
+    var claim: String? = nil
+    var already_member: Bool? = nil
+
+    var isPersonal: Bool { kind == "personal" }
 }
 
 struct CreatedInvite: Codable, Equatable {

@@ -109,6 +109,8 @@ struct InvitePreviewUI: Equatable {
     var inviterName: String
     var participantCount: Int
     var status: OutingStatusUI
+    /// «دعوة شخصية»: the name the leader gave me — I join as this person.
+    var inviteeName: String? = nil
 }
 
 enum InvitePhaseUI: Equatable {
@@ -118,6 +120,8 @@ enum InvitePhaseUI: Equatable {
     case expired
     /// The link is malformed or unknown.
     case invalid
+    /// A personal invite someone else already used: «هذه الدعوة لشخص آخر».
+    case taken
     /// Network or server error, retryable.
     case error(String)
 }
