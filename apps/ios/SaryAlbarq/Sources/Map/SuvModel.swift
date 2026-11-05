@@ -1,6 +1,10 @@
 import Foundation
 
-/// The same low-poly overland 4×4 the web draws (port of `apps/web/src/lib/sary/suvModel.ts`):
+/// The member's car on the map. The modelled expedition SUV (bundled `SuvExpedition.glb`,
+/// built by scripts/suv/build_suv.py) is painted per member at runtime (BODY material only);
+/// this file's procedural car is the fallback.
+///
+/// Procedural fallback: the same low-poly overland 4×4 the web draws (port of `apps/web/src/lib/sary/suvModel.ts`):
 /// boxy body, round headlights, black flares and bumpers, platform rack with a rolled awning,
 /// spare on the tailgate. Built in code as a glTF 2.0 binary — same parts, same sizes, same
 /// materials — so there is no third-party asset and the body takes each member's colour.
@@ -265,17 +269,108 @@ enum SuvModel {
         return out
     }
 
-    /// Bump when the geometry changes, so cached files are rebuilt.
-    static let geometryVersion = "v1"
+    // MARK: the bundled expedition SUV (Resources/Models/SuvExpedition.glb)
+
+    /// The modelled car (scripts/suv/build_suv.py): an original boxy expedition 4×4 with
+    /// bevelled edges, a contact shadow and a light rim, styled to read like a navigation
+    /// puck. The procedural car above stays as the fallback if the asset cannot be used.
+    static let assetName = "SuvExpedition"
+    /// Material that takes the member's colour, and the parts that stay black.
+    static let bodyMaterial = "BODY"
+    static let trimMaterial = "TRIM"
+    static let rimMaterial = "RIM"
+
+    static let trimHex: UInt32 = 0x1A1B1D
+    /// Trim for a near-black body (#15191C): lifted to a graphite so flares, bumpers and the
+    /// rack stay distinct from the paint, with brighter wheels as a contrasting edge.
+    static let darkBodyTrimHex: UInt32 = 0x4A5058
+    static let darkBodyRimHex: UInt32 = 0xB4BAC2
+
+    /// sRGB relative luminance (0…1).
+    static func luminance(_ rgb: UInt32) -> Double {
+        let c = linear(rgb)
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    }
+
+    /// A body this dark would melt into black trim.
+    static func needsLightTrim(_ body: UInt32) -> Bool { luminance(body) < 0.03 }
+
+    static func trim(for body: UInt32) -> UInt32 { needsLightTrim(body) ? darkBodyTrimHex : trimHex }
+
+    static func bundledGlb(_ bundle: Bundle = .main) -> Data? {
+        guard let url = bundle.url(forResource: assetName, withExtension: "glb") else { return nil }
+        return try? Data(contentsOf: url)
+    }
+
+    /// The .glb with BODY painted `body` (and TRIM/RIM lifted for a near-black body). Only the
+    /// JSON chunk changes; the binary chunk is copied as is. nil if it is not a glTF 2.0
+    /// binary with a BODY material.
+    static func recolored(_ glb: Data, body: UInt32) -> Data? {
+        let b = [UInt8](glb)
+        func u32(_ o: Int) -> Int? {
+            guard o + 4 <= b.count else { return nil }
+            return Int(b[o]) | Int(b[o + 1]) << 8 | Int(b[o + 2]) << 16 | Int(b[o + 3]) << 24
+        }
+        guard u32(0) == 0x4654_6C67, u32(4) == 2, let jsonLen = u32(12), u32(16) == 0x4E4F_534A,
+              20 + jsonLen <= b.count,
+              var gltf = (try? JSONSerialization.jsonObject(with: Data(b[20 ..< 20 + jsonLen]))) as? [String: Any],
+              var mats = gltf["materials"] as? [[String: Any]] else { return nil }
+        let rest = Data(b[(20 + jsonLen)...]) // BIN chunk header + payload
+        func paint(_ name: String, _ rgb: UInt32) -> Bool {
+            guard let i = mats.firstIndex(where: { $0["name"] as? String == name }) else { return false }
+            var pbr = mats[i]["pbrMetallicRoughness"] as? [String: Any] ?? [:]
+            let alpha = (pbr["baseColorFactor"] as? [Double])?.last ?? 1
+            pbr["baseColorFactor"] = linear(rgb) + [alpha]
+            mats[i]["pbrMetallicRoughness"] = pbr
+            return true
+        }
+        guard paint(bodyMaterial, body) else { return nil }
+        if needsLightTrim(body) {
+            _ = paint(trimMaterial, darkBodyTrimHex)
+            _ = paint(rimMaterial, darkBodyRimHex)
+        }
+        gltf["materials"] = mats
+        guard var json = try? JSONSerialization.data(withJSONObject: gltf, options: [.sortedKeys]) else { return nil }
+        while json.count % 4 != 0 { json.append(0x20) }
+        var out = Data()
+        func put(_ v: Int) { var x = UInt32(v).littleEndian; out.append(Data(bytes: &x, count: 4)) }
+        put(0x4654_6C67)
+        put(2)
+        put(12 + 8 + json.count + rest.count)
+        put(json.count)
+        put(0x4E4F_534A)
+        out.append(json)
+        out.append(rest)
+        return out
+    }
+
+    /// The car for one body colour: the modelled SUV, else the procedural one.
+    static func modelData(body: UInt32, bundle: Bundle = .main) -> (data: Data, modelled: Bool) {
+        if let src = bundledGlb(bundle), let painted = recolored(src, body: body) { return (painted, true) }
+        return (glb(body: body), false)
+    }
+
+    /// Cache version of the modelled car: a hash of the bundled .glb, so a new asset in an app
+    /// update never reuses an old cached file. The procedural fallback keeps a fixed version.
+    static func geometryVersion(_ asset: Data) -> String {
+        var h: UInt64 = 0xCBF2_9CE4_8422_2325
+        for b in asset { h = (h ^ UInt64(b)) &* 0x100_0000_01B3 }
+        return "x" + String(h, radix: 36)
+    }
+
+    static let fallbackGeometryVersion = "v1"
 
     /// A file URL for Mapbox's `addStyleModel`, one .glb per body colour, written once.
-    static func fileURL(body: UInt32) -> URL? {
+    static func fileURL(body: UInt32, bundle: Bundle = .main) -> URL? {
         let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("sary-suv", isDirectory: true)
-        let url = dir.appendingPathComponent("\(Vehicle.modelId(body))-\(geometryVersion).glb")
+        let asset = bundledGlb(bundle)
+        let painted = asset.flatMap { recolored($0, body: body) }
+        let version = asset.map(geometryVersion) ?? fallbackGeometryVersion
+        let url = dir.appendingPathComponent("\(Vehicle.modelId(body))-\(painted == nil ? fallbackGeometryVersion : version).glb")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try glb(body: body).write(to: url, options: .atomic)
+            try (painted ?? glb(body: body)).write(to: url, options: .atomic)
             return url
         } catch {
             return nil

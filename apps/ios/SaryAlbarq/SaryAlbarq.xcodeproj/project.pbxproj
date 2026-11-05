@@ -51,6 +51,7 @@
 		1FF78175DEA5D06E0A2A39A4 /* StoryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F250B4DBC1D0018C096D9D /* StoryUITests.swift */; };
 		221DBCA2BC5B78E51263FF28 /* WeatherModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CAF059F25F880DEEA683E7A /* WeatherModels.swift */; };
 		24CC0A40C49F60AB7BFD0D4C /* ConvoyWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = A808BA3B26A1B5CAD0E3AF29 /* ConvoyWatch.swift */; };
+		24FA587480F13B167854BBF5 /* CarIconBase.png in Resources */ = {isa = PBXBuildFile; fileRef = AF08F6A568DACC8F3C5EDAE3 /* CarIconBase.png */; };
 		260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */; };
 		264A462D36ED3C4FF124556A /* StoryLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F87CBEC9527276CE06BC75 /* StoryLayout.swift */; };
 		2922667834889B9DCA1B3555 /* SunsetWayBack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEC7F5717C18EE95B7D09DE8 /* SunsetWayBack.swift */; };
@@ -114,7 +115,9 @@
 		549ED87985925555B0E297C9 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE3C7F10D18DF499BCA61AB2 /* WeatherService.swift */; };
 		55BB6568EECC74357658A74E /* DemoFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 722A5E7011E6663441A0888F /* DemoFeatures.swift */; };
 		56C37BC65A988C69129919B5 /* MapboxDirections in Frameworks */ = {isa = PBXBuildFile; productRef = C32309FEA9B13199EEBBAD6F /* MapboxDirections */; };
+		587FECF9EB533AC726A847E3 /* CarIconBody.png in Resources */ = {isa = PBXBuildFile; fileRef = CDFC36812895ABA08B073D6F /* CarIconBody.png */; };
 		58C9B4B400F925E1099A297F /* RouteFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECDC19382CB3316DC07F394 /* RouteFile.swift */; };
+		58E77A55FF5F1741A5FE53B6 /* CarIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25DB46CD353D74E938F0729 /* CarIcon.swift */; };
 		5943A0D1147BFDBE7D8E5CFC /* NavModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACC87B0D190CEAD26C08D02 /* NavModels.swift */; };
 		59EBEB964759D58E54727F8E /* SafetyAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77CE80B48719C956802AFB51 /* SafetyAPI.swift */; };
 		59F5CFE4F32B7EF3D46BF238 /* Enjad.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF385D7141E043A6472522EF /* Enjad.swift */; };
@@ -136,6 +139,7 @@
 		65D1768FBB2671B07CC4DE6C /* Convoy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52F18343CB5D4890CE903610 /* Convoy.swift */; };
 		662A8225BE50B7128B547448 /* LiveOutingContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */; };
 		66672651B5767A5368BC50AC /* AppModel+Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DA9790B4909EF8BADFBD902 /* AppModel+Track.swift */; };
+		67FF0CF1B0D3EF48690636BD /* SuvExpedition.glb in Resources */ = {isa = PBXBuildFile; fileRef = D1D3DF15F79ACEB372C40B53 /* SuvExpedition.glb */; };
 		684D7791FEA2712123A0A9A1 /* SaryParticipant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */; };
 		69118051628BDACB89F99869 /* TrailMatchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */; };
 		693C61DAE332565D0BB660FD /* SpeedUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */; };
@@ -587,9 +591,11 @@
 		ADD3481E4956173E7476C431 /* WaypointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointTests.swift; sourceTree = "<group>"; };
 		AE9277C432B14BEC26834FFA /* SafetyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafetyModels.swift; sourceTree = "<group>"; };
 		AEC7F5717C18EE95B7D09DE8 /* SunsetWayBack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunsetWayBack.swift; sourceTree = "<group>"; };
+		AF08F6A568DACC8F3C5EDAE3 /* CarIconBase.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = CarIconBase.png; sourceTree = "<group>"; };
 		AF0B91A3644AA5117E588A56 /* ConvoyIntelUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyIntelUITests.swift; sourceTree = "<group>"; };
 		AFE11BD246D68B3CF32D2369 /* SpeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTests.swift; sourceTree = "<group>"; };
 		B0FB42D448CC3008D403F34D /* NavSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavSession.swift; sourceTree = "<group>"; };
+		B25DB46CD353D74E938F0729 /* CarIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarIcon.swift; sourceTree = "<group>"; };
 		B320D512D47E006CCF289262 /* CarPlayFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayFeatures.swift; sourceTree = "<group>"; };
 		B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayCoordinator.swift; sourceTree = "<group>"; };
 		B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-ExtraBold.ttf"; sourceTree = "<group>"; };
@@ -615,9 +621,11 @@
 		C611B1059DE705E698793E36 /* DesertTerrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesertTerrain.swift; sourceTree = "<group>"; };
 		CBF04B63676B51DC3605ECA7 /* SaryAlertLane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlertLane.swift; sourceTree = "<group>"; };
 		CC2E83113F431B9839B4D5CE /* ConvoyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyTests.swift; sourceTree = "<group>"; };
+		CDFC36812895ABA08B073D6F /* CarIconBody.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = CarIconBody.png; sourceTree = "<group>"; };
 		CE3C7F10D18DF499BCA61AB2 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
 		D132B3832EC90CC64BA0342A /* SaryShowcase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryShowcase.swift; sourceTree = "<group>"; };
 		D195AD214B4CA1E984CD2A64 /* TrackFollowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFollowUITests.swift; sourceTree = "<group>"; };
+		D1D3DF15F79ACEB372C40B53 /* SuvExpedition.glb */ = {isa = PBXFileReference; path = SuvExpedition.glb; sourceTree = "<group>"; };
 		D4164610D015B4413743DBA8 /* TripProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripProgress.swift; sourceTree = "<group>"; };
 		D4B8BFBB9F1B771E327A8275 /* CoordinateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateParser.swift; sourceTree = "<group>"; };
 		D5E57FB8A27CBA2240B35A0F /* FeatureViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureViews.swift; sourceTree = "<group>"; };
@@ -728,6 +736,7 @@
 		1428C2F85B3DD5A92FBF8EF9 /* Map */ = {
 			isa = PBXGroup;
 			children = (
+				B25DB46CD353D74E938F0729 /* CarIcon.swift */,
 				228B792179E7688D3B50771D /* ChipLayout.swift */,
 				F1338061A444CBC2D438FE17 /* OfflineMaps.swift */,
 				572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */,
@@ -842,6 +851,15 @@
 				5ACDB34D02E84254D9E52416 /* Widgets */,
 				AF0812172F6B23688AE14662 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		33BB7847272848060622D688 /* CarIcon */ = {
+			isa = PBXGroup;
+			children = (
+				AF08F6A568DACC8F3C5EDAE3 /* CarIconBase.png */,
+				CDFC36812895ABA08B073D6F /* CarIconBody.png */,
+			);
+			path = CarIcon;
 			sourceTree = "<group>";
 		};
 		36A0F5FA64D8DB846BB2E8E4 /* Config */ = {
@@ -1082,8 +1100,10 @@
 			children = (
 				5AF5AA15881B17850C98CA71 /* Assets.xcassets */,
 				77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */,
+				33BB7847272848060622D688 /* CarIcon */,
 				2E34D73B37A06B558F2BA4B2 /* Fonts */,
 				D1F55DF995866060A02C7E28 /* InfoPlist.strings */,
+				F83AC3220733C30F782BCA08 /* Models */,
 				ACC0A6B2F49E5727204434CA /* Sounds */,
 			);
 			path = Resources;
@@ -1305,6 +1325,14 @@
 			path = Weather;
 			sourceTree = "<group>";
 		};
+		F83AC3220733C30F782BCA08 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				D1D3DF15F79ACEB372C40B53 /* SuvExpedition.glb */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1483,9 +1511,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				C9C19B349BAB334D88BDBB89 /* Assets.xcassets in Resources */,
+				24FA587480F13B167854BBF5 /* CarIconBase.png in Resources */,
+				587FECF9EB533AC726A847E3 /* CarIconBody.png in Resources */,
 				B55007BB4AC745A6F82825ED /* InfoPlist.strings in Resources */,
 				3A554C7BA14E8C41B716A608 /* OFL.txt in Resources */,
 				4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */,
+				67FF0CF1B0D3EF48690636BD /* SuvExpedition.glb in Resources */,
 				8C34594CDCC94567B77196B0 /* Tajawal-Bold.ttf in Resources */,
 				808DCD3C26D893B0F099B7BA /* Tajawal-ExtraBold.ttf in Resources */,
 				5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */,
@@ -1622,6 +1653,7 @@
 				E4F4E8BBAFA3CB882B96A2C1 /* BackgroundPositionSender.swift in Sources */,
 				39D0C6136D6D47E64658617A /* Backoff.swift in Sources */,
 				1CA61098FF2C6466AC156AEF /* CarColors.swift in Sources */,
+				58E77A55FF5F1741A5FE53B6 /* CarIcon.swift in Sources */,
 				1C45B2ABAFD066E38B318B27 /* CarPlayCoordinator.swift in Sources */,
 				79AB0CE628DDD4A9688EB4F5 /* CarPlayFeatures.swift in Sources */,
 				F1E90EB70EF716F63FA8DAFE /* CarPlayMapViewController.swift in Sources */,
