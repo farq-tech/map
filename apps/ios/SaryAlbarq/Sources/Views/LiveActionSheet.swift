@@ -24,10 +24,15 @@ enum LiveActionCatalog {
         var following = false
         var hasRoute = true
         var stuck = false
+        /// The trip ended: only what still makes sense on this phone (map, search, weather…).
+        var ended = false
     }
 
+    /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
+    static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow"]
+
     static func groups(_ s: State) -> [LiveActionGroup] {
-        [
+        let all = [
             LiveActionGroup(title: "الطريق", items: [
                 .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate",
                       subtitle: "لصاحب، للوجهة أو لنقطة التجمع"),
@@ -57,6 +62,12 @@ enum LiveActionCatalog {
                 .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube"),
             ]),
         ]
+        guard s.ended else { return all }
+        return all.compactMap { g in
+            var g = g
+            g.items.removeAll { needsRunningTrip.contains($0.id) }
+            return g.items.isEmpty ? nil : g
+        }
     }
 }
 

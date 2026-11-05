@@ -31,8 +31,8 @@ struct TrackMapView: UIViewRepresentable {
         map.ornaments.options.compass.visibility = .adaptive
         map.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: padding.bottom + 4)
         map.ornaments.options.logo.margins = CGPoint(x: 8, y: padding.bottom + 4)
-        /* The imagery's maximum: no blurrier over-zoom past z20. */
-        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: 20))
+        /* The imagery's sharp maximum: no blurry over-zoom. */
+        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: SatelliteLabels.imageryMaxZoom))
         if !interactive {
             map.gestures.options.panEnabled = false
             map.gestures.options.pinchEnabled = false

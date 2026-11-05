@@ -156,6 +156,50 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(active.first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
     }
 
+    /// Build 11: an ended trip kept offering «رسالة فوق سيارتي», «غرّزت»… to a group that is gone.
+    func testActionCatalogOnAnEndedTrip() {
+        let ids = Set(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).map(\.id))
+        XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather", "copyme"]))
+        XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).contains { $0.items.isEmpty }, "no empty group")
+    }
+
+    /// After the end the header names the outing, not a target («نقطة البداية» of a return trip).
+    func testHeaderTitleAfterTheEnd() {
+        var t = trip(.arrived(at: Date(), manual: false))
+        t.destinationName = "نقطة البداية"
+        XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t), "نقطة البداية")
+        XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t, ended: true), "العودة من روضة الثمامة")
+        t.phase = .ended
+        XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t, ended: true), "العودة من روضة الثمامة")
+    }
+
+    /// Satellite imagery is sharp to ~z18 over the Kingdom: the live map never zooms past it.
+    func testSatelliteZoomIsCappedAtTheImageryResolution() {
+        XCTAssertEqual(MapLayer.satellite.maxZoom, 18)
+        XCTAssertLessThanOrEqual(SatelliteLabels.trackMaxZoom, MapLayer.satellite.maxZoom)
+        XCTAssertGreaterThan(MapLayer.topo.maxZoom, MapLayer.satellite.maxZoom)
+    }
+
+    /// Build 12 imagery clarity: only Mapbox raster paint properties, on the imported satellite layer, idempotent.
+    func testSatelliteImageryTuning() throws {
+        let inner = #"{"version":8,"sources":{},"layers":[{"id":"bg","type":"background"},{"id":"mapbox-satellite","type":"raster","source":"mapbox://mapbox.satellite","paint":{"raster-emissive-strength":0.5}}]}"#
+        let style = ArabicBasemap.wrap(inner)
+        let once = SatelliteImagery.tune(style)
+        XCTAssertEqual(SatelliteImagery.tune(once), once, "idempotent")
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(once.utf8)) as? [String: Any])
+        let imp = try XCTUnwrap((root["imports"] as? [[String: Any]])?.first?["data"] as? [String: Any])
+        let layers = try XCTUnwrap(imp["layers"] as? [[String: Any]])
+        let paint = try XCTUnwrap(layers[1]["paint"] as? [String: Any])
+        XCTAssertEqual(paint["raster-contrast"] as? Double, 0.12)
+        XCTAssertEqual(paint["raster-saturation"] as? Double, 0.08)
+        XCTAssertEqual(paint["raster-resampling"] as? String, "linear")
+        XCTAssertEqual(paint["raster-emissive-strength"] as? Double, 0.5, "the style's own paint is kept")
+        XCTAssertNil(layers[0]["paint"], "non-raster layers untouched")
+        XCTAssertLessThanOrEqual(SatelliteImagery.paint["raster-saturation"] as? Double ?? 1, 0.15, "natural, not oversaturated")
+        XCTAssertEqual(SatelliteImagery.tune("not json"), "not json")
+    }
+
     func testRouterNarrationIsSpokenOnlyInArabic() {
         XCTAssertFalse(NavText.isArabic("Turn left onto طريق الملك فهد."), "Valhalla's English narration")
         XCTAssertTrue(NavText.isArabic("انعطف يسارًا إلى طريق الملك فهد"))

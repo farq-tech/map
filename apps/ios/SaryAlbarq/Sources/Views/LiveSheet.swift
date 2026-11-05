@@ -27,7 +27,7 @@ struct LiveSheet: View {
                     .accessibilityIdentifier("nav.auto.resume")
                 }
                 /* One line: the people. The trip's numbers are in the header above. */
-                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
+                SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
             }
             if ui.sheetDetent != .peek {
@@ -84,7 +84,8 @@ struct LiveSheet: View {
             LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
                                                                   following: controller.planModel?.following == true,
                                                                   hasRoute: controller.planModel?.plan.hasRoute ?? false,
-                                                                  stuck: controller.safety.myStuck != nil)),
+                                                                  stuck: controller.safety.myStuck != nil,
+                                                                  ended: controller.tripEnded)),
                             action: controller.performAction, close: { controller.modal = nil })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
