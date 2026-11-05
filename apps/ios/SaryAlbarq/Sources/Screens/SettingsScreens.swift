@@ -132,6 +132,9 @@ struct SettingsView: View {
                            systemImage: "key.fill", tint: model.recovery?.active == true ? nil : theme.palette.warning, id: "settings.recovery") { open(.recoveryCode) }
                 SaryDivider()
                 SaryNavRow(title: "التنبيهات", detail: pushDetail, systemImage: "bell.fill", id: "settings.notifications") { open(.notifications) }
+                SaryDivider()
+                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
+                           id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
@@ -193,7 +196,7 @@ struct PrivacySettingsView: View {
             SarySection(title: "متى يُشارك موقعي؟") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("hand.tap.fill", "بانضمامك لطلعة (أو إنشائك لها) يشوف أعضاؤها موقعك مباشرة، بدون ما تضغط «شارك موقعي». توقف المشاركة من «أوقف» متى ما بغيت، أو تطلع من الطلعة.")
-                    fact("lock.iphone", "بعد ما تختار «شارك موقعي» وبإذن «دائمًا»، تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى توقفها، أو تغادر، أو يزيلك صاحب الطلعة، أو تتوقف الطلعة أو تنتهي.")
+                    fact("lock.iphone", "بعد ما تختار «شارك موقعي» وبإذن «دائمًا»، تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى توقفها، أو تغادر، أو يزيلك أمير الرحلة، أو تتوقف الطلعة أو تنتهي.")
                     fact("iphone", "بإذن «أثناء الاستخدام» فقط: تُرسل والتطبيق مفتوح أمامك، وتتوقف إذا قفلت الشاشة.")
                     fact("xmark.app", "إذا قفلت التطبيق من قائمة التطبيقات، قد لا يعيد iOS فتحه، فتتوقف المشاركة حتى تفتحه.")
                     fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل لأصحابك ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
@@ -296,7 +299,7 @@ struct DeleteAccountView: View {
             SarySection(title: "يُحذف من الخادم") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("person.text.rectangle", "اسمك وصورتك ورقم جوالك.")
-                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت صاحبها تنتقل لمساعدك أو لأقدم عضو، وإذا ما بقي أحد تنتهي.")
+                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت أمير الرحلة تنتقل الإمارة لنائبك أو لأقدم مشارك، وإذا ما بقي أحد تنتهي.")
                     fact("location.fill", "آخر موقع محفوظ لك، ورسائلك القصيرة، ونداء الطوارئ، ورمز «قناة الطلعة» الذي يوقظ جوالك.")
                     fact("flag.checkered", "ملخصات رحلاتك التي شاركتها.")
                     fact("bell.fill", "تنبيهات هذا الجهاز وأي جهاز آخر، ورمز الاسترجاع.")

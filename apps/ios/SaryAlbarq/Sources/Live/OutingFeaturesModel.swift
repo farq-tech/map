@@ -50,6 +50,7 @@ final class OutingFeaturesModel: ObservableObject {
     private var bag = Set<AnyCancellable>()
     private var gate = ConvoyAlertGate()
     private var lastConvoy: ConvoyInfo?
+    private var tailGrace = GraceFilter()
 
     /// The alert lane (wired to `LiveOutingController.pushAlert`).
     var pushAlert: (LiveAlertUI, TimeInterval) -> Void = { _, _ in }
@@ -242,7 +243,14 @@ final class OutingFeaturesModel: ObservableObject {
         }
         let ev = ConvoyMath.evaluate(c, live: Self.liveCars(members))
         if ev != convoyCheck { convoyCheck = ev }
-        let (fire, buzz) = gate.admit(ev.alerts, now: now)
+        /* «تنبيهات القافلة»: «تأخر عن المؤخرة» can be off, or wait a grace period. */
+        let rules = ConvoyAlertPrefs.shared.settings
+        func isBehind(_ a: ConvoyAlert) -> Bool { if case .behindTail = a { return true }; return false }
+        var alerts = ev.alerts
+        if !rules.behindTailOn { alerts.removeAll(where: isBehind) }
+        let ripe = tailGrace.pass(alerts.filter(isBehind).map(\.key), grace: rules.behindTailGraceS, now: now)
+        alerts.removeAll { isBehind($0) && !ripe.contains($0.key) }
+        let (fire, buzz) = gate.admit(alerts, now: now)
         for a in fire { pushAlert(LiveAlertUI(id: a.key, kind: .convoy(alertUI(a, view: v))), 45) }
         if buzz { haptic() }
     }

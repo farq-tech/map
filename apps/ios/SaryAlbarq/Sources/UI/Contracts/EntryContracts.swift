@@ -56,7 +56,7 @@ struct OutingRowUI: Equatable, Identifiable {
     var name: String
     var status: OutingStatusUI
     var participantCount: Int
-    /// I own the outing («صاحب الطلعة»).
+    /// I own the outing («أمير الرحلة»).
     var isLeader: Bool
 }
 

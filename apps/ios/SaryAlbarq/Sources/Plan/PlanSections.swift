@@ -30,7 +30,7 @@ struct PlanDetailsSections: View {
     @ViewBuilder
     private var planSection: some View {
         let p = theme.palette
-        SarySection(title: "خطة الطلعة", footer: iLead ? "أنت تقدر ترسم المسار وتحدد الوجهة. يشوفها كل الأعضاء." : "يرسمها صاحب الطلعة أو مساعده.") {
+        SarySection(title: "خطة الطلعة", footer: iLead ? "أنت تقدر ترسم المسار وتحدد الوجهة. يشوفها كل الأعضاء." : "يرسمها أمير الرحلة أو نائبه.") {
             switch plan.planPhase {
             case .loading:
                 SarySkeletonRow().padding(.vertical, theme.space(.s))
@@ -81,6 +81,7 @@ struct PlanDetailsSections: View {
                         if tp.hasRoute {
                             Button {
                                 share = try? RouteFile.exportFile(name: snapshot.outing.name, plan: tp)
+                                TrackLibrary.shared.add(name: snapshot.outing.name, origin: .exported, points: tp.points)
                             } label: { SaryButtonLabel(title: "GPX", systemImage: SaryIcon.share) }
                                 .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                                 .accessibilityIdentifier("details.planExport")

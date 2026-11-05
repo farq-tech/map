@@ -280,6 +280,8 @@ struct PlanEditorView: View {
             importBusy = false
             switch r {
             case let .success(im):
+                /* Also kept in exploration's «مسارات GPX» list (this device). */
+                TrackLibrary.shared.add(name: im.name ?? url.deletingPathExtension().lastPathComponent, origin: .imported, points: im.points)
                 push()
                 draft = im.points
                 drawing = false
@@ -293,7 +295,10 @@ struct PlanEditorView: View {
     }
 
     private func exportGPX() {
-        do { share = try RouteFile.exportFile(name: outingName, plan: plan.plan) } catch { plan.errorText = "تعذّر تجهيز الملف." }
+        do {
+            share = try RouteFile.exportFile(name: outingName, plan: plan.plan)
+            if plan.plan.hasRoute { TrackLibrary.shared.add(name: outingName, origin: .exported, points: plan.plan.points) }
+        } catch { plan.errorText = "تعذّر تجهيز الملف." }
     }
 }
 

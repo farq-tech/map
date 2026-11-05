@@ -15,6 +15,7 @@ enum HomeRoute: Hashable {
     case offlineMaps
     case about
     case advanced
+    case convoyAlerts
 }
 
 /// «طلعاتي»: my outings by state (جارية / متوقفة / لم تبدأ), the latest ended
@@ -67,6 +68,7 @@ struct HomeView: View {
         case .offlineMaps: OfflineMapsView(back: pop)
         case .about: AboutView(back: pop)
         case .advanced: AdvancedSettingsView(back: pop)
+        case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
         }
     }
 
@@ -188,7 +190,7 @@ struct ActiveOutingCard: View {
                         Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
                         if o.role == "owner" {
                             Image(systemName: SaryIcon.crown).font(.system(size: 10)).foregroundStyle(p.warningText)
-                                .accessibilityLabel(Text("صاحب الطلعة"))
+                                .accessibilityLabel(Text("أمير الرحلة"))
                         }
                         OutingRowWeather(outingId: o.id)
                     }
@@ -238,7 +240,7 @@ struct OutingCard: View {
                             Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
                             if o.role == "owner" {
                                 Image(systemName: SaryIcon.crown).font(.system(size: 10)).foregroundStyle(p.warningText)
-                                    .accessibilityLabel(Text("صاحب الطلعة"))
+                                    .accessibilityLabel(Text("أمير الرحلة"))
                             }
                         }
                         HStack(spacing: 6) {

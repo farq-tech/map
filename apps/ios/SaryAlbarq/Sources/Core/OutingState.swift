@@ -214,7 +214,7 @@ struct OutingView: Equatable {
     /// «وضع القافلة», wherever the server put it.
     var convoy: ConvoyInfo? { snapshot.outing.convoy ?? snapshot.convoy }
 
-    /// Owner or «مساعد»: may start/pause the outing and manage the rally point.
+    /// Owner or «نائب الأمير»: may start/pause the outing and manage the rally point.
     var iLead: Bool { snapshot.me.role == "owner" || snapshot.me.co_leader == true || snapshot.me.can_lead == true }
     var iOwn: Bool { snapshot.me.role == "owner" }
 

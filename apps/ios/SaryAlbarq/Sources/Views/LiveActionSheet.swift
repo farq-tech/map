@@ -45,6 +45,10 @@ enum LiveActionCatalog {
                 .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
                 .init(id: "copyme", title: "انسخ أو شارك موقعي", systemImage: "location.viewfinder", accessibilityID: "outing-copyme"),
             ]),
+            LiveActionGroup(title: "الخريطة", items: [
+                .init(id: "explore", title: "استكشاف", systemImage: "binoculars.fill", accessibilityID: "outing-explore",
+                      subtitle: "الطبقات، التضاريس، الإحداثيات، أماكني، GPX، بلا إنترنت"),
+            ]),
             LiveActionGroup(title: "الخدمات", items: [
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
                 .init(id: "weather", title: "الطقس", systemImage: "cloud.sun.fill", accessibilityID: "outing-weather"),

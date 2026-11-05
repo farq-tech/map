@@ -225,7 +225,7 @@ struct SaryRoleChip: View {
             HStack(spacing: 3) {
                 Image(systemName: role == .leader ? SaryIcon.crown : SaryIcon.shield)
                     .font(.system(size: 9, weight: .bold))
-                Text(role == .leader ? "صاحب الطلعة" : "مساعد").saryText(.micro)
+                Text(role == .leader ? "أمير الرحلة" : "نائب الأمير").saryText(.micro)
             }
             .foregroundStyle(theme.palette.accentText)
             .padding(.horizontal, 6)
@@ -270,6 +270,13 @@ struct SaryParticipantRow: View {
                             if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
                             if let b = participant.batteryPercent { SaryBatteryLabel(percent: b) }
                         }
+                        if let line = SaryConvoyLine.text(participant, now: now) {
+                            Text(line)
+                                .saryNumber(.caption, weight: .bold)
+                                .foregroundStyle(participant.stoppedSince != nil ? theme.palette.warningText : theme.palette.textSecondary)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("participant.convoy")
+                        }
                         if participant.tripArrived {
                             SaryTripArrivedBadge()
                         } else if let r = participant.tripRemainingMeters {
@@ -310,9 +317,27 @@ struct SaryParticipantRow: View {
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }
         if let k = participant.speedKmh, participant.presence.isLive { parts.append(SarySpeedLabel.accessibility(kmh: k)) }
         if let bat = participant.batteryPercent { parts.append("البطارية \(SaryFormat.percent(bat))") }
+        if let c = SaryConvoyLine.text(participant, now: now) { parts.append(c) }
         if participant.tripArrived { parts.append("وصل الوجهة") }
         else if let r = participant.tripRemainingMeters { parts.append("باقي \(SaryFormat.distance(meters: r)) للوجهة") }
         return parts.joined(separator: "، ")
+    }
+}
+
+/// «عن أمير الرحلة ١٫٢ كم» / «عن المقدمة …» · «واقف منذ ٤ د» on a member's row (unit-tested).
+enum SaryConvoyLine {
+    /// Shown once a live car has stood still this long (a red light is not «واقف»).
+    static let stoppedAfterS: TimeInterval = 60
+
+    static func text(_ p: ParticipantUI, now: Date) -> String? {
+        var parts: [String] = []
+        /* The owner's row already says «أمير الرحلة» on its role chip; «المقدمة» is said here. */
+        if p.isConvoyLeader { if p.leaderTitle == "المقدمة" { parts.append("المقدمة") } }
+        else if let d = p.leaderDistanceMeters { parts.append("عن \(p.leaderTitle) \(SaryFormat.distance(meters: d))") }
+        if let s = p.stoppedSince, p.presence.isLive, now.timeIntervalSince(s) >= stoppedAfterS {
+            parts.append("واقف منذ \(SaryFormat.number(Int(now.timeIntervalSince(s) / 60))) د")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -403,7 +428,7 @@ struct SaryParticipantCard: View {
 
             if state.canManage {
                 VStack(spacing: 0) {
-                    Button(action: actions.promoteCoLeader) { SaryButtonLabel(title: p.role == .coLeader ? "ألغِ صفة المساعد" : "اجعله مساعدًا", systemImage: SaryIcon.shield) }
+                    Button(action: actions.promoteCoLeader) { SaryButtonLabel(title: p.role == .coLeader ? "ألغِ صفة نائب الأمير" : "اجعله نائبًا للأمير", systemImage: SaryIcon.shield) }
                         .buttonStyle(.saryPlain)
                     Button(role: .destructive) { confirmRemove = true } label: {
                         SaryButtonLabel(title: "أزله من الطلعة", systemImage: "person.fill.xmark")

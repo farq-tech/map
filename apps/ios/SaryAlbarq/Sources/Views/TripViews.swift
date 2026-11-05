@@ -121,7 +121,7 @@ struct TripCard: View {
             switch ui.phase {
             case let .needsDestination(canSet):
                 Text(canSet ? "كل طلعة رحلة لها بداية ونهاية. حدّد وين رايحين، وتبدأ الرحلة لما تبدأ الطلعة."
-                            : "صاحب الطلعة ما حدّد الوجهة بعد. أول ما يحددها تبدأ الرحلة.")
+                            : "أمير الرحلة ما حدّد الوجهة بعد. أول ما يحددها تبدأ الرحلة.")
                     .saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                 if canSet {
                     Button(action: actions.setDestination) { SaryButtonLabel(title: "حدّد الوجهة", systemImage: "flag.checkered") }
@@ -278,7 +278,7 @@ struct TripCard: View {
                 .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
                 .accessibilityIdentifier("trip.end")
         } else {
-            Text("صاحب الطلعة ينهي الرحلة لما يوصل الجميع.").saryText(.footnote).foregroundStyle(p.textSecondary)
+            Text("أمير الرحلة ينهي الرحلة لما يوصل الجميع.").saryText(.footnote).foregroundStyle(p.textSecondary)
         }
     }
 

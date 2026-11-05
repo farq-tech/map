@@ -20,6 +20,8 @@ enum AlertPriority: Int, Comparable {
             case .myTimerOverdue, .friendTimerOverdue, .sunset: self = .returnTimer
             }
         case .silent: self = .silent
+        /* A car stopped for minutes while everyone drives may need help: as urgent as a silent car. */
+        case let .convoy(c) where c.kind == .unexpectedStop: self = .silent
         case .convoy, .drift: self = .convoy
         case .weather: self = .weather
         case .note, .voice: self = .note
