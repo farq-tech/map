@@ -826,6 +826,63 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		void refreshPushSubscription();
 	}, []);
 
+	/* Joining is the consent (same as the iPhone app): a member whose sharing
+	 * is off on the server (an old web switch, or a pause from an older build)
+	 * is switched back on once when the trip screen opens. Stopping = leaving. */
+	const resumedRef = useRef(false);
+	const meSharing = me?.sharing;
+	const tripStatus = outing?.status;
+	useEffect(() => {
+		if (resumedRef.current || closed || meSharing !== false || !tripStatus || tripStatus === "ended") return;
+		resumedRef.current = true;
+		OutingsApi.setSharing(outingId, true).then(
+			() => void live.reload(),
+			() => {
+				resumedRef.current = false;
+			},
+		);
+		// live.reload is stable per outing
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [meSharing, tripStatus, closed, outingId]);
+
+	/* Location denied in the browser: show the calm «how to allow it» screen,
+	 * and carry on by itself the moment it is allowed (no reload needed). */
+	const locationDenied = hasLocationPermission === false && !closed && Boolean(tripStatus) && tripStatus !== "ended";
+	useEffect(() => {
+		if (!locationDenied) return;
+		let status: PermissionStatus | null = null;
+		let gone = false;
+		const retry = () => {
+			if (!status || status.state !== "denied") requestLocation();
+		};
+		const onChange = () => {
+			if (status && status.state !== "denied") requestLocation();
+		};
+		const perms: Permissions | null = "permissions" in navigator && typeof navigator.permissions?.query === "function" ? navigator.permissions : null;
+		if (perms) {
+			perms.query({ name: "geolocation" as PermissionName }).then(
+				(s) => {
+					if (gone) return;
+					status = s;
+					s.addEventListener("change", onChange);
+					onChange();
+				},
+				() => undefined,
+			);
+		}
+		/* Coming back from the browser's settings: try again. Without the
+		 * Permissions API, also retry quietly now and then (a denied request
+		 * fails at once, without a prompt). */
+		window.addEventListener("focus", retry);
+		const t = perms ? null : window.setInterval(retry, 8_000);
+		return () => {
+			gone = true;
+			status?.removeEventListener("change", onChange);
+			window.removeEventListener("focus", retry);
+			if (t) window.clearInterval(t);
+		};
+	}, [locationDenied, requestLocation]);
+
 	/* Field test: export to a file on this device; sending numbers to the server is a separate choice. */
 	const [fieldMsg, setFieldMsg] = useState<string | null>(null);
 	const exportField = () => {
@@ -947,11 +1004,16 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		if (!outing || !me) return "";
 		if (outing.status === "created") return isRTL ? "لم تبدأ الطلعة — لا تُرسَل المواقع بعد" : "Not started — no positions are shared yet";
 		if (outing.status === "paused") return isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "Paused — sharing is off for everyone";
-		if (!me.sharing) return isRTL ? "أوقفت مشاركة موقعك" : "You paused sharing";
+		if (!me.sharing) return isRTL ? "نُفعّل مشاركة موقعك…" : "Turning your sharing on…";
 		if (!visible) return isRTL ? "التطبيق في الخلفية — لا يُرسَل موقعك" : "In background — not sending";
 		if (canSend) return isRTL ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "Your location is being shared with members";
 		return isRTL ? "بانتظار موقعك…" : "Waiting for your location…";
 	})();
+
+	/* Honest about the web: nothing leaves this device once the page is closed or hidden. */
+	const webNote = isRTL
+		? "المتصفح يرسل موقعك والصفحة مفتوحة فقط؛ للمشاركة المستمرة استخدم تطبيق الآيفون"
+		: "The browser sends your location only while this page is open; for continuous sharing use the iPhone app";
 
 	const liveCount = rows.filter((r) => r.fresh === "live").length;
 	const header = (
@@ -1066,6 +1128,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						<p className="is-warn">{offlineText}</p>
 					) : null}
 					{wakeHeld ? <p>{isRTL ? "الشاشة تبقى مضاءة أثناء الطلعة — وصّل الشاحن." : "The screen stays on during the outing — plug in the charger."}</p> : null}
+					<p data-testid="outing-web-note-detail">{webNote}</p>
 				</div>
 			</header>
 
@@ -1367,21 +1430,15 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 
 				{panel === "settings" ? (
 					<div className="sary-o-panel" data-testid="outing-settings">
-						<label className="sary-o-switch">
-							<input
-								type="checkbox"
-								checked={Boolean(me?.sharing)}
-								disabled={busy}
-								onChange={(e) => {
-									const on = e.target.checked;
-									void run(() => OutingsApi.setSharing(outingId, on));
-								}}
-								data-testid="outing-sharing-toggle"
-							/>
-							<span>{isRTL ? "مشاركة موقعي" : "Share my location"}</span>
-						</label>
-						<p className="sary-o-note">
-							{isRTL ? "عند الإيقاف يُحذف موقعك من الخادم فورًا ولا يراه أحد." : "Turning it off deletes your position from the server at once."}
+						{/* Same as the iPhone app: joining is the consent, there is no on/off
+						 * switch inside the trip — the only way to stop is «غادر الطلعة». */}
+						<p className="sary-o-note" data-testid="outing-sharing-auto">
+							{isRTL
+								? "مشاركة موقعك تلقائية ما دمت في الطلعة. لإيقافها: «غادر الطلعة» (أسفل الإعدادات)، ويُحذف موقعك من الخادم فورًا."
+								: "Your location is shared automatically while you are in the outing. To stop: «Leave outing» (below), and your position is deleted from the server at once."}
+						</p>
+						<p className="sary-o-note" data-testid="outing-web-note">
+							{webNote}
 						</p>
 						<div className="sary-o-modes" role="radiogroup" aria-label={isRTL ? "سرعة التحديث" : "Update rate"} data-testid="outing-rate">
 							<span className="sary-o-modes-label">{isRTL ? "سرعة التحديث" : "Update rate"}</span>
@@ -1545,11 +1602,46 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							onClick={() => setConfirm({ kind: "leave" })}
 							data-testid="outing-leave"
 						>
-							{isRTL ? "مغادرة الطلعة" : "Leave outing"}
+							{isRTL ? "غادر الطلعة" : "Leave outing"}
 						</button>
 					</div>
 				) : null}
 			</FarqBottomSheet>
+
+			{locationDenied && !confirm ? (
+				<div className="sary-o-modal" role="dialog" aria-modal="true" aria-labelledby="outing-geo-title" data-testid="outing-geo-denied">
+					<div className="sary-o-card">
+						<h2 id="outing-geo-title">{isRTL ? "نحتاج إذن الموقع لتكمل الطلعة" : "Allow location to continue the outing"}</h2>
+						<p>
+							{isRTL
+								? "انضمامك للطلعة يعني أن أصحابك يشوفون موقعك، لكن المتصفح مانع الوصول للموقع الآن. فعّله وتكمل الطلعة تلقائيًا:"
+								: "Joining means your friends see your location, but the browser is blocking it right now. Allow it and the outing continues by itself:"}
+						</p>
+						<ul className="sary-o-steps" data-testid="outing-geo-steps">
+							<li>
+								{isRTL
+									? "آيفون (Safari): اضغط «aA» بجانب العنوان ← إعدادات الموقع الإلكتروني ← الموقع ← سماح. أو: الإعدادات ← Safari ← الموقع ← اسأل."
+									: "iPhone (Safari): tap «aA» by the address ← Website Settings ← Location ← Allow. Or: Settings ← Safari ← Location ← Ask."}
+							</li>
+							<li>
+								{isRTL
+									? "Chrome: اضغط رمز القفل أو الإعدادات بجانب العنوان ← الأذونات ← الموقع ← سماح."
+									: "Chrome: tap the lock / settings icon by the address ← Permissions ← Location ← Allow."}
+							</li>
+							<li>{isRTL ? "وتأكد أن خدمات الموقع مفعّلة في جوالك." : "And make sure Location Services are on for your phone."}</li>
+						</ul>
+						<p className="sary-o-note">{webNote}</p>
+						<div className="sary-o-row">
+							<button type="button" className="sary-o-primary" onClick={requestLocation} data-testid="outing-geo-retry">
+								{isRTL ? "سمحت — حاول مرة ثانية" : "Done — try again"}
+							</button>
+							<button type="button" className="sary-o-secondary" disabled={busy} onClick={() => setConfirm({ kind: "leave" })} data-testid="outing-geo-leave">
+								{isRTL ? "غادر الطلعة" : "Leave outing"}
+							</button>
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			{confirm ? (
 				<div
@@ -1564,7 +1656,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							{confirm.kind === "end"
 								? isRTL ? "إنهاء الطلعة؟" : "End the outing?"
 								: confirm.kind === "leave"
-									? isRTL ? "مغادرة الطلعة؟" : "Leave the outing?"
+									? isRTL ? "غادر الطلعة؟" : "Leave the outing?"
 									: isRTL ? `إزالة ${confirm.name}؟` : `Remove ${confirm.name}?`}
 						</h2>
 						<p>

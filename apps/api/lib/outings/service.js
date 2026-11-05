@@ -485,6 +485,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const [row] = await q(
       `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.consumed_by, i.consumed_at, i.opened_at,
               o.name, o.status AS outing_status, o.join_locked, o.open_links, u.display_name AS owner_name,
+              o.plan_destination->>'name' AS destination_name,
               (SELECT count(*)::int FROM sary.outing_members m
                 WHERE m.outing_id = o.id AND m.status = 'active') AS member_count,
               (SELECT status FROM sary.outing_members m
@@ -516,6 +517,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       invitee_name: isPersonal ? row.invitee_name : null,
       claim: isPersonal ? claimOf(row, viewer) : 'open',
       already_member: row.viewer_status === 'active',
+      /* «الوجهة» as the plan names it (e.g. «روضة الثمامة») — the name only,
+       * never its coordinates: the invitee is not a member yet. */
+      destination_name: typeof row.destination_name === 'string' && row.destination_name.trim() ? row.destination_name : null,
     };
   }
 

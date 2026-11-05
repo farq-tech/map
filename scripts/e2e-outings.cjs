@@ -199,17 +199,12 @@ async function waitFor(fn, ms = 15_000, step = 250) {
     if (await C.page.locator('[data-testid="outing-member"]').count()) throw new Error('outsider saw members');
   });
 
-  await check('B pauses sharing: A sees «أوقف مشاركة موقعه», no distance', async () => {
+  /* Same as the iPhone app: joining is the consent, no on/off switch in the trip; stopping = «غادر الطلعة». */
+  await check('B has no sharing switch, only the honest web note', async () => {
     await B.page.getByTestId('outing-tab-settings').click();
-    await B.page.getByTestId('outing-sharing-toggle').click();
-    await waitFor(async () => /أوقف مشاركة موقعه/.test(await memberText(A.page, bId)));
-    if (await A.page.locator(`[data-user="${bId}"] [data-testid="outing-member-distance"]`).count()) throw new Error('distance still shown');
-    await shot(A, '07-B-paused');
-  });
-
-  await check('B resumes sharing: live again', async () => {
-    await B.page.getByTestId('outing-tab-settings').click();
-    await B.page.getByTestId('outing-sharing-toggle').click();
+    if (await B.page.locator('[data-testid="outing-sharing-toggle"]').count()) throw new Error('sharing switch still shown');
+    const note = await B.page.getByTestId('outing-web-note').innerText();
+    if (!/الصفحة مفتوحة فقط/.test(note)) throw new Error(`web note: ${note}`);
     await B.ctx.setGeolocation({ ...north(east(START, 1200), 1250), accuracy: 9 });
     await waitFor(async () => /مباشر/.test(await memberText(A.page, bId)), 20_000);
   });

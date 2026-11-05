@@ -136,6 +136,8 @@ export type InvitePreview = {
 	/** open · yours (used by you: rejoin) · taken (used by someone else) · claimed (used; anonymous viewer). */
 	claim?: "open" | "yours" | "taken" | "claimed";
 	already_member?: boolean;
+	/** «الوجهة» from the trip plan (name only, no coordinates), or null. */
+	destination_name?: string | null;
 };
 
 /** «دعوة شخصية» as the leader sees it. */
