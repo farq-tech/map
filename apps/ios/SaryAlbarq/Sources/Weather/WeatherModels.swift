@@ -12,6 +12,8 @@ struct WeatherArea: Hashable, Codable {
         case area
         /// A chosen point (destination, «الطقس هنا»): 4 decimals.
         case point
+        /// «بريف المكان» (a tapped map spot): the ≈ 1 km cell (0.01°), so nearby taps share one request.
+        case cell
     }
 
     let lat: Double
@@ -32,9 +34,24 @@ struct WeatherArea: Hashable, Codable {
         precision = .point
     }
 
+    /// A tapped spot for the place brief: snapped to the 0.01° (≈ 1 km) grid.
+    init(cell lat: Double, lng: Double) {
+        self.lat = (lat * 100).rounded() / 100
+        self.lng = (lng * 100).rounded() / 100
+        precision = .cell
+    }
+
+    private var format: String {
+        switch precision {
+        case .area: return "%.1f"
+        case .point: return "%.4f"
+        case .cell: return "%.2f"
+        }
+    }
+
     /// Exactly what goes into the URL.
-    var latText: String { String(format: precision == .area ? "%.1f" : "%.4f", lat) }
-    var lngText: String { String(format: precision == .area ? "%.1f" : "%.4f", lng) }
+    var latText: String { String(format: format, lat) }
+    var lngText: String { String(format: format, lng) }
     var key: String { "\(precision.rawValue)_\(latText)_\(lngText)" }
     var coordinate: Geo.LatLng { Geo.LatLng(lat: lat, lng: lng) }
 }
@@ -57,6 +74,12 @@ struct WeatherHour: Equatable, Codable {
     var dust: Double?
     /// PM10, µg/m³.
     var pm10: Double?
+    /// «يُحس كأنها»: the model's apparent temperature (heat / wind chill), °C.
+    var apparentC: Double? = nil
+    /// Relative humidity at 2 m, 0…100.
+    var humidity: Double? = nil
+    /// UV index (hourly only).
+    var uvIndex: Double? = nil
 }
 
 /// Everything one refresh brought back.
@@ -81,8 +104,8 @@ enum OpenMeteo {
     static let attribution = "بيانات الطقس: Open-Meteo"
     static let siteURL = URL(string: "https://open-meteo.com/")!
 
-    static let hourlyFields = "temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility"
-    static let currentFields = "temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility"
+    static let hourlyFields = "temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,apparent_temperature,relative_humidity_2m,uv_index"
+    static let currentFields = "temperature_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,apparent_temperature,relative_humidity_2m"
 
     /// Only the (rounded or chosen) coordinate and the fields; nothing about the person.
     static func forecastURL(_ a: WeatherArea) -> URL {
@@ -116,6 +139,8 @@ enum OpenMeteo {
             var wind_direction_10m: Double?
             var wind_gusts_10m: Double?
             var visibility: Double?
+            var apparent_temperature: Double?
+            var relative_humidity_2m: Double?
         }
         struct Hourly: Decodable {
             var time: [Double]
@@ -127,6 +152,9 @@ enum OpenMeteo {
             var wind_direction_10m: [Double?]?
             var wind_gusts_10m: [Double?]?
             var visibility: [Double?]?
+            var apparent_temperature: [Double?]?
+            var relative_humidity_2m: [Double?]?
+            var uv_index: [Double?]?
         }
         var current: Current?
         var hourly: Hourly?
@@ -158,18 +186,22 @@ enum OpenMeteo {
                 time: Date(timeIntervalSince1970: t), temperatureC: at(h.temperature_2m, i), precipitationMm: at(h.precipitation, i),
                 precipitationProbability: at(h.precipitation_probability, i), weatherCode: at(h.weather_code, i),
                 windKmh: at(h.wind_speed_10m, i), gustKmh: at(h.wind_gusts_10m, i), windFromDeg: at(h.wind_direction_10m, i),
-                visibilityM: at(h.visibility, i), dust: d?.0 ?? nil, pm10: d?.1 ?? nil))
+                visibilityM: at(h.visibility, i), dust: d?.0 ?? nil, pm10: d?.1 ?? nil,
+                apparentC: at(h.apparent_temperature, i), humidity: at(h.relative_humidity_2m, i), uvIndex: at(h.uv_index, i)))
         }
         hours.sort { $0.time < $1.time }
         var current: WeatherHour?
         if let c = f.current {
             /* Dust for "now": the air API's current value, else the hour that contains now. */
-            let hourDust = dustAt[(c.time / 3600).rounded(.down) * 3600]
+            let hourStart = (c.time / 3600).rounded(.down) * 3600
+            let hourDust = dustAt[hourStart]
+            let uvNow = hours.first { $0.time.timeIntervalSince1970 == hourStart }?.uvIndex
             current = WeatherHour(
                 time: Date(timeIntervalSince1970: c.time), temperatureC: c.temperature_2m, precipitationMm: c.precipitation,
                 precipitationProbability: nil, weatherCode: c.weather_code, windKmh: c.wind_speed_10m, gustKmh: c.wind_gusts_10m,
                 windFromDeg: c.wind_direction_10m, visibilityM: c.visibility,
-                dust: a?.current?.dust ?? hourDust?.0 ?? nil, pm10: a?.current?.pm10 ?? hourDust?.1 ?? nil)
+                dust: a?.current?.dust ?? hourDust?.0 ?? nil, pm10: a?.current?.pm10 ?? hourDust?.1 ?? nil,
+                apparentC: c.apparent_temperature, humidity: c.relative_humidity_2m, uvIndex: uvNow)
         }
         return WeatherReport(area: area, fetchedAt: fetchedAt, current: current, hours: hours, airAvailable: a?.hourly != nil)
     }

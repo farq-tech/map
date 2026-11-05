@@ -303,6 +303,7 @@ final class LiveOutingController: ObservableObject {
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
+        placeBriefDebugLaunch()
         #endif
     }
 

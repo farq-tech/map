@@ -1,4 +1,5 @@
 @_spi(Experimental) import MapboxMaps
+import MetalKit
 import SwiftUI
 import UIKit
 
@@ -118,6 +119,9 @@ struct OutingMapboxView: UIViewRepresentable {
     var onMemberTap: (String) -> Void = { _ in }
     var onRallyTap: () -> Void = {}
     var onMapTap: (LngLat) -> Void = { _ in }
+    /// «بريف المكان»: a single tap on an empty spot (not a car, pin, chip, label button or
+    /// control), with the name when it was a map label (POI). Not while picking.
+    var onEmptyTap: (LngLat, String?) -> Void = { _, _ in }
     /// Screen points of every car and the rally flag, after each camera move or glide step.
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
@@ -177,6 +181,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onCarTap = onMemberTap
         c.onRallyTap = onRallyTap
         c.onMapTap = onMapTap
+        c.onEmptyTap = onEmptyTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
         c.waypointPins.onTap = onWaypointTap
@@ -250,6 +255,8 @@ struct OutingMapboxView: UIViewRepresentable {
         var onCarTap: (String) -> Void = { _ in }
         var onRallyTap: () -> Void = {}
         var onMapTap: (LngLat) -> Void = { _ in }
+        var onEmptyTap: (LngLat, String?) -> Void = { _, _ in }
+        private var poiTap: Cancelable?
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
@@ -352,8 +359,20 @@ struct OutingMapboxView: UIViewRepresentable {
                     self.onMapTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
                     return true
                 }
+                if self.isEmptySpot(ctx.point) {
+                    self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), nil)
+                    return true
+                }
                 return false
             })
+            /* A map label (POI) names the brief. Registered after the map tap: Mapbox asks featureset
+               interactions first, and this one only answers where nothing of ours is on top. */
+            poiTap = map.mapboxMap.addInteraction(TapInteraction(.standardPoi) { [weak self] poi, ctx in
+                guard let self, !self.picking, self.car(at: ctx.point) == nil, self.isEmptySpot(ctx.point) else { return false }
+                self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), poi.name)
+                return true
+            })
+            MapTerrainProbe.source = self
             waypointPins.onClusterTap = { [weak self] pts in
                 guard let self else { return }
                 self.keepGroup = false
@@ -397,6 +416,8 @@ struct OutingMapboxView: UIViewRepresentable {
             roadQuery?.cancel()
             waterQuery?.cancel()
             tapInteraction?.cancel()
+            poiTap?.cancel()
+            if MapTerrainProbe.source === self { MapTerrainProbe.source = nil }
             cancelables.removeAll()
         }
 
@@ -1034,6 +1055,15 @@ struct OutingMapboxView: UIViewRepresentable {
                 map.ornaments.options.logo.margins = CGPoint(x: spot.rect.minX - safe.left, y: y)
                 map.ornaments.options.attributionButton.margins = CGPoint(x: spot.rect.minX + lw + 4 - safe.left, y: y)
             }
+        }
+
+        /// Nothing of ours under the finger: not a chip / pin (overlay), a view annotation
+        /// (rally flag, route label, start pin) or an ornament — only the map itself.
+        private func isEmptySpot(_ p: CGPoint) -> Bool {
+            guard let map, let hit = map.hitTest(p, with: nil) else { return true }
+            if hit === map || hit === overlay { return true }
+            /* The map's render surface (a Metal view directly under the MapView). */
+            return hit.superview === map && hit is MTKView
         }
 
         private func car(at p: CGPoint) -> String? {
@@ -1677,5 +1707,24 @@ private struct NoteTail: Shape {
         p.addLine(to: CGPoint(x: r.midX, y: r.maxY))
         p.closeSubpath()
         return p
+    }
+}
+
+// MARK: - «بريف المكان»: Terrain-DEM at a spot
+
+extension OutingMapboxView.Coordinator: TerrainSampling {
+    /// Elevation (metres, exaggeration undone) and a slope from four samples 60 m around —
+    /// only from DEM tiles the map has loaded; nil otherwise, never guessed.
+    func terrain(at p: LngLat) -> TerrainSample {
+        guard let map, styleReady else { return .unavailable }
+        let m: MapboxMap = map.mapboxMap!
+        let k = terrainExaggeration
+        func el(_ q: LngLat) -> Double? { m.elevation(at: CLLocationCoordinate2D(latitude: q.lat, longitude: q.lng)).map { $0 / k } }
+        let d = 60.0
+        let dLat = d / 111_320, dLng = d / (111_320 * max(0.1, cos(p.lat * .pi / 180)))
+        let c = el(p)
+        let slope = PlaceBriefRules.slopeDeg(center: c, east: el(LngLat(lng: p.lng + dLng, lat: p.lat)), west: el(LngLat(lng: p.lng - dLng, lat: p.lat)),
+                                             north: el(LngLat(lng: p.lng, lat: p.lat + dLat)), south: el(LngLat(lng: p.lng, lat: p.lat - dLat)), spacingM: d)
+        return TerrainSample(elevationM: c, slopeDeg: slope)
     }
 }
