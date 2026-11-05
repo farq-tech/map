@@ -13,8 +13,16 @@ private func fix(_ p: LngLat, accuracy: Double = 5) -> DeviceFix {
     DeviceFix(lat: p.lat, lng: p.lng, accuracy: accuracy, heading: nil, speed: 12, atMs: Date().timeIntervalSince1970 * 1000)
 }
 
+/// Guidance on for this phone (the leader's «للكل» accepted, or started by me).
+private func on() -> TripAutoNavState {
+    var s = TripAutoNavState()
+    s.active = true
+    return s
+}
+
 private func active(_ edit: (inout TripAutoNav.Input) -> Void = { _ in }) -> TripAutoNav.Input {
     var i = TripAutoNav.Input()
+    i.state = on()
     i.status = .active
     i.destination = camp
     i.hasFix = true
@@ -60,7 +68,7 @@ final class TripAutoNavDecisionTests: XCTestCase {
         XCTAssertEqual(TripAutoNav.decide(active { $0.status = .created }), .none, "the leader has not pressed «ابدأ الطلعة»")
         XCTAssertEqual(TripAutoNav.decide(active { $0.destination = nil }), .none)
         XCTAssertEqual(TripAutoNav.decide(active { $0.hasFix = false }), .none, "waits for GPS, never routes from nowhere")
-        XCTAssertEqual(TripAutoNav.decide(active { $0.enabled = false }), .none, "the setting is off on this phone")
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state.active = false }), .none, "nobody started it for this phone: «ابدأ الطلعة» alone does not")
         XCTAssertEqual(TripAutoNav.decide(active { $0.state.paused = true }), .none, "«أوقف التوجيه» on this phone")
     }
 
@@ -100,7 +108,7 @@ final class TripAutoNavStopTests: XCTestCase {
     func testArrivingAtAStopAdvancesAfterTheDwell() {
         let stops = [fuel]
         let atFuel = TripAutoNav.target(stop: fuel, index: 0)
-        let s = TripAutoNav.arrived(TripAutoNavState(), at: atFuel, stops: stops)
+        let s = TripAutoNav.arrived(on(), at: atFuel, stops: stops)
         XCTAssertEqual(s.reachedStops, [TripAutoNav.key(fuel)])
         XCTAssertFalse(s.arrived)
         func input(_ ago: Double) -> TripAutoNav.Input {
@@ -112,7 +120,7 @@ final class TripAutoNavStopTests: XCTestCase {
 
     func testArrivingAtTheDestinationEndsForGood() {
         let dest = TripAutoNav.nextTarget(destination: camp, stops: [], reached: [])!
-        let s = TripAutoNav.arrived(TripAutoNavState(), at: dest, stops: [])
+        let s = TripAutoNav.arrived(on(), at: dest, stops: [])
         XCTAssertTrue(s.arrived)
         XCTAssertEqual(TripAutoNav.decide(active { $0.state = s; $0.navPhase = .arrived; $0.navAuto = true; $0.navTarget = dest; $0.arrivedAgoS = 60 }), .none)
         XCTAssertEqual(TripAutoNav.decide(active { $0.state = s }), .none, "after «إنهاء» on the card: nothing restarts")
@@ -156,7 +164,7 @@ final class TripAutoNavRelaunchTests: XCTestCase {
     }
 
     func testRelaunchedMidTripResumesToTheNextStop() {
-        var s = TripAutoNavState()
+        var s = on()
         s.reachedStops = [TripAutoNav.key(fuel)]
         s.save("o", defaults)
         let back = TripAutoNavState.load("o", defaults)
@@ -166,10 +174,10 @@ final class TripAutoNavRelaunchTests: XCTestCase {
     }
 
     func testRelaunchAfterArrivalOrPauseDoesNotRestart() {
-        var arrived = TripAutoNavState()
+        var arrived = on()
         arrived.arrived = true
         XCTAssertEqual(TripAutoNav.decide(active { $0.state = arrived }), .none)
-        var paused = TripAutoNavState()
+        var paused = on()
         paused.paused = true
         XCTAssertEqual(TripAutoNav.decide(active { $0.state = paused }), .none)
     }
@@ -184,6 +192,101 @@ final class TripAutoNavRelaunchTests: XCTestCase {
     func testAccountWipeForgetsIt() {
         XCTAssertTrue(LocalAccountData.keys.contains(TripAutoNavState.storeKey))
         XCTAssertTrue(LocalAccountData.keys.contains(TripAutoNavPrefs.enabledKey))
+    }
+}
+
+/// «ابدأ التوجيه للكل» (the leader) / «لي فقط» / members only for themselves.
+final class NavBroadcastTests: XCTestCase {
+    private let owner = "u-owner", deputy = "u-deputy", member = "u-member", me = "u-me"
+    private var cmd: String { NavBroadcast.text(targetName: "روضة الثمامة") }
+
+    func testTheCommandIsANoteWithinTheLimit() {
+        XCTAssertTrue(NavBroadcast.isBroadcast(cmd))
+        XCTAssertEqual(NavBroadcast.targetName(cmd), "روضة الثمامة")
+        XCTAssertFalse(NavBroadcast.isBroadcast("بوقف عند المحطة"))
+        XCTAssertFalse(NavBroadcast.isBroadcast(RallyRecall.noteText))
+        XCTAssertLessThanOrEqual(NavBroadcast.text(targetName: String(repeating: "ا", count: 200)).count, ServerRules.noteMax)
+    }
+
+    func testLeaderForAllStartsAMember() {
+        var s = TripAutoNavState()
+        let r = NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true)
+        XCTAssertEqual(r, .start)
+        XCTAssertTrue(s.active)
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = s }), .start(TripAutoNav.nextTarget(destination: camp, stops: [], reached: [])!))
+        /* The same note again (every snapshot carries it): acted on once. */
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true), .none)
+    }
+
+    func testBroadcastFromANonLeaderIsIgnored() {
+        var s = TripAutoNavState()
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: member, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true), .ignored)
+        XCTAssertFalse(s.active)
+        XCTAssertNil(s.broadcastAt)
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = s }), .none, "nothing starts")
+        /* The deputy too, while the rule is «leader only». */
+        XCTAssertFalse(NavBroadcast.deputyMayBroadcast)
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t2", senderId: deputy, ownerId: owner, senderIsDeputy: true, myId: me, autoAccept: true), .ignored)
+        XCTAssertFalse(s.active)
+    }
+
+    func testMyOwnNoteIsNotACommandToMe() {
+        var s = TripAutoNavState()
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: owner, autoAccept: true), .none)
+        XCTAssertFalse(s.active, "the leader's «لي فقط» / «للكل» is set on his phone directly")
+    }
+
+    func testLeaderOnlyMeStartsNobodyElse() {
+        /* «لي فقط» sends nothing: a member's phone sees no command and stays off. */
+        let member = TripAutoNavState()
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = member }), .none)
+        XCTAssertFalse(member.active)
+    }
+
+    func testMemberCannotStartForOthers() {
+        XCTAssertFalse(NavBroadcast.mayBroadcast(senderId: member, ownerId: owner, senderIsDeputy: false))
+        XCTAssertTrue(NavBroadcast.mayBroadcast(senderId: owner, ownerId: owner, senderIsDeputy: false))
+    }
+
+    func testSettingOffOffersInsteadOfStarting() {
+        var s = TripAutoNavState()
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: false), .offer)
+        XCTAssertTrue(s.offered)
+        XCTAssertFalse(s.active, "one tap «ابدأ» first")
+    }
+
+    func testMemberLocalStopStaysLocalUntilANewCommand() {
+        var s = TripAutoNavState()
+        _ = NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true)
+        s.paused = true // «أوقف التوجيه» on this phone
+        XCTAssertEqual(TripAutoNav.decide(active { $0.state = s }), .none)
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true), .none,
+                       "the old command does not override my stop")
+        XCTAssertTrue(s.paused)
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t2", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true), .start,
+                       "«وجّه الكل» again is a new command")
+        XCTAssertFalse(s.paused)
+    }
+
+    func testNoCommandAfterArrival() {
+        var s = on()
+        s.arrived = true
+        s.active = false
+        XCTAssertEqual(NavBroadcast.receive(&s, text: cmd, at: "t9", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true), .none)
+        XCTAssertFalse(s.active)
+    }
+
+    func testOldSavedStateStillDecodes() throws {
+        let old = #"{"reachedStops":["24.72400,46.69600"],"paused":false,"arrived":false}"#
+        let s = try JSONDecoder().decode(TripAutoNavState.self, from: Data(old.utf8))
+        XCTAssertEqual(s.reachedStops.count, 1)
+        XCTAssertFalse(s.active)
+    }
+
+    func testLeaderSeesGuideAllInPlus() {
+        let items = LiveActionCatalog.groups(.init(guideAllTarget: "روضة الثمامة")).flatMap(\.items)
+        XCTAssertEqual(items.first { $0.id == "guideAll" }?.title, "وجّه الكل إلى روضة الثمامة")
+        XCTAssertNil(LiveActionCatalog.groups(.init()).flatMap(\.items).first { $0.id == "guideAll" }, "members: no way to start it for others")
     }
 }
 

@@ -1,15 +1,18 @@
 import Foundation
 
-// «ابدأ الطلعة» ⇒ «الملاحة» by itself, for every member, until arrival.
+// The trip's guidance: turn by turn to the trip's NEXT target — the next planned stop not
+// yet reached, else the destination — until arrival; a stop reached moves on to the next
+// one; the destination reached says «وصلتوا» and stops.
 //
-// When the outing is active and has a destination, every phone in it guides its driver
-// turn by turn to the trip's NEXT target — the next planned stop not yet reached, else
-// the destination — with no extra tap. Members who join later, or open the app again
-// after iOS closed it, start the same way. It keeps going until arrival; a stop reached
-// moves on to the next one; the destination reached says «وصلتوا» and stops.
+// Who starts it (the owner's rule): «أمير الرحلة» starts it for everyone («ابدأ التوجيه
+// للكل», a group command over the member-note channel, like «ارجعوا لنقطة التجمع») or
+// only for himself («لي فقط»). Everyone else starts it only for themselves; a group
+// command from anyone who is not the current leader is ignored. Members who join later,
+// or open the app again, resume the leader's last command (or their own start).
 //
 // Per device: «أوقف التوجيه» / «استأنف» and the setting «ابدأ التوجيه تلقائيًا مع الرحلة»
-// only change THIS phone. Nothing here is sent anywhere (UserDefaults, like `TripStore`).
+// (accept the leader's «للكل» without asking) only change THIS phone. The state is kept on
+// the phone (UserDefaults, like `TripStore`); the only thing sent is the leader's note.
 //
 // Pure decisions (unit-tested in Tests/TripAutoNavTests.swift); the live screen applies them
 // (`LiveOutingController+AutoNav.swift`).
@@ -29,12 +32,31 @@ enum TripAutoNavPrefs {
 
 /// What this phone remembers of one outing's automatic guidance.
 struct TripAutoNavState: Codable, Equatable {
+    /// The trip's guidance is on for this phone (the leader's «للكل» accepted, or started by me).
+    var active = false
+    /// The leader's group command already handled (its note time), so it is acted on once.
+    var broadcastAt: String?
+    /// The leader's «للكل» arrived while the setting is off: «أمير الرحلة بدأ التوجيه · ابدأ».
+    var offered = false
     /// Planned stops already reached (`TripAutoNav.key`), in the order reached.
     var reachedStops: [String] = []
     /// «أوقف التوجيه» on this phone (until «استأنف»).
     var paused = false
     /// Guidance reached the destination: never restart it for this outing.
     var arrived = false
+
+    init() {}
+
+    /* Tolerant: a state saved by an older build of this branch still decodes. */
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        active = (try? c.decodeIfPresent(Bool.self, forKey: .active)) ?? false
+        broadcastAt = try? c.decodeIfPresent(String.self, forKey: .broadcastAt)
+        offered = (try? c.decodeIfPresent(Bool.self, forKey: .offered)) ?? false
+        reachedStops = (try? c.decodeIfPresent([String].self, forKey: .reachedStops)) ?? []
+        paused = (try? c.decodeIfPresent(Bool.self, forKey: .paused)) ?? false
+        arrived = (try? c.decodeIfPresent(Bool.self, forKey: .arrived)) ?? false
+    }
 
     /// One dictionary per device (outing id → state), like `TripStore`; wiped with the account.
     static let storeKey = "sary.nav.autoTrip.states.v1"
@@ -108,8 +130,6 @@ enum TripAutoNav {
     }
 
     struct Input: Equatable {
-        /// «ابدأ التوجيه تلقائيًا مع الرحلة».
-        var enabled = true
         var state = TripAutoNavState()
         var status: OutingStatus?
         /// The screen is closed for this outing (left, removed, ended).
@@ -146,7 +166,8 @@ enum TripAutoNav {
         if i.closed || i.status == .ended {
             return i.navAuto && i.navPhase != .idle && i.navPhase != .arrived ? .stop : .none
         }
-        guard i.enabled, !i.state.paused, i.status == .active, i.destination != nil else { return .none }
+        /* Only once started on this phone: by the leader's «للكل» or by me («لي فقط» / «ابدأ التوجيه»). */
+        guard i.state.active, !i.state.paused, i.status == .active, i.destination != nil else { return .none }
         if i.state.arrived || i.tripArrived {
             return i.navAuto && (i.navPhase == .guiding || i.navPhase == .offRoad) ? .finish : .none
         }
@@ -172,5 +193,64 @@ enum TripAutoNav {
     /// The one line said when automatic guidance starts («نبدأ التوجيه إلى …»).
     static func intro(_ t: NavTarget, resumed: Bool) -> String {
         resumed ? "نكمل إلى \(t.name)" : "نبدأ التوجيه إلى \(t.name)"
+    }
+}
+
+/// «ابدأ التوجيه للكل»: the leader's group command, carried as his member note (the same
+/// channel as «ارجعوا لنقطة التجمع»: server note + nearby link, no new endpoint).
+/// It carries no route and no position: each phone guides from where IT is to the trip's
+/// next target as IT has reached it.
+enum NavBroadcast {
+    static let prefix = "🧭 التوجيه للكل"
+    /// The deputy («نائب الأمير») may also start guidance for everyone. The owner said
+    /// «كأمير»: leader only.
+    static let deputyMayBroadcast = false
+
+    /// «🧭 التوجيه للكل: روضة الثمامة» (≤ the note limit).
+    static func text(targetName: String) -> String {
+        String("\(prefix): \(targetName)".prefix(ServerRules.noteMax))
+    }
+
+    static func isBroadcast(_ text: String?) -> Bool {
+        text?.trimmingCharacters(in: .whitespaces).hasPrefix(prefix) == true
+    }
+
+    static func targetName(_ text: String) -> String? {
+        guard isBroadcast(text), let r = text.range(of: ":") else { return nil }
+        let n = text[r.upperBound...].trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? nil : n
+    }
+
+    /// May this sender start guidance for everyone? Verified on receipt, on every phone.
+    static func mayBroadcast(senderId: String, ownerId: String, senderIsDeputy: Bool) -> Bool {
+        senderId == ownerId || (deputyMayBroadcast && senderIsDeputy)
+    }
+
+    enum Receipt: Equatable {
+        /// Nothing new.
+        case none
+        /// Not from the leader: ignored (never starts anything).
+        case ignored
+        /// Start now (the setting accepts it without asking).
+        case start
+        /// The setting is off: offer it («أمير الرحلة بدأ التوجيه · ابدأ»).
+        case offer
+    }
+
+    /// A note that is a group command reached this phone.
+    static func receive(_ s: inout TripAutoNavState, text: String, at: String, senderId: String, ownerId: String,
+                        senderIsDeputy: Bool, myId: String, autoAccept: Bool) -> Receipt {
+        guard isBroadcast(text), senderId != myId, s.broadcastAt != at else { return .none }
+        guard mayBroadcast(senderId: senderId, ownerId: ownerId, senderIsDeputy: senderIsDeputy) else { return .ignored }
+        s.broadcastAt = at
+        guard !s.arrived else { return .none }
+        if autoAccept {
+            s.active = true
+            s.paused = false
+            s.offered = false
+            return .start
+        }
+        s.offered = true
+        return .offer
     }
 }

@@ -24,6 +24,8 @@ enum LiveActionCatalog {
         var following = false
         var hasRoute = true
         var stuck = false
+        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone).
+        var guideAllTarget: String?
     }
 
     static func groups(_ s: State) -> [LiveActionGroup] {
@@ -31,6 +33,10 @@ enum LiveActionCatalog {
             LiveActionGroup(title: "الطريق", items: [
                 .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate",
                       subtitle: "لصاحب، للوجهة أو لنقطة التجمع"),
+            ] + (s.guideAllTarget.map { t in
+                [LiveActionItem(id: "guideAll", title: "وجّه الكل إلى \(t)", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
+                                subtitle: "يبدأ التوجيه على جوال كل عضو · يقدر كل واحد يوقفه عنده")]
+            } ?? []) + [
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
                 .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق العودة" : "طريق العودة", systemImage: SaryIcon.backTrack,
                       accessibilityID: "outing-backtrack", subtitle: s.backTracking ? nil : "ارجع من نفس مسارك", isActive: s.backTracking),
