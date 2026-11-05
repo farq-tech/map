@@ -57,6 +57,7 @@ struct LiveOutingScreen: View {
                     onMemberTap: { controller.openParticipant($0) },
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
+                    onEmptyTap: { controller.mapTappedEmpty($0, name: $1) },
                     onProjection: { controller.overlay.projection = $0 },
                     onUserGesture: {
                         controller.following = false

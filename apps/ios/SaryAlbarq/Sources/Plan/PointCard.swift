@@ -47,7 +47,10 @@ struct PointCard: View {
     var subject: Subject
     var actions: PointActions = .none
     var close: (() -> Void)?
+    /// «بريف المكان» (the live map's tap / long-press): weather, sun and terrain at the point.
+    var brief: PlaceBriefOptions? = nil
     @Environment(\.sary) private var theme
+    @StateObject private var briefModel = PlaceBriefModel()
     @State private var toast: String?
     @State private var copied = ""
     @State private var share: ShareItem?
@@ -74,6 +77,22 @@ struct PointCard: View {
         }
         .animation(theme.animation(.snappy), value: toast)
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
+        .task(id: "\(point.lat),\(point.lng)") {
+            guard let brief, case let .point(p, name) = subject else { return }
+            briefModel.load(p, knownName: name, saved: brief.saved)
+        }
+    }
+
+    private var briefOn: Bool {
+        if brief != nil, case .point = subject { return true }
+        return false
+    }
+
+    /// The name to save / share with: one the person or the map gave, or a saved place (never «قرب …»).
+    private var resolvedName: String? {
+        if case let .point(_, n) = subject, let n { return n }
+        if briefOn, let n = briefModel.name, !n.approximate { return n.text }
+        return nil
     }
 
     @ViewBuilder
@@ -84,6 +103,9 @@ struct PointCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title(now: now)).saryText(.headline).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("point.title")
+                    if briefOn, let d = PlaceBriefRules.distanceText(from: brief?.me, to: point) {
+                        Text(d).saryNumber(.footnote).foregroundStyle(p.textSecondary).accessibilityIdentifier("point.distance")
+                    }
                     if case let .me(f) = subject {
                         let parts = [CoordinateShare.accuracyLabel(f.accuracyM), CoordinateShare.clock(f.at)].compactMap { $0 }
                         Text(parts.joined(separator: " · ")).saryText(.footnote).foregroundStyle(p.textSecondary)
@@ -95,6 +117,18 @@ struct PointCard: View {
             if case let .me(f) = subject, !CoordinateShare.isFresh(f, now: now) {
                 SaryBanner(text: "هذا ليس موقعك الحالي: \(CoordinateShare.headline(f, now: now)). يُرسل كذلك في النص.", tone: .warning)
             }
+            if briefOn {
+                /* The brief's header already carries the coordinates when there is no name. */
+                if briefModel.name != nil || resolvedName != nil {
+                    Text(CoordinateShare.displayDecimal(point)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textSecondary)
+                        .textSelection(.enabled).accessibilityIdentifier("point.decimal")
+                }
+                if brief?.compact != true {
+                    Text(CoordinateShare.displayDMS(point)).saryNumber(.footnote).foregroundStyle(p.textTertiary)
+                }
+                PlaceBriefSection(ui: PlaceBriefPresenter.build(briefModel.weather, loading: briefModel.loading, failed: briefModel.failure, point: point, now: now),
+                                  terrain: briefModel.terrain, compact: brief?.compact == true)
+            } else {
             VStack(alignment: .leading, spacing: 4) {
                 Text(CoordinateShare.displayDecimal(point))
                     .saryNumber(.title2, weight: .bold).foregroundStyle(p.textPrimary)
@@ -102,6 +136,7 @@ struct PointCard: View {
                     .accessibilityIdentifier("point.decimal")
                 Text(CoordinateShare.displayDMS(point))
                     .saryNumber(.subhead).foregroundStyle(p.textSecondary)
+            }
             }
             HStack(spacing: theme.space(.s)) {
                 Menu {
@@ -141,7 +176,7 @@ struct PointCard: View {
     private var extraActions: [Extra] {
         let pt = point
         var out: [Extra] = []
-        var name: String? { if case let .point(_, n) = subject { return n }; return nil }
+        let name = resolvedName
         if let f = actions.navigateHere { out.append(Extra(id: "point.navigate", title: "ملاحة إلى هنا", icon: SaryIcon.directions) { f(pt) }) }
         if let f = actions.weatherHere { out.append(Extra(id: "point.weather", title: "الطقس هنا", icon: "cloud.sun.fill") { f(pt) }) }
         if let f = actions.setDestination { out.append(Extra(id: "point.destination", title: "اجعلها الوجهة", icon: "flag.checkered") { f(pt, name) }) }
@@ -153,7 +188,9 @@ struct PointCard: View {
 
     private func title(now: Date) -> String {
         switch subject {
-        case let .point(_, name): return name ?? "نقطة على الخريطة"
+        case let .point(_, name):
+            if briefOn { return name ?? briefModel.name?.display ?? CoordinateShare.displayDecimal(point) }
+            return name ?? "نقطة على الخريطة"
         case let .me(f): return CoordinateShare.headline(f, now: now)
         }
     }
@@ -175,7 +212,7 @@ struct PointCard: View {
 
     private func message(_ kind: CoordinateShare.MapLink, now: Date) -> String {
         switch subject {
-        case let .point(p, name): return CoordinateShare.pointMessage(p, name: name, link: kind)
+        case let .point(p, _): return CoordinateShare.pointMessage(p, name: resolvedName, link: kind)
         case let .me(f): return CoordinateShare.myLocationMessage(f, link: kind, now: now)
         }
     }
