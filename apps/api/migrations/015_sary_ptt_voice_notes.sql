@@ -2,8 +2,8 @@
 -- recorded, sent, then played for everyone on the same channel — and kept for
 -- a while so a phone that was out of coverage still gets it when it is back.
 --
--- Additive only: one new table. Nothing existing is altered. Older API builds
--- never read it.
+-- Additive only: one new table and one new column with a default (below).
+-- Nothing existing is altered or rewritten. Older API builds never read them.
 --
 -- Storage is this database (bytea), nothing paid, nothing third party:
 --   · one clip ≤ 60 s of AAC (≈24–32 kbps mono) ≈ 240 KB, capped at 640 KB;
@@ -22,6 +22,14 @@
 -- answer is not stored twice). recorded_at: when the sender stopped
 -- recording (sent late from an outbox it is older than created_at), which is
 -- what «still recent enough to play by itself» is measured from.
+
+-- ptt_tokens.voice_notes: this device's app plays voice notes it is woken for
+-- (builds before voice notes would show «فلان يتكلم» on the Lock Screen for a
+-- transmission that never comes, so only flagged tokens get those pushes).
+-- A new column with a default: existing rows read false, older builds never
+-- send it.
+
+ALTER TABLE sary.ptt_tokens ADD COLUMN IF NOT EXISTS voice_notes boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS sary.ptt_voice_notes (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -201,7 +201,8 @@ function parsePttRegistration(raw) {
   if (!TOKEN_RE.test(token)) return { error: 'invalid_token' };
   const environment = typeof raw.environment === 'string' ? raw.environment.trim().toLowerCase() : '';
   if (!ENVIRONMENTS.has(environment)) return { error: 'invalid_environment' };
-  return { token, environment };
+  /* «رسالة صوتية»: this build plays the voice notes it is woken for. */
+  return { token, environment, voice_notes: raw.voice_notes === true };
 }
 
 /**
@@ -435,10 +436,10 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
     const reg = parsePttRegistration(raw);
     if (reg.error) return { ok: false, error: reg.error };
     await q(
-      `INSERT INTO sary.ptt_tokens (user_id, outing_id, token, environment, bundle_id) VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO sary.ptt_tokens (user_id, outing_id, token, environment, bundle_id, voice_notes) VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, outing_id = EXCLUDED.outing_id,
-         environment = EXCLUDED.environment, bundle_id = EXCLUDED.bundle_id, updated_at = now()`,
-      [user.id, outingId, reg.token, reg.environment, config.bundleId],
+         environment = EXCLUDED.environment, bundle_id = EXCLUDED.bundle_id, voice_notes = EXCLUDED.voice_notes, updated_at = now()`,
+      [user.id, outingId, reg.token, reg.environment, config.bundleId, reg.voice_notes === true],
     );
     /* A few devices per person per outing; the oldest token goes. */
     await q(
@@ -478,8 +479,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
          JOIN sary.outing_members m ON m.user_id = t.user_id AND m.outing_id = t.outing_id
          JOIN sary.outings o ON o.id = t.outing_id
          WHERE t.outing_id = $1 AND m.status = 'active' AND o.status <> 'ended'
-           AND t.bundle_id = $3 AND t.user_id <> $2::uuid`,
-        [outingId, talkerId, config.bundleId],
+           AND t.bundle_id = $3 AND t.user_id <> $2::uuid
+           AND (NOT $4::boolean OR t.voice_notes)`,
+        [outingId, talkerId, config.bundleId, type === 'voice_note'],
       );
       const targets = rows.filter((r) => {
         if (skipUsers.has(r.user_id) || (include && !include(r.user_id))) {

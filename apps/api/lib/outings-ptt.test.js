@@ -270,7 +270,8 @@ test('pushtotalk request: headers and payload as Apple documents them', () => {
 });
 
 test('ptt token registration: hex token + environment', () => {
-  assert.deepEqual(parsePttRegistration({ token: 'AB'.repeat(32), environment: 'sandbox' }), { token: 'ab'.repeat(32), environment: 'sandbox' });
+  assert.deepEqual(parsePttRegistration({ token: 'AB'.repeat(32), environment: 'sandbox' }), { token: 'ab'.repeat(32), environment: 'sandbox', voice_notes: false });
+  assert.equal(parsePttRegistration({ token: 'ab'.repeat(32), environment: 'sandbox', voice_notes: true }).voice_notes, true);
   assert.equal(parsePttRegistration({ token: 'xyz', environment: 'sandbox' }).error, 'invalid_token');
   assert.equal(parsePttRegistration({ token: 'ab'.repeat(32), environment: 'dev' }).error, 'invalid_environment');
   assert.equal(parsePttRegistration(null).error, 'invalid_token');

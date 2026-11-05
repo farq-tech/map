@@ -162,8 +162,10 @@ test('voice notes end to end: members only, channel-scoped, delivered live / old
   for (const p of [B, C, D, E]) assert.equal((await api('POST', '/invites/join', p.token, { token: created.body.invite.token })).status, 200);
   await api('POST', `/${O}/status`, A.token, { action: 'start' });
 
-  /* D: phone in a pocket with a Push to Talk token, no socket. E: no PTT token, an ordinary APNs token. */
-  assert.equal((await api('POST', `/${O}/ptt/token`, D.token, { token: hex(), environment: 'sandbox' })).status, 201);
+  /* D: phone in a pocket with a Push to Talk token, no socket. E: no PTT token, an ordinary APNs token.
+   * B also has a PTT token, from an older build (no voice_notes flag): never woken for a note. */
+  assert.equal((await api('POST', `/${O}/ptt/token`, D.token, { token: hex(), environment: 'sandbox', voice_notes: true })).status, 201);
+  assert.equal((await api('POST', `/${O}/ptt/token`, E.token, { token: hex(), environment: 'sandbox' })).status, 201);
   assert.equal((await api('POST', '/push/apns', E.token, { token: hex(), environment: 'sandbox' })).status, 201);
 
   /* A, B: this build (voice notes); C: an older build (no caps). All on «تردد ١». */
@@ -211,7 +213,7 @@ test('voice notes end to end: members only, channel-scoped, delivered live / old
   assert.equal(woke[0].body.channel, '1');
   assert.ok(Number(woke[0].headers['apns-expiration']) > Math.floor(Date.now() / 1000), 'expires with the auto-play window, not at once');
   const alerted = alerts.filter((p) => p.body.type === 'voice_note');
-  assert.equal(alerted.length, 1, 'E (no PTT token) gets a time-sensitive alert instead');
+  assert.equal(alerted.length, 1, 'E (only an older build\'s PTT token) gets a time-sensitive alert instead');
   assert.equal(alerted[0].body.aps['interruption-level'], 'time-sensitive');
   assert.match(alerted[0].body.aps.alert.body, /رسالة صوتية \(60 ث\)/);
 
