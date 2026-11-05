@@ -127,7 +127,7 @@ final class OutingActivityCoordinator {
         /* A friend's SOS lights the screen; nothing else does. */
         let alert = state.alert.flatMap { new -> AlertConfiguration? in
             guard new.kind == .sos, !new.isMe, lastStateAlertDiffers(new) else { return nil }
-            return AlertConfiguration(title: "طوارئ", body: "\(new.name) يطلب المساعدة", sound: .default)
+            return AlertConfiguration(title: "طوارئ", body: "\(new.name) يطلب فزعة", sound: .default)
         }
         Task { await a.update(content, alertConfiguration: alert) }
     }

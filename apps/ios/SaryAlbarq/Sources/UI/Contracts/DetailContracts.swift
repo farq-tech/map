@@ -44,7 +44,7 @@ struct NoteComposerUIState: Equatable {
     /// Max characters.
     var maxLength: Int = 80
     /// Ready phrases, tapped to fill the field.
-    var presets: [String] = ["بوقف", "محطة بنزين", "انتظروني", "تعبت نرتاح", "وصلت"]
+    var presets: [String] = ["بوقف", "محطة بنزين", "اصبروا لي", "تعبت، نوقف نرتاح", "وصلت"]
     var isSending: Bool = false
     var errorMessage: String?
 }

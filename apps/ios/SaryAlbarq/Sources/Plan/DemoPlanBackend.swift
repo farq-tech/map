@@ -17,10 +17,10 @@ final class DemoPlanBackend: PlanBackend {
             .init(lng: 46.6960, lat: 24.7240), .init(lng: 46.7032, lat: 24.7338), .init(lng: 46.7150, lat: 24.7405),
             .init(lng: 46.7275, lat: 24.7442), .init(lng: 46.7360, lat: 24.7531), .init(lng: 46.7491, lat: 24.7590),
         ]
-        var p = TripPlan(route: PlanLineString(route), notes: "نتجمع عند المحطة ٤:٣٠ العصر. الطريق رملي بعد الكيلو ٦ — نزّلوا هواء الكفرات.",
+        var p = TripPlan(route: PlanLineString(route), notes: "نتجمع عند المحطة ٤:٣٠ العصر. الطريق رملي بعد الكيلو ٦ — نفّسوا الكفرات.",
                          destination: OutingDestination(name: "روضة الثمامة", lat: 24.7590, lng: 46.7491), updated_at: ISODate.string(Date().addingTimeInterval(-1800)))
         /* `-demoPlanStops`: one planned stop on the way (auto-navigation's stop → destination). */
-        if arguments.contains("-demoPlanStops") { p.stops = [OutingDestination(name: "محطة الوقود", lat: 24.7240, lng: 46.6960)] }
+        if arguments.contains("-demoPlanStops") { p.stops = [OutingDestination(name: "محطة البنزين", lat: 24.7240, lng: 46.6960)] }
         let me = DemoData.meId
         func items(_ a: String, _ b: String) -> [ChecklistItem] {
             [
@@ -30,7 +30,7 @@ final class DemoPlanBackend: PlanBackend {
                 .init(id: "c4", title: "حبل سحب", assignee_user_id: a, done: true, created_by: me),
                 .init(id: "c5", title: "كفرات احتياط", assignee_user_id: nil, done: false, created_by: me),
                 .init(id: "c6", title: "عدة إسعاف", assignee_user_id: me, done: true, created_by: b),
-                .init(id: "c7", title: "مضخة هواء", assignee_user_id: b, done: false, created_by: a),
+                .init(id: "c7", title: "كمبروسر", assignee_user_id: b, done: false, created_by: a),
                 .init(id: "c8", title: "فحم", assignee_user_id: nil, done: true, created_by: a),
                 .init(id: "c9", title: "كشاف", assignee_user_id: me, done: true, created_by: me),
                 .init(id: "c10", title: "خيمة", assignee_user_id: nil, done: false, created_by: b),

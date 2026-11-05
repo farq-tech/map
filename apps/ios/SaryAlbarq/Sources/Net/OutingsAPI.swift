@@ -55,7 +55,7 @@ struct OutingAPIError: Error, Equatable {
             "removed_from_outing": "أزالك أمير الرحلة منها، فلا يمكنك الانضمام مرة ثانية.",
             "not_a_member": "لست عضوًا في هذه الطلعة.",
             "owner_only": "هذا الإجراء لأمير الرحلة فقط.",
-            "invalid_name": "اكتب اسمًا يظهر لأصحابك.",
+            "invalid_name": "اكتب اسمًا يظهر للعيال.",
             "invalid_outing_name": "اكتب اسمًا للطلعة.",
             "rate_limited": "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
             "too_frequent": "انتظر ثانيتين ثم أرسل.",

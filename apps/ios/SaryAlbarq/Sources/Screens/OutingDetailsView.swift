@@ -224,7 +224,7 @@ struct TripSummaryView: View {
                             Task {
                                 if await model.startReturnTrip(from: outingId) == nil { busy = false }
                             }
-                        } label: { SaryButtonLabel(title: "طريق العودة", systemImage: SaryIcon.backTrack, busy: busy) }
+                        } label: { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack, busy: busy) }
                             .buttonStyle(.sary(.secondary))
                             .accessibilityIdentifier("summary.returnTrip")
                         Text("رحلة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")

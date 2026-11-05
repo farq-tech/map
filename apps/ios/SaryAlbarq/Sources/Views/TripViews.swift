@@ -190,7 +190,7 @@ struct TripCard: View {
         case .needsDestination: return "ما فيه وجهة"
         case .arrived: return "وصلت 🎉"
         case .ended: return "انتهت الرحلة"
-        default: return ui.isReturnTrip ? "طريق العودة إلى \(ui.destinationName)" : "الرحلة إلى \(ui.destinationName)"
+        default: return ui.isReturnTrip ? "طريق الرجعة إلى \(ui.destinationName)" : "الرحلة إلى \(ui.destinationName)"
         }
     }
 
@@ -289,10 +289,10 @@ struct TripCard: View {
         Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الرحلة", systemImage: "chart.bar.doc.horizontal") }
             .buttonStyle(.saryPrimary)
             .accessibilityIdentifier("trip.summary")
-        Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق العودة", systemImage: SaryIcon.backTrack) }
+        Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }
             .buttonStyle(.sarySecondary)
             .accessibilityIdentifier("trip.return")
-        Text("«طريق العودة» رحلة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+        Text("«طريق الرجعة» رحلة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 

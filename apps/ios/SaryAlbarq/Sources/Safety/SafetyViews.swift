@@ -290,7 +290,7 @@ struct SafetySection: View {
                 SaryRowIcon(systemImage: SafetyIcon.stuck, color: p.warning)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("غرّزت؟").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                    Text("ضغطة وحدة تنبّه أصحابك، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Text("ضغطة وحدة تنبّه العيال، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button { safety.askStuck() } label: { SaryButtonLabel(title: "غرّزت", busy: safety.stuckBusy) }
@@ -330,7 +330,7 @@ struct ReturnTimerCard: View {
                     .accessibilityIdentifier("timer-unavailable")
             case .none:
                 HStack(spacing: theme.space(.m)) {
-                    header("مؤقت الرجوع", "قل لأحد في البيت متى ترجع. إذا تأخرت يوصله تنبيه.")
+                    header("مؤقت الرجوع", "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
                     Button { safety.editorOpen = true } label: { SaryButtonLabel(title: "اضبط", systemImage: "plus") }
                         .buttonStyle(.sary(.primary, width: .hug, compact: true))
                         .accessibilityIdentifier("timer-set")
@@ -422,7 +422,7 @@ struct ReturnTimerEditor: View {
                     Spacer()
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق") { safety.editorOpen = false }
                 }
-                Text("حدد متى ترجع، وأرسل رابطًا لأحد في البيت. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
+                Text("حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
                     .saryText(.callout).foregroundStyle(p.textSecondary)
 
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
@@ -506,8 +506,8 @@ struct SafetyPrompts: View {
                     Button("إلغاء", role: .cancel) {}
                 } message: {
                     Text(safety.isSharingNow()
-                         ? "يوصل لأصحابك في الطلعة إنك غرّزت، ويشوفون مكانك على الخريطة."
-                         : "يوصل لأصحابك في الطلعة إنك غرّزت. موقعك غير مُشارَك، فما يشوفون مكانك إلا إذا شاركته.")
+                         ? "يوصل للعيال في الطلعة إنك غرّزت، ويشوفون مكانك على الخريطة."
+                         : "يوصل للعيال في الطلعة إنك غرّزت. موقعك غير مُشارَك، فما يشوفون مكانك إلا إذا شاركته.")
                 }
             Color.clear
                 .alert("تأخرت عن وقت الرجوع", isPresented: Binding(get: { settled && safety.overduePrompt }, set: { safety.overduePrompt = $0 })) {

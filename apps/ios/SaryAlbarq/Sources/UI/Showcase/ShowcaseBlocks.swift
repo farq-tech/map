@@ -619,7 +619,7 @@ private struct OverlaysBlocks: View {
                 HStack(spacing: 40) {
                     SaryRallyFlag(marker: .init(label: "نقطة التجمع"))
                     SaryRallyFlag(marker: .init(label: nil))
-                    SaryNoteBubble(bubble: .init(text: "انتظروني عند المحطة الجاية، بنعبي بنزين", color: SaryCarColors.palette[2]))
+                    SaryNoteBubble(bubble: .init(text: "اصبروا لي عند المحطة الجاية، بنعبّي بنزين", color: SaryCarColors.palette[2]))
                 }
             }
         }
@@ -653,7 +653,7 @@ private struct StatesBlocks: View {
             SaryStateView(kind: .loading("جارٍ البحث عن أقرب محطة…")).sarySurface(radius: SaryRadius.l)
         }
         ShowcaseBlock(index: 1, title: "فارغ") {
-            SaryStateView(kind: .empty(title: "ما فيه طلعات بعد", message: "أنشئ طلعة وادعُ أصحابك برابط", systemImage: "car.2"),
+            SaryStateView(kind: .empty(title: "ما فيه طلعات بعد", message: "أنشئ طلعة وادعُ العيال برابط", systemImage: "car.2"),
                           actionTitle: "طلعة جديدة").sarySurface(radius: SaryRadius.l)
         }
         ShowcaseBlock(index: 2, title: "خطأ") {
@@ -685,7 +685,7 @@ private struct InputsBlocks: View {
         ShowcaseBlock(index: 0, title: "حقول النص") {
             VStack(spacing: 16) {
                 SaryTextField(title: "اسم الطلعة", placeholder: "مثل: طلعة الثمامة", text: $name, id: "outing-name-input", maxLength: 40)
-                SaryTextField(title: "اسمك", placeholder: "كيف يشوفك أصحابك", text: $empty, id: "name-empty", help: "يظهر فوق سيارتك")
+                SaryTextField(title: "اسمك", placeholder: "كيف يشوفك العيال", text: $empty, id: "name-empty", help: "يظهر فوق سيارتك")
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "phone", keyboard: .phonePad,
                               state: .error("الرقم ناقص · اكتب ١٠ أرقام تبدأ بـ ٠٥"))
                 SaryTextField(title: "رمز الاسترجاع", placeholder: "XXXX-XXXX", text: $code, id: "recovery", state: .success("الرمز صحيح"))
@@ -694,7 +694,7 @@ private struct InputsBlocks: View {
         }
         ShowcaseBlock(index: 1, title: "مفاتيح") {
             SarySection {
-                SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الأصحاب", systemImage: "bell.fill", isOn: $t1)
+                SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ العيال", systemImage: "bell.fill", isOn: $t1)
                 SaryDivider()
                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause, isOn: $t2)
             }

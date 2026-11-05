@@ -106,7 +106,7 @@ struct HomeView: View {
                     .sarySurface(radius: SaryRadius.l)
             default:
                 if model.current.isEmpty && model.history.isEmpty {
-                    SaryStateView(kind: .empty(title: "ما عندك طلعات بعد", message: "أنشئ طلعة وأرسل رابطها لأصحابك، أو افتح رابط دعوة وصلك.", systemImage: "car.2.fill"))
+                    SaryStateView(kind: .empty(title: "ما عندك طلعات بعد", message: "أنشئ طلعة وأرسل رابطها للعيال، أو افتح رابط دعوة وصلك.", systemImage: "car.2.fill"))
                         .sarySurface(radius: SaryRadius.l)
                         .accessibilityIdentifier("home.empty")
                 }

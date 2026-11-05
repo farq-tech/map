@@ -153,7 +153,7 @@ final class DeclutterTests: XCTestCase {
         XCTAssertFalse(LiveActionCatalog.groups(.init(chat: false)).flatMap(\.items).contains { $0.id == "chat" }, "no chat on an older server")
         XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
-        XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق العودة")
+        XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق الرجعة")
         XCTAssertEqual(active.first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
     }
 

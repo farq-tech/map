@@ -325,7 +325,7 @@ struct ChecklistState: Equatable {
     var items: [ChecklistItem] = []
 
     /// Quick-add chips; the ones already on the list are hidden.
-    static let suggestions = ["ماء", "حطب", "شاحن", "حبل سحب", "كفرات احتياط", "عدة إسعاف", "كشاف", "بنزين احتياط", "أكل", "خيمة", "فحم", "مضخة هواء"]
+    static let suggestions = ["ماء", "حطب", "شاحن", "حبل سحب", "كفرات احتياط", "عدة إسعاف", "كشاف", "بنزين احتياط", "أكل", "خيمة", "فحم", "كمبروسر"]
 
     var doneCount: Int { items.filter(\.done).count }
     var total: Int { items.count }

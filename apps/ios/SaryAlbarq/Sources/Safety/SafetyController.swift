@@ -114,7 +114,7 @@ final class SafetyController: ObservableObject {
     var sunsetLine: String? {
         guard let s = sunset, s > now().addingTimeInterval(-SunsetWarning.afterSunsetS) else { return nil }
         var t = s > now() ? "المغرب \(SafetyFormat.clock(s))" : "غابت الشمس \(SafetyFormat.clock(s))"
-        if let w = wayBackS { t += " · طريق العودة \(SafetyFormat.span(minutes: SunsetWarning.roundUp5(w / 60))) تقريبًا" }
+        if let w = wayBackS { t += " · طريق الرجعة \(SafetyFormat.span(minutes: SunsetWarning.roundUp5(w / 60))) تقريبًا" }
         return t
     }
 
@@ -295,7 +295,7 @@ final class SafetyController: ObservableObject {
             try await backend?.reportStuck(outingId, note: clean)
             stuckAvailability = .available
             stuck[myId] = StuckReport(userId: myId, at: now(), note: clean)
-            toast(isSharingNow() ? "وصل لأصحابك إنك غرّزت، ويشوفون مكانك" : "وصل لأصحابك إنك غرّزت · موقعك غير مُشارَك")
+            toast(isSharingNow() ? "وصل للعيال إنك غرّزت، ويشوفون مكانك" : "وصل للعيال إنك غرّزت · موقعك غير مُشارَك")
         } catch let e as OutingAPIError where e.isNotDeployed {
             stuckAvailability = .notDeployed
             toast("«غرّزت» غير متاح بعد")

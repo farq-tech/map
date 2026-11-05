@@ -19,7 +19,7 @@ enum GroupAudioBackendError: Error, Equatable {
                 "unknown_station": "هذي الإذاعة ما عادت متاحة.",
                 "live_stream": "البث المباشر ما يتقدّم ولا يرجع.",
                 "outing_ended": "انتهت هذه الطلعة.",
-                "rate_limited": "بشويش… انتظر ثواني.",
+                "rate_limited": "على هونك… اصبر ثواني.",
                 "not_a_member": "لست عضوًا في هذه الطلعة.",
             ]
             return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : "حدث خطأ. أعد المحاولة.")
