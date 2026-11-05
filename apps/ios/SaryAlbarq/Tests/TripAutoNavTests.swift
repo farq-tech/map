@@ -283,10 +283,10 @@ final class NavBroadcastTests: XCTestCase {
         XCTAssertFalse(s.active)
     }
 
-    func testLeaderSeesGuideAllInPlus() {
-        let items = LiveActionCatalog.groups(.init(guideAllTarget: "روضة الثمامة")).flatMap(\.items)
+    func testLeaderSeesGuideAllInTheTripTab() {
+        let items = LiveActionCatalog.tripRouteActions(.init(guideAllTarget: "روضة الثمامة"))
         XCTAssertEqual(items.first { $0.id == "guideAll" }?.title, "وجّه الكل إلى روضة الثمامة")
-        XCTAssertNil(LiveActionCatalog.groups(.init()).flatMap(\.items).first { $0.id == "guideAll" }, "members: no way to start it for others")
+        XCTAssertNil(LiveActionCatalog.tripRouteActions(.init()).first { $0.id == "guideAll" }, "members: no way to start it for others")
     }
 }
 

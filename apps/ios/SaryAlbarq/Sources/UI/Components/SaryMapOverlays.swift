@@ -54,7 +54,8 @@ struct SaryNameChip: View {
                     .foregroundStyle(chip.presence.isLive ? p.textPrimary : p.textSecondary)
                 if let s = chip.silentSince {
                     SarySilentBadge(since: s, now: chip.now, compact: true)
-                } else if !chip.presence.isLive {
+                } else if NameChipAge.shows(chip.presence, now: chip.now) {
+                    /* «تخفيف الزحمة» ٩ (Lovable: «خالد · قبل ٤ د»): the age only once it is worth saying. */
                     Text(style.label(now: chip.now))
                         .saryText(.micro, weight: .medium)
                         .foregroundStyle(p.textSecondary)
@@ -377,5 +378,17 @@ struct SaryCarGlassShape: Shape {
         p.addRoundedRect(in: CGRect(x: w * 0.18, y: h * 0.22, width: w * 0.64, height: h * 0.2), cornerSize: CGSize(width: 3, height: 3))
         p.addRoundedRect(in: CGRect(x: w * 0.2, y: h * 0.66, width: w * 0.6, height: h * 0.13), cornerSize: CGSize(width: 3, height: 3))
         return p
+    }
+}
+
+/// «قبل ٤ د» on a car's name chip only when the position is really old (over two minutes) or paused.
+enum NameChipAge {
+    static let afterSeconds: TimeInterval = 120
+    static func shows(_ p: ParticipantPresence, now: Date) -> Bool {
+        switch p {
+        case .live: return false
+        case .paused: return true
+        case let .stale(since): return now.timeIntervalSince(since) > afterSeconds
+        }
     }
 }

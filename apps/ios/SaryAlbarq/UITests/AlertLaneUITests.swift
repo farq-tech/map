@@ -45,11 +45,11 @@ final class AlertLaneUITests: XCTestCase {
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "rain", "-SaryContext", "driving", "-SaryScheme", "light"]
         app.launch()
         app.allowLocationIfAsked()
-        XCTAssertTrue(app.buttons["outing-locate"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.descendants(matching: .any)["outing-ptt"].waitForExistence(timeout: 20))
         sleep(4)
         /* Weather is low priority: while driving it never takes the card. */
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'alert.weather.'")).firstMatch.exists, "no weather card while driving")
         XCTAssertFalse(app.buttons["outing-actions"].exists, "driving: no «+» on the map")
-        XCTAssertTrue(app.descendants(matching: .any)["speedometer"].firstMatch.exists, "driving: the speedometer shows")
+        XCTAssertFalse(app.buttons["outing-locate"].exists, "driving: no side column («تخفيف الزحمة» ١)")
     }
 }

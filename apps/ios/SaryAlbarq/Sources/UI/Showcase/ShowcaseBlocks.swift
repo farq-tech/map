@@ -498,7 +498,7 @@ struct SheetBody: View {
                                 Button {} label: { SaryButtonLabel(title: "نسخ", systemImage: SaryIcon.copy) }.buttonStyle(.sarySecondary)
                                 Button {} label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }.buttonStyle(.saryPrimary)
                             }
-                        case .more:
+                        case .more, .map:
                             SarySection(title: "مشاركتي") {
                                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause, isOn: .constant(false))
                                 SaryDivider()

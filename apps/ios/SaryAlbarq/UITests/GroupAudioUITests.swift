@@ -55,7 +55,11 @@ final class GroupAudioUITests: XCTestCase {
         shot(app, "radio-2-leader-playing")
         any(app, "radio.close").tap()
         XCTAssertTrue(any(app, "radio.sheet").waitForNonExistence(timeout: 5))
+        /* «تخفيف الزحمة» ٢: a ♪ in the header; its small control opens from it. */
+        let note = any(app, "radio.header")
+        XCTAssertTrue(note.waitForExistence(timeout: 5), "♪ in the header")
         let bar = any(app, "radio.bar.title")
+        if !bar.exists { note.tap() }
         XCTAssertTrue(bar.waitForExistence(timeout: 5), "«يشغّل الآن» on the map")
         XCTAssertTrue(bar.label.contains("إذاعة القرآن الكريم"))
         XCTAssertTrue(any(app, "radio.bar.toggle").exists)
@@ -65,8 +69,14 @@ final class GroupAudioUITests: XCTestCase {
     /// A member: the leader started a station → «يشغّل الآن» appears by itself; «اسكت عندي» is local.
     func testMemberSeesNowPlayingAndMutes() {
         let app = launch(["-SaryRadioMember", "-SaryRadioRemote"])
+        let note = any(app, "radio.header")
+        XCTAssertTrue(note.waitForExistence(timeout: 10), "the leader's pick reaches the member: ♪ in the header")
         let bar = any(app, "radio.bar.title")
-        XCTAssertTrue(bar.waitForExistence(timeout: 10), "the leader's pick reaches the member")
+        /* The bar shows by itself for a few seconds when the track changes; the ♪ keeps it open. */
+        sleep(6)
+        XCTAssertFalse(bar.exists, "the bar folds back into the ♪")
+        note.tap()
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
         XCTAssertTrue(bar.label.contains("إذاعة القرآن الكريم"))
         XCTAssertFalse(any(app, "radio.bar.toggle").exists, "a member does not control the trip")
         shot(app, "radio-4-member-now-playing")

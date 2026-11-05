@@ -9,12 +9,15 @@ struct SOSOverlayHost: UIViewRepresentable {
     var state: MySOSUI
     var theme: SaryTheme
     var trigger: () -> Void
+    /// Where the map's own SOS is (window points): the floating copy sits exactly there.
+    var frame: CGRect? = nil
+    var size: CGFloat? = nil
 
     func makeUIView(context: Context) -> UIView { SOSAnchorView() }
 
     func updateUIView(_ v: UIView, context: Context) {
         guard let anchor = v as? SOSAnchorView else { return }
-        anchor.model = .init(visible: visible, state: state, theme: theme, trigger: trigger)
+        anchor.model = .init(visible: visible, state: state, theme: theme, trigger: trigger, frame: frame, size: size)
     }
 
     static func dismantleUIView(_ v: UIView, coordinator: ()) {
@@ -29,6 +32,8 @@ final class SOSAnchorView: UIView {
         var state: MySOSUI
         var theme: SaryTheme
         var trigger: () -> Void
+        var frame: CGRect? = nil
+        var size: CGFloat? = nil
     }
 
     var model: Model? { didSet { apply() } }
@@ -73,14 +78,16 @@ final class SOSOverlayWindow: UIWindow {
     override var canBecomeKey: Bool { false }
 
     func update(_ m: SOSAnchorView.Model) {
-        let side = m.theme.bigButton + 16
+        let disc = m.size ?? m.theme.bigButton
+        let side = disc + 16
         let screen = windowScene?.coordinateSpace.bounds ?? UIScreen.main.bounds
         let safeBottom = windowScene?.windows.first(where: { $0 !== self && $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
-        let f = CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.l) - 56 - side,
-                       width: side, height: side)
+        /* The calm screen measures its SOS (top left, under the header): the copy goes exactly there. */
+        let f = m.frame.map { CGRect(x: $0.midX - side / 2, y: $0.midY - side / 2, width: side, height: side) }
+            ?? CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.l) - 56 - side, width: side, height: side)
         if frame != f { frame = f }
         host.rootView = AnyView(
-            SarySOSButton(state: m.state, trigger: m.trigger)
+            SarySOSButton(state: m.state, trigger: m.trigger, size: m.size, compactLabel: m.size != nil)
                 .accessibilityIdentifier("sos.overlay")
                 .frame(width: side, height: side)
                 .environment(\.sary, m.theme)

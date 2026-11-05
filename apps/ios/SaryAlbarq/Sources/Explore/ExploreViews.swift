@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 // MARK: - Map chrome
 
-/// Exploration's top bar: back · «استكشاف» + the layer · bell · «ارجع للرحلة».
+/// Exploration's top bar: back (to the trip map) · «استكشاف» + the layer · bell.
 struct ExploreHeader: View {
     var layer: MapLayer
     var bell: Int
@@ -19,7 +19,8 @@ struct ExploreHeader: View {
     var body: some View {
         let p = theme.palette
         HStack(spacing: theme.space(.s)) {
-            Button(action: back) {
+            /* One back button («تخفيف الزحمة» ١١): out of exploration, back on the trip map. */
+            Button(action: exit) {
                 Image(systemName: SaryIcon.back)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(p.textPrimary)
@@ -27,8 +28,8 @@ struct ExploreHeader: View {
                     .saryGlass(Circle(), role: .chrome, interactive: true)
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("رجوع"))
-            .accessibilityIdentifier("outing-back")
+            .accessibilityLabel(Text("ارجع للرحلة"))
+            .accessibilityIdentifier("explore-exit")
 
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: "binoculars.fill")
@@ -73,19 +74,6 @@ struct ExploreHeader: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("explore.header")
 
-            Button(action: exit) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.uturn.backward").font(.system(size: 14, weight: .bold))
-                    Text("ارجع للرحلة").saryText(.subhead, weight: .bold).lineLimit(1)
-                }
-                .foregroundStyle(p.onAccent)
-                .padding(.horizontal, theme.space(.m))
-                .frame(minHeight: barHeight)
-                .background(Capsule().fill(p.accent))
-                .contentShape(Capsule())
-            }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityIdentifier("explore-exit")
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
@@ -180,15 +168,14 @@ struct ExploreReadout: View {
 
 extension SaryMapControlItem {
     /// Exploration's floating group.
+    /// «تخفيف الزحمة» ١٠: three buttons. 3D terrain and «الوضع الواقعي» are in «الطبقات»;
+    /// saved places and GPX tracks share one sheet.
     static func explore(terrain3D: Bool, tracksShown: Int) -> [SaryMapControlItem] {
         [
-            SaryMapControlItem(id: "layers", systemImage: "square.3.layers.3d", label: "الطبقات", accessibilityID: "explore-layers"),
-            SaryMapControlItem(id: "terrain", systemImage: "mountain.2.fill", label: terrain3D ? "أوقف العرض ثلاثي الأبعاد" : "عرض ثلاثي الأبعاد للتضاريس",
-                               accessibilityID: "explore-terrain", isActive: terrain3D),
-            SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني المحفوظة", accessibilityID: "explore-places"),
-            SaryMapControlItem(id: "tracks", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath.fill", label: "مسارات GPX",
-                               accessibilityID: "explore-tracks", badge: tracksShown > 0 ? tracksShown : nil),
-            SaryMapControlItem(id: "realistic", systemImage: RealisticEntryButton.icon, label: "الوضع الواقعي", accessibilityID: "explore-realistic"),
+            SaryMapControlItem(id: "layers", systemImage: "square.3.layers.3d", label: "الطبقات", accessibilityID: "explore-layers",
+                               isActive: terrain3D, hint: "الخريطة، التضاريس ثلاثية الأبعاد، الوضع الواقعي، بلا إنترنت"),
+            SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني ومساراتي", accessibilityID: "explore-places",
+                               badge: tracksShown > 0 ? tracksShown : nil),
             SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate"),
         ]
     }
@@ -246,9 +233,39 @@ struct ExploreLayersSheet: View {
                     .padding(.horizontal, theme.space(.m))
             }
             SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
-                SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والطعوس",
-                              systemImage: "mountain.2.fill", isOn: $controller.terrain3D, id: "explore-terrain3d")
-                    .padding(.horizontal, theme.space(.m))
+                /* «تخفيف الزحمة» ١٠: this was a button on the map; now one tap here (the map's «الطبقات» lights up). */
+                Button { controller.terrain3D.toggle() } label: {
+                    HStack(spacing: theme.space(.m)) {
+                        SaryRowIcon(systemImage: "mountain.2.fill", color: controller.terrain3D ? p.accent : nil)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("عرض ثلاثي الأبعاد").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                            Text("يميل الخريطة ويبرز الجبال والطعوس").saryText(.footnote).foregroundStyle(p.textSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(controller.terrain3D ? "شغّال" : "طافي")
+                            .saryText(.footnote, weight: .bold)
+                            .foregroundStyle(controller.terrain3D ? p.onAccent : p.textSecondary)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Capsule().fill(controller.terrain3D ? p.accent : p.sunken))
+                    }
+                    .frame(minHeight: theme.minTarget)
+                    .padding(.vertical, theme.space(.xs))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(SaryRowPressStyle())
+                .padding(.horizontal, theme.space(.m))
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(Text(controller.terrain3D ? "شغّال" : "طافي"))
+                .accessibilityAddTraits(controller.terrain3D ? [.isButton, .isSelected] : .isButton)
+                .accessibilityIdentifier("explore-terrain3d")
+            }
+            SarySection(title: "الوضع الواقعي", footer: "مدن مجسّمة بصور Apple، وأنت واقف (مو أثناء القيادة).") {
+                SaryNavRow(title: "الوضع الواقعي", detail: "شوف المكان مجسّم من فوق",
+                           systemImage: RealisticEntryButton.icon, id: "explore-realistic") {
+                    controller.modal = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.realisticRequest += 1 }
+                }
+                .padding(.horizontal, theme.space(.m))
             }
             SarySection(title: "بلا إنترنت") {
                 SaryNavRow(title: "الخرائط بلا إنترنت",
@@ -553,3 +570,171 @@ struct TracksSheet: View {
 }
 
 private struct TrackShareURL: Identifiable { let url: URL; var id: String { url.absoluteString } }
+
+// MARK: - «أماكني ومساراتي»
+
+/// Saved places and GPX tracks behind ONE exploration button («تخفيف الزحمة» ١٠): two tabs on top,
+/// each the sheet it always was.
+struct PlacesAndTracksSheet: View {
+    enum Part: Hashable { case places, tracks }
+    let controller: LiveOutingController
+    @State var part: Part
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: theme.space(.xs)) {
+                tab("أماكني", systemImage: "star.fill", .places, id: "places.tab")
+                tab("مساراتي", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath.fill", .tracks, id: "explore-tracks")
+            }
+            .padding(4)
+            .background(Capsule().fill(theme.palette.surface))
+            .padding(.horizontal, theme.space(.l))
+            .padding(.top, theme.space(.m))
+            switch part {
+            case .places: SavedPlacesSheet(controller: controller)
+            case .tracks: TracksSheet(controller: controller)
+            }
+        }
+    }
+
+    private func tab(_ title: String, systemImage: String, _ p: Part, id: String) -> some View {
+        let on = part == p
+        return Button { part = p } label: {
+            Label(title, systemImage: systemImage)
+                .saryText(.subhead, weight: .bold)
+                .foregroundStyle(on ? theme.palette.onAccent : theme.palette.textPrimary)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(Capsule().fill(on ? theme.palette.accent : .clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier(id)
+    }
+}
+
+// MARK: - Lovable's exploration top
+
+/// Exploring (Lovable): no trip header — the three layers as one segmented bar, the crosshair's
+/// coordinates under it with copy and save. Our additions, documented: a back chevron (out of
+/// exploration) and «الطبقات» (3D terrain, high-res imagery, offline maps) at the bar's ends.
+struct ExploreTopBar: View {
+    @ObservedObject var controller: LiveOutingController
+    var layers: () -> Void
+    var exit: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(spacing: 8) {
+            HStack(spacing: 4) {
+                round(SaryIcon.back, label: "ارجع للرحلة", id: "explore-exit", action: exit)
+                HStack(spacing: 0) {
+                    ForEach([MapLayer.satellite, .topo, .standard], id: \.self) { l in
+                        let on = controller.mapLayer == l
+                        Button { controller.mapLayer = l } label: {
+                            Text(l.label)
+                                .font(.sary(14, .medium))
+                                .foregroundStyle(on ? p.onAccent : p.textSecondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, minHeight: 36)
+                                .background { if on { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(p.accent) } }
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityIdentifier("explore.layer.\(l.rawValue)")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("الطبقة: \(controller.mapLayer.label)"))
+                .accessibilityIdentifier("explore.layerName")
+                round("square.3.layers.3d", label: "الطبقات", id: "explore-layers", active: controller.terrain3D, action: layers)
+            }
+            .padding(5)
+            .frame(height: 46)
+            .saryGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
+            ExploreCoordinateBar(model: controller.exploreReading, format: controller.coordFormat,
+                                 toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
+                                 copy: controller.copyCrosshair, save: controller.saveCrosshair)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.header")
+    }
+
+    private func round(_ symbol: String, label: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(active ? theme.palette.onAccent : theme.palette.textPrimary)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(active ? theme.palette.accent : theme.palette.sunken.opacity(0.7)))
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(label))
+        .accessibilityAddTraits(active ? [.isButton, .isSelected] : .isButton)
+        .accessibilityIdentifier(id)
+    }
+}
+
+/// «٢٨٫٠٧١٢° N ٤١٫٦٦٣٣° E» with copy and save (Lovable), the elevation small under it.
+struct ExploreCoordinateBar: View {
+    @ObservedObject var model: ExploreReadingModel
+    var format: CoordinateShare.Format
+    var toggleFormat: () -> Void
+    var copy: () -> Void
+    var save: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let r = model.reading
+        HStack(spacing: 4) {
+            Button(action: toggleFormat) {
+                HStack(spacing: 8) {
+                    Image(systemName: "mappin.and.ellipse").font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accentText)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.map { ExploreRules.coordinateText($0.center, format) } ?? "…")
+                            .font(.sary(14, .medium))
+                            .foregroundStyle(p.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .accessibilityIdentifier("explore.coordinate")
+                        Text(ExploreRules.elevationText(r?.elevationM))
+                            .font(.sary(10, .regular))
+                            .foregroundStyle(p.textTertiary)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("explore.elevation")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(Text("اضغط للتبديل بين العشري والدرجات"))
+            .accessibilityIdentifier("explore-coord-format")
+            icon(SaryIcon.copy, label: "انسخ الإحداثية", id: "explore-copy", action: copy)
+            icon("bookmark", label: "احفظ المكان في أماكني", id: "explore-save", action: save)
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 4)
+        .frame(height: 44)
+        .saryGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.readout")
+    }
+
+    private func icon(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.palette.textPrimary)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(label))
+        .accessibilityIdentifier(id)
+    }
+}

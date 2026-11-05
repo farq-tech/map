@@ -89,7 +89,8 @@ final class VisualsUITests: XCTestCase {
     }
 
     func testShotNafudDustAtDusk() {
-        let app = launch(["-SaryVisualsClock", "2026-11-05T14:12:00Z", "-SaryVisualsCamera", "28.0,41.5,13.4,70,250"], weather: "dust")
+        /* «تخفيف الزحمة» ٦ folds the line after 5 s (LiveCalmTests); this screenshot keeps it to read it. */
+        let app = launch(["-SaryVisualsClock", "2026-11-05T14:12:00Z", "-SaryVisualsCamera", "28.0,41.5,13.4,70,250", "-SaryKeepSource"], weather: "dust")
         sleep(16)
         XCTAssertTrue(any(app, "visuals.source").label.contains("غبار"), "the weather-driven source line")
         shot(app, "nafud-dust")

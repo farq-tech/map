@@ -171,14 +171,15 @@ struct SaryTabBar: View {
     var groupBadge: Int = 0
     var body: some View {
         SarySegmented(
-            options: LiveTabUI.allCases,
+            options: LiveTabUI.sheetTabs,
             selection: $selection,
             label: { $0.label },
             systemImage: { tab in
                 switch tab {
                 case .trip: return "flag.checkered"
                 case .group: return "person.2.fill"
-                case .more: return "ellipsis.circle"
+                case .more: return "gearshape"
+                case .map: return "map"
                 }
             },
             badge: { $0 == .group ? groupBadge : 0 },
@@ -186,7 +187,8 @@ struct SaryTabBar: View {
                 switch tab {
                 case .trip: return "tab.trip"
                 case .group: return "tab.group"
-                case .more: return "tab.more"
+                case .more: return "tab.settings"
+                case .map: return "tab.map"
                 }
             }
         )

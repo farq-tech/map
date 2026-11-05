@@ -21,6 +21,21 @@ final class DemoPlanBackend: PlanBackend {
                          destination: OutingDestination(name: "روضة الثمامة", lat: 24.7590, lng: 46.7491), updated_at: ISODate.string(Date().addingTimeInterval(-1800)))
         /* `-demoPlanStops`: one planned stop on the way (auto-navigation's stop → destination). */
         if arguments.contains("-demoPlanStops") { p.stops = [OutingDestination(name: "محطة البنزين", lat: 24.7240, lng: 46.6960)] }
+        #if DEBUG
+        /* Screenshots in the desert: `-SaryDemoShift "dLat,dLng"` moves the plan with the demo group,
+         * `-SaryDemoPlanName "مخيم النفود"` renames its destination. */
+        if let i = arguments.firstIndex(of: "-SaryDemoShift"), i + 1 < arguments.count {
+            let d = arguments[i + 1].split(separator: ",").compactMap { Double($0) }
+            if d.count == 2 {
+                p.route = p.route.map { PlanLineString($0.coordinates.map { LngLat(lng: $0[0] + d[1], lat: $0[1] + d[0]) }) }
+                p.destination = p.destination.map { OutingDestination(name: $0.name, lat: $0.lat + d[0], lng: $0.lng + d[1]) }
+                p.stops = p.stops.map { OutingDestination(name: $0.name, lat: $0.lat + d[0], lng: $0.lng + d[1]) }
+            }
+        }
+        if let i = arguments.firstIndex(of: "-SaryDemoPlanName"), i + 1 < arguments.count, let dst = p.destination {
+            p.destination = OutingDestination(name: arguments[i + 1], lat: dst.lat, lng: dst.lng)
+        }
+        #endif
         let me = DemoData.meId
         func items(_ a: String, _ b: String) -> [ChecklistItem] {
             [

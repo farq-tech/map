@@ -84,6 +84,7 @@
 		2EAB185D80F63C1539158767 /* CarIcon-e8eef0.png in Resources */ = {isa = PBXBuildFile; fileRef = 706AD935009018DA0626E8F3 /* CarIcon-e8eef0.png */; };
 		2EBEA95EE43CA164861A4C21 /* PlanMapLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50A29F2A211EB5C443FC4D85 /* PlanMapLayer.swift */; };
 		2F360A6DD9C12B2BB04D8175 /* CommonContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5DE21DF8A6B652B7B423C3 /* CommonContract.swift */; };
+		2F53B1048F428082EF87169C /* LiveSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */; };
 		2F5472EBB008D3DB87307CD2 /* LiveOutingController+Trip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ED140A77D1089CF6F2D87EA /* LiveOutingController+Trip.swift */; };
 		2F7CB1EAD4ADF08D52B7BE14 /* OutingSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D946A6C4BA372259FDBA0CB /* OutingSheets.swift */; };
 		2F8F190AEC4682EBB4977F9E /* ScreensUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E38FF141ADCD1DE7AF6350C5 /* ScreensUITests.swift */; };
@@ -228,6 +229,7 @@
 		7FF6F7FAA0DE9DE4CE6E5B6D /* ScreenKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28D20037D03EABCC832D131B /* ScreenKit.swift */; };
 		808DCD3C26D893B0F099B7BA /* Tajawal-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */; };
 		8119664F4F417852AF8DD8DC /* openmeteo-air-desert-brief.json in Resources */ = {isa = PBXBuildFile; fileRef = C95BA33663E5F49A9814B0F3 /* openmeteo-air-desert-brief.json */; };
+		81E90F56E4C2BE70DD256285 /* DeclutterShotsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F06B3290E213A7B0DAAA501 /* DeclutterShotsUITests.swift */; };
 		82B5BABF13BAB693522FAA49 /* StoryMedia.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43221C3D797CB2C6A5C99A02 /* StoryMedia.swift */; };
 		83091C9FAFB36B676607ABEE /* SaryButtons.swift in Sources */ = {isa = PBXBuildFile; fileRef = A76B7AC870FF18C0416DEE76 /* SaryButtons.swift */; };
 		836BF6F435EE0474F9DD3F85 /* PlaceBriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D7C101498AD3576122F231 /* PlaceBriefTests.swift */; };
@@ -248,6 +250,7 @@
 		898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */; };
 		8B531A50B19D4227914CD5F7 /* SkyAtmosphere.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58ECEA491A4CF6FE67BAB7D7 /* SkyAtmosphere.swift */; };
 		8C34594CDCC94567B77196B0 /* Tajawal-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2BF84021DFB4D072F073FD54 /* Tajawal-Bold.ttf */; };
+		8C6E19E3929644E9E955A851 /* LiveCalmChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7087625DE9A0A4783B82C03B /* LiveCalmChrome.swift */; };
 		8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */; };
 		8DC94CC5C6F716F6414B2314 /* OutingActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */; };
 		8EBB14746071B160B8A17F73 /* ParkedSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 441A6E20F83F7195AC1E87FF /* ParkedSessionTests.swift */; };
@@ -259,6 +262,7 @@
 		9115AF7704813FDAAB0C3A44 /* CreateOutingWizard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24196944BD9442139264A0B6 /* CreateOutingWizard.swift */; };
 		911EA0E677E066F0F1D6E8CE /* LiveOutingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC9F685C8D12E14CB142C571 /* LiveOutingController.swift */; };
 		913DA56B796E0D6CA4D634BB /* CoordinateShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = F70543C38944AC802EC15DD6 /* CoordinateShare.swift */; };
+		91FF4821B1A9F1382C0C5238 /* LiveCalmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256A626ED91D55969B38573E /* LiveCalmTests.swift */; };
 		92B96B2F349DEA5FB18939FA /* StoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6DA5CD2131BB21430FC238 /* StoryTests.swift */; };
 		9327E36EBEF367AFEB8ED7D6 /* BackgroundCadence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99417499EC816CDB8203DE6C /* BackgroundCadence.swift */; };
 		934EA41034EFBA3F01A7F5A0 /* openmeteo-forecast-rain-derived.json in Resources */ = {isa = PBXBuildFile; fileRef = 42BE8F0C99D3D2998B7BECFF /* openmeteo-forecast-rain-derived.json */; };
@@ -344,6 +348,7 @@
 		C2F97FDEC9ED998804C7C064 /* PlanAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3F505C8C264BD20F14F659 /* PlanAPI.swift */; };
 		C333C1199B78ACC6824DC4EC /* TripHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D15C0180B74A77828B624AD /* TripHeader.swift */; };
 		C40C2E1496B6004B5A68E241 /* TripTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC6CD09D56F7ED3ACF7E231 /* TripTracker.swift */; };
+		C44CE262C80A33459F0EF575 /* LayersToggleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17CE5AD0622933541AA92553 /* LayersToggleUITests.swift */; };
 		C46C281FE6CACF48AA6A39CB /* EnjadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DA19E3DFEC156E61AC55C3E /* EnjadTests.swift */; };
 		C4BE81361B59B343906259EA /* SaryStates.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F18F1551C61F843F8D69AB /* SaryStates.swift */; };
 		C5927DBB725691498B921ECB /* ChatUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5201DF3387B657D0AE691C5 /* ChatUITests.swift */; };
@@ -489,6 +494,7 @@
 		045023FD183A9121FEFAF6FE /* MapLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLayer.swift; sourceTree = "<group>"; };
 		051727DD1152CBFFC71F0478 /* SpeedModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedModel.swift; sourceTree = "<group>"; };
 		06228EED7F4332FE3814E788 /* SunPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunPosition.swift; sourceTree = "<group>"; };
+		0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSettingsPage.swift; sourceTree = "<group>"; };
 		0770F4C24CEEC9C2B35D8095 /* RecoveryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryScreens.swift; sourceTree = "<group>"; };
 		0804CB496E8E9E8AFD015766 /* WaypointLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointLayout.swift; sourceTree = "<group>"; };
 		087D07928C7AC61627BD3A63 /* SaryPTT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryPTT.swift; sourceTree = "<group>"; };
@@ -516,6 +522,7 @@
 		15B691AC41FCD8479C0AB9E7 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		1616F75CC1BD288A1F5D7F47 /* PlanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanEditorView.swift; sourceTree = "<group>"; };
 		16F28414F943B3349E130B6F /* NavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTests.swift; sourceTree = "<group>"; };
+		17CE5AD0622933541AA92553 /* LayersToggleUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayersToggleUITests.swift; sourceTree = "<group>"; };
 		17DC972D4DA097CBC7482DF4 /* CarIcon-2f6fd6.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-2f6fd6.png"; sourceTree = "<group>"; };
 		1A09C810DC132D0FF26E074C /* SaryAlbarqApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAlbarqApp.swift; sourceTree = "<group>"; };
 		1A646C8F38F1576C4D69B2CD /* PTTFloor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTFloor.swift; sourceTree = "<group>"; };
@@ -524,6 +531,7 @@
 		1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailMatchCoordinator.swift; sourceTree = "<group>"; };
 		1E7F1086C5EA7B6CA1C8FA43 /* CarIcon-15191c.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-15191c.png"; sourceTree = "<group>"; };
 		1ECDC19382CB3316DC07F394 /* RouteFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFile.swift; sourceTree = "<group>"; };
+		1F06B3290E213A7B0DAAA501 /* DeclutterShotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeclutterShotsUITests.swift; sourceTree = "<group>"; };
 		1F3B2535F9A9E6BDD3201291 /* Backoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backoff.swift; sourceTree = "<group>"; };
 		2026730EB662B04457DEB1C2 /* WaypointPins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaypointPins.swift; sourceTree = "<group>"; };
 		22577D3538F441C2B397A087 /* LocationTuning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTuning.swift; sourceTree = "<group>"; };
@@ -533,6 +541,7 @@
 		23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryTheme.swift; sourceTree = "<group>"; };
 		24196944BD9442139264A0B6 /* CreateOutingWizard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateOutingWizard.swift; sourceTree = "<group>"; };
 		24F7E9777207753A1040C308 /* VisualsDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualsDemo.swift; sourceTree = "<group>"; };
+		256A626ED91D55969B38573E /* LiveCalmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCalmTests.swift; sourceTree = "<group>"; };
 		26412D7E37DB5FDC4068D007 /* OffroadTracks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffroadTracks.swift; sourceTree = "<group>"; };
 		26444FB642192D73393CFABD /* NavGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavGuidance.swift; sourceTree = "<group>"; };
 		26A2D5E7719A828DE7D7A254 /* RadioSoundsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioSoundsTests.swift; sourceTree = "<group>"; };
@@ -675,6 +684,7 @@
 		6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingActivityTests.swift; sourceTree = "<group>"; };
 		7054D28829BF6342E6ADB5CB /* VoiceClips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceClips.swift; sourceTree = "<group>"; };
 		706AD935009018DA0626E8F3 /* CarIcon-e8eef0.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-e8eef0.png"; sourceTree = "<group>"; };
+		7087625DE9A0A4783B82C03B /* LiveCalmChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCalmChrome.swift; sourceTree = "<group>"; };
 		7172FCC8CD02CE979267C29A /* SaryAlbarq-PortalPending.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "SaryAlbarq-PortalPending.entitlements"; sourceTree = "<group>"; };
 		71FA16F086DA2E158BD914C1 /* Trail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trail.swift; sourceTree = "<group>"; };
 		722A5E7011E6663441A0888F /* DemoFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoFeatures.swift; sourceTree = "<group>"; };
@@ -1247,6 +1257,7 @@
 				C347C7656CA76BEA0F9F22B6 /* HiResImageryTests.swift */,
 				947B5CE5884768A4F5647DF3 /* IntroPolicyTests.swift */,
 				EF569B22E1459820F90EC893 /* JoinFlowTests.swift */,
+				256A626ED91D55969B38573E /* LiveCalmTests.swift */,
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
 				816FF5DA4F1C348B22CC18E1 /* LiveDeclutterTests.swift */,
 				7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */,
@@ -1293,7 +1304,9 @@
 			children = (
 				D5E57FB8A27CBA2240B35A0F /* FeatureViews.swift */,
 				5F9CFC01A92F8600D0137AF6 /* LiveActionSheet.swift */,
+				7087625DE9A0A4783B82C03B /* LiveCalmChrome.swift */,
 				369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */,
+				0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */,
 				ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */,
 				E1EB5A63D0A8DAA5F932FD3A /* PTTChannelViews.swift */,
 				52B545614818C7F89DCDD20D /* RootView.swift */,
@@ -1526,12 +1539,14 @@
 				9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */,
 				AF0B91A3644AA5117E588A56 /* ConvoyIntelUITests.swift */,
 				BE100E5962388F4D3E30A69F /* CreateFlowUITests.swift */,
+				1F06B3290E213A7B0DAAA501 /* DeclutterShotsUITests.swift */,
 				2CCC91C98DF0E4D15B63D3EC /* EnjadUITests.swift */,
 				2C20F3D96CC034D11B618E01 /* ExploreUITests.swift */,
 				377E7121059C982DAAABD4CF /* FollowCameraUITests.swift */,
 				96C332A0106FE4F16F9025D3 /* GroupAudioUITests.swift */,
 				B96E3B534452C1D2A5BABD3F /* HiResImageryUITests.swift */,
 				B8161B8B4725CAA9EAF536CF /* IntroUITests.swift */,
+				17CE5AD0622933541AA92553 /* LayersToggleUITests.swift */,
 				A6512E998C15D9197A532AED /* LiveActivityUITests.swift */,
 				44FCA409C1EA244DFDF28518 /* LiveEndedUITests.swift */,
 				79172DD3710A43059AD423D9 /* LiveProductionTests.swift */,
@@ -1996,12 +2011,14 @@
 				5487F7F21A426D1FE552CE27 /* ChipDeclutterUITests.swift in Sources */,
 				CFFD2C6973DA826E03887019 /* ConvoyIntelUITests.swift in Sources */,
 				39C4D38F91670C59274D52FC /* CreateFlowUITests.swift in Sources */,
+				81E90F56E4C2BE70DD256285 /* DeclutterShotsUITests.swift in Sources */,
 				F48816F0B0F704770F052455 /* EnjadUITests.swift in Sources */,
 				B0F63AD4963228B6CE716916 /* ExploreUITests.swift in Sources */,
 				838A4B2A305EBA4D66C0ADE1 /* FollowCameraUITests.swift in Sources */,
 				B1CC39862DF6CFB43ADE1C2C /* GroupAudioUITests.swift in Sources */,
 				AB34CD5D53607F7565277ED7 /* HiResImageryUITests.swift in Sources */,
 				D8048225C7DDBD4AC05B6C0A /* IntroUITests.swift in Sources */,
+				C44CE262C80A33459F0EF575 /* LayersToggleUITests.swift in Sources */,
 				AB9F2EBF5F16E7BC02ECA93E /* LiveActivityUITests.swift in Sources */,
 				FDC2C5CDF48EEC570FC1F7C4 /* LiveEndedUITests.swift in Sources */,
 				B8AB3C623C340AE231910C47 /* LiveProductionTests.swift in Sources */,
@@ -2054,6 +2071,7 @@
 				4A2F0CA38711696A90802E92 /* HiResImageryTests.swift in Sources */,
 				31FF1360A4929F73EA33DF1B /* IntroPolicyTests.swift in Sources */,
 				87E1BC4BBA578A594BBE7D18 /* JoinFlowTests.swift in Sources */,
+				91FF4821B1A9F1382C0C5238 /* LiveCalmTests.swift in Sources */,
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
 				F4C74240EB3E350477F54F33 /* LiveDeclutterTests.swift in Sources */,
 				5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */,
@@ -2183,6 +2201,7 @@
 				1E02895EB7B6FDE875ADFE62 /* InviteLink.swift in Sources */,
 				8EFD0F9766B96B5E67024BB0 /* JoinFlow.swift in Sources */,
 				313D70BE3BD281350DB21478 /* LiveActionSheet.swift in Sources */,
+				8C6E19E3929644E9E955A851 /* LiveCalmChrome.swift in Sources */,
 				6BEE9F5231818331223116B0 /* LiveChannel.swift in Sources */,
 				5BC7E6C250CAB4DE79C6FDFE /* LiveContext.swift in Sources */,
 				662A8225BE50B7128B547448 /* LiveOutingContract.swift in Sources */,
@@ -2203,6 +2222,7 @@
 				1FA64AB181BA37FCE46FAC6E /* LiveOutingScreen.swift in Sources */,
 				0DE0211F7641DC919CDE20EC /* LivePlaceBrief.swift in Sources */,
 				50443BC7D769962FC54573B3 /* LivePlan.swift in Sources */,
+				2F53B1048F428082EF87169C /* LiveSettingsPage.swift in Sources */,
 				7106AAFF960B91D1859F66A7 /* LiveSheet.swift in Sources */,
 				5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */,
 				1918FDC15D475DEA5AF47FE1 /* LocalDestination.swift in Sources */,
@@ -2473,7 +2493,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2576,7 +2596,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

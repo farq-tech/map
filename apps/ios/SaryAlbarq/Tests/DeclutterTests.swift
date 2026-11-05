@@ -122,11 +122,12 @@ final class DeclutterTests: XCTestCase {
 
     func testHeaderTitleAndLine() {
         let t = trip(.underway, eta: Date(timeIntervalSince1970: 0))
-        XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: t), "روضة الثمامة")
+        /* Lovable: the outing's name on top, «إلى <الوجهة> · باقي … · نوصل …» under it. */
+        XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: t), "طلعة الثمامة")
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: trip(.needsDestination(canSet: true))), "طلعة الثمامة")
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "طلعة الثمامة", trip: nil), "طلعة الثمامة")
         let line = TripHeaderPresenter.line(status: .active, trip: t, follow: nil, connection: .connected, nearbyCars: 0) ?? ""
-        XCTAssertTrue(line.hasPrefix("باقي ١٢ كم"), line)
+        XCTAssertTrue(line.hasPrefix("إلى روضة الثمامة · باقي ١٢ كم"), line)
         XCTAssertTrue(line.contains(" · نوصل "), line)
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "لم تبدأ")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: t, follow: "على المسار", connection: .connected, nearbyCars: 0), "على المسار")
@@ -145,23 +146,28 @@ final class DeclutterTests: XCTestCase {
     // MARK: «+»
 
     func testActionCatalogHoldsEveryFeature() {
+        /* «تخفيف الزحمة» ١٣: tiles in sections; «اتبع الخطة» moved to «الرحلة», «انسخ موقعي» to «أنت». */
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "المجموعة", "الخريطة", "الخدمات", "الترفيه"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الترفيه", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
-        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-note-open", "outing-stuck",
-                                  "outing-waypoint-add", "outing-copyme", "outing-nearest-open", "outing-weather", "outing-radio", "outing-youtube", "outing-explore", "outing-chat"])
+        /* Lovable's tiles, plus ours (never dropped). */
+        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-chat", "outing-rally", "outing-convoy",
+                                  "outing-note-open", "outing-stuck", "outing-enjad", "outing-timer", "outing-brief", "outing-save-place",
+                                  "outing-weather", "outing-waypoint-add", "outing-nearest-open", "outing-radio", "outing-youtube",
+                                  "outing-explore", "outing-hires", "outing-realistic", "outing-effects", "outing-fit"])
+        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"], "also in «الرحلة»")
         XCTAssertFalse(LiveActionCatalog.groups(.init(chat: false)).flatMap(\.items).contains { $0.id == "chat" }, "no chat on an older server")
         XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
         XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق الرجعة")
-        XCTAssertEqual(active.first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
+        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init(following: true)).first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
     }
 
     /// Build 11: an ended trip kept offering «رسالة فوق سيارتي», «غرّزت»… to a group that is gone.
     func testActionCatalogOnAnEndedTrip() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather", "copyme"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather"]))
         XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).contains { $0.items.isEmpty }, "no empty group")
     }
 
@@ -169,7 +175,8 @@ final class DeclutterTests: XCTestCase {
     func testHeaderTitleAfterTheEnd() {
         var t = trip(.arrived(at: Date(), manual: false))
         t.destinationName = "نقطة البداية"
-        XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t), "نقطة البداية")
+        XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t), "العودة من روضة الثمامة")
+        XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: t, follow: nil, connection: .connected, nearbyCars: 0), "وصلت نقطة البداية")
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t, ended: true), "العودة من روضة الثمامة")
         t.phase = .ended
         XCTAssertEqual(TripHeaderPresenter.title(outingName: "العودة من روضة الثمامة", trip: t, ended: true), "العودة من روضة الثمامة")
@@ -227,6 +234,8 @@ final class DeclutterTests: XCTestCase {
     }
 
     func testThreeTabs() {
-        XCTAssertEqual(LiveTabUI.allCases.map(\.label), ["الرحلة", "المجموعة", "المزيد"])
+        /* Lovable: «الخريطة · العيال · الرحلة» in the sheet; the settings behind the header's gear. */
+        XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "العيال", "الرحلة"])
+        XCTAssertEqual(LiveTabUI.more.label, "الإعدادات")
     }
 }

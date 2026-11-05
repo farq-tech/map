@@ -99,11 +99,20 @@ final class PlanUITests: XCTestCase {
         }
         app.launch()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
-        /* «انسخ أو شارك موقعي» is in the «+» actions sheet. */
-        let more = app.buttons["outing-actions"]
-        XCTAssertTrue(more.waitForExistence(timeout: 15))
-        more.tap()
-        let copyMe = app.buttons["outing-copyme"]
+        /* «انسخ أو شارك موقعي» is on «أنت» («تخفيف الزحمة» ١٣): the map's «أنت» chip, or my row. */
+        let me = app.descendants(matching: .any)["car.chip.me"].firstMatch
+        if me.waitForExistence(timeout: 15) && me.isHittable {
+            me.tap()
+        } else {
+            let summary = app.descendants(matching: .any)["outing-sheet-summary"]
+            XCTAssertTrue(summary.waitForExistence(timeout: 5))
+            summary.tap()
+            app.buttons["tab.group"].tap()
+            let mine = app.descendants(matching: .any).matching(identifier: "participant-row").matching(NSPredicate(format: "label CONTAINS %@", "أنت")).firstMatch
+            XCTAssertTrue(mine.waitForExistence(timeout: 5))
+            mine.tap()
+        }
+        let copyMe = app.buttons["انسخ أو شارك موقعي"]
         XCTAssertTrue(copyMe.waitForExistence(timeout: 5))
         copyMe.tap()
         /* With a fix: the card (honest about its age); without one: says so. */

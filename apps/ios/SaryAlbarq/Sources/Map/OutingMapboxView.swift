@@ -168,7 +168,8 @@ struct OutingMapboxView: UIViewRepresentable {
         context.coordinator.terrain3D = terrain3D
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
-        map.ornaments.options.compass.visibility = .adaptive
+        /* «تخفيف الزحمة» ١٦ (Lovable has no compass): the north lives in the camera button. */
+        map.ornaments.options.compass.visibility = .hidden
         /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
@@ -351,6 +352,11 @@ struct OutingMapboxView: UIViewRepresentable {
             /// Name chip and note bubble, drawn in the declutter overlay (see `ChipLayout`).
             var chipBox: HostBox<MapChip>?
             var noteBox: HostBox<MapNote>?
+            /// «تخفيف الزحمة» ٩: the bubble's text and when it (re)appeared; after
+            /// `NoteFold.seconds` it folds to the chip's note dot until the chip is tapped.
+            var noteKey: String?
+            var noteSince: CFTimeInterval = 0
+            var noteFolded: Bool { noteKey != nil && CACurrentMediaTime() - noteSince >= NoteFold.seconds }
 
             init(_ item: MapMember, at p: LngLat) {
                 self.item = item
@@ -1023,7 +1029,7 @@ struct OutingMapboxView: UIViewRepresentable {
         private func drawChip(_ r: Rec, on map: MapView) {
             let id = r.item.id
             if let chip = r.item.chip {
-                let view = MapChip(chip: chip, noteWaiting: false, theme: theme) { [weak self] in self?.onCarTap(id) }
+                let view = MapChip(chip: chip, noteWaiting: false, theme: theme) { [weak self] in self?.chipTapped(id) }
                 if let box = r.chipBox { box.update(view) } else {
                     let box = HostBox(view)
                     overlay.addSubview(box)
@@ -1034,6 +1040,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 r.chipBox = nil
             }
             if bubblesOn, let bubble = r.item.bubble {
+                if r.noteKey != bubble.text {
+                    r.noteKey = bubble.text
+                    r.noteSince = CACurrentMediaTime()
+                    scheduleNoteFold()
+                }
                 let view = MapNote(bubble: bubble, theme: theme) { [weak self] in self?.onCarTap(id) }
                 if let box = r.noteBox { box.update(view) } else {
                     let box = HostBox(view)
@@ -1043,7 +1054,24 @@ struct OutingMapboxView: UIViewRepresentable {
             } else {
                 r.noteBox?.removeFromSuperview()
                 r.noteBox = nil
+                r.noteKey = nil
             }
+        }
+
+        /// A folded note comes back on a tap of its chip; otherwise the chip opens the member.
+        private func chipTapped(_ id: String) {
+            if let r = recs[id], r.noteBox != nil, r.noteFolded {
+                r.noteSince = CACurrentMediaTime()
+                scheduleNoteFold()
+                layoutChips()
+            } else {
+                onCarTap(id)
+            }
+        }
+
+        /// Re-lays the chips once the newest bubble is due to fold.
+        private func scheduleNoteFold() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + NoteFold.seconds + 0.05) { [weak self] in self?.layoutChips() }
         }
 
         /// Declutter: stack close chips with leader lines, fold crowds into a group chip,
@@ -1062,11 +1090,12 @@ struct OutingMapboxView: UIViewRepresentable {
             for r in recs.values {
                 let hasNote = r.item.bubble != nil
                 guard r.chipBox != nil || r.noteBox != nil else { continue }
+                let folded = r.noteFolded && r.chipBox != nil
                 /* The waiting-note dot is part of the chip's size, so measure the chip as it would be drawn with it. */
                 let chipSize = r.chipBox?.measure(noteWaiting: hasNote) ?? .zero
                 let prio = r.item.presence == .live ? 2 : (r.item.presence == .recent ? 1 : 0)
                 items.append(ChipLayout.Item(id: r.item.id, anchor: screen(r.shown.coordinate), chip: chipSize,
-                                             note: r.noteBox?.ideal, isMe: r.item.isMe, priority: prio))
+                                             note: folded ? nil : r.noteBox?.ideal, isMe: r.item.isMe, priority: prio))
             }
             var opts = ChipLayout.Options(bounds: map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: 0, right: 0)))
             opts.expanded = expandedGroups
@@ -1080,7 +1109,7 @@ struct OutingMapboxView: UIViewRepresentable {
                 guard let r = recs[p.id] else { continue }
                 let hasNote = r.item.bubble != nil
                 if let box = r.chipBox {
-                    box.setNoteWaiting(hasNote && (p.noteCollapsed || r.noteBox == nil))
+                    box.setNoteWaiting(hasNote && (p.noteCollapsed || r.noteBox == nil || r.noteFolded))
                     box.isHidden = false
                     box.frame = p.frame
                     overlay.bringSubviewToFront(box)
@@ -1942,4 +1971,9 @@ extension OutingMapboxView.Coordinator: TerrainSampling {
                                              north: el(LngLat(lng: p.lng, lat: p.lat + dLat)), south: el(LngLat(lng: p.lng, lat: p.lat - dLat)), spacingM: d)
         return TerrainSample(elevationM: c, slopeDeg: slope)
     }
+}
+
+/// «تخفيف الزحمة» ٩: how long a note bubble stays open over a car before it folds to the chip's dot.
+enum NoteFold {
+    static let seconds: CFTimeInterval = 10
 }

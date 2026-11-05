@@ -39,6 +39,10 @@ final class MediaUITests: XCTestCase {
         let moreTab = app.buttons["tab.more"]
         XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
         moreTab.tap()
+        /* «الإعدادات» → «الإذاعة ويوتيوب» → «يوتيوب» (also «أدوات» → الترفيه). */
+        let page = any(app, "settings.media")
+        XCTAssertTrue(page.waitForExistence(timeout: 5))
+        page.tap()
         let entry = any(app, "media.entry")
         for _ in 0..<4 where !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5), "«يوتيوب» in the live sheet")

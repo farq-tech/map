@@ -162,6 +162,16 @@ final class LiveOutingController: ObservableObject {
     @Published var statusExpanded = false
     /// The trip header's bell: the queued alerts open under the header.
     @Published var bellOpen = false
+    /// «إذاعة الطلعة»'s small control under the header, opened from the header's ♪ («تخفيف الزحمة» ٢).
+    @Published var radioBarOpen = false
+    /// Tapping «أنت» on the map: my note, or copy / share my location.
+    @Published var meMenuOpen = false
+    /// «الوضع الواقعي» asked from «الطبقات» (the live screen presents it).
+    @Published var realisticRequest = 0
+    /// «المزيد» → «متقدم» open (the tools' «المؤثرات» opens it there).
+    @Published var settingsAdvanced = false
+    /// «الإعدادات»: Lovable's full page, pushed from the header's gear.
+    @Published var settingsOpen = false
     /// Every alert this screen showed, newest first (behind the bell): nothing is just dropped.
     @Published var alertHistory: [AlertHistoryEntry] = []
     /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
@@ -292,7 +302,10 @@ final class LiveOutingController: ObservableObject {
         /* «المحادثات»: `-SaryChat home|group`, `-SaryChatMoving` (the driving block without a car). */
         if let c = arg("-SaryChat") { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .chat(c == "group" ? .group : nil) } }
         if shotArgs.contains("-SaryChatMoving") { debugChatMoving = true }
-        if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
+        if let t = arg("-SaryLiveTab") {
+            selectedTab = t == "group" ? .group : t == "map" ? .map : .trip
+            if t == "more" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.openSettings() } }
+        }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
@@ -491,6 +504,8 @@ final class LiveOutingController: ObservableObject {
             let name = v.members[c.user_id]?.display_name ?? ""
             pushAlert(LiveAlertUI(id: "voice:\(c.id)", kind: .voice(VoiceClipUI(id: c.id, senderName: name, senderColor: v.colors[c.user_id] ?? 0xFFFFFF,
                                                                                 durationSeconds: max(1, Int((Double(c.duration_ms) / 1000).rounded())), playback: .idle))), ttl: 60)
+            /* «تشغيل تلقائي للرسائل الصوتية» (الإعدادات). */
+            if VoiceAutoplay.on { actions.voice.play(c.id) }
         }
         reconcileSilence(prev: prev, next: v)
         /* A friend cleared their SOS: forget we acknowledged it. */
@@ -853,7 +868,7 @@ final class LiveOutingController: ObservableObject {
         a.selectTab = { [weak self] t in self?.selectedTab = t }
         a.participantsTab = ParticipantsTabActions(
             openParticipant: { [weak self] id in self?.openParticipant(id) },
-            addMyPhone: { [weak self] in self?.selectedTab = .more },
+            addMyPhone: { [weak self] in self?.selectedTab = .trip; self?.sheetDetent = .full },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
                 self.lowerSheetThenAsk(.point(r.position))
@@ -1011,9 +1026,9 @@ final class LiveOutingController: ObservableObject {
 
     func openParticipant(_ id: String) {
         if id == session.view?.myId {
-            /* «رسالة فوق سيارتك» only while the outing runs: after the end nobody would see it. */
-            guard !tripEnded else { return }
-            modal = .note
+            /* «أنت»: «رسالة فوق سيارتي» (only while the outing runs: after the end nobody would see it)
+             * and «انسخ أو شارك موقعي» (moved here from «+», «تخفيف الزحمة» ١٣). */
+            meMenuOpen = true
         } else {
             modal = .participant(id)
         }

@@ -32,11 +32,16 @@ final class FollowCameraUITests: XCTestCase {
 
     private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id] }
 
-    private func mode(_ app: XCUIApplication) -> String { (el(app, "outing-locate").value as? String) ?? "" }
+    /// While guiding there is no side column («تخفيف الزحمة» ١): the camera's mode is on «نظرة عامة» in the guidance bar.
+    private func cameraElement(_ app: XCUIApplication) -> XCUIElement {
+        el(app, "outing-locate").exists ? el(app, "outing-locate") : el(app, "nav.overview")
+    }
+
+    private func mode(_ app: XCUIApplication) -> String { (cameraElement(app).value as? String) ?? "" }
 
     private func waitMode(_ app: XCUIApplication, _ m: String, timeout: TimeInterval = 8) -> Bool {
-        let p = NSPredicate(format: "value == %@", m)
-        return XCTWaiter.wait(for: [expectation(for: p, evaluatedWith: el(app, "outing-locate"))], timeout: timeout) == .completed
+        let p = NSPredicate { _, _ in ((self.cameraElement(app).value as? String) ?? "") == m }
+        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: p, object: nil)], timeout: timeout) == .completed
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
@@ -58,7 +63,9 @@ final class FollowCameraUITests: XCTestCase {
     }
 
     func testButtonCyclesFollowHeadingFree() {
-        let app = launch(["-SaryDrive", "1"])
+        /* Drive-mode sizes, parked: the camera button is on the map's side only when not driving
+         * («تخفيف الزحمة» ١; while driving «رجّعني» brings the camera back). */
+        let app = launch(["-SaryDrive", "1", "-SaryContext", "stopped"])
         let b = el(app, "outing-locate")
         XCTAssertTrue(b.waitForExistence(timeout: 10))
         XCTAssertEqual(mode(app), "free")
@@ -110,7 +117,8 @@ final class FollowCameraUITests: XCTestCase {
         XCTAssertTrue(el(app, "camera.recenter").waitForExistence(timeout: 5), "the pill brings guidance back from the overview too")
         sleep(2)
         shot(app, "follow-6-overview")
-        el(app, "outing-locate").tap()
+        /* From «نظرة عامة» the same button brings the car back. */
+        el(app, "nav.overview").tap()
         XCTAssertTrue(waitMode(app, "heading"))
     }
 }

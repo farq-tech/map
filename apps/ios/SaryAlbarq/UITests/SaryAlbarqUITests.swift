@@ -44,7 +44,7 @@ final class SaryAlbarqUITests: XCTestCase {
         // Tap the status bar, not the map centre: a demo car sits there and would open its card.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the interruption monitor answer a permission prompt
         XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "trip header")
-        XCTAssertTrue(app.buttons["outing-fit"].exists, "control cluster")
+        XCTAssertTrue(app.buttons["outing-actions"].exists, "«أدوات» on the map's side")
         XCTAssertTrue(app.buttons["outing-locate"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["outing-sos"].exists, "SOS dock")
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
@@ -190,12 +190,18 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("3-in-trip-sharing-on", app)
 
         app.buttons["tab.more"].tap()
+        let who = any(app, "settings.whoSees")
+        XCTAssertTrue(who.waitForExistence(timeout: 5))
+        who.tap()
         XCTAssertTrue(any(app, "settings-battery").waitForExistence(timeout: 5))
         XCTAssertFalse(any(app, "settings-pause-sharing").exists, "no stop switch in «المزيد» either")
         shot("4-more-no-toggle", app)
 
-        /* «غادر الطلعة» asks first. */
-        app.buttons["tab.trip"].tap()
+        /* «غادر الطلعة» asks first (back from «الإعدادات» to «الرحلة»). */
+        app.buttons["settings.sub.back"].tap()
+        XCTAssertTrue(app.buttons["settings.back"].waitForExistence(timeout: 3))
+        app.buttons["settings.back"].tap()
+        if app.buttons["tab.trip"].waitForExistence(timeout: 3) { app.buttons["tab.trip"].tap() }
         XCTAssertTrue(app.buttons["live.leave"].waitForExistence(timeout: 5))
         app.buttons["live.leave"].tap()
         XCTAssertTrue(app.staticTexts["تغادر الطلعة؟"].waitForExistence(timeout: 5) || app.sheets.firstMatch.waitForExistence(timeout: 2), "confirmation first")

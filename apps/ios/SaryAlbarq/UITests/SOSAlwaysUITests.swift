@@ -48,13 +48,13 @@ final class SOSAlwaysUITests: XCTestCase {
         add(a)
     }
 
-    /// Big enough and fully on screen, in the bottom-left corner where the dock's SOS sits.
+    /// Big enough and fully on screen, on the left under the header where the map's SOS sits (Lovable).
     /// (Not `isHittable`: XCUITest's hit test does not look into the app's extra overlay window.)
     private func assertOnScreen(_ app: XCUIApplication, _ e: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         let f = e.frame, screen = app.frame
         XCTAssertGreaterThanOrEqual(f.width, 60, "a big target", file: file, line: line)
         XCTAssertTrue(screen.contains(f), "fully on screen: \(f)", file: file, line: line)
-        XCTAssertLessThan(f.midX, screen.midX, "bottom left, like the dock", file: file, line: line)
-        XCTAssertGreaterThan(f.midY, screen.midY, file: file, line: line)
+        XCTAssertLessThan(f.midX, screen.midX, "on the left, like the map's SOS", file: file, line: line)
+        XCTAssertLessThan(f.midY, screen.midY, "in the upper half, under the header (Lovable)", file: file, line: line)
     }
 }
