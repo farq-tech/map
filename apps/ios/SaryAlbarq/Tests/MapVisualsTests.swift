@@ -160,7 +160,7 @@ final class MapVisualsTests: XCTestCase {
         XCTAssertEqual(o.frame(at: 0), from)
         let start = o.frame(at: o.approachS)!
         XCTAssertEqual(start.center, p)
-        XCTAssertEqual(start.pitch, 65)
+        XCTAssertEqual(start.pitch, DroneOrbit.defaultPitch)
         XCTAssertEqual(start.bearing, 30, accuracy: 0.001)
         XCTAssertEqual(o.frame(at: o.duration)!.bearing, 30, accuracy: 0.001, "back where it started: 360°")
         XCTAssertNil(o.frame(at: o.duration + 0.1))
@@ -180,7 +180,7 @@ final class MapVisualsTests: XCTestCase {
         XCTAssertLessThan(steps.first!, steps[steps.count / 2] / 5, "eases in")
         XCTAssertLessThan(steps.last!, steps[steps.count / 2] / 5, "eases out")
         XCTAssertLessThan(steps.max()! / 0.25, 30, "never faster than ~26°/s")
-        XCTAssertTrue(path.allSatisfy { $0.pitch == 65 && $0.zoom == o.zoom })
+        XCTAssertTrue(path.allSatisfy { $0.pitch == DroneOrbit.defaultPitch && $0.zoom == o.zoom })
     }
 
     func testDroneNeverWhileDriving() {
@@ -253,6 +253,60 @@ final class MapVisualsTests: XCTestCase {
             XCTAssertLessThan(abs(e - prev), 0.03)
             prev = e
         }
+    }
+
+    func testExaggerationLiftsZoomedOutDunesSmoothly() {
+        /* Tilted and zoomed out: more lift for the ~30 m DEM's dunes; none close up or flat. */
+        let far = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 12))
+        let near = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 16))
+        XCTAssertEqual(near, 1.5, accuracy: 0.001)
+        XCTAssertEqual(far, 2.0, accuracy: 0.02)
+        XCTAssertEqual(VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 0, zoom: 11)), 1.15, accuracy: 0.001, "flat: no lift")
+        XCTAssertEqual(VisualBudget.exaggeration(VisualContext(driving: true, pitch: 62, zoom: 12)), 1.0, "true heights while driving")
+        var prev = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 10))
+        for z in stride(from: 10.0, through: 17, by: 0.1) {
+            let e = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: z))
+            XCTAssertLessThan(abs(e - prev), 0.03, "smooth in zoom")
+            prev = e
+        }
+    }
+
+    func testSceneLightIsWarmByDayAndNeverNavyAtNight() {
+        let golden = SceneLight.from(SunPosition(altitudeDeg: 4, azimuthDeg: 250, rising: false))
+        XCTAssertGreaterThan(golden.ambient.r, golden.ambient.b + 40, "golden hour: warm ambient (no blue cast on red sand)")
+        XCTAssertEqual(golden.direction[0], 250, accuracy: 0.1, "lit from the real sun's azimuth")
+        XCTAssertGreaterThan(golden.direction[1], 80, "a low sun: a grazing light")
+        let noon = SceneLight.from(SunPosition(altitudeDeg: 50, azimuthDeg: 180, rising: false))
+        XCTAssertGreaterThanOrEqual(noon.ambient.r, noon.ambient.b)
+        XCTAssertEqual(noon.direction[1], 40, accuracy: 0.1)
+        let night = SceneLight.from(SunPosition(altitudeDeg: -30, azimuthDeg: 280, rising: false))
+        XCTAssertLessThan(night.ambient.b - night.ambient.r, 60, "moonlight, not Standard's navy")
+        XCTAssertGreaterThan(night.ambient.r, 90, "deep, not black")
+        XCTAssertEqual(night.direction[0], HillshadeLight.nightDirection)
+        /* Continuous through the day: no jump over a 1° change. */
+        var prev = SceneLight.from(SunPosition(altitudeDeg: -20, azimuthDeg: 250, rising: false))
+        for a in stride(from: -20.0, through: 40, by: 1) {
+            let l = SceneLight.from(SunPosition(altitudeDeg: a, azimuthDeg: 250, rising: false))
+            XCTAssertLessThan(abs(l.ambientIntensity - prev.ambientIntensity), 0.08, "≈ 4 minutes of real sun per degree")
+            XCTAssertLessThan(abs(l.ambient.b - prev.ambient.b), 18)
+            prev = l
+        }
+    }
+
+    func testHillshadeShadowsStayWarmAndBroadPassIsSofter() {
+        let dusk = HillshadeLight.from(SunPosition(altitudeDeg: 3, azimuthDeg: 250, rising: false), satellite: true)
+        XCTAssertGreaterThan(dusk.shadow.r, dusk.shadow.b, "amber shadows, not teal")
+        XCTAssertGreaterThan(dusk.highlight.r, dusk.highlight.b)
+        XCTAssertLessThan(dusk.broad.shadow.a, dusk.shadow.a)
+        XCTAssertEqual(dusk.broad.accent.a, 0)
+    }
+
+    func testDustHazeKeepsTheForegroundCrisp() {
+        let now = Date()
+        let w = SkyWeather(visibilityM: 1_800, dust: 1_400, pm10: 2_000, weatherCode: 0, precipitationMm: 0, fetchedAt: now)
+        let s = SkyAtmosphere.make(sunAltitude: 3, weather: w, now: now)
+        XCTAssertGreaterThanOrEqual(s.range[0], 0, "the haze starts at the map centre, not in front of the camera")
+        XCTAssertGreaterThan(s.color.r, s.color.b + 50, "warm ochre dust, not a grey veil")
     }
 
     func testBudgetReducesInLowPowerDrivingAndReduceMotion() {

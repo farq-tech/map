@@ -43,6 +43,8 @@ struct VisualContext: Equatable {
     var reduceMotion = false
     var layer: MapLayer = .satellite
     var pitch = 0.0
+    /// Camera zoom (16 and above: no extra lift; the dunes get more at z11–z14).
+    var zoom = 16.0
 }
 
 /// What is actually on, after Low Power Mode, driving and Reduce Motion had their say.
@@ -70,11 +72,16 @@ enum VisualBudget {
     static func legacyExaggeration(terrain3D: Bool) -> Double { terrain3D ? 1.6 : 1.15 }
 
     /// 1.0 while driving (true heights under a moving car); 1.15 flat; up to 1.5 in exploration
-    /// / the 3D view / a drone flight (1.3 elsewhere) as the camera tilts — never a jump.
+    /// / the 3D view / a drone flight (1.3 elsewhere) as the camera tilts, + up to 0.5 when tilted
+    /// and zoomed out (z ≤ 12) — never a jump.
     static func exaggeration(_ c: VisualContext) -> Double {
         if c.driving { return 1.0 }
         let maxEx = c.exploring || c.terrain3D || c.flying ? 1.5 : 1.3
-        return Smooth.lerp(1.15, maxEx, Smooth.step(15, 60, c.pitch))
+        let tilt = Smooth.step(15, 60, c.pitch)
+        /* Farther out the ~30 m DEM's dunes flatten to nothing: a little more lift at z11–z14,
+           none from z15.5 (close up they already stand). Smooth in zoom and pitch alike. */
+        let far = 1 - Smooth.step(12, 15.5, c.zoom)
+        return Smooth.lerp(1.15, maxEx, tilt) + 0.5 * far * tilt
     }
 
     static func resolve(_ s: VisualEffectsSettings, _ c: VisualContext) -> EffectiveVisuals {

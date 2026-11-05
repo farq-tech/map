@@ -64,25 +64,81 @@ struct HillshadeLight: Equatable {
     static let nightDirection = 315.0
 
     static func from(_ sun: SunPosition, satellite: Bool) -> HillshadeLight {
-        /* Imagery already carries its own shadows: keep ours lighter over satellite. */
-        let k = satellite ? 0.7 : 1.0
+        /* Imagery already carries its own shadows: keep ours a little lighter over satellite. */
+        let k = satellite ? 0.9 : 1.0
         let a = sun.altitudeDeg
         if a <= -6 {
-            return HillshadeLight(direction: nightDirection, exaggeration: 0.22 * k,
-                                  shadow: RGBA(6, 10, 28, 0.55), highlight: RGBA(120, 140, 190, 0.12), accent: RGBA(8, 12, 30, 0.3), fromSun: false)
+            /* Moonlight-neutral (a hint of cool, never navy: navy over red sand reads teal). */
+            return HillshadeLight(direction: nightDirection, exaggeration: 0.4 * k,
+                                  shadow: RGBA(10, 10, 18, 0.72), highlight: RGBA(176, 184, 206, 0.10), accent: RGBA(8, 8, 16, 0.4), fromSun: false)
         }
-        /* 0° → strongest (0.7), 70°+ → faint (0.2), smooth in between. */
+        /* 0° → strongest (0.92), 70°+ → still readable (0.42), smooth in between. */
         let low = 1 - Smooth.step(0, 70, a)
-        let ex = (0.2 + 0.5 * low) * k
-        /* Golden hour (sun under ~12°): warm highlights and amber shadows on the sand. */
-        let golden = 1 - Smooth.step(0, 12, a)
+        let ex = (0.42 + 0.5 * low) * k
+        /* Golden hour (sun under ~12°): warm highlights and burnt-amber shadows on the sand. */
+        let golden = 1 - Smooth.step(0, 14, a)
         let twilight = 1 - Smooth.step(-6, 0, a)
-        var shadow = RGBA(44, 30, 18, 0.5).mix(RGBA(70, 34, 14, 0.55), golden)
-        var highlight = RGBA(255, 246, 228, 0.32).mix(RGBA(255, 196, 120, 0.4), golden)
-        shadow = shadow.mix(RGBA(46, 26, 32, 0.55), twilight)
-        highlight = highlight.mix(RGBA(255, 150, 120, 0.22), twilight)
+        var shadow = RGBA(50, 28, 14, 0.8).mix(RGBA(74, 30, 8, 0.86), golden)
+        var highlight = RGBA(255, 244, 220, 0.4).mix(RGBA(255, 206, 128, 0.58), golden)
+        shadow = shadow.mix(RGBA(52, 28, 28, 0.72), twilight)
+        highlight = highlight.mix(RGBA(255, 170, 128, 0.28), twilight)
         return HillshadeLight(direction: sun.azimuthDeg, exaggeration: ex, shadow: shadow, highlight: highlight,
-                              accent: RGBA(30, 20, 10, 0.25), fromSun: true)
+                              accent: RGBA(40, 22, 10, 0.45), fromSun: true)
+    }
+
+    /// The broad pass (a coarse DEM, the big dune forms): same light, a softer, wider shade.
+    var broad: HillshadeLight {
+        var b = self
+        b.exaggeration = min(1, exaggeration * 1.05)
+        b.shadow.a *= 0.62
+        b.highlight.a *= 0.55
+        b.accent.a = 0
+        return b
+    }
+}
+
+/// The scene's 3D light (Mapbox `lights`: ambient + directional) from the real sun, so the
+/// imagery, the cars and their shadows are lit the way the desert is right now: warm white by
+/// day, gold at a low sun (from the sun's real azimuth), rose at twilight and a dim, nearly
+/// neutral moonlight at night. Replaces Standard's preset lights, whose blue dusk / navy night
+/// ambient tints red sand teal.
+struct SceneLight: Equatable {
+    var ambient: RGBA
+    var ambientIntensity: Double
+    var directional: RGBA
+    var directionalIntensity: Double
+    /// [azimuth from north, clockwise; polar angle from the zenith], degrees.
+    var direction: [Double]
+    var shadowIntensity: Double
+
+    static func from(_ sun: SunPosition) -> SceneLight {
+        let a = sun.altitudeDeg
+        let golden = 1 - Smooth.step(0, 16, a)
+        let twilight = 1 - Smooth.step(-6, 0, a)
+        let night = 1 - Smooth.step(-12, -5, a)
+        /* A warm grade even at noon (desert light, and it pulls the imagery's cyan cast back to sand). */
+        var amb = RGBA(255, 240, 218).mix(RGBA(255, 212, 162), golden).mix(RGBA(226, 172, 152), twilight).mix(RGBA(120, 132, 172), night)
+        amb.a = 1
+        var dir = RGBA(255, 242, 218).mix(RGBA(255, 186, 112), golden).mix(RGBA(255, 156, 116), twilight).mix(RGBA(160, 172, 206), night)
+        dir.a = 1
+        let ambI = Smooth.lerp(Smooth.lerp(Smooth.lerp(0.82, 0.76, golden), 0.62, twilight), 0.26, night)
+        let dirI = Smooth.lerp(Smooth.lerp(Smooth.lerp(0.32, 0.52, golden), 0.2, twilight), 0.1, night)
+        /* The sun's own direction while it is up; a high north-west moon-ish light at night. */
+        let az = night > 0.5 ? HillshadeLight.nightDirection : sun.azimuthDeg
+        let polar = night > 0.5 ? 60 : min(88, max(12, 90 - a))
+        return SceneLight(ambient: amb, ambientIntensity: ambI, directional: dir, directionalIntensity: dirI,
+                          direction: [(az * 10).rounded() / 10, (polar * 10).rounded() / 10], shadowIntensity: night > 0.5 ? 0.45 : 0.85)
+    }
+
+    /// Standard's own lights for a preset (literal values from its style), used to hand the light
+    /// back when «السماء والإضاءة» is switched off.
+    static func standard(_ p: SunLight.Preset) -> SceneLight {
+        switch p {
+        case .dawn: return SceneLight(ambient: RGBA(254, 237, 220), ambientIntensity: 0.75, directional: RGBA(252, 195, 139), directionalIntensity: 0.5, direction: [120, 50], shadowIntensity: 1)
+        case .day: return SceneLight(ambient: RGBA(255, 255, 255), ambientIntensity: 0.8, directional: RGBA(255, 255, 255), directionalIntensity: 0.2, direction: [180, 20], shadowIntensity: 1)
+        case .dusk: return SceneLight(ambient: RGBA(54, 60, 94), ambientIntensity: 0.8, directional: RGBA(252, 192, 135), directionalIntensity: 0.2, direction: [240, 80], shadowIntensity: 1)
+        case .night: return SceneLight(ambient: RGBA(0, 24, 56), ambientIntensity: 0.5, directional: RGBA(74, 74, 74), directionalIntensity: 0.5, direction: [270, 20], shadowIntensity: 0.5)
+        }
     }
 }
 

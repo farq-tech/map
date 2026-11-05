@@ -79,22 +79,24 @@ struct SkyAtmosphere: Equatable {
 
     /// The sky for the real sun altitude alone (keyframes, blended smoothly between).
     static func sky(sunAltitude a: Double) -> SkyAtmosphere {
-        struct K { var alt: Double; var color: RGBA; var high: RGBA; var space: RGBA; var blend: Double; var stars: Double; var end: Double }
+        struct K { var alt: Double; var color: RGBA; var high: RGBA; var space: RGBA; var blend: Double; var stars: Double; var start: Double; var end: Double }
+        /* The haze starts past the map centre (a crisp foreground) and is warm desert-beige by day;
+           night is deep blue, never black, so the dunes stay readable under the stars. */
         let keys: [K] = [
-            K(alt: -18, color: RGBA(11, 16, 30), high: RGBA(8, 18, 48), space: RGBA(1, 3, 10), blend: 0.03, stars: 0.8, end: 9),
-            K(alt: -10, color: RGBA(22, 28, 50), high: RGBA(18, 32, 78), space: RGBA(4, 8, 26), blend: 0.05, stars: 0.6, end: 9),
-            K(alt: -4, color: RGBA(70, 58, 92), high: RGBA(52, 66, 140), space: RGBA(14, 20, 60), blend: 0.09, stars: 0.2, end: 10),
-            K(alt: -2, color: RGBA(156, 112, 112), high: RGBA(68, 84, 158), space: RGBA(22, 30, 80), blend: 0.11, stars: 0.06, end: 10.5),
-            K(alt: 0, color: RGBA(242, 170, 130), high: RGBA(84, 104, 176), space: RGBA(30, 42, 100), blend: 0.13, stars: 0.0, end: 11),
-            K(alt: 6, color: RGBA(255, 214, 168), high: RGBA(108, 152, 224), space: RGBA(70, 116, 200), blend: 0.1, stars: 0, end: 12),
-            K(alt: 20, color: RGBA(232, 240, 250), high: RGBA(52, 118, 228), space: RGBA(150, 192, 244), blend: 0.06, stars: 0, end: 12),
+            K(alt: -18, color: RGBA(22, 26, 42), high: RGBA(12, 22, 54), space: RGBA(3, 6, 16), blend: 0.04, stars: 0.85, start: 0.7, end: 9),
+            K(alt: -10, color: RGBA(30, 34, 56), high: RGBA(20, 34, 82), space: RGBA(5, 10, 28), blend: 0.06, stars: 0.6, start: 0.7, end: 9),
+            K(alt: -4, color: RGBA(84, 64, 92), high: RGBA(56, 68, 140), space: RGBA(14, 20, 60), blend: 0.09, stars: 0.2, start: 0.9, end: 10),
+            K(alt: -2, color: RGBA(170, 118, 108), high: RGBA(72, 86, 158), space: RGBA(22, 30, 80), blend: 0.11, stars: 0.06, start: 1.0, end: 10.5),
+            K(alt: 0, color: RGBA(244, 172, 122), high: RGBA(88, 106, 176), space: RGBA(30, 42, 100), blend: 0.12, stars: 0.0, start: 1.1, end: 11.5),
+            K(alt: 6, color: RGBA(252, 206, 156), high: RGBA(110, 152, 222), space: RGBA(70, 116, 200), blend: 0.09, stars: 0, start: 1.2, end: 12.5),
+            K(alt: 20, color: RGBA(236, 234, 228), high: RGBA(56, 120, 226), space: RGBA(150, 192, 244), blend: 0.05, stars: 0, start: 1.3, end: 13),
         ]
         let lo = keys.last { $0.alt <= a } ?? keys[0]
         let hi = keys.first { $0.alt > a } ?? keys[keys.count - 1]
         /* Linear between keyframes: the sky moves at the pace of the sun, with no sudden swing. */
         let t = hi.alt == lo.alt ? 0 : min(1, max(0, (a - lo.alt) / (hi.alt - lo.alt)))
-        return SkyAtmosphere(range: [0.8, Smooth.lerp(lo.end, hi.end, t)], color: lo.color.mix(hi.color, t), highColor: lo.high.mix(hi.high, t),
-                             spaceColor: lo.space.mix(hi.space, t), horizonBlend: Smooth.lerp(lo.blend, hi.blend, t),
+        return SkyAtmosphere(range: [Smooth.lerp(lo.start, hi.start, t), Smooth.lerp(lo.end, hi.end, t)], color: lo.color.mix(hi.color, t),
+                             highColor: lo.high.mix(hi.high, t), spaceColor: lo.space.mix(hi.space, t), horizonBlend: Smooth.lerp(lo.blend, hi.blend, t),
                              starIntensity: Smooth.lerp(lo.stars, hi.stars, t), sourceLine: nil, weatherDriven: false)
     }
 
@@ -116,12 +118,14 @@ struct SkyAtmosphere: Equatable {
             s.starIntensity *= 1 - g
         }
         if d > 0 {
-            let sand = RGBA(214, 178, 132).mix(RGBA(92, 70, 46), night)
-            s.color = s.color.mix(sand, 0.15 + d * 0.8)
-            s.highColor = s.highColor.mix(RGBA(200, 166, 120).mix(RGBA(60, 46, 32), night), d * 0.85)
-            s.spaceColor = s.spaceColor.mix(RGBA(196, 168, 128).mix(RGBA(30, 24, 18), night), d * 0.6)
-            s.horizonBlend = max(s.horizonBlend, Smooth.lerp(s.horizonBlend, 0.4, d))
-            s.range = [min(s.range[0], Smooth.lerp(0.8, -0.6, d)), min(s.range[1], Smooth.lerp(s.range[1], 1.4, d))]
+            /* Airborne dust is warm ochre, thick with distance: the haze starts at the map centre, so
+               the ground at your feet stays sharp while the far dunes melt into it (not a grey veil). */
+            let sand = RGBA(204, 154, 96).mix(RGBA(90, 66, 42), night)
+            s.color = s.color.mix(sand, 0.2 + d * 0.8)
+            s.highColor = s.highColor.mix(RGBA(216, 174, 118).mix(RGBA(62, 46, 30), night), d * 0.9)
+            s.spaceColor = s.spaceColor.mix(RGBA(206, 170, 122).mix(RGBA(30, 24, 18), night), d * 0.7)
+            s.horizonBlend = max(s.horizonBlend, Smooth.lerp(s.horizonBlend, 0.32, d))
+            s.range = [min(s.range[0], Smooth.lerp(s.range[0], 0.05, d)), min(s.range[1], Smooth.lerp(s.range[1], 1.6, d))]
             s.starIntensity *= 1 - d
         }
         /* A short visibility, whatever its cause, shortens the range (never lengthens it). */

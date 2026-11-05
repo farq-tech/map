@@ -1,7 +1,7 @@
 import Foundation
 
 /// «طيران درون استكشافي»: an orbit around one point — a short glide in, then one full
-/// circle at a low altitude and a steep pitch (~65°), easing in and out so it never jerks.
+/// circle at a low altitude and a steep pitch (~62°), easing in and out so it never jerks.
 /// Pure: the camera for any time `t`; `DroneFlight` (MapVisualsDirector) plays it and stops
 /// on the first touch.
 struct DroneOrbit: Equatable {
@@ -19,13 +19,15 @@ struct DroneOrbit: Equatable {
     var approachS: Double = 2.0
     /// Seconds for the full circle (the brief asks for ~20–25 s).
     var orbitS: Double = 22
-    var pitch: Double = 65
+    var pitch: Double = DroneOrbit.defaultPitch
     /// Low: about 450–600 m of view across at this zoom and pitch.
     var zoom: Double = 15.6
     /// Degrees: one full circle.
     var sweep: Double = 360
 
     static let defaultOrbitS = 22.0
+    /// Steep enough for the dunes to stand up, low enough that the horizon stays near.
+    static let defaultPitch = 62.0
 
     var duration: Double { approachS + orbitS }
 

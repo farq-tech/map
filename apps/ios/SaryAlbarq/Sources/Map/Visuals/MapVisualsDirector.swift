@@ -45,6 +45,11 @@ final class MapVisualsDirector: NSObject {
     private var appliedSky: SkyAtmosphere?
     private var fogSet = false
     private var appliedHillshade: HillshadeLight?
+    private var appliedScene: SceneLight?
+    private var prefetch: DronePrefetch?
+    /// The flight waits at the orbit's start (≤ 3 s) until the orbit's tiles are in.
+    private var holdUntil: CFTimeInterval = 0
+    private var lastStep: CFTimeInterval = 0
     private var weather: SkyWeather?
     private var weatherCell: WeatherArea?
     private var weatherAt: CFTimeInterval = -1_000
@@ -62,6 +67,11 @@ final class MapVisualsDirector: NSObject {
     static let log = OSSignposter(subsystem: "sa.sary.albarq", category: "MapVisuals")
     static let hillshadeSource = "wow-hillshade-dem"
     static let hillshadeLayer = "wow-hillshade"
+    /// The broad pass: the same DEM capped at z11, so the big dune forms shade softly at any zoom.
+    static let hillshadeBroadSource = "wow-hillshade-dem-broad"
+    static let hillshadeBroadLayer = "wow-hillshade-broad"
+    static let ambientLight = "wow-ambient"
+    static let directionalLight = "wow-directional"
     static let slopeSource = "wow-slope"
     static let slopeLayer = "wow-slope-line"
     static let glowPrefix = "wow-glow-"
@@ -136,9 +146,9 @@ final class MapVisualsDirector: NSObject {
 
     // MARK: inputs → effects
 
-    private func context(_ i: MapVisualInputs, pitch: Double) -> VisualContext {
+    private func context(_ i: MapVisualInputs, pitch: Double, zoom: Double) -> VisualContext {
         VisualContext(driving: i.driving, exploring: i.exploring, terrain3D: i.terrain3D, flying: flight != nil, lowPower: lowPower,
-                      reduceMotion: UIAccessibility.isReduceMotionEnabled, layer: i.layer, pitch: pitch)
+                      reduceMotion: UIAccessibility.isReduceMotionEnabled, layer: i.layer, pitch: pitch, zoom: zoom)
     }
 
     private func tick() {
@@ -158,7 +168,7 @@ final class MapVisualsDirector: NSObject {
         let i = inputs()
         lastInputs = i
         let st = map.mapboxMap.cameraState
-        let e = VisualBudget.resolve(settings, context(i, pitch: st.pitch))
+        let e = VisualBudget.resolve(settings, context(i, pitch: st.pitch, zoom: st.zoom))
         let was = effective
         effective = e
         guard styleReady else { return }
@@ -183,6 +193,7 @@ final class MapVisualsDirector: NSObject {
         appliedPreset = nil
         appliedSky = nil
         appliedHillshade = nil
+        appliedScene = nil
         fogSet = false
         slopeKey = nil
         appliedExaggeration = nil
@@ -199,7 +210,7 @@ final class MapVisualsDirector: NSObject {
         guard styleReady, let map else { return }
         if effective.managed, settings.terrain {
             let st = map.mapboxMap.cameraState
-            let c = context(lastInputs, pitch: st.pitch)
+            let c = context(lastInputs, pitch: st.pitch, zoom: st.zoom)
             effective.exaggeration = VisualBudget.exaggeration(c)
             applyExaggeration()
         }
@@ -260,18 +271,51 @@ final class MapVisualsDirector: NSObject {
     }
 
     private func applyLight() {
-        guard styleReady, ownsLight, lastInputs.layer.isImport, let m = map?.mapboxMap, let s = skySun else { return }
+        guard styleReady, lastInputs.layer.isImport, let m = map?.mapboxMap else { return }
+        guard ownsLight, let s = skySun else {
+            /* Handed back: Standard's own lights for the preset the coordinator sets. */
+            if appliedScene != nil, let s = skySun {
+                appliedScene = nil
+                setScene(SceneLight.standard(lastInputs.night ? .night : s.preset), m)
+            }
+            return
+        }
         let p = s.preset
-        guard p != appliedPreset else { return }
-        appliedPreset = p
-        try? m.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: p.rawValue)
+        if p != appliedPreset {
+            appliedPreset = p
+            /* The preset still themes Standard's roads, labels and 3D objects; the light itself is ours. */
+            try? m.setStyleImportConfigProperty(for: "basemap", config: "lightPreset", value: p.rawValue)
+        }
+        let scene = SceneLight.from(s)
+        guard scene != appliedScene else { return }
+        appliedScene = scene
+        setScene(scene, m)
+    }
+
+    private func setScene(_ l: SceneLight, _ m: MapboxMap) {
+        let t = StyleTransition(duration: Double(effective.transitionMs) / 1000, delay: 0)
+        var a = AmbientLight(id: Self.ambientLight)
+        a.color = .constant(StyleColor(l.ambient.uiColor))
+        a.colorTransition = t
+        a.intensity = .constant(l.ambientIntensity)
+        a.intensityTransition = t
+        var d = DirectionalLight(id: Self.directionalLight)
+        d.color = .constant(StyleColor(l.directional.uiColor))
+        d.colorTransition = t
+        d.intensity = .constant(l.directionalIntensity)
+        d.intensityTransition = t
+        d.direction = .constant(l.direction)
+        d.directionTransition = t
+        d.castShadows = .constant(true)
+        d.shadowIntensity = .constant(l.shadowIntensity)
+        try? m.setLights(ambient: a, directional: d)
     }
 
     private func applyHillshade() {
         guard styleReady, let map else { return }
         let m: MapboxMap = map.mapboxMap
         guard effective.hillshade, let sunNow = sun else {
-            if m.layerExists(withId: Self.hillshadeLayer) { try? m.removeLayer(withId: Self.hillshadeLayer) }
+            for id in [Self.hillshadeLayer, Self.hillshadeBroadLayer] where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
             appliedHillshade = nil
             return
         }
@@ -280,27 +324,42 @@ final class MapVisualsDirector: NSObject {
         var here = SunPosition.at(clock, lat: c.latitude, lng: c.longitude)
         if lastInputs.night || sunNow.altitudeDeg <= -12 { here.altitudeDeg = min(here.altitudeDeg, -12) }
         let h = HillshadeLight.from(here, satellite: lastInputs.layer == .satellite)
+        /* Their own sources (Mapbox advises not sharing the terrain's), same tiles: cached / offline alike. */
         if !m.sourceExists(withId: Self.hillshadeSource) {
-            /* Its own source (Mapbox advises not sharing the terrain's), same tiles: cached / offline alike. */
             try? m.addSource(withId: Self.hillshadeSource, properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1",
                                                                         "tileSize": 512, "maxzoom": 14])
         }
+        if !m.sourceExists(withId: Self.hillshadeBroadSource) {
+            try? m.addSource(withId: Self.hillshadeBroadSource, properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1",
+                                                                             "tileSize": 512, "maxzoom": 11])
+        }
+        let broad = h.broad
+        /* Detail pass: crisper as you come closer (the ~30 m DEM's ridges and slip faces). */
+        let detailEx: [Any] = ["interpolate", ["linear"], ["zoom"], 9, h.exaggeration * 0.6, 12, h.exaggeration, 15, min(1, h.exaggeration * 1.12)]
+        let broadEx: [Any] = ["interpolate", ["linear"], ["zoom"], 8, broad.exaggeration, 15, broad.exaggeration * 0.75]
+        put(Self.hillshadeBroadLayer, source: Self.hillshadeBroadSource, light: broad, exaggeration: broadEx, below: nil, m, changed: h != appliedHillshade)
+        put(Self.hillshadeLayer, source: Self.hillshadeSource, light: h, exaggeration: detailEx, below: nil, m, changed: h != appliedHillshade)
+        appliedHillshade = h
+    }
+
+    private func put(_ id: String, source: String, light h: HillshadeLight, exaggeration: [Any], below: String?, _ m: MapboxMap, changed: Bool) {
         let t: [String: Any] = ["duration": effective.transitionMs, "delay": 0]
         let paint: [String: Any] = [
             "hillshade-illumination-anchor": "map", "hillshade-illumination-direction": h.direction,
-            "hillshade-exaggeration": h.exaggeration, "hillshade-exaggeration-transition": t,
+            "hillshade-exaggeration": exaggeration,
             "hillshade-shadow-color": h.shadow.css, "hillshade-shadow-color-transition": t,
             "hillshade-highlight-color": h.highlight.css, "hillshade-highlight-color-transition": t,
-            "hillshade-accent-color": h.accent.css,
+            "hillshade-accent-color": h.accent.css, "hillshade-accent-color-transition": t,
+            /* Our colours are already the sun's: not re-tinted by the scene light. */
+            "hillshade-emissive-strength": 1,
         ]
-        if !m.layerExists(withId: Self.hillshadeLayer) {
-            var layer: [String: Any] = ["id": Self.hillshadeLayer, "type": "hillshade", "source": Self.hillshadeSource, "paint": paint]
+        if !m.layerExists(withId: id) {
+            var layer: [String: Any] = ["id": id, "type": "hillshade", "source": source, "paint": paint]
             if lastInputs.layer.isImport { layer["slot"] = "bottom" }
             try? m.addLayer(with: layer, layerPosition: nil)
-        } else if h != appliedHillshade {
-            for (k, v) in paint { try? m.setLayerProperty(for: Self.hillshadeLayer, property: k, value: v) }
+        } else if changed {
+            for (k, v) in paint { try? m.setLayerProperty(for: id, property: k, value: v) }
         }
-        appliedHillshade = h
     }
 
     // MARK: weather → fog
@@ -485,7 +544,9 @@ final class MapVisualsDirector: NSObject {
         let st = map.mapboxMap.cameraState
         let from = DroneOrbit.Frame(center: LngLat(lng: st.center.longitude, lat: st.center.latitude), zoom: st.zoom, bearing: st.bearing, pitch: st.pitch)
         var orbit = DroneOrbit(center: p, from: from)
-        orbit.zoom = max(14.8, min(16.2, st.zoom < 12 ? 15.4 : 15.6))
+        /* A little lower and less steep than before: closer dunes, less far horizon to stream. */
+        orbit.zoom = max(15.0, min(16.2, st.zoom < 12 ? 15.6 : 15.8))
+        orbit.pitch = DroneOrbit.defaultPitch
         if UIAccessibility.isReduceMotionEnabled {
             /* Reduce Motion: the same low, tilted view — still, no circling. */
             map.mapboxMap.setCamera(to: CameraOptions(center: p.coordinate, zoom: orbit.zoom, bearing: st.bearing, pitch: orbit.pitch))
@@ -494,6 +555,13 @@ final class MapVisualsDirector: NSObject {
         }
         flight = orbit
         flightStart = CACurrentMediaTime()
+        lastStep = flightStart
+        /* Prefetch the orbit's terrain (a temporary tile region, removed after) and hold at the orbit's
+           start until it is in (≤ 3 s), so the circle never flies over white, unloaded ground. */
+        let pf = DronePrefetch(center: p)
+        prefetch = pf
+        holdUntil = flightStart + orbit.approachS + 3
+        pf.start()
         frameTimes = []
         MapVisualsHub.shared.setFlying(true)
         refresh(force: false)
@@ -520,6 +588,11 @@ final class MapVisualsDirector: NSObject {
         guard let flight, let map else { stopDrone(); return }
         let now = CACurrentMediaTime()
         frameTimes.append(now)
+        if now - flightStart > flight.approachS, now < holdUntil, prefetch?.done == false {
+            /* Hover at the orbit's start: the flight's clock waits for the tiles. */
+            flightStart += now - lastStep
+        }
+        lastStep = now
         guard let f = flight.frame(at: now - flightStart) else { stopDrone(); return }
         map.mapboxMap.setCamera(to: CameraOptions(center: f.center.coordinate, zoom: f.zoom, bearing: f.bearing, pitch: f.pitch))
     }
@@ -529,6 +602,8 @@ final class MapVisualsDirector: NSObject {
         link?.invalidate()
         link = nil
         flight = nil
+        prefetch?.finish()
+        prefetch = nil
         if let r = touchStop { r.view?.removeGestureRecognizer(r) }
         touchStop = nil
         if let s = flightSignpost { Self.log.endInterval("droneFlight", s) }
@@ -653,5 +728,57 @@ final class VisualsSourceView: UIView {
         let w = min(maxWidth, inner.width + 20), h = inner.height + 8
         stack.frame = CGRect(x: 10, y: 4, width: w - 20, height: inner.height)
         return CGSize(width: w, height: h)
+    }
+}
+
+extension RGBA {
+    var uiColor: UIColor { UIColor(red: r / 255, green: g / 255, blue: b / 255, alpha: a) }
+}
+
+/// The drone orbit's terrain, fetched before the circle starts: a temporary TileStore region
+/// (DEM, z11–14, ~3 km around the point) that the map reads at once; removed
+/// when the flight ends (the tiles stay in the ambient cache). Never listed with the offline
+/// areas (those are `sary-`). No network at all when the area is already cached or offline.
+final class DronePrefetch {
+    static let regionId = "wow-drone-prefetch"
+    let center: LngLat
+    private(set) var done = false
+    private var task: Cancelable?
+    private let started = CACurrentMediaTime()
+
+    init(center: LngLat) { self.center = center }
+
+    func start() {
+        let dLat = 3.0 / 111.0, dLng = 3.0 / (111.0 * max(0.2, cos(center.lat * .pi / 180)))
+        let ring = [(-1.0, -1.0), (1, -1), (1, 1), (-1, 1), (-1, -1)].map {
+            CLLocationCoordinate2D(latitude: center.lat + $0.1 * dLat, longitude: center.lng + $0.0 * dLng)
+        }
+        /* The terrain DEM by name (the style's own sources would need a style pack): a missing DEM tile is
+           what tears a white, jagged hole in the 3D ground mid-orbit. Imagery still streaming shows the
+           style's sand background (ArabicBasemap.tune), never white. */
+        let opts = TilesetDescriptorOptions(styleURI: OutingMapboxView.styleURI, zoomRange: 11...14,
+                                            tilesets: ["mapbox://mapbox.mapbox-terrain-dem-v1"])
+        let descriptor = OfflineManager().createTilesetDescriptor(for: opts)
+        guard let load = TileRegionLoadOptions(geometry: .polygon(Polygon([ring])), descriptors: [descriptor], metadata: ["app": "sary-drone"],
+                                               acceptExpired: true) else { done = true; return }
+        task = TileStore.default.loadTileRegion(forId: Self.regionId, loadOptions: load) { [weak self] result in
+            let outcome: String
+            switch result {
+            case let .success(r): outcome = "\(r.completedResourceCount)/\(r.requiredResourceCount) tiles"
+            case let .failure(e): outcome = "failed: \(e)"
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.done = true
+                Logger(subsystem: "sa.sary.albarq", category: "MapVisuals")
+                    .info("drone prefetch: \(String(format: "%.1f", CACurrentMediaTime() - self.started), privacy: .public) s, \(outcome, privacy: .public)")
+            }
+        }
+    }
+
+    func finish() {
+        if !done { task?.cancel() }
+        task = nil
+        TileStore.default.removeTileRegion(forId: Self.regionId)
     }
 }

@@ -1614,7 +1614,8 @@ enum ArabicBasemap {
 
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
-        guard let u = fileURL(layer), let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
+        let s = tune(raw)
         cache[layer] = s
         return s
     }
@@ -1626,8 +1627,19 @@ enum ArabicBasemap {
     }
 
     static func transform(_ style: String) -> String {
-        style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
-            .replacingOccurrences(of: "[\"get\",\"name_en\"]", with: "[\"coalesce\",[\"get\",\"name_ar\"],[\"get\",\"name\"]]")
+        tune(style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
+            .replacingOccurrences(of: "[\"get\",\"name_en\"]", with: "[\"coalesce\",[\"get\",\"name_ar\"],[\"get\",\"name\"]]"))
+    }
+
+    /// Standard Satellite, tuned for the desert (idempotent, also applied to a cached copy): a tile
+    /// still loading shows warm sand instead of Standard's near-white land; the imagery gets a touch of
+    /// contrast, a little less of the source's cyan-leaning saturation, and answers the scene light more
+    /// (emissive 0.3, so «المؤثرات البصرية»'s real-sun light grades it). Mapbox's own raster paint, no new data.
+    static func tune(_ style: String) -> String {
+        style.replacingOccurrences(of: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(20, 20%, 95%)\"",
+                                   with: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(28, 40%, 60%)\"")
+            .replacingOccurrences(of: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.5}",
+                                  with: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.3,\"raster-contrast\":0.18,\"raster-saturation\":-0.26}")
     }
 
     static func wrap(_ style: String) -> String {
