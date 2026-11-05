@@ -54,6 +54,8 @@ import type { IntelligenceMapPlaces } from "../../services/intelligenceService";
 import FarqBottomSheet, { sheetHeightPx, type SheetSnap } from "../intelligence/FarqBottomSheet";
 import { liveStateLabel, statusLabel } from "./labels";
 import { useLiveOuting } from "./useLiveOuting";
+import { OutingChat } from "./OutingChat";
+import { chatBus } from "../../lib/outings/chat";
 import { downloadReport, useFieldDiagnostics } from "./useFieldDiagnostics";
 import { diag, exportFileName } from "../../lib/outings/fieldDiagnostics";
 import { BatteryBadge, MySosBanner, RallyCard, RallyPlacer, SosAlert, SosHoldButton, SosStrip, useAudioUnlock, useSiren, type SosAlertView } from "./OutingSafety";
@@ -66,7 +68,7 @@ import "../../styles/outings.css";
 
 const FarqMap = lazy(() => import("../intelligence/FarqMap"));
 
-export type OutingPanel = "members" | "invite" | "settings";
+export type OutingPanel = "members" | "chat" | "invite" | "settings";
 
 const EMPTY_PLACES = { type: "FeatureCollection", count: 0, matched: 0, layer: "outdoor", features: [] } as unknown as IntelligenceMapPlaces;
 
@@ -153,6 +155,24 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const isOwner = me?.role === "owner";
 	/* Owner or «مساعد». Only shows the controls; the server checks every action. */
 	const canLead = Boolean(me?.can_lead ?? isOwner);
+	/* «دردشة الطلعة»: unread badge on its tab — from the snapshot, then live. */
+	const [chatUnread, setChatUnread] = useState(0);
+	const snapUnread = view?.snapshot.chat_unread;
+	useEffect(() => {
+		if (typeof snapUnread === "number") setChatUnread(panel === "chat" ? 0 : snapUnread);
+		// the snapshot is the truth whenever it changes
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [snapUnread]);
+	const panelRef = useRef(panel);
+	panelRef.current = panel;
+	const myId = me?.user_id;
+	useEffect(
+		() =>
+			chatBus.on((e) => {
+				if (e.type === "chat_message" && e.message.conv === "group" && e.message.sender_id !== myId && panelRef.current !== "chat") setChatUnread((n) => n + 1);
+			}),
+		[myId],
+	);
 
 	useSaryChrome();
 	usePageMeta({
@@ -1136,7 +1156,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						</p>
 					) : null}
 					<div className="sary-o-tabs" role="tablist">
-						{(["members", ...(canLead ? ["invite"] : []), "settings"] as OutingPanel[]).map((p) => (
+						{(["members", "chat", ...(canLead ? ["invite"] : []), "settings"] as OutingPanel[]).map((p) => (
 							<button
 								key={p}
 								type="button"
@@ -1149,7 +1169,12 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								}}
 								data-testid={`outing-tab-${p}`}
 							>
-								{p === "members" ? (isRTL ? "المشاركون" : "Members") : p === "invite" ? (isRTL ? "الدعوة" : "Invite") : isRTL ? "الإعدادات" : "Settings"}
+								{p === "members" ? (isRTL ? "المشاركون" : "Members") : p === "chat" ? (isRTL ? "الدردشة" : "Chat") : p === "invite" ? (isRTL ? "الدعوة" : "Invite") : isRTL ? "الإعدادات" : "Settings"}
+								{p === "chat" && chatUnread > 0 ? (
+									<span className="sary-o-chat-badge" data-testid="outing-chat-unread" aria-label={isRTL ? `${chatUnread} غير مقروءة` : `${chatUnread} unread`}>
+										{chatUnread > 99 ? "99+" : chatUnread.toLocaleString(isRTL ? "ar-SA" : "en")}
+									</span>
+								) : null}
 							</button>
 						))}
 					</div>
@@ -1317,6 +1342,27 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							</>
 						)}
 					</div>
+				) : null}
+
+				{panel === "chat" && me ? (
+					<OutingChat
+						outingId={outingId}
+						meId={me.user_id}
+						isRTL={isRTL}
+						live={liveState === "live"}
+						names={new Map([...(view?.members.values() || [])].map((m) => [m.user_id, m.display_name]))}
+						colors={colors}
+						othersCount={Math.max(0, (view?.members.size || 1) - 1)}
+						canModerate={canLead && outing?.status !== "ended"}
+						myLocation={here ? { lat: here.lat, lng: here.lng } : null}
+						onShowPoint={(pt) => {
+							setFollow(false);
+							setKeepGroup(false);
+							setSnap("peek");
+							setFocus({ lat: pt.lat, lng: pt.lng, id: `chat-${Date.now()}`, kind: "locate", zoom: 15 });
+						}}
+						onSeen={() => setChatUnread(0)}
+					/>
 				) : null}
 
 				{panel === "settings" ? (

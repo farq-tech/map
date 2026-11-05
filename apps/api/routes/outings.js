@@ -137,6 +137,15 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, lim
 
   /* Native iOS push (APNs). Off (enabled:false, 503 apns_disabled) unless the API has APNS_*.
    * Body: { token: <hex device token>, environment: 'sandbox'|'production', bundle_id?: <must match> }. */
+  /* «رسائل المحادثة» notifications on/off, per person (default on). */
+  router.get('/push/chat', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.chatPrefs(req.user)) });
+  }));
+
+  router.put('/push/chat', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setChatPrefs(req.user, req.body || {})) });
+  }));
+
   router.get('/push/apns', (_req, res) => {
     res.json({ ok: true, ...(apns ? apns.publicConfig() : { enabled: false, bundle_id: null }) });
   });
@@ -468,6 +477,33 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, lim
   router.post('/:id/media/takeover', auth, asyncHandler(async (req, res) => {
     if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     res.json({ ok: true, ...(await service.takeoverMedia(req.user, req.params.id)) });
+  }));
+
+  /* «المحادثات» — HTTP side of the trip chat (the live socket carries the same
+   * frames: chat_message / chat_read / chat_typing). `:with` is 'group' or the
+   * other member's user id. Cursor pagination by server seq: ?before=<seq> or
+   * ?after=<seq>, &limit≤100. Membership is checked on every call — see chat.js. */
+  router.get('/:id/chat', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.chatConversations(req.user, req.params.id)) });
+  }));
+
+  router.get('/:id/chat/:with', auth, asyncHandler(async (req, res) => {
+    const { before, after, limit } = req.query;
+    res.json({ ok: true, ...(await service.chatMessages(req.user, req.params.id, req.params.with, { before, after, limit })) });
+  }));
+
+  router.post('/:id/chat/:with', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await service.chatSend(req.user, req.params.id, { ...(req.body || {}), with: req.params.with });
+    res.status(r.duplicate ? 200 : 201).json({ ok: true, ...r });
+  }));
+
+  router.post('/:id/chat/:with/read', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.chatRead(req.user, req.params.id, req.params.with, req.body?.seq)) });
+  }));
+
+  router.delete('/:id/chat/messages/:messageId', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.chatDelete(req.user, req.params.id, req.params.messageId)) });
   }));
 
   router.post('/:id/leave', auth, asyncHandler(async (req, res) => {

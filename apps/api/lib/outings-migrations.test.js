@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Every outings migration (001–011, 013) applies in order on an empty database and
+ * Every outings migration (001–013) applies in order on an empty database and
  * on one in today's production state (001–002 already applied, with data).
  *
  *   SARY_TEST_DATABASE_URL=postgres://… node --test apps/api/lib/outings-migrations.test.js
@@ -34,7 +34,7 @@ const ALL = [
   '009_sary_outing_features.sql',
   '010_sary_ptt_tokens.sql',
   '011_sary_personal_invites.sql',
-  /* 012 is reserved for «دردشة الطلعة» (trip chat, its own branch); migrate() applies by name, gaps are fine. */
+  '012_sary_trip_chat.sql',
   '013_sary_ptt_channels.sql',
 ];
 
@@ -49,11 +49,11 @@ async function isolatedDb(url) {
   return u.toString();
 }
 
-test('the migrations folder holds exactly 001–011 and 013', () => {
+test('the migrations folder holds exactly 001–013', () => {
   assert.deepEqual(fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort(), ALL);
 });
 
-test('001–011 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
+test('001–013 apply in order on an empty database, then on a 001–002 (production) database', { skip, timeout: 60_000 }, async (t) => {
   const pool = createPool(await isolatedDb(URL_));
   t.after(() => pool.end());
 
@@ -101,7 +101,7 @@ test('008 on a database at the current level (001–007 applied, with data): onl
   const [u] = (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ('سعد', $1) RETURNING id`, [crypto.randomBytes(32)])).rows;
   await pool.query(`INSERT INTO sary.push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, 'https://fcm.googleapis.com/fcm/send/x', $2, $3)`, [u.id, 'p'.repeat(87), 'a'.repeat(22)]);
 
-  assert.deepEqual(await migrate(pool), ['008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '013_sary_ptt_channels.sql']);
+  assert.deepEqual(await migrate(pool), ['008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql']);
   assert.deepEqual(await migrate(pool), [], 'idempotent');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.push_subscriptions')).rows[0].n, 1, 'web push rows untouched');
 
@@ -137,7 +137,7 @@ test('009 on a database at 008 (with data): only 009 is new, existing rows keep 
   const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status, rally_lat, rally_lng) VALUES ('طلعة', $1, 'active', 24.7, 46.6) RETURNING id`, [u.id])).rows;
   await pool.query(`INSERT INTO sary.outing_members (outing_id, user_id, role) VALUES ($1, $2, 'owner')`, [o.id, u.id]);
 
-  assert.deepEqual(await migrate(pool), ['009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '013_sary_ptt_channels.sql']);
+  assert.deepEqual(await migrate(pool), ['009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql']);
   assert.deepEqual(await migrate(pool), [], 'idempotent');
   /* Re-running the file itself is harmless too (IF NOT EXISTS everywhere). */
   await pool.query(fs.readFileSync(path.join(DIR, '009_sary_outing_features.sql'), 'utf8'));
@@ -187,7 +187,7 @@ test('010 on a database at 009 (with data): only 010 is new, RLS on, tokens casc
   const [u2] = (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ('فهد', $1) RETURNING id`, [crypto.randomBytes(32)])).rows;
   const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status) VALUES ('طلعة', $1, 'active') RETURNING id`, [u.id])).rows;
 
-  assert.deepEqual(await migrate(pool), ['010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '013_sary_ptt_channels.sql']);
+  assert.deepEqual(await migrate(pool), ['010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql']);
   assert.deepEqual(await migrate(pool), [], 'idempotent');
   await pool.query(fs.readFileSync(path.join(DIR, '010_sary_ptt_tokens.sql'), 'utf8'));
   const { rows: [rls] } = await pool.query(`SELECT relrowsecurity FROM pg_class WHERE oid = 'sary.ptt_tokens'::regclass`);
@@ -224,7 +224,7 @@ test('011 on a database at 010 (with live group links): only 011 is new, old lin
     [o.id, crypto.randomBytes(32), u.id],
   )).rows;
 
-  assert.deepEqual(await migrate(pool), ['011_sary_personal_invites.sql', '013_sary_ptt_channels.sql']);
+  assert.deepEqual(await migrate(pool), ['011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql']);
   assert.deepEqual(await migrate(pool), [], 'idempotent');
   await pool.query(fs.readFileSync(path.join(DIR, '011_sary_personal_invites.sql'), 'utf8'));
 
@@ -248,7 +248,57 @@ test('011 on a database at 010 (with live group links): only 011 is new, old lin
   assert.deepEqual(after, { invited_name: 'فهد', invite_id: null }, 'sweeping an old invite keeps the member and their name');
 });
 
-test('013 on a database at 011 (with a live trip): only 013 is new, RLS on, private channels cascade with the trip and the identity', { skip, timeout: 60_000 }, async (t) => {
+test('012 on a database at 011 (with data): only 012 is new, additive, RLS on, chat cascades with identity and outing', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(await isolatedDb(URL_));
+  t.after(() => pool.end());
+  await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
+  await pool.query('CREATE SCHEMA sary');
+  await pool.query(`CREATE TABLE sary.schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const f of ALL.slice(0, 11)) {
+    await pool.query(fs.readFileSync(path.join(DIR, f), 'utf8'));
+    await pool.query('INSERT INTO sary.schema_migrations (name) VALUES ($1)', [f]);
+  }
+  const user = async (n) => (await pool.query(`INSERT INTO sary.users (display_name, token_hash) VALUES ($1, $2) RETURNING id`, [n, crypto.randomBytes(32)])).rows[0];
+  const a = await user('سعد');
+  const b = await user('فهد');
+  const [o] = (await pool.query(`INSERT INTO sary.outings (name, owner_id, status) VALUES ('طلعة', $1, 'active') RETURNING id`, [a.id])).rows;
+
+  assert.deepEqual(await migrate(pool), ['012_sary_trip_chat.sql', '013_sary_ptt_channels.sql'], 'only 012 (and 013) are new');
+  assert.deepEqual(await migrate(pool), [], 'idempotent');
+  await pool.query(fs.readFileSync(path.join(DIR, '012_sary_trip_chat.sql'), 'utf8'));
+
+  assert.equal((await pool.query(`SELECT chat_seq FROM sary.outings WHERE id = $1`, [o.id])).rows[0].chat_seq, '0');
+  assert.equal((await pool.query(`SELECT chat_push FROM sary.users WHERE id = $1`, [a.id])).rows[0].chat_push, true, 'existing people: notifications on');
+  for (const table of ['chat_messages', 'chat_reads']) {
+    const { rows } = await pool.query(`SELECT relrowsecurity FROM pg_class WHERE oid = ('sary.' || $1)::regclass`, [table]);
+    assert.equal(rows[0].relrowsecurity, true, `${table}: RLS on`);
+  }
+  const dm = [a.id, b.id].sort().join(':');
+  const ins = (seq, conv, sender, recipient, extra = {}) =>
+    pool.query(
+      `INSERT INTO sary.chat_messages (outing_id, seq, conv, sender_id, recipient_id, client_id, kind, body) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [o.id, seq, conv, sender, recipient, extra.cid || `c${seq}`, extra.kind || 'text', extra.body ?? 'هلا'],
+    );
+  await ins(1, 'group', a.id, null);
+  await ins(2, dm, a.id, b.id);
+  await ins(3, 'group', b.id, null);
+  const bad = (p) => assert.rejects(p);
+  await bad(ins(1, 'group', a.id, null, { cid: 'dup-seq' }));
+  await bad(ins(4, 'group', a.id, null, { cid: 'c1' }));
+  await bad(ins(5, 'group', a.id, b.id));
+  await bad(ins(6, dm, a.id, null));
+  await bad(ins(7, 'group', a.id, null, { kind: 'photo' }));
+  await bad(ins(8, 'group', a.id, null, { body: 'x'.repeat(1001) }));
+  await pool.query(`INSERT INTO sary.chat_reads (outing_id, user_id, conv, last_seq) VALUES ($1, $2, 'group', 3)`, [o.id, b.id]);
+  await pool.query(`DELETE FROM sary.users WHERE id = $1`, [b.id]);
+  const left = (await pool.query(`SELECT seq FROM sary.chat_messages ORDER BY seq`)).rows.map((r) => Number(r.seq));
+  assert.deepEqual(left, [1], 'their messages and the DMs to them go with the identity');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.chat_reads')).rows[0].n, 0);
+  await pool.query(`DELETE FROM sary.outings WHERE id = $1`, [o.id]);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM sary.chat_messages')).rows[0].n, 0, 'cascades with the outing');
+});
+
+test('013 on a database at 012 (with a live trip): only 013 is new, RLS on, private channels cascade with the trip and the identity', { skip, timeout: 60_000 }, async (t) => {
   const pool = createPool(await isolatedDb(URL_));
   t.after(() => pool.end());
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');

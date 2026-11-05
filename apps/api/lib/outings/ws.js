@@ -18,6 +18,10 @@
  *     convoy_updated · plan_updated · checklist_updated   (see lib/outings/features.js)
  *   ← member_silent · member_resumed · member_going_offline   (see lib/outings/silence.js)
  *   ← media_state { state }   («قناة الطلعة», state or null — see lib/outings/media.js)
+ *   → chat_message { id, with, client_id, kind, text?, point? }  ← chat_ack { id, ok, message | reason }
+ *   → chat_read { with, seq }   → chat_typing { with, on }
+ *   ← chat_message · chat_read · chat_typing · chat_deleted   («المحادثات», see lib/outings/chat.js;
+ *     HTTP fallback: GET/POST /api/outings/:id/chat…)
  *   (older builds' voice clips go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  *
  * Live push-to-talk «قناة الطلعة» (lib/outings/ptt.js): ptt_join / ptt_leave /
@@ -155,6 +159,12 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
         if (ptt && msg.type.startsWith('ptt_')) return void (await ptt.handle(conn, msg));
+        /* «المحادثات»: membership is checked again inside, on every frame. */
+        if ((msg.type === 'chat_message' || msg.type === 'chat_read' || msg.type === 'chat_typing') && service.chatSocketFrame) {
+          const out = await service.chatSocketFrame(conn.user, conn.outingId, msg);
+          if (out) reply(out);
+          return;
+        }
         if (msg.type === 'note') {
           try {
             const r = await service.setNote(conn.user, conn.outingId, msg.text);

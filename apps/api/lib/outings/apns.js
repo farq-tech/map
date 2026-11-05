@@ -47,7 +47,7 @@ const APNS_ORIGINS = Object.freeze({
   sandbox: 'https://api.sandbox.push.apple.com',
 });
 const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent']);
-const ACTIVE = new Set(['stuck_reply', 'ptt_channel_invite']);
+const ACTIVE = new Set(['stuck_reply', 'chat_message', 'ptt_channel_invite']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;
 const BUNDLE_RE = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
@@ -149,8 +149,9 @@ function apnsRequestFor(payload = {}, outingId, { now = Date.now(), bundleId } =
     type,
     outing_id: outingId,
     ...(payload.channel_id ? { channel_id: String(payload.channel_id) } : {}),
-    url: `/outings/${outingId}`,
+    url: payload.url || `/outings/${outingId}`,
     at: new Date(now).toISOString(),
+    ...(payload.extra && typeof payload.extra === 'object' ? payload.extra : {}),
   });
   const headers = {
     'apns-push-type': 'alert',
@@ -371,8 +372,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
          WHERE m.outing_id = $1 AND m.status = 'active' AND ($4::boolean OR o.status <> 'ended')
            AND t.bundle_id = $3
            AND ($2::uuid IS NULL OR t.user_id <> $2::uuid)
-           AND ($5::uuid IS NULL OR t.user_id = $5::uuid)`,
-        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null],
+           AND ($5::uuid IS NULL OR t.user_id = $5::uuid)
+           AND NOT (t.user_id = ANY($6::uuid[]))`,
+        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : []],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {

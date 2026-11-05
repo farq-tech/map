@@ -115,10 +115,14 @@ test('notifiers pass include_ended / to_user into the recipient query', async ()
   const pool = { query: async (text, params) => { calls.push({ text, params }); return { rows: [] }; } };
   const web = createPushNotifier({ pool, config: { enabled: true, publicKey: 'k', privateKey: 'p' }, sender: { send: async () => ({}) } });
   await web.notifyMembers('11111111-1111-4111-8111-111111111111', null, { type: 'stuck_reply', to_user: '22222222-2222-4222-8222-222222222222', include_ended: true });
-  assert.deepEqual(calls[0].params.slice(2), [true, '22222222-2222-4222-8222-222222222222']);
+  assert.deepEqual(calls[0].params.slice(2), [true, '22222222-2222-4222-8222-222222222222', []]);
   const apns = createApnsNotifier({ pool, config: { enabled: true, bundleId: 'sa.sary.albarq', key: {} }, sender: { send: async () => ({ status: 200 }) }, info: () => {} });
   await apns.notifyMembers('11111111-1111-4111-8111-111111111111', null, { type: 'x' });
-  assert.deepEqual(calls[1].params.slice(3), [false, null]);
+  assert.deepEqual(calls[1].params.slice(3), [false, null, []]);
+  /* «المحادثات»: members who turned chat notifications off are left out in SQL. */
+  await web.notifyMembers('11111111-1111-4111-8111-111111111111', null, { type: 'chat_message', except_users: ['33333333-3333-4333-8333-333333333333'] });
+  assert.deepEqual(calls[2].params.at(-1), ['33333333-3333-4333-8333-333333333333']);
+  assert.match(calls[2].text, /NOT \(s\.user_id = ANY\(\$5::uuid\[\]\)\)/);
 });
 
 /* ---------------- database ---------------- */
