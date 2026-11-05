@@ -384,18 +384,36 @@ enum PTTVoiceLevel: String, CaseIterable, Hashable {
     /// Speech loudness at the speaker, dBFS RMS.
     var targetDB: Float {
         switch self {
-        case .normal: -17
-        case .high: -14
-        case .veryHigh: -8   // +6 dB over «عالي»; the limiter takes the peaks
+        case .normal: -18
+        case .high: -15
+        /* ≈ the loudest clean speech under a −1 dBFS ceiling (crest ≈ 11 dB after the
+           compressor); louder would only be distortion. */
+        case .veryHigh: -13
+        }
+    }
+
+    /// Compressor before the limiter: takes the speech peaks down so the level can rise.
+    var compressorThresholdDB: Float {
+        switch self {
+        case .normal, .high: -9
+        case .veryHigh: -10
+        }
+    }
+
+    var compressorRatio: Float {
+        switch self {
+        case .normal: 2
+        case .high: 3
+        case .veryHigh: 4
         }
     }
 
     /// The most the receiver boosts a quiet sender (an older build that sends the raw mic).
     var maxGainDB: Float {
         switch self {
-        case .normal: 15
-        case .high: 20
-        case .veryHigh: 26
+        case .normal: 18
+        case .high: 24
+        case .veryHigh: 30
         }
     }
 
@@ -464,6 +482,38 @@ struct PTTAutoGain {
         }
         return x * gain
     }
+    /// Feedback form: `y` is what came out after `gain` (and anything after it, such as a
+    /// compressor), so the level is held at the far end of the chain.
+    mutating func track(output y: Float) {
+        power = Self.follow * power + (1 - Self.follow) * y * y
+        let rms = power.squareRoot()
+        if rms > gate * gain {
+            let want = min(maxGain, max(minGain, gain * target / rms))
+            gain += (want - gain) * (want < gain ? Self.down : Self.up)
+        }
+    }
+}
+
+/// Fast peak compressor (2 ms attack, 60 ms release): lowers the speech crest factor.
+struct PTTCompressor {
+    let threshold: Float
+    let ratio: Float
+    private var env: Float = 0
+    private static let rate = Float(PTTAudioFormat.sampleRate)
+    private static let attack = 1 - exp(-1 / (0.002 * rate))
+    private static let release = 1 - exp(-1 / (0.06 * rate))
+
+    init(thresholdDB: Float, ratio: Float) {
+        threshold = PTTLoudness.linear(thresholdDB)
+        self.ratio = ratio
+    }
+
+    mutating func process(_ x: Float) -> Float {
+        let a = abs(x)
+        env += (a - env) * (a > env ? Self.attack : Self.release)
+        guard env > threshold else { return x }
+        return x * pow(threshold / env, 1 - 1 / ratio)
+    }
 }
 
 /// Peak limiter at `PTTLoudness.ceiling`: instant attack (never over), 80 ms release.
@@ -499,15 +549,22 @@ struct PTTTxLevel {
 /// level (+3…+26 dB for a quiet sender) and a limiter so it never clips.
 struct PTTRxLevel {
     private var agc: PTTAutoGain
+    private var compressor: PTTCompressor
     private var limiter = PTTLimiter()
 
     init(_ level: PTTVoiceLevel = .default) {
         /* A sender on this build arrives at ≈ −16 dBFS: start at the gain that needs. */
         agc = PTTAutoGain(targetDB: level.targetDB, maxGainDB: level.maxGainDB,
                           startGainDB: max(0, level.targetDB - PTTLoudness.txTargetDB))
+        compressor = PTTCompressor(thresholdDB: level.compressorThresholdDB, ratio: level.compressorRatio)
     }
 
-    mutating func process(_ x: Float) -> Float { limiter.process(agc.process(x)) }
+    /// gain → compressor → limiter; the gain follows the compressor's output.
+    mutating func process(_ x: Float) -> Float {
+        let y = compressor.process(x * agc.gain)
+        agc.track(output: y)
+        return limiter.process(y)
+    }
 
     mutating func process(_ b: AVAudioPCMBuffer) {
         guard let d = b.floatChannelData?[0] else { return }
