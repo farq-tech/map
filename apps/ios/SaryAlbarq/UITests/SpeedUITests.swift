@@ -99,7 +99,9 @@ final class SpeedUITests: XCTestCase {
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
         tab.tap()
         let toggle = app.switches["speed.alert"]
-        for _ in 0..<8 where !toggle.isHittable { app.swipeUp() }
+        /* The «المزيد» list grew (auto-guidance, driving realism): bring the switch clear of the
+         * bottom edge, not just barely on screen, before tapping it. */
+        for _ in 0..<10 where !toggle.isHittable || toggle.frame.maxY > app.frame.maxY - 160 { app.swipeUp() }
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertEqual(toggle.value as? String, "0", "off by default")
         XCTAssertFalse(app.staticTexts["speed.limit"].exists)
