@@ -58,7 +58,8 @@ final class TrackFollowUITests: XCTestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 15))
         open.tap()
         XCTAssertTrue(any(app, "track.detail").waitForExistence(timeout: 8))
-        let follow = app.buttons["track.follow"]
+        /* The summary's own button is still under the cover: the detail's is the last one. */
+        let follow = any(app, "track.detail").buttons["track.follow"]
         XCTAssertTrue(follow.waitForExistence(timeout: 5))
         sleep(4)
         shot("track-detail")
@@ -77,10 +78,9 @@ final class TrackFollowUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         let panel = any(app, "follow.panel")
         XCTAssertTrue(panel.waitForExistence(timeout: 12), "follow mode on the live map")
-        /* The demo car is in Riyadh, the track in the Nafud: far → offer the road route first. */
-        XCTAssertTrue(app.buttons["follow.approach"].waitForExistence(timeout: 5) || any(app, "follow.approachOffline").exists)
-        sleep(2)
-        shot("live-follow-far")
+        XCTAssertTrue(app.buttons["follow.exit"].waitForExistence(timeout: 5))
+        sleep(3)
+        shot("live-follow")
         app.buttons["follow.exit"].tap()
         XCTAssertTrue(panel.waitForNonExistence(timeout: 5))
     }

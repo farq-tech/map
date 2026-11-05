@@ -125,6 +125,7 @@ struct TrackDetailView: View {
                 .padding(.bottom, theme.space(.s))
                 .background(GeometryReader { g in Color.clear.onAppear { cardHeight = g.size.height + 24 } })
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("track.detail")
     }
 }

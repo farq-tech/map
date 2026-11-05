@@ -70,6 +70,7 @@ struct TrackFollowScreen: View {
         }
         .onChange(of: location.lastFix) { _, f in model.ingest(f, nowMs: Date().timeIntervalSince1970 * 1000) }
         .onDisappear { location.stopWatchingForeground() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("follow.screen")
     }
 

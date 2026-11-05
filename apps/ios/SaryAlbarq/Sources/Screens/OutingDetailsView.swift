@@ -145,8 +145,8 @@ struct TripSummaryView: View {
     @State private var story: StoryFacts?
     /// Build 10: my trail as a precise, followable track (built once, off the body).
     @State private var track: FollowSubject?
-    @State private var trackDetail: FollowSubject?
-    @State private var follow: TrackFollowModel?
+    /// One cover for both (two `.fullScreenCover`s on one view do not both present).
+    @State private var trackCover: TrackCover?
 
     var body: some View {
         let p = theme.palette
@@ -200,7 +200,7 @@ struct TripSummaryView: View {
                 if let track {
                     SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
                         TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
-                                         open: { trackDetail = track }, follow: { follow = TrackFollowModel(track) })
+                                         open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
                             .padding(.vertical, theme.space(.s))
                     }
                 } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
@@ -242,23 +242,28 @@ struct TripSummaryView: View {
             guard track == nil, let name = subtitle else { return }
             track = await model.trackSubject(outingId, name: name)
         }
-        .fullScreenCover(item: $trackDetail) { s in
-            TrackDetailView(subject: s, close: { trackDetail = nil }) { chosen in
-                trackDetail = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { follow = TrackFollowModel(chosen) }
-            }
-            .saryPresented(appearance)
-        }
-        .fullScreenCover(item: $follow) { m in
-            TrackFollowScreen(model: m) { follow = nil }
-                .saryPresented(appearance)
-        }
         .sheet(item: Binding(get: { shareText.map(ShareText.init) }, set: { if $0 == nil { shareText = nil } })) { t in
             ShareSheet(items: [t.text]).presentationDetents([.medium, .large])
         }
         .fullScreenCover(item: Binding(get: { story.map(StorySheet.init) }, set: { if $0 == nil { story = nil } })) { st in
             StoryComposerView(facts: st.facts) { story = nil }
                 .saryPresented(appearance)
+        }
+        .background {
+            /* Its own host view: a second `.fullScreenCover` on the same view would never present. */
+            Color.clear.fullScreenCover(item: $trackCover) { c in
+                switch c {
+                case let .detail(s):
+                    TrackDetailView(subject: s, close: { trackCover = nil }) { chosen in
+                        trackCover = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { trackCover = TrackFollowModel(chosen).map(TrackCover.follow) }
+                    }
+                    .saryPresented(appearance)
+                case let .follow(m):
+                    TrackFollowScreen(model: m) { trackCover = nil }
+                        .saryPresented(appearance)
+                }
+            }
         }
     }
 
@@ -433,6 +438,18 @@ struct TrailSketch: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("رسم مسارك: \(SaryFormat.distance(meters: trail.recordedLengthM)) مسجّلة"))
+    }
+}
+
+private enum TrackCover: Identifiable {
+    case detail(FollowSubject)
+    case follow(TrackFollowModel)
+
+    var id: String {
+        switch self {
+        case let .detail(s): return "detail:\(s.id)"
+        case let .follow(m): return "follow:\(m.id)"
+        }
     }
 }
 
