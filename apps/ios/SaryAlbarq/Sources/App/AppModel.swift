@@ -105,6 +105,7 @@ final class AppModel: ObservableObject {
         monitor.start(queue: DispatchQueue(label: "sary.net"))
         /* Screens observe the model; the registrar's state is part of it. */
         pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        push.accountId = { [weak self] in self?.identity?.user.id }
         sessionSink = $session.sink { [activity] in activity.attach($0) }
         observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
             guard let id = n.object as? String else { return }
@@ -537,7 +538,13 @@ final class AppModel: ObservableObject {
     }
 
     func foreground(_ active: Bool) {
+        /* Only a real change. The scene can report .active again without having left the
+         * screen (the system PushToTalk UI, a banner): each of those used to re-run the list
+         * load, the APNs registration (GET+POST /push/apns) and a socket restart. */
+        let changed = active != phoneActive
         phoneActive = active
+        guard changed else { return }
+        PTTDiagnosticsLog.shared.add("app", active ? "foreground" : "background")
         session?.foreground(active || CarPlayHub.active)
         if active {
             Task { await refresh() }
@@ -546,7 +553,9 @@ final class AppModel: ObservableObject {
     }
 
     /// The phone's own screen is up (SwiftUI scene phase).
-    private var phoneActive = true
+    /* Launched by iOS in the background (location, a pushtotalk push): not on screen yet, so the
+     * first .active is a real change. */
+    private var phoneActive = UIApplication.shared.applicationState != .background
 
     /// CARPLAY HOOK: the CarPlay screen showing the app counts as the app being open in
     /// front of you (the driver sees the live map there), so the session stays "visible"

@@ -673,6 +673,8 @@ private struct SettingsTab: View {
             SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على الميكروفون وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
                 SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
                               isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
+                SaryDivider()
+                PTTLinkRow(line: s.pttLink)
             }
             MediaEntryCard(center: MediaCenters.of(controller))
             SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
@@ -921,4 +923,42 @@ struct ShareSheet: UIViewControllerRepresentable {
     var items: [Any]
     func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - «قناة الطلعة» diagnostics
+
+/// The live link in one line, and «سجل القناة» to share with whoever is fixing it.
+private struct PTTLinkRow: View {
+    var line: String
+    @Environment(\.sary) private var theme
+    @State private var file: URL?
+
+    var body: some View {
+        HStack(spacing: theme.space(.m)) {
+            SaryRowIcon(systemImage: "antenna.radiowaves.left.and.right")
+            Text(line)
+                .saryText(.footnote)
+                .foregroundStyle(theme.palette.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("settings-ptt-link")
+            Button {
+                file = PTTDiagnosticsLog.shared.exportFile()
+            } label: {
+                Label("سجل القناة", systemImage: "square.and.arrow.up")
+                    .saryText(.footnote, weight: .medium)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("settings-ptt-log")
+        }
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .sheet(item: Binding(get: { file.map(ShareFile.init) }, set: { file = $0?.url })) { f in
+            ShareSheet(items: [f.url])
+        }
+    }
+
+    struct ShareFile: Identifiable {
+        let url: URL
+        var id: String { url.absoluteString }
+    }
 }
