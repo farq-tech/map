@@ -49,6 +49,8 @@ final class OutingWeather: ObservableObject {
         for s in [self.area, self.destination] {
             s.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         }
+        /* «واقعية القيادة»: the map's dust drifts with this area's real wind, and stops in rain. */
+        if tracksMap { self.area.$report.sink { DrivingWeather.update($0?.current ?? $0?.hours.first) }.store(in: &bag) }
     }
 
     deinit { loop?.cancel() }

@@ -87,7 +87,7 @@ enum LocalAccountData {
             NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
             /* Build 9: exploration and convoy-alert rules. */
             MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
-        ] + TrailPrefs.keys + SpeedPrefs.keys
+        ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {

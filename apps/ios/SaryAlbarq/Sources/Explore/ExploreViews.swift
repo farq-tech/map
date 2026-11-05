@@ -196,6 +196,7 @@ struct ExploreLayersSheet: View {
     @ObservedObject var controller: LiveOutingController
     @ObservedObject private var offline = OfflineMaps.shared
     @Environment(\.sary) private var theme
+    @AppStorage(DrivingRealismPrefs.osmKey) private var osmTracks = true
 
     var body: some View {
         let p = theme.palette
@@ -232,6 +233,11 @@ struct ExploreLayersSheet: View {
                     .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
                     .accessibilityIdentifier("layer.\(l.rawValue)")
                 }
+            }
+            SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap عبر Mapbox: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
+                SaryToggleRow(title: "مسارات البر (OSM)", subtitle: "طبعات الطرق الترابية مثل OsmAnd",
+                              systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", isOn: $osmTracks, id: "explore-osm-tracks")
+                    .padding(.horizontal, theme.space(.m))
             }
             SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
                 SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والكثبان",

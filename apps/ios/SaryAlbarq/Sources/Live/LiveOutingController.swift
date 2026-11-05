@@ -237,6 +237,7 @@ final class LiveOutingController: ObservableObject {
             if n.count == 2 { DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.ask(.point(LngLat(lng: n[1], lat: n[0]))) } }
         }
         if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
+        if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
