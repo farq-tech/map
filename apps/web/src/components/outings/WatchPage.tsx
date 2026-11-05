@@ -110,7 +110,7 @@ export default function WatchPage() {
 			{view.kind === "invalid" ? (
 				<section className="sary-o-card" data-testid="watch-invalid">
 					<h2>الرابط غير صالح أو انتهى</h2>
-					<p className="sary-o-note">اطلب من صاحب الطلعة أن يرسل لك الرابط من جديد.</p>
+					<p className="sary-o-note">اطلب من أمير الرحلة أن يرسل لك الرابط من جديد.</p>
 				</section>
 			) : null}
 
