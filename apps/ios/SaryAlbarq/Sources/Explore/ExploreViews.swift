@@ -157,6 +157,10 @@ struct ExploreReadout: View {
             .accessibilityHint(Text("اضغط للتبديل بين العشري والدرجات"))
             .accessibilityIdentifier("explore-coord-format")
             SaryIconButton(systemImage: SaryIcon.copy, label: "انسخ الإحداثية", id: "explore-copy", action: copy)
+            /* «طيران درون استكشافي» around the crosshair (exploration is never driving). */
+            SaryIconButton(systemImage: "rotate.3d", label: "طيران درون استكشافي", id: "explore-drone") {
+                if let c = r?.center { MapVisualsHub.shared.fly(to: c) }
+            }
             Button(action: save) {
                 Label("احفظ", systemImage: "star.fill").labelStyle(.titleAndIcon)
                     .saryText(.subhead, weight: .bold)
@@ -267,6 +271,7 @@ struct SavedPlacesSheet: View {
     @Environment(\.sary) private var theme
     @State private var share: ShareItem?
     @State private var deleting: SavedPlace?
+    @ObservedObject private var visuals = MapVisualsHub.shared
     @State private var realistic: RealisticScene?
 
     var body: some View {
@@ -326,6 +331,13 @@ struct SavedPlacesSheet: View {
             Menu {
                 Button { controller.showOnMap(place.position) } label: { Label("اعرضه على الخريطة", systemImage: "map") }
                 Button { controller.navigateToPlace(place) } label: { Label("ملاحة إليه", systemImage: SaryIcon.directions) }
+                Button {
+                    controller.modal = nil
+                    controller.sheetDetent = .peek
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { MapVisualsHub.shared.fly(to: place.position) }
+                } label: { Label(visuals.driving ? "الدرون متوقف أثناء القيادة" : "طيران درون استكشافي", systemImage: "rotate.3d") }
+                    .disabled(visuals.driving)
+                    .accessibilityIdentifier("places.drone")
                 Button { PlanClipboard.copy(CoordinateShare.copy(place.position, controller.coordFormat)); controller.toast("نُسخت الإحداثية") } label: {
                     Label("انسخ الإحداثية", systemImage: SaryIcon.copy)
                 }

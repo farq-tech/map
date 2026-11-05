@@ -259,6 +259,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var waterQuery: Cancelable?
         let navDrawer = NavMapDrawer()
         let exploreDrawer = ExploreMapDrawer()
+        /// «المؤثرات البصرية» (Sources/Map/Visuals): terrain, sun light, sky, glow, slope, drone flight.
+        let visuals = MapVisualsDirector()
         var layer: MapLayer = .satellite
         var terrain3D = false
         var onCenter: (MapCenterReading) -> Void = { _ in }
@@ -369,6 +371,8 @@ struct OutingMapboxView: UIViewRepresentable {
                opens the shared-waypoint composer. */
             installLongPress(map)
             navDrawer.attach(map)
+            visuals.attach(map, inputs: { [weak self] in self?.visualInputs() ?? MapVisualInputs() },
+                           takeCamera: { [weak self] in self?.keepGroup = false; self?.onUserGesture() })
         }
 
         func setWaypoints(_ list: [MapWaypoint]) {
@@ -403,6 +407,7 @@ struct OutingMapboxView: UIViewRepresentable {
             waterQuery?.cancel()
             tapInteraction?.cancel()
             cancelables.removeAll()
+            visuals.detach()
         }
 
         func setChrome(_ insets: UIEdgeInsets) {
@@ -474,7 +479,7 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         /// Terrain exaggeration: the outing map's usual 1.15, stronger in the 3D terrain view.
-        var terrainExaggeration: Double { terrain3D ? 1.6 : 1.15 }
+        var terrainExaggeration: Double { visuals.exaggeration(legacy: terrain3D ? 1.6 : 1.15) }
 
         /// Another base layer: load its (Arabic) style; `styleLoaded` puts every layer of ours back.
         func setLayer(_ l: MapLayer) {
@@ -522,7 +527,8 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func applyLight() {
-            guard styleReady, let map else { return }
+            /* With «السماء والإضاءة» on, the visuals pack sets the light from the real sun altitude. */
+            guard styleReady, let map, !visuals.ownsLight else { return }
             let at = lastCars.first(where: \.isMe)?.position ?? lastCars.first?.position
             /* Night mode (forced or after sunset) is the night light; otherwise the sun decides. */
             let preset: SunLight.Preset = theme.night ? .night : (at.map { SunLight.preset(Date(), lat: $0.lat, lng: $0.lng) } ?? .day)
@@ -1657,7 +1663,8 @@ enum ArabicBasemap {
 
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
-        guard let u = fileURL(layer), let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
+        let s = tune(raw)
         cache[layer] = s
         return s
     }
@@ -1669,8 +1676,19 @@ enum ArabicBasemap {
     }
 
     static func transform(_ style: String) -> String {
-        style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
-            .replacingOccurrences(of: "[\"get\",\"name_en\"]", with: "[\"coalesce\",[\"get\",\"name_ar\"],[\"get\",\"name\"]]")
+        tune(style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
+            .replacingOccurrences(of: "[\"get\",\"name_en\"]", with: "[\"coalesce\",[\"get\",\"name_ar\"],[\"get\",\"name\"]]"))
+    }
+
+    /// Standard Satellite, tuned for the desert (idempotent, also applied to a cached copy): a tile
+    /// still loading shows warm sand instead of Standard's near-white land; the imagery gets a touch of
+    /// contrast, a little less of the source's cyan-leaning saturation, and answers the scene light more
+    /// (emissive 0.3, so «المؤثرات البصرية»'s real-sun light grades it). Mapbox's own raster paint, no new data.
+    static func tune(_ style: String) -> String {
+        style.replacingOccurrences(of: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(20, 20%, 95%)\"",
+                                   with: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(28, 40%, 60%)\"")
+            .replacingOccurrences(of: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.5}",
+                                  with: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.3,\"raster-contrast\":0.18,\"raster-saturation\":-0.26}")
     }
 
     static func wrap(_ style: String) -> String {
@@ -1726,5 +1744,23 @@ private struct NoteTail: Shape {
         p.addLine(to: CGPoint(x: r.midX, y: r.maxY))
         p.closeSubpath()
         return p
+    }
+}
+
+// MARK: - «المؤثرات البصرية» inputs
+
+extension OutingMapboxView.Coordinator {
+    /// What the visuals pack reads from the live map (see `MapVisualsDirector`).
+    func visualInputs() -> MapVisualInputs {
+        let me = lastCars.first(where: \.isMe)
+        var routes: [[LngLat]] = []
+        if let f = trails.followed { routes.append(f.points) }
+        if exploreDrawer.last.active { routes += exploreDrawer.last.tracks.map(\.points) }
+        if let r = navLast.routes.first(where: \.selected) { routes.append(r.coordinates) }
+        if planDrawing.plan.route.count >= 2 { routes.append(planDrawing.plan.route) }
+        /* Same idea as LiveContextRule: guidance, drive mode, or clearly moving (> ~15 km/h). */
+        let driving = theme.drive || navDrawer.ownsCamera || (me?.speedMps ?? 0) > 4.2
+        return MapVisualInputs(me: me.map { recs[$0.id]?.shown ?? $0.position }, driving: driving, exploring: exploreDrawer.last.active,
+                               terrain3D: terrain3D, night: theme.night, layer: layer, chrome: chrome, routes: routes)
     }
 }

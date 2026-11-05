@@ -154,6 +154,7 @@ struct SettingsView: View {
                 SaryDivider()
                 SaryNavRow(title: "متقدم", detail: "سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
             }
+            VisualEffectsSection()
             SarySection {
                 SaryNavRow(title: "حول سَرى البارق", systemImage: "info.circle.fill", id: "settings.about") { open(.about) }
             }
