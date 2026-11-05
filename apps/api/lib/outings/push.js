@@ -156,8 +156,9 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
          JOIN sary.outings o ON o.id = m.outing_id
          WHERE m.outing_id = $1 AND m.status = 'active' AND ($3::boolean OR o.status <> 'ended')
            AND ($2::uuid IS NULL OR s.user_id <> $2::uuid)
-           AND ($4::uuid IS NULL OR s.user_id = $4::uuid)`,
-        [outingId, exceptUserId || null, payload.include_ended === true, payload.to_user || null],
+           AND ($4::uuid IS NULL OR s.user_id = $4::uuid)
+           AND NOT (s.user_id = ANY($5::uuid[]))`,
+        [outingId, exceptUserId || null, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : []],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {
@@ -175,8 +176,9 @@ function createPushNotifier({ pool, config = pushConfigFromEnv(), sender, viewer
         title: trimText(payload.title, 80),
         body: trimText(payload.body, 240),
         tag: payload.tag || `sary-${payload.type || 'event'}-${outingId}`,
-        url: `/outings/${outingId}`,
+        url: payload.url || `/outings/${outingId}`,
         at: new Date().toISOString(),
+        ...(payload.extra && typeof payload.extra === 'object' ? { extra: payload.extra } : {}),
       });
       const opts = { ttl: payload.ttl ?? 900, urgency: payload.urgency || 'normal' };
       const { dead, used } = await deliver(targets, body, opts, result);
@@ -352,6 +354,31 @@ function featurePayload(kind, { senderName, outingName, note, title, replyKind, 
   }
 }
 
+/**
+ * A trip-chat message → a push for members whose screen is off. Normal
+ * interruption level (sound, no Focus break-through). The sender is named the
+ * way the trip names them (the personal-invite name first). `extra.chat_with`
+ * tells the app which conversation to open: 'group' or the sender's id.
+ */
+function chatPushPayload(message, { senderName, outingName } = {}) {
+  const who = senderName || 'أحد أعضاء الطلعة';
+  const direct = Boolean(message?.recipient_id);
+  const title = direct ? `${who} (خاص)` : `${who}${outingName ? ` · ${outingName}` : ''}`;
+  let body = '';
+  if (message?.kind === 'location') body = message.point?.label ? `📍 ${trimText(message.point.label, 60)}` : '📍 شارك موقعًا على الخريطة';
+  else body = trimText(message?.text || '', 200);
+  return {
+    type: 'chat_message',
+    title: trimText(title, 80),
+    body: body || 'رسالة جديدة',
+    tag: `sary-chat-${message?.id || 'x'}`,
+    ttl: 6 * 3600,
+    urgency: 'high',
+    url: `/outings/${message?.outing_id}?chat=${direct ? message.sender_id : 'group'}`,
+    extra: { chat_with: direct ? message.sender_id : 'group', message_id: message?.id || null, seq: message?.seq ?? null },
+  };
+}
+
 /** Pushes to the people holding a watch link. Web push only (the watcher has no app). */
 function watcherPayload(kind, { ownerName } = {}) {
   const who = ownerName || 'أمير الرحلة';
@@ -361,4 +388,4 @@ function watcherPayload(kind, { ownerName } = {}) {
   return null;
 }
 
-module.exports = { featurePayload, watcherPayload, createPushNotifier, createWebPushSender, pushConfigFromEnv, parseSubscription, pushPayloadFor, PUSH_HOSTS, MAX_PER_USER };
+module.exports = { chatPushPayload, featurePayload, watcherPayload, createPushNotifier, createWebPushSender, pushConfigFromEnv, parseSubscription, pushPayloadFor, PUSH_HOSTS, MAX_PER_USER };

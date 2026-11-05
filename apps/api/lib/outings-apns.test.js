@@ -269,7 +269,7 @@ test('notifier: same recipients as web push, gone tokens deleted, failures count
   const select = pool.calls.find((c) => /^SELECT t\.id/.test(c.text));
   assert.match(select.text, /m\.status = 'active' AND \(\$4::boolean OR o\.status <> 'ended'\)/);
   assert.match(select.text, /t\.user_id <> \$2::uuid/, 'never the sender');
-  assert.deepEqual(select.params, [OUTING, SENDER, 'sa.sary.albarq', false, null]);
+  assert.deepEqual(select.params, [OUTING, SENDER, 'sa.sary.albarq', false, null, []]);
   const del = pool.calls.find((c) => /^DELETE FROM sary\.apns_tokens WHERE id = ANY/.test(c.text));
   assert.deepEqual(del.params[0].sort(), ['r2', 'r3']);
   const upd = pool.calls.find((c) => /^UPDATE sary\.apns_tokens SET last_used_at/.test(c.text));
