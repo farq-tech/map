@@ -75,7 +75,7 @@ test('floor: grant to the first, deny «busy» to the second, release on stop', 
   const b = conn('B');
   await ptt.handle(a, { type: 'ptt_join' });
   await ptt.handle(b, { type: 'ptt_join' });
-  assert.deepEqual(last(a, 'ptt_state'), { type: 'ptt_state', talker: null, max_ms: 400 });
+  assert.deepEqual(last(a, 'ptt_state'), { type: 'ptt_state', talker: null, max_ms: 400, channel: '1' }, 'an old client is on «تردد ١» (the field is additive)');
 
   await ptt.handle(a, { type: 'ptt_start', id: 1 });
   const g = last(a, 'ptt_grant');
@@ -448,7 +448,7 @@ test('ptt end to end: token routes, live relay over the outing socket, pushtotal
   for (const l of [la, lb, le]) {
     await l.next((m) => m.type === 'ready');
     l.send({ type: 'ptt_join' });
-    assert.deepEqual(await l.next((m) => m.type === 'ptt_state'), { type: 'ptt_state', talker: null, max_ms: 5000 });
+    assert.deepEqual(await l.next((m) => m.type === 'ptt_state'), { type: 'ptt_state', talker: null, max_ms: 5000, channel: '1' });
   }
   le.send({ type: 'presence', away: true });
   await sleep(100);

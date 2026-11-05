@@ -20,6 +20,8 @@ const { createPttRelay } = require('./outings/ptt');
 
 const OUTING = '47ba65dc-0000-4000-8000-000000000001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* When each text message arrived (performance.now()), without changing its shape. */
+const arrivedAt = new WeakMap();
 
 async function until(pred, ms = 3000, what = 'condition') {
   const end = Date.now() + ms;
@@ -30,22 +32,28 @@ async function until(pred, ms = 3000, what = 'condition') {
   throw new Error(`timeout waiting for ${what}`);
 }
 
-async function lab({ authDelayMs = 0, authTimeoutMs = 300 } = {}) {
-  const users = { 'tok-a': { id: 'ua', display_name: 'فهد' }, 'tok-b': { id: 'ub', display_name: 'سعد' } };
+async function lab({ authDelayMs = 0, authTimeoutMs = 300, channels } = {}) {
+  const users = {
+    'tok-a': { id: 'ua', display_name: 'فهد' },
+    'tok-b': { id: 'ub', display_name: 'سعد' },
+    'tok-c': { id: 'uc', display_name: 'نورة' },
+    'tok-d': { id: 'ud', display_name: 'ريم' },
+  };
   const service = {
     async authenticate(token) {
       if (authDelayMs) await sleep(authDelayMs);
       return users[token] || null;
     },
     async membership(outingId, userId) {
-      return outingId === OUTING && ['ua', 'ub'].includes(userId) ? { status: 'active', outing_status: 'active', role: 'member' } : null;
+      if (outingId !== OUTING || !['ua', 'ub', 'uc', 'ud'].includes(userId)) return null;
+      return { status: 'active', outing_status: 'active', role: userId === 'ua' ? 'owner' : 'member' };
     },
     async getOuting(user) {
       return { outing: { id: OUTING, status: 'active' }, me: { user_id: user.id }, members: [], positions: [] };
     },
   };
   const hub = createHub();
-  const ptt = createPttRelay({ hub, service, log: () => {} });
+  const ptt = createPttRelay({ hub, service, ...(channels ? { channels } : {}), log: () => {} });
   const server = http.createServer();
   const socket = attachOutingsSocket(server, { service, hub, ptt, authTimeoutMs, heartbeatMs: 60_000 });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -57,7 +65,12 @@ async function lab({ authDelayMs = 0, authTimeoutMs = 300 } = {}) {
     const bin = [];
     let closeCode = null;
     let closeReason = null;
-    ws.on('message', (d, isBinary) => (isBinary ? bin.push(Buffer.from(d)) : inbox.push(JSON.parse(String(d)))));
+    ws.on('message', (d, isBinary) => {
+      if (isBinary) return bin.push(Buffer.from(d));
+      const m = JSON.parse(String(d));
+      arrivedAt.set(m, performance.now());
+      inbox.push(m);
+    });
     ws.on('close', (c, r) => {
       closeCode = c;
       closeReason = String(r);
@@ -65,14 +78,21 @@ async function lab({ authDelayMs = 0, authTimeoutMs = 300 } = {}) {
     const opened = new Promise((r) => ws.on('open', r)).then(() => {
       if (auth) ws.send(JSON.stringify({ type: 'auth', token, outing_id: OUTING }));
     });
-    const next = async (type, ms = 3000) => {
-      await until(() => inbox.some((m) => m.type === type), ms, type);
-      return inbox.splice(inbox.findIndex((m) => m.type === type), 1)[0];
+    const next = async (type, ms = 3000, pred = () => true) => {
+      const hit = (m) => m.type === type && pred(m);
+      await until(() => inbox.some(hit), ms, type);
+      return inbox.splice(inbox.findIndex(hit), 1)[0];
     };
+    /* When each binary frame arrived (performance.now()), for the latency budget. */
+    const binAt = [];
+    ws.on('message', (_d, isBinary) => {
+      if (isBinary) binAt.push(performance.now());
+    });
     return {
       ws,
       inbox,
       bin,
+      binAt,
       opened,
       next,
       send: (m) => ws.send(JSON.stringify(m)),
@@ -226,6 +246,230 @@ test('a phone that gives up during auth is never seated in the room', async () =
     const st = L.socket.stats();
     assert.equal(st.ready, 0);
     assert.ok(st.closes['1006'] >= 1);
+  } finally {
+    await L.close();
+  }
+});
+
+/* ---------------- «ترددات»: channels over the same two-phone lab ---------------- */
+
+const PRIVATE = '9b2f0c1e-7a6d-4c3b-8e2a-5d4c3b2a1f00';
+
+/** The registry's contract (lib/outings/ptt-channels.js), in memory: one private channel. */
+function fakeChannels(members) {
+  let relay = null;
+  const pub = ['1', '2', '3', '4', '5'];
+  return {
+    members,
+    async load() {},
+    loaded: () => true,
+    isAllowed: (_o, id, u) => pub.includes(id) || (id === PRIVATE && members.has(u)),
+    view: (_o, u, _m, live) => [
+      ...pub.map((id) => ({ id, kind: 'public', name: `تردد ${id}`, ...live(id) })),
+      ...(members.has(u) ? [{ id: PRIVATE, kind: 'private', name: 'الأمامية', members: [...members], ...live(PRIVATE) }] : []),
+    ],
+    setRelay(r) {
+      relay = r;
+    },
+    get relay() {
+      return relay;
+    },
+  };
+}
+
+async function seated(L, tokens) {
+  const ps = tokens.map((t) => L.phone(t));
+  await Promise.all(ps.map((p) => p.opened));
+  for (const p of ps) await p.next('ready');
+  return ps;
+}
+
+test('channels: two talkers at once on «تردد ١» and «تردد ٣», each heard only on their own channel; an old phone stays on ١', async () => {
+  const L = await lab();
+  try {
+    const [a, b, c, d] = await seated(L, ['tok-a', 'tok-b', 'tok-c', 'tok-d']);
+    a.send({ type: 'ptt_join', channel: '1', channels: true });
+    b.send({ type: 'ptt_join' }); // build 9–12: no channel, no `channels` flag
+    c.send({ type: 'ptt_join', channel: '3', channels: true });
+    d.send({ type: 'ptt_join', channel: '3', channels: true });
+    assert.equal((await a.next('ptt_state')).channel, '1');
+    assert.equal((await b.next('ptt_state')).channel, '1', 'an old client lands on «تردد ١»');
+    assert.equal((await c.next('ptt_state')).channel, '3');
+    await d.next('ptt_state');
+    const list = await c.next('ptt_channels', 3000, (m) => m.channels.find((x) => x.id === '3').listeners.length === 2);
+    assert.deepEqual(list.channels.map((x) => x.id), ['1', '2', '3', '4', '5']);
+    assert.equal(list.current, '3');
+
+    /* Both floors at once: one talker per channel, not per trip. */
+    a.send({ type: 'ptt_start', id: 1 });
+    c.send({ type: 'ptt_start', id: 2 });
+    const ga = await a.next('ptt_grant');
+    const gc = await c.next('ptt_grant');
+    assert.equal(ga.channel, '1');
+    assert.equal(gc.channel, '3');
+    assert.notEqual(ga.burst, gc.burst, 'bursts stay unique across the trip');
+    assert.equal((await b.next('ptt_talker')).user_id, 'ua');
+    assert.equal((await d.next('ptt_talker')).user_id, 'uc');
+    d.send({ type: 'ptt_start', id: 3 });
+    assert.deepEqual((await d.next('ptt_deny')).talker_id, 'uc', '«تردد ٣» is busy with C');
+
+    const fa = [0, 1, 2, 3].map((i) => frame(ga.burst, i));
+    const fc = [0, 1, 2].map((i) => frame(gc.burst, i, 70));
+    for (const f of fa) a.ws.send(f);
+    for (const f of fc) c.ws.send(f);
+    await until(() => b.bin.length === 4 && d.bin.length === 3, 3000, 'both channels relayed');
+    await sleep(60);
+    assert.deepEqual(b.bin, fa, '«تردد ١» hears A only');
+    assert.deepEqual(d.bin, fc, '«تردد ٣» hears C only');
+    assert.equal(a.bin.length + c.bin.length, 0);
+    assert.equal(b.inbox.some((m) => m.type === 'ptt_channels'), false, 'old clients never get channel lists');
+    assert.equal(b.inbox.some((m) => m.type === 'ptt_talker' && m.user_id === 'uc'), false);
+    a.send({ type: 'ptt_stop' });
+    c.send({ type: 'ptt_stop' });
+    assert.equal((await b.next('ptt_idle')).channel, '1');
+    assert.equal((await d.next('ptt_idle')).channel, '3');
+    for (const p of [a, b, c, d]) p.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('channels: switching mid-sentence ends the old one quietly and tunes into the new one from its start', async () => {
+  const L = await lab();
+  try {
+    const [a, b, c] = await seated(L, ['tok-a', 'tok-b', 'tok-c']);
+    a.send({ type: 'ptt_join', channel: '2', channels: true });
+    b.send({ type: 'ptt_join', channel: '1', channels: true });
+    c.send({ type: 'ptt_join', channel: '1', channels: true });
+    for (const p of [a, b, c]) await p.next('ptt_state');
+    a.send({ type: 'ptt_start', id: 1 });
+    c.send({ type: 'ptt_start', id: 1 });
+    const ga = await a.next('ptt_grant');
+    const gc = await c.next('ptt_grant');
+    const fa = [0, 1, 2].map((i) => frame(ga.burst, i));
+    for (const f of fa) a.ws.send(f);
+    c.ws.send(frame(gc.burst, 0));
+    await until(() => b.bin.length === 1);
+
+    const t0 = performance.now();
+    b.send({ type: 'ptt_join_channel', channel: '2' });
+    const idle = await b.next('ptt_idle');
+    const idleMs = arrivedAt.get(idle) - t0;
+    assert.deepEqual([idle.user_id, idle.reason, idle.channel], ['uc', 'switched', '1'], 'what we heard on ١ ends for us only');
+    const st = await b.next('ptt_state');
+    assert.equal(st.channel, '2');
+    assert.equal(st.talker.user_id, 'ua');
+    await until(() => b.bin.length === 4, 2000, 'catch-up on ٢');
+    const switchMs = b.binAt[1] - t0;
+    test.diagnostic?.(`switch → old channel silenced: ${idleMs.toFixed(1)} ms`);
+    assert.deepEqual(b.bin.slice(1), fa, 'the sentence on ٢ from its start');
+    assert.ok(switchMs < 150, `switch → audio of the new channel in ${switchMs.toFixed(1)} ms`);
+    test.diagnostic?.(`switch → first frame of the new channel: ${switchMs.toFixed(1)} ms`);
+    assert.equal(L.ptt.state(OUTING, '1').user_id, 'uc', 'C still talks on ١');
+
+    /* The talker switching away gives up the floor. */
+    c.send({ type: 'ptt_join_channel', channel: '4' });
+    assert.equal((await c.next('ptt_idle')).reason, 'left');
+    assert.equal(L.ptt.state(OUTING, '1'), null);
+    for (const p of [a, b, c]) p.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('private channel: only invited sockets join, hear or talk; a removed member is off the air at once; closing kicks everyone', async () => {
+  const reg = fakeChannels(new Set(['ua', 'ub']));
+  const L = await lab({ channels: reg });
+  try {
+    const [a, b, c, d] = await seated(L, ['tok-a', 'tok-b', 'tok-c', 'tok-d']);
+    a.send({ type: 'ptt_join', channel: PRIVATE, channels: true });
+    b.send({ type: 'ptt_join', channel: PRIVATE, channels: true });
+    c.send({ type: 'ptt_join', channel: PRIVATE, channels: true }); // not invited
+    d.send({ type: 'ptt_join' }); // old phone
+    assert.equal((await a.next('ptt_state')).channel, PRIVATE);
+    assert.equal((await b.next('ptt_state')).channel, PRIVATE);
+    assert.deepEqual(await c.next('ptt_channel_kicked'), { type: 'ptt_channel_kicked', channel: PRIVATE, reason: 'not_invited' });
+    assert.equal((await c.next('ptt_state')).channel, '1', 'refused → «تردد ١»');
+    c.send({ type: 'ptt_join_channel', channel: PRIVATE });
+    await c.next('ptt_channel_kicked');
+    await d.next('ptt_state');
+    const cl = await c.next('ptt_channels');
+    assert.equal(cl.channels.some((x) => x.id === PRIVATE), false, 'C does not even see it');
+
+    a.send({ type: 'ptt_start', id: 1 });
+    const g = await a.next('ptt_grant');
+    assert.equal(g.channel, PRIVATE);
+    await b.next('ptt_talker');
+    const fs = [0, 1, 2, 3, 4].map((i) => frame(g.burst, i));
+    for (const f of fs.slice(0, 3)) a.ws.send(f);
+    await until(() => b.bin.length === 3);
+    await sleep(80);
+    assert.equal(c.bin.length + d.bin.length, 0, 'nothing reaches anyone not invited');
+    assert.equal(c.inbox.concat(d.inbox).some((m) => m.type === 'ptt_talker'), false, 'not even who talks');
+
+    /* The leader removes B mid-sentence: B is moved to ١ before the next frame. */
+    reg.members.delete('ub');
+    reg.relay.kick(OUTING, PRIVATE, new Set(['ub']), 'removed');
+    assert.equal((await b.next('ptt_channel_kicked')).reason, 'removed');
+    assert.equal((await b.next('ptt_state')).channel, '1');
+    for (const f of fs.slice(3)) a.ws.send(f);
+    await sleep(120);
+    assert.equal(b.bin.length, 3, 'not one more frame after the removal');
+
+    /* B, kicked, cannot sneak back. */
+    b.send({ type: 'ptt_join_channel', channel: PRIVATE });
+    await b.next('ptt_channel_kicked');
+
+    /* Close: the talker is cut and moved too. */
+    reg.members.clear();
+    reg.relay.kick(OUTING, PRIVATE, null, 'closed');
+    assert.equal((await a.next('ptt_idle', 3000, (m) => m.channel === PRIVATE)).reason, 'closed');
+    assert.equal((await a.next('ptt_channel_kicked')).reason, 'closed');
+    assert.equal(L.ptt.state(OUTING, PRIVATE), null);
+    for (const p of [a, b, c, d]) p.ws.close();
+  } finally {
+    await L.close();
+  }
+});
+
+test('latency budget: the first audio frame reaches the listener in ≤ 10 ms (p50) / 50 ms (p95) of the talker sending it (loopback)', async () => {
+  const L = await lab();
+  try {
+    const [a, b] = await seated(L, ['tok-a', 'tok-b']);
+    a.send({ type: 'ptt_join', channel: '3', channels: true });
+    b.send({ type: 'ptt_join', channel: '3', channels: true });
+    await a.next('ptt_state');
+    await b.next('ptt_state');
+    const samples = { grant: [], talker: [], first: [], frame: [] };
+    for (let round = 0; round < 12; round++) { // ≤ 40 text frames per 10 s per socket (ws.js)
+      const t0 = performance.now();
+      a.send({ type: 'ptt_start', id: round });
+      const g = await a.next('ptt_grant');
+      samples.grant.push(arrivedAt.get(g) - t0);
+      samples.talker.push(arrivedAt.get(await b.next('ptt_talker')) - t0);
+      const n0 = b.bin.length;
+      const sentAt = [];
+      for (let i = 0; i < 5; i++) {
+        sentAt.push(performance.now());
+        a.ws.send(frame(g.burst, i));
+        await sleep(30);
+      }
+      await until(() => b.bin.length === n0 + 5);
+      samples.first.push(b.binAt[n0] - sentAt[0]);
+      for (let i = 0; i < 5; i++) samples.frame.push(b.binAt[n0 + i] - sentAt[i]);
+      a.send({ type: 'ptt_stop' });
+      await b.next('ptt_idle');
+    }
+    const pct = (xs, p) => [...xs].sort((x, y) => x - y)[Math.min(xs.length - 1, Math.floor(xs.length * p))];
+    const line = Object.entries(samples).map(([k, xs]) => `${k} p50=${pct(xs, 0.5).toFixed(2)} p95=${pct(xs, 0.95).toFixed(2)} ms`).join(' · ');
+    test.diagnostic?.(line);
+    console.log(`[ptt latency] ${line}`);
+    /* The server's share of the ≤ 150 ms press-to-ear budget (the phone's jitter buffer + squelch take the rest). */
+    assert.ok(pct(samples.first, 0.5) < 10, `first frame p50 ${pct(samples.first, 0.5).toFixed(2)} ms`);
+    assert.ok(pct(samples.first, 0.95) < 50, `first frame p95 ${pct(samples.first, 0.95).toFixed(2)} ms`);
+    assert.ok(pct(samples.talker, 0.95) < 50, 'listener learns who is on air within 50 ms of the press');
+    a.ws.close();
+    b.ws.close();
   } finally {
     await L.close();
   }
