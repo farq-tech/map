@@ -54,6 +54,8 @@ struct PointCard: View {
     @State private var copied = ""
     @State private var share: ShareItem?
     @ObservedObject private var visuals = MapVisualsHub.shared
+    /// «الوضع الواقعي» on this point (Apple 3D imagery).
+    @State private var realistic: RealisticScene?
 
     private var point: LngLat {
         switch subject {
@@ -77,6 +79,7 @@ struct PointCard: View {
         }
         .animation(theme.animation(.snappy), value: toast)
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
+        .realisticCover($realistic)
     }
 
     @ViewBuilder
@@ -156,6 +159,7 @@ struct PointCard: View {
             out.append(Extra(id: "point.drone", title: visuals.driving ? "الدرون متوقف أثناء القيادة" : "طيران درون استكشافي", icon: "rotate.3d",
                              disabled: visuals.driving) { f(pt) })
         }
+        out.append(Extra(id: "point.realistic", title: "الوضع الواقعي", icon: RealisticEntryButton.icon) { realistic = .point(pt, name: name) })
         return out
     }
 

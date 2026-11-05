@@ -142,6 +142,7 @@ struct SettingsView: View {
                 SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
                               isOn: $radioSounds, id: "settings.radioSounds")
             }
+            IntroSettingsSection()
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
             }
@@ -470,6 +471,8 @@ struct AboutView: View {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")
                     Text("محطات الوقود من OpenStreetMap (ODbL).")
                     Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
+                    Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
+                    HiResLicenseNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

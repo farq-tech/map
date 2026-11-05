@@ -41,6 +41,8 @@ struct SaryAvatar: View {
     var photo: UIImage? = nil
     var presence: ParticipantPresence = .live
     var size: CGFloat = 44
+    /// A small badge of their car (CarIcon) in their colour, at the bottom corner.
+    var car: Bool = false
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -70,6 +72,14 @@ struct SaryAvatar: View {
             Circle()
                 .strokeBorder(presence.isLive ? carColor : theme.palette.stale,
                               style: StrokeStyle(lineWidth: 2.5, dash: style.dashed ? [4, 3] : []))
+        }
+        .overlay(alignment: .bottomLeading) {
+            if car, let img = CarIcon.image(color) {
+                Image(uiImage: img).resizable().scaledToFit()
+                    .frame(height: size * 0.62)
+                    .saturation(style.saturation)
+                    .offset(x: -size * 0.14, y: size * 0.12)
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             if style.paused {
@@ -252,7 +262,7 @@ struct SaryParticipantRow: View {
             stack {
                 HStack(spacing: theme.space(.m)) {
                     SaryAvatar(name: participant.name, color: participant.color, photo: participant.photo,
-                               presence: participant.presence, size: theme.drive ? 48 : 40)
+                               presence: participant.presence, size: theme.drive ? 48 : 40, car: true)
                     let ax = typeSize.isAccessibilitySize
                     let line = ax ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(spacing: 6))
                     VStack(alignment: .leading, spacing: 3) {
@@ -263,8 +273,16 @@ struct SaryParticipantRow: View {
                                 .lineLimit(ax ? 3 : 1)
                             SaryRoleChip(role: participant.role)
                         }
+                        if let nick = participant.nickname {
+                            Text(nick).saryText(.caption).foregroundStyle(theme.palette.textTertiary).lineLimit(1)
+                                .accessibilityIdentifier("participant.nickname")
+                        }
                         line {
                             if let s = participant.silentSince { SarySilentBadge(since: s, now: now) }
+                            else if participant.neverShared {
+                                Text(SaryParticipantRow.neverSharedText).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+                                    .accessibilityIdentifier("participant.neverShared")
+                            }
                             else { SaryPresenceBadge(presence: participant.presence, now: now) }
                             if participant.viaNearby { SaryNearbyMark() }
                             if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
@@ -307,11 +325,15 @@ struct SaryParticipantRow: View {
         .accessibilityHint(Text("اضغط لعرض بطاقة المشارك"))
     }
 
+    static let neverSharedText = "ما شارك موقعه"
+
     private var accessibility: String {
         var parts = [participant.name]
+        if let n = participant.nickname { parts.append(n) }
         if let r = participant.roleLabel { parts.append(r) }
         if let n = SaryCarColors.name(for: participant.color) { parts.append("السيارة \(n)") }
-        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) } ?? SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
+        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) }
+                     ?? (participant.neverShared ? Self.neverSharedText : SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now)))
         if participant.viaNearby { parts.append(SaryNearbyMark.text) }
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }

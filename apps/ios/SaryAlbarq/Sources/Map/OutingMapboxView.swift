@@ -147,6 +147,8 @@ struct OutingMapboxView: UIViewRepresentable {
     /// The map centre (the exploration crosshair), its terrain elevation in metres when the
     /// DEM tiles there are loaded (nil otherwise — never guessed) and the zoom. Throttled.
     var onCenter: (MapCenterReading) -> Void = { _ in }
+    /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
+    var hiRes = HiResRequest.off
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -201,6 +203,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setLabels(labels)
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
+        HiResImagery.of(map).update(hiRes)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -305,6 +308,8 @@ struct OutingMapboxView: UIViewRepresentable {
             var anchor: LngLat
             let matcher = RoadSnap.Matcher()
             var model = false
+            /// The vehicle layer is the 2D icon (symbol), not the 3D model.
+            var icon = false
             var layersReady = false
             /// Name chip and note bubble, drawn in the declutter overlay (see `ChipLayout`).
             var chipBox: HostBox<MapChip>?
@@ -460,6 +465,17 @@ struct OutingMapboxView: UIViewRepresentable {
                 r.model = false
             }
             sync(lastCars)
+            #if DEBUG
+            /* Car previews: `-SaryCarCam "zoom,pitch,bearing"` holds the camera on the group. */
+            if let c = CarCam.parse(ProcessInfo.processInfo.arguments) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    guard let self, let b = GroupFraming.bounds(self.lastCars.map(\.position)) else { return }
+                    self.keepGroup = false
+                    let at = c.at ?? LngLat(lng: (b.west + b.east) / 2, lat: (b.south + b.north) / 2)
+                    map.camera.ease(to: CameraOptions(center: at.coordinate, zoom: c.zoom, bearing: c.bearing, pitch: c.pitch), duration: 0)
+                }
+            }
+            #endif
         }
 
         /// Terrain exaggeration: the outing map's usual 1.15, stronger in the 3D terrain view.
@@ -770,7 +786,20 @@ struct OutingMapboxView: UIViewRepresentable {
                         "circle-pitch-alignment": "map", "circle-emissive-strength": 1,
                     ] as [String: Any],
                 ], layerPosition: nil)
-                if wantModel, ensureModel(r.item.color, on: m) {
+                if wantModel, Vehicle.marker == .icon, ensureIcon(r.item.color, on: m) {
+                    /* The 2D car (CarIcon): turned by heading on the map, upright to the screen (legible at nav pitch), ~constant size. */
+                    try? m.addLayer(with: [
+                        "id": ids.layer, "type": "symbol", "source": ids.source,
+                        "layout": [
+                            "icon-image": CarIcon.imageId(r.item.color), "icon-size": CarIcon.sizeExpression,
+                            "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "viewport",
+                            "icon-allow-overlap": true, "icon-ignore-placement": true,
+                        ] as [String: Any],
+                        "paint": ["icon-opacity": 1, "icon-emissive-strength": 1] as [String: Any],
+                    ], layerPosition: nil)
+                    r.model = true
+                    r.icon = true
+                } else if wantModel, ensureModel(r.item.color, on: m) {
                     try? m.addLayer(with: [
                         "id": ids.layer, "type": "model", "source": ids.source,
                         "layout": ["model-id": Vehicle.modelId(r.item.color)],
@@ -781,14 +810,17 @@ struct OutingMapboxView: UIViewRepresentable {
                         ] as [String: Any],
                     ], layerPosition: nil)
                     r.model = true
+                    r.icon = false
                 } else {
                     r.model = false
+                    r.icon = false
                 }
                 r.layersReady = true
             }
             setPosition(r, on: m)
             if r.model {
-                try? m.setLayerProperty(for: ids.layer, property: "model-opacity", value: Vehicle.opacity(r.item.presence))
+                try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
+                                        value: Vehicle.opacity(r.item.presence))
             }
             try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
         }
@@ -797,7 +829,24 @@ struct OutingMapboxView: UIViewRepresentable {
             let ids = Vehicle.ids(r.key)
             m.updateGeoJSONSource(withId: ids.source, geoJSON: .geometry(.point(Point(r.shown.coordinate))))
             if r.model {
-                try? m.setLayerProperty(for: ids.layer, property: "model-rotation", value: Vehicle.rotation(r.heading))
+                if r.icon {
+                    try? m.setLayerProperty(for: ids.layer, property: "icon-rotate", value: CarIcon.rotate(r.heading))
+                } else {
+                    try? m.setLayerProperty(for: ids.layer, property: "model-rotation", value: Vehicle.rotation(r.heading))
+                }
+            }
+        }
+
+        private func ensureIcon(_ color: UInt32, on m: MapboxMap) -> Bool {
+            let id = CarIcon.imageId(color)
+            if addedModels.contains(id) { return true }
+            guard let img = CarIcon.image(color) else { return false }
+            do {
+                try m.addImage(img, id: id)
+                addedModels.insert(id)
+                return true
+            } catch {
+                return false
             }
         }
 

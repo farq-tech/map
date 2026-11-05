@@ -11,6 +11,11 @@ struct LngLat: Equatable {
 /// It stays readable at every zoom: about the same on-screen size up to street
 /// zoom, then its true size (≈4.9 m) once that is larger.
 enum Vehicle {
+    /// How a car is drawn: the 2D glossy icon (default), else the 3D model (CarIcon falls back
+    /// to it if its images are missing; the modelled SUV falls back to the procedural one).
+    enum Marker { case icon, model }
+    static var marker: Marker = ProcessInfo.processInfo.arguments.contains("-SaryCar3D") ? .model : .icon
+
     /// Degrees added to a compass heading so the model's nose (+Z in glTF) points that way.
     static let modelHeadingOffset = 180.0
     /// On-screen length the car keeps until its true size is larger.
@@ -86,6 +91,17 @@ enum Vehicle {
         let x = (b.lng - a.lng) * cos((a.lat + b.lat) / 2 * r)
         let y = b.lat - a.lat
         return ((atan2(x, y) / r).truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
+    }
+}
+
+/// DEBUG car previews: `-SaryCarCam "zoom,pitch,bearing[,lat,lng]"` (screenshots of the cars at a
+/// given zoom / pitch; centred on the group unless a point is given).
+enum CarCam {
+    static func parse(_ args: [String]) -> (zoom: Double, pitch: Double, bearing: Double, at: LngLat?)? {
+        guard let i = args.firstIndex(of: "-SaryCarCam"), i + 1 < args.count else { return nil }
+        let n = args[i + 1].split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard let z = n.first, (0 ... 22).contains(z) else { return nil }
+        return (z, n.count > 1 ? min(85, max(0, n[1])) : 0, n.count > 2 ? n[2] : 0, n.count > 4 ? LngLat(lng: n[4], lat: n[3]) : nil)
     }
 }
 

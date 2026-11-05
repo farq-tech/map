@@ -46,6 +46,8 @@ struct DebugScreen: View {
         case "join": JoinByLinkSheet()
         case "invite-valid": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "كشتة نفود الثويرات", inviterName: "أبو فهد", participantCount: 5, status: .active)))
         case "invite-expired": InviteJoinSheet(token: "x", preset: .expired)
+        case "invite-personal": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active, inviteeName: "فهد أخوي")))
+        case "invite-taken": InviteJoinSheet(token: "x", preset: .taken)
         case "invite-invalid": InviteJoinSheet(token: "x", preset: .invalid)
         case "invite-error": InviteJoinSheet(token: "x", preset: .error("الشبكة بطيئة. أعد المحاولة."))
         case "notify-explainer": NotifyExplainerSheet(done: {})

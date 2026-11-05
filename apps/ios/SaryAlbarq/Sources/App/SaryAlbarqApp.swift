@@ -18,10 +18,12 @@ struct SaryAlbarqApp: App {
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)
                 .environment(\.locale, Locale(identifier: "ar"))
-                .onOpenURL { model.handle(url: $0) }
+                .onOpenURL { IntroController.shared.interrupt(); model.handle(url: $0) }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { a in
+                    IntroController.shared.interrupt()
                     if let u = a.webpageURL { model.handle(url: u) }
                 }
+                .saryCinematicIntro(model) // CINEMATIC INTRO HOOK: cold launch only, rules in Sources/Intro/IntroPolicy.swift
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
                 .saryCarPlayPreviewIfRequested() // CARPLAY PREVIEW HOOK: DEBUG + `-SaryCarPlayPreview` only (Sources/CarPlay)

@@ -94,10 +94,11 @@ struct TrackDetailView: View {
     var follow: (FollowSubject) -> Void
     @Environment(\.sary) private var theme
     @State private var cardHeight: CGFloat = 220
+    @State private var realistic: RealisticScene?
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            TrackMapView(line: subject.line, padding: UIEdgeInsets(top: 90, left: 0, bottom: cardHeight, right: 0))
+            TrackMapView(line: subject.line, padding: UIEdgeInsets(top: 90, left: 0, bottom: cardHeight, right: 0), hiRes: HiResRequest(surface: .trackDetail))
                 .ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: theme.space(.s)) {
@@ -116,6 +117,7 @@ struct TrackDetailView: View {
                     .frame(minHeight: 44)
                     .saryGlass(Capsule(), role: .chrome)
                     Spacer(minLength: 0)
+                    RealisticEntryButton(id: "track.realistic") { realistic = .track(subject) }
                 }
                 .padding(.horizontal, theme.space(.m))
                 Spacer()
@@ -127,6 +129,7 @@ struct TrackDetailView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("track.detail")
+        .realisticCover($realistic)
     }
 }
 
