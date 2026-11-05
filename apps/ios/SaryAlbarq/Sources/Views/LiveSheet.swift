@@ -246,8 +246,21 @@ private struct TrailCard: View {
             .buttonStyle(card.backTrackActive ? .sarySecondary : .saryPrimary)
             .disabled(card.pointCount < 2 && !card.backTrackActive)
             .accessibilityIdentifier("trail.backtrack")
+            if let h = card.health {
+                Text(h.line).saryNumber(.caption).foregroundStyle(p.textSecondary)
+                    .accessibilityIdentifier("trail.health")
+                ForEach(h.warnings, id: \.self) { w in
+                    Text(w).saryText(.caption).foregroundStyle(p.warningText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if h.preciseOff {
+                    Button("فعّل الموقع الدقيق", action: controller.openAppSettings)
+                        .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                        .accessibilityIdentifier("trail.precise")
+                }
+            }
             if card.gapCount > 0 {
-                Text("الخط المتقطع جزء لم يُسجَّل (التطبيق كان مقفل أو انقطع GPS)، نرسمه مستقيمًا ولا نخمّن الطريق.")
+                Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة GPS لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
                     .saryText(.caption).foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -277,7 +290,7 @@ private struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك فقط ولا يُرسل لأي أحد، ولا حتى الخادم. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل لأصحابك ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه إلى Mapbox فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -286,7 +299,7 @@ private struct TrailSettingsSection: View {
                 .disabled(!card.recordingOn)
             if card.recordingOn && card.backgroundOn && !card.backgroundAllowed {
                 VStack(alignment: .leading, spacing: theme.space(.xs)) {
-                    Text("الإذن الآن «أثناء الاستخدام» فقط، فإذا قفلت الشاشة يتوقف التسجيل ويظهر خط متقطع. للتسجيل والشاشة مقفلة: الإعدادات ← سَرى البارق ← الموقع ← «دائمًا».")
+                    Text("إذن الموقع مقفل، فما نقدر نسجّل والشاشة مقفلة. الإعدادات ← سَرى البارق ← الموقع ← «دائمًا» أو «أثناء الاستخدام».")
                         .saryText(.caption).foregroundStyle(p.warningText)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("افتح الإعدادات", action: controller.openAppSettings)
@@ -295,6 +308,10 @@ private struct TrailSettingsSection: View {
                 }
                 .padding(.bottom, theme.space(.s))
             }
+            SaryDivider()
+            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها (Mapbox) · في البر يبقى كما سجّله GPS", systemImage: "road.lanes",
+                          isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
+                .disabled(!card.recordingOn)
             SaryDivider()
             SaryToggleRow(title: "أظهر مسارات الأصحاب", systemImage: SaryIcon.fitGroup,
                           isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends.settings")
@@ -320,7 +337,7 @@ private struct TrailSettingsSection: View {
 
     private var backgroundSubtitle: String {
         if !card.backgroundOn { return "متوقف: يُسجَّل والتطبيق مفتوح فقط" }
-        if !card.backgroundAllowed { return "يحتاج إذن «دائمًا» من iOS" }
+        if !card.backgroundAllowed { return "يحتاج إذن الموقع من iOS" }
         return card.recordingInBackground ? "يُسجَّل الآن والشاشة مقفلة" : "على جوالك فقط · يستهلك بطارية أكثر"
     }
 }

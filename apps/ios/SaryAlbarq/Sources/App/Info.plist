@@ -50,9 +50,14 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط عندما تختار «شارك موقعي» والتطبيق مفتوح أمامك.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>يسجّل سَرى البارق «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة، ليرجّعك «طريق العودة» من نفس الطريق. المسار يبقى على جوالك فقط ولا يُرسل لأحد؛ ومشاركة موقعك مع الأصحاب تبقى والتطبيق مفتوح فقط.</string>
+	<string>يسجّل سَرى البارق «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة، ليرجّعك «طريق العودة» من نفس الطريق. المسار يبقى على جوالك ولا يُرسل لأصحابك ولا لخوادمنا (تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط)؛ ومشاركة موقعك مع الأصحاب تبقى والتطبيق مفتوح فقط.</string>
 	<!-- Background location is used ONLY for the on-device trail («سجّل مساري والشاشة مقفلة»,
 	     owner-approved). Positions are never sent from the background (SendGate). -->
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>TrailRecording</key>
+		<string>«الموقع الدقيق» مقفل، فيصير «مساري» تقريبيًا بالكيلومترات. اسمح بالموقع الدقيق لهذه الطلعة ليُرسم طريقك على الشوارع اللي مشيت فيها بالضبط، ويرجّعك «طريق العودة» من نفس الطريق.</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

@@ -190,7 +190,8 @@ final class LiveOutingController: ObservableObject {
         let nearby = session.meshOverlay
         return LivePresenterInput(
             view: nearby.view,
-            myFix: location.lastFix,
+            /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
+            myFix: session.smoothedFix(location.lastFix),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
@@ -213,7 +214,8 @@ final class LiveOutingController: ObservableObject {
             mapBearing: overlay.projection.bearing,
             now: Date(),
             nearbyVia: nearby.viaNearby,
-            nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0
+            nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0,
+            preciseOff: location.preciseOff
         )
     }
 
@@ -332,16 +334,22 @@ final class LiveOutingController: ObservableObject {
     /// Everything the map draws for trails. Friends' trails end at their last real fix and fade
     /// with it: an old position never looks live.
     func mapTrails(members: [MapMember]) -> MapTrails {
-        let t = session.trail
-        let runs = t.runs
+        /* Road-matched where the matcher is confident, smoothed elsewhere (desert). */
+        let shown = session.displayTrail
+        let runs = Trail.runs(shown)
         var out = MapTrails()
-        if t.points.count >= 2 {
+        if shown.count >= 2 {
             out.mine = MapTrails.Line(id: "me", color: myTrailColor, solid: runs.solid, gaps: runs.gaps)
         }
-        out.start = t.start?.position
+        out.start = shown.first?.position
         out.highlight = backTrack != nil
         out.gapLabels = runs.gaps
-            .map { (mid: LngLat(lng: ($0[0].lng + $0[1].lng) / 2, lat: ($0[0].lat + $0[1].lat) / 2), len: Vehicle.distanceMeters($0[0], $0[1])) }
+            .map { g -> (mid: LngLat, len: Double) in
+                var len = 0.0
+                for i in g.indices.dropFirst() { len += Vehicle.distanceMeters(g[i - 1], g[i]) }
+                let mid = g.count == 2 ? LngLat(lng: (g[0].lng + g[1].lng) / 2, lat: (g[0].lat + g[1].lat) / 2) : g[g.count / 2]
+                return (mid: mid, len: len)
+            }
             .filter { $0.len >= 150 }
             .sorted { $0.len > $1.len }
             .prefix(2).map(\.mid)
@@ -367,12 +375,14 @@ final class LiveOutingController: ObservableObject {
         if let s = t.start, let f = location.lastFix { startDist = Vehicle.distanceMeters(s.position, LngLat(lng: f.lng, lat: f.lat)) }
         return TrailCardUIState(recordedMeters: t.recordedLengthM, pointCount: t.points.count, gapCount: t.gapCount, startDistanceMeters: startDist,
                                 isRecording: session.trailRecordingAllowed, recordingOn: TrailPrefs.record(), backgroundOn: TrailPrefs.background(),
-                                backgroundAllowed: session.hasAlwaysPermission, recordingInBackground: session.recordingInBackground,
-                                showFriends: showFriendTrails, backTrackActive: backTrack != nil)
+                                backgroundAllowed: session.lockedScreenTrailPossible, recordingInBackground: session.recordingInBackground,
+                                showFriends: showFriendTrails, backTrackActive: backTrack != nil,
+                                health: session.trailRecordingAllowed ? session.trailHealth : nil,
+                                matchOn: TrailMatchPrefs.enabled())
     }
 
     func startBackTrack() {
-        guard let bt = BackTrack(session.trail) else {
+        guard let bt = BackTrack(path: session.displayTrail) else {
             toast("ما فيه مسار مسجّل بعد. يبدأ التسجيل أول ما تتحرك.")
             return
         }
@@ -393,11 +403,11 @@ final class LiveOutingController: ObservableObject {
     private func updateBackTrack() {
         guard var bt = backTrack else { return }
         /* Only a recent fix: an old one would point the wrong way. */
-        guard let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
+        guard let f = session.smoothedFix(location.lastFix), Date().timeIntervalSince1970 * 1000 - f.atMs < 60_000 else {
             backTrackStatus = nil
             return
         }
-        let st = bt.update(LngLat(lng: f.lng, lat: f.lat))
+        let st = bt.update(LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy, atMs: f.atMs)
         if bt != backTrack { backTrack = bt }
         if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
         if st != backTrackStatus { backTrackStatus = st }
@@ -421,6 +431,12 @@ final class LiveOutingController: ObservableObject {
         stopBackTrack()
         session.clearTrail()
         toast("مسحنا مسارك لهذه الطلعة من جوالك")
+    }
+
+    /// «طابق مساري مع الطرق» (Mapbox Map Matching).
+    func setTrailMatching(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: TrailMatchPrefs.key)
+        objectWillChange.send()
     }
 
     func setTrailRecording(_ on: Bool) {

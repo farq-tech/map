@@ -14,6 +14,8 @@ struct MapMember: Equatable, Identifiable {
     /// Reported course, already trusted (nil when parked or not live).
     var heading: Double?
     var accuracyM: Double?
+    /// m/s when known (road snapping widens its search for a car that is clearly driving).
+    var speedMps: Double? = nil
     /// Time of this fix, ms (for the glide length between fixes).
     var atMs: Double
     var note: String?
@@ -203,6 +205,7 @@ struct OutingMapboxView: UIViewRepresentable {
         private var link: CADisplayLink?
         private var chrome: UIEdgeInsets = .zero
         private var roads: [RoadSnap.RoadLine] = []
+        private var lastRoadRefresh: CFTimeInterval = 0
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
         let waypointPins = WaypointPins()
@@ -401,7 +404,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             if !m.layerExists(withId: RoadSnap.probeLayer) {
                 try? m.addLayer(with: [
-                    "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 13,
+                    "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 12,
                     "filter": RoadSnap.drivableFilter, "paint": ["line-opacity": 0, "line-width": 1],
                 ], layerPosition: nil)
             }
@@ -470,9 +473,11 @@ struct OutingMapboxView: UIViewRepresentable {
                     default: break
                     }
                 }
+                let changed = lines.count != self.roads.count || lines.first?.coords != self.roads.first?.coords
                 self.roads = lines
+                guard changed else { return }
                 /* A car drawn before its street loaded gets matched now. */
-                for r in self.recs.values where r.matcher.road == nil && !r.item.approximate {
+                for r in self.recs.values where r.matcher.road == nil && !r.matcher.offRoad {
                     r.matcher.reset()
                 }
                 self.sync(self.lastCars)
@@ -484,6 +489,9 @@ struct OutingMapboxView: UIViewRepresentable {
         func sync(_ cars: [MapMember]) {
             lastCars = cars
             guard let map else { return }
+            /* While following a moving car the map is never idle: refresh the streets every few seconds too. */
+            let t = CACurrentMediaTime()
+            if t - lastRoadRefresh > 3 { lastRoadRefresh = t; refreshRoads() }
             applyLight()
             let now = CACurrentMediaTime()
             let reduce = UIAccessibility.isReduceMotionEnabled
@@ -496,11 +504,15 @@ struct OutingMapboxView: UIViewRepresentable {
                 let course: Double? = v.heading ?? existing.flatMap { r in Vehicle.distanceMeters(r.anchor, raw) >= 12 ? Vehicle.bearing(r.anchor, raw) : nil }
                 let rec = existing ?? Rec(v, at: raw)
                 /* A confident fix in town is drawn on the street it drives along; an approximate one stays where measured. */
+                /* In town the car is on the street: also a 60–100 m city-canyon fix while clearly driving
+                 * (build 4 left those, and every «تقريبي» one, on the roofs). Parked/approximate: where measured. */
                 var matched: RoadSnap.Match?
-                if v.approximate {
+                let driving = (v.speedMps ?? 0) >= RoadSnap.drivingMps && course != nil
+                if v.approximate && !driving {
                     rec.matcher.reset()
                 } else {
-                    matched = rec.matcher.match(raw, RoadSnap.nearby(roads, raw), course: course, maxM: RoadSnap.snapRadius(v.accuracyM))
+                    matched = rec.matcher.match(raw, RoadSnap.nearby(roads, raw), course: course, speed: v.speedMps, accuracy: v.accuracyM, atMs: v.atMs)
+                    if matched?.key == nil { matched = nil }
                 }
                 let target = matched?.point ?? raw
                 if existing == nil {

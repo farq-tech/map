@@ -4,9 +4,11 @@ import Foundation
 // go back the way it entered. Pure value types here (filtering, simplification,
 // gaps, distance along the trail, off-track); the session records, the map draws.
 //
-// PRIVACY: the trail lives ONLY on this phone. Nothing in this file, nor the
-// session that feeds it, ever hands a trail point to the network layer; the
-// server only ever sees the single latest fix that `SendGate` lets through.
+// PRIVACY: the trail lives on this phone. Nothing in this file, nor the session
+// that feeds it, ever hands a trail point to our server or the live channel; the
+// server only ever sees the single latest fix that `SendGate` lets through. The
+// one exception (owner decision, 2026-11) is the road matcher (`TrailMatching`),
+// which sends stretches of it to Mapbox Map Matching — switchable off.
 
 /// One kept point of a trail.
 struct TrailPoint: Codable, Equatable {
@@ -116,27 +118,31 @@ enum TrailSimplify {
     }
 }
 
-/// My recorded trail for one outing.
+/// My recorded trail for one outing: the Kalman-smoothed path, decimated in code.
+/// The raw fixes it came from are kept beside it (`TrailRawLog`), so it can always
+/// be rebuilt; the map draws the road-matched version when there is one (`TrailMatchCache`).
 struct Trail: Codable, Equatable {
     var points: [TrailPoint] = []
-    /// The next accepted point starts after an unrecorded stretch.
+    /// We were not listening for a while (app closed / no permission): the next point
+    /// only becomes a gap if the gap rule holds (see `isGap`).
     var gapNext = false
-    /// Fixes that looked like a jump from the last point; three consistent ones
-    /// in a row mean the jump was real (the last point was the bad one).
-    var pending: [TrailPoint] = []
     /// Points before this index are already simplified.
     var simplifiedUpTo = 0
+    /// The smoother (nil until the first usable fix; old trails load without one).
+    var filter: TrailKalman?
+    /// The last usable fix seen (filtered position + its time), kept or not.
+    var lastUsable: TrailPoint?
 
-    // Noise filter (owner: accuracy gate, ~10 m steps, reject jumps by speed).
-    static let maxAccuracyM = 30.0
-    static let minStepM = 10.0
-    static let maxSpeedMps = 70.0
-    /// In the foreground, a silence this long AND a move this far is a GPS gap too.
-    static let silentGapS = 120.0
-    static let silentGapM = 300.0
-    static let jumpConfirmations = 3
+    /// A kept point every few metres (decimation of the 1 Hz smoothed stream).
+    static let minStepM = 8.0
+    /// Ceiling used by the friends' trails and the plausibility gate.
+    static let maxSpeedMps = TrailKalman.maxSpeedMps
+    static let maxAccuracyM = TrailKalman.maxAccuracyM
+    /// A gap ONLY when there were truly no usable fixes for this long AND this far.
+    static let gapSilenceS = 60.0
+    static let gapDistanceM = 500.0
     /// Simplification for storage, and how many newest points stay raw.
-    static let toleranceM = 4.0
+    static let toleranceM = 3.0
     static let rawTail = 30
     static let simplifyEvery = 120
 
@@ -147,57 +153,52 @@ struct Trail: Codable, Equatable {
     /// The next point is after a stretch we did not see (app closed / backgrounded / restarted).
     mutating func markGap() {
         if !points.isEmpty { gapNext = true }
-        pending = []
+    }
+
+    static func isGap(silenceS: Double, distanceM: Double) -> Bool {
+        silenceS > gapSilenceS && distanceM > gapDistanceM
     }
 
     /// Feed one GPS fix. True when it became a trail point.
     @discardableResult
-    mutating func add(_ f: DeviceFix) -> Bool {
-        if let a = f.accuracy, a > Self.maxAccuracyM { return false }
-        guard f.lat.isFinite, f.lng.isFinite, abs(f.lat) <= 90, abs(f.lng) <= 180 else { return false }
-        let p = TrailPoint(lat: f.lat, lng: f.lng, t: f.atMs)
-        guard let prev = points.last else {
-            points.append(p)
-            return true
+    mutating func add(_ f: DeviceFix) -> Bool { add(RawFix(f)) }
+
+    @discardableResult
+    mutating func add(_ raw: RawFix) -> Bool {
+        if let last = lastUsable ?? points.last, raw.t <= last.t { return false }
+        var k = filter ?? TrailKalman()
+        let out = k.step(raw)
+        guard case let .accepted(pos, _, _, _) = out else {
+            filter = k
+            return false
         }
-        guard p.t > prev.t else { return false }
-        let d = Vehicle.distanceMeters(prev.position, p.position)
-        let dt = (p.t - prev.t) / 1000
-        if gapNext {
-            /* After an unrecorded stretch any distance is possible: start the new run here. */
-            var q = p
-            q.gap = d >= Self.minStepM
-            if !q.gap, d < Self.minStepM { gapNext = false; return false }
-            append(q)
+        filter = k
+        let here = TrailPoint(lat: pos.lat, lng: pos.lng, t: raw.t)
+        let prevUsable = lastUsable ?? points.last
+        lastUsable = here
+        guard let prev = points.last else {
+            points.append(here)
             gapNext = false
             return true
         }
-        if d < Self.minStepM { pending = []; return false }
-        if d / max(dt, 0.5) > Self.maxSpeedMps {
-            /* A jump. Believe it only when the next fixes agree with each other. */
-            if let lastPending = pending.last {
-                let pd = Vehicle.distanceMeters(lastPending.position, p.position)
-                let pdt = (p.t - lastPending.t) / 1000
-                if pdt > 0, pd / max(pdt, 0.5) <= Self.maxSpeedMps { pending.append(p) } else { pending = [p] }
-            } else {
-                pending = [p]
-            }
-            if pending.count >= Self.jumpConfirmations {
-                var first = pending[0]
-                first.gap = true
-                append(first)
-                for q in pending.dropFirst() where Vehicle.distanceMeters(points.last!.position, q.position) >= Self.minStepM { append(q) }
-                pending = []
-                return true
-            }
+        let silence = (raw.t - (prevUsable?.t ?? prev.t)) / 1000
+        let jump = Vehicle.distanceMeters((prevUsable ?? prev).position, here.position)
+        var q = here
+        q.gap = Self.isGap(silenceS: silence, distanceM: jump)
+        if !q.gap && Vehicle.distanceMeters(prev.position, here.position) < Self.minStepM {
+            gapNext = false
             return false
         }
-        pending = []
-        var q = p
-        /* Foreground but no fixes for minutes while we moved far: we did not see that stretch. */
-        q.gap = dt > Self.silentGapS && d > Self.silentGapM
+        gapNext = false
         append(q)
         return true
+    }
+
+    /// The trail as these raw fixes make it (re-processing, GPX export, tests).
+    static func rebuild(_ raw: [RawFix]) -> Trail {
+        var t = Trail()
+        for f in raw.sorted(by: { $0.t < $1.t }) { t.add(f) }
+        return t
     }
 
     private mutating func append(_ p: TrailPoint) {
@@ -232,14 +233,21 @@ struct Trail: Codable, Equatable {
         var solid: [[LngLat]] = []
         var gaps: [[LngLat]] = []
         var run: [LngLat] = []
+        var gap: [LngLat] = []
         for (i, p) in points.enumerated() {
             if p.gap, i > 0 {
                 if run.count >= 2 { solid.append(run) }
-                gaps.append([points[i - 1].position, p.position])
+                /* Consecutive gap points (a matched road through the unrecorded stretch) are one dashed line. */
+                if gap.isEmpty { gap = [points[i - 1].position] }
+                gap.append(p.position)
                 run = []
+            } else if !gap.isEmpty {
+                gaps.append(gap)
+                gap = []
             }
             run.append(p.position)
         }
+        if !gap.isEmpty { gaps.append(gap) }
         if run.count >= 2 { solid.append(run) }
         return (solid, gaps)
     }
@@ -265,26 +273,35 @@ struct BackTrackStatus: Equatable {
     var onGap: Bool
 }
 
-/// Back-tracking a frozen copy of my trail (new points recorded on the way back do not change the target).
+/// Back-tracking a frozen copy of my trail — the road-matched one when there is
+/// one (`TrailDisplay`), else the smoothed one (new points recorded on the way back
+/// do not change the target).
 struct BackTrack: Equatable {
     let path: [TrailPoint]
     /// Distance from the start to each point, along the trail.
     let cum: [Double]
-    /// Highest segment still ahead of me: progress only moves toward the start (auto-advance).
+    /// Segment I was last matched to: progress moves toward the start (auto-advance),
+    /// with a little forward slack, and re-acquires anywhere once I am clearly on another part.
     private(set) var cursor: Int
     private(set) var offTrack = false
+    /// Since when I have been far from the trail (the warning waits `offTrackHoldS`).
+    private(set) var farSinceMs: Double?
 
+    /// «خرجت عن الطريق»: further than this …
     static let offTrackM = 60.0
+    /// … for this long (a red light beside a parallel street is not leaving the trail).
+    static let offTrackHoldS = 10.0
     /// Back on the trail only once well inside it (no flicker at the edge).
-    static let backOnM = 45.0
+    static let backOnM = 35.0
     static let arrivedM = 30.0
     /// The arrow points this far back along the trail.
     static let lookAheadM = 40.0
-    /// Forward slack: a few segments the person may still be on after a turn-around.
-    static let forwardSlack = 2
+    /// Forward slack along the trail (a turn-around, a U-turn at the next junction).
+    static let forwardSlackM = 300.0
 
-    init?(_ trail: Trail) {
-        let pts = trail.points
+    init?(_ trail: Trail) { self.init(path: trail.points) }
+
+    init?(path pts: [TrailPoint]) {
         guard pts.count >= 2 else { return nil }
         path = pts
         var c = [0.0]
@@ -307,18 +324,44 @@ struct BackTrack: Equatable {
         return LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
     }
 
-    mutating func update(_ me: LngLat) -> BackTrackStatus {
-        let hi = min(path.count - 2, cursor + Self.forwardSlack)
+    private func nearest(_ me: LngLat, in range: ClosedRange<Int>) -> (seg: Int, point: LngLat, u: Double, d: Double) {
         var best: (seg: Int, point: LngLat, u: Double, d: Double)?
-        for i in 0...hi {
+        for i in range {
             let pr = TrailGeo.project(me, path[i].position, path[i + 1].position)
             /* Ties (a loop over itself) go to the part nearer the start. */
             if best == nil || pr.distM < best!.d - 0.5 { best = (i, pr.point, pr.u, pr.distM) }
         }
-        let b = best!
+        return best!
+    }
+
+    /// - Parameters:
+    ///   - accuracy: the fix's horizontal accuracy: never «خرجت» while the GPS itself is less sure than the distance.
+    ///   - atMs: the fix time; nil (tests, one-off estimates) skips the hold.
+    mutating func update(_ me: LngLat, accuracy: Double? = nil, atMs: Double? = nil) -> BackTrackStatus {
+        let reach = cum[min(cursor + 1, cum.count - 1)] + Self.forwardSlackM
+        var hi = cursor
+        while hi < path.count - 2, cum[hi + 1] <= reach { hi += 1 }
+        var b = nearest(me, in: 0...hi)
+        if b.d > Self.offTrackM, hi < path.count - 2 {
+            /* Clearly not on the part ahead of the cursor: maybe I am on a later part (the cursor was misled). */
+            let g = nearest(me, in: 0...(path.count - 2))
+            if g.d < Self.backOnM { b = g }
+        }
         cursor = b.seg
         let along = cum[b.seg] + (cum[b.seg + 1] - cum[b.seg]) * b.u
-        if offTrack { offTrack = b.d > Self.backOnM } else { offTrack = b.d > Self.offTrackM }
+        let unsure = (accuracy ?? 0) >= b.d
+        if offTrack {
+            if b.d < Self.backOnM || unsure { offTrack = false; farSinceMs = nil }
+        } else if b.d > Self.offTrackM && !unsure {
+            if let t = atMs {
+                if farSinceMs == nil { farSinceMs = t }
+                if t - farSinceMs! >= Self.offTrackHoldS * 1000 { offTrack = true }
+            } else {
+                offTrack = true
+            }
+        } else {
+            farSinceMs = nil
+        }
         let remaining = along + b.d
         let arrived = Vehicle.distanceMeters(me, startPoint) <= Self.arrivedM
         let target = offTrack ? b.point : point(atAlong: along - Self.lookAheadM)
@@ -408,9 +451,12 @@ enum TrailStore {
         } catch {}
     }
 
+    /// The trail, its raw fixes and its road-matched geometry.
     static func delete(_ outingId: String, in dir: URL? = directory) {
         guard let u = url(outingId, in: dir) else { return }
         try? FileManager.default.removeItem(at: u)
+        TrailRawLog.delete(outingId, in: dir)
+        TrailMatchStore.delete(outingId, in: dir)
     }
 
     static func forgetAll(in dir: URL? = directory) {

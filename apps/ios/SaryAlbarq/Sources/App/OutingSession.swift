@@ -21,6 +21,10 @@ struct SessionEnv {
     var trailDirectory: URL? = TrailStore.directory
     /// The phone-to-phone link (`NearbyMesh`). Needs `timers` too, so unit tests never touch the radios.
     var nearbyMesh = true
+    /// Road matcher for «مساري» (Mapbox Map Matching with the app's public token). Runs only with `timers`.
+    var trailMatching: TrailMatchingService? = MapboxTrailMatching.fromBundle()
+    /// Tests only: stands in for "iOS keeps a When-In-Use app's updates alive with the screen locked" (iOS 17+).
+    var lockedScreenTrailOverride: Bool?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -78,6 +82,12 @@ final class OutingSession: ObservableObject, Identifiable {
     private var pendingServerStop = false
     private var trailSavedAt = Date.distantPast
     private var trailUnsaved = 0
+    /// Raw fixes not yet appended to the outing's raw log.
+    private var rawPending: [RawFix] = []
+    /// The last few minutes of raw fixes (for «الدقة ±٨ م · ١٢ نقطة/دقيقة»).
+    private(set) var recentRaw: [RawFix] = []
+    /// Road matching of my trail (nil: no token / switched off).
+    private(set) var matcher: TrailMatchCoordinator?
     /// Cars of the same outing nearby, phone to phone, when the internet is gone.
     let mesh: NearbyMesh
     private var meshActivation = MeshActivation()
@@ -114,6 +124,10 @@ final class OutingSession: ObservableObject, Identifiable {
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
         trail.markGap()
+        if demo == nil || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
+            let m = TrailMatchCoordinator(outingId: id, dir: env.trailDirectory, service: svc)
+            matcher = m
+        }
         #if DEBUG
         if demo != nil, Self.forcedOffline { link = .offline }
         #endif
@@ -149,10 +163,19 @@ final class OutingSession: ObservableObject, Identifiable {
     func open() {
         visible = env.isForeground()
         location.onTrailFix = { [weak self] f in self?.trailFix(f) }
+        matcher?.onChange = { [weak self] in
+            guard let self else { return }
+            self.updateRoadMode()
+            self.objectWillChange.send()
+        }
+        matcher?.accuracyAt = { [weak self] t in self?.recentRaw.last(where: { abs($0.t - t) < 1500 })?.acc }
+        /* Offline-first: whatever was recorded but not matched yet (offline, app closed) is caught up now. */
+        if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
         /* Your own dot, for distances and directions. Nothing is sent until you choose to share. */
         Task {
             _ = await location.requestWhenInUse()
             if self.visible { location.watchForeground() }
+            self.syncTrailGPS()
         }
         if env.timers {
             let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -209,7 +232,10 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func close() {
         stopBackgroundTrail()
+        location.stopTrail()
         saveTrail()
+        /* The last stretch, matched once more now the outing is over (cached for the details page). */
+        if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
         location.onTrailFix = { _ in }
         mesh.setRunning(false)
         stopSharingLocally()
@@ -227,6 +253,7 @@ final class OutingSession: ObservableObject, Identifiable {
         if active {
             location.watchForeground()
             stopBackgroundTrail()
+            syncTrailGPS()
             channel?.setAway(false)
             channel?.reconnectNow()
             reconcileSharing()
@@ -323,6 +350,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private func reconcileSharing() {
         /* Ended, left, removed, switch off: the screen-locked trail stops at once. */
         if recordingInBackground && !canRecordTrailInBackground { stopBackgroundTrail() }
+        syncTrailGPS()
         guard let v = view else { return }
         /* Paused / ended / sharing switched off elsewhere: the intent ends too. */
         if wantsToShare && (v.status == .paused || v.status == .ended || !v.snapshot.me.sharing) {
@@ -418,9 +446,55 @@ final class OutingSession: ObservableObject, Identifiable {
 
     var hasAlwaysPermission: Bool { env.alwaysOverride ?? location.hasAlways }
 
-    /// The screen-locked trail may run: «دائمًا», both switches on, and an outing I am recording.
+    /// iOS keeps the trail running with the screen locked: «دائمًا», or (iOS 17+) «أثناء الاستخدام»
+    /// with the background activity session taken while on screen.
+    var lockedScreenTrailPossible: Bool {
+        hasAlwaysPermission || (env.lockedScreenTrailOverride ?? (env.authorizationOverride ?? location.canLocate))
+    }
+
+    /// The screen-locked trail may run: both switches on, iOS allows it, and an outing I am recording.
     var canRecordTrailInBackground: Bool {
-        TrailPrefs.background(env.defaults) && hasAlwaysPermission && trailRecordingAllowed
+        TrailPrefs.background(env.defaults) && lockedScreenTrailPossible && trailRecordingAllowed
+    }
+
+    /// The GPS at its best while «مساري» records on screen; back to normal when it may not.
+    func syncTrailGPS() {
+        if trailRecordingAllowed && visible {
+            location.startTrail(background: TrailPrefs.background(env.defaults))
+        } else if !trailRecordingAllowed {
+            location.stopTrail()
+        }
+    }
+
+    /// My fix as the map draws «أنت»: the Kalman-smoothed position (and speed) for this very fix
+    /// when «مساري» is recording, else the fix itself. Display only — never what is sent.
+    func smoothedFix(_ f: DeviceFix?) -> DeviceFix? {
+        guard var f, let k = trail.filter, k.started, abs(k.tMs - f.atMs) < 1500 else { return f }
+        let p = k.position
+        f.lat = p.lat
+        f.lng = p.lng
+        if f.speed == nil { f.speed = k.speedMps }
+        return f
+    }
+
+    /// What the map draws and «طريق العودة» follows: road-matched where confident, smoothed elsewhere.
+    var displayTrail: [TrailPoint] {
+        TrailMatchPrefs.enabled(env.defaults) ? TrailDisplay.compose(trail.points, matcher?.cache) : trail.points
+    }
+
+    /// «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
+    var trailHealth: TrailHealth {
+        TrailHealth.compute(raw: recentRaw, nowMs: Date().timeIntervalSince1970 * 1000,
+                            preciseOff: location.preciseOff, whenInUseOnly: location.canLocate && !hasAlwaysPermission,
+                            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+    }
+
+    /// On roads the GPS uses iOS's automotive model; where the matcher finds no road lately, the generic one.
+    private func updateRoadMode() {
+        guard let last = trail.points.last, let m = matcher else { return }
+        let matchedRecently = m.cache.spans.last.map { last.t - $0.endT < 5 * 60_000 } ?? false
+        let triedRecently = last.t - m.cache.doneUpToT < 5 * 60_000
+        if triedRecently { location.onRoad = matchedRecently }
     }
 
     /// Every GPS fix, foreground or (with «دائمًا») background. It goes into the trail on this
@@ -428,12 +502,22 @@ final class OutingSession: ObservableObject, Identifiable {
     func trailFix(_ f: DeviceFix) {
         guard trailRecordingAllowed else { return }
         guard visible || recordingInBackground else { return }
-        guard trail.add(f) else { return }
-        trailUnsaved += 1
-        if trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5 { saveTrail() }
+        /* Every raw fix is kept (compact, capped): the drawn trail is derived from them. */
+        let raw = RawFix(f)
+        rawPending.append(raw)
+        recentRaw.append(raw)
+        if recentRaw.count > 400 { recentRaw.removeFirst(recentRaw.count - 300) }
+        let added = trail.add(raw)
+        if added { trailUnsaved += 1 }
+        if rawPending.count >= 30 || (added && (trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5)) { saveTrail() }
+        if added, env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail) }
     }
 
     func saveTrail() {
+        if !rawPending.isEmpty {
+            TrailRawLog.append(rawPending, outingId: id, in: env.trailDirectory)
+            rawPending = []
+        }
         guard trailUnsaved > 0 || trail.isEmpty == false else { return }
         TrailStore.save(trail, outingId: id, in: env.trailDirectory)
         trailSavedAt = Date()
@@ -444,6 +528,9 @@ final class OutingSession: ObservableObject, Identifiable {
     func clearTrail() {
         trail = Trail()
         TrailStore.delete(id, in: env.trailDirectory)
+        matcher?.clear()
+        rawPending = []
+        recentRaw = []
         trailUnsaved = 0
     }
 
@@ -453,6 +540,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* Off and on again: what happened in between was not recorded. */
         trail.markGap()
         if !on { stopBackgroundTrail(); saveTrail() }
+        syncTrailGPS()
         objectWillChange.send()
     }
 
@@ -460,6 +548,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func setBackgroundTrail(_ on: Bool) {
         env.defaults.set(on, forKey: TrailPrefs.backgroundKey)
         if !on { stopBackgroundTrail() }
+        syncTrailGPS()
         objectWillChange.send()
     }
 

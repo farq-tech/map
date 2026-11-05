@@ -95,7 +95,7 @@ final class OutingActivityCoordinator {
     private func backDistance(_ s: OutingSession, _ f: DeviceFix) -> Double? {
         let n = s.trail.points.count
         if backTrack?.id != s.id || backTrack?.count != n {
-            backTrack = BackTrack(s.trail).map { (s.id, n, $0) }
+            backTrack = BackTrack(path: s.displayTrail).map { (s.id, n, $0) }
         }
         guard var b = backTrack else { return nil }
         let st = b.track.update(LngLat(lng: f.lng, lat: f.lat))

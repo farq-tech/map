@@ -17,7 +17,7 @@ extension LiveOutingController {
         s.isSharingNow = { [weak self] in self?.session.isSharingNow ?? false }
         /* «طريق العودة»: from where I am, back along my own trail to its start (on this phone only). */
         s.wayBackDistanceM = { [weak self] in
-            guard let self, let f = self.location.lastFix, var bt = BackTrack(self.session.trail) else { return nil }
+            guard let self, let f = self.location.lastFix, var bt = BackTrack(path: self.session.displayTrail) else { return nil }
             let st = bt.update(LngLat(lng: f.lng, lat: f.lat))
             return st.arrived ? nil : st.remainingM
         }
