@@ -8,6 +8,9 @@ struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @EnvironmentObject private var model: AppModel
+    /// An invite link opened during this trip, shown once the sheet on top (if any) is gone.
+    @State private var invite: InviteToken?
 
     var body: some View {
         let ui = controller.ui
@@ -53,6 +56,17 @@ struct LiveSheet: View {
                 .saryAppearance(appearance)
                 .accessibilityIdentifier("friend-sos-alert")
         }
+        .sheet(item: $invite, onDismiss: { if model.pendingInvite == invite?.id { model.pendingInvite = nil } }) { inv in
+            InviteJoinSheet(token: inv.id).saryPresented(appearance)
+        }
+        .onReceive(model.$pendingInvite.removeDuplicates()) { t in
+            guard let t, invite?.id != t else { if t == nil { invite = nil }; return }
+            /* One sheet at a time: close whatever is up, then show the invite. */
+            let busy = controller.modal != nil || controller.shareItem != nil
+            controller.modal = nil
+            controller.shareItem = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + (busy ? 0.6 : 0.05)) { if model.pendingInvite == t { invite = InviteToken(id: t) } }
+        }
         .sheet(item: Binding(get: { controller.shareItem.map(ShareURL.init) }, set: { if $0 == nil { controller.shareItem = nil } })) { s in
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
         }
@@ -61,7 +75,7 @@ struct LiveSheet: View {
             Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("أعضاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة يوقف الإرسال لين ترجع للطلعة؛ لإيقافه نهائيًا غادر الطلعة.")
+            Text("أعضاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
         }
         .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
             Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)

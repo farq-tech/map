@@ -305,6 +305,15 @@ private struct StationList: View {
     var body: some View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
+            if center.stations.isEmpty {
+                HStack(spacing: theme.space(.s)) {
+                    ProgressView()
+                    Text("نجيب قائمة الإذاعات…").saryText(.callout).foregroundStyle(p.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(theme.space(.m))
+                .accessibilityIdentifier("radio.catalog.loading")
+            }
             ForEach(GroupAudioStation.Group.allCases, id: \.self) { g in
                 let list = center.stations.filter { $0.group == g }
                 if !list.isEmpty {

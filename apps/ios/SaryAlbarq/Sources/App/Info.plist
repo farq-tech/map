@@ -77,7 +77,7 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يلتقط صوتك فقط وأنت ضاغط على زر «قناة الطلعة»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لا يُسجَّل ولا يُحفظ في أي مكان.</string>
+	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك.</string>
 
 	<!-- Phone-to-phone link for cars of the same outing (MultipeerConnectivity, NearbyMesh). -->
 	<key>NSLocalNetworkUsageDescription</key>

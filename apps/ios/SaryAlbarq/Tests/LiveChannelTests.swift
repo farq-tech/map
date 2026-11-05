@@ -240,25 +240,23 @@ final class LiveChannelTests: XCTestCase {
         XCTAssertEqual(ch.state, .closed)
     }
 
-    func testReplacedBacksOffInsteadOfFightingThenGivesUp() {
+    func testReplacedBacksOffInsteadOfFightingAndNeverGivesUp() {
         let ch = makeChannel()
         ch.start()
-        for i in 0..<(LiveChannel.replacedGiveUp - 1) {
+        for i in 0..<20 {
             sockets[i].onOpen()
             ready(sockets[i])
             sockets[i].onClose(4409)
-            XCTAssertTrue(closed.isEmpty)
-            XCTAssertGreaterThanOrEqual(clock.pendingDelays.max() ?? 0, LiveChannel.replacedWaitMs, "waits it out")
+            XCTAssertTrue(closed.isEmpty, "never closed for good while the trip is open (\(i + 1) in a row)")
+            let wait = min(LiveChannel.replacedMaxWaitMs, LiveChannel.replacedWaitMs * Double(i + 1))
+            XCTAssertGreaterThanOrEqual(clock.pendingDelays.max() ?? 0, wait, "waits it out")
+            XCTAssertLessThanOrEqual(clock.pendingDelays.max() ?? 0, LiveChannel.replacedMaxWaitMs + 30_000, "capped")
             ch.reconnectNow() // the app coming to the foreground does not jump the wait
             XCTAssertEqual(sockets.count, i + 1)
-            clock.advance(LiveChannel.replacedWaitMs * Double(i + 1) + 1)
+            clock.advance(wait + 30_001)
             XCTAssertEqual(sockets.count, i + 2)
         }
-        let last = sockets.count - 1
-        sockets[last].onOpen()
-        ready(sockets[last])
-        sockets[last].onClose(4409)
-        XCTAssertEqual(closed, [.replaced], "after \(LiveChannel.replacedGiveUp) in a row: another phone is us")
+        XCTAssertNotEqual(ch.state, .closed)
     }
 
     func testReconnectNowDoesNotKillAHandshakingSocket() {
@@ -296,9 +294,50 @@ final class LiveChannelTests: XCTestCase {
         XCTAssertEqual(sockets.count, 2, "the press reconnects now, no backoff")
         sockets[1].onOpen()
         ready(sockets[1])
-        let types = sockets[1].sent.compactMap { $0["type"] as? String }
-        XCTAssertEqual(Array(types.suffix(2)), ["ptt_join", "ptt_start"], "join first, then the floor")
+        var types = sockets[1].sent.compactMap { $0["type"] as? String }
+        XCTAssertEqual(types.last, "ptt_join", "join first")
+        XCTAssertFalse(types.contains("ptt_start"), "the floor waits for the server to confirm the join (else: not_joined)")
+        sockets[1].serverSays(["type": "ptt_state", "talker": NSNull(), "max_ms": 60000])
+        types = sockets[1].sent.compactMap { $0["type"] as? String }
+        XCTAssertEqual(Array(types.suffix(2)), ["ptt_join", "ptt_start"], "then the floor")
         XCTAssertEqual(sockets[1].sent.last?["id"] as? Int, 7)
+    }
+
+    /// QA build 15: an older server that never confirms the join still gets the request, a moment later.
+    func testFloorRequestAfterRejoinGoesAnywayIfTheJoinIsNotConfirmed() {
+        let ch = makeChannel()
+        ch.start()
+        sockets[0].onOpen()
+        ready(sockets[0])
+        ch.setPTTJoined(true)
+        sockets[0].onClose(1006)
+        ch.pttStart(id: 9)
+        sockets[1].onOpen()
+        ready(sockets[1])
+        XCTAssertFalse(sockets[1].sent.contains { $0["type"] as? String == "ptt_start" })
+        clock.advance(LiveChannel.joinAckWaitMs + 1)
+        XCTAssertEqual(sockets[1].sent.last?["type"] as? String, "ptt_start")
+        XCTAssertEqual(sockets[1].sent.last?["id"] as? Int, 9)
+        /* Afterwards presses go at once (no wait on every press). */
+        ch.pttStop()
+        ch.pttStart(id: 10)
+        XCTAssertEqual(sockets[1].sent.last?["id"] as? Int, 10)
+    }
+
+    /// A press right after joining on a live socket waits for the confirmation too.
+    func testPressRightAfterJoiningWaitsForTheConfirmation() {
+        let ch = makeChannel()
+        ch.start()
+        sockets[0].onOpen()
+        ready(sockets[0])
+        ch.setPTTJoined(true)
+        ch.pttStart(id: 3)
+        XCTAssertEqual(sockets[0].sent.last?["type"] as? String, "ptt_join")
+        sockets[0].serverSays(["type": "ptt_channels", "current": "1", "can_create": false, "channels": []])
+        XCTAssertEqual(sockets[0].sent.last?["type"] as? String, "ptt_start")
+        ch.pttStop()
+        ch.pttStart(id: 4)
+        XCTAssertEqual(sockets[0].sent.last?["id"] as? Int, 4, "confirmed: no more waiting")
     }
 
     func testStaleFloorRequestIsDropped() {

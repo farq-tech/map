@@ -69,6 +69,14 @@ enum Vehicle {
         "peer-" + userId.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }
 
+    /// A car whose fix is not live is drawn grey (QA build 15: not just faded — clearly "old").
+    static let staleRGB: UInt32 = 0x8E8E93
+
+    /// The colour a car is drawn in: its own while live, grey once the fix is old.
+    static func displayColor(_ color: UInt32, _ f: Policy.Freshness) -> UInt32 {
+        f == .live ? color : staleRGB
+    }
+
     /// Model opacity by freshness: an old fix is visibly not live.
     static func opacity(_ f: Policy.Freshness) -> Double {
         switch f {

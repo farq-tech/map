@@ -147,3 +147,34 @@ private extension XCUIElement {
         typeText(text)
     }
 }
+
+/// An invite link opened while a trip is on screen (QA build 15): the live sheet is always
+/// presented, so the invite must come from inside it — even over another open sheet.
+final class InviteDuringTripUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    func testInviteLinkOpenedDuringATripShowsTheJoinScreen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
+                               "-SaryContext", "stopped", "-SaryDemoInviteDuringTrip", "25"]
+        addUIInterruptionMonitor(withDescription: "permissions") { alert in
+            for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
+                alert.buttons[label].tap()
+                return true
+            }
+            return false
+        }
+        app.launch()
+        let summary = app.descendants(matching: .any)["outing-sheet-summary"].firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 20))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        /* Another sheet is up when the link arrives: «+» (the actions). */
+        app.buttons["outing-actions"].tap()
+        XCTAssertTrue(app.buttons["invite.join"].waitForExistence(timeout: 40), "the join screen shows over the trip")
+        XCTAssertTrue(app.staticTexts["invite.name"].exists)
+        let a = XCTAttachment(screenshot: app.screenshot())
+        a.name = "invite-during-trip"
+        a.lifetime = .keepAlways
+        add(a)
+    }
+}

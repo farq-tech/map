@@ -195,6 +195,8 @@ final class BackgroundPositionSenderTests: XCTestCase {
 final class StubAPIProtocol: URLProtocol {
     nonisolated(unsafe) static var requests: [(method: String, path: String, body: [String: Any])] = []
     nonisolated(unsafe) static var snapshot: [String: Any] = [:]
+    /// Paths (suffix) answered with HTTP 503, e.g. "/leave" to test a failed «غادر الطلعة».
+    nonisolated(unsafe) static var failing: Set<String> = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -216,8 +218,10 @@ final class StubAPIProtocol: URLProtocol {
         var out: [String: Any] = ["ok": true]
         if path.hasSuffix("/live") { out = Self.snapshot }
         if method == "PATCH" { out["sharing"] = (body["sharing"] as? Bool) ?? false }
+        let fail = Self.failing.contains { path.hasSuffix($0) }
+        if fail { out = ["error": "unavailable"] }
         let data = try! JSONSerialization.data(withJSONObject: out)
-        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: fail ? 503 : 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)
     }
@@ -385,6 +389,22 @@ final class BackgroundSessionTests: XCTestCase {
         _ = await s.leave()
         await assertStopped(s, "leave")
         XCTAssertTrue(StubAPIProtocol.requests.contains { $0.path.hasSuffix("/o1/leave") || $0.path.hasSuffix("/o1/me") && $0.method == "DELETE" } || s.closedReason == .left)
+    }
+
+    /// A failed «غادر الطلعة» (no network, server error): still a member, so still sharing.
+    func testFailedLeaveKeepsSharingUntilTheServerAgrees() async {
+        let s = await sharingInBackground()
+        StubAPIProtocol.failing = ["/leave"]
+        defer { StubAPIProtocol.failing = [] }
+        let ok = await s.leave()
+        XCTAssertFalse(ok)
+        XCTAssertNil(s.closedReason, "still a member")
+        XCTAssertTrue(s.wantsToShare, "sharing is not stopped before the server confirms")
+        XCTAssertTrue(s.gate.allowsBackgroundPosition)
+        StubAPIProtocol.failing = []
+        let ok2 = await s.leave()
+        XCTAssertTrue(ok2)
+        await assertStopped(s, "leave once the server agreed")
     }
 
     func testRemovedStops() async {

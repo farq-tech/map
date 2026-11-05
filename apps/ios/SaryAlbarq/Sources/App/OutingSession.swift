@@ -345,7 +345,11 @@ final class OutingSession: ObservableObject, Identifiable {
         #endif
     }
 
+    /// `close()` ran: nothing of this session runs any more.
+    private(set) var didClose = false
+
     func close() {
+        didClose = true
         backgroundSender?.stop()
         stopBackgroundTrail()
         location.stopTrail()
@@ -945,10 +949,14 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Leave the outing (also after it ended). True when the server agreed.
     @discardableResult
     func leave() async -> Bool {
-        stopSharingLocally()
-        if isDemo { closed(.left); return true }
+        if isDemo { stopSharingLocally(); closed(.left); return true }
+        /* Stop only once the server agreed: a failed request (no network) leaves me a member,
+         * and a member keeps sharing — the error says so and «غادر الطلعة» can be tried again. */
         let ok = await run("leave") { try await api.leave(id) }
-        if ok { closed(.left) }
+        if ok {
+            stopSharingLocally()
+            closed(.left)
+        }
         return ok
     }
 

@@ -31,7 +31,9 @@ struct RootView: View {
             }
         }
         .animation(theme.animation(.smooth), value: model.launching)
-        .sheet(item: Binding(get: { model.pendingInvite.map(InviteToken.init) }, set: { model.pendingInvite = $0?.id })) { inv in
+        /* During a trip the live sheet is always presented: the invite is shown from inside it
+         * (`LiveSheet`), never from here, where a second sheet would silently not appear. */
+        .sheet(item: Binding(get: { model.session == nil ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }
         .sheet(isPresented: Binding(get: { model.offerNotifications && model.session == nil && model.pendingInvite == nil },
@@ -73,7 +75,7 @@ struct LiveOutingHost: View {
         _controller = StateObject(wrappedValue: {
             let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
             c.onExit = { [weak model] in model?.closeSession() }
-            c.onBackToList = { [weak model] in model?.closeSession(keepShare: true) }
+            c.onBackToList = { [weak model] in model?.parkSession() }
             /* «تخطيط الطلعة»: the weather reads the plan's destination and route. */
             c.planModel = model.plans.model(session.id)
             c.setPush = { [weak model] on in

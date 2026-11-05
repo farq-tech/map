@@ -54,6 +54,20 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
+		<!-- «دعوة شخصية»: the leader picks a contact; the invitee's name (as the leader saved it) and
+		     the last digits of the number go to the server to label the personal link. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeContacts</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
 		<!-- Short notes over your car, shown to fellow members for 15 minutes. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
@@ -118,13 +132,27 @@
 				<string>35F9.1</string>
 			</array>
 		</dict>
-		<!-- UserDefaults: settings, share mode, consent per outing, invite links this device created, on-device trip totals. App-only. -->
+		<!-- UserDefaults: settings, share mode, consent per outing, invite links this device created,
+		     on-device trip totals (CA92.1, app-only); and the App Group group.sa.sary.albarq that the
+		     share extension writes a shared YouTube link into for the app to pick up (1C8F.1). -->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>
 			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>CA92.1</string>
+				<string>1C8F.1</string>
+			</array>
+		</dict>
+		<!-- File timestamps / attributes of the app's own files only: the newest stored trails are
+		     matched first (Core/TrailMatching.swift), the raw trail log's size is capped
+		     (Core/TrailRawLog.swift). Never shown, never sent. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
 			</array>
 		</dict>
 	</array>

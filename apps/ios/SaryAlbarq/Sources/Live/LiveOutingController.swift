@@ -83,6 +83,18 @@ enum LiveModal: Identifiable, Equatable {
         case .pttChannels: return "pttChannels"
         }
     }
+
+    /// Only sheets that mean nothing once the trip is over close by themselves when it ends
+    /// (guidance, a note to send, a rally label, permission explainers). Safety («اطلب إنجاد»),
+    /// the chats, a member's card, the weather… stay until the person closes them.
+    var closesWhenTripEnds: Bool {
+        switch self {
+        case .note, .rallyLabel, .navPicker, .navOptions, .navSteps, .navStartChoice, .shareAlways, .trailAlways, .pttChannels:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 /// The wiring layer for the live outing: owns the screen's local state, feeds
@@ -487,7 +499,7 @@ final class LiveOutingController: ObservableObject {
         feedWeather()
         if session.closedReason != nil, !closeHandled {
             closeHandled = true
-            if modal != nil { modal = nil }
+            if modal?.closesWhenTripEnds == true { modal = nil }
         }
         objectWillChange.send()
     }
@@ -885,12 +897,12 @@ final class LiveOutingController: ObservableObject {
     func back() {
         autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
-        /* Build 14: no «أوقف المشاركة» — back to the list only pauses sending until the trip is
-         * opened again; stopping for good is «غادر الطلعة». Say so before leaving the map. */
+        /* No «أوقف المشاركة»: back to the list keeps the trip's session (and sharing) running
+         * (build 15); stopping is «غادر الطلعة» or the trip's end. Say so before leaving the map. */
         if session.isSharingNow || (session.wantsToShare && session.view?.status == .active) { confirm = .backWhileSharing } else { onExit() }
     }
 
-    /// «ارجع للقائمة» from the back dialog: still a member, the share stays armed.
+    /// «ارجع للقائمة» from the back dialog: still a member, sharing keeps going off the map.
     func backToList() {
         confirm = nil
         onBackToList()

@@ -104,6 +104,10 @@ struct LiveOutingScreen: View {
         }
         .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .ignoresSafeArea(.keyboard)
+        /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
+         * its own window (the dock's copy is hidden or covered then). */
+        .background(SOSOverlayHost(visible: controller.sheetDetent == .full || controller.modal != nil,
+                                   state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger))
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
                 .realisticCover($realistic)
