@@ -19,6 +19,9 @@ const GroceryStubPage = lazy(() => import("./pages/GroceryStubPage"));
 const OutingsHome = lazy(() => import("./components/outings/OutingsHome"));
 const OutingJoin = lazy(() => import("./components/outings/OutingJoin"));
 const OutingLive = lazy(() => import("./components/outings/OutingLive"));
+const PrivacyPolicy = lazy(() => import("./components/outings/PrivacyPolicy"));
+const SupportPage = lazy(() => import("./components/outings/SupportPage"));
+const WatchPage = lazy(() => import("./components/outings/WatchPage"));
 
 function RootLayout() {
 	return (
@@ -116,6 +119,39 @@ const outingJoinRoute = createRoute({
 	),
 });
 
+/* سياسة الخصوصية — linked from the App Store listing and the iPhone app. */
+const privacyRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/privacy",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<PrivacyPolicy />
+		</Suspense>
+	),
+});
+
+/* الدعم — the App Store "Support URL" for the iPhone app. */
+const supportRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/support",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<SupportPage />
+		</Suspense>
+	),
+});
+
+/* «مؤقت الرجوع» — public watch link; the capability token rides in the fragment (/watch#…). */
+const watchRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/watch",
+	component: () => (
+		<Suspense fallback={<RouteFallback />}>
+			<WatchPage />
+		</Suspense>
+	),
+});
+
 const outingLiveRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/outings/$id",
@@ -172,6 +208,9 @@ const routeTree = rootRoute.addChildren([
 	outingsRoute,
 	outingJoinRoute,
 	outingLiveRoute,
+	privacyRoute,
+	supportRoute,
+	watchRoute,
 ]);
 
 const router = createRouter({ routeTree });
@@ -180,6 +219,13 @@ declare module "@tanstack/react-router" {
 	interface Register {
 		router: typeof router;
 	}
+}
+
+/* «حفظ المنطقة دون اتصال» reads what the map loaded from resource timing; the default 250 entries fill up in seconds. */
+try {
+	performance.setResourceTimingBufferSize(2000);
+} catch {
+	/* older browsers: the offline save just sees fewer of the map's files */
 }
 
 const el = document.getElementById("root");

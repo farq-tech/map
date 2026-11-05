@@ -236,23 +236,148 @@
 	color: #f0b7a4;
 }
 
-.sary-o-share {
-	position: absolute;
-	top: calc(72px + env(safe-area-inset-top));
-	inset-inline: 12px;
-	z-index: 7;
+/* One status line under the title: sharing, GPS and connection in a single row; tap for detail. */
+.sary-o-bar {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	transition: background-color 240ms ease;
+}
+
+.sary-o-bar.has-warn {
+	border-color: rgba(240, 120, 90, 0.55);
+}
+
+.sary-o-bar-row {
 	display: flex;
 	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.sary-o-title {
+	flex: 1 1 auto;
+	gap: 2px;
+}
+
+.sary-o-title-row {
+	display: flex;
+	align-items: baseline;
 	gap: 8px;
-	padding: 8px 12px;
-	border-radius: 12px;
-	background: rgba(28, 24, 20, 0.86);
+	min-width: 0;
+}
+
+.sary-o-title-row strong {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.sary-o-title .sary-o-title-meta {
+	flex: 0 0 auto;
+	font-size: 0.75rem;
+	white-space: nowrap;
+}
+
+.sary-o-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+	min-height: 28px;
+	padding: 0;
+	border: 0;
+	background: transparent;
 	color: #d4c6ae;
+	font: inherit;
+	font-size: 0.82rem;
+	text-align: start;
+	cursor: pointer;
+}
+
+.sary-o-status.is-on {
+	color: #f4efe6;
+}
+
+.sary-o-status-text {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sary-o-badge {
+	flex: 0 0 auto;
+	padding: 1px 8px;
+	border-radius: 999px;
+	background: rgba(150, 52, 32, 0.95);
+	color: #fde6dd;
+	font-size: 0.75rem;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.sary-o-status-chev {
+	flex: 0 0 auto;
+	opacity: 0.7;
+	transition: transform 200ms ease;
+}
+
+.sary-o-bar.is-open .sary-o-status-chev {
+	transform: rotate(180deg);
+}
+
+/* Read by screen readers (and by innerText), not shown. */
+.sary-o-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+.sary-o-detail {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(244, 239, 230, 0.12);
+	color: #e8dfd0;
 	font-size: 0.85rem;
 }
 
-.sary-o-share.is-on {
-	color: #f4efe6;
+.sary-o-detail[hidden] {
+	display: none;
+}
+
+.sary-o-detail p {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+}
+
+.sary-o-detail .is-warn {
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: rgba(120, 44, 28, 0.92);
+	color: #fde6dd;
+}
+
+.sary-o-detail .is-warn button {
+	min-height: 32px;
+	border: 0;
+	background: transparent;
+	color: #fff;
+	text-decoration: underline;
+	font: inherit;
+	font-weight: 700;
 }
 
 .sary-o-dot {
@@ -263,14 +388,17 @@
 	background: #8a7f70;
 }
 
-.sary-o-share.is-on .sary-o-dot {
+.sary-o-status.is-on .sary-o-dot {
 	background: #e8842c;
+}
+
+.sary-o-status.is-on .sary-o-dot {
 	box-shadow: 0 0 0 0 rgba(232, 132, 44, 0.6);
 	animation: sary-o-pulse 1.8s ease-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.sary-o-share.is-on .sary-o-dot {
+	.sary-o-status.is-on .sary-o-dot {
 		animation: none;
 	}
 }
@@ -281,24 +409,142 @@
 	}
 }
 
-.sary-o-warn {
+/* Off-screen friends: a chip on the edge in their car colour, pointing at them. */
+.sary-o-edges {
 	position: absolute;
-	top: calc(116px + env(safe-area-inset-top));
-	inset-inline: 12px;
-	z-index: 7;
-	padding: 8px 12px;
-	border-radius: 12px;
-	background: rgba(120, 44, 28, 0.92);
-	color: #fde6dd;
-	font-size: 0.85rem;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
 }
 
-.sary-o-warn button {
-	border: 0;
-	background: transparent;
-	color: #fff;
-	text-decoration: underline;
+.sary-o-edge {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 136px;
+	height: 38px;
+	padding: 0 8px;
+	border: 2px solid var(--car, #e8eef0);
+	border-radius: 999px;
+	background: rgba(28, 24, 20, 0.92);
+	color: #f4efe6;
 	font: inherit;
+	text-align: start;
+	transform: translate(-50%, -50%);
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+/* Not live: said in words in the chip, and drawn dashed — never like a live car. */
+.sary-o-edge[data-fresh="recent"],
+.sary-o-edge[data-fresh="lost"] {
+	border-style: dashed;
+	opacity: 0.85;
+}
+
+.sary-o-edge-arrow {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--car, #e8eef0);
+	color: #1c1814;
+}
+
+.sary-o-edge-arrow svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
+	stroke: currentColor;
+}
+
+.sary-o-edge-text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.15;
+}
+
+.sary-o-edge-text b {
+	font-size: 0.8rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.sary-o-edge-text small {
+	color: #d4c6ae;
+	font-size: 0.7rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ---- driving mode: read at a glance, hit with a thumb on a bumpy track ---- */
+.sary-o-live[data-drive="1"] .sary-o-title strong {
+	font-size: 1.2rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-status {
+	min-height: 36px;
+	font-size: 1rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-round {
+	width: 52px;
+	height: 52px;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-fabs .sary-fab {
+	min-height: 54px;
+	min-width: 76px;
+	font-size: 1.05rem;
+	font-weight: 700;
+	border-radius: 18px;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-member {
+	min-height: 64px;
+	font-size: 1.05rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-layer-chip {
+	min-height: 52px;
+	font-size: 1rem;
+}
+
+.sary-o-live[data-drive="1"] .sary-o-edge {
+	transform: translate(-50%, -50%) scale(1.15);
+}
+
+.sary-o-live[data-drive="1"] .sary-peer__name b {
+	font-size: 1.05em;
+}
+
+/* ---- night: darker chrome so the screen does not glare in the desert dark ---- */
+.sary-o-live[data-night="1"] .sary-o-bar,
+.sary-o-live[data-night="1"] .sary-fab,
+.sary-o-live[data-night="1"] .sary-o-edge {
+	background: rgba(8, 8, 10, 0.92);
+	color: #d9d2c5;
+}
+
+.sary-o-live[data-night="1"] .farq-sheet {
+	background: #0d0c0b;
+	color: #d9d2c5;
+}
+
+.sary-o-live[data-night="1"] .sary-o-title span,
+.sary-o-live[data-night="1"] .sary-o-status {
+	color: #b9ae9c;
+}
+
+.sary-o-live[data-night="1"] .sary-o-status.is-on {
+	color: #e6dfd3;
 }
 
 .sary-o-fabs {
@@ -456,6 +702,25 @@
 
 .sary-o-modal .sary-o-card {
 	max-width: 420px;
+}
+
+/* Location-denied screen: SOS is never hidden — the button and its banners/toasts sit above it. */
+.sary-o-live[data-geo-denied="1"] .sary-sos-btn {
+	z-index: 70;
+	bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.sary-o-live[data-geo-denied="1"] .sary-o-lane {
+	z-index: 70;
+}
+
+.sary-o-steps {
+	margin: 0;
+	padding-inline-start: 1.2em;
+	display: grid;
+	gap: 6px;
+	font-size: 0.92em;
+	line-height: 1.5;
 }
 
 /* ---- participant marker ---- */
@@ -657,9 +922,7 @@
 }
 
 @media (min-width: 1024px) {
-	.sary-o-bar,
-	.sary-o-share,
-	.sary-o-warn {
+	.sary-o-bar {
 		inset-inline-end: auto;
 		width: min(420px, 40vw);
 	}
@@ -684,6 +947,15 @@
 	color: #e8842c;
 	font-size: 0.8rem;
 	font-weight: 700;
+}
+
+.sary-o-dest {
+	margin: 0;
+	color: #d4c6ae;
+}
+
+.sary-o-dest strong {
+	color: #e8842c;
 }
 
 .sary-o-current {
@@ -975,4 +1247,495 @@
 .sary-o-contact .sary-o-linkbtn {
 	flex: 1 1 0;
 	justify-content: center;
+}
+
+/* Field test tools («وضع الاختبار الميداني») */
+.sary-o-field {
+	display: grid;
+	gap: 6px;
+	margin-block: 4px 10px;
+}
+.sary-o-field .sary-o-row {
+	flex-wrap: wrap;
+}
+
+/* Recovery code: one glance to read back, nothing to misread. */
+.sary-o-code {
+	width: 100%;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	/* 34 characters must fit a 320 px phone without scrolling the field. */
+	font-size: clamp(11px, 3.4vw, 15px);
+	letter-spacing: 0;
+	padding: 0 8px;
+	text-align: center;
+}
+
+/* ---- keep-screen-on hint + notifications row ---- */
+
+.sary-o-wake-hint {
+	max-width: calc(100vw - 32px);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 0.85rem;
+	text-align: center;
+}
+
+.sary-o-push {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	border: 1px solid rgba(244, 239, 230, 0.12);
+	border-radius: 14px;
+	padding: 10px 12px;
+}
+
+.sary-o-push-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	min-height: 44px;
+}
+
+.sary-o-push-head strong {
+	font-weight: 700;
+}
+
+.sary-o-push ol {
+	margin: 0;
+	padding-inline-start: 1.2em;
+	color: #d4c6ae;
+	font-size: 0.85rem;
+	display: grid;
+	gap: 2px;
+}
+
+/* ---- push-to-talk («اضغط وتكلم») ---- */
+
+.sary-o-ptt-wrap {
+	position: absolute;
+	z-index: 6;
+	inset-inline-start: 12px;
+	bottom: calc(168px + env(safe-area-inset-bottom));
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	max-width: calc(100% - 120px);
+}
+
+.sary-o-ptt {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 56px;
+	padding: 0 18px;
+	border: 2px solid rgba(244, 239, 230, 0.25);
+	border-radius: 999px;
+	background: rgba(28, 24, 20, 0.92);
+	color: #f4efe6;
+	font: 700 0.95rem/1.2 inherit;
+	overflow: hidden;
+	/* Holding must not select text, open a callout or scroll the map. */
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	touch-action: none;
+	cursor: pointer;
+}
+
+.sary-o-ptt[data-state="recording"] {
+	background: #b3261e;
+	border-color: #ffb4a9;
+}
+
+.sary-o-ptt[data-state="sending"],
+.sary-o-ptt[data-state="arming"] {
+	opacity: 0.8;
+}
+
+.sary-o-ptt-bar {
+	position: absolute;
+	inset-inline-start: 0;
+	bottom: 0;
+	height: 4px;
+	background: #ffdad5;
+}
+
+.sary-o-ptt-msg {
+	margin: 0;
+	padding: 8px 12px;
+	border-radius: 12px;
+	background: #fff4d6;
+	color: #1c1814;
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.sary-o-voice-wrap {
+	position: fixed;
+	z-index: 64;
+	top: calc(76px + env(safe-area-inset-top, 0px));
+	inset-inline: 12px;
+	display: flex;
+	justify-content: center;
+}
+
+.sary-o-voice-wrap.is-below {
+	top: calc(150px + env(safe-area-inset-top, 0px));
+}
+
+.sary-o-voice {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	column-gap: 10px;
+	width: 100%;
+	max-width: 420px;
+	padding: 10px 14px;
+	border: 0;
+	border-inline-start: 6px solid var(--car, #e8842c);
+	border-radius: 16px;
+	background: #e9f3ff;
+	color: #10202c;
+	text-align: start;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	cursor: pointer;
+}
+
+.sary-o-voice > span {
+	grid-row: span 2;
+	font-size: 1.3rem;
+}
+
+.sary-o-voice small {
+	font-size: 0.8rem;
+	opacity: 0.8;
+}
+
+.sary-o-voice[data-state="playing"] {
+	background: #d4ecff;
+}
+
+/* Over the sender's car, like a note. */
+.sary-peer__voice {
+	display: inline-block;
+	max-width: 200px;
+	padding: 5px 10px;
+	border-radius: 12px;
+	background: #e9f3ff;
+	color: #10202c;
+	font: 700 12px/1.3 system-ui, sans-serif;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+	cursor: pointer;
+}
+
+.sary-peer:not(.is-car) .sary-peer__voice {
+	position: absolute;
+	bottom: 52px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+.sary-peer:not(.is-car) .sary-peer__note:not([hidden]) ~ .sary-peer__voice {
+	bottom: 92px;
+}
+
+.sary-peer__voice.is-playing {
+	background: #b9e0ff;
+}
+
+.sary-peer__voice[hidden] {
+	display: none;
+}
+
+/* ---- nearest station ---- */
+
+.sary-o-nearest {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.sary-o-nearest li {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px;
+	border: 1px solid rgba(244, 239, 230, 0.12);
+	border-radius: 14px;
+}
+
+.sary-o-nearest li > div:first-child {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.sary-o-nearest span {
+	font-size: 0.9rem;
+	color: #cfc4b3;
+}
+
+.sary-o-card h3 {
+	margin: 4px 0 0;
+	font-size: 1rem;
+}
+
+.sary-o-attrib {
+	font-size: 0.75rem !important;
+}
+
+/* ---- opt-in trip summary ---- */
+
+.sary-o-trip {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-top: 6px;
+	border-top: 1px solid rgba(244, 239, 230, 0.1);
+}
+
+.sary-o-trip-big {
+	margin: 0;
+	font-size: 1.4rem;
+	font-weight: 800;
+}
+
+.sary-o-summaries {
+	list-style: none;
+	margin: 4px 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.sary-o-summaries li {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 0.9rem;
+}
+
+/* Half-open sheet while driving: the button column must still clear the top bar. */
+.sary-o-live[data-drive="1"][data-snap="half"] .sary-o-fabs .sary-fab {
+	min-height: 46px;
+	min-width: 0;
+	font-size: 0.98rem;
+}
+
+/* ---- integration: one alert lane under the top bar ----
+ * The SOS line (#24), note / gap alerts, the voice banner (#23) and toasts all
+ * used to sit fixed at the top of the screen, over the bar and each other.
+ * They now stack in one lane right under the bar (whose height is measured
+ * into --sary-bar-bottom), so the status line (#21) always stays readable. */
+.sary-o-lane {
+	position: absolute;
+	z-index: 8;
+	top: calc(var(--sary-bar-bottom, 84px) + 6px);
+	inset-inline: 12px;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+	pointer-events: none;
+}
+
+.sary-o-lane > * {
+	pointer-events: auto;
+}
+
+.sary-o-lane > .sary-o-alert,
+.sary-o-lane > .sary-sos-mine,
+.sary-o-lane > .sary-sos-strip,
+.sary-o-lane > .sary-o-voice,
+.sary-o-lane > .sary-o-toast {
+	position: static;
+	inset: auto;
+	top: auto;
+	bottom: auto;
+	left: auto;
+	transform: none;
+	width: auto;
+	max-width: none;
+	margin: 0;
+}
+
+.sary-o-lane > .sary-o-alert {
+	padding: 10px 14px;
+}
+
+.sary-o-lane > .sary-o-toast {
+	align-self: center;
+	max-width: 100%;
+	text-align: center;
+}
+
+/* The keep-screen-on hint (#18) lives in the status line now. */
+.sary-o-badge.is-info {
+	background: rgba(143, 224, 168, 0.16);
+	color: #c8f0d4;
+}
+
+/* ---- integration: «اضغط وتكلم» (#23) beside «طوارئ» (#24), never on top of it ----
+ * Same bottom-start corner, same height above the sheet, one button-width in. */
+.sary-o-ptt-wrap {
+	inset-inline-start: calc(12px + 64px + 10px);
+	bottom: calc(min(calc(var(--sary-sheet-h, 148px) + 20px + env(safe-area-inset-bottom, 0px)), calc(100dvh - 240px)) + 4px);
+	/* Leave room for the round-button column on the other side. */
+	max-width: calc(100% - 86px - 132px);
+	align-items: flex-start;
+}
+
+.sary-o-ptt {
+	max-width: 100%;
+}
+
+.sary-o-ptt > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---- integration: with the sheet open, the four buttons lie in one row ----
+ * Stacked, four tall buttons above a half sheet reach the alert lane on a short
+ * phone (iPhone 14: 664 px). One row keeps them all. */
+.sary-o-live:not([data-snap="peek"]) .sary-o-fabs {
+	/* The row sits above «طوارئ» and «اضغط وتكلم», which keep the sheet's edge. */
+	bottom: calc(var(--sary-sheet-h) + 44px + 72px + env(safe-area-inset-bottom, 0px)) !important;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+	max-width: calc(100vw - 24px);
+}
+
+.sary-o-live:not([data-snap="peek"]) .sary-o-fabs .sary-fab {
+	min-height: 40px;
+	min-width: 0;
+	padding: 0 10px;
+	white-space: nowrap;
+}
+
+/* ---------- /watch — «مؤقت الرجوع» ---------- */
+.sary-watch-hero { text-align: center; align-items: center; }
+.sary-watch-hero h1 { margin: 4px 0; font-size: 1.45rem; line-height: 1.4; }
+.sary-watch-icon svg { width: 44px; height: 44px; }
+.sary-watch-armed .sary-watch-icon { color: #e8842c; }
+.sary-watch-overdue { border-color: rgba(214, 84, 60, 0.7); background: #2c1712; }
+.sary-watch-overdue .sary-watch-icon, .sary-watch-overdue h1 { color: #ff9a80; }
+.sary-watch-arrived .sary-watch-icon, .sary-watch-arrived h1 { color: #8fd19e; }
+.sary-watch-cancelled .sary-watch-icon { color: rgba(244, 239, 230, 0.6); }
+.sary-watch-rel { margin: 0; font-weight: 700; font-size: 1.05rem; }
+.sary-watch-call { display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; font-size: 1.1rem; }
+.sary-watch-map { height: 240px; border-radius: 14px; overflow: hidden; }
+.sary-watch-pin { display: flex; flex-direction: column; align-items: center; padding: 4px 8px; border-radius: 10px; background: #221c16; color: #f4efe6; border: 2px solid #ff9a80; font: 600 12px/1.3 system-ui, sans-serif; direction: rtl; white-space: nowrap; }
+.sary-watch-pin span { font-weight: 400; opacity: 0.8; }
+.sary-watch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sary-watch-list li { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.sary-watch-list a { color: #e8a865; margin-inline-start: auto; direction: ltr; unicode-bidi: isolate; }
+.sary-watch-foot { text-align: center; }
+.sary-watch-foot a { color: #e8a865; }
+
+/* «دعوة شخصية»: the person's own name, beside the name the inviter gave them. */
+.sary-o-nick {
+	font-weight: 400;
+	opacity: 0.7;
+}
+
+/* «دردشة الطلعة» — group chat panel (components/outings/OutingChat.tsx). */
+.sary-o-chat-badge {
+	display: inline-grid;
+	place-items: center;
+	min-width: 18px;
+	height: 18px;
+	margin-inline-start: 6px;
+	padding: 0 5px;
+	border-radius: 9px;
+	background: #d6452f;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+}
+.sary-o-chat-title {
+	margin: 0;
+	font-size: 15px;
+}
+.sary-o-chat-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: 42vh;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+.sary-o-chat-msg {
+	align-self: flex-start;
+	max-width: 85%;
+	display: grid;
+	gap: 2px;
+	padding: 8px 10px;
+	border-radius: 14px;
+	border-inline-start: 4px solid #9aa5ad;
+	background: rgba(127, 127, 127, 0.14);
+	overflow-wrap: anywhere;
+}
+.sary-o-chat-msg.is-mine {
+	align-self: flex-end;
+	background: rgba(47, 111, 214, 0.18);
+}
+.sary-o-chat-msg.is-deleted {
+	opacity: 0.7;
+}
+.sary-o-chat-who {
+	font-size: 12px;
+}
+.sary-o-chat-meta {
+	font-size: 11px;
+	opacity: 0.75;
+}
+.sary-o-chat-point,
+.sary-o-link-btn {
+	background: none;
+	border: 0;
+	padding: 0;
+	color: inherit;
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+	text-align: start;
+}
+.sary-o-chat-quick {
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+}
+.sary-o-chat-compose {
+	display: flex;
+	gap: 8px;
+	align-items: flex-end;
+}
+.sary-o-chat-compose textarea {
+	flex: 1;
+	min-height: 44px;
+	resize: vertical;
+	border-radius: 12px;
+	padding: 8px 10px;
+	font: inherit;
+	color: inherit;
+	background: rgba(127, 127, 127, 0.12);
+	border: 1px solid rgba(127, 127, 127, 0.35);
 }

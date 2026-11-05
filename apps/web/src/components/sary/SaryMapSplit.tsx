@@ -37,9 +37,27 @@ import { sheetHeightPx } from "../intelligence/FarqBottomSheet";
 import SaryExploreChrome from "./SaryExploreChrome";
 import SaryPlaceSheet from "./SaryPlaceSheet";
 import SaryRouteSheet from "./SaryRouteSheet";
+import type { Map as MapboxMap } from "mapbox-gl";
 import "../../styles/sary-map.css";
 
 const FarqMap = lazy(() => import("../intelligence/FarqMap"));
+const OfflineAreaSheet = lazy(() => import("./OfflineAreaSheet"));
+
+/** navigator.onLine, live. */
+function useOnline(): boolean {
+	const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+	useEffect(() => {
+		const on = () => setOnline(true);
+		const off = () => setOnline(false);
+		window.addEventListener("online", on);
+		window.addEventListener("offline", off);
+		return () => {
+			window.removeEventListener("online", on);
+			window.removeEventListener("offline", off);
+		};
+	}, []);
+	return online;
+}
 
 type Phase =
 	| "permission"
@@ -105,6 +123,9 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 	const [query, setQuery] = useState(search.q || "");
 	const [layer, setLayer] = useState<OutdoorLayerId>(search.layer || "around");
 	const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
+	const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
+	const [offlineOpen, setOfflineOpen] = useState(false);
+	const online = useOnline();
 	const [selectedId, setSelectedId] = useState(search.place || "");
 	const [phase, setPhase] = useState<Phase>(
 		hasLocationPermission ? "loading" : "permission",
@@ -529,6 +550,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 					<FarqMap
 						mode="outdoor"
 						basemap="satellite"
+						onMapReady={setMapInstance}
 						places={{
 							type: "FeatureCollection",
 							count: split.places.features.length,
@@ -588,6 +610,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 					}}
 					searchHint={searchHint}
 					onToggleLanguage={toggleLanguage}
+					onOffline={() => setOfflineOpen(true)}
 					layer={layer}
 					onLayer={(next) => {
 						setLayer(next);
@@ -755,6 +778,16 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 						</p>
 					) : null}
 				</SaryExploreChrome>
+				{!online ? (
+					<p className="sary-offline-badge" role="status" data-testid="sary-offline-badge">
+						{isRTL ? "دون اتصال — تظهر المناطق المحفوظة فقط" : "Offline — saved areas only"}
+					</p>
+				) : null}
+				{offlineOpen ? (
+					<Suspense fallback={null}>
+						<OfflineAreaSheet isRTL={isRTL} map={mapInstance} basemap="satellite" onClose={() => setOfflineOpen(false)} />
+					</Suspense>
+				) : null}
 			</div>
 			<aside className="sary-desktop-panel hidden lg:block">
 				<button type="button" className="sary-lang" onClick={toggleLanguage}>

@@ -31,7 +31,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const pool = createPool(URL_);
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   const applied = await migrate(pool);
-  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql']);
+  assert.deepEqual(applied, ['001_sary_outings.sql', '002_sary_member_phone.sql', '003_sary_field_diagnostics.sql', '004_sary_accounts.sql', '005_sary_trip_summary.sql', '006_sary_push_subscriptions.sql', '007_sary_safety.sql', '008_sary_apns_tokens.sql', '009_sary_outing_features.sql', '010_sary_ptt_tokens.sql', '011_sary_personal_invites.sql', '012_sary_trip_chat.sql', '013_sary_ptt_channels.sql', '014_sary_group_audio.sql']);
   assert.deepEqual(await migrate(pool), [], 'migrations are idempotent');
 
   const outings = setupOutings({
@@ -267,6 +267,21 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const history = await api('GET', '/', B);
   assert.equal(history.body.current.length, 0);
   assert.equal(history.body.history[0].name, 'طلعة الثمامة');
+
+  /* --- field-test diagnostics: members of the (ended) outing only, numbers only --- */
+  const sample = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../../../docs/field-test/sample-diagnostics.json'), 'utf8'));
+  const dirty = { ...sample, lat: 24.7, display_name: 'خويي سعد', token: B, app: { ...sample.app, platform: 'android' } };
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, B, { report: dirty })).status, 201);
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, A, { report: sample })).status, 404, 'a member who left cannot send');
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, C, { report: sample })).status, 404, 'a stranger cannot send');
+  assert.equal((await api('POST', `/${outingId}/diagnostics`, B, { report: { schema: 'x' } })).body.error, 'unsupported_schema');
+  const diagRows = await pool.query('SELECT * FROM sary.field_diagnostics');
+  assert.equal(diagRows.rows.length, 1);
+  const row = diagRows.rows[0];
+  assert.deepEqual(Object.keys(row).sort(), ['browser', 'id', 'outing_ref', 'platform', 'received_at', 'report']);
+  const storedRow = JSON.stringify(row);
+  for (const secret of [outingId, bId, B, 'خويي', '24.7']) assert.ok(!storedRow.includes(secret), `stored row leaks ${secret}`);
+  assert.equal(row.report.sends.attempts, sample.sends.attempts);
 });
 
 test('twenty members in one outing, two outings isolated', { skip, timeout: 60_000 }, async (t) => {
@@ -342,4 +357,544 @@ test('twenty members in one outing, two outings isolated', { skip, timeout: 60_0
   assert.equal(snap.positions.length, 20);
   for (const s of sockets) s.ws.close();
   spy.close();
+});
+
+test('outing safety — SOS, battery, rally point', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(URL_);
+  await migrate(pool);
+  const outings = setupOutings({ pool, autoMigrate: false, limits: { identityPerHour: 100, invitePer10Min: 100 }, config: { minFixIntervalMs: 0, persistEveryMs: 0 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+
+  async function api(method, path, token, body) {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }
+
+  function live(token, outingId) {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+    const inbox = [];
+    const waiters = [];
+    ws.on('message', (d) => {
+      const msg = JSON.parse(String(d));
+      inbox.push(msg);
+      for (const w of [...waiters]) if (w.pred(msg)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(msg); }
+    });
+    const next = (pred, ms = 4000) => {
+      const hit = inbox.find(pred);
+      if (hit) { inbox.splice(inbox.indexOf(hit), 1); return Promise.resolve(hit); }
+      return new Promise((resolve, reject) => {
+        const w = { pred, resolve: (m) => { clearTimeout(timer); inbox.splice(inbox.indexOf(m), 1); resolve(m); } };
+        const timer = setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); reject(new Error('timeout waiting for message')); }, ms);
+        waiters.push(w);
+      });
+    };
+    const opened = new Promise((r) => ws.on('open', r)).then(() => ws.send(JSON.stringify({ type: 'auth', token, outing_id: outingId })));
+    return { ws, next, opened, inbox, send: (m) => ws.send(JSON.stringify(m)) };
+  }
+
+  const a = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const b = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const c = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+  const created = (await api('POST', '/', a.token, { name: 'طلعة الأمان' })).body;
+  const id = created.outing_id;
+  await api('POST', '/invites/join', b.token, { token: created.invite.token });
+  await api('POST', `/${id}/status`, a.token, { action: 'start' });
+
+  const la = live(a.token, id);
+  const lb = live(b.token, id);
+  await Promise.all([la.opened, lb.opened]);
+  const ready = await la.next((m) => m.type === 'ready');
+  await lb.next((m) => m.type === 'ready');
+  assert.equal(ready.snapshot.outing.rally, null, 'no rally point to begin with');
+
+  /* --- battery rides the heartbeat; nothing is invented when a phone cannot tell --- */
+  lb.send({ type: 'heartbeat', gps: 'ok', battery: { level: 0.12, charging: false } });
+  const link = await la.next((m) => m.type === 'member_link' && m.user_id === b.user.id);
+  assert.deepEqual([link.battery.level, link.battery.charging], [0.12, false]);
+  assert.ok(link.battery.at);
+  let snap = (await api('GET', `/${id}`, a.token)).body;
+  assert.equal(snap.members.find((m) => m.user_id === b.user.id).battery.level, 0.12, 'battery in the snapshot');
+  assert.equal(snap.members.find((m) => m.user_id === a.user.id).battery, null, 'never guessed for a phone that sent none');
+  assert.equal((await api('POST', `/${id}/heartbeat`, a.token, { gps: 'ok', battery: { level: 7, charging: true } })).status, 200);
+  assert.equal((await lb.next((m) => m.type === 'member_link' && m.user_id === a.user.id)).battery, null, 'out-of-range reading is dropped');
+
+  /* --- SOS --- */
+  assert.equal((await api('POST', `/${id}/sos`, c.token, { fix: null })).status, 404, 'outsider cannot raise an SOS');
+  assert.equal((await api('POST', `/${id}/sos`, b.token, { fix: { lat: RIYADH.lat, lng: RIYADH.lng, accuracy: 12, age_ms: 40 * 60_000 } })).body.error, 'sos_fix_stale');
+  const raised = await api('POST', `/${id}/sos`, b.token, { fix: { lat: RIYADH.lat, lng: RIYADH.lng, accuracy: 12, age_ms: 90_000 } });
+  assert.equal(raised.status, 200);
+  const heard = await la.next((m) => m.type === 'sos');
+  assert.equal(heard.user_id, b.user.id);
+  assert.equal(heard.sos.fix.lat, RIYADH.lat);
+  const fixAge = Date.now() - new Date(heard.sos.fix.recorded_at).getTime();
+  assert.ok(fixAge >= 89_000 && fixAge < 100_000, 'the fix keeps its own (older) time');
+  assert.equal((await api('POST', `/${id}/sos`, b.token, {})).body.error, 'too_frequent', 'rate limited');
+
+  /* A late joiner and a reconnect both see it in the snapshot. */
+  const rotated = (await api('POST', `/${id}/invites`, a.token, {})).body.invite.token;
+  await api('POST', '/invites/join', c.token, { token: rotated });
+  const lc = live(c.token, id);
+  await lc.opened;
+  const cReady = await lc.next((m) => m.type === 'ready');
+  const bInSnap = cReady.snapshot.members.find((m) => m.user_id === b.user.id);
+  assert.equal(bInSnap.sos.fix.lng, RIYADH.lng, 'late joiner sees the active SOS');
+
+  /* «أنا بخير» clears it for everyone. */
+  assert.equal((await api('DELETE', `/${id}/sos`, b.token)).status, 200);
+  assert.equal((await la.next((m) => m.type === 'sos')).sos, null);
+  assert.equal((await lc.next((m) => m.type === 'sos')).sos, null);
+  snap = (await api('GET', `/${id}`, c.token)).body;
+  assert.equal(snap.members.find((m) => m.user_id === b.user.id).sos, null);
+
+  /* With no GPS at all you can still call for help. */
+  await new Promise((r) => setTimeout(r, 3_100));
+  assert.equal((await api('POST', `/${id}/sos`, b.token, { fix: null })).body.sos.fix, null);
+  assert.equal((await la.next((m) => m.type === 'sos')).sos.fix, null);
+
+  /* --- rally point --- */
+  assert.equal((await api('PUT', `/${id}/rally`, b.token, { lat: 24.8, lng: 46.7 })).status, 403, 'members cannot set it');
+  assert.equal((await api('PUT', `/${id}/rally`, c.token, { lat: 24.8, lng: 46.7 })).status, 403);
+  assert.equal((await api('PUT', `/${id}/rally`, a.token, { lat: 'x', lng: 46.7 })).body.error, 'invalid_rally');
+  const set = await api('PUT', `/${id}/rally`, a.token, { lat: 24.8, lng: 46.7, label: 'عند الطلح' });
+  assert.equal(set.status, 200);
+  const r1 = await lb.next((m) => m.type === 'rally');
+  assert.deepEqual([r1.rally.lat, r1.rally.lng, r1.rally.label, r1.rally.set_by], [24.8, 46.7, 'عند الطلح', a.user.id]);
+  await api('PUT', `/${id}/rally`, a.token, { lat: 24.81, lng: 46.71 });
+  assert.equal((await lb.next((m) => m.type === 'rally')).rally.lat, 24.81, 'moved');
+  assert.equal((await api('GET', `/${id}`, c.token)).body.outing.rally.lng, 46.71, 'rally in the snapshot');
+  await api('DELETE', `/${id}/rally`, a.token);
+  assert.equal((await lb.next((m) => m.type === 'rally')).rally, null, 'cleared');
+  await api('PUT', `/${id}/rally`, a.token, { lat: 24.82, lng: 46.72 });
+
+  /* --- leaving drops my SOS; ending wipes rally and every SOS --- */
+  await api('POST', `/${id}/leave`, b.token);
+  snap = (await api('GET', `/${id}`, c.token)).body;
+  assert.equal(snap.members.some((m) => m.sos), false);
+  await api('POST', `/${id}/status`, a.token, { action: 'end' });
+  const row = (await pool.query('SELECT rally_lat, rally_lng FROM sary.outings WHERE id = $1', [id])).rows[0];
+  assert.deepEqual(row, { rally_lat: null, rally_lng: null }, 'ending deletes the rally point');
+  for (const s of [la, lb, lc]) s.ws.close();
+});
+
+test('web push: notes and SOS reach members whose screen is off', { skip, timeout: 60_000 }, async (t) => {
+  const crypto = require('crypto');
+  const pool = createPool(URL_);
+  await migrate(pool);
+  /* A fake push service: records what would be sent, answers 410 for "gone" endpoints. */
+  const inbox = [];
+  const sender = {
+    async send(sub, body, opts) {
+      if (sub.endpoint.includes('/gone')) throw Object.assign(new Error('gone'), { statusCode: 410 });
+      inbox.push({ endpoint: sub.endpoint, keys: sub.keys, payload: JSON.parse(body), opts });
+      return { statusCode: 201 };
+    },
+  };
+  const outings = setupOutings({
+    pool,
+    autoMigrate: false,
+    limits: { identityPerHour: 100, invitePer10Min: 100 },
+    push: { config: { enabled: true, publicKey: 'BTestPublicKey', privateKey: 'unused-by-fake' }, sender, maxPerUser: 2 },
+  });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  const api = async (method, path, token, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const keys = () => {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.generateKeys();
+    return { p256dh: ecdh.getPublicKey().toString('base64url'), auth: crypto.randomBytes(16).toString('base64url') };
+  };
+  const sub = (name) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}-${crypto.randomUUID()}`, keys: keys() });
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = pred();
+      if (v) return v;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const gap = () => new Promise((r) => setTimeout(r, 2_100)); // one note per 2 s per person
+
+  const cfg = await api('GET', '/push/config');
+  assert.deepEqual(cfg.body, { ok: true, enabled: true, public_key: 'BTestPublicKey' });
+
+  const A = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const B = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const C = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+
+  /* --- subscribe: auth, validation, cap per person --- */
+  assert.equal((await api('POST', '/push/subscribe', null, { subscription: sub('x') })).status, 401);
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: { endpoint: 'https://evil.example.com/x', keys: keys() } })).status, 400);
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: { endpoint: 'https://fcm.googleapis.com/x', keys: { p256dh: 'AA', auth: 'BB' } } })).status, 400);
+  const b1 = sub('b-old'), b2 = sub('gone'), b3 = sub('b-new');
+  for (const s of [b1, b2, b3]) {
+    assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: s })).status, 201);
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  const bRows = (await pool.query('SELECT endpoint FROM sary.push_subscriptions WHERE user_id = $1', [B.user.id])).rows.map((r) => r.endpoint).sort();
+  assert.deepEqual(bRows, [b2.endpoint, b3.endpoint].sort(), 'capped at 2 per person, oldest dropped');
+  assert.equal((await api('POST', '/push/subscribe', B.token, { subscription: b3 })).status, 201, 'resubscribing is idempotent');
+  const a1 = sub('a');
+  assert.equal((await api('POST', '/push/subscribe', A.token, { subscription: a1 })).status, 201);
+  const c1 = sub('c');
+  assert.equal((await api('POST', '/push/subscribe', C.token, { subscription: c1 })).status, 201);
+
+  /* --- an outing with A and B; C is an outsider --- */
+  const o = (await api('POST', '/', A.token, { name: 'طلعة النفود' })).body;
+  assert.equal((await api('POST', '/invites/join', B.token, { token: o.invite.token })).status, 200);
+  assert.equal((await api('POST', `/${o.outing_id}/status`, A.token, { action: 'start' })).status, 200);
+
+  /* A note from A → B's phones, never A's own, never the outsider's. A 410 deletes that subscription. */
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'بوقف عند المحطة' })).status, 200);
+  const first = await until(() => inbox.find((m) => m.endpoint === b3.endpoint));
+  await settle();
+  assert.deepEqual(inbox.map((m) => m.endpoint), [b3.endpoint]);
+  assert.equal(first.payload.type, 'note');
+  assert.equal(first.payload.body, 'بوقف عند المحطة');
+  assert.equal(first.payload.title, 'أبو فهد · طلعة النفود');
+  assert.equal(first.payload.url, `/outings/${o.outing_id}`);
+  assert.deepEqual(first.keys, b3.keys);
+  const gone = await pool.query('SELECT 1 FROM sary.push_subscriptions WHERE endpoint = $1', [b2.endpoint]);
+  assert.equal(gone.rowCount, 0, '410 Gone → subscription deleted');
+  await gap();
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: '' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 1, 'clearing a note pushes nothing');
+
+  /* B has the outing on screen (socket, not away) → no push for a note; away → push again. */
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+  const got = [];
+  ws.on('message', (d) => got.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.on('open', r));
+  ws.send(JSON.stringify({ type: 'auth', token: B.token, outing_id: o.outing_id }));
+  await until(() => got.some((m) => m.type === 'ready'));
+  await gap();
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'وين صرتوا؟' })).status, 200);
+  await until(() => got.some((m) => m.type === 'member_note' && m.note?.text === 'وين صرتوا؟'));
+  await settle();
+  assert.equal(inbox.length, 0, 'a member looking at the outing gets the in-app alert, not a push');
+  ws.send(JSON.stringify({ type: 'presence', away: true }));
+  await settle();
+  await gap();
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'ردّوا' })).status, 200);
+  await until(() => inbox.length === 1);
+
+  /* SOS (any emitter of an `sos` event) is pushed with high urgency, even to someone watching. */
+  ws.send(JSON.stringify({ type: 'presence', away: false }));
+  await settle();
+  inbox.length = 0;
+  outings.hub.emit(o.outing_id, { type: 'sos', user_id: A.user.id, text: 'علقنا في الرمل' });
+  const sos = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(sos.endpoint, b3.endpoint);
+  assert.equal(sos.opts.urgency, 'high');
+  assert.match(sos.payload.title, /أبو فهد/);
+  assert.equal(sos.payload.body, 'علقنا في الرمل');
+  await settle();
+  assert.equal(inbox.length, 1, 'the sender is not pushed about their own SOS');
+
+  /* The real SOS route (#24) emits the shape that is auto-pushed: raise → alarm,
+   * refresh → no second alarm, «أنا بخير» → a quiet replacement with the same tag. */
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  const real = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(real.endpoint, b3.endpoint);
+  assert.equal(real.opts.urgency, 'high');
+  await new Promise((r) => setTimeout(r, 3_100));
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 1, 'refreshing an SOS does not ring again');
+  assert.equal((await api('DELETE', `/${o.outing_id}/sos`, A.token)).status, 200);
+  const clear = await until(() => inbox.find((m) => m.payload.type === 'sos_clear'));
+  assert.equal(clear.payload.tag, real.payload.tag);
+  assert.equal(clear.opts.urgency, 'normal');
+  ws.close();
+
+  /* Leaving stops pushes at once. */
+  assert.equal((await api('POST', `/${o.outing_id}/leave`, B.token)).status, 200);
+  await gap();
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'باقي أحد؟' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 0, 'former members get nothing');
+
+  /* Unsubscribe removes only my own row. */
+  assert.deepEqual((await api('DELETE', '/push/subscribe', C.token, { endpoint: a1.endpoint })).body, { ok: true, removed: 0 });
+  assert.deepEqual((await api('DELETE', '/push/subscribe', A.token, { endpoint: a1.endpoint })).body, { ok: true, removed: 1 });
+});
+
+test('voice clips (memory only) and opt-in trip summaries (totals only)', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(URL_);
+  await migrate(pool);
+  const outings = setupOutings({ pool, autoMigrate: false, limits: { identityPerHour: 100, invitePer10Min: 100, clipsPer5Min: 5 }, config: { minFixIntervalMs: 0, persistEveryMs: 0 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  const base = `http://127.0.0.1:${port}/api/outings`;
+  const call = async (method, path, token, body) => {
+    const res = await fetch(base + path, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const upload = (token, outingId, buf, { type = 'audio/mp4', ms = '3200' } = {}) =>
+    fetch(`${base}/${outingId}/clips`, {
+      method: 'POST',
+      headers: { 'content-type': type, 'x-clip-duration-ms': ms, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: buf,
+    }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const mp4 = (n = 2000) => Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypM4A '), Buffer.alloc(n, 7)]);
+
+  const a = (await call('POST', '/me', null, { display_name: 'سعد' })).body;
+  const b = (await call('POST', '/me', null, { display_name: 'فهد' })).body;
+  const c = (await call('POST', '/me', null, { display_name: 'غريب' })).body;
+  const o = (await call('POST', '/', a.token, { name: 'طلعة الصوت' })).body;
+  await call('POST', '/invites/join', b.token, { token: o.invite.token });
+  await call('POST', `/${o.outing_id}/status`, a.token, { action: 'start' });
+
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/outings/live`);
+  const got = [];
+  ws.on('message', (d) => got.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.on('open', r));
+  ws.send(JSON.stringify({ type: 'auth', token: b.token, outing_id: o.outing_id }));
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const hit = got.find(pred);
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  await until((m) => m.type === 'ready');
+
+  /* --- push-to-talk --- */
+  const sent = await upload(a.token, o.outing_id, mp4());
+  assert.equal(sent.status, 201);
+  assert.equal(sent.body.clip.mime, 'audio/mp4', 'type comes from the bytes');
+  const ev = await until((m) => m.type === 'voice_clip');
+  assert.equal(ev.clip.user_id, a.user.id);
+  assert.equal(ev.clip.duration_ms, 3200);
+  assert.ok(new Date(ev.clip.expires_at) - Date.now() <= 10 * 60_000);
+  const fetched = await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${b.token}` } });
+  assert.equal(fetched.status, 200);
+  assert.equal(fetched.headers.get('content-type'), 'audio/mp4');
+  assert.equal(fetched.headers.get('cache-control'), 'no-store');
+  assert.equal(Buffer.from(await fetched.arrayBuffer()).length, mp4().length, 'recipient gets the bytes');
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${c.token}` } })).status, 404, 'outsider cannot fetch a clip');
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`)).status, 401, 'no token, no clip');
+  assert.equal((await call('GET', `/${o.outing_id}`, b.token)).body.voice_clips.length, 1, 'polling clients see it in the snapshot');
+
+  assert.equal((await upload(c.token, o.outing_id, mp4())).status, 404, 'outsider cannot post');
+  assert.equal((await upload(a.token, o.outing_id, mp4())).body.error, 'too_frequent', 'one clip at a time');
+  assert.equal((await upload(a.token, o.outing_id, Buffer.from('<script>x</script>'.repeat(30)), { type: 'audio/mp4' })).status, 415, 'not audio');
+  assert.equal((await upload(a.token, o.outing_id, mp4(), { ms: '60000' })).body.error, 'invalid_clip_duration', 'max 15 s');
+  assert.equal((await upload(a.token, o.outing_id, mp4(500 * 1024))).status, 413, 'size cap');
+  assert.equal((await upload(a.token, o.outing_id, mp4())).status, 429, 'rate limited per person');
+  const stored = await pool.query(`SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema = 'sary' AND data_type = 'bytea' AND column_name NOT IN ('token_hash', 'recovery_hash')`);
+  assert.equal(stored.rows[0].n, 0, 'no table can hold audio');
+
+  /* --- summaries: only after the end, only totals, only for members --- */
+  const summary = { distance_m: 18_400, duration_s: 2, moving_s: 1 };
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary })).body.error, 'outing_not_ended');
+  await new Promise((r) => setTimeout(r, 1_100));
+  await call('POST', `/${o.outing_id}/status`, a.token, { action: 'end' });
+  assert.equal((await fetch(`http://127.0.0.1:${port}${ev.clip.url}`, { headers: { authorization: `Bearer ${b.token}` } })).status, 404, 'ending drops clips');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { distance_m: 18_400, duration_s: 9_999, moving_s: 10 } })).body.error, 'implausible_summary', 'longer than the outing ran');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { ...summary, points: [[46.6, 24.7]] } })).body.error, 'invalid_summary', 'no points accepted');
+  assert.equal((await call('PUT', `/${o.outing_id}/summary`, c.token, { summary })).status, 404, 'outsider cannot share');
+  const ok = await call('PUT', `/${o.outing_id}/summary`, a.token, { summary: { distance_m: 400, duration_s: 2, moving_s: 1 } });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.summary.distance_m, 400);
+  const cols = (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'sary' AND table_name = 'trip_summaries' ORDER BY 1`)).rows.map((r) => r.column_name);
+  assert.deepEqual(cols, ['distance_m', 'duration_s', 'moving_s', 'outing_id', 'shared_at', 'user_id'], 'totals only — no coordinates');
+
+  /* B did not tap «شارك ملخصي»: nothing of theirs exists. */
+  const hist = await call('GET', '/', b.token);
+  const row = hist.body.history.find((h) => h.id === o.outing_id);
+  assert.deepEqual(row.summaries.map((s) => [s.display_name, s.distance_m, s.duration_s]), [['سعد', 400, 2]]);
+  assert.equal((await call('GET', '/', c.token)).body.history.length, 0, 'outsiders see no history');
+  assert.equal((await call('GET', `/${o.outing_id}`, b.token)).body.summaries.length, 1);
+
+  assert.equal((await call('DELETE', `/${o.outing_id}/summary`, a.token)).body.withdrawn, true);
+  assert.equal((await call('GET', '/', b.token)).body.history.find((h) => h.id === o.outing_id).summaries.length, 0, 'withdrawn = deleted');
+  ws.close();
+});
+
+test('APNs: tokens per identity, same recipients as web push, gone tokens removed', { skip, timeout: 60_000 }, async (t) => {
+  const crypto = require('crypto');
+  const http2 = require('http2');
+  const { apnsConfigFromEnv, createApnsSender } = require('./outings/apns');
+  const pool = createPool(URL_);
+  await migrate(pool);
+
+  /* A fake APNs (h2c) behind the real HTTP/2 sender; a throwaway P-256 key. */
+  const pem = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const config = apnsConfigFromEnv({ APNS_KEY_ID: 'ABC123DEFG', APNS_TEAM_ID: 'MH7J92HV9N', APNS_PRIVATE_KEY: pem.replace(/\n/g, '\\n'), APNS_BUNDLE_ID: 'sa.sary.albarq' });
+  const inbox = [];
+  const h2 = http2.createServer();
+  h2.on('stream', (stream, headers) => {
+    let body = '';
+    stream.on('data', (c) => (body += c));
+    stream.on('end', () => {
+      const token = headers[':path'].split('/').pop();
+      inbox.push({ token, headers, payload: JSON.parse(body) });
+      if (token.startsWith('dead')) {
+        stream.respond({ ':status': 410 });
+        stream.end(JSON.stringify({ reason: 'Unregistered' }));
+      } else {
+        stream.respond({ ':status': 200 });
+        stream.end();
+      }
+    });
+  });
+  await new Promise((r) => h2.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${h2.address().port}`;
+  const sender = createApnsSender(config, { origins: { production: origin, sandbox: origin } });
+
+  const outings = setupOutings({
+    pool,
+    autoMigrate: false,
+    limits: { identityPerHour: 100, invitePer10Min: 100 },
+    push: { config: { enabled: false } },
+    apns: { config, sender, maxPerUser: 2 },
+  });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const port = server.address().port;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await new Promise((r) => h2.close(r));
+    await pool.end();
+  });
+  const api = async (method, path, token, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  const until = async (pred, ms = 5000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = pred();
+      if (v) return v;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error('timeout');
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  const hex = () => crypto.randomBytes(32).toString('hex');
+
+  assert.deepEqual((await api('GET', '/push/apns')).body, { ok: true, enabled: true, bundle_id: 'sa.sary.albarq' });
+  assert.equal(outings.push.enabled, false, 'web push off: APNs alone still pushes');
+
+  const A = (await api('POST', '/me', null, { display_name: 'أبو فهد' })).body;
+  const B = (await api('POST', '/me', null, { display_name: 'سعد' })).body;
+  const C = (await api('POST', '/me', null, { display_name: 'غريب' })).body;
+
+  const aTok = hex(), bOld = hex(), bNew = hex(), cTok = hex();
+  const dead = 'dead'.padEnd(64, 'd'); // the fake APNs answers 410 Unregistered for this one
+  assert.equal((await api('POST', '/push/apns', null, { token: aTok, environment: 'production' })).status, 401);
+  assert.equal((await api('POST', '/push/apns', B.token, { token: 'nothex', environment: 'production' })).status, 400);
+  assert.equal((await api('POST', '/push/apns', B.token, { token: bOld, environment: 'staging' })).status, 400);
+  for (const tok of [bOld, dead, bNew]) {
+    assert.equal((await api('POST', '/push/apns', B.token, { token: tok, environment: 'sandbox' })).status, 201);
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  const bRows = (await pool.query('SELECT token FROM sary.apns_tokens WHERE user_id = $1', [B.user.id])).rows.map((r) => r.token).sort();
+  assert.deepEqual(bRows, [dead, bNew].sort(), 'capped at 2 per person, oldest dropped');
+  assert.equal((await api('POST', '/push/apns', A.token, { token: aTok.toUpperCase(), environment: 'production' })).status, 201);
+  assert.equal((await api('POST', '/push/apns', C.token, { token: cTok, environment: 'production' })).status, 201);
+
+  const o = (await api('POST', '/', A.token, { name: 'طلعة النفود' })).body;
+  assert.equal((await api('POST', '/invites/join', B.token, { token: o.invite.token })).status, 200);
+  assert.equal((await api('POST', `/${o.outing_id}/status`, A.token, { action: 'start' })).status, 200);
+
+  /* A note from A → B's iPhone only; the 410 token is deleted. */
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'بوقف عند المحطة' })).status, 200);
+  await until(() => inbox.length >= 2);
+  await settle();
+  assert.deepEqual(inbox.map((m) => m.token).sort(), [dead, bNew].sort(), 'never the sender, never the outsider');
+  const note = inbox.find((m) => m.token === bNew);
+  assert.deepEqual(note.payload.aps.alert, { title: 'أبو فهد · طلعة النفود', body: 'بوقف عند المحطة' });
+  assert.equal(note.payload.aps['interruption-level'], 'passive');
+  assert.equal(note.payload.aps['thread-id'], `sary-outing-${o.outing_id}`);
+  assert.equal(note.payload.outing_id, o.outing_id);
+  assert.equal(note.headers['apns-topic'], 'sa.sary.albarq');
+  assert.equal((await pool.query('SELECT 1 FROM sary.apns_tokens WHERE token = $1', [dead])).rowCount, 0, '410 → token deleted');
+
+  /* The real SOS route: time-sensitive with sound; «أنا بخير» collapses onto it. */
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/sos`, A.token, { fix: null })).status, 200);
+  const sos = await until(() => inbox.find((m) => m.payload.type === 'sos'));
+  assert.equal(sos.token, bNew);
+  assert.equal(sos.payload.aps['interruption-level'], 'time-sensitive');
+  assert.equal(sos.payload.aps.sound, 'default');
+  assert.equal(sos.headers['apns-priority'], '10');
+  assert.equal((await api('DELETE', `/${o.outing_id}/sos`, A.token)).status, 200);
+  const clear = await until(() => inbox.find((m) => m.payload.type === 'sos_clear'));
+  assert.equal(clear.headers['apns-collapse-id'], sos.headers['apns-collapse-id']);
+
+  /* Leaving stops pushes at once. */
+  assert.equal((await api('POST', `/${o.outing_id}/leave`, B.token)).status, 200);
+  await new Promise((r) => setTimeout(r, 2_100));
+  inbox.length = 0;
+  assert.equal((await api('POST', `/${o.outing_id}/note`, A.token, { text: 'باقي أحد؟' })).status, 200);
+  await settle();
+  assert.equal(inbox.length, 0, 'former members get nothing');
+
+  /* Unregister removes only my own token. */
+  assert.deepEqual((await api('DELETE', '/push/apns', C.token, { token: aTok })).body, { ok: true, removed: 0 });
+  assert.deepEqual((await api('DELETE', '/push/apns', A.token, { token: aTok })).body, { ok: true, removed: 1 });
 });

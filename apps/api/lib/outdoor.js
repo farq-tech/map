@@ -10,7 +10,8 @@ const path = require('path');
 const crypto = require('crypto');
 
 const KSA = { lngMin: 34, lngMax: 56, latMin: 16, latMax: 33 };
-const DATA_DIR = path.join(__dirname, '../data/outdoor');
+const DEFAULT_DATA_DIR = path.join(__dirname, '../data/outdoor');
+let DATA_DIR = DEFAULT_DATA_DIR;
 const AROUND_DEFAULT_M = 15_000;
 const FEATURE_CAP = 400;
 
@@ -47,7 +48,7 @@ function kindFromName(name) {
 }
 
 function groupOf(kind) {
-  if (['camp', 'picnic', 'well', 'spring', 'landmark'].includes(kind)) return 'place';
+  if (['camp', 'picnic', 'well', 'spring', 'landmark', 'fuel'].includes(kind)) return 'place';
   if (['public_track', 'osm_track', 'observed_track', 'personal_track'].includes(kind)) {
     return 'movement';
   }
@@ -105,6 +106,8 @@ function loadFc(file, layer, classify) {
         evidence: classified.evidence || 'public',
         license: 'ODbL',
         fclass: props.fclass || null,
+        /* OSM `brand` (e.g. ساسكو، الدريس) — a tag, kept apart from the name. */
+        ...(props.brand ? { brand: String(props.brand).trim().slice(0, 60) } : {}),
         lng,
         lat,
       },
@@ -118,6 +121,8 @@ function classifyLayer(layer) {
     if (layer === 'wells') return { kind: 'well', evidence: 'public' };
     if (layer === 'springs') return { kind: 'spring', evidence: 'public' };
     if (layer === 'camps') return { kind: 'camp', evidence: 'public' };
+    /* amenity=fuel (Geofabrik traffic layer fclass `fuel`, or an Overpass export). */
+    if (layer === 'fuel') return props.fclass && props.fclass !== 'fuel' ? null : { kind: 'fuel', evidence: 'public' };
     if (layer === 'tracks') return { kind: 'osm_track', evidence: 'public' };
     if (layer === 'wadis') {
       const fromName = kindFromName(name);
@@ -140,6 +145,8 @@ function loadIndex() {
     ...loadFc('wells.geojson', 'wells', classifyLayer('wells')),
     ...loadFc('springs.geojson', 'springs', classifyLayer('springs')),
     ...loadFc('camps.geojson', 'camps', classifyLayer('camps')),
+    /* Optional until the data step in data/outdoor/README.md is run. */
+    ...loadFc('fuel.geojson', 'fuel', classifyLayer('fuel')),
     ...loadFc('nature-places.geojson', 'places', classifyLayer('places')),
     ...loadFc('tracks-named.geojson', 'tracks', classifyLayer('tracks')),
     ...loadFc('wadis.geojson', 'wadis', classifyLayer('wadis')),
@@ -199,11 +206,22 @@ function queryFeatures({ bbox, types, zoom, limit }) {
     if (typeSet && !typeSet.has(p.kind) && !typeSet.has(p.group)) continue;
     if (box && !inBbox(p.lng, p.lat, box)) continue;
     hits.push(f);
-    if (hits.length >= cap) break;
+    /* Without a box there is no "nearer"; keep the old first-N behaviour. */
+    if (!box && hits.length >= cap) break;
+  }
+  /* A dense box (Riyadh holds hundreds of fuel stations) keeps the features
+   * nearest its centre, not whichever came first in the file. */
+  let truncated = false;
+  if (hits.length > cap) {
+    truncated = true;
+    const c = { lng: (box.west + box.east) / 2, lat: (box.south + box.north) / 2 };
+    hits.sort((a, b) => haversineMeters(c, a.properties) - haversineMeters(c, b.properties));
+    hits.length = cap;
   }
   return {
     type: 'FeatureCollection',
     count: hits.length,
+    ...(truncated ? { truncated: true } : {}),
     source: 'osm',
     license: 'ODbL',
     features: hits,
@@ -235,6 +253,7 @@ function queryAround({ lng, lat, radius }) {
       tracks,
       places,
       nearest_well: nearest((p) => p.kind === 'well'),
+      nearest_fuel: nearest((p) => p.kind === 'fuel'),
       nearest_rawdah: nearest((p) => p.kind === 'rawdah' || p.kind === 'fayad'),
       nearest_shaib: nearest((p) => p.kind === 'shaib' || p.kind === 'wadi'),
     },
@@ -301,7 +320,9 @@ module.exports = {
   stats,
   etagFor,
   loadIndex,
-  __reset() {
+  /** Tests only: forget the index, optionally reading another data folder. */
+  __reset({ dataDir } = {}) {
     INDEX = null;
+    DATA_DIR = dataDir || DEFAULT_DATA_DIR;
   },
 };

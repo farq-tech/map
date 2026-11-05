@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLanguage } from "../../contexts/LanguageContext";
+import { useLocation } from "../../contexts/LocationContext";
 import { loadAvatar } from "../../lib/farqAvatar";
 import {
 	loadIdentity,
@@ -14,6 +15,7 @@ import { formatNumber } from "../../lib/sary/domain";
 import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
+import { RecoveryForm } from "./Recovery";
 import "../../styles/outings.css";
 
 const PENDING_KEY = "sary.outings.pendingInvite";
@@ -42,6 +44,7 @@ export default function OutingJoin() {
 	const { language } = useLanguage();
 	const isRTL = language === "ar";
 	const navigate = useNavigate();
+	const { requestLocation } = useLocation();
 	const [token] = useState(() => takeInviteToken());
 	const [identity, setIdentity] = useState<Identity | null>(() => loadIdentity());
 	const [preview, setPreview] = useState<InvitePreview | null>(null);
@@ -50,6 +53,7 @@ export default function OutingJoin() {
 	const avatar = loadAvatar();
 	const [name, setName] = useState("");
 	const [sharePhoto, setSharePhoto] = useState(false);
+	const [recovering, setRecovering] = useState(false);
 
 	useSaryChrome();
 	usePageMeta({
@@ -63,14 +67,24 @@ export default function OutingJoin() {
 	useEffect(() => {
 		if (!token) return;
 		OutingsApi.previewInvite(token).then(
-			(r) => setPreview(r.invite),
+			(r) => {
+				/* A personal invite someone else already used: say so before anyone types a name. */
+				if (r.invite.claim === "taken") setError("invite_taken");
+				else setPreview(r.invite);
+				if (r.invite.kind === "personal" && r.invite.invitee_name) setName((n) => n || r.invite.invitee_name || "");
+			},
 			(e) => setError(e instanceof OutingApiError ? e.code : "network"),
 		);
 	}, [token]);
+	const personal = preview?.kind === "personal" ? preview.invitee_name || null : null;
 
 	/* One tap: create the identity if there is none, then join. */
 	const join = async () => {
 		if (!token) return;
+		/* Joining is the consent: ask for the browser's location permission in
+		 * the same turn as the tap (iOS Safari ignores delayed prompts). The
+		 * trip screen starts sharing as soon as it is allowed. */
+		requestLocation();
 		setBusy(true);
 		setError(null);
 		try {
@@ -108,16 +122,49 @@ export default function OutingJoin() {
 				<section className="sary-o-card" data-testid="outing-join-preview">
 					<span className="sary-o-kicker">{isRTL ? "دعوة إلى طلعة" : "Outing invite"}</span>
 					<h2 data-testid="outing-join-name">{preview.name}</h2>
+					{preview.destination_name ? (
+						<p className="sary-o-dest" data-testid="outing-join-destination">
+							{isRTL ? "الوجهة: " : "Destination: "}
+							<strong>{preview.destination_name}</strong>
+						</p>
+					) : null}
 					<p>
 						{isRTL ? `دعاك ${preview.owner_name}` : `${preview.owner_name} invited you`} ·{" "}
 						{isRTL ? `${formatNumber(preview.member_count, true)} مشارك` : `${preview.member_count} members`} ·{" "}
 						{statusLabel(preview.status, isRTL)}
 					</p>
-					<p className="sary-o-note">
+					{personal ? (
+						<p className="sary-o-note" data-testid="outing-join-personal">
+							{isRTL
+								? `هذه دعوة شخصية لـ«${personal}». ستظهر في الطلعة بهذا الاسم كما سمّاك ${preview.owner_name}.`
+								: `A personal invite for “${personal}”. You will appear in the outing under this name, as ${preview.owner_name} saved you.`}
+						</p>
+					) : null}
+					{preview.join_locked ? (
+						<p className="sary-o-error" role="status" data-testid="outing-join-locked">
+							{outingErrorText("join_locked", isRTL)}
+						</p>
+					) : null}
+					<p className="sary-o-note" data-testid="outing-join-consent">
 						{isRTL
-							? "بعد الانضمام يرى أعضاء الطلعة موقعك وأنت على شاشة الطلعة فقط، وتستطيع إيقاف المشاركة أو المغادرة متى شئت."
-							: "Once you join, members see your location only while you are on the outing screen. You can pause sharing or leave any time."}
+							? "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها. بعد «انضم» يطلب المتصفح إذن الموقع."
+							: "By joining, members see your live location until the outing ends or you leave it. After «Join» the browser asks for location access."}
 					</p>
+					<p className="sary-o-note" data-testid="outing-join-web-note">
+						{isRTL
+							? "المتصفح يرسل موقعك والصفحة مفتوحة فقط؛ للمشاركة المستمرة استخدم تطبيق الآيفون"
+							: "The browser sends your location only while the page is open; for continuous sharing use the iPhone app"}
+					</p>
+					{recovering && !identity ? (
+						<RecoveryForm
+							isRTL={isRTL}
+							onDone={(id) => {
+								setIdentity(id);
+								setRecovering(false);
+							}}
+							onCancel={() => setRecovering(false)}
+						/>
+					) : (
 					<form
 						className="sary-o-form"
 						onSubmit={(e) => {
@@ -128,7 +175,11 @@ export default function OutingJoin() {
 						{!identity ? (
 							<>
 								<label>
-									<span>{isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}</span>
+									<span>
+										{personal
+											? isRTL ? "لقبك (يظهر بجانب اسمك في الطلعة)" : "Your nickname (shown beside your name)"
+											: isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}
+									</span>
 									<input
 										value={name}
 										onChange={(e) => setName(e.target.value)}
@@ -161,11 +212,19 @@ export default function OutingJoin() {
 						>
 							{busy
 								? "…"
-								: identity
-									? isRTL ? `انضم للطلعة باسم ${identity.user.display_name}` : `Join as ${identity.user.display_name}`
-									: isRTL ? "انضم للطلعة" : "Join the outing"}
+								: personal
+									? isRTL ? `انضم باسم «${personal}»` : `Join as “${personal}”`
+									: identity
+										? isRTL ? `انضم للطلعة باسم ${identity.user.display_name}` : `Join as ${identity.user.display_name}`
+										: isRTL ? "انضم للطلعة" : "Join the outing"}
 						</button>
+						{!identity ? (
+							<button type="button" className="sary-o-link-btn" onClick={() => setRecovering(true)} data-testid="outing-recover-open">
+								{isRTL ? "استخدمت سَرى من قبل؟ عندي رمز استرجاع" : "Used Sary before? I have a recovery code"}
+							</button>
+						) : null}
 					</form>
+					)}
 					<button type="button" className="sary-o-secondary" onClick={() => void navigate({ to: "/map" })}>
 						{isRTL ? "ليس الآن" : "Not now"}
 					</button>

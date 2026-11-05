@@ -1,5 +1,20 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
+import { INVITE_PAGE_FILE, inviteHtml, publicOrigin } from "./src/lib/outings/inviteMeta";
+
+/** Emits outings-join.html next to index.html: the invite link's preview card (see inviteMeta.ts). */
+function invitePreviewPage(origin: string): Plugin {
+	return {
+		name: "sary-invite-preview",
+		apply: "build",
+		enforce: "post",
+		generateBundle(_opts, bundle) {
+			const index = bundle["index.html"];
+			if (!index || index.type !== "asset") return;
+			this.emitFile({ type: "asset", fileName: INVITE_PAGE_FILE, source: inviteHtml(String(index.source), origin) });
+		},
+	};
+}
 
 export default defineConfig(({ mode }) => {
 	const envDir = new URL("../..", import.meta.url).pathname;
@@ -8,7 +23,7 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		envDir,
-		plugins: [react()],
+		plugins: [react(), invitePreviewPage(publicOrigin({ ...env, ...process.env }))],
 		define: {
 			__APP_VERSION__: JSON.stringify(
 				process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "dev",

@@ -37,7 +37,7 @@ import {
 	syncSaryData,
 } from "../../lib/sary/mapLayers";
 import { bearingBetween, distanceMeters, ensureVehicleLayer, removeVehicle, setVehicle, VEHICLE_LAYER } from "../../lib/sary/vehicleLayer";
-import { snapRadius, snapToRoad } from "../../lib/sary/roadSnap";
+import { matchOnMap, RoadMatcher, snapRadius } from "../../lib/sary/roadSnap";
 import { lerp } from "../../lib/outings/motion";
 import type { OutdoorLayerId } from "../../routes/map";
 import {
@@ -105,6 +105,9 @@ type CameraFocusRequest = {
 	bounds?: [number, number, number, number] | null;
 	/** Screen px covered from the top by the page's own bars (bounds fits keep clear of them). */
 	topInset?: number;
+	/** Screen px covered by floating buttons on either side (bounds fit keeps clear of them). */
+	leftInset?: number;
+	rightInset?: number;
 	/** Closest the bounds fit may zoom (default 15.5). */
 	maxZoom?: number;
 };
@@ -538,6 +541,8 @@ export default function FarqMap({
 	const vehicleShownRef = useRef<{ lng: number; lat: number } | null>(null);
 	const vehicleHeadingRef = useRef<number | null>(null);
 	const vehicleAnchorRef = useRef<{ lng: number; lat: number } | null>(null);
+	/* Keeps our car on the same street from fix to fix (display only). */
+	const roadMatcherRef = useRef(new RoadMatcher());
 	const vehicleLabelRef = useRef<mapboxgl.Marker | null>(null);
 	const onVehicleTapRef = useRef(onVehicleTap);
 	onVehicleTapRef.current = onVehicleTap;
@@ -1283,8 +1288,11 @@ export default function FarqMap({
 			userMarkerRef.current?.remove();
 			userMarkerRef.current = null;
 			/* Keep the last real heading while parked; never invent one. */
+			/* The course of this fix, if it has one: reported, or from real movement. */
+			let course: number | null = null;
 			if (typeof userHeading === "number" && Number.isFinite(userHeading)) {
 				vehicleHeadingRef.current = userHeading;
+				course = userHeading;
 				vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 			} else {
 				/* Some phones report no course. Take it from real movement instead:
@@ -1293,12 +1301,17 @@ export default function FarqMap({
 				if (!a) vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 				else if (distanceMeters(a, userLocation) >= 12) {
 					vehicleHeadingRef.current = bearingBetween(a, userLocation);
+					course = vehicleHeadingRef.current;
 					vehicleAnchorRef.current = { lng: userLocation.lng, lat: userLocation.lat };
 				}
 			}
 			const from = vehicleShownRef.current;
-			/* In town, on the street rather than inside the house beside it. */
-			const to = snapToRoad(map, { lng: userLocation.lng, lat: userLocation.lat }, snapRadius(userAccuracy));
+			/* In town, on the street it is driving along rather than inside the house beside it. */
+			const matched = matchOnMap(map, roadMatcherRef.current, { lng: userLocation.lng, lat: userLocation.lat }, course, snapRadius(userAccuracy));
+			const to = matched.point;
+			/* Moving along a matched road: point the car down the road, not a few degrees into the kerb. */
+			if (course != null && matched.heading != null) vehicleHeadingRef.current = matched.heading;
+			map.getContainer().dataset.road = matched.key ?? "";
 			cancelAnimationFrame(vehicleRafRef.current);
 			if (!from || reducedMotionRef.current) {
 				vehicleShownRef.current = to;
@@ -1357,6 +1370,8 @@ export default function FarqMap({
 		vehicleLabel,
 		vehicleNote,
 		isRTL,
+		/* A parked phone sends no new fix: draw the car as soon as the intro ends. */
+		introDone,
 	]);
 
 	/* The photo lives in this browser and is changed from a control elsewhere in
@@ -1378,7 +1393,7 @@ export default function FarqMap({
 			const [w, s, e, n] = focusRequest.bounds;
 			const pad = cameraPadding("select", bottomInsetRef.current);
 			map.fitBounds([[w, s], [e, n]], {
-				padding: { top: Math.max(pad.top, focusRequest.topInset ?? 0), bottom: pad.bottom, left: pad.left + 16, right: pad.right + 16 },
+				padding: { top: Math.max(pad.top, focusRequest.topInset ?? 0), bottom: pad.bottom, left: Math.max(pad.left + 16, focusRequest.leftInset ?? 0), right: Math.max(pad.right + 16, focusRequest.rightInset ?? 0) },
 				duration: travel(900),
 				maxZoom: focusRequest.maxZoom ?? 15.5,
 				essential: true,
