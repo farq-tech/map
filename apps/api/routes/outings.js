@@ -18,6 +18,7 @@ const { OutingError } = require('../lib/outings/service');
 const { createRateLimiter } = require('../lib/outings/rate-limit');
 const { battery } = require('../lib/outings/validate');
 const { CLIP_MAX_BYTES } = require('../lib/outings/clips');
+const { NOTE_MAX_BYTES } = require('../lib/outings/voice-notes');
 const { parseSubscription } = require('../lib/outings/push');
 const { createRoutingRouter } = require('../lib/outings/routing');
 const { catalog: groupAudioCatalog } = require('../lib/outings/group-audio-catalog');
@@ -27,7 +28,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, apns, pttChannels = null, limits = {}, routing = {} }) {
+function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voiceNotes = null, limits = {}, routing = {} }) {
   const router = express.Router();
   /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
   const smallJson = express.json({ limit: '48kb' });
@@ -69,6 +70,10 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, lim
   const pttTokenLimit = createRateLimiter({ limit: limits.pttTokensPer10Min ?? 20, windowMs: 10 * 60_000 });
   /* Raw audio bytes, capped. Only this route reads a body that is not JSON. */
   const rawAudio = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: CLIP_MAX_BYTES });
+  /* «رسالة صوتية»: up to 60 s; a trip talks in turns, a burst after a tunnel is fine. */
+  const rawNote = express.raw({ type: ['audio/*', 'application/octet-stream'], limit: NOTE_MAX_BYTES });
+  const noteLimit = createRateLimiter({ limit: limits.voiceNotesPer5Min ?? 40, windowMs: 5 * 60_000 });
+  const noteFetchLimit = createRateLimiter({ limit: limits.voiceNoteFetchesPerMin ?? 240, windowMs: 60_000 });
 
   const auth = asyncHandler(async (req, res, next) => {
     const m = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization || ''));
@@ -321,6 +326,36 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, lim
     res.set('Expires', new Date(meta.expires_at).toUTCString());
     res.send(buf);
   }));
+
+  if (voiceNotes) {
+    /* «رسالة صوتية» — see lib/outings/voice-notes.js. Body: the recording; the rest in headers. */
+    router.post('/:id/voice-notes', auth, asyncHandler(async (req, res, next) => {
+      if (!noteLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      next();
+    }), rawNote, asyncHandler(async (req, res) => {
+      const r = await voiceNotes.upload(req.user, req.params.id, {
+        buf: Buffer.isBuffer(req.body) ? req.body : null,
+        durationMs: req.headers['x-clip-duration-ms'],
+        channel: req.headers['x-ptt-channel'],
+        clientId: req.headers['x-client-id'],
+        ageMs: req.headers['x-clip-age-ms'],
+      });
+      res.status(r.duplicate ? 200 : 201).json({ ok: true, ...r });
+    }));
+    router.get('/:id/voice-notes', auth, asyncHandler(async (req, res) => {
+      if (!noteFetchLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      res.json({ ok: true, ...(await voiceNotes.list(req.user, req.params.id, { channel: req.query.channel })) });
+    }));
+    router.get('/:id/voice-notes/:noteId', auth, asyncHandler(async (req, res) => {
+      if (!noteFetchLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      const { meta, buf } = await voiceNotes.fetch(req.user, req.params.id, req.params.noteId);
+      res.set('Content-Type', meta.mime);
+      res.set('X-Content-Type-Options', 'nosniff');
+      res.set('Content-Disposition', 'inline');
+      res.set('Expires', new Date(meta.expires_at).toUTCString());
+      res.send(buf);
+    }));
+  }
 
   /* «قناة الطلعة» Push to Talk: this device's ephemeral channel token for this outing.
    * Body { token: <hex>, environment: 'sandbox'|'production' }. DELETE on leave / «اكتم القناة»

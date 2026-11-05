@@ -46,7 +46,8 @@ const APNS_ORIGINS = Object.freeze({
   production: 'https://api.push.apple.com',
   sandbox: 'https://api.sandbox.push.apple.com',
 });
-const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent']);
+/* 'voice_note': a walkie-talkie message for a phone the Push to Talk path could not wake. */
+const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent', 'voice_note']);
 const ACTIVE = new Set(['stuck_reply', 'chat_message', 'ptt_channel_invite']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;
@@ -169,22 +170,25 @@ function apnsRequestFor(payload = {}, outingId, { now = Date.now(), bundleId } =
  * dropped rather than delivered after the talker stopped. Payload keys beyond
  * `activeSpeaker` (Apple's example key) are ours, read by the app.
  */
-function pttRequestFor({ outingId, talkerId, name, burst, channel }, { bundleId } = {}) {
+function pttRequestFor({ outingId, talkerId, name, burst, channel, type = 'ptt_talker', extra = null, expiresInS = 0 }, { bundleId, now = Date.now() } = {}) {
   const body = JSON.stringify({
     aps: {},
     activeSpeaker: utf8Cut(String(name || 'عضو'), 120),
     v: 1,
-    type: 'ptt_talker',
+    type,
     outing_id: outingId,
     user_id: talkerId,
     burst: Number.isInteger(burst) ? burst : null,
     /* «ترددات»: which channel is on air ('1'…'5' or a private channel id). Older apps ignore it. */
     ...(channel ? { channel: String(channel) } : {}),
+    /* A voice note («رسالة صوتية»): which one to fetch and play (lib/outings/voice-notes.js). */
+    ...(extra && typeof extra === 'object' ? extra : {}),
   });
   const headers = {
     'apns-push-type': 'pushtotalk',
     'apns-priority': '10',
-    'apns-expiration': '0',
+    /* Live: 0 (a late push is useless). A voice note: as long as it may still play by itself. */
+    'apns-expiration': expiresInS > 0 ? String(Math.floor(now / 1000) + Math.round(expiresInS)) : '0',
   };
   if (bundleId) headers['apns-topic'] = `${bundleId}.voip-ptt`;
   return { headers, body };
@@ -373,8 +377,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
            AND t.bundle_id = $3
            AND ($2::uuid IS NULL OR t.user_id <> $2::uuid)
            AND ($5::uuid IS NULL OR t.user_id = $5::uuid)
-           AND NOT (t.user_id = ANY($6::uuid[]))`,
-        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : []],
+           AND NOT (t.user_id = ANY($6::uuid[]))
+           AND ($7::uuid[] IS NULL OR t.user_id = ANY($7::uuid[]))`,
+        [outingId, exceptUserId || null, config.bundleId, payload.include_ended === true, payload.to_user || null, Array.isArray(payload.except_users) ? payload.except_users : [], Array.isArray(payload.only_users) ? payload.only_users : null],
       );
       const watching = payload.always ? new Set() : viewers(outingId) || new Set();
       const targets = rows.filter((r) => {
@@ -462,8 +467,9 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
    */
   /** `include(userId)`: may this member be woken for this channel at all (their radio is on it,
    * and a private channel lists them)? Default: everyone. */
-  async function notifyPtt(outingId, talkerId, { name, burst, channel = null, skipUsers = new Set(), include = null } = {}) {
-    const result = { sent: 0, removed: 0, failed: 0, skipped: 0 };
+  async function notifyPtt(outingId, talkerId, { name, burst, channel = null, skipUsers = new Set(), include = null, type, extra = null, expiresInS = 0 } = {}) {
+    /* `users`: who a push actually went to (voice notes fall back to an alert for the rest). */
+    const result = { sent: 0, removed: 0, failed: 0, skipped: 0, users: new Set() };
     if (!enabled || !outingId) return result;
     try {
       const rows = await q(
@@ -483,13 +489,16 @@ function createApnsNotifier({ pool, config = apnsConfigFromEnv(), sender, viewer
         return true;
       });
       if (!targets.length) return result;
-      const req = pttRequestFor({ outingId, talkerId, name, burst, channel }, { bundleId: config.bundleId });
+      const req = pttRequestFor({ outingId, talkerId, name, burst, channel, type, extra, expiresInS }, { bundleId: config.bundleId, now: now() });
       const dead = [];
       await Promise.all(
         targets.map(async (t) => {
           try {
             const r = await out.send({ token: t.token, environment: t.environment }, req);
-            if (r.status === 200) result.sent += 1;
+            if (r.status === 200) {
+              result.sent += 1;
+              result.users.add(t.user_id);
+            }
             else if (isGone(r)) {
               dead.push(t.id);
               result.removed += 1;
