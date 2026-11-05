@@ -239,17 +239,18 @@ final class MapVisualsTests: XCTestCase {
 
     func testBudgetTerrainExaggeration() {
         let s = VisualEffectsSettings()
-        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(driving: true, pitch: 60)).exaggeration, 1.0, "true heights while driving")
-        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(exploring: true, pitch: 0)).exaggeration, 1.15, accuracy: 0.001)
-        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(exploring: true, pitch: 62)).exaggeration, 1.5, accuracy: 0.001)
-        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(pitch: 62)).exaggeration, 1.3, accuracy: 0.001)
-        let mid = VisualBudget.resolve(s, VisualContext(terrain3D: true, pitch: 37.5)).exaggeration
+        /* Open desert seen from afar (z11): the dune lift. */
+        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(driving: true, pitch: 60, zoom: 11)).exaggeration, 1.0, "true heights while driving")
+        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(exploring: true, pitch: 0, zoom: 11)).exaggeration, 1.15, accuracy: 0.001)
+        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(exploring: true, pitch: 62, zoom: 11)).exaggeration, 2.0, accuracy: 0.001)
+        XCTAssertEqual(VisualBudget.resolve(s, VisualContext(pitch: 62, zoom: 11)).exaggeration, 1.8, accuracy: 0.001)
+        let mid = VisualBudget.resolve(s, VisualContext(terrain3D: true, pitch: 37.5, zoom: 11)).exaggeration
         XCTAssertGreaterThan(mid, 1.15)
-        XCTAssertLessThan(mid, 1.5)
+        XCTAssertLessThan(mid, 2.0)
         /* Smooth in pitch: no step bigger than 0.03 per degree. */
-        var prev = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 0))
+        var prev = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 0, zoom: 11))
         for p in stride(from: 0.0, through: 85, by: 1) {
-            let e = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: p))
+            let e = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: p, zoom: 11))
             XCTAssertLessThan(abs(e - prev), 0.03)
             prev = e
         }
@@ -259,16 +260,104 @@ final class MapVisualsTests: XCTestCase {
         /* Tilted and zoomed out: more lift for the ~30 m DEM's dunes; none close up or flat. */
         let far = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 12))
         let near = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 16))
-        XCTAssertEqual(near, 1.5, accuracy: 0.001)
-        XCTAssertEqual(far, 2.0, accuracy: 0.02)
+        XCTAssertEqual(near, 1.0, accuracy: 0.001, "close in: true heights")
+        XCTAssertEqual(far, 2.0, accuracy: 0.02, "the dunes keep their lift up to z12")
         XCTAssertEqual(VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 0, zoom: 11)), 1.15, accuracy: 0.001, "flat: no lift")
         XCTAssertEqual(VisualBudget.exaggeration(VisualContext(driving: true, pitch: 62, zoom: 12)), 1.0, "true heights while driving")
         var prev = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 10))
         for z in stride(from: 10.0, through: 17, by: 0.1) {
             let e = VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: z))
-            XCTAssertLessThan(abs(e - prev), 0.03, "smooth in zoom")
+            /* The fade to true heights spans one zoom level (and the terrain itself glides 400 ms). */
+            XCTAssertLessThan(abs(e - prev), 0.16, "smooth in zoom")
+            if z >= 12 { XCTAssertLessThanOrEqual(e, prev + 1e-9, "only ever comes down towards z13") }
             prev = e
         }
+    }
+
+    func testTrueHeightsFromZ13Everywhere() {
+        for p in [0.0, 30, 62, 85] {
+            for z in [13.0, 14, 15.8, 18] {
+                XCTAssertEqual(VisualBudget.exaggeration(VisualContext(exploring: true, terrain3D: true, flying: true, pitch: p, zoom: z)), 1.0,
+                               accuracy: 1e-9, "z\(z) pitch \(p)")
+            }
+        }
+    }
+
+    // MARK: cities
+
+    func testNeverExaggeratedOverACity() {
+        /* Al-Masjid al-Haram, Kingdom Centre, Madinah, Jeddah, Khobar, Abha, AlUla old town. */
+        let cities: [(Double, Double)] = [(21.4225, 39.8262), (24.7114, 46.6744), (24.4672, 39.6111), (21.5433, 39.1728),
+                                          (26.2794, 50.2083), (18.2164, 42.5053), (26.6150, 37.9150)]
+        for (lat, lng) in cities {
+            let u = UrbanAreas.weight(lat: lat, lng: lng)
+            XCTAssertEqual(u, 1, "\(lat),\(lng) is a city")
+            for z in [9.0, 11, 12, 14, 16] {
+                let e = VisualBudget.exaggeration(VisualContext(exploring: true, terrain3D: true, pitch: 62, zoom: z, urban: u))
+                XCTAssertEqual(e, 1.0, accuracy: 1e-9, "true heights over \(lat),\(lng) at z\(z)")
+            }
+        }
+    }
+
+    func testDesertDunesKeepTheirLift() {
+        /* The Nafud, the Empty Quarter, the Riyadh dunes east of the city. */
+        for (lat, lng) in [(28.0, 41.5), (20.5, 50.0), (25.12, 46.12)] {
+            let u = UrbanAreas.weight(lat: lat, lng: lng)
+            XCTAssertEqual(u, 0, "\(lat),\(lng) is open desert")
+            XCTAssertEqual(VisualBudget.exaggeration(VisualContext(exploring: true, pitch: 62, zoom: 11, urban: u)), 2.0, accuracy: 0.001)
+        }
+    }
+
+    func testCityEdgeBlendsWithoutAJump() {
+        /* Walking east out of Riyadh's box (east edge 47.05) into the open. */
+        var prev = UrbanAreas.weight(lat: 24.7, lng: 47.0)
+        XCTAssertEqual(prev, 1)
+        for i in 1...120 {
+            let lng = 47.0 + Double(i) * 0.001
+            let u = UrbanAreas.weight(lat: 24.7, lng: lng)
+            XCTAssertLessThan(abs(u - prev), 0.06, "smooth across the edge")
+            XCTAssertLessThanOrEqual(u, prev + 1e-12)
+            prev = u
+        }
+        XCTAssertEqual(prev, 0, "~3 km out: open desert")
+    }
+
+    func testCityBuildingsOnlyOnSatelliteInACityNotWhileDriving() {
+        let s = VisualEffectsSettings()
+        let city = VisualContext(exploring: true, layer: .satellite, pitch: 58, zoom: 15.3, urban: 1)
+        XCTAssertTrue(VisualBudget.resolve(s, city).buildings)
+        var c = city
+        c.urban = 0
+        XCTAssertFalse(VisualBudget.resolve(s, c).buildings, "not in the desert")
+        c = city
+        c.driving = true
+        XCTAssertFalse(VisualBudget.resolve(s, c).buildings, "not while driving")
+        c = city
+        c.lowPower = true
+        XCTAssertFalse(VisualBudget.resolve(s, c).buildings, "not in Low Power Mode")
+        c = city
+        c.layer = .standard
+        XCTAssertFalse(VisualBudget.resolve(s, c).buildings, "Standard draws its own")
+        var off = s
+        off.buildings = false
+        XCTAssertFalse(VisualBudget.resolve(off, city).buildings, "its own switch")
+        off = s
+        off.master = false
+        XCTAssertFalse(VisualBudget.resolve(off, city).buildings)
+        /* Looking straight down the imagery's roofs stay; tilted, the buildings stand. */
+        XCTAssertEqual(VisualBudget.buildingsOpacity(pitch: 0), 0)
+        XCTAssertEqual(VisualBudget.buildingsOpacity(pitch: 58), 1, accuracy: 1e-9, "solid: no ghosted photo through the walls")
+        let layer = CityBuildings.layer(id: "b", source: "s", opacity: 0.5)
+        XCTAssertEqual(layer["type"] as? String, "fill-extrusion")
+        XCTAssertEqual(layer["source-layer"] as? String, "building")
+        XCTAssertEqual((layer["paint"] as? [String: Any])?["fill-extrusion-opacity"] as? Double, 0.5)
+    }
+
+    func testRealisticOfferedOnlyWhenTiltedOverACity() {
+        XCTAssertTrue(CityBuildings.offerRealistic(pitch: 58, zoom: 15.3, urban: 1))
+        XCTAssertFalse(CityBuildings.offerRealistic(pitch: 20, zoom: 15.3, urban: 1), "looking down: the imagery is fine")
+        XCTAssertFalse(CityBuildings.offerRealistic(pitch: 58, zoom: 15.3, urban: 0), "the desert")
+        XCTAssertFalse(CityBuildings.offerRealistic(pitch: 58, zoom: 10, urban: 1), "too far out")
     }
 
     func testSceneLightIsWarmByDayAndNeverNavyAtNight() {

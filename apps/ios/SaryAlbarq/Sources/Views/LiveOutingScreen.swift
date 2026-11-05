@@ -37,6 +37,8 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
+    /// Tilted over a city: «اعرضها بالوضع الواقعي».
+    @ObservedObject private var visuals = MapVisualsHub.shared
 
     var body: some View {
         let ui = controller.ui
@@ -189,6 +191,12 @@ struct LiveOutingScreen: View {
                     PickingBanner(moving: controller.picking.moving, cancel: controller.cancelPicking)
                         .chromeFrame("picking")
                 }
+                if offersCityRealistic(exploring: exploring, driving: driving) {
+                    /* A city tilted on draped imagery smears; Apple's photoreal 3D is one tap away, at the same camera. */
+                    RealisticEntryButton(id: "explore.city-realistic", title: "اعرضها بالوضع الواقعي") { openRealistic(atMapCamera: true) }
+                        .chromeFrame("city-realistic")
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, theme.space(.m))
@@ -284,6 +292,21 @@ struct LiveOutingScreen: View {
         .environment(\.convoyAlertActions, controller.convoyAlertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
         .animation(theme.animation(.smooth), value: controller.nav.phase)
+        .animation(theme.animation(.smooth), value: visuals.cityTilt)
+    }
+
+    /// Exploring, tilted over a city, online, stopped and not guiding (the realistic view's own rules).
+    private func offersCityRealistic(exploring: Bool, driving: Bool) -> Bool {
+        exploring && !driving && visuals.cityTilt && app.online && !controller.nav.isActive && !controller.motion.moving
+            && !controller.picking.active && controller.sheetDetent != .full
+    }
+
+    private func openRealistic(atMapCamera: Bool = false) {
+        /* Looking, not driving: navigation and movement stay on the trip map. */
+        if controller.nav.isActive || controller.motion.moving { controller.toast("الوضع الواقعي متاح وأنت واقف"); return }
+        var scene = RealisticScene.live(controller, plan: app.plans.model(controller.session.id), places: savedPlaces.places)
+        if atMapCamera { scene.camera = visuals.realisticCamera() }
+        realistic = scene
     }
 
     /// The one floating group: «موقعي» · «المجموعة» (+ «طريق العودة» when it fits the moment)
@@ -318,10 +341,7 @@ struct LiveOutingScreen: View {
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
         case "tracks": controller.modal = .tracks
-        case "realistic":
-            /* Looking, not driving: navigation and movement stay on the trip map. */
-            if controller.nav.isActive || controller.motion.moving { controller.toast("الوضع الواقعي متاح وأنت واقف") }
-            else { realistic = .live(controller, plan: app.plans.model(controller.session.id), places: savedPlaces.places) }
+        case "realistic": openRealistic()
         default: controller.navControlTapped(id)
         }
     }
