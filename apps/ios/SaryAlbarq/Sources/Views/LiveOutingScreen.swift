@@ -35,6 +35,8 @@ struct LiveOutingScreen: View {
     @State private var touching = false
     @ObservedObject private var savedPlaces = SavedPlacesStore.shared
     @ObservedObject private var trackLibrary = TrackLibrary.shared
+    /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
+    @State private var realistic: RealisticScene?
 
     var body: some View {
         let ui = controller.ui
@@ -100,6 +102,7 @@ struct LiveOutingScreen: View {
         .ignoresSafeArea(.keyboard)
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
+                .realisticCover($realistic)
                 .background {
                     /* The sheet's real top edge on screen (its content height leaves out the home-indicator area). */
                     GeometryReader { g in
@@ -292,6 +295,10 @@ struct LiveOutingScreen: View {
         case "terrain": controller.terrain3D.toggle()
         case "places": controller.modal = .places
         case "tracks": controller.modal = .tracks
+        case "realistic":
+            /* Looking, not driving: navigation and movement stay on the trip map. */
+            if controller.nav.isActive || controller.motion.moving { controller.toast("الوضع الواقعي متاح وأنت واقف") }
+            else { realistic = .live(controller, plan: app.plans.model(controller.session.id), places: savedPlaces.places) }
         default: controller.navControlTapped(id)
         }
     }
