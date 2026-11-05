@@ -2,6 +2,7 @@
 
 const express = require('express');
 const outdoor = require('../lib/outdoor');
+const { appConfig } = require('../lib/app-config');
 
 function sendJson(req, res, body, maxAge = 120) {
   const payload = JSON.stringify(body);
@@ -16,6 +17,11 @@ function sendJson(req, res, body, maxAge = 120) {
 
 module.exports = function createOutdoorRouter() {
   const router = express.Router();
+
+  /* The native app's remote switches (kill switch for «صور عالية الوضوح»). Short cache. */
+  router.get('/app-config', (req, res) => {
+    sendJson(req, res, appConfig(), 60);
+  });
 
   router.get('/features', (req, res) => {
     const data = outdoor.queryFeatures({
