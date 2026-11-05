@@ -25,13 +25,19 @@ final class SOSAlwaysUITests: XCTestCase {
         any(app, "outing-sheet-summary").tap()
         let sheet = any(app, "tab.more")
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
-        app.swipeUp()
         let overlay = any(app, "sos.overlay")
+        /* Drag the sheet by its top row all the way up (full height). */
+        for _ in 0..<3 where !overlay.exists {
+            let top = any(app, "outing-sheet-summary").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)))
+            _ = overlay.waitForExistence(timeout: 2)
+        }
         XCTAssertTrue(overlay.waitForExistence(timeout: 6), "SOS over the full sheet")
         XCTAssertTrue(overlay.isHittable)
 
         /* A sheet on top («+» the actions): still there. */
-        app.swipeDown()
+        let summary = any(app, "outing-sheet-summary").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        summary.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
         if app.buttons["outing-actions"].waitForExistence(timeout: 5) { app.buttons["outing-actions"].tap() }
         XCTAssertTrue(any(app, "outing-actions-sheet").waitForExistence(timeout: 6))
         XCTAssertTrue(overlay.waitForExistence(timeout: 4) && overlay.isHittable, "SOS over a sheet on top")

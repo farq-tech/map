@@ -160,7 +160,8 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(app.buttons["onboarding.begin"].isHittable, "no onboarding in front of an invite")
         XCTAssertTrue(app.staticTexts["invite.inviter"].label.contains("راشد"), "who invited you")
         XCTAssertTrue(app.staticTexts["invite.name"].exists, "the trip")
-        XCTAssertTrue(any(app, "invite.destination").label.contains("الوجهة: روضة الثمامة"), "the destination under the trip name")
+        let dest = app.staticTexts["invite.destination"]
+        XCTAssertTrue(dest.exists && dest.label.contains("روضة الثمامة"), "the destination under the trip name: \(dest.exists ? dest.label : "-")")
         XCTAssertTrue(any(app, "invite.personal").label.contains("فهد أخوي"), "the name the inviter gave")
         XCTAssertFalse(app.textFields["invite.myName"].exists, "no name to type: the identity is made silently")
         XCTAssertEqual(app.staticTexts["join.shareStatement"].label, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")

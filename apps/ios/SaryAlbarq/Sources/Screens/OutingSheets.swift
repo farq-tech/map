@@ -127,9 +127,9 @@ struct InviteJoinSheet: View {
                     if let dest = inv.destinationName {
                         Label {
                             Text("الوجهة: \(dest)").saryText(.callout, weight: .bold)
-                        } icon: { Image(systemName: "mappin.and.ellipse") }
+                                .accessibilityIdentifier("invite.destination")
+                        } icon: { Image(systemName: "mappin.and.ellipse").accessibilityHidden(true) }
                             .foregroundStyle(p.textPrimary)
-                            .accessibilityIdentifier("invite.destination")
                     }
                     Label {
                         Text("\(SaryFormat.number(inv.participantCount)) في الطلعة الآن").saryText(.callout)
