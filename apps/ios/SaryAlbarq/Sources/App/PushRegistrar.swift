@@ -70,6 +70,10 @@ final class PushRegistrar: ObservableObject {
     static let enabledKey = "sary.outings.notify.v1"
     static let tokenKey = "sary.push.apns.token.v1"
     static let explainedKey = "sary.push.explained.v1"
+    static let registeredAtKey = "sary.push.apns.registeredAt.v1"
+    static let registeredForKey = "sary.push.apns.registeredFor.v1"
+    /// The same token is confirmed with the server at most this often (it keeps its own copy).
+    static let reconfirmAfter: TimeInterval = 24 * 3600
 
     /// Debug builds talk to APNs sandbox, Release to production (from the build, not the entitlement file).
     nonisolated static var buildEnvironment: String {
@@ -80,8 +84,16 @@ final class PushRegistrar: ObservableObject {
         #endif
     }
 
+    private let now: () -> Date
+    /// Who is signed in (the cache below is per identity: a restore on this phone registers again).
+    var accountId: () -> String? = { nil }
+    /// A registration in flight for this token (Apple can hand the same token twice in a row).
+    private var inFlight: String?
+
     init(backend: PushBackend, system: PushSystem = LivePushSystem(), defaults: UserDefaults = .standard,
-         bundleId: String = Bundle.main.bundleIdentifier ?? "sa.sary.albarq", environment: String = PushRegistrar.buildEnvironment) {
+         bundleId: String = Bundle.main.bundleIdentifier ?? "sa.sary.albarq", environment: String = PushRegistrar.buildEnvironment,
+         now: @escaping () -> Date = Date.init) {
+        self.now = now
         self.backend = backend
         self.system = system
         self.defaults = defaults
@@ -143,6 +155,18 @@ final class PushRegistrar: ObservableObject {
     func register(_ token: String, signedIn: Bool) async {
         guard enabled else { state = .off; return }
         guard signedIn else { return }
+        /* Apple hands the token back on every registerForRemoteNotifications(); the server only
+         * needs it when it changed (or once a day). This was a GET+POST /push/apns on every
+         * return to the screen — every ~30 s on a phone with the PushToTalk banner up. */
+        if token == registeredToken, defaults.string(forKey: Self.registeredForKey) == accountId(),
+           let at = defaults.object(forKey: Self.registeredAtKey) as? Date,
+           now().timeIntervalSince(at) < Self.reconfirmAfter, at <= now() {
+            state = .registered
+            return
+        }
+        guard inFlight != token else { return }
+        inFlight = token
+        defer { inFlight = nil }
         do {
             let cfg = try await backend.apnsConfig()
             guard cfg.enabled else { state = .serverNotReady; return }
@@ -150,6 +174,8 @@ final class PushRegistrar: ObservableObject {
             /* Apple rotated the token: the old one is dead weight on the server. */
             if let old = registeredToken, old != token { try? await backend.unregisterApns(token: old) }
             defaults.set(token, forKey: Self.tokenKey)
+            defaults.set(now(), forKey: Self.registeredAtKey)
+            defaults.set(accountId(), forKey: Self.registeredForKey)
             state = .registered
         } catch let e as OutingAPIError {
             if e.code == "apns_disabled" || e.status == 503 || e.status == 404 { state = .serverNotReady } else { state = .failed(e.arabic) }
@@ -174,12 +200,14 @@ final class PushRegistrar: ObservableObject {
         guard let t = registeredToken else { return }
         try? await backend.unregisterApns(token: t)
         defaults.removeObject(forKey: Self.tokenKey)
+        defaults.removeObject(forKey: Self.registeredAtKey)
     }
 
     /// After the account is deleted: the server already dropped this device's token with the
     /// identity, so nothing is sent; forget it here and stop APNs delivery to this install.
     func forgetDevice() {
         defaults.removeObject(forKey: Self.tokenKey)
+        defaults.removeObject(forKey: Self.registeredAtKey)
         defaults.removeObject(forKey: Self.explainedKey)
         defaults.removeObject(forKey: Self.enabledKey)
         system.unregisterForRemoteNotifications()

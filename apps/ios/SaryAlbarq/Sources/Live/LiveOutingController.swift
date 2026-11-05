@@ -341,6 +341,7 @@ final class LiveOutingController: ObservableObject {
             notificationsOn: notificationsOn,
             batterySharing: session.batterySharing,
             pttMuted: session.walkie.muted,
+            pttLink: PTTLinkText.line(session.linkDiag, nowMs: Date().timeIntervalSince1970 * 1000),
             speakingUserId: speakingUserId,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,

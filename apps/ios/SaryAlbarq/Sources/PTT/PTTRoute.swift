@@ -39,6 +39,8 @@ struct PTTRouteCallbacks {
     var systemBeganTransmit: () -> Void = {}
     /// The system ended our transmission (button released there, a call came in…).
     var transmitEnded: () -> Void = {}
+    /// The system refused to start a transmission we asked for (failedToBeginTransmitting).
+    var transmitFailed: () -> Void = {}
     /// The speaker may play now.
     var playbackReady: () -> Void = {}
     /// The ephemeral APNs token for this channel (hex), for POST /ptt/token.
@@ -79,8 +81,13 @@ final class PTTInAppRoute: PTTRoute {
     private func activate() {
         guard !sessionActive else { return }
         let s = AVAudioSession.sharedInstance()
-        try? s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
-        try? s.setActive(true)
+        do {
+            try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
+            try s.setActive(true)
+            PTTDiagnosticsLog.shared.add("audio", "in-app session active")
+        } catch {
+            PTTDiagnosticsLog.shared.add("audio", "in-app session failed: \((error as NSError).domain)#\((error as NSError).code)")
+        }
         sessionActive = true
     }
 
@@ -113,6 +120,8 @@ final class PTTInAppRoute: PTTRoute {
 final class PTTSystemRoute: NSObject, PTTRoute {
     static let shared = PTTSystemRoute()
     static let log = Logger(subsystem: "sa.sary.albarq", category: "ptt")
+    /// Every PTChannelManager callback goes to «سجل القناة» (thread-safe; no names, no ids).
+    nonisolated static func diag(_ m: String) { PTTDiagnosticsLog.shared.add("sys", m) }
 
     var callbacks = PTTRouteCallbacks()
     private(set) var manager: PTChannelManager?
@@ -138,8 +147,10 @@ final class PTTSystemRoute: NSObject, PTTRoute {
                 channelUUID = restored
                 joinedSystem = true
             }
+            Self.diag("manager ready (restored channel: \(joinedSystem))")
         } catch {
             Self.log.notice("[PTT] system channel unavailable: \(String(describing: error), privacy: .public)")
+            Self.diag("manager unavailable: \(Self.describe(error))")
         }
     }
 
@@ -151,8 +162,12 @@ final class PTTSystemRoute: NSObject, PTTRoute {
         outingName = name.isEmpty ? "قناة الطلعة" : "قناة الطلعة · \(name)"
         if channelUUID == u, joinedSystem { return }
         /* Another outing's channel is still up: leave it first (one channel per system). */
-        if let old = channelUUID, old != u { m.leaveChannel(channelUUID: old) }
+        if let old = channelUUID, old != u {
+            Self.diag("leaving another outing's channel")
+            m.leaveChannel(channelUUID: old)
+        }
         channelUUID = u
+        Self.diag("requestJoinChannel")
         m.requestJoinChannel(channelUUID: u, descriptor: descriptor())
     }
 
@@ -162,7 +177,8 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     }
 
     func beginTransmit() {
-        guard let m = manager, let u = channelUUID, joinedSystem else { return }
+        guard let m = manager, let u = channelUUID, joinedSystem else { return Self.diag("beginTransmit skipped (not joined)") }
+        Self.diag("requestBeginTransmitting")
         m.requestBeginTransmitting(channelUUID: u)
     }
 
@@ -171,15 +187,42 @@ final class PTTSystemRoute: NSObject, PTTRoute {
         m.stopTransmitting(channelUUID: u)
     }
 
+    /// Fired when setting the remote participant fails (the system will not activate the session for it).
+    var onRemoteFailed: () -> Void = {}
+
     func setRemote(_ name: String?) {
         guard let m = manager, let u = channelUUID, joinedSystem else { return }
         let p = name.map { PTParticipant(name: $0, image: nil) }
-        Task { try? await m.setActiveRemoteParticipant(p, channelUUID: u) }
+        Task {
+            do {
+                try await m.setActiveRemoteParticipant(p, channelUUID: u)
+                Self.diag("setActiveRemoteParticipant(\(p == nil ? "nil" : "talker")) ok")
+            } catch {
+                Self.diag("setActiveRemoteParticipant failed: \(Self.describe(error))")
+                if p != nil { self.onRemoteFailed() }
+            }
+        }
     }
 
+    private var lastServiceStatus: Bool?
+
     func setServiceStatus(_ ok: Bool) {
-        guard let m = manager, let u = channelUUID, joinedSystem else { return }
-        Task { try? await m.setServiceStatus(ok ? .ready : .connecting, channelUUID: u) }
+        guard let m = manager, let u = channelUUID, joinedSystem, lastServiceStatus != ok else { return }
+        lastServiceStatus = ok
+        Task {
+            do {
+                try await m.setServiceStatus(ok ? .ready : .connecting, channelUUID: u)
+                Self.diag("serviceStatus \(ok ? "ready" : "connecting")")
+            } catch {
+                Self.diag("setServiceStatus failed: \(Self.describe(error))")
+            }
+        }
+    }
+
+    /// Error domain + code only (never the user-facing text, which may hold names).
+    nonisolated static func describe(_ e: Error) -> String {
+        let n = e as NSError
+        return "\(n.domain)#\(n.code)"
     }
 
     private func descriptor() -> PTChannelDescriptor {
@@ -191,14 +234,17 @@ final class PTTSystemRoute: NSObject, PTTRoute {
 
 extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate {
     nonisolated func channelManager(_ channelManager: PTChannelManager, didJoinChannel channelUUID: UUID, reason: PTChannelJoinReason) {
+        Self.diag("didJoinChannel reason=\(reason.rawValue)")
         Task { @MainActor in
             self.channelUUID = channelUUID
             self.joinedSystem = true
+            self.lastServiceStatus = nil
             Self.log.notice("[PTT] system channel joined")
         }
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, didLeaveChannel channelUUID: UUID, reason: PTChannelLeaveReason) {
+        Self.diag("didLeaveChannel reason=\(reason.rawValue)")
         Task { @MainActor in
             self.joinedSystem = false
             if self.channelUUID == channelUUID { self.channelUUID = nil }
@@ -207,6 +253,7 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, channelUUID: UUID, didBeginTransmittingFrom source: PTChannelTransmitRequestSource) {
+        Self.diag("didBeginTransmitting source=\(source.rawValue)")
         Task { @MainActor in
             /* From our own button we already asked the server; from the Lock Screen / a headset we must. */
             if source != .developerRequest { self.callbacks.systemBeganTransmit() }
@@ -214,23 +261,30 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, channelUUID: UUID, didEndTransmittingFrom source: PTChannelTransmitRequestSource) {
+        Self.diag("didEndTransmitting source=\(source.rawValue)")
         Task { @MainActor in self.callbacks.transmitEnded() }
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, receivedEphemeralPushToken pushToken: Data) {
         let hex = Self.hex(pushToken)
+        Self.diag("ephemeral push token (\(pushToken.count) bytes)")
         Task { @MainActor in self.callbacks.token(hex) }
     }
 
     /// Must return at once (Apple): parse, hand the rest to the main thread.
     nonisolated func incomingPushResult(channelManager: PTChannelManager, channelUUID: UUID, pushPayload: [String: Any]) -> PTPushResult {
-        guard let name = pushPayload["activeSpeaker"] as? String, !name.isEmpty else { return .leaveChannel }
+        guard let name = pushPayload["activeSpeaker"] as? String, !name.isEmpty else {
+            Self.diag("incoming push without activeSpeaker → leaveChannel")
+            return .leaveChannel
+        }
+        Self.diag("incoming push (app \(Thread.isMainThread ? "main" : "bg") thread)")
         let outing = (pushPayload["outing_id"] as? String) ?? channelUUID.uuidString.lowercased()
         Task { @MainActor in self.onWokenByPush(outing, name) }
         return .activeRemoteParticipant(PTParticipant(name: name, image: nil))
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, didActivate audioSession: AVAudioSession) {
+        Self.diag("didActivate audio session (category=\(audioSession.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")))")
         Task { @MainActor in
             /* The system decides whether this is for talking or listening; both callbacks are idempotent. */
             self.callbacks.transmitReady()
@@ -239,10 +293,12 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, didDeactivate audioSession: AVAudioSession) {
+        Self.diag("didDeactivate audio session")
         Task { @MainActor in self.callbacks.audioDeactivated() }
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, failedToJoinChannel channelUUID: UUID, error: Error) {
+        Self.diag("failedToJoinChannel \(Self.describe(error))")
         Task { @MainActor in
             Self.log.notice("[PTT] join failed: \(String(describing: error), privacy: .public)")
             self.joinedSystem = false
@@ -250,7 +306,12 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
     }
 
     nonisolated func channelManager(_ channelManager: PTChannelManager, failedToBeginTransmittingInChannel channelUUID: UUID, error: Error) {
-        Task { @MainActor in self.callbacks.transmitEnded() }
+        Self.diag("failedToBeginTransmitting \(Self.describe(error))")
+        Task { @MainActor in self.callbacks.transmitFailed() }
+    }
+
+    nonisolated func channelManager(_ channelManager: PTChannelManager, failedToStopTransmittingInChannel channelUUID: UUID, error: Error) {
+        Self.diag("failedToStopTransmitting \(Self.describe(error))")
     }
 
     nonisolated func channelDescriptor(restoredChannelUUID channelUUID: UUID) -> PTChannelDescriptor {
