@@ -114,7 +114,7 @@ export default function OutingJoin() {
 				<strong>{isRTL ? "سَرى البارق — خريطة البر" : "Sary Albarq — the desert map"}</strong>
 				<p className="sary-o-note">
 					{isRTL
-						? "خريطة للطلعات البرية: تشوف أصحابك على الخريطة أثناء الطلعة، ويشوفونك."
+						? "خريطة للطلعات البرية: تشوف العيال على الخريطة أثناء الطلعة، ويشوفونك."
 						: "A map for desert trips: see your friends on one map during the outing, and they see you."}
 				</p>
 			</header>
@@ -178,7 +178,7 @@ export default function OutingJoin() {
 									<span>
 										{personal
 											? isRTL ? "لقبك (يظهر بجانب اسمك في الطلعة)" : "Your nickname (shown beside your name)"
-											: isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}
+											: isRTL ? "اسمك كما يظهر للعيال" : "Your name, as friends will see it"}
 									</span>
 									<input
 										value={name}

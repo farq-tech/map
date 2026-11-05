@@ -125,7 +125,7 @@ export function TripSummaryCard({ outingId, isRTL, meId }: { outingId: string; i
 					</div>
 				</>
 			) : done === "shared" ? (
-				<p className="sary-o-note" role="status">{isRTL ? "شاركت ملخصك مع أصحاب الطلعة ✓" : "You shared your summary ✓"}</p>
+				<p className="sary-o-note" role="status">{isRTL ? "شاركت ملخصك مع عيال الطلعة ✓" : "You shared your summary ✓"}</p>
 			) : null}
 			{shared?.length ? (
 				<>

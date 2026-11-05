@@ -41,7 +41,7 @@ const PAGE_MAX = 100;
 const RETENTION_DAYS = 30;
 const TYPING_MIN_GAP_MS = 1_500;
 /** The note presets («بوقف، انتظروني، وصلت…»), offered as quick replies. Any short line is accepted. */
-const QUICK_PRESETS = ['بوقف', 'محطة بنزين', 'انتظروني', 'تعبت نرتاح', 'وصلت'];
+const QUICK_PRESETS = ['بوقف', 'محطة بنزين', 'اصبروا لي', 'تعبت، نوقف نرتاح', 'وصلت'];
 
 /** Chat text: keeps line breaks (at most one blank line), drops control and bidi-override characters. */
 function chatText(raw, max = TEXT_MAX) {

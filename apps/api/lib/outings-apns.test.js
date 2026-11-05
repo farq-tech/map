@@ -142,7 +142,7 @@ test('payloads: Arabic texts from the web push, SOS time-sensitive, the rest pas
   const sosP = pushPayloadFor({ type: 'sos', user_id: SENDER, text: 'علقنا في الرمل' }, { senderName: 'أبو فهد', outingName: 'طلعة النفود' });
   const sos = apnsRequestFor(sosP, OUTING, opts);
   const sb = JSON.parse(sos.body);
-  assert.deepEqual(sb.aps.alert, { title: '🆘 أبو فهد يطلب المساعدة · طلعة النفود', body: 'علقنا في الرمل' });
+  assert.deepEqual(sb.aps.alert, { title: '🆘 أبو فهد يطلب فزعة · طلعة النفود', body: 'علقنا في الرمل' });
   assert.equal(sb.aps['interruption-level'], 'time-sensitive');
   assert.notEqual(sb.aps['interruption-level'], 'critical');
   assert.equal(sb.aps.sound, 'default');

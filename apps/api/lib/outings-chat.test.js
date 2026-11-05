@@ -190,12 +190,12 @@ test('trip chat — authorization, DMs, pagination, outbox retries, deletion, re
   const lc = live(C.token, o.id);
   await Promise.all([la.ready, lb.ready, lc.ready]);
   assert.ok(typeof la.inbox.find((m) => m.type === 'ready').snapshot.chat_unread === 'number', 'snapshot carries the unread badge');
-  lb.send({ type: 'chat_message', id: 7, with: 'group', client_id: 'b-ws-1', kind: 'quick', text: 'انتظروني' });
+  lb.send({ type: 'chat_message', id: 7, with: 'group', client_id: 'b-ws-1', kind: 'quick', text: 'اصبروا لي' });
   const ack = await lb.until((m) => m.type === 'chat_ack' && m.id === 7);
   assert.equal(ack.ok, true);
   assert.equal(ack.message.kind, 'quick');
   const gotA = await la.until((m) => m.type === 'chat_message' && m.message.client_id === 'b-ws-1');
-  assert.equal(gotA.message.text, 'انتظروني');
+  assert.equal(gotA.message.text, 'اصبروا لي');
   await lc.until((m) => m.type === 'chat_message' && m.message.client_id === 'b-ws-1');
 
   /* A direct message reaches the two of them only. */
@@ -226,7 +226,7 @@ test('trip chat — authorization, DMs, pagination, outbox retries, deletion, re
   assert.equal(convA.conversations[1].unread, 1);
   assert.equal(convA.unread_total, 4);
   assert.equal(convA.can_moderate, true);
-  assert.deepEqual(convA.quick_replies.slice(0, 3), ['بوقف', 'محطة بنزين', 'انتظروني']);
+  assert.deepEqual(convA.quick_replies.slice(0, 3), ['بوقف', 'محطة بنزين', 'اصبروا لي']);
   la.send({ type: 'chat_read', with: B.user.id, seq: dmAck.message.seq });
   const receipt = await lb.until((m) => m.type === 'chat_read' && m.user_id === A.user.id);
   assert.equal(receipt.seq, dmAck.message.seq, '✓✓ for B');

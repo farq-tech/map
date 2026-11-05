@@ -388,7 +388,7 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		leader_only: "هذا الإجراء لأمير الرحلة أو نائبه فقط.",
 		join_locked: "قفل أمير الرحلة الانضمام، فلا يمكن لأحد جديد الدخول الآن.",
 		recovery_invalid: "رمز الاسترجاع غير صحيح أو استُخدم من قبل.",
-		invalid_name: "اكتب اسمًا يظهر لأصحابك.",
+		invalid_name: "اكتب اسمًا يظهر للعيال.",
 		invalid_outing_name: "اكتب اسمًا للطلعة.",
 		rate_limited: "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
 		too_frequent: "انتظر ثانيتين ثم أرسل.",
