@@ -104,6 +104,23 @@ struct SaryAlertCard: View {
         switch alert.kind {
         case .silent(let s):
             SarySilentCard(alert: s, tapped: tapped, dismiss: dismiss, actions: silent)
+        case .offTrack(let o):
+            card {
+                Image(systemName: FollowIcon.offTrack)
+                    .font(.system(size: theme.drive ? 20 : 15, weight: .bold))
+                    .foregroundStyle(theme.palette.emergencyText)
+                    .frame(width: theme.drive ? 48 : 36, height: theme.drive ? 48 : 36)
+                    .background(Circle().fill(theme.palette.emergency.opacity(0.18)))
+            } content: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("خرجت عن المسار").saryText(theme.drive ? .headline : .callout, weight: .bold)
+                        .foregroundStyle(theme.palette.textPrimary).lineLimit(1)
+                    Text("على بعد \(SaryFormat.distance(meters: o.meters)) من «\(o.trackName)» · ارجع باتجاه السهم")
+                        .saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
+                }
+            }
+            .accessibilityLabel(Text("خرجت عن المسار، على بعد \(SaryFormat.distance(meters: o.meters)) من \(o.trackName)"))
+            .accessibilityIdentifier("alert.offTrack")
         case .toast(let text):
             Text(text)
                 .saryText(.subhead, weight: .bold)

@@ -67,6 +67,10 @@ struct MapTrails: Equatable {
     var highlight = false
     /// Where to say «لم يُسجَّل هذا الجزء» (the longest gaps only).
     var gapLabels: [LngLat] = []
+    /// Build 10: my trail as drawn (smoothed, outliers out, speed colours) — `TrackDisplay`.
+    var mineTrack: TrackLine?
+    /// «اسلك هذا المسار»: the track being followed (drawn with its start / end dots and a glow).
+    var followed: TrackLine?
 }
 
 /// A one-shot camera request; a new `id` asks again.
@@ -82,6 +86,8 @@ struct MapCameraRequest: Equatable {
         case point(LngLat)
         /// Frame these points (my trail and me, for «طريق العودة»).
         case fit([LngLat])
+        /// Frame a track as closely as the satellite imagery allows (z19).
+        case fitTrack([LngLat])
     }
 
     var kind: Kind
@@ -136,6 +142,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var terrain3D = false
     /// Exploration: shown GPX tracks and saved places.
     var explore = MapExplore()
+    /// Standard Satellite's labels: clean over a recorded / followed track, roads while driving.
+    var labels: SatelliteLabels = .standard
     /// The map centre (the exploration crosshair), its terrain elevation in metres when the
     /// DEM tiles there are loaded (nil otherwise — never guessed) and the zoom. Throttled.
     var onCenter: (MapCenterReading) -> Void = { _ in }
@@ -190,6 +198,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setNav(nav)
         c.onCenter = onCenter
         c.setLayer(layer)
+        c.setLabels(labels)
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
         if let req = camera, req.id != c.lastCamera {
@@ -206,6 +215,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 c.center(p)
             case let .fit(pts):
                 c.fit(pts)
+            case let .fitTrack(pts):
+                c.fit(pts, maxZoom: SatelliteLabels.trackMaxZoom)
             }
         }
     }
@@ -258,6 +269,9 @@ struct OutingMapboxView: UIViewRepresentable {
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
         private var trails = MapTrails()
         private var trailLayerKey: String?
+        let mineDrawer = TrackLineDrawer(id: "sary-track-mine")
+        let followDrawer = TrackLineDrawer(id: "sary-track-follow")
+        var labels: SatelliteLabels = .standard
         private var startPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<TrailStartPin>)?
         /// «نقطة البداية» drops its label (icon only) while a car's chip would sit on it.
         private var startCompact = false
@@ -409,10 +423,9 @@ struct OutingMapboxView: UIViewRepresentable {
             styleReady = true
             addedModels.removeAll()
             let m: MapboxMap = map.mapboxMap!
-            /* Same Standard config as the web's applyBasemap() for the outing map. */
-            for (k, v) in [("show3dObjects", true), ("showPointOfInterestLabels", false), ("showTransitLabels", false), ("showRoadLabels", false)] as [(String, Bool)] {
-                try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
-            }
+            /* Same Standard config as the web's applyBasemap() for the outing map; labels per `SatelliteLabels`. */
+            try? m.setStyleImportConfigProperty(for: "basemap", config: "show3dObjects", value: true)
+            labels.apply(m)
             light = nil
             applyLight()
             if let r = rallyPin?.point {
@@ -431,6 +444,8 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             ensureRoadProbe()
             trailLayerKey = nil
+            mineDrawer.styleLoaded()
+            followDrawer.styleLoaded()
             drawTrails()
             drawPlan(force: true)
             navDrawer.styleLoaded()
@@ -454,6 +469,12 @@ struct OutingMapboxView: UIViewRepresentable {
                 guard let self, let json, self.layer == l else { return }
                 self.map?.mapboxMap.loadStyle(json)
             }
+        }
+
+        func setLabels(_ l: SatelliteLabels) {
+            guard l != labels else { return }
+            labels = l
+            if styleReady, let m = map?.mapboxMap { l.apply(m) }
         }
 
         func setTerrain3D(_ on: Bool) {
@@ -1077,8 +1098,16 @@ struct OutingMapboxView: UIViewRepresentable {
                 addTrailLayers(m, myColor: myColor)
                 trailLayerKey = key
             }
-            m.updateGeoJSONSource(withId: Self.trailMine, geoJSON: .featureCollection(Self.collection(trails.mine.map { [$0] } ?? [])))
             m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
+            /* Build 10: my trail and a followed track in the shared track style (casing, speed gradient, dots). */
+            let ids = m.allLayerIdentifiers.map(\.id)
+            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
+            let w = (theme.drive ? TrackLineStyle.width + 1 : TrackLineStyle.width) + (trails.highlight ? 1.5 : 0)
+            mineDrawer.update(m, line: trails.mineTrack, style: TrackLineStyle(width: w, color: myColor, speedColours: true,
+                                                                                casing: Self.casing(for: myColor), showEnds: false,
+                                                                                glow: trails.highlight), below: below)
+            followDrawer.update(m, line: trails.followed, style: TrackLineStyle(width: TrackLineStyle.width + 1, glow: true),
+                                below: below)
             placeStart(trails.start)
             placeGapLabels(trails.gapLabels)
         }
@@ -1119,9 +1148,7 @@ struct OutingMapboxView: UIViewRepresentable {
             let solid: [Any] = ["==", ["get", "k"], "s"]
             let gap: [Any] = ["==", ["get", "k"], "g"]
             let roundLine: [String: Any] = ["line-join": "round", "line-cap": "round"]
-            let casing = Self.casing(for: myColor)
-            let mine = "#" + Vehicle.hex(myColor)
-            var layers: [[String: Any]] = [
+            let layers: [[String: Any]] = [
                 ["id": "\(Self.trailFriends)-casing", "type": "line", "source": Self.trailFriends, "filter": solid, "layout": roundLine,
                  "paint": ["line-color": theme.night ? "#ffffff" : "#16110b", "line-width": width(w * 0.55 + 2.5),
                            "line-opacity": ["*", ["get", "o"], 0.55], "line-emissive-strength": 1] as [String: Any]],
@@ -1130,20 +1157,6 @@ struct OutingMapboxView: UIViewRepresentable {
                 ["id": "\(Self.trailFriends)-gap", "type": "line", "source": Self.trailFriends, "filter": gap, "layout": ["line-join": "round"],
                  "paint": ["line-color": ["get", "c"], "line-width": width(w * 0.45), "line-opacity": ["*", ["get", "o"], 0.8],
                            "line-dasharray": [1, 2.2], "line-emissive-strength": 1] as [String: Any]],
-            ]
-            if trails.highlight {
-                layers.append(["id": "\(Self.trailMine)-glow", "type": "line", "source": Self.trailMine, "layout": roundLine,
-                               "paint": ["line-color": mine, "line-width": width(w + 14), "line-opacity": 0.35, "line-blur": 6, "line-emissive-strength": 1] as [String: Any]])
-            }
-            layers += [
-                ["id": "\(Self.trailMine)-casing", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
-                 "paint": ["line-color": casing, "line-width": width(w + 3), "line-opacity": 0.92, "line-emissive-strength": 1] as [String: Any]],
-                ["id": "\(Self.trailMine)-line", "type": "line", "source": Self.trailMine, "filter": solid, "layout": roundLine,
-                 "paint": ["line-color": mine, "line-width": width(w), "line-emissive-strength": 1] as [String: Any]],
-                ["id": "\(Self.trailMine)-gap-casing", "type": "line", "source": Self.trailMine, "filter": gap, "layout": roundLine,
-                 "paint": ["line-color": casing, "line-width": width(w * 0.7 + 3), "line-opacity": 0.85, "line-emissive-strength": 1] as [String: Any]],
-                ["id": "\(Self.trailMine)-gap", "type": "line", "source": Self.trailMine, "filter": gap, "layout": ["line-join": "round"],
-                 "paint": ["line-color": mine, "line-width": width(w * 0.7), "line-dasharray": [1.2, 1.6], "line-emissive-strength": 1] as [String: Any]],
             ]
             for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
         }
@@ -1258,17 +1271,17 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         /// Frame arbitrary points (my trail and me).
-        func fit(_ pts: [LngLat]) {
+        func fit(_ pts: [LngLat], maxZoom: Double = GroupFraming.maxZoom) {
             keepGroup = false
-            frame(pts)
+            frame(pts, maxZoom: maxZoom)
         }
 
-        private func frame(_ pts: [LngLat]) {
+        private func frame(_ pts: [LngLat], maxZoom: Double = GroupFraming.maxZoom) {
             guard let map, let b = GroupFraming.bounds(pts), map.bounds.height > 0 else { return }
             let coords = [CLLocationCoordinate2D(latitude: b.south, longitude: b.west), CLLocationCoordinate2D(latitude: b.north, longitude: b.east)]
             let state = map.mapboxMap.cameraState
             guard var cam = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(padding: .zero, bearing: state.bearing, pitch: state.pitch),
-                                                       coordinatesPadding: framePadding, maxZoom: GroupFraming.maxZoom, offset: nil) else { return }
+                                                       coordinatesPadding: framePadding, maxZoom: maxZoom, offset: nil) else { return }
             cam.padding = nil
             fitting = true
             map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.9) { [weak self] _ in self?.fitting = false }

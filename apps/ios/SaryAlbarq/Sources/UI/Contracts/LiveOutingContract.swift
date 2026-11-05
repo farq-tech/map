@@ -128,6 +128,8 @@ enum LiveAlertKindUI: Equatable {
     case weather(WeatherAlertUI)
     /// «انقطع إرسال فهد منذ ١٠ د» with «اتجه» / «اتصال» (SarySilentCard.swift).
     case silent(SilentAlertUI)
+    /// «اسلك هذا المسار»: more than 50 m off the followed track for over 10 s.
+    case offTrack(FollowDeviationAlertUI)
 }
 
 struct LiveAlertUI: Equatable, Identifiable {
@@ -432,6 +434,44 @@ struct BackTrackUI: Equatable {
     var relativeToCourse: Bool
     /// I am on a stretch that was not recorded (straight dashed line).
     var onGap: Bool
+}
+
+/// «اسلك هذا المسار»: the follow panel (off-road, along any saved track).
+struct FollowTrackUI: Equatable {
+    enum Phase: Equatable {
+        /// No recent GPS fix yet (an old one is never used).
+        case waitingFix
+        case onTrack
+        /// More than 50 m from the track for over 10 s: «خرجت عن المسار».
+        case offTrack
+        /// More than 2 km from the whole track: offer to navigate to its nearest point (online).
+        case far
+        case arrived
+    }
+
+    var name: String
+    var phase: Phase
+    /// Along the track to its end.
+    var remainingMeters: Double?
+    /// 0…1 of the track behind me.
+    var progress: Double?
+    /// My distance from the track.
+    var offsetMeters: Double?
+    var arrowDegrees: Double
+    var directionLabel: String
+    var relativeToCourse = false
+    /// On a stretch that was not recorded (straight dashed line).
+    var onGap: Bool
+    /// Followed backwards («اعكس الاتجاه»).
+    var reversed: Bool
+    /// Navigating to the track needs the internet (routing); the follow itself does not.
+    var online: Bool
+}
+
+/// The one «خرجت عن المسار» card in the alert queue.
+struct FollowDeviationAlertUI: Equatable {
+    var trackName: String
+    var meters: Double
 }
 
 /// «مساري» card in the sheet and its settings.

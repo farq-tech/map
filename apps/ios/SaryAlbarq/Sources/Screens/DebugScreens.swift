@@ -25,6 +25,10 @@ struct DebugScreen: View {
         case "history": HomeView(initial: [.history])
         #if DEBUG
         case "story": StoryComposerView(facts: StoryFixtures.facts()) {}
+        case "track-detail":
+            if let s = DemoTrail.dunesSubject() { TrackDetailView(subject: s, close: {}, follow: { _ in }) }
+        case "follow":
+            if let s = DemoTrail.dunesSubject(), let m = TrackFollowModel(s) { TrackFollowScreen(model: m, close: {}) }
         #endif
         case "profile": HomeView(initial: [.profile])
         case "settings": HomeView(initial: [.settings])

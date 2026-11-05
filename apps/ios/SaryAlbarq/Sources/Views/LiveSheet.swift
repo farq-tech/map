@@ -81,7 +81,21 @@ struct LiveSheet: View {
                 .presentationDragIndicator(.visible)
         case let .participant(id):
             if let s = controller.participantCard(id) {
-                ScrollView { SaryParticipantCard(state: s, actions: controller.participantActions(id)) }
+                ScrollView {
+                    SaryParticipantCard(state: s, actions: controller.participantActions(id))
+                    /* Build 10: their recent trail (as this phone saw it) can be followed too. */
+                    if let f = controller.friendFollowSubject(id) {
+                        Button {
+                            controller.modal = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.startFollow(f) }
+                        } label: {
+                            SaryButtonLabel(title: "اسلك مساره (\(SaryFormat.distance(meters: f.stats.distanceM)))", systemImage: FollowIcon.follow)
+                        }
+                        .buttonStyle(.sary(.secondary))
+                        .padding(.horizontal)
+                        .accessibilityIdentifier("participant.followTrail")
+                    }
+                }
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
                     .accessibilityIdentifier("participant-card")
@@ -149,6 +163,11 @@ struct LiveSheet: View {
                 .presentationDetents([.large])
         case .convoyAlerts:
             ConvoyAlertSettingsView(close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case let .enjad(situation):
+            EnjadSheet(input: controller.enjadInput(situation), online: controller.followOnline,
+                       addPhone: { controller.modal = nil; controller.actions.participantsTab.addMyPhone() },
+                       close: { controller.modal = nil })
                 .presentationDetents([.large])
         case .tracks:
             TracksSheet(controller: controller)

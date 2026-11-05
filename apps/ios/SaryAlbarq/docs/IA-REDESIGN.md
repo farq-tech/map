@@ -252,6 +252,16 @@ another UI test, ‡ = unit-tested.
 | «تنبيهات القافلة» rules (new) | — | «المزيد» tab (`settings-convoy-alerts`); Settings → الحساب (`settings.convoyAlerts`) | 2 ✔ ‡ |
 | Return to the meeting point (new) | rally «اتجه» only | rally card «ارجعوا لنقطة التجمع» (`rally.recall`, leaders) → members get a prompt with «اتجه» (`convoy.goRally`); who is at the rally (`rally.arrived`) | 2 ✔ ‡ |
 
+### Build 10–11 additions («دقة المسار» + «إنجاد»)
+
+| Feature | Build 9 | Build 10–11 | Taps |
+|---|---|---|---|
+| One track style (new) | thin trail, plain GPX lines | every track (my live trail, «طريق العودة», summary, story preview, GPX, followed track): darker casing, round joins, speed `line-gradient` (light slow → deep fast; GPX one colour), start / end dots; display-only Douglas–Peucker 2.5 m + outlier rejection (> 25 m accuracy, > 70 m/s jumps) | 0 ‡ |
+| Clean satellite (new) | POI / transit / road labels off, place labels on | when a track is the subject (exploration on satellite, «طريق العودة», follow, summary, track detail): place + road labels off too; while navigating: road + place names on; track framing to z19 | 0 |
+| Trip stats card (new) | stats grid (km, moving time, top / average speed) | summary «مساري»: track on clean satellite + dark card «المسافة · أعلى سرعة · مدة القيادة» (`track.stats`, «—» when unknown) + «اسلك هذا المسار» (`track.follow`); «كبّر» → full-screen track detail (`summary.trackOpen` → `track.detail`) | 0–1 † ‡ |
+| «اسلك هذا المسار» follow mode (new) | «طريق العودة» on my own trail only | any saved track: summary / track detail (`track.follow` → stand-alone `follow.screen`), GPX rows in exploration (`tracks.follow` → detail), a member's recent trail (`participant.followTrail`); panel `follow.panel`: distance left along the track, progress, «اعكس الاتجاه» (`follow.reverse`), «إنهاء» (`follow.exit`); one «خرجت عن المسار» card (`alert.offTrack`, > 50 m for > 10 s); > 2 km away: «وجّهني لأقرب نقطة» (`follow.approach`, online only); driving: the panel is the one header | 1–2 † ‡ |
+| «اطلب إنجاد» (new) | — | «غرّزت؟» confirm → «اطلب إنجاد (واتساب)»; stuck strip «إنجاد» (`stuck-enjad`); «السلامة» stuck row (`sheet-stuck-enjad`); sent-SOS strip «إنجاد» (`sos-enjad`) → sheet `enjad.sheet`: WhatsApp (`enjad.whatsapp`, SMS fallback), «اتصل بإنجاد» (`enjad.call`), SMS (`enjad.sms`); the person sends it | 2 † ‡ |
+
 ## 6. Stages
 
 | Stage | Scope | Build 8 |
