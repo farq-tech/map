@@ -12,13 +12,10 @@ MAPBOX_ACCESS_TOKEN =
 CARPLAY_ENABLED = NO
 CARPLAY_ENABLED[sdk=iphonesimulator*] = YES
 // STILL PENDING at build 8 (checked via the App Store Connect API, 2026-11-05): the App ID
-// sa.sary.albarq has PUSH_NOTIFICATIONS, USERNOTIFICATIONS_TIMESENSITIVE, ASSOCIATED_DOMAINS but
-// NOT Push to Talk nor App Groups — those two were enabled on sa.sary.albarq.share instead.
-// Archiving with NO fails: «Provisioning profile "iOS Team Provisioning Profile: sa.sary.albarq"
-// doesn't include the Push to Talk capability» / «… doesn't support the group.sa.sary.albarq App Group».
-// Owner: Apple Developer → Identifiers → sa.sary.albarq → enable Push to Talk + App Groups
-// (group.sa.sary.albarq), then set NO. Until then device/archive builds sign without those two.
-SARY_PORTAL_PENDING = YES
+// Build 9: App Store Connect API (bundleIdCapabilities) shows sa.sary.albarq with PUSH_TO_TALK and
+// APP_GROUPS (plus push, time-sensitive, associated domains), and sa.sary.albarq.share with APP_GROUPS,
+// so device/archive builds sign with the full entitlements again. Set YES only if the portal loses them.
+SARY_PORTAL_PENDING = NO
 SARY_PORTAL_PENDING[sdk=iphonesimulator*] = NO
 SARY_APP_ENTITLEMENTS_PENDING_NO = Sources/App/SaryAlbarq.entitlements
 SARY_APP_ENTITLEMENTS_PENDING_YES = Sources/App/SaryAlbarq-PortalPending.entitlements
