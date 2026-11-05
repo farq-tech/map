@@ -164,6 +164,7 @@ struct SaryDialog: View {
             VStack(spacing: theme.space(.s)) {
                 Button(action: confirm) { SaryButtonLabel(title: confirmTitle, busy: busy) }
                     .buttonStyle(.sary(confirmKind))
+                    .accessibilityIdentifier("dialog.confirm")
                     .disabled(busy)
                 Button(cancelTitle, action: cancel).buttonStyle(.sary(.secondary))
             }
