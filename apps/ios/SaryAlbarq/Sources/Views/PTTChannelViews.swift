@@ -88,11 +88,6 @@ struct PTTChannelSheet: View {
                     Text("تسمع ترددًا واحدًا وتتكلم فيه. كل تردد يتكلم فيه شخص واحد في نفس الوقت.")
                 }
 
-                /* «رسالة صوتية»: this channel's recent notes, ▶︎ each. */
-                if let vn = VoiceNoteCenters.of(walkie.outingId) {
-                    VoiceNoteSection(center: vn)
-                }
-
                 Section("الترددات العامة") {
                     ForEach(publicChannels) { c in row(c) }
                 }
@@ -118,6 +113,11 @@ struct PTTChannelSheet: View {
                              ? "التردد الخاص لا يسمعه ولا يراه إلا من تدعوهم — حتى ٥ ترددات في الطلعة."
                              : "يفتحها أمير الرحلة لمن يدعوهم فقط.")
                     }
+                }
+
+                /* «رسالة صوتية»: this channel's recent notes, ▶︎ each (after the channels, so the knob and rows stay where they were). */
+                if let vn = VoiceNoteCenters.of(walkie.outingId) {
+                    VoiceNoteSection(center: vn)
                 }
             }
             .navigationTitle("الترددات")
