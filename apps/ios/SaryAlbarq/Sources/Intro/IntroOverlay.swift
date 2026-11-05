@@ -18,6 +18,8 @@ struct IntroOverlay: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { intro.userSkip() }
             .accessibilityIdentifier("intro")
+            /* UI tests: the cinematic playing vs. only the launch frame crossfading out. */
+            .accessibilityValue(intro.mode == .full && (intro.startedAt != nil || intro.freeze != nil) ? "playing" : "launch")
     }
 
     @ViewBuilder private var stage: some View {

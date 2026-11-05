@@ -121,8 +121,21 @@ final class PTTAudioEngine {
                 guard hw.sampleRate > 0, hw.channelCount > 0 else { throw PTTError.noMicrophone }
                 inputConverter = AVAudioConverter(from: hw, to: PTTAudioFormat.pcm)
                 /* An engine already running for a cue or a friend's voice was started without the
-                 * input in its graph: a tap added now may never be called. Restart it with the mic. */
-                if engine.isRunning, !inputWired, !playing {
+                 * input in its graph: a tap added now may never be called (a quick reply went out
+                 * silent). Restart it with the mic — after cutting the friend's drained tail if needed. */
+                switch Self.micRestart(engineRunning: engine.isRunning, inputWired: inputWired, playing: playing, draining: draining) {
+                case .none:
+                    break
+                case .restart:
+                    cuePlayer.stop()
+                    cuesInFlight = 0
+                    engine.stop()
+                case .endTailThenRestart:
+                    draining = false
+                    endCue = nil
+                    playing = false
+                    jitter.reset(burst: nil)
+                    player.stop()
                     cuePlayer.stop()
                     cuesInFlight = 0
                     engine.stop()
@@ -134,11 +147,23 @@ final class PTTAudioEngine {
                 }
                 try ensureEngine()
             } catch {
+                engine.inputNode.removeTap(onBus: 0)
+                inputWired = false
                 Self.log.error("[PTT] capture failed: \(String(describing: error), privacy: .public)")
                 PTTDiagnosticsLog.shared.add("audio", "mic failed: \((error as NSError).domain)#\((error as NSError).code)")
                 capturing = false
             }
         }
+    }
+
+    enum MicRestart: Equatable { case none, restart, endTailThenRestart }
+
+    /// What to do with a running engine when the mic starts (pure, unit-tested). Only a friend
+    /// still TALKING keeps the engine as it is (the floor is theirs; our request is refused anyway).
+    static func micRestart(engineRunning: Bool, inputWired: Bool, playing: Bool, draining: Bool) -> MicRestart {
+        guard engineRunning, !inputWired else { return .none }
+        if !playing { return .restart }
+        return draining ? .endTailThenRestart : .none
     }
 
     func stopCapture() {

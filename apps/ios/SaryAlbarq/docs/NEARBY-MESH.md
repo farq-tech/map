@@ -9,7 +9,7 @@ wired in `OutingSession` and shown by `LiveOutingPresenter`. Tests:
 ## When it runs
 
 * Only while the sharing gate is open (`SendGate.allowsPosition`: consent on this
-  device, iOS permission, «شارك موقعي» pressed, server sharing on, outing active,
+  device, iOS permission, the share intent on (automatic while a member, build 14), server sharing on, outing active,
   app in the foreground). Stopping sharing turns it off at once and first sends a
   `stop` event, so nearby phones drop your position.
 * And only when it is needed (`MeshActivation`): this phone's server link has been

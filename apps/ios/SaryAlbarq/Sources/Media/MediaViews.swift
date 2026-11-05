@@ -212,6 +212,7 @@ private struct LinkInput: View {
 /// The player at the size drive safety allows — never smaller than 200 × 200 pt, never covered.
 private struct PlayerBlock: View {
     @ObservedObject var center: MediaCenter
+    @State private var fullWidth: CGFloat = 0
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -241,9 +242,14 @@ private struct PlayerBlock: View {
                     .clipShape(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
                     .accessibilityIdentifier("media.player.compact")
             } else {
+                /* 16:9 across the sheet's width, but never under YouTube's 200 × 200 pt: an explicit
+                 * height (an aspect-fit inside a min-height frame still drew 194.7 pt on a 6.3" phone), with 2 pt
+                 * to spare so rounding on screen never lands a hair under 200 (measured 199.99999). */
                 MediaPlayerHost(engine: center.engine)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .frame(minHeight: DriveGate.minPlayerSide)
+                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: DriveGate.minPlayerSide)
+                    .frame(height: max(DriveGate.minPlayerSide + 2, (fullWidth * 9 / 16).rounded(.up)))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullWidth = $0 }
                     .clipShape(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
                     .accessibilityIdentifier("media.player.full")
             }

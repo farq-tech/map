@@ -202,6 +202,13 @@ final class GroupAudioTests: XCTestCase {
         XCTAssertTrue(GroupAudioCatalog.bundled.allSatisfy { $0.url.hasPrefix("https://") })
         let json = #"{"ok":true,"stations":[{"id":"a","name":"A","subtitle":"","group":"fm","url":"http://x","homepage":""},{"id":"b","name":"B","subtitle":"","group":"quran","url":"https://y","homepage":""}]}"#
         XCTAssertEqual(GroupAudioCatalog.decode(Data(json.utf8))?.map(\.id), ["b"], "http stations dropped")
+        /* QA build 15: the server's catalog wins; the app's copy only when it cannot be reached. */
+        let server = GroupAudioCatalog.decode(Data(json.utf8))
+        XCTAssertEqual(GroupAudioCatalog.resolve(server: server, shared: true).stations.map(\.id), ["b"])
+        XCTAssertFalse(GroupAudioCatalog.resolve(server: server, shared: true).offline)
+        XCTAssertEqual(GroupAudioCatalog.resolve(server: nil, shared: true).stations, GroupAudioCatalog.bundled, "offline fallback")
+        XCTAssertTrue(GroupAudioCatalog.resolve(server: nil, shared: true).offline)
+        XCTAssertFalse(GroupAudioCatalog.resolve(server: nil, shared: false).offline, "a local-only radio uses the app's list")
     }
 
     func testAudiusOnlyStreamableTracks() {

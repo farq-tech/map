@@ -40,7 +40,10 @@ final class GroupAudioCenter: ObservableObject {
     @Published private(set) var availability: Availability = .unknown
     @Published private(set) var ducking = GroupAudioDucking()
     @Published private(set) var status: PlayerStatus = .idle
-    @Published private(set) var stations: [GroupAudioStation] = GroupAudioCatalog.bundled
+    /// From the server's catalog; empty while it loads (the app's copy only if it cannot be reached).
+    @Published private(set) var stations: [GroupAudioStation] = []
+    /// The server's catalog could not be fetched: the app's own copy is shown.
+    @Published private(set) var catalogOffline = false
     @Published private(set) var audiusResults: [AudiusAPI.Track] = []
     @Published private(set) var audiusSearching = false
     @Published var errorText: String?
@@ -165,14 +168,22 @@ final class GroupAudioCenter: ObservableObject {
         guard backend.isShared else { return }
         backend = GroupAudioLocalBackend(me: myUserId, iLead: true)
         availability = .localOnly
+        if stations.isEmpty { stations = GroupAudioCatalog.bundled }
     }
 
     private func loadCatalog() async {
-        guard backend.isShared else { return }
-        let url = Endpoints.apiBase.appendingPathComponent("api/outings/group-audio/catalog")
-        guard let (data, resp) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 8)),
-              (resp as? HTTPURLResponse)?.statusCode == 200, let list = GroupAudioCatalog.decode(data) else { return }
-        stations = list
+        var list: [GroupAudioStation]?
+        if backend.isShared {
+            let url = Endpoints.apiBase.appendingPathComponent("api/outings/group-audio/catalog")
+            for attempt in 0..<2 where list == nil {
+                if attempt > 0 { try? await Task.sleep(nanoseconds: 1_500_000_000) }
+                if let (data, resp) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 8)),
+                   (resp as? HTTPURLResponse)?.statusCode == 200 { list = GroupAudioCatalog.decode(data) }
+            }
+        }
+        let r = GroupAudioCatalog.resolve(server: list, shared: backend.isShared)
+        stations = r.stations
+        catalogOffline = r.offline
     }
 
     private func send(_ c: GroupAudioCommand) async {

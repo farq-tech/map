@@ -21,6 +21,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var history: [OutingSummary] = []
     @Published private(set) var listPhase: ListPhase = .loading
     @Published var session: OutingSession?
+    /// Back in «طلعاتي» while still a member of an active trip (build 15): the trip's session keeps
+    /// running off the map — sharing is forced and stops only by «غادر الطلعة» or the trip's end.
+    @Published private(set) var parkedSession: OutingSession?
+    private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
     @Published var errorText: String?
@@ -98,7 +102,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 let now = forcedOffline ? false : path.status == .satisfied
-                if now && !self.online { self.session?.networkBack() }
+                if now && !self.online { self.session?.networkBack(); self.parkedSession?.networkBack() }
                 self.online = now
             }
         }
@@ -107,7 +111,7 @@ final class AppModel: ObservableObject {
         /* Screens observe the model; the registrar's state is part of it. */
         pushSink = push.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         push.accountId = { [weak self] in self?.identity?.user.id }
-        sessionSink = $session.sink { [activity] in activity.attach($0) }
+        sessionSink = $session.combineLatest($parkedSession).sink { [activity] s, parked in activity.attach(s ?? parked) }
         observers.append(NotificationCenter.default.addObserver(forName: .saryOpenOuting, object: nil, queue: .main) { [weak self] n in
             guard let id = n.object as? String else { return }
             Task { @MainActor in self?.open(id) }
@@ -125,7 +129,23 @@ final class AppModel: ObservableObject {
             }
         }
         #endif
+        #if DEBUG
+        /* `-SaryDemoInvite personal|group` (+ `-SaryNoIdentity`): an invite link just opened, no trip yet
+         * (the one-step join, UI tests and screenshots; the demo preview and join stand in for the server). */
+        if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInvite") {
+            demoInviteKind = i + 1 < arguments.count ? arguments[i + 1] : "personal"
+            if arguments.contains("-SaryNoIdentity") { identity = nil }
+            seedDemoLists()
+            pendingInvite = "demo-invite"
+        } else if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        /* `-SaryDemoInviteDuringTrip <s>`: an invite link opened s seconds into the demo trip (UI tests). */
+        if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInviteDuringTrip"), i + 1 < arguments.count, let s = Double(arguments[i + 1]) {
+            demoInviteKind = "group"
+            DispatchQueue.main.asyncAfter(deadline: .now() + s) { [weak self] in self?.pendingInvite = "demo-invite" }
+        }
+        #else
         if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        #endif
         #if DEBUG
         if !isDemo, let i = arguments.firstIndex(of: "-SaryLabOuting"), i + 1 < arguments.count { open(arguments[i + 1]) }
         #endif
@@ -162,6 +182,9 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// `-SaryDemoInvite`: which demo invite the link stands for ("personal" or "group").
+    private var demoInviteKind: String?
+
     /// DEBUG screenshot hook: `-SaryScreen <name>` opens one screen with demo data.
     @Published var debugScreen: String?
 
@@ -181,6 +204,11 @@ final class AppModel: ObservableObject {
         if !p.isEmpty && ServerRules.normalizePhone(p) == nil {
             errorText = OutingAPIError(code: "invalid_phone", status: 400).arabic
             return false
+        }
+        if isDemo {
+            /* `-demo` has no server: the identity is local (the one-step join's silent identity). */
+            identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: clean, avatar: nil, phone: nil))
+            return true
         }
         loading = true
         defer { loading = false }
@@ -317,6 +345,7 @@ final class AppModel: ObservableObject {
         if let u = identity?.user.id { ShareMemory.setActiveShare(user: u, outing: nil) }
         session?.close()
         session = nil
+        closeParked()
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
         /* «الرحلة» (start point, arrivals) is about where I went: it goes with the identity too. */
@@ -398,13 +427,33 @@ final class AppModel: ObservableObject {
         return isDemo ? InviteLink.url(for: "demo-invite") : nil
     }
 
-    func preview(_ token: String) async throws -> InvitePreview { try await api.preview(token: token) }
+    func preview(_ token: String) async throws -> InvitePreview {
+        if isDemo {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let personal = demoInviteKind != "group"
+            return InvitePreview(outing_id: DemoData.outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_name: "راشد", member_count: 4,
+                                 expires_at: ISODate.string(Date().addingTimeInterval(86400)), join_locked: false,
+                                 kind: personal ? "personal" : "group", invitee_name: personal ? "فهد أخوي" : nil, claim: "open",
+                                 destination_name: "روضة الثمامة")
+        }
+        return try await api.preview(token: token)
+    }
 
+    /// «انضم للطلعة» once iOS allowed the location (the one-step join, `JoinMachine`): join,
+    /// open the trip and share at once — no toggle, no consent sheet (joining is the consent).
     func join(_ token: String) async -> Bool {
+        if isDemo {
+            pendingInvite = nil
+            openDemoSession()
+            consentByJoining(DemoData.outingId)
+            startSharingAfterJoin(DemoData.outingId)
+            if !push.explained { offerNotifications = true }
+            return true
+        }
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
-            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: share by default. */
+            /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: sharing is on, forced. */
             consentByJoining(r.outing_id)
             await refresh()
             open(r.outing_id)
@@ -426,6 +475,7 @@ final class AppModel: ObservableObject {
         do {
             try await api.leave(id)
             if session?.id == id { closeSession() }
+            if parkedSession?.id == id { closeParked() }
             await refresh()
             return true
         } catch let e as OutingAPIError { errorText = e.arabic } catch {}
@@ -480,6 +530,10 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ outingId: String) {
+        if let p = parkedSession {
+            if p.id == outingId, session == nil { return unpark() }
+            if p.id != outingId { closeParked() }
+        }
         if isDemo {
             if outingId == DemoData.outingId { openDemoSession() }
             return
@@ -487,12 +541,48 @@ final class AppModel: ObservableObject {
         guard let id = identity else { return }
         if session?.id == outingId { return }
         session?.close()
+        /* Build 14: a member of a trip shares while it runs — opening it is the same as joining
+         * (no «شارك موقعي»). The gate still needs iOS permission, an active trip and the server's
+         * sharing flag; ended / left / removed close the session and stop it. */
+        consentByJoining(outingId)
         let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
         session = s
         s.open()
+        s.resumeIfPreviouslySharing()
     }
 
-    func closeSession() {
+    /// «ارجع للقائمة»: the map closes, the trip's session (and its sharing) keeps running.
+    func parkSession() {
+        guard let s = session else { return }
+        closeParked()
+        session = nil
+        parkedSession = s
+        /* The trip ended, or I left / was removed: the parked session closes for good. */
+        parkedSink = s.$closedReason.compactMap { $0 }.first().receive(on: DispatchQueue.main).sink { [weak self] _ in
+            guard let self, self.parkedSession === s else { return }
+            self.closeParked()
+            Task { await self.refresh() }
+        }
+        Task { await refresh() }
+    }
+
+    private func unpark() {
+        guard let s = parkedSession else { return }
+        parkedSink = nil
+        parkedSession = nil
+        session = s
+    }
+
+    private func closeParked() {
+        parkedSink = nil
+        parkedSession?.close()
+        parkedSession = nil
+    }
+
+    /// `keepShare`: back to «طلعاتي» while still a member — the share stays armed, so opening the
+    /// trip again (or a relaunch) picks it up. Leaving / sign-out forget it.
+    func closeSession(keepShare: Bool = false) {
+        session?.keepShareOnClose = keepShare
         session?.close()
         session = nil
         Task { await refresh() }
@@ -547,6 +637,7 @@ final class AppModel: ObservableObject {
         guard changed else { return }
         PTTDiagnosticsLog.shared.add("app", active ? "foreground" : "background")
         session?.foreground(active || CarPlayHub.active)
+        parkedSession?.foreground(active || CarPlayHub.active)
         if active {
             Task { await refresh() }
             Task { await push.refresh(signedIn: signedIn && !isDemo) }
@@ -564,6 +655,7 @@ final class AppModel: ObservableObject {
     /// `SendGate` condition (consent, «شارك موقعي», active outing). See docs/CARPLAY-ENTITLEMENT.md.
     func carPlayVisible(_ on: Bool) {
         session?.foreground(phoneActive || on)
+        parkedSession?.foreground(phoneActive || on)
     }
 
     /// The app restarted mid-share — by the person, or by iOS in the background after a

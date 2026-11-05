@@ -330,6 +330,8 @@ struct OutingMapboxView: UIViewRepresentable {
             var anchor: LngLat
             let matcher = RoadSnap.Matcher()
             var model = false
+            /// Drawn grey (the fix is not live).
+            var greyed = false
             /// The vehicle layer is the 2D icon (symbol), not the 3D model.
             var icon = false
             var layersReady = false
@@ -869,7 +871,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     ] as [String: Any],
                 ], layerPosition: nil)
                 if wantModel, Vehicle.marker == .icon, ensureIcon(r.item.color, on: m) {
-                    /* The 2D car (CarIcon): turned by heading on the map, upright to the screen (legible at nav pitch), ~constant size. */
+                    /* The 2D car (CarIcon): flat on the map (pitch and rotation aligned to the map, not kept upright), turned by heading, ~constant size. */
                     try? m.addLayer(with: [
                         "id": ids.layer, "type": "symbol", "source": ids.source,
                         "layout": [
@@ -898,6 +900,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     r.icon = false
                 }
                 r.layersReady = true
+                r.greyed = false // fresh layers are drawn in the car's own colour
             }
             setPosition(r, on: m)
             if r.model {
@@ -905,6 +908,19 @@ struct OutingMapboxView: UIViewRepresentable {
                                         value: Vehicle.opacity(r.item.presence))
             }
             try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
+            /* Not live: grey, not only faded (the spot, the 2D car or the 3D model's paint). */
+            let shown = Vehicle.displayColor(r.item.isMe ? Vehicle.mySpotHex : r.item.color, r.item.presence)
+            if r.greyed != (r.item.presence != .live) {
+                r.greyed = r.item.presence != .live
+                try? m.setLayerProperty(for: ids.spot, property: "circle-color", value: "#" + Vehicle.hex(shown))
+                if r.model, r.icon {
+                    let c = r.greyed ? Vehicle.staleRGB : r.item.color
+                    if ensureIcon(c, on: m) { try? m.setLayerProperty(for: ids.layer, property: "icon-image", value: CarIcon.imageId(c)) }
+                } else if r.model {
+                    try? m.setLayerProperty(for: ids.layer, property: "model-color", value: "#" + Vehicle.hex(Vehicle.staleRGB))
+                    try? m.setLayerProperty(for: ids.layer, property: "model-color-mix-intensity", value: r.greyed ? 1.0 : 0.0)
+                }
+            }
         }
 
         private func setPosition(_ r: Rec, on m: MapboxMap) {

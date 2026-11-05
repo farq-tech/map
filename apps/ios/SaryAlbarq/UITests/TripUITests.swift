@@ -44,6 +44,14 @@ final class TripUITests: XCTestCase {
         let peek = app.descendants(matching: .any)["trip.header"]
         XCTAssertTrue(peek.waitForExistence(timeout: 20), "the trip header sits at the top of the map")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        /* On a clean simulator iOS asks for the location a moment later; the permission monitor
+         * only answers on an interaction: keep nudging until the first fix is in. */
+        for _ in 0..<15 where peek.label.contains("ننتظر موقعك") {
+            move(to: approach(2200))
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+            sleep(2)
+        }
+        XCTAssertFalse(peek.label.contains("ننتظر موقعك"), "the first fix is in: \(peek.label)")
 
         /* Drive in: 100 m every 4 s (25 m/s), with the GPS ticking each second in between. */
         var first: String?

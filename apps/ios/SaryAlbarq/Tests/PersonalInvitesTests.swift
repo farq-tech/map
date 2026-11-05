@@ -98,6 +98,22 @@ final class PersonalInvitesTests: XCTestCase {
         XCTAssertEqual(OutingAPIError(code: "invite_taken", status: 409).arabic, "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.")
     }
 
+    func testInvitePreviewDestinationIsOptional() throws {
+        let base = #""outing_id":"o","name":"طلعة","status":"active","owner_name":"أبو فهد","member_count":3,"expires_at":"2026-11-06T09:00:00.000Z""#
+        /* The current production server: no field → nothing shown. */
+        let old = try JSONDecoder().decode(InvitePreview.self, from: Data("{\(base)}".utf8))
+        XCTAssertNil(old.destination_name)
+        XCTAssertNil(InvitePreviewUI.destination(old.destination_name))
+        /* Newer server: «الوجهة: روضة الثمامة». */
+        let new = try JSONDecoder().decode(InvitePreview.self, from: Data("{\(base),\"destination_name\":\" روضة الثمامة \"}".utf8))
+        XCTAssertEqual(new.destination_name, " روضة الثمامة ")
+        XCTAssertEqual(InvitePreviewUI.destination(new.destination_name), "روضة الثمامة")
+        /* Explicit null or blank: nothing. */
+        let null = try JSONDecoder().decode(InvitePreview.self, from: Data("{\(base),\"destination_name\":null}".utf8))
+        XCTAssertNil(null.destination_name)
+        XCTAssertNil(InvitePreviewUI.destination("  "))
+    }
+
     func testModelInvitesResendsRevokesAndKeepsTheNumberOnThisPhoneOnly() async throws {
         let d = UserDefaults(suiteName: "pi-\(UUID().uuidString)")!
         let m = PersonalInvitesModel(outingId: "o1", outingName: "طلعة الثمامة", api: nil, isDemo: true, defaults: d, initial: [])

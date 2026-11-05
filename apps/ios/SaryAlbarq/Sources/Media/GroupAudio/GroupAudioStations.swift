@@ -57,6 +57,13 @@ enum GroupAudioCatalog {
               url: "https://stream.ufmradio.com:8003/", homepage: "https://ufmradio.com/"),
     ]
 
+    /// The list to show (QA build 15): the server's catalog is the source of truth; the copy in
+    /// the app is only the fallback when the server cannot be reached (or a local-only radio).
+    static func resolve(server: [GroupAudioStation]?, shared: Bool) -> (stations: [GroupAudioStation], offline: Bool) {
+        if shared, let server, !server.isEmpty { return (server, false) }
+        return (bundled, shared)
+    }
+
     /// Decodes `GET /api/outings/group-audio/catalog`; https stations only.
     static func decode(_ data: Data) -> [GroupAudioStation]? {
         struct Wire: Decodable { var stations: [GroupAudioStation] }

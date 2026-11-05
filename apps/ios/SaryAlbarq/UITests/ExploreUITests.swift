@@ -84,11 +84,14 @@ final class ExploreUITests: XCTestCase {
         let app = launch(["-SaryExplore"])
         let save = app.buttons["explore-save"]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
-        save.tap()
         let name = any(app, "placeEdit.name")
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
-        name.typeText("مخيم الشتاء")
+        /* Exploration may still be settling (the camera, the layers sheet): tap again if the editor did not come up. */
+        for _ in 0..<3 where !name.exists {
+            save.tap()
+            _ = name.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(name.exists, "«حفظ المكان» opens the editor")
+        name.focusAndType("مخيم الشتاء")
         any(app, "placeEdit.icon.camp").tap()
         any(app, "placeEdit.save").tap()
         app.buttons["explore-places"].tap()
@@ -98,9 +101,21 @@ final class ExploreUITests: XCTestCase {
         shot(app, "explore-places")
         /* Delete via the row's menu. */
         any(app, "places.menu").tap()
-        app.buttons["احذف"].firstMatch.tap()
-        let confirm = app.buttons["احذف"].firstMatch
-        if confirm.waitForExistence(timeout: 3) { confirm.tap() }
+        /* The menu animates in: wait until «احذف» can take a tap, then the confirmation. */
+        /* «احذف» shows twice in the tree (the menu item, then the confirmation): tap the one that can take it. */
+        func tapHittableDelete(within seconds: TimeInterval) -> Bool {
+            let end = Date().addingTimeInterval(seconds)
+            while Date() < end {
+                if let b = app.buttons.matching(NSPredicate(format: "label == 'احذف'")).allElementsBoundByIndex.first(where: { $0.isHittable }) {
+                    b.tap()
+                    return true
+                }
+                usleep(300_000)
+            }
+            return false
+        }
+        XCTAssertTrue(tapHittableDelete(within: 6), "«احذف» in the row's menu")
+        _ = tapHittableDelete(within: 3) // the confirmation, if asked
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForNonExistence(timeout: 5), "deleted")
     }
 

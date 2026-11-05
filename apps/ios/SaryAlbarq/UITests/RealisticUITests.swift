@@ -135,11 +135,14 @@ final class RealisticUITests: XCTestCase {
         let app = launch(["-SaryExplore"])
         let save = app.buttons["explore-save"]
         XCTAssertTrue(save.waitForExistence(timeout: 10))
-        save.tap()
         let name = any(app, "placeEdit.name")
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
-        name.typeText("المخيم")
+        /* Exploration may still be settling (the camera, the layers sheet): tap again if the editor did not come up. */
+        for _ in 0..<3 where !name.exists {
+            save.tap()
+            _ = name.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(name.exists, "«حفظ المكان» opens the editor")
+        name.focusAndType("المخيم")
         any(app, "placeEdit.save").tap()
         app.buttons["explore-places"].tap()
         let entry = app.buttons["places.realistic"]

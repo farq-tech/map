@@ -90,6 +90,11 @@ final class LiveChannel {
     private(set) var pttChannel = PTTChannels.defaultId
     /// A floor request made while the socket was (re)connecting: sent right after `ready`, if still fresh.
     private var pendingPTTStart: (id: Int, atMs: Double)?
+    /// The server has confirmed our `ptt_join` on this socket (its first `ptt_state` / `ptt_channels`).
+    /// Until then a floor request waits: the server answers a `ptt_start` racing the join with
+    /// `ptt_deny not_joined` (QA build 15).
+    private var pttJoinAcked = false
+    private var joinAckWait: Cancellable?
     /// When the current socket was created (a socket still handshaking is not killed by `reconnectNow`).
     private var socketStartedMs = 0.0
     private var readyTimer: Cancellable?
@@ -107,7 +112,9 @@ final class LiveChannel {
     static let staleMs = 25_000.0
     /// After a 4409 the next try waits at least this long (another socket of ours is newer: do not fight it).
     static let replacedWaitMs = 20_000.0
-    static let replacedGiveUp = 4
+    /// The 4409 wait grows with each one in a row, up to this (QA build 15: never give up for good
+    /// while the trip is open — a closed session stops the walkie-talkie and the sharing).
+    static let replacedMaxWaitMs = 300_000.0
 
     init(outingId: String, token: String, url: URL = Endpoints.liveSocket, handlers: Handlers = Handlers(), deps: Deps,
          log: @escaping (String) -> Void = { PTTDiagnosticsLog.shared.add("link", $0) }) {
@@ -125,6 +132,8 @@ final class LiveChannel {
         if !stopped { log("stop") }
         stopped = true
         pendingPTTStart = nil
+        joinAckWait?.cancel()
+        joinAckWait = nil
         slot.clear()
         clearTimers()
         let s = socket
@@ -181,7 +190,27 @@ final class LiveChannel {
     /// Join (or mute = leave) the outing's live voice channel. Survives reconnects.
     func setPTTJoined(_ on: Bool) {
         pttJoined = on
-        sendFrame(on ? joinFrame() : ["type": "ptt_leave"])
+        if sendFrame(on ? joinFrame() : ["type": "ptt_leave"]), on { pttJoinAcked = false }
+    }
+
+    private func armJoinAckWait() {
+        joinAckWait?.cancel()
+        joinAckWait = deps.scheduler.after(ms: Self.joinAckWaitMs) { [weak self] in
+            self?.joinAckWait = nil
+            self?.pttJoinAcked = true // an older server may never confirm: do not make every press wait
+            self?.sendPendingStart("join not confirmed in time")
+        }
+    }
+
+    /// The waiting floor request goes now (if it is still fresh and the socket is live).
+    private func sendPendingStart(_ why: String) {
+        guard let p = pendingPTTStart, state == .live else { return }
+        pendingPTTStart = nil
+        joinAckWait?.cancel()
+        joinAckWait = nil
+        guard deps.scheduler.nowMs - p.atMs <= Self.pendingStartMaxMs else { return log("ptt_start dropped (too old)") }
+        log("ptt_start sent \(why)")
+        sendFrame(["type": "ptt_start", "id": p.id])
     }
 
     /// «غيّر التردد»: listen (and talk) on `channel` from now on. Sent at once when joined;
@@ -198,10 +227,21 @@ final class LiveChannel {
     /// `channels: true` tells the server this build understands «ترددات» (lists, kicks, invites).
     private func joinFrame() -> [String: Any] { ["type": "ptt_join", "channel": pttChannel, "channels": true] }
 
+    /// After a (re)join, a waiting floor request goes at the latest this long after the join was
+    /// sent, acknowledged or not (an older server may not answer a join).
+    static let joinAckWaitMs = 2_500.0
+
     /// Ask for the floor. While the socket is (re)connecting the request waits for `ready`
-    /// (≤ `pendingStartMaxMs`) instead of being lost, and the reconnect starts now.
+    /// (≤ `pendingStartMaxMs`) instead of being lost, and the reconnect starts now; right after a
+    /// (re)join it waits for the server's join confirmation.
     @discardableResult
     func pttStart(id: Int) -> Bool {
+        if state == .live, pttJoined, !pttJoinAcked {
+            pendingPTTStart = (id, deps.scheduler.nowMs)
+            log("ptt_start waits for the join")
+            armJoinAckWait()
+            return true
+        }
         if sendFrame(["type": "ptt_start", "id": id]) { return true }
         guard !stopped else { return false }
         pendingPTTStart = (id, deps.scheduler.nowMs)
@@ -213,6 +253,8 @@ final class LiveChannel {
     func pttStop() {
         if pendingPTTStart != nil {
             pendingPTTStart = nil
+            joinAckWait?.cancel()
+            joinAckWait = nil
             return
         }
         sendFrame(["type": "ptt_stop"])
@@ -406,13 +448,11 @@ final class LiveChannel {
                 /* «إذاعة الطلعة» (Sources/Media/GroupAudio): a late joiner starts in sync. */
                 if let snap = msg["snapshot"] as? [String: Any], let ga = snap["group_audio"], !(ga is NSNull) { GroupAudioEvents.post(outingId: self.outingId, raw: ga) }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
+                self.pttJoinAcked = false
                 if self.pttJoined { self.sendFrame(self.joinFrame()) }
-                if let p = self.pendingPTTStart {
-                    self.pendingPTTStart = nil
-                    if self.deps.scheduler.nowMs - p.atMs <= Self.pendingStartMaxMs {
-                        self.log("ptt_start sent after ready")
-                        self.sendFrame(["type": "ptt_start", "id": p.id])
-                    }
+                if self.pendingPTTStart != nil {
+                    /* Rejoining: the request goes once the server confirms the join (or after a short wait). */
+                    if self.pttJoined { self.armJoinAckWait() } else { self.sendPendingStart("after ready") }
                 }
                 self.flush()
                 self.schedulePing()
@@ -426,6 +466,10 @@ final class LiveChannel {
             case "closed", "note_ack":
                 break
             case _ where type.hasPrefix("ptt_"):
+                if type == "ptt_state" || type == "ptt_channels", self.pttJoined, !self.pttJoinAcked {
+                    self.pttJoinAcked = true
+                    self.sendPendingStart("after the join was confirmed")
+                }
                 if let sig = PTTSignal.decode(msg) {
                     if let scoped = self.handlers.onPTTOnChannel { scoped(sig, PTTSignal.channel(of: msg)) } else { self.handlers.onPTT(sig) }
                 } else if let ev = PTTChannelEvent.decode(msg) {
@@ -465,8 +509,7 @@ final class LiveChannel {
             case .backOff:
                 /* 4409: a newer socket of ours (or another phone signed in as us) holds the room. Wait it out. */
                 self.replacedStreak += 1
-                if self.replacedStreak >= Self.replacedGiveUp { return self.terminal(.replaced) }
-                self.scheduleReconnect(atLeastMs: Self.replacedWaitMs * Double(self.replacedStreak))
+                self.scheduleReconnect(atLeastMs: min(Self.replacedMaxWaitMs, Self.replacedWaitMs * Double(self.replacedStreak)))
             case .verify(let r):
                 /* 4401 / 4404 used to end the outing on this phone for good. Ask over HTTP first:
                  * only the API saying so (401 / not a member) is final; anything else retries. */

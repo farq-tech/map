@@ -20,7 +20,12 @@ final class FollowCameraUITests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["outing-sheet-summary"].waitForExistence(timeout: 20))
+        app.allowLocationIfAsked()
+        /* The live screen — or, after a slow launch, the guidance already over it (the route
+         * options sheet hides the live sheet's summary while it shows). */
+        let ids = ["outing-sheet-summary", "nav.options", "nav.banner"]
+        let ready = NSPredicate { _, _ in ids.contains { app.descendants(matching: .any)[$0].exists } }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 30), .completed, "the live screen")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         return app
     }

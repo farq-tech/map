@@ -18,10 +18,10 @@
 
 | Key | Why |
 | --- | --- |
-| `NSLocationWhenInUseUsageDescription` | the outing map and sharing, only after «شارك موقعي» |
+| `NSLocationWhenInUseUsageDescription` | the outing map and sharing with the outing you joined, automatically while it runs (asked at «انضم للطلعة», the only prompt at join) |
 | `NSMicrophoneUsageDescription` | «اضغط وتكلم», only while held |
 | `NSCameraUsageDescription` | scanning a QR (invite / recovery code); a photo for a shared waypoint, only when the person takes one |
-| `NSLocationAlwaysAndWhenInUseUsageDescription` | keep sharing my live position with my outing's members with the screen locked, after «شارك موقعي»; and the on-device «مساري» trail |
+| `NSLocationAlwaysAndWhenInUseUsageDescription` | keep sharing my live position with my outing's members with the screen locked while I am a member of the running outing; and the on-device «مساري» trail. Asked later, in context (back after the screen locked during a trip) |
 | `UIBackgroundModes: location` | the same two, and nothing else |
 
 ### Background location: live sharing with the outing (owner decision, 2026-11)
@@ -31,24 +31,28 @@ share in an outing, sharing must keep going with the screen locked, in another
 app, on CarPlay and on a poor signal, until they stop it, leave, are removed, or
 the outing ends.
 
-- **User-initiated and explicit.** Nothing is sent before the member presses
-  «شارك موقعي» inside an active outing and accepts our consent sheet, which says
-  in Arabic that sharing continues in the background / with the screen locked
-  until they stop, leave or the outing ends — and only then asks iOS for
-  «دائمًا». With «أثناء الاستخدام» only, sharing works while the app is on
-  screen and a persistent one-line hint under «موقعك مُشارَك» deep-links to
-  Settings to choose «دائمًا».
+- **User-initiated and explicit (build 14: one-step join, sharing forced on).**
+  Nothing is sent before the person taps «انضم للطلعة» on an invite, under the
+  line «بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها»
+  (or creates the outing). That tap asks iOS for «أثناء الاستخدام» (precise);
+  refused or imprecise → not joined, a calm «افتح الإعدادات» screen. While a
+  member of an active outing sharing is automatic — there is no «شارك موقعي» /
+  «أوقف» switch; «غادر الطلعة» (confirmed) is the way to stop. «دائمًا» is never
+  asked at join: the first time the person is back after sending paused off
+  screen, our explainer, then iOS. With «أثناء الاستخدام» only, sharing works
+  while the app is on screen and a persistent one-line hint under «موقعك مُشارَك»
+  deep-links to Settings to choose «دائمًا».
 - **Visible.** `showsBackgroundLocationIndicator` (the blue pill) is on whenever
   sharing runs off screen; the share row stays on the live screen; the privacy
-  screen and the consent sheet say exactly this.
-- **Stoppable at once.** «أوقف», leave, removed (404 / socket 4403), outing
+  screen, the join screen and the «دائمًا» explainer say exactly this.
+- **Stoppable at once.** «غادر الطلعة», removed (404 / socket 4403), outing
   paused or ended, sharing switched off on the server (409 `sharing_off`), sign
   out / account deletion, or iOS permission downgraded → background updates,
   significant-change and region monitoring stop immediately and the existing
   stop signal (`PATCH /:id/me {sharing:false}`, which deletes the server's last
   fix) is sent, wrapped in a UIKit background task.
-- **Gate.** `SendGate.allowsPosition` = consent ∧ iOS permission ∧ «شارك موقعي»
-  ∧ server sharing ∧ outing active ∧ not closed ∧ (on screen ∨ «دائمًا»).
+- **Gate.** `SendGate.allowsPosition` = joined here (consent) ∧ iOS permission ∧ share
+  intent (on while a member) ∧ server sharing ∧ outing active ∧ not closed ∧ (on screen ∨ «دائمًا»).
   `allowsBackgroundPosition` is the off-screen half. Both are asked again at the
   last step (`LiveChannel` on screen, `BackgroundPositionSender` off screen).
 - **Transport off screen.** iOS suspends WebSockets, so off screen each fix is
@@ -95,17 +99,20 @@ of the resume path (`BackgroundSessionTests`), to be checked on a device.
 
 > Sary Albarq (سَرى البارق) is for groups driving together on off-road outings.
 > Background location is used to share the user's live position with the
-> members of the outing they are in — and nobody else — after the user taps
-> "Share my location" (شارك موقعي) inside an active outing and accepts an
-> in-app consent screen that explains it continues with the screen locked. It
-> stops when the user taps Stop, leaves the outing, is removed, or the outing
-> ends. iOS shows the blue location indicator the whole time. With "While Using"
+> members of the outing they joined — and nobody else. The join screen says,
+> right under the Join button, that members see the user's live location until
+> the outing ends or they leave it; sharing is automatic while they are a member
+> of an active outing. It stops when the user leaves the outing (a clearly
+> labelled, confirmed "Leave outing" button on the live screen), is removed, or
+> the outing is paused or ends. "Always" is requested only later, after the user
+> comes back from locking the screen during an outing, with an explainer first. iOS shows the blue location indicator the whole time. With "While Using"
 > only, sharing stops when the app leaves the screen. Background location also
 > records the user's own trail on the device only (never uploaded) for a
 > "way back" guide. The server keeps only the latest position and deletes it when
-> sharing stops or the outing ends. To test: create an outing, start it, tap
-> Share my location, accept, choose "Allow While Using" then "Change to Always
-> Allow", lock the phone; a second device in the same outing keeps seeing the
+> the user leaves, is removed, or the outing is paused or ends. To test: create an
+> outing, start it, open its invite link on a second device and tap Join, choose
+> "Allow While Using"; lock and unlock the phone, accept the explainer and
+> "Change to Always Allow", lock it again; the first device keeps seeing the
 > position move.
 
 ### «مساري» (on-device trail)
@@ -120,8 +127,11 @@ point). With «أثناء الاستخدام» only, locked stretches are drawn 
 
 Photos: the profile photo uses `PhotosPicker`, which
 runs out of process and needs no photo-library permission string.
-The app explains location in onboarding before iOS asks, and notifications
-after a first join (or from settings) before iOS asks — never at launch.
+Location is asked at the tap on «انضم للطلعة» (the only prompt at join; the line
+under the button explains it), or after the onboarding explainer for a creator.
+Notifications: our explainer with the first alert worth sending inside a trip
+(or from settings) — never at launch or at join. Microphone: at the first
+«اضغط وتكلم».
 
 ## Privacy manifest (`Resources/PrivacyInfo.xcprivacy`)
 
@@ -129,7 +139,7 @@ No tracking, no tracking domains. Collected, linked to the identity, for app
 functionality only: precise location, name, phone (optional), photo
 (optional), other user content (notes), audio (push-to-talk), other data
 (opt-in battery level, opt-in trip totals). Location is collected on screen and,
-with «دائمًا» after «شارك موقعي», off screen too — same data, same purpose. «مساري» (the trail) is **not**
+with «دائمًا» while a member of an active outing, off screen too — same data, same purpose. «مساري» (the trail) is **not**
 collected: it never leaves the device, so it is not declared. Required-reason APIs:
 UserDefaults `CA92.1`, system boot time `35F9.1` (`CACurrentMediaTime` for
 animation timing). Mapbox ships its own manifest inside its framework.

@@ -45,8 +45,10 @@ final class IntroUITests: XCTestCase {
         app.terminate()
         app.launchArguments = ["-SaryIntro", "1"]
         app.launch()
-        /* Only the launch's night frame, crossfading out with the boot splash (≈1 s). */
-        waitGone(intro(app), 3)
+        /* Only the launch's night frame, crossfading out with the boot splash — never the cinematic
+         * (judged by what plays, not by a stopwatch: a loaded simulator stretches the crossfade). */
+        assertNeverPlays(app, for: 4)
+        waitGone(intro(app), 10)
         XCTAssertTrue(app.buttons["onboarding.begin"].waitForExistence(timeout: 5))
     }
 
@@ -62,8 +64,19 @@ final class IntroUITests: XCTestCase {
         let token = String(repeating: "A", count: 43)
         app.open(URL(string: "saryalbarq://join#\(token)")!)
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        waitGone(intro(app), 1.5)
+        assertNeverPlays(app, for: 4)
+        waitGone(intro(app), 10)
         sleep(2)
         XCTAssertFalse(intro(app).exists, "a launch for an invite never plays the intro")
+    }
+
+    /// For `seconds`, the intro (if still on screen at all) is only the launch frame, never playing.
+    private func assertNeverPlays(_ app: XCUIApplication, for seconds: TimeInterval, file: StaticString = #filePath, line: UInt = #line) {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            let e = intro(app)
+            if e.exists, (e.value as? String) == "playing" { return XCTFail("the intro played", file: file, line: line) }
+            usleep(250_000)
+        }
     }
 }

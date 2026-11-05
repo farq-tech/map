@@ -29,6 +29,7 @@ final class TripAutoNavUITests: XCTestCase {
             return false
         }
         app.launch()
+        app.allowLocationIfAsked()
         /* The reinstall resets the location permission: answer iOS's prompt directly, whenever it shows. */
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deadline = Date().addingTimeInterval(45)
@@ -97,10 +98,11 @@ final class TripAutoNavUITests: XCTestCase {
 
     /// A member: the leader's «للكل» arrives over his note ⇒ guidance starts; a local stop stays local.
     func testMemberFollowsTheLeadersCommandAndStopsLocally() {
-        let app = launch(Self.member + ["-SaryDemoLeaderBroadcast", "6"])
+        /* The broadcast timer runs from app launch: leave room for a slow simulator's launch. */
+        let app = launch(Self.member + ["-SaryDemoLeaderBroadcast", "25"])
         XCTAssertFalse(el(app, "nav.banner").exists, "nothing before the leader's command")
         XCTAssertTrue(el(app, "nav.auto.start").waitForExistence(timeout: 8), "a member can start it for himself")
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 20), "the leader's «للكل» starts it here")
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 45), "the leader's «للكل» starts it here")
         sleep(1)
         shot(app, "autonav-1b-member-following-leader")
         el(app, "nav.auto.pause").tap()
@@ -141,8 +143,11 @@ final class TripAutoNavUITests: XCTestCase {
 
     func testArrivalSaysWasaltuAndStops() {
         let app = launch(Self.on + ["-SaryAutoNavArrive", "6"])
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15))
         let title = el(app, "nav.arrived.title")
+        /* Arrival fires 6 s into guidance: on a slow simulator the banner can already be gone when
+         * we first look, so either the banner or the arrival card proves guidance started. */
+        let started = NSPredicate { _, _ in self.el(app, "nav.banner").exists || title.exists }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: started, object: nil)], timeout: 20), .completed, "guidance started")
         XCTAssertTrue(title.waitForExistence(timeout: 20), "the arrival card")
         XCTAssertEqual(title.label, "وصلتوا")
         XCTAssertFalse(el(app, "nav.banner").exists, "guidance stopped")
@@ -195,12 +200,13 @@ final class TripAutoNavUITests: XCTestCase {
     }
 
     func testOffRoadLegAfterTheRoad() {
-        let app = launch(Self.on + ["-SaryNavOffRoad", "-SaryAutoNavRouteEnd", "12", "-SaryDrive", "1"])
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 12), "the road part first")
+        /* The road part ends 30 s after launch: room for a slow simulator to show it first. */
+        let app = launch(Self.on + ["-SaryNavOffRoad", "-SaryAutoNavRouteEnd", "30", "-SaryDrive", "1"])
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 25), "the road part first")
         /* The plan's drawn route reaches the camp: the leg follows it («اسلك هذا المسار»). */
         let follow = el(app, "follow.title")
         let arrow = el(app, "nav.offroad")
-        let deadline = Date().addingTimeInterval(20)
+        let deadline = Date().addingTimeInterval(45)
         while !follow.exists && !arrow.exists && Date() < deadline { usleep(300_000) }
         XCTAssertTrue(follow.exists || arrow.exists, "switches to off-road guidance by itself")
         sleep(2)

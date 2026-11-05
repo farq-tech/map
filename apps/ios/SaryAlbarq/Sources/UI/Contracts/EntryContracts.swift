@@ -111,6 +111,16 @@ struct InvitePreviewUI: Equatable {
     var status: OutingStatusUI
     /// «دعوة شخصية»: the name the leader gave me — I join as this person.
     var inviteeName: String? = nil
+    /// «الوجهة: …» under the trip name; nil (older server or no destination) shows nothing.
+    var destinationName: String? = nil
+}
+
+extension InvitePreviewUI {
+    /// The server's `destination_name`, trimmed; blank means none.
+    static func destination(_ raw: String?) -> String? {
+        guard let t = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+        return t
+    }
 }
 
 enum InvitePhaseUI: Equatable {

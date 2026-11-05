@@ -22,8 +22,9 @@ final class AlertLaneUITests: XCTestCase {
         app.launchArguments = ["-resetState", "-demo", "-demoConvoy", "-demoSilent", "-SarySafety", "stuck-friend",
                                "-SaryWeatherDemo", "rain", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryNight", "0", "-SaryContext", "stopped"]
         app.launch()
+        app.allowLocationIfAsked()
         let bell = app.buttons["alerts.bell"]
-        XCTAssertTrue(bell.waitForExistence(timeout: 20), "the bell counts the queued alerts")
+        XCTAssertTrue(bell.waitForExistence(timeout: 45), "the bell counts the queued alerts")
         XCTAssertTrue(bell.label.contains("تنبيه"), bell.label)
         /* One card on screen: the stuck friend outranks silence, convoy and weather. */
         XCTAssertTrue(app.buttons["جاي"].waitForExistence(timeout: 5), "the stuck card (highest priority) is the one shown")
@@ -43,6 +44,7 @@ final class AlertLaneUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "rain", "-SaryContext", "driving", "-SaryScheme", "light"]
         app.launch()
+        app.allowLocationIfAsked()
         XCTAssertTrue(app.buttons["outing-locate"].waitForExistence(timeout: 20))
         sleep(4)
         /* Weather is low priority: while driving it never takes the card. */

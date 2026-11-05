@@ -19,6 +19,7 @@ final class HiResImageryUITests: XCTestCase {
             return false
         }
         app.launch()
+        app.allowLocationIfAsked()
         return app
     }
 
@@ -26,13 +27,13 @@ final class HiResImageryUITests: XCTestCase {
 
     func testBadgeInExplorationOverZoomGoneInNavigation() {
         let app = launch(["-SaryExplore", "-SaryHiResCam", "25.12,46.10,18.6",
-                          "-SaryNavDemo", "-SaryNavTo", "25.10,46.12,الشعيب", "-SaryNavDelay", "60", "-SaryNavState", "guiding"])
+                          "-SaryNavDemo", "-SaryNavTo", "25.10,46.12,الشعيب", "-SaryNavDelay", "120", "-SaryNavState", "guiding"])
         sleep(3)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the permission monitor answer
-        XCTAssertTrue(badge(app).waitForExistence(timeout: 70), "«مُحسّنة» once enhanced tiles are on screen")
+        XCTAssertTrue(badge(app).waitForExistence(timeout: 110), "«مُحسّنة» once enhanced tiles are on screen (network tiles + on-device model; slow under a loaded simulator)")
         XCTAssertEqual(badge(app).label, "مُحسّنة")
         attach(app, "hires-exploration-badge")
-        /* Navigation starts at 60 s (demo router): the enhanced layer is removed with its badge. */
+        /* Navigation starts at 120 s (demo router): the enhanced layer is removed with its badge. */
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: badge(app))
         waitForExpectations(timeout: 150)

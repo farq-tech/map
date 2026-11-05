@@ -253,6 +253,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
         guard !isDemo else {
             walkie.attach(channel: nil, mesh: mesh)
+            debugKeepDemoFixLive()
             return debugAutoTalk()
         }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
@@ -308,6 +309,22 @@ final class OutingSession: ObservableObject, Identifiable {
         location.onFix = { [weak self] f in self?.handleFix(f) }
     }
 
+    /// UI tests: `-SaryDemoKeepLive` re-sends «أبو فهد»'s demo fix every few seconds (as his phone
+    /// would), so «live» checks do not race the ~15 s freshness window on a slow simulator.
+    private func debugKeepDemoFixLive() {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-SaryDemoKeepLive") else { return }
+        let uid = "00000000-0000-4000-8000-000000000002"
+        Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] t in
+            Task { @MainActor in
+                guard let self, var p = self.view?.positions[uid] else { t.invalidate(); return }
+                p.recorded_at = ISODate.string(Date())
+                self.debugApply(.position(p))
+            }
+        }
+        #endif
+    }
+
     private func debugAutoTalk() {
         #if DEBUG
         /* Lab: `-SaryPTTAutoTalk "<after s>,<for s>"` holds the walkie-talkie button by itself (with -SaryPTTTone). */
@@ -328,7 +345,11 @@ final class OutingSession: ObservableObject, Identifiable {
         #endif
     }
 
+    /// `close()` ran: nothing of this session runs any more.
+    private(set) var didClose = false
+
     func close() {
+        didClose = true
         backgroundSender?.stop()
         stopBackgroundTrail()
         location.stopTrail()
@@ -337,7 +358,8 @@ final class OutingSession: ObservableObject, Identifiable {
         if env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail, force: true) }
         location.onTrailFix = { _ in }
         mesh.setRunning(false)
-        stopSharingLocally()
+        /* Back to «طلعاتي» as a member keeps the share armed (it resumes when the trip opens again). */
+        stopSharingLocally(forget: !keepShareOnClose)
         walkie.detach(leftOuting: closedReason != nil)
         channel?.stop()
         channel = nil
@@ -376,6 +398,11 @@ final class OutingSession: ObservableObject, Identifiable {
                 trail.markGap()
             }
             saveTrail()
+            /* «أثناء الاستخدام» only: sending pauses off screen. That is the moment «دائمًا» means
+             * something, so the live screen offers it when the person is back (once per device). */
+            if wantsToShare && view?.status == .active && !hasAlwaysPermission && (env.authorizationOverride ?? location.canLocate) {
+                askAlwaysOnReturn = true
+            }
             if gate.allowsBackgroundPosition && (location.isSharing || isDemo) {
                 /* «دائمًا»: keep sharing off screen, over HTTP. */
                 backgroundSender?.start()
@@ -428,9 +455,23 @@ final class OutingSession: ObservableObject, Identifiable {
         reconcileSharing()
     }
 
-    /// Opened right after «انضم» / creating: the controller follows up with the «دائمًا» explainer
-    /// once iOS answered the location prompt (or shows the Settings fix when refused).
+    /// Opened right after «انضم» / creating (the one-step join already asked iOS for the location).
     @Published var joinedJustNow = false
+
+    /// The app left the screen while sharing with «أثناء الاستخدام» only: on return, the live
+    /// screen explains «دائمًا» (the contextual upgrade; Apple does not let us force it at join).
+    @Published var askAlwaysOnReturn = false
+
+    /// The app is on screen (or CarPlay shows it).
+    var isVisible: Bool { visible }
+
+    /// Set by «ارجع للقائمة»: closing keeps the share armed for this member.
+    var keepShareOnClose = false
+
+    /// The share was resumed before the snapshot came: re-assert the server's flag then.
+    private var reassertOnSnapshot = false
+    /// PATCH sharing:true in flight (an older build's «أوقف» left it off): keep the intent meanwhile.
+    private var reassertingServerShare = false
 
     /// You pressed stop: nothing more leaves the phone, the server deletes your fix.
     func stopSharing() async {
@@ -450,13 +491,14 @@ final class OutingSession: ObservableObject, Identifiable {
         }
     }
 
-    /// Internal for tests (the «أوقف» path without the network).
-    func stopSharingLocally() {
+    /// Internal for tests (the stop path without the network). `forget: false` keeps the armed
+    /// share on disk (back to the list while still a member).
+    func stopSharingLocally(forget: Bool = true) {
         wantsToShare = false
         lastSent = nil
         channel?.dropPendingFix()
         backgroundSender?.stop()
-        if ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
+        if forget, ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
             ShareMemory.setActiveShare(user: myUserId, outing: nil, defaults: env.defaults)
         }
         location.stopSharing()
@@ -469,6 +511,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func resumeIfPreviouslySharing() {
         guard ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent else { return }
         wantsToShare = true
+        if let v = view { reassertServerShare(v) } else { reassertOnSnapshot = true }
         if !visible && hasAlwaysPermission && !isDemo && view == nil {
             if env.authorizationOverride ?? location.canLocate { location.startSharing(mode: mode) }
             let done = env.keepAlive()
@@ -478,6 +521,22 @@ final class OutingSession: ObservableObject, Identifiable {
             }
         }
         reconcileSharing()
+    }
+
+    /// Forced sharing (build 14): a member whose server flag is off (an older build's «أوقف») is
+    /// switched back on when the trip opens. Once only per open: a later «off» from the server is
+    /// respected (the gate closes) — it can only come from elsewhere.
+    private func reassertServerShare(_ v: OutingView) {
+        guard !isDemo, !v.snapshot.me.sharing, v.status != .ended, closedReason == nil, !reassertingServerShare else { return }
+        reassertingServerShare = true
+        Task { [weak self] in
+            guard let self else { return }
+            if (try? await self.api.setSharing(self.id, sharing: true)) != nil {
+                self.view?.apply(.memberSharing(userId: self.myUserId, sharing: true))
+            }
+            self.reassertingServerShare = false
+            self.reconcileSharing()
+        }
     }
 
     /// The network came back: a fix waiting off screen goes now (if still fresh).
@@ -500,8 +559,9 @@ final class OutingSession: ObservableObject, Identifiable {
         if recordingInBackground && !canRecordTrailInBackground { stopBackgroundTrail() }
         syncTrailGPS()
         guard let v = view else { return }
-        /* Paused / ended / sharing switched off elsewhere: the intent ends too. */
-        if wantsToShare && (v.status == .paused || v.status == .ended || !v.snapshot.me.sharing) {
+        /* Ended / sharing switched off elsewhere: the intent ends too. Paused keeps it (the gate
+         * closes while paused, and sharing comes back by itself on resume: no toggle to press). */
+        if wantsToShare && !reassertingServerShare && (v.status == .ended || !v.snapshot.me.sharing) {
             stopSharingLocally()
         }
         let allowed = gate.allowsPosition
@@ -755,6 +815,10 @@ final class OutingSession: ObservableObject, Identifiable {
         mesh.setServerKey(s.mesh_key, outingId: id)
         if let previous { notifyChanges(from: previous) }
         if s.outing.status == .ended { closed(.outingEnded) }
+        if reassertOnSnapshot, let v = view {
+            reassertOnSnapshot = false
+            if wantsToShare { reassertServerShare(v) }
+        }
         reconcileSharing()
     }
 
@@ -885,10 +949,14 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Leave the outing (also after it ended). True when the server agreed.
     @discardableResult
     func leave() async -> Bool {
-        stopSharingLocally()
-        if isDemo { closed(.left); return true }
+        if isDemo { stopSharingLocally(); closed(.left); return true }
+        /* Stop only once the server agreed: a failed request (no network) leaves me a member,
+         * and a member keeps sharing — the error says so and «غادر الطلعة» can be tried again. */
         let ok = await run("leave") { try await api.leave(id) }
-        if ok { closed(.left) }
+        if ok {
+            stopSharingLocally()
+            closed(.left)
+        }
         return ok
     }
 

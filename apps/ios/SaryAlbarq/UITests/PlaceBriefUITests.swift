@@ -40,7 +40,9 @@ final class PlaceBriefUITests: XCTestCase {
     private func emptySpot(_ app: XCUIApplication) -> XCUICoordinate {
         let map = any(app, "outing.map")
         XCTAssertTrue(map.waitForExistence(timeout: 10))
-        return map.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.36))
+        /* Upper right, under the weather pill: (0.22, 0.36) now lands on a hazard pin by
+         * «أبو فهد»'s note bubble. */
+        return map.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.30))
     }
 
     func testOneTapOnTheMapOpensTheBrief() {

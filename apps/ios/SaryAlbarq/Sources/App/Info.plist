@@ -52,12 +52,13 @@
 		<string>whatsapp</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط بعد ما تختار «شارك موقعي».</string>
+	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه تلقائيًا مع أعضاء الطلعة التي انضممت لها فقط، ما دامت شغّالة. تتوقف المشاركة إذا غادرت الطلعة أو انتهت.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>بعد ما تختار «شارك موقعي» في طلعة، يواصل سَرى البارق مشاركة موقعك مع أعضاء تلك الطلعة فقط في الخلفية والشاشة مقفلة (مع مؤشر الموقع الأزرق)، حتى توقف المشاركة أو تغادر أو تنتهي الطلعة. ويسجّل «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة ليرجّعك «طريق العودة» من نفس الطريق؛ المسار يبقى على جوالك ولا يُرسل لأصحابك ولا لخوادمنا (تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط).</string>
-	<!-- Background location (owner decision, 2026-11): with «دائمًا», a member who pressed
-	     «شارك موقعي» keeps sharing their live position with that outing's members off screen
-	     (blue indicator; HTTP POST /positions; stops on stop / leave / removed / ended), and the
+	<string>ما دمت عضوًا في طلعة شغّالة، يواصل سَرى البارق مشاركة موقعك مع أعضاء تلك الطلعة فقط في الخلفية والشاشة مقفلة (مع مؤشر الموقع الأزرق)، حتى تغادر الطلعة أو تنتهي. ويسجّل «مساري» (طريقك في الطلعة) حتى والشاشة مقفلة ليرجّعك «طريق العودة» من نفس الطريق؛ المسار يبقى على جوالك ولا يُرسل لأصحابك ولا لخوادمنا (تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط).</string>
+	<!-- Background location (owner decision, 2026-11; forced on while a member, build 14): with
+	     «دائمًا», a member of an active outing keeps sharing their live position with that outing's
+	     members off screen (blue indicator; HTTP POST /positions; stops on leave / removed / paused /
+	     ended — there is no in-trip stop switch, leaving is the way out), and the
 	     on-device trail keeps recording. With «أثناء الاستخدام» nothing is sent off screen (SendGate).
 	     An active turn-by-turn navigation («الملاحة», started by the person) keeps following the
 	     route and rerouting with the screen locked (Mapbox Navigation SDK).
@@ -76,7 +77,7 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يلتقط صوتك فقط وأنت ضاغط على زر «قناة الطلعة»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لا يُسجَّل ولا يُحفظ في أي مكان.</string>
+	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك.</string>
 
 	<!-- Phone-to-phone link for cars of the same outing (MultipeerConnectivity, NearbyMesh). -->
 	<key>NSLocalNetworkUsageDescription</key>

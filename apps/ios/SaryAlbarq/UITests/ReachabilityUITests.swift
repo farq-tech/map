@@ -79,7 +79,7 @@ final class ReachabilityUITests: XCTestCase {
         let tabs: [(String, [String])] = [
             ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends"]),
             ("tab.group", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
-            ("tab.more", ["settings-pause-sharing", "settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
+            ("tab.more", ["settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
                         "settings-context", "settings-drive", "settings-night", "speed.alert", "settings-convoy-alerts", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),
         ]
         for (tab, ids) in tabs {

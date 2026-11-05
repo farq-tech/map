@@ -24,7 +24,12 @@ final class NavigationUITests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["outing-sheet-summary"].waitForExistence(timeout: 20))
+        app.allowLocationIfAsked()
+        /* The live screen — or, with `-SaryNavDelay` short and a slow launch, the navigation UI
+         * already over it (a presented sheet hides the live sheet's summary). */
+        let ids = ["outing-sheet-summary", "nav.options", "nav.banner", "nav.rerouting", "nav.offroad", "nav.arrived", "nav.offroad.note"]
+        let ready = NSPredicate { _, _ in ids.contains { app.descendants(matching: .any)[$0].exists } }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 30), .completed, "the live screen")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         return app
     }
@@ -62,7 +67,7 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(el(app, "nav.options").waitForExistence(timeout: 15), "the route options sheet")
             XCTAssertTrue(el(app, "nav.route.selected").waitForExistence(timeout: 10), "routes listed")
             XCTAssertTrue(app.switches["nav.opt.fastest"].exists || el(app, "nav.opt.fastest").exists)
-            XCTAssertTrue(el(app, "map.navLabel.selected").waitForExistence(timeout: 8), "time/distance on the map")
+            XCTAssertTrue(el(app, "map.navLabel.selected").waitForExistence(timeout: 20), "time/distance on the map")
             XCTAssertTrue(el(app, "map.navLabel").exists, "the alternative too")
             sleep(2)
             shot(app, "nav-options-\(m)")

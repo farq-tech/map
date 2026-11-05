@@ -13,7 +13,7 @@ final class SpeedUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         /* The speedometer shows while driving only (build 8): pin the driving context. */
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryContext", "driving"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryContext", "driving", "-SaryDemoKeepLive"]
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -106,7 +106,7 @@ final class SpeedUITests: XCTestCase {
         XCTAssertEqual(toggle.value as? String, "0", "off by default")
         XCTAssertFalse(app.staticTexts["speed.limit"].exists)
         /* Tap the switch itself (on the left in RTL), not the row's middle (its label). */
-        if toggle.switches.firstMatch.exists { toggle.switches.firstMatch.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap() }
+        XCTAssertTrue(toggle.flipSwitch(), "the over-speed switch flips")
         let limit = app.staticTexts["speed.limit"]
         XCTAssertTrue(limit.waitForExistence(timeout: 5))
         XCTAssertEqual(limit.label, "١٢٠ كم/س")
