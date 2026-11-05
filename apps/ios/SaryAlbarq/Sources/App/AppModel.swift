@@ -52,7 +52,8 @@ final class AppModel: ObservableObject {
             IdentityStore.save(nil)
             ShareMemory.forgetAll()
             TripLogStore.forgetAll()
-            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] {
+            TrailStore.forgetAll()
+            for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key] + TrailPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
         }
@@ -249,6 +250,8 @@ final class AppModel: ObservableObject {
         session = nil
         IdentityStore.save(nil)
         TripLogStore.forgetAll()
+        /* «مساري» is about where I went: it goes with the identity. */
+        TrailStore.forgetAll()
         identity = nil
         recovery = nil
         current = []
@@ -343,6 +346,13 @@ final class AppModel: ObservableObject {
         if isDemo { return StoryFixtures.waypoints() }
         #endif
         return []
+    }
+
+    /// My trail for this outing, from this device only (never sent).
+    func myTrailPoints(_ id: String) -> Trail? {
+        if isDemo { return id == "demo-old" || id == DemoData.outingId ? DemoTrail.mine(now: Date()) : nil }
+        if let s = session, s.id == id { return s.trail }
+        return TrailStore.load(id)
     }
 
     func shareSummary(_ id: String) async -> TripShare? {
