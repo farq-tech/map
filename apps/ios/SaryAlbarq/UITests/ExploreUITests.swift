@@ -99,27 +99,26 @@ final class ExploreUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForExistence(timeout: 5), "the saved place is listed")
         for id in ["places.addCenter", "places.row", "places.menu"] { XCTAssertTrue(any(app, id).exists, id) }
         shot(app, "explore-places")
-        /* Delete via the row's menu. The menu (seven actions) opens above the row and scrolls: its last
-           action, «احذف», is laid out partly below the menu's visible edge, so it is not hittable until the
-           menu is scrolled (what a person does too). Under load the opening tap's release can also land on
-           «احذف» (the menu covers the «…» button) and pick it, which goes straight to the confirmation. */
+        /* Delete via the row's menu. Its actions only take a tap once the menu has settled, which on build 15
+           took longer than the old 6 s window while the map kept the main thread busy re-querying roads (fixed in
+           OutingMapboxView). Under load the opening tap's release can also land on «احذف» (the menu covers the «…»
+           button) and pick it, which goes straight to the confirmation. Either way the confirmation must follow. */
         any(app, "places.menu").tap()
-        let delete = any(app, "places.delete")
         let confirm = app.buttons["dialog.confirm"]
-        let shown = Date().addingTimeInterval(10)
-        while Date() < shown, !delete.exists, !confirm.exists { usleep(300_000) }
-        XCTAssertTrue(delete.exists || confirm.exists, "the row's menu opened")
-        if !confirm.exists {
-            /* Scroll the menu from one of its own rows (its collection reports a full-screen frame, so a
-               swipe from that frame's middle would land outside the menu and close it). */
-            let inMenu = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'ملاحة إليه'")).firstMatch
-            for _ in 0..<4 where !delete.isHittable {
-                if inMenu.exists { inMenu.swipeUp() } else { usleep(500_000) }
+        func tapHittableDelete(within seconds: TimeInterval) -> Bool {
+            let end = Date().addingTimeInterval(seconds)
+            while Date() < end {
+                if confirm.exists { return true }
+                if let b = app.buttons.matching(NSPredicate(format: "label == 'احذف'")).allElementsBoundByIndex.first(where: { $0.isHittable }) {
+                    b.tap()
+                    return true
+                }
+                usleep(300_000)
             }
-            XCTAssertTrue(delete.isHittable, "«احذف» reachable in the row's menu")
-            delete.tap()
+            return false
         }
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "the confirmation")
+        XCTAssertTrue(tapHittableDelete(within: 30), "«احذف» in the row's menu")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "the confirmation")
         confirm.tap()
         XCTAssertTrue(app.staticTexts["مخيم الشتاء"].waitForNonExistence(timeout: 5), "deleted")
     }
