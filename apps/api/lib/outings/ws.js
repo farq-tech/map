@@ -35,8 +35,37 @@ const HEARTBEAT_MS = 25_000;
 const MAX_FRAME_BYTES = 4 * 1024;
 const MAX_MSGS_PER_10S = 40;
 const MAX_SOCKETS_PER_USER_ROOM = 3;
+/* Close codes. 4401 means "this token is no good": clients stop for good on it, so a slow
+ * auth must never be reported with it (it used to be — see AUTH_TIMEOUT_CODE). */
+const AUTH_TIMEOUT_CODE = 4408;
+const OPEN = 1;
 
-function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } = {}) {
+/** Socket lifetimes and close codes, numbers only (no user, no outing): GET /api/outings/health-style probes. */
+function createSocketStats() {
+  const closes = new Map(); // code → count
+  let opened = 0;
+  let ready = 0;
+  let shortLived = 0; // closed < 15 s after opening
+  return {
+    open() {
+      opened += 1;
+    },
+    ready() {
+      ready += 1;
+    },
+    close(code, ms) {
+      closes.set(code, (closes.get(code) || 0) + 1);
+      if (ms < 15_000) shortLived += 1;
+    },
+    snapshot() {
+      return { opened, ready, short_lived: shortLived, closes: Object.fromEntries([...closes].sort((a, b) => a[0] - b[0])) };
+    },
+  };
+}
+
+function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, authTimeoutMs = AUTH_TIMEOUT_MS, heartbeatMs = HEARTBEAT_MS, log = null } = {}) {
+  const stats = createSocketStats();
+  const debug = log || (process.env.SARY_WS_DEBUG === '1' ? (...a) => console.log('[outings-ws]', ...a) : null);
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES, perMessageDeflate: false });
 
   server.on('upgrade', (req, socket, head) => {
@@ -52,13 +81,28 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
 
   wss.on('connection', (ws) => {
     const conn = { ws, userId: null, outingId: null, user: null, window: [] };
-    const authTimer = setTimeout(() => {
-      if (!conn.userId) ws.close(4401, 'auth_timeout');
-    }, AUTH_TIMEOUT_MS);
+    const openedAt = Date.now();
+    let authing = false;
+    let wasReady = false;
+    stats.open();
+    /* Only a socket that never sent `auth` is timed out here. One whose auth is still being
+     * checked (a slow database) waits for the answer: closing it then, and with 4401, told
+     * the phone its token was bad and it stopped reconnecting for good. */
+    let authTimer = setTimeout(() => {
+      if (conn.userId) return;
+      if (!authing) return ws.close(AUTH_TIMEOUT_CODE, 'auth_timeout');
+      /* Checking for a long time already: a last, generous cap. */
+      authTimer = setTimeout(() => {
+        if (!conn.userId) ws.close(AUTH_TIMEOUT_CODE, 'auth_timeout');
+      }, authTimeoutMs * 4);
+      authTimer.unref?.();
+    }, authTimeoutMs);
+    authTimer.unref?.();
 
     const reply = (msg) => hub.send(conn, msg);
 
     ws.on('message', async (data, isBinary) => {
+      conn.msgs = (conn.msgs || 0) + 1;
       if (isBinary) {
         /* Audio for the walkie-talkie. Without a relay, or before auth, binary is not allowed. */
         if (!ptt || !conn.userId) return ws.close(1003, 'text_only');
@@ -79,13 +123,17 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
       if (!msg || typeof msg.type !== 'string') return;
       try {
         if (msg.type === 'auth') {
-          if (conn.userId) return;
+          if (conn.userId || authing) return;
+          authing = true;
           const user = await service.authenticate(msg.token);
           if (!user) return ws.close(4401, 'unauthorized');
           const m = await service.membership(msg.outing_id, user.id, { fresh: true });
           if (!m || m.status !== 'active') return ws.close(4404, 'not_a_member');
           if (m.outing_status === 'ended') return ws.close(4410, 'outing_ended');
           clearTimeout(authTimer);
+          /* The phone may have given up while we checked: never seat a closed socket in the room
+           * (it would count as "online" and as one of this person's sockets forever). */
+          if (ws.readyState !== OPEN) return;
           conn.userId = user.id;
           conn.user = user;
           hub.join(msg.outing_id, conn);
@@ -95,6 +143,8 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
             old.ws.close(4409, 'replaced');
           }
           const snapshot = await service.getOuting(user, msg.outing_id);
+          wasReady = true;
+          stats.ready();
           reply({ type: 'ready', snapshot });
           return;
         }
@@ -120,11 +170,16 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
         /* Never echo internals; never log the frame (it may hold a position). */
         console.warn('[outings-ws]', e.code || e.message);
         reply({ type: 'error', code: e.code || 'server_error' });
+        /* A failed auth leaves nothing to talk to: let the phone retry (not 4401: nothing says the token is bad). */
+        if (msg.type === 'auth' && !wasReady && ws.readyState === OPEN) ws.close(1011, 'server_error');
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code) => {
       clearTimeout(authTimer);
+      const ms = Date.now() - openedAt;
+      stats.close(code, ms);
+      if (debug) debug('close', { code, ms, ready: wasReady, msgs: conn.msgs || 0, pongs: ws.__pongs || 0 });
       ptt?.drop(conn);
       hub.leave(conn);
     });
@@ -145,10 +200,11 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
       }
     });
     hub.sweepPollers();
-  }, HEARTBEAT_MS);
+  }, heartbeatMs);
   beat.unref?.();
   wss.on('connection', (ws) => {
     ws.on('pong', () => {
+      ws.__pongs = (ws.__pongs || 0) + 1;
       ws.__dead = false;
     });
     ws.on('message', () => {
@@ -158,6 +214,7 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
 
   return {
     wss,
+    stats: () => stats.snapshot(),
     close() {
       clearInterval(beat);
       for (const ws of wss.clients) ws.terminate();
@@ -166,4 +223,4 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH } =
   };
 }
 
-module.exports = { attachOutingsSocket, OUTINGS_WS_PATH: PATH };
+module.exports = { attachOutingsSocket, OUTINGS_WS_PATH: PATH, AUTH_TIMEOUT_CODE };

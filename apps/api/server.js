@@ -128,6 +128,7 @@ app.get('/api/health', (_req, res) => {
       outings_routing: Boolean(outings.service && routingConfigFromEnv().enabled),
     },
     outings: outings.hub.stats(),
+    outings_ws: outings.socketStats ? outings.socketStats() : null,
   });
 });
 
