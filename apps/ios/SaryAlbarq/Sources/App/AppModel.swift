@@ -784,13 +784,18 @@ enum DemoData {
             if d.count == 2 { positions = positions.map { var p = $0; p.lat += d[0]; p.lng += d[1]; return p } }
         }
         #endif
+        var demoOutingName = "طلعة الثمامة (عرض تجريبي)"
+        #if DEBUG
+        /* Desert screenshots: `-SaryDemoOutingName "كشتة النفود الكبير"`. */
+        if let i = args.firstIndex(of: "-SaryDemoOutingName"), i + 1 < args.count { demoOutingName = args[i + 1] }
+        #endif
         var demoStatus = OutingStatus.active
         #if DEBUG
         /* `-demoNotStarted`: the leader has not pressed «ابدأ الطلعة» yet (auto-navigation UI tests). */
         if args.contains("-demoNotStarted") { demoStatus = .created }
         #endif
         let snap = OutingSnapshot(
-            outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: demoStatus, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
+            outing: OutingInfo(id: outingId, name: demoOutingName, status: demoStatus, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
             me: SnapshotMe(user_id: me, role: me == meId ? "owner" : "member", sharing: true),
             members: members, positions: positions.filter { $0.user_id != me }, invite: InviteState(active: true, expires_at: nil),
             server_now: ISODate.string(now)

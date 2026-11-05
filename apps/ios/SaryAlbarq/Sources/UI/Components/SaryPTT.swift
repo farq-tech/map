@@ -10,12 +10,218 @@ struct SaryPTTButton: View {
     var showsCaption = true
     /// Microphone level 0…1 while talking (drives the halo).
     var level: Float = 0
+    /// The wide «اضغط وتكلم» capsule of the calm live screen (the Lovable reference): the whole
+    /// capsule talks; the channel is a separate label under it (never a long-press here).
+    var pill = false
+    /// Lovable: 200×68 while driving, 178×56 stopped.
+    var big = false
+    /// «تردد ١» under the title inside the capsule; tapping it opens the channels. It is its own
+    /// target ABOVE the capsule (a sibling, not a child), so the talk gesture never sees that touch.
+    var channelLabel: String? = nil
+    var openChannels: (() -> Void)? = nil
 
     @Environment(\.sary) private var theme
     @State private var pressing = false
     @State private var pulse = false
+    /// «القناة غير متاحة» / «القناة مكتومة» say so for a few seconds when it happens, then the
+    /// capsule just stays dim («تخفيف الزحمة» ٣).
+    @State private var quietShown = false
 
     var body: some View {
+        if pill { pillBody } else { discBody }
+    }
+
+    /// How long «القناة غير متاحة» is spelled out after the state changes.
+    static let quietSeconds: UInt64 = 5
+
+    private var isQuiet: Bool { state == .unavailable || state == .muted }
+
+    private var pillTitle: String {
+        if isQuiet && !quietShown { return "اضغط وتكلم" }
+        return stateLabel
+    }
+
+    private var pillBody: some View {
+        let p = theme.palette
+        let h: CGFloat = big ? 68 : 56
+        let d: CGFloat = big ? 26 : 20
+        let fill: Color? = {
+            switch state {
+            case .idle, .arming: return p.accent
+            case .talking: return p.accent
+            case let .listening(_, color): return Color(rgb: color)
+            case .muted, .unavailable: return nil
+            }
+        }()
+        let ink: Color = {
+            switch state {
+            case let .listening(_, color): return SaryCarColors.ink(on: color)
+            case .muted, .unavailable: return p.textSecondary
+            default: return p.onAccent
+            }
+        }()
+        let face = pillFace(h: h, d: d, fill: fill, ink: ink, placeholder: false)
+        return ZStack {
+        face
+        .opacity(isQuiet ? 0.85 : 1)
+        .scaleEffect(pressing && !theme.reduceMotion ? 1.04 : 1)
+        .contentShape(Capsule())
+        .gesture(pressGesture)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("قناة الطلعة، اضغط وتكلم"))
+        .accessibilityValue(Text(stateLabel))
+        .accessibilityHint(Text("اضغط مطولًا وتكلم، يسمعك أعضاء الطلعة مباشرة. ارفع إصبعك لتتوقف"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("outing-ptt")
+        .accessibilityAction(named: Text("ابدأ التكلم")) { actions.pressBegan() }
+        .accessibilityAction(named: Text("أوقف التكلم")) { actions.pressEnded() }
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .task(id: isQuiet) {
+            guard isQuiet else { quietShown = false; return }
+            quietShown = true
+            try? await Task.sleep(nanoseconds: Self.quietSeconds * 1_000_000_000)
+            if !Task.isCancelled { quietShown = false }
+        }
+        .onChange(of: isOnAir) { _, on in
+            guard on, !theme.reduceMotion else { pulse = false; return }
+            pulse = false
+            withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
+        .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
+        .animation(theme.animation(.snappy), value: state)
+        .animation(theme.animation(.snappy), value: quietShown)
+            if channelLabel != nil, openChannels != nil {
+                pillFace(h: h, d: d, fill: nil, ink: ink, placeholder: true)
+            }
+        }
+        .fixedSize()
+    }
+
+    /// The capsule's content. `placeholder`: the same layout, invisible, with only the channel
+    /// label live (the sibling layer that takes the label's taps).
+    @ViewBuilder
+    private func pillFace(h: CGFloat, d: CGFloat, fill: Color?, ink: Color, placeholder: Bool) -> some View {
+        let content = HStack(spacing: big ? 12 : 10) {
+            pillIcon(d: d, ink: ink).opacity(placeholder ? 0 : 1).allowsHitTesting(!placeholder)
+            VStack(alignment: .leading, spacing: 1) {
+                pillText(ink: ink).opacity(placeholder ? 0 : 1).allowsHitTesting(!placeholder).accessibilityHidden(placeholder)
+                if let c = channelLabel {
+                    channelText(c, ink: ink, placeholder: placeholder)
+                }
+            }
+        }
+        .padding(.leading, big ? 26 : 20)
+        .padding(.trailing, big ? 28 : 20)
+        .frame(minWidth: big ? 200 : 178, minHeight: h, maxHeight: h)
+        if placeholder {
+            content.allowsHitTesting(true)
+        } else {
+            content
+                .background { pillFill(fill) }
+                .saryGlass(Capsule(), role: .control, interactive: fill == nil)
+                .background { pillHalo(fill) }
+        }
+    }
+
+    @ViewBuilder
+    private func channelText(_ c: String, ink: Color, placeholder: Bool) -> some View {
+        let t = Text(c)
+            .font(.sary(10, .medium))
+            .foregroundStyle(ink.opacity(0.85))
+            .lineLimit(1)
+        if placeholder {
+            Button { openChannels?() } label: {
+                t.padding(.vertical, 6).padding(.horizontal, 6).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, -6).padding(.horizontal, -6)
+            .accessibilityLabel(Text("التردد: \(c)"))
+            .accessibilityHint(Text("اضغط لتغيّر التردد"))
+            .accessibilityIdentifier("ptt-channel-chip")
+        } else {
+            t.opacity(openChannels == nil ? 1 : 0).accessibilityHidden(true)
+        }
+    }
+
+    private func pillIcon(d: CGFloat, ink: Color) -> some View {
+        ZStack {
+            pillGlyph(ink: ink)
+                .font(.system(size: d * 0.85, weight: .semibold))
+                .foregroundStyle(ink)
+                .environment(\.layoutDirection, .leftToRight)
+            if isTalking { pillRing(ink: ink).frame(width: d + 12, height: d + 12) }
+        }
+        .frame(width: d + 4, height: d + 4)
+    }
+
+    private func pillText(ink: Color) -> some View {
+        Text(pillTitle)
+            .font(.sary(big ? 18 : 14, .bold))
+            .foregroundStyle(ink)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .contentTransition(.numericText())
+            .accessibilityIdentifier("outing-ptt-caption")
+    }
+
+    @ViewBuilder
+    private func pillFill(_ fill: Color?) -> some View {
+        if let fill {
+            let glow: Double = isOnAir ? 0.55 : 0.3
+            Capsule().fill(fill)
+                .shadow(color: fill.opacity(glow), radius: isOnAir ? 14 : 8, y: 3)
+        }
+    }
+
+    @ViewBuilder
+    private func pillHalo(_ fill: Color?) -> some View {
+        if isOnAir {
+            let grow: CGFloat = pulse ? 1.12 + CGFloat(level) * 0.12 : 1.0
+            Capsule().fill((fill ?? theme.palette.accent).opacity(0.3))
+                .scaleEffect(grow)
+                .opacity(pulse ? 0 : 0.9)
+        }
+    }
+
+    @ViewBuilder
+    private func pillGlyph(ink: Color) -> some View {
+        switch state {
+        case .arming: ProgressView().tint(ink)
+        case .talking:
+            Image(systemName: "waveform").symbolEffect(.variableColor.iterative, isActive: !theme.reduceMotion)
+        case .listening:
+            Image(systemName: "speaker.wave.2.fill").symbolEffect(.variableColor.iterative, isActive: !theme.reduceMotion)
+        case .muted: Image(systemName: "speaker.slash.fill")
+        case .unavailable: Image(systemName: "mic.slash.fill")
+        case .idle: Image(systemName: SaryIcon.mic)
+        }
+    }
+
+    private func pillRing(ink: Color) -> some View {
+        var share: CGFloat = 0
+        if case let .talking(s, remaining) = state { share = CGFloat(remaining) / CGFloat(max(1, s + remaining)) }
+        return Circle()
+            .trim(from: 0, to: share)
+            .stroke(ink.opacity(0.9), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .rotationEffect(.degrees(-90))
+            .padding(2)
+    }
+
+    private func pillDisc(d: CGFloat, ink: Color, filled: Bool) -> some View {
+        ZStack {
+            Circle().fill(ink.opacity(filled ? 0.16 : 0.08))
+            pillGlyph(ink: ink)
+                .font(.system(size: d * 0.42, weight: .bold))
+                .foregroundStyle(ink)
+                .environment(\.layoutDirection, .leftToRight)
+            if isTalking { pillRing(ink: ink) }
+        }
+        .frame(width: d, height: d)
+    }
+
+    @ViewBuilder
+    private var discBody: some View {
         let size = theme.bigButton
         VStack(spacing: theme.space(.xs)) {
             ZStack {

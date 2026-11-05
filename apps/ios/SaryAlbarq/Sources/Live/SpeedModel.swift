@@ -16,6 +16,9 @@ final class SpeedModel: ObservableObject {
     }
 
     @Published private(set) var current: SpeedReading = .unknown
+    /// A real speed has been read on this screen («تخفيف الزحمة» ٨): until then the speedometer
+    /// stays off the map instead of showing an empty «— كم/س». Never an invented number.
+    @Published private(set) var everRead = false
     /// My speeds since this screen opened (fallback when no trip log is kept here).
     private(set) var local = TripLog()
     private var smoother = SpeedSmoother()
@@ -36,5 +39,6 @@ final class SpeedModel: ObservableObject {
         let r = smoother.reading(nowMs: now.timeIntervalSince1970 * 1000)
         /* Whole km/h is what is shown: don't republish for sub-unit wobble. */
         if r.kmh.map({ $0.rounded() }) != current.kmh.map({ $0.rounded() }) || (r == .unknown) != (current == .unknown) { current = r }
+        if !everRead, r.kmh != nil { everRead = true }
     }
 }

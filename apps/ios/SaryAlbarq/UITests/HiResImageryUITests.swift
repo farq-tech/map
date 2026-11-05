@@ -31,8 +31,9 @@ final class HiResImageryUITests: XCTestCase {
         sleep(3)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the permission monitor answer
         XCTAssertTrue(badge(app).waitForExistence(timeout: 110), "«مُحسّنة» once enhanced tiles are on screen (network tiles + on-device model; slow under a loaded simulator)")
-        XCTAssertEqual(badge(app).label, "مُحسّنة")
         attach(app, "hires-exploration-badge")
+        /* «تخفيف الزحمة» ٧: it says so for 3 s, then steps aside. */
+        XCTAssertTrue(badge(app).waitForNonExistence(timeout: 8), "the badge hides after a few seconds")
         /* Navigation starts at 120 s (demo router): the enhanced layer is removed with its badge. */
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: badge(app))

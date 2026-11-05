@@ -93,7 +93,10 @@ final class OutingWalkieTalkie: ObservableObject {
 
     /// The saved channel for this outing, if it still looks like one ("1"…"5" or a uuid).
     static func savedChannel(_ outingId: String, defaults: UserDefaults) -> String {
-        guard let s = defaults.string(forKey: channelKeyPrefix + outingId) else { return PTTChannels.defaultId }
+        guard let s = defaults.string(forKey: channelKeyPrefix + outingId) else {
+            /* A new outing starts on «التردد الافتراضي». */
+            return defaults.string(forKey: PTTChannels.preferredKey).flatMap { PTTChannels.isPublic($0) ? $0 : nil } ?? PTTChannels.defaultId
+        }
         return PTTChannels.isPublic(s) || UUID(uuidString: s) != nil ? s : PTTChannels.defaultId
     }
 

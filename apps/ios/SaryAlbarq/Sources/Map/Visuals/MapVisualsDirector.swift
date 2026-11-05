@@ -91,6 +91,8 @@ final class MapVisualsDirector: NSObject {
     override init() {
         effective = VisualBudget.resolve(settings, VisualContext())
         super.init()
+        /* «تخفيف الزحمة» ٦: the source line folds away after a few seconds; the overlay shrinks with it. */
+        overlay.onExpire = { [weak self] in self?.layoutOverlay() }
     }
 
     /// The light preset and sky are ours (the coordinator's own `applyLight` stands aside).
@@ -693,6 +695,7 @@ final class MapVisualsDirector: NSObject {
         let size = overlay.fit(maxWidth: map.bounds.width - 32)
         overlay.frame = CGRect(x: (map.bounds.width - size.width) / 2, y: lastInputs.chrome.top + 6, width: size.width, height: size.height)
         overlay.isHidden = size.height == 0 || lastInputs.driving
+        if !overlay.isHidden && map.window != nil { overlay.armFold() }
     }
 }
 
@@ -742,6 +745,33 @@ final class VisualsSourceView: UIView {
     private let slope = UILabel()
     private(set) var sourceText: String?
     var slopeShown = false
+    /// «الأجواء من الطقس: …» shows for this long when it appears or changes, then folds away
+    /// (the attribution stays in the weather and layers sheets: CC‑BY kept).
+    static let sourceSeconds: TimeInterval = 5
+    var onExpire: (() -> Void)?
+    private var shownKey: String?
+    private var expired = false
+    private var hideWork: DispatchWorkItem?
+    private var visibleSource: String? { expired ? nil : sourceText }
+
+    /// The line is on screen: the 5 s start now (not while the map is still loading behind the sheet).
+    func armFold() {
+        guard sourceText != nil, !expired, hideWork == nil else { return }
+        #if DEBUG
+        /* Screenshots of the sky (VisualsUITests) keep the line to read it. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryKeepSource") { return }
+        #endif
+        let w = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.expired = true
+            self.source.text = nil
+            self.source.isHidden = true
+            self.accessibilityLabel = self.slopeShown ? self.slope.attributedText?.string : nil
+            self.onExpire?()
+        }
+        hideWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.sourceSeconds, execute: w)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -771,8 +801,15 @@ final class VisualsSourceView: UIView {
 
     func set(source s: String?, slope sl: String?) {
         sourceText = s
-        source.text = s
-        source.isHidden = s == nil
+        if s != shownKey {
+            shownKey = s
+            expired = false
+            hideWork?.cancel()
+            hideWork = nil
+        }
+        let shown = visibleSource
+        source.text = shown
+        source.isHidden = shown == nil
         let attr = NSMutableAttributedString()
         if let sl {
             attr.append(NSAttributedString(string: "▬ ", attributes: [.foregroundColor: UIColor(red: 0.96, green: 0.72, blue: 0.24, alpha: 1)]))
@@ -780,11 +817,11 @@ final class VisualsSourceView: UIView {
         }
         slope.attributedText = attr
         slope.isHidden = sl == nil
-        accessibilityLabel = [s, sl].compactMap { $0 }.joined(separator: "، ")
+        accessibilityLabel = [shown, sl].compactMap { $0 }.joined(separator: "، ")
     }
 
     func fit(maxWidth: CGFloat) -> CGSize {
-        guard sourceText != nil || slopeShown else { return .zero }
+        guard visibleSource != nil || slopeShown else { return .zero }
         let inner = stack.systemLayoutSizeFitting(CGSize(width: maxWidth - 20, height: 100))
         let w = min(maxWidth, inner.width + 20), h = inner.height + 8
         stack.frame = CGRect(x: 10, y: 4, width: w - 20, height: inner.height)

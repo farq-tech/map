@@ -11,6 +11,10 @@ struct SarySOSButton: View {
     var state: MySOSUI
     var holdDuration: Double = 1
     var trigger: () -> Void = {}
+    /// Diameter (default: the theme's big button).
+    var size: CGFloat? = nil
+    /// The calm live screen (Lovable): «SOS» in the disc instead of the icon + «طوارئ».
+    var compactLabel = false
 
     @Environment(\.sary) private var theme
     @State private var holding = false
@@ -21,7 +25,7 @@ struct SarySOSButton: View {
 
     var body: some View {
         let p = theme.palette
-        let size = theme.bigButton
+        let size = self.size ?? theme.bigButton
         let sending = state == .sending
         let active: Bool = { if case .active = state { return true }; return false }()
 
@@ -31,6 +35,12 @@ struct SarySOSButton: View {
             if sending {
                 ProgressView().tint(p.onEmergency).controlSize(.regular)
             } else {
+                if compactLabel && !active {
+                    Text("SOS")
+                        .font(.system(size: max(14, size * 0.26), weight: .heavy, design: .rounded))
+                        .foregroundStyle(p.onEmergency)
+                        .environment(\.layoutDirection, .leftToRight)
+                } else {
                 VStack(spacing: 0) {
                     Image(systemName: active ? SaryIcon.checkCircle : SaryIcon.sos)
                         .font(.system(size: size * (active ? 0.3 : 0.36), weight: .heavy))
@@ -39,6 +49,7 @@ struct SarySOSButton: View {
                         .dynamicTypeSize(...DynamicTypeSize.large)
                 }
                 .foregroundStyle(p.onEmergency)
+                }
             }
         }
         .frame(width: size, height: size)

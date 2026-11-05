@@ -78,9 +78,10 @@ struct VoiceNoteRecordBar: View {
                 Image(systemName: "trash.fill")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(p.emergencyText)
-                    .frame(width: 48, height: 48)
-                    .saryGlass(Circle(), role: .control, interactive: true)
+                    .frame(width: 52, height: 52)
+                    .background(Circle().fill(p.sunken))
             }
+            .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text("احذف"))
             .accessibilityHint(Text("يحذف التسجيل وما يرسله"))
             .accessibilityIdentifier("voice-note-cancel")
@@ -89,10 +90,10 @@ struct VoiceNoteRecordBar: View {
                 HStack(spacing: 6) {
                     Circle().fill(p.emergency).frame(width: 8, height: 8)
                     Text("يسجّل")
-                        .saryText(.footnote, weight: .medium)
+                        .font(.sary(13, .medium))
                         .foregroundStyle(p.textSecondary)
                     Text("\(SaryFormat.clock(seconds: secs)) / \(SaryFormat.clock(seconds: Int(VoiceNotePolicy.maxRecordMs / 1000)))")
-                        .saryNumber(.footnote)
+                        .font(.sary(13, .bold)).monospacedDigit()
                         .foregroundStyle(p.textPrimary)
                         .contentTransition(.numericText())
                         .accessibilityIdentifier("voice-note-timer")
@@ -105,19 +106,21 @@ struct VoiceNoteRecordBar: View {
             Button(action: center.send) {
                 HStack(spacing: 6) {
                     Image(systemName: "paperplane.fill")
-                    Text("أرسل").saryText(.bodyStrong)
+                    Text("أرسل").font(.sary(17, .bold))
                 }
                 .foregroundStyle(p.onAccent)
-                .padding(.horizontal, 16)
-                .frame(height: 48)
+                .padding(.horizontal, 22)
+                .frame(height: 56)
                 .background(Capsule().fill(p.accent))
             }
+            .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("voice-note-send")
             .accessibilityHint(Text("يرسل الرسالة لكل اللي على نفس التردد"))
         }
         .padding(.horizontal, theme.space(.s))
         .padding(.vertical, 8)
-        .saryGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .panel)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p.chromeOpaque.opacity(0.88)))
+        .saryGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .chrome)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voice-note-recording")
     }
@@ -143,7 +146,7 @@ struct VoiceNotePlayingCard: View {
             .frame(width: 44, height: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(playing.name) يتكلم…")
-                    .saryText(.bodyStrong)
+                    .font(.sary(16, .bold))
                     .foregroundStyle(p.textPrimary)
                     .lineLimit(1)
                     .accessibilityIdentifier("voice-note-speaker")
@@ -156,21 +159,23 @@ struct VoiceNotePlayingCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(SaryFormat.clock(seconds: playing.seconds))
-                .saryNumber(.footnote)
+                .font(.sary(13, .medium)).monospacedDigit()
                 .foregroundStyle(p.textSecondary)
             Button(action: stop) {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(p.textPrimary)
-                    .frame(width: 40, height: 40)
-                    .saryGlass(Circle(), role: .control, interactive: true)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(p.sunken))
             }
+            .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text("أوقف"))
             .accessibilityIdentifier("voice-note-stop")
         }
         .padding(.horizontal, theme.space(.s))
         .padding(.vertical, 8)
-        .saryGlass(RoundedRectangle(cornerRadius: 26, style: .continuous), role: .panel)
+        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p.chromeOpaque.opacity(0.88)))
+        .saryGlass(RoundedRectangle(cornerRadius: 28, style: .continuous), role: .chrome)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voice-note-playing")
     }
@@ -188,12 +193,13 @@ struct VoiceNoteStatusPill: View {
             HStack(spacing: 6) {
                 Image(systemName: sending > 0 ? "arrow.up.circle" : "waveform")
                     .environment(\.layoutDirection, .leftToRight)
-                Text(label).saryText(.footnote, weight: .medium)
+                Text(label).font(.sary(13, .medium))
             }
             .foregroundStyle(p.textPrimary)
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .saryGlass(Capsule(), role: .control, interactive: true)
+            .background(Capsule().fill(p.chromeOpaque.opacity(0.88)))
+            .saryGlass(Capsule(), role: .chrome)
         }
         .accessibilityIdentifier("voice-note-pill")
     }
@@ -244,9 +250,9 @@ struct VoiceNoteSection: View {
             .accessibilityLabel(Text(isPlaying ? "أوقف رسالة \(name)" : "شغّل رسالة \(name)"))
             .accessibilityIdentifier("voice-note-play")
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).saryText(.bodyStrong).foregroundStyle(p.textPrimary)
+                Text(name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary)
                 Text("\(SaryFormat.clock(seconds: n.seconds)) · \(Self.when(n.recorded_at))")
-                    .saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                    .font(.sary(12, .regular)).monospacedDigit().foregroundStyle(p.textSecondary)
             }
             Spacer()
             if !mine, !center.isHeard(n.id) {

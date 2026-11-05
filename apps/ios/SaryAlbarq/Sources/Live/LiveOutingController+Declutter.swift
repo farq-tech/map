@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Build 8 «ترتيب الشاشة» (docs/IA-REDESIGN.md): the context mode, the «+» actions,
 /// and what the trip header and the map show.
@@ -37,6 +38,32 @@ extension LiveOutingController {
         return s
     }
 
+    /// «الإعدادات» as a pushed page: the full-screen cover appears without its slide-up, the page
+    /// slides in itself (`SettingsPushHost`).
+    func openSettings() {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { settingsOpen = true }
+    }
+
+    func closeSettings() {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { settingsOpen = false }
+    }
+
+    /// What «أدوات الطلعة» and the «الرحلة» tab's route actions offer right now.
+    var actionState: LiveActionCatalog.State {
+        .init(backTracking: backTrack != nil,
+              following: planModel?.following == true,
+              hasRoute: planModel?.plan.hasRoute ?? false,
+              stuck: safety.myStuck != nil,
+              ended: tripEnded,
+              guideAllTarget: canGuideAll && session.view?.status == .active ? autoNavNextTarget?.name : nil,
+              chat: chat.isAvailable,
+              channels: session.walkie.showsChannels)
+    }
+
     /// One row of the «+» sheet was chosen: close it, then act (most actions open their own sheet).
     func performAction(_ id: String) {
         modal = nil
@@ -44,7 +71,7 @@ extension LiveOutingController {
         if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { return }
         let run: () -> Void = { [weak self] in self?.runAction(id) }
         switch id {
-        case "backtrack", "follow": run()
+        case "backtrack", "follow", "fit", "rally", "timer", "effects", "realistic": run()
         default: DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: run)
         }
     }
@@ -72,6 +99,21 @@ extension LiveOutingController {
         case "youtube": MediaCenters.of(self).open()
         case "radio": GroupAudioCenters.of(self).open()
         case "explore": enterExplore()
+        case "channels": modal = .pttChannels
+        case "enjad": openEnjad(.emergency)
+        case "fit": a.fitGroup()
+        case "rally": selectedTab = .group; sheetDetent = .half
+        case "timer": selectedTab = .trip; sheetDetent = .half
+        case "convoy": modal = .convoyAlerts
+        case "brief":
+            if let f = location.lastFix { modal = .plan(.brief(LngLat(lng: f.lng, lat: f.lat), name: nil)) } else { toast("ننتظر أول قراءة من GPS") }
+        case "savePlace":
+            if let f = location.lastFix { modal = .placeEdit(SavedPlaceDraft(id: nil, point: LngLat(lng: f.lng, lat: f.lat), name: "", icon: .pin)) } else { toast("ننتظر أول قراءة من GPS") }
+        case "hires":
+            enterExplore()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.modal = .layers }
+        case "realistic": realisticRequest += 1
+        case "effects": openSettings()
         default: break
         }
     }

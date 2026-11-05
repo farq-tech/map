@@ -18,21 +18,33 @@ struct LiveSheet: View {
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
+                NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps },
+                             overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
+                             cameraMode: controller.mapFollowMode.rawValue)
             } else {
                 /* One line: the people. The trip's numbers are in the header above. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
             }
             if ui.sheetDetent != .peek {
-                SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
-                    .padding(.horizontal, theme.space(.l))
+                HStack(spacing: theme.space(.s)) {
+                    SaryTabBar(selection: Binding(get: { ui.selectedTab }, set: { actions.selectTab($0) }), groupBadge: controller.chat.totalUnread)
+                    Button { controller.openSettings() } label: {
+                        Image(systemName: "gearshape").font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(theme.palette.textPrimary).frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text("الإعدادات"))
+                    .accessibilityIdentifier("sheet.settings")
+                }
+                .padding(.horizontal, theme.space(.l))
                 ScrollView {
                     VStack(spacing: theme.space(.m)) {
                         switch ui.selectedTab {
                         case .trip: TripTab(controller: controller, ui: ui)
                         case .group: GroupTab(controller: controller, ui: ui)
-                        case .more: SettingsTab(controller: controller, ui: ui)
+                        case .more: TripTab(controller: controller, ui: ui)
+                        case .map: MapTab(controller: controller)
                         }
                     }
                     .padding(.horizontal, theme.space(.l))
@@ -49,6 +61,10 @@ struct LiveSheet: View {
         .background(GroupAudioSheetHost(center: GroupAudioCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
+                .saryAppearance(appearance)
+        }
+        .fullScreenCover(isPresented: Binding(get: { controller.settingsOpen }, set: { if !$0 { controller.closeSettings() } })) {
+            SettingsPushHost { close in LiveSettingsPage(controller: controller, close: close) }
                 .saryAppearance(appearance)
         }
         .fullScreenCover(item: Binding(get: { ui.sos.incoming.first { !$0.acknowledged } }, set: { _ in })) { a in
@@ -69,6 +85,13 @@ struct LiveSheet: View {
         }
         .sheet(item: Binding(get: { controller.shareItem.map(ShareURL.init) }, set: { if $0 == nil { controller.shareItem = nil } })) { s in
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
+        }
+        .confirmationDialog("أنت", isPresented: $controller.meMenuOpen, titleVisibility: .visible) {
+            if !controller.tripEnded {
+                Button("رسالة فوق سيارتي") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.modal = .note } }
+            }
+            Button("انسخ أو شارك موقعي") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.modal = .plan(.me) } }
+            Button("إلغاء", role: .cancel) {}
         }
         .confirmationDialog("أنت في طلعة شغّالة", isPresented: Binding(get: { controller.confirm == .backWhileSharing }, set: { if !$0 && controller.confirm == .backWhileSharing { controller.confirm = nil } }), titleVisibility: .visible) {
             Button("ارجع للقائمة", action: controller.backToList)
@@ -96,16 +119,10 @@ struct LiveSheet: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
         case .actions:
-            LiveActionSheet(groups: LiveActionCatalog.groups(.init(backTracking: controller.backTrack != nil,
-                                                                  following: controller.planModel?.following == true,
-                                                                  hasRoute: controller.planModel?.plan.hasRoute ?? false,
-                                                                  stuck: controller.safety.myStuck != nil,
-                                                                  ended: controller.tripEnded,
-                                                                  guideAllTarget: controller.canGuideAll && controller.session.view?.status == .active
-                                                                      ? controller.autoNavNextTarget?.name : nil,
-                                                                  chat: controller.chat.isAvailable)),
+            LiveActionSheet(groups: LiveActionCatalog.groups(controller.actionState),
                             action: controller.performAction, close: { controller.modal = nil })
-                .presentationDetents([.medium, .large])
+                /* Lovable: two thirds of the screen (SOS and the header stay in view), scrolls; pull up for all. */
+                .presentationDetents([.fraction(0.66), .large])
                 .presentationDragIndicator(.visible)
         case let .participant(id):
             if let s = controller.participantCard(id) {
@@ -191,7 +208,7 @@ struct LiveSheet: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .places:
-            SavedPlacesSheet(controller: controller)
+            PlacesAndTracksSheet(controller: controller, part: .places)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case let .placeEdit(d):
@@ -206,7 +223,7 @@ struct LiveSheet: View {
                        close: { controller.modal = nil })
                 .presentationDetents([.large])
         case .tracks:
-            TracksSheet(controller: controller)
+            PlacesAndTracksSheet(controller: controller, part: .tracks)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -234,11 +251,87 @@ private struct TripTab: View {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
             }
             TripPlanCard(controller: controller)
+            TripRouteActions(controller: controller)
             if ui.status != .ended {
                 LiveWeatherCard(controller: controller, weather: controller.weather)
                 SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
             }
             TrailCard(controller: controller, card: controller.trailCard)
+            /* From the old «المزيد» (Lovable's settings have none of these): the invite link, pause /
+             * end / leave, and my number. */
+            TripControls(controller: controller, ui: ui)
+        }
+    }
+}
+
+/// «اتبع الخطة» and the leader's «وجّه الكل» (moved here from «+», «تخفيف الزحمة» ١٣).
+private struct TripRouteActions: View {
+    @ObservedObject var controller: LiveOutingController
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let items = LiveActionCatalog.tripRouteActions(controller.actionState)
+        if !items.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                    Button { controller.performAction(item.id) } label: {
+                        HStack(spacing: theme.space(.m)) {
+                            SaryRowIcon(systemImage: item.systemImage, color: item.isActive ? theme.palette.accent : nil)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.title).saryText(.body, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                                if let sub = item.subtitle {
+                                    Text(sub).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, theme.space(.m))
+                        .frame(minHeight: 56)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SaryRowPressStyle())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(item.isActive ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityIdentifier(item.accessibilityID)
+                    if i < items.count - 1 { SaryDivider().padding(.leading, 56) }
+                }
+            }
+            .sarySurface(radius: SaryRadius.l)
+        }
+    }
+}
+
+// MARK: - «الخريطة»
+
+/// Lovable's «الخريطة» tab: the layers (exploration), high-res imagery, the realistic view, offline maps
+/// and the visual effects.
+private struct MapTab: View {
+    @ObservedObject var controller: LiveOutingController
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Group {
+            SarySection(title: "الطبقة") {
+                SaryNavRow(title: controller.mapLayer.label, detail: "قمر صناعي، طبوغرافي، عادي · في الاستكشاف",
+                           systemImage: "square.3.layers.3d", id: "map.layers") {
+                    controller.sheetDetent = .peek
+                    controller.enterExplore()
+                }
+                .padding(.horizontal, theme.space(.m))
+            }
+            HiResLayerSection()
+            SarySection(title: "الوضع الواقعي") {
+                SaryNavRow(title: "الوضع الواقعي", detail: "شوف المكان مجسّم من فوق", systemImage: "mountain.2", id: "map.realistic") {
+                    controller.sheetDetent = .peek
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { controller.realisticRequest += 1 }
+                }
+                .padding(.horizontal, theme.space(.m))
+                SaryDivider()
+                SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تطلع من التغطية", systemImage: "arrow.down.circle.fill",
+                           id: "map.offline") { controller.modal = .offlineMaps }
+                    .padding(.horizontal, theme.space(.m))
+            }
+            VisualEffectsSection()
         }
     }
 }
@@ -435,7 +528,7 @@ private struct TrailCard: View {
 }
 
 /// «مساري» in the settings tab: recording, the screen-locked trail, friends' trails, clear.
-private struct TrailSettingsSection: View {
+struct TrailSettingsSection: View {
     @ObservedObject var controller: LiveOutingController
     var card: TrailCardUIState
     @Environment(\.sary) private var theme
@@ -684,7 +777,7 @@ private struct InviteTab: View {
 
 // MARK: - Settings tab
 
-private struct SettingsTab: View {
+private struct TripControls: View {
     @ObservedObject var controller: LiveOutingController
     var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
@@ -696,69 +789,29 @@ private struct SettingsTab: View {
     var body: some View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
-        Group {
-            if ui.participantsTab.myPhoneMissing {
-                Button(action: controller.actions.participantsTab.addMyPhone) {
-                    SaryBanner(text: "لم تضف رقمك · أضفه ليتصل بك العيال", tone: .info, systemImage: SaryIcon.phone)
-                }
-                .buttonStyle(.plain)
-            }
-            SarySection(title: "مشاركتي", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع».") {
-                SaryToggleRow(title: "شارك البطارية", subtitle: "نسبة الشحن تظهر لأعضاء الطلعة", systemImage: SaryIcon.battery(60),
-                              isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) }), id: "settings-battery")
-                SaryDivider()
-                SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ العيال", systemImage: "bell.fill",
-                              isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) }), id: "settings-notify")
-            }
-            SarySection(title: "قناة الطلعة", footer: "اضغط مطولًا على الميكروفون وتكلم: يسمعك أعضاء الطلعة مباشرة، واحد يتكلم في كل مرة، حتى لو كانت شاشاتهم مقفلة. صوتك يمرّ ولا يُحفظ في أي مكان.") {
-                SaryToggleRow(title: "اكتم القناة", subtitle: "لا تسمع أحدًا ولا يوقظ جوالك", systemImage: "speaker.slash.fill",
-                              isOn: Binding(get: { s.pttMuted }, set: { a.setPTTMuted($0) }), id: "settings-ptt-mute")
-                SaryDivider()
-                PTTLinkRow(line: s.pttLink)
-            }
-            GroupAudioEntryCard(center: GroupAudioCenters.of(controller))
-            MediaEntryCard(center: MediaCenters.of(controller))
-            SarySection(title: "القيادة والعرض", footer: "«شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل. «تلقائي» يختار من سرعتك والملاحة.") {
-                VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    segmentTitle("شكل الشاشة")
-                    SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
-                    segmentTitle("وضع القيادة (خط وأزرار أكبر)")
-                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.driveMode }, set: { a.setDriveMode($0) }), label: { $0.label }, id: "settings-drive")
-                    segmentTitle("الوضع الليلي")
-                    SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
-                }
-                .padding(theme.space(.s))
-                SaryDivider()
-                SaryToggleRow(title: "ابدأ التوجيه تلقائيًا مع الرحلة", subtitle: "إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة · على جوالك فقط",
-                              systemImage: "location.north.line.fill",
-                              isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
-                SaryDivider()
-                SaryToggleRow(title: "رجّعني للتوجيه تلقائيًا", subtitle: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس",
-                              systemImage: "location.north.line.fill",
-                              isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
-                                            set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
-            }
-            SpeedSettingsSection()
-            DrivingRealismSection()
-            SarySection(title: "القافلة") {
-                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
-                           systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }
-                    .padding(.horizontal, theme.space(.m))
-            }
-            TrailSettingsSection(controller: controller, card: controller.trailCard)
-            SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
-                Button { controller.modal = .offlineMaps } label: {
-                    HStack(spacing: theme.space(.m)) {
-                        SaryRowIcon(systemImage: "arrow.down.circle.fill")
-                        Text("احفظ الخريطة بلا إنترنت").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
-                        Spacer()
-                        Image(systemName: "chevron.forward").font(.system(size: 13, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+        VStack(spacing: theme.space(.m)) {
+            SarySection(title: "الطلعة") {
+                if ui.participantsTab.myPhoneMissing {
+                    Button(action: controller.actions.participantsTab.addMyPhone) {
+                        SaryBanner(text: "ما أضفت رقمك · أضفه عشان يتصل بك العيال", tone: .info, systemImage: SaryIcon.phone)
                     }
-                    .frame(minHeight: theme.minTarget)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .padding(theme.space(.s))
+                    SaryDivider()
                 }
-                .buttonStyle(SaryRowPressStyle())
-                .accessibilityIdentifier("settings-offline")
+                if s.outingStatus != .ended {
+                    actionRow("رابط الدعوة", icon: "link", id: "settings-invite") { controller.selectedTab = .group; controller.sheetDetent = .half }
+                    SaryDivider()
+                }
+                if s.isLeader && s.outingStatus != .ended {
+                    if s.outingStatus != .notStarted {
+                        actionRow(s.outingStatus == .paused ? "استأنف الطلعة" : "أوقف مؤقتًا", icon: s.outingStatus == .paused ? SaryIcon.play : SaryIcon.pause, id: "settings-pause-outing") { confirm = .pause }
+                        SaryDivider()
+                    }
+                    actionRow("أنهِ الطلعة", icon: "flag.checkered", destructive: true, id: "settings-end") { confirm = .end }
+                    SaryDivider()
+                }
+                actionRow("غادر الطلعة", icon: "rectangle.portrait.and.arrow.right", destructive: true, id: "settings-leave") { confirm = .leave }
             }
             SarySection(title: "رقمي", footer: "يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب.") {
                 VStack(spacing: theme.space(.s)) {
@@ -770,18 +823,8 @@ private struct SettingsTab: View {
                 .padding(theme.space(.m))
             }
             .onAppear { phone = s.myPhone ?? "" }
-            SarySection(title: "الطلعة") {
-                if s.isLeader && s.outingStatus != .ended {
-                    if s.outingStatus != .notStarted {
-                        actionRow(s.outingStatus == .paused ? "استأنف الطلعة" : "أوقف مؤقتًا", icon: s.outingStatus == .paused ? SaryIcon.play : SaryIcon.pause, id: "settings-pause-outing") { confirm = .pause }
-                        SaryDivider()
-                    }
-                    actionRow("أنهِ الطلعة", icon: "flag.checkered", destructive: true, id: "settings-end") { confirm = .end }
-                    SaryDivider()
-                }
-                actionRow("غادر الطلعة", icon: "rectangle.portrait.and.arrow.right", destructive: true, id: "settings-leave") { confirm = .leave }
-            }
-            .confirmationDialog(title, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible, presenting: confirm) { k in
+        }
+        .confirmationDialog(title, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible, presenting: confirm) { k in
                 switch k {
                 case .pause: Button(s.outingStatus == .paused ? "استأنف" : "أوقف مؤقتًا", action: a.pauseOrResumeOuting)
                 case .end: Button("أنهِ الطلعة للجميع", role: .destructive, action: a.endOuting)
@@ -795,7 +838,16 @@ private struct SettingsTab: View {
                 case .leave: Text("بيتوقف إرسال موقعك وتخرج من الطلعة.")
                 }
             }
-        }
+    }
+
+    /// A numbered section of «المزيد» («١ الصوت والقناة»…).
+    private func groupTitle(_ t: String, number: Int) -> some View {
+        Text(t)
+            .saryText(.headline, weight: .heavy)
+            .foregroundStyle(theme.palette.textPrimary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, theme.space(.s))
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func segmentTitle(_ t: String) -> some View {
@@ -941,7 +993,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 // MARK: - «قناة الطلعة» diagnostics
 
 /// The live link in one line, and «سجل القناة» to share with whoever is fixing it.
-private struct PTTLinkRow: View {
+struct PTTLinkRow: View {
     var line: String
     @Environment(\.sary) private var theme
     @State private var file: URL?
@@ -973,5 +1025,33 @@ private struct PTTLinkRow: View {
     struct ShareFile: Identifiable {
         let url: URL
         var id: String { url.absoluteString }
+    }
+}
+
+/// Lovable's settings slide in like a pushed page (the cover itself appears without animation) and
+/// slide back out before it closes.
+struct SettingsPushHost<Page: View>: View {
+    @ViewBuilder var page: (_ close: @escaping () -> Void) -> Page
+    @State private var shown = false
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        GeometryReader { g in
+            page { close() }
+                .offset(x: shown ? 0 : -g.size.width)
+                .onAppear { withAnimation(theme.animation(.smooth)) { shown = true } }
+        }
+        .background(Color.clear)
+        .presentationBackground(.clear)
+    }
+
+    private func close() {
+        withAnimation(theme.animation(.smooth)) { shown = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { dismiss() }
+        }
     }
 }

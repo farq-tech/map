@@ -63,10 +63,11 @@ final class LiveEndedUITests: XCTestCase {
         /* Nothing that needs a running trip: no walkie-talkie, no SOS to an ended group. */
         XCTAssertFalse(app.buttons["outing-ptt"].exists, "«اضغط وتكلم» is gone once the trip ended")
         XCTAssertFalse(app.buttons["outing-sos"].exists, "SOS is gone once the trip ended")
-        /* The header no longer names a destination as if we were still heading there. */
-        let header = app.descendants(matching: .any)["trip.header"]
-        XCTAssertTrue(header.label.contains("انتهت"), header.label)
-        XCTAssertFalse(header.label.contains("إلى "), "no «إلى …» target after the end: \(header.label)")
+        /* Lovable: the end card takes the header's place; no «إلى …» target after the end. */
+        XCTAssertFalse(app.descendants(matching: .any)["trip.header"].exists, "the end card replaces the trip header")
+        let title = app.descendants(matching: .any)["live.ended.title"]
+        XCTAssertTrue(title.label.contains("انتهت"), title.label)
+        XCTAssertFalse(title.label.contains("إلى "), "no «إلى …» target after the end: \(title.label)")
         /* The peek line says the trip ended rather than «٠ مباشر» next to my own moving car. */
         XCTAssertTrue(app.descendants(matching: .any)["outing-sheet-summary"].label.contains("انتهت"))
         attach(app, "ended-state")

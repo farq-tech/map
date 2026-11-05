@@ -324,9 +324,28 @@ final class HiResImagery: NSObject {
 
     // MARK: badge
 
+    /// «تخفيف الزحمة» ٧: the badge says «مُحسّنة» for 3 s when enhanced tiles arrive, then
+    /// steps aside (the state stays in «الطبقات» → «صور عالية الوضوح»).
+    static let badgeSeconds: TimeInterval = 3
+    private var badgeExpired = false
+    private var badgeTimer: DispatchWorkItem?
+
     private func refreshBadge() {
         guard let map else { return }
-        let show = decision.drawsLayer && lock.withLock { visible.badge }
+        let wanted = decision.drawsLayer && lock.withLock { visible.badge }
+        if !wanted {
+            badgeExpired = false
+            badgeTimer?.cancel()
+            badgeTimer = nil
+        } else if badgeTimer == nil && !badgeExpired {
+            let w = DispatchWorkItem { [weak self] in
+                self?.badgeExpired = true
+                self?.refreshBadge()
+            }
+            badgeTimer = w
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.badgeSeconds, execute: w)
+        }
+        let show = wanted && !badgeExpired
         if badge.isHidden == show {
             UIView.animate(withDuration: 0.2) { self.badge.alpha = show ? 1 : 0 } completion: { _ in self.badge.isHidden = !show }
             if show { badge.isHidden = false }
