@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import Foundation
 import UIKit
@@ -58,6 +59,10 @@ final class OutingSession: ObservableObject, Identifiable {
 
     let isDemo: Bool
     let location: LocationSharer
+    /// Return-timer and «غرّزت» events for `SafetyController`.
+    let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
+    /// The server side of the safety pack (nil in the demo: all local).
+    var safetyBackend: SafetyBackend? { isDemo ? nil : api }
     private let api: OutingsAPI
     private let token: String
     private let env: SessionEnv
@@ -411,6 +416,8 @@ final class OutingSession: ObservableObject, Identifiable {
             closed(.left)
         case .outingStatus, .memberSharing:
             reconcileSharing()
+        case let .safety(s):
+            safetyEvents.send(s)
         default:
             break
         }
