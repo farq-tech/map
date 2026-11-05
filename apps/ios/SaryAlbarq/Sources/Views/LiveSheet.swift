@@ -35,6 +35,7 @@ struct LiveSheet: View {
         .padding(.top, theme.space(.s))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SafetyPrompts(safety: controller.safety))
+        .background(MediaSheetHost(center: MediaCenters.of(controller)))
         .sheet(item: $controller.modal) { m in
             modal(m)
                 .saryAppearance(appearance)
@@ -129,6 +130,7 @@ private struct ParticipantsTab: View {
                 SafetySection(safety: controller.safety, now: ui.now, outingActive: ui.status == .active)
             }
             TrailCard(controller: controller, card: controller.trailCard)
+            MediaEntryCard(center: MediaCenters.of(controller))
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
                 ForEach(list) { p in
