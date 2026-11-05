@@ -90,8 +90,9 @@ final class PTTInAppRoute: PTTRoute {
         pendingDeactivate?.cancel()
         let w = DispatchWorkItem { [weak self] in self?.deactivate() }
         pendingDeactivate = w
-        /* Back-and-forth talk should not flap the session (and other apps' audio). */
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: w)
+        /* Back-and-forth talk should not flap the session (and other apps' audio); long enough
+           for the jitter buffer's drain (≤ 2 s) and the roger + squelch tail after it. */
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8, execute: w)
     }
 
     private func deactivate() {

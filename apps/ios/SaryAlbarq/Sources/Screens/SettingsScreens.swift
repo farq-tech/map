@@ -121,6 +121,8 @@ struct SettingsView: View {
     var open: (HomeRoute) -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    /// «قناة الطلعة» squelch / chirp / roger and the radio-voice filter (on by default).
+    @AppStorage(PTTRadioSounds.enabledKey) private var radioSounds = true
 
     var body: some View {
         /* Four clear sections (docs/IA-REDESIGN.md §2.7). */
@@ -135,6 +137,10 @@ struct SettingsView: View {
                 SaryDivider()
                 SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
                            id: "settings.convoyAlerts") { open(.convoyAlerts) }
+            }
+            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الأصحاب بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+                SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
+                              isOn: $radioSounds, id: "settings.radioSounds")
             }
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
