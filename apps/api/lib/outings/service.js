@@ -24,6 +24,7 @@ const { createSilenceWatch } = require('./silence');
 const { createMedia } = require('./media');
 const { createGroupAudio } = require('./group-audio');
 const { createPersonalInvites } = require('./invites');
+const { createChat } = require('./chat');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -34,6 +35,10 @@ class OutingError extends Error {
 }
 
 const err = (code, status) => new OutingError(code, status);
+
+/* Leaving / removed: off every «تردد خاص» of that trip (migration 013). */
+const PTT_CHANNEL_MEMBER_DELETE = `DELETE FROM sary.ptt_channel_members cm USING sary.ptt_channels c
+  WHERE c.id = cm.channel_id AND c.outing_id = $1 AND cm.user_id = $2`;
 
 /**
  * May this membership lead the outing — start/pause/resume it, manage the
@@ -66,6 +71,8 @@ function defaultConfig() {
      * idleEndHours). Ending the outing deletes it. */
     positionRetentionHours: envNumber('OUTING_POSITION_RETENTION_HOURS', 24, { min: 0.1, max: 24 * 7 }),
     idleEndHours: envNumber('OUTING_IDLE_END_HOURS', 24, { min: 1, max: 24 * 30 }),
+    /* «المحادثات»: messages of an ended trip are deleted this many days after it ended. */
+    chatRetentionDays: envNumber('OUTING_CHAT_RETENTION_DAYS', 30, { min: 1, max: 90 }),
     membershipCacheMs: 15_000,
     authCacheMs: 60_000,
   };
@@ -90,6 +97,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   /* Voice clips: memory only, 10 minutes. See clips.js. */
   const clips = clipsLib.createClipStore({ now });
   let hub = events;
+  /* «ترددات»: the walkie-talkie's private channels (lib/outings/ptt-channels.js), told when a
+   * member leaves or the trip ends so its in-memory copy matches the rows deleted here. */
+  let pttChannels = null;
 
   const q = (text, params) => pool.query(text, params).then((r) => r.rows);
 
@@ -152,6 +162,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     requireLeader: (...a) => requireLeader(...a),
     forgetOuting: (...a) => forgetOuting(...a),
   });
+
+  /* «المحادثات»: group + direct trip chat, stored, 30-day retention — see chat.js. */
+  const chat = createChat({ q, tx, now, err, cfg, push, canLead, events: () => hub });
 
   function dropLatest(outingId, userId) {
     const room = latest.get(outingId);
@@ -682,6 +695,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       leads ? inviteState(outingId, m.open_links) : Promise.resolve(null),
     ]);
     const personalInvites = leads && outing.status !== 'ended' ? await personal.personalOf(outingId) : null;
+    const chatUnread = await chat.unreadTotal(outingId, user.id).catch(() => 0);
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
@@ -709,6 +723,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       invite: inv,
       /* Leaders only: one line per person invited — «أُرسلت / فتحها / انضم / لم يفتحها». */
       personal_invites: personalInvites,
+      /* «المحادثات»: unread messages for me in this trip (the Group-tab badge). */
+      chat_unread: chatUnread,
       /* Offline car-to-car mesh secret: active members only (requireMember above). */
       mesh_key: meshKey,
       server_now: new Date(now()).toISOString(),
@@ -746,6 +762,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   async function endOutingRows(run, outingId) {
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [outingId]);
     await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1`, [outingId]);
+    /* «تردد خاص» channels end with the trip (their member lists cascade). */
+    await run(`DELETE FROM sary.ptt_channels WHERE outing_id = $1`, [outingId]);
     await run(
       `UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL
        WHERE id = $1`,
@@ -788,6 +806,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       silence.drop(outingId);
     }
     if (t.to === 'ended') clips.dropOuting(outingId);
+    if (t.to === 'ended') pttChannels?.outingEnded(outingId);
     hub.emit(outingId, { type: 'outing_status', status: o.status, started_at: o.started_at, ended_at: o.ended_at });
     if (t.to === 'ended') hub.closeRoom(outingId, 'outing_ended');
     return o;
@@ -804,6 +823,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         [outingId, memberId],
       );
       await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, memberId]);
+      await run(PTT_CHANNEL_MEMBER_DELETE, [outingId, memberId]);
       if (r.length) await rotateMeshKeyRows(run, outingId);
       return r;
     });
@@ -816,6 +836,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     clips.dropUser(outingId, memberId);
     void features.dropFromConvoy(outingId, memberId);
     void media.memberGone(outingId, memberId);
+    pttChannels?.memberGone(outingId, memberId);
     hub.kick(outingId, memberId, 'removed');
     hub.emit(outingId, { type: 'member_left', user_id: memberId, reason: 'removed' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -835,6 +856,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
     /* Their phone is no longer in «قناة الطلعة»: no more Push to Talk wake-ups. */
     await run(`DELETE FROM sary.ptt_tokens WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
+    await run(PTT_CHANNEL_MEMBER_DELETE, [outingId, userId]);
     await rotateMeshKeyRows(run, outingId);
     if (m.role !== 'owner') return { ended: false, owner: null };
     await run(`UPDATE sary.outing_members SET role = 'member' WHERE outing_id = $1 AND user_id = $2`, [outingId, userId]);
@@ -870,6 +892,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (outcome.ended) media.dropMedia(outingId);
     if (outcome.ended) groupAudio.dropGroupAudio(outingId);
     else void media.memberGone(outingId, userId);
+    if (outcome.ended) pttChannels?.outingEnded(outingId);
+    else pttChannels?.memberGone(outingId, userId);
     hub.kick(outingId, userId, 'left');
     hub.emit(outingId, { type: 'member_left', user_id: userId, reason: 'left' });
     hub.emit(outingId, { type: 'mesh_key_rotated' });
@@ -904,7 +928,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
    *      are re-attributed to the outing's current owner, so a group's live
    *      link keeps working;
    *   4. DELETE the user: memberships, positions, trip summaries, web push
-   *      subscriptions and APNs tokens go with it (ON DELETE CASCADE), recovery
+   *      subscriptions, APNs tokens, every chat message they sent, every direct
+   *      chat message sent to them and their read markers go with it
+   *      (ON DELETE CASCADE, migration 012), recovery
    *      code columns live on the row itself, rally_set_by is SET NULL.
    * Memory-only state (notes, SOS, voice clips they sent, latest fixes, auth
    * cache, sockets) is dropped after commit. The token is 401 from then on.
@@ -1384,6 +1410,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       await q(`DELETE FROM sary.member_positions WHERE outing_id = $1`, [id]);
       await q(`UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`, [id]);
       await q(`UPDATE sary.outings SET rally_lat = NULL, rally_lng = NULL, rally_label = NULL, rally_set_at = NULL, rally_set_by = NULL WHERE id = $1`, [id]);
+      await q(`DELETE FROM sary.ptt_channels WHERE outing_id = $1`, [id]);
+      pttChannels?.outingEnded(id);
       forgetOuting(id);
       dropLatest(id);
       silence.drop(id);
@@ -1404,6 +1432,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     }
     for (const [k, at] of lastPersist) if (at < cutoff) lastPersist.delete(k);
     clips.sweep();
+    /* Trip chat: ended more than 30 days ago → every message and read marker deleted. */
+    await chat.purge().catch((e) => console.warn('[outings-chat] purge', e.code || e.message));
     await features.sweepFeatures();
     media.sweepMedia();
     groupAudio.sweepGroupAudio();
@@ -1417,9 +1447,13 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     ...media.api,
     ...groupAudio.api,
     ...personal.api,
+    ...chat.api,
     memberNames,
     setEvents(next) {
       hub = next || noopEvents();
+    },
+    setPttChannels(next) {
+      pttChannels = next || null;
     },
     createUser,
     authenticate,

@@ -13,10 +13,11 @@
  */
 
 const createOutingsRouter = require('../../routes/outings');
-const { createOutingsService } = require('./service');
+const { createOutingsService, OutingError } = require('./service');
 const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
 const { createPttRelay } = require('./ptt');
+const { createPttChannels } = require('./ptt-channels');
 const { getOutingsPool, migrate } = require('./db');
 const { createPushNotifier, pushConfigFromEnv } = require('./push');
 const { createApnsNotifier, apnsConfigFromEnv, combineNotifiers } = require('./apns');
@@ -43,9 +44,34 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
       if (PUSHED_EVENTS.has(event?.type)) void service.announce(outingId, event.user_id, event);
     };
   }
-  /* «قناة الطلعة»: live walkie-talkie relay on the same socket (relay only, nothing stored). */
-  const ptt = service ? createPttRelay({ hub, service, apns, ...(now ? { now } : {}), options: pttOpts }) : null;
-  const router = createOutingsRouter({ service, hub, push, apns, limits, routing });
+  /* «قناة الطلعة»: live walkie-talkie relay on the same socket (relay only, nothing stored),
+   * with its channels «ترددات» (five public, plus the leader's private ones). */
+  const pttChannels = service
+    ? createPttChannels({
+        q: (text, params) => pool.query(text, params).then((r) => r.rows),
+        tx: async (fn) => {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const out = await fn((text, params) => client.query(text, params).then((r) => r.rows));
+            await client.query('COMMIT');
+            return out;
+          } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw e;
+          } finally {
+            client.release();
+          }
+        },
+        err: (code, status) => new OutingError(code, status),
+        requireMember: (...a) => service.requireMember(...a),
+        cfg: { maxMembers: config?.maxMembers },
+        push: fanout,
+      })
+    : null;
+  service?.setPttChannels(pttChannels);
+  const ptt = service ? createPttRelay({ hub, service, apns, channels: pttChannels, ...(now ? { now } : {}), options: pttOpts }) : null;
+  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;

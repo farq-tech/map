@@ -101,6 +101,8 @@ export type OutingSnapshot = {
 	voice_clips?: ClipMeta[];
 	/** Once ended: the totals people chose to share («شارك ملخصي»). */
 	summaries?: SharedSummary[];
+	/** «المحادثات»: my unread chat messages in this outing. */
+	chat_unread?: number;
 	server_now: string;
 };
 
