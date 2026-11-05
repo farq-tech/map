@@ -263,8 +263,16 @@ struct SaryParticipantRow: View {
                                 .lineLimit(ax ? 3 : 1)
                             SaryRoleChip(role: participant.role)
                         }
+                        if let nick = participant.nickname {
+                            Text(nick).saryText(.caption).foregroundStyle(theme.palette.textTertiary).lineLimit(1)
+                                .accessibilityIdentifier("participant.nickname")
+                        }
                         line {
                             if let s = participant.silentSince { SarySilentBadge(since: s, now: now) }
+                            else if participant.neverShared {
+                                Text(SaryParticipantRow.neverSharedText).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+                                    .accessibilityIdentifier("participant.neverShared")
+                            }
                             else { SaryPresenceBadge(presence: participant.presence, now: now) }
                             if participant.viaNearby { SaryNearbyMark() }
                             if let k = participant.speedKmh, participant.presence.isLive { SarySpeedLabel(kmh: k) }
@@ -307,11 +315,15 @@ struct SaryParticipantRow: View {
         .accessibilityHint(Text("اضغط لعرض بطاقة المشارك"))
     }
 
+    static let neverSharedText = "ما شارك موقعه"
+
     private var accessibility: String {
         var parts = [participant.name]
+        if let n = participant.nickname { parts.append(n) }
         if let r = participant.roleLabel { parts.append(r) }
         if let n = SaryCarColors.name(for: participant.color) { parts.append("السيارة \(n)") }
-        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) } ?? SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now))
+        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) }
+                     ?? (participant.neverShared ? Self.neverSharedText : SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now)))
         if participant.viaNearby { parts.append(SaryNearbyMark.text) }
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
         if let b = participant.bearingDegrees, !participant.isMe { parts.append(SaryFormat.relativeDirection(b)) }

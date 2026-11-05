@@ -554,10 +554,10 @@ final class SafetyEndToEndTests: XCTestCase {
         let b = try base()
         let (apiA, a) = try await client(b, "أمير الرحلة")
         let (apiB, bId) = try await client(b, "أبو فهد")
-        let created = try await apiA.create(name: "طلعة اختبار")
+        let created = try await apiA.create(name: "طلعة اختبار", personal: false)
         let oid = created.outing_id
         _ = try await apiA.setStatus(oid, action: "start")
-        _ = try await apiB.join(token: created.invite.token)
+        _ = try await apiB.join(token: try XCTUnwrap(created.invite).token)
 
         // Return timer: arm, extend (same contact, same timer, old link still valid), arrived.
         let sa = controller(apiA, outing: oid, me: a.user.id)

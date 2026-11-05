@@ -82,6 +82,14 @@ struct OutingAPIError: Error, Equatable {
             "implausible_summary": "أرقام الرحلة على هذا الجهاز غير منطقية، فلم نرسلها.",
             "invalid_summary": "تعذّر إرسال الملخص.",
             "server_busy": "الخادم مشغول. أعد المحاولة بعد قليل.",
+            "invite_taken": "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.",
+            "open_links_disabled": "أوقف أمير الرحلة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
+            "invite_used": "استُخدمت هذه الدعوة، وصاحبها في الطلعة.",
+            "invite_replaced": "أُرسلت لهذا الشخص دعوة أحدث.",
+            "invite_not_found": "لم نجد هذه الدعوة.",
+            "invalid_invitee_name": "اكتب اسم الشخص كما تعرفه.",
+            "too_many_invites": "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
+            "invalid_open_links": "تعذّر تغيير الرابط المفتوح.",
         ]
         return t[code] ?? "حدث خطأ. أعد المحاولة."
     }
@@ -168,7 +176,8 @@ final class OutingsAPI {
     struct UserBox: Decodable { var user: PublicUser }
     struct IdentityBox: Decodable { var user: PublicUser; var token: String }
     struct ListBox: Decodable { var current: [OutingSummary]; var history: [OutingSummary] }
-    struct CreatedBox: Decodable { var outing_id: String; var invite: CreatedInvite }
+    /// `invite` is nil for a personal-only trip (`invites: "personal"`): people are invited one by one.
+    struct CreatedBox: Decodable { var outing_id: String; var invite: CreatedInvite?; var open_links: Bool? }
     struct InviteBox: Decodable { var invite: CreatedInvite }
     struct PreviewBox: Decodable { var invite: InvitePreview }
     struct JoinBox: Decodable { var outing_id: String; var already: Bool? }
@@ -254,7 +263,43 @@ final class OutingsAPI {
     }
 
     func list() async throws -> ListBox { try await call("GET", "") }
-    func create(name: String) async throws -> CreatedBox { try await call("POST", "", body: ["name": name]) }
+    /// `personal: true` (build 12+): no open link — the leader invites people one by one.
+    /// An older server ignores the field and still returns an open link.
+    func create(name: String, personal: Bool = true) async throws -> CreatedBox {
+        var b = ["name": name]
+        if personal { b["invites"] = "personal" }
+        return try await call("POST", "", body: b)
+    }
+
+    // MARK: «دعوة شخصية» — one single-use link per person
+
+    struct PersonalBox: Decodable { var invite: PersonalInvite; var replaced: String? }
+    struct PersonalListBox: Decodable { var invites: [PersonalInvite] }
+    struct OpenLinksBox: Decodable { var open_links: Bool }
+
+    func personalInvites(_ id: String) async throws -> [PersonalInvite] {
+        let r: PersonalListBox = try await call("GET", "/\(id)/invites/personal")
+        return r.invites
+    }
+    /// `phone`: E.164 or nil. The server keeps only its last 4 digits and a salted digest.
+    func createPersonalInvite(_ id: String, name: String, phone: String?) async throws -> PersonalInvite {
+        var b = ["name": name]
+        if let phone { b["phone"] = phone }
+        let r: PersonalBox = try await call("POST", "/\(id)/invites/personal", body: b)
+        return r.invite
+    }
+    func resendPersonalInvite(_ id: String, invite: String) async throws -> PersonalInvite {
+        let r: PersonalBox = try await call("POST", "/\(id)/invites/personal/\(invite)/resend", body: [String: String]())
+        return r.invite
+    }
+    func revokePersonalInvite(_ id: String, invite: String) async throws -> PersonalInvite {
+        let r: PersonalBox = try await call("DELETE", "/\(id)/invites/personal/\(invite)")
+        return r.invite
+    }
+    func setOpenLinks(_ id: String, on: Bool) async throws -> Bool {
+        let r: OpenLinksBox = try await call("PATCH", "/\(id)/invites/settings", body: ["open_links": on])
+        return r.open_links
+    }
     func get(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)") }
     func poll(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)/live") }
     func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil) async throws {
@@ -361,7 +406,8 @@ final class OutingsAPI {
         let _: OkBox = try await call("DELETE", "/me")
     }
     func preview(token: String) async throws -> InvitePreview {
-        let r: PreviewBox = try await call("POST", "/invites/preview", body: ["token": token], auth: false)
+        /* With this phone's identity when there is one: a used personal invite then says «yours» or «taken». */
+        let r: PreviewBox = try await call("POST", "/invites/preview", body: ["token": token])
         return r.invite
     }
     func join(token: String) async throws -> JoinBox { try await call("POST", "/invites/join", body: ["token": token]) }

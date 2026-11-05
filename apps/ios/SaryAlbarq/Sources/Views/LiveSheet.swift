@@ -248,7 +248,8 @@ private struct GroupTab: View {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 Text("ادعُ ربعك").saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
                     .accessibilityAddTraits(.isHeader)
-                InviteTab(controller: controller, ui: ui)
+                /* «دعوة شخصية»: one link per person; the open link only while the leader keeps it on. */
+                LivePersonalInvites(session: controller.session) { InviteTab(controller: controller, ui: ui) }
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("invite-section")

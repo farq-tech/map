@@ -95,6 +95,11 @@ struct InviteJoinSheet: View {
                         Text("\(SaryFormat.number(inv.participantCount)) في الطلعة الآن").saryText(.callout)
                     } icon: { Image(systemName: "person.2.fill") }
                         .foregroundStyle(p.textSecondary)
+                    if let invitee = inv.inviteeName {
+                        SaryBanner(text: "دعوة شخصية لـ«\(invitee)». تظهر في الطلعة بهذا الاسم كما حفظك \(inv.inviterName)، والرابط لك وحدك.",
+                                   tone: .info, systemImage: "person.fill.checkmark")
+                            .accessibilityIdentifier("invite.personal")
+                    }
                 }
                 .padding(theme.space(.l))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,11 +108,17 @@ struct InviteJoinSheet: View {
                     SaryBanner(text: "انتهت هذه الطلعة، فلا يمكن الانضمام لها.", tone: .warning)
                 } else {
                     if model.identity == nil {
-                        SaryTextField(title: "اسمك", placeholder: "كما يراه أصحابك", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                        if inv.inviteeName != nil {
+                            SaryTextField(title: "لقبك (يظهر بجانب اسمك)", placeholder: "مثال: أبو سعود", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax,
+                                          help: "اسمك في الطلعة يبقى كما سمّاك أمير الرحلة.")
+                        } else {
+                            SaryTextField(title: "اسمك", placeholder: "كما يراه أصحابك", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                        }
                     }
                     if let error { SaryInlineMessage(text: error, tone: .error) }
                     Button { join() } label: {
-                        SaryButtonLabel(title: model.identity.map { "انضم باسم \($0.user.display_name)" } ?? "انضم للطلعة", busy: busy, busyTitle: "ننضم…")
+                        SaryButtonLabel(title: inv.inviteeName.map { "انضم باسم «\($0)»" } ?? model.identity.map { "انضم باسم \($0.user.display_name)" } ?? "انضم للطلعة",
+                                        busy: busy, busyTitle: "ننضم…")
                     }
                     .buttonStyle(.sary(.primary))
                     .disabled(busy || (model.identity == nil && name.trimmingCharacters(in: .whitespaces).isEmpty))
@@ -122,6 +133,10 @@ struct InviteJoinSheet: View {
                 SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الرحلة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.expired")
+            case .taken:
+                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. اطلب من أمير الرحلة يرسل لك دعوة باسمك."),
+                              actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
+                    .accessibilityIdentifier("invite.taken")
             case .invalid:
                 SaryStateView(kind: .error(title: "رابط غير صحيح", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
@@ -160,10 +175,14 @@ struct InviteJoinSheet: View {
                 case .ended: return .ended
                 }
             }()
-            phase = .ready(InvitePreviewUI(outingName: p.name, inviterName: p.owner_name, participantCount: p.member_count, status: st))
+            if p.isPersonal, p.claim == "taken" { phase = .taken; return }
+            if p.isPersonal, let n = p.invitee_name, model.identity == nil, name.isEmpty { name = n }
+            phase = .ready(InvitePreviewUI(outingName: p.name, inviterName: p.owner_name, participantCount: p.member_count, status: st,
+                                           inviteeName: p.isPersonal ? p.invitee_name : nil))
         } catch let e as OutingAPIError {
             switch e.code {
-            case "invite_expired", "invite_revoked": phase = .expired
+            case "invite_expired", "invite_revoked", "open_links_disabled": phase = .expired
+            case "invite_taken": phase = .taken
             case "invite_invalid", "not_found", "http_404", "http_400": phase = .invalid
             default: phase = .error(e.arabic)
             }
@@ -183,6 +202,12 @@ struct InviteJoinSheet: View {
             if model.identity != nil, await model.join(token) {
                 busy = false
                 dismiss()
+                return
+            }
+            if model.errorText == OutingAPIError(code: "invite_taken", status: 409).arabic {
+                model.errorText = nil
+                busy = false
+                phase = .taken
                 return
             }
             error = model.errorText ?? "تعذّر الانضمام."

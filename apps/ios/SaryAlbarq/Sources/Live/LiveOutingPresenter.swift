@@ -224,7 +224,9 @@ enum LiveOutingPresenter {
                 photo: nil,
                 viaNearby: !isMe && i.nearbyVia.contains(m.user_id),
                 speedKmh: isMe ? nil : friendSpeedKmh(m.user_id, in: v, now: i.now),
-                silentSince: isMe ? nil : silentSince(m.user_id, in: v)
+                silentSince: isMe ? nil : silentSince(m.user_id, in: v),
+                nickname: m.nickname.flatMap { $0.isEmpty || $0 == m.display_name ? nil : $0 },
+                neverShared: !isMe && v.status == .active && m.sharing && v.positions[m.user_id] == nil && !i.nearbyVia.contains(m.user_id)
             ), idx))
             if i.tripDestination != nil {
                 let live = !isMe && m.sharing && v.freshness(of: m.user_id, deviceNow: i.now) == .live

@@ -82,7 +82,8 @@ final class OutingSession: ObservableObject, Identifiable {
     let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
     /// The server side of the safety pack (nil in the demo: all local).
     var safetyBackend: SafetyBackend? { isDemo ? nil : api }
-    private let api: OutingsAPI
+    /// Internal so the per-person invites model (Sources/Invites) shares this client.
+    let api: OutingsAPI
     private let token: String
     private let env: SessionEnv
     private var channel: LiveChannel?
