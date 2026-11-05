@@ -49,6 +49,9 @@ final class OutingWalkieTalkie: ObservableObject {
     private var meshSilence: Timer?
     private var registeredToken: String?
     private var pendingPlayback: UInt8?
+    /// «أصوات اللاسلكي»: which squelch / chirp / roger to play, and when.
+    private var cues = PTTRadioCueSequencer()
+    private var leaving = false
     /// Display names for «فلان يتكلم» (the server sends one too; this one is localised to our member list).
     var nameOf: (String) -> String? = { _ in nil }
     var outingName: () -> String = { "" }
@@ -113,7 +116,9 @@ final class OutingWalkieTalkie: ObservableObject {
 
     /// The outing screen closed / the outing is over: off the air, off the system channel.
     func detach(leftOuting: Bool) {
+        leaving = true
         apply(floor.linkLost())
+        leaving = false
         timer?.invalidate()
         timer = nil
         channel?.setPTTJoined(false)
@@ -214,7 +219,12 @@ final class OutingWalkieTalkie: ObservableObject {
                 preRoll = []
                 for d in early { transmit(d, burst: burst) }
                 startCaptureIfReady()
+                /* "Speak now": once the floor is ours *and* the session is live. The engine sends
+                   silence while it sounds, so the chirp never goes on air. */
+                if let c = cues.talkGranted(audioReady: audioReady || !route.isSystemChannel, cueContext) { audio.playCue(c) }
             case .stopCapture:
+                /* Roger first (the mic is gated while it sounds), then the mic closes. */
+                if let c = cues.talkEnded(cueContext) { audio.playCue(c) }
                 stopMic()
                 route.endTransmit()
             case let .startPlayback(t):
@@ -222,12 +232,14 @@ final class OutingWalkieTalkie: ObservableObject {
                 audio.armReceive(burst: t.burst)
                 route.setRemote(displayName(t))
                 /* The system route activates the session asynchronously (didActivate). */
-                if audioReady || !route.isSystemChannel { audio.startPlayback(burst: t.burst) } else { pendingPlayback = t.burst }
+                if audioReady || !route.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst }
             case .stopPlayback:
                 PTTAudioEngine.log.notice("[PTT] stop playback (mode=\(String(describing: self.mode), privacy: .public) live=\(self.channel?.isLive == true))")
                 playbackOn = false
                 pendingPlayback = nil
-                audio.stopPlayback()
+                /* Muted or the link dropped: no roger for a transmission we did not hear end. */
+                let quiet = leaving || muted || (channel?.isLive != true && mode != .nearby)
+                audio.stopPlayback(cue: cues.incomingEnded(quiet: quiet, cueContext))
                 route.setRemote(nil)
             case let .refused(r):
                 if !isTalking { stopMic() }
@@ -255,6 +267,14 @@ final class OutingWalkieTalkie: ObservableObject {
             micOn = true
             audio.startCapture(burst: capturingBurst ?? 0)
         }
+    }
+
+    private var cueContext: PTTRadioCueSequencer.Context {
+        .init(enabled: PTTRadioSounds.enabled(defaults), systemRoute: route.isSystemChannel)
+    }
+
+    private func startPlayback(burst: UInt8) {
+        audio.startPlayback(burst: burst, cue: cues.incomingStarted(burst: burst, cueContext))
     }
 
     private func stopMic() {
@@ -299,13 +319,14 @@ final class OutingWalkieTalkie: ObservableObject {
             guard let self else { return }
             self.audioReady = true
             self.startCaptureIfReady()
+            if let cue = self.cues.audioBecameReady(self.cueContext) { self.audio.playCue(cue) }
         }
         c.playbackReady = { [weak self] in
             guard let self else { return }
             self.audioReady = true
             if let b = self.pendingPlayback {
                 self.pendingPlayback = nil
-                self.audio.startPlayback(burst: b)
+                self.startPlayback(burst: b)
             }
         }
         c.audioDeactivated = { [weak self] in self?.audioReady = false }

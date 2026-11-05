@@ -23,6 +23,17 @@ final class PTTAudioEngine {
     let queue = DispatchQueue(label: "sa.sary.ptt.audio", qos: .userInteractive)
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    /// «أصوات اللاسلكي»: squelch / chirp / roger, on their own node so they mix over a voice.
+    private let cuePlayer = AVAudioPlayerNode()
+    private var cuesInFlight = 0
+    /// While a cue sounds during capture the mic sends silence (the speaker must not leak on air).
+    private var micGateUntil: TimeInterval = 0
+    /// Played after the current transmission has drained.
+    private var endCue: PTTRadioCue?
+    private var voiceFX = PTTRadioVoiceFX()
+    /// Read on the audio queue for each new transmission.
+    var radioVoice: () -> Bool = { PTTRadioSounds.enabled() }
+    private var radioVoiceOn = false
     private var encoder = PTTEncoder()
     private var decoder = PTTDecoder()
     private var chunker = PTTChunker()
@@ -58,6 +69,8 @@ final class PTTAudioEngine {
         if !attached {
             engine.attach(player)
             engine.connect(player, to: engine.mainMixerNode, format: PTTAudioFormat.pcm)
+            engine.attach(cuePlayer)
+            engine.connect(cuePlayer, to: engine.mainMixerNode, format: PTTAudioFormat.pcm)
             attached = true
         }
         if !engine.isRunning {
@@ -67,7 +80,7 @@ final class PTTAudioEngine {
     }
 
     private func stopEngineIfIdle() {
-        guard !capturing, !playing else { return }
+        guard !capturing, !playing, cuesInFlight == 0 else { return }
         engine.stop()
     }
 
@@ -131,6 +144,15 @@ final class PTTAudioEngine {
     }
 
     private func feed(_ samples: UnsafeBufferPointer<Float>) {
+        if Date().timeIntervalSince1970 < micGateUntil {
+            /* A cue is sounding: what the mic hears now is our own speaker. Send silence instead. */
+            let zeros = [Float](repeating: 0, count: samples.count)
+            return zeros.withUnsafeBufferPointer { feedChunks($0) }
+        }
+        feedChunks(samples)
+    }
+
+    private func feedChunks(_ samples: UnsafeBufferPointer<Float>) {
         for chunk in chunker.push(samples) {
             guard let pcm = AVAudioPCMBuffer.ptt(chunk), let packet = encoder?.encode(pcm) else { continue }
             let f = PTTFrame(burst: burst, seq: seq, codec: .aacELD16k, payload: packet)
@@ -173,18 +195,26 @@ final class PTTAudioEngine {
             draining = false
             jitter.reset(burst: b)
             decoder?.reset()
+            voiceFX.reset()
+            radioVoiceOn = radioVoice()
+            endCue = nil
             rx = RxProbe()
         }
     }
 
-    func startPlayback(burst b: UInt8) {
+    /// `cue`: played first; the voice waits for it (`leadIn`), the jitter buffer fills meanwhile.
+    func startPlayback(burst b: UInt8, cue: PTTRadioCue? = nil) {
         armReceive(burst: b)
+        if let cue { playCue(cue) }
         queue.async { [self] in
             guard !playing else { return }
             do {
                 try ensureEngine()
                 playing = true
                 player.play()
+                if let cue, let lead = Self.silence(seconds: PTTRadioSynth.duration(cue)) {
+                    player.scheduleBuffer(lead, completionHandler: nil)
+                }
                 /* Two buffers in flight keep the chain pulling at the audio clock. */
                 scheduleNext()
                 scheduleNext()
@@ -194,10 +224,11 @@ final class PTTAudioEngine {
         }
     }
 
-    /// The talker let go: play what is still buffered (≤ 2 s), then stop.
-    func stopPlayback(drain: Bool = true) {
+    /// The talker let go: play what is still buffered (≤ 2 s), then `cue` (roger + squelch), then stop.
+    func stopPlayback(drain: Bool = true, cue: PTTRadioCue? = nil) {
         queue.async { [self] in
             guard playing else { return }
+            endCue = cue
             if drain, jitter.depth > 0 {
                 draining = true
                 let b = jitter.burst
@@ -218,7 +249,41 @@ final class PTTAudioEngine {
         if useTestTone || rx.frames > 0 { rx.report(final: true, stats: jitter.stats) }
         jitter.reset(burst: nil)
         player.stop()
+        if let c = endCue {
+            endCue = nil
+            startCue(c)
+        }
         stopEngineIfIdle()
+    }
+
+    // MARK: radio cues
+
+    /// Plays one cue through the session the route activated. Cues queue one after another.
+    func playCue(_ cue: PTTRadioCue) {
+        queue.async { [self] in startCue(cue) }
+    }
+
+    private func startCue(_ cue: PTTRadioCue) {
+        guard let buf = PTTRadioSynth.buffer(cue) else { return }
+        do { try ensureEngine() } catch {
+            Self.log.error("[PTT] cue failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        let seconds = Double(buf.frameLength) / PTTAudioFormat.sampleRate
+        if capturing {
+            /* Room for the cues already queued, plus the speaker's latency. */
+            micGateUntil = max(micGateUntil, Date().timeIntervalSince1970) + seconds + 0.08
+        }
+        cuesInFlight += 1
+        cuePlayer.scheduleBuffer(buf, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            self?.queue.async {
+                guard let self else { return }
+                self.cuesInFlight -= 1
+                if self.cuesInFlight == 0 { self.cuePlayer.stop() }
+                self.stopEngineIfIdle()
+            }
+        }
+        cuePlayer.play()
     }
 
     /// An audio frame from the socket or the nearby link (any thread).
@@ -233,6 +298,7 @@ final class PTTAudioEngine {
         case .frame(let f):
             if f.codec == .aacELD16k, let pcm = decoder?.decode(f.payload) {
                 rx.add(pcm)
+                if radioVoiceOn { voiceFX.process(pcm) }
                 if rx.frames % 33 == 0 { rx.report(final: false, stats: jitter.stats) }
                 buf = pcm
             } else {
@@ -246,6 +312,13 @@ final class PTTAudioEngine {
         player.scheduleBuffer(buf, completionCallbackType: .dataConsumed) { [weak self] _ in
             self?.queue.async { self?.scheduleNext() }
         }
+    }
+
+    private static func silence(seconds: TimeInterval) -> AVAudioPCMBuffer? {
+        let n = AVAudioFrameCount(seconds * PTTAudioFormat.sampleRate)
+        guard n > 0, let b = AVAudioPCMBuffer(pcmFormat: PTTAudioFormat.pcm, frameCapacity: n) else { return nil }
+        b.frameLength = n
+        return b
     }
 
     private static func silence() -> AVAudioPCMBuffer {
