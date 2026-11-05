@@ -99,12 +99,14 @@
 	<!-- Launch screen: the Dark Sand background and the app mark, the same as the splash that follows. -->
 	<key>UILaunchScreen</key>
 	<dict>
+		<!-- The cinematic intro's first frame (Sources/Intro, rendered by scripts/render-intro-launch.swift):
+		     440×956 pt, centred, so the animated intro takes over without a seam. -->
 		<key>UIColorName</key>
-		<string>LaunchBackground</string>
+		<string>IntroNight</string>
 		<key>UIImageName</key>
-		<string>LaunchMark</string>
+		<string>IntroLaunch</string>
 		<key>UIImageRespectsSafeAreaInsets</key>
-		<true/>
+		<false/>
 	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
