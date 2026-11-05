@@ -60,6 +60,7 @@ final class AppModel: ObservableObject {
         activity.stuck = { $0.stuckMarks }
         activity.speed = { $0.speedSnapshot() }
         activity.trip = { $0.tripSnapshot() }
+        activity.nav = { $0.navSnapshot() }
         isDemo = arguments.contains("-demo")
         if arguments.contains("-resetState") {
             IdentityStore.save(nil)
@@ -668,8 +669,13 @@ enum DemoData {
             if d.count == 2 { positions = positions.map { var p = $0; p.lat += d[0]; p.lng += d[1]; return p } }
         }
         #endif
+        var demoStatus = OutingStatus.active
+        #if DEBUG
+        /* `-demoNotStarted`: the leader has not pressed «ابدأ الطلعة» yet (auto-navigation UI tests). */
+        if args.contains("-demoNotStarted") { demoStatus = .created }
+        #endif
         let snap = OutingSnapshot(
-            outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: .active, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
+            outing: OutingInfo(id: outingId, name: "طلعة الثمامة (عرض تجريبي)", status: demoStatus, owner_id: meId, created_at: ago(3600), started_at: ago(3000), ended_at: nil),
             me: SnapshotMe(user_id: me, role: me == meId ? "owner" : "member", sharing: true),
             members: members, positions: positions.filter { $0.user_id != me }, invite: InviteState(active: true, expires_at: nil),
             server_now: ISODate.string(now)

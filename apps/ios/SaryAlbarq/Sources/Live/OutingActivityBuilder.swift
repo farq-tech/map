@@ -19,7 +19,8 @@ enum OutingActivityBuilder {
     ///   - backMeters: along my trail to its start (back-track), when it exists.
     ///   - stuck: members who reported «غرّزت», newest first or in any order.
     ///   - speed: my current speed (`SpeedModel.snapshot`); shown only while fresh.
-    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = [], speed: SpeedModel.Snapshot? = nil, trip: TripPanelUI? = nil) -> OutingActivityState? {
+    static func state(_ i: LivePresenterInput, backMeters: Double?, stuck: [StuckMark] = [], speed: SpeedModel.Snapshot? = nil, trip: TripPanelUI? = nil,
+                      nav: NavActivityLine? = nil) -> OutingActivityState? {
         guard let v = i.view else { return nil }
         let parts = LiveOutingPresenter.participants(i)
         let live = parts.filter { $0.presence == .live }
@@ -48,6 +49,11 @@ enum OutingActivityBuilder {
             speedKmh: speedKmh(speed, gpsOK: gpsOK, now: i.now)
         )
         applyTrip(trip, to: &state, gpsOK: gpsOK)
+        /* The manoeuvre needs my position to be true: none without a current fix. */
+        if let nav, gpsOK || nav.arrived {
+            state.navLine = nav.text
+            state.navSymbol = nav.symbol
+        }
         return state
     }
 
@@ -113,12 +119,15 @@ enum OutingActivityThrottle {
         if (new.speedKmh == nil) != (last.speedKmh == nil) || abs((new.speedKmh ?? 0) - (last.speedKmh ?? 0)) >= 5 { return true }
         if moved(new.farthestMeters, last.farthestMeters) || moved(new.backMeters, last.backMeters) { return true }
         if new.tripPercent != last.tripPercent || moved(new.tripRemainingM, last.tripRemainingM) { return true }
+        if new.navLine != last.navLine { return true }
         return since >= refreshInterval
     }
 
     static func isUrgent(_ a: OutingActivityState, _ b: OutingActivityState) -> Bool {
         a.alert != b.alert || a.gpsOK != b.gpsOK || a.online != b.online || a.liveCount != b.liveCount || a.memberCount != b.memberCount
             || a.tripArrived != b.tripArrived || (a.tripPercent == nil) != (b.tripPercent == nil)
+            /* A new manoeuvre (not the distance ticking down to it) is worth an update at once. */
+            || a.navSymbol != b.navSymbol || (a.navLine == nil) != (b.navLine == nil)
     }
 
     static func moved(_ a: Double?, _ b: Double?) -> Bool {

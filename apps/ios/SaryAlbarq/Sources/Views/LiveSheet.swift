@@ -17,6 +17,15 @@ struct LiveSheet: View {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
                 NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
             } else {
+                if controller.showsAutoNavResume {
+                    /* The trip's guidance is paused on this phone: one tap brings it back. */
+                    Button { controller.resumeAutoNav() } label: {
+                        SaryButtonLabel(title: "استأنف التوجيه", systemImage: "location.north.line.fill")
+                    }
+                    .buttonStyle(.sary(.secondary, compact: true))
+                    .padding(.horizontal, theme.space(.l))
+                    .accessibilityIdentifier("nav.auto.resume")
+                }
                 /* One line: the people. The trip's numbers are in the header above. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
@@ -684,6 +693,10 @@ private struct SettingsTab: View {
                     SarySegmented(options: TriModeUI.allCases, selection: Binding(get: { s.nightMode }, set: { a.setNightMode($0) }), label: { $0.label }, id: "settings-night")
                 }
                 .padding(theme.space(.s))
+                SaryDivider()
+                SaryToggleRow(title: "ابدأ التوجيه تلقائيًا مع الرحلة", subtitle: "إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة · على جوالك فقط",
+                              systemImage: "location.north.line.fill",
+                              isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
             }
             SpeedSettingsSection()
             SarySection(title: "القافلة") {

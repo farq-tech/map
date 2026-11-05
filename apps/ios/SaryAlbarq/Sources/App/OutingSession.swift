@@ -111,6 +111,8 @@ final class OutingSession: ObservableObject, Identifiable {
     var speedSnapshot: () -> SpeedModel.Snapshot? = { nil }
     /// «الرحلة» from the live screen (for the Live Activity), when it is open.
     var tripSnapshot: () -> TripPanelUI? = { nil }
+    /// «الملاحة»'s next manoeuvre from the live screen (for the Live Activity), while guiding.
+    var navSnapshot: () -> NavActivityLine? = { nil }
     /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
     var onNearbyEvent: (MeshEvent) -> Void = { _ in }
     #if DEBUG

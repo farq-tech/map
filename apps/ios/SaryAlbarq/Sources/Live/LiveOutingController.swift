@@ -197,6 +197,14 @@ final class LiveOutingController: ObservableObject {
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
+    /// The trip's automatic guidance on this phone (`TripAutoNav`, LiveOutingController+AutoNav.swift).
+    @Published var autoNavState = TripAutoNavState()
+    /// The live link was up on the last change (the network coming back retries the road route).
+    var autoNavWasOnline = true
+    /// «اسلك هذا المسار» started by the off-road leg of the automatic guidance (stopped with it).
+    var autoNavFollowId: String?
+    /// The person left this screen: no automatic guidance from it any more (reopening starts it again).
+    var autoNavLeft = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -300,6 +308,7 @@ final class LiveOutingController: ObservableObject {
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
         registerCarPlay()
         registerTrip()
+        registerAutoNav()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
@@ -405,6 +414,7 @@ final class LiveOutingController: ObservableObject {
     private func sessionChanged() {
         updateSpeed()
         updateTrip()
+        autoNavSessionChanged()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -451,6 +461,7 @@ final class LiveOutingController: ObservableObject {
         updateBackTrack()
         updateFollow()
         updateTrip()
+        autoNavTick()
         updateAuto()
         if let f = location.lastFix {
             var m = motion
@@ -832,6 +843,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }

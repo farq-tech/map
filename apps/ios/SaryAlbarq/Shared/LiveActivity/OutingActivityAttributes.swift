@@ -54,6 +54,11 @@ struct OutingActivityState: Codable, Hashable {
     var tripApprox: Bool = false
     var tripETA: Date? = nil
     var tripArrived: Bool = false
+    /// «الملاحة» on the Lock Screen: the next manoeuvre («بعد ٥٠٠ م انعطف يمينًا …»), or the
+    /// off-road bearing line, decided on the phone; nil hides it.
+    var navLine: String? = nil
+    /// SF Symbol for that line (never mirrored).
+    var navSymbol: String? = nil
 }
 
 extension OutingActivityState {
