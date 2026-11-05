@@ -792,7 +792,7 @@ struct OutingMapboxView: UIViewRepresentable {
                         "id": ids.layer, "type": "symbol", "source": ids.source,
                         "layout": [
                             "icon-image": CarIcon.imageId(r.item.color), "icon-size": CarIcon.sizeExpression,
-                            "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "viewport",
+                            "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "map", "icon-keep-upright": false,
                             "icon-allow-overlap": true, "icon-ignore-placement": true,
                         ] as [String: Any],
                         "paint": ["icon-opacity": 1, "icon-emissive-strength": 1] as [String: Any],
