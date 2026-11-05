@@ -197,6 +197,10 @@ final class LiveOutingController: ObservableObject {
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
+    /// The outing closing (ended / left / removed) was handled: the sheet open at that moment
+    /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
+    /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
+    var closeHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -440,7 +444,10 @@ final class LiveOutingController: ObservableObject {
         exploreDrivingCheck()
         checkConvoy()
         feedWeather()
-        if session.closedReason != nil, modal != nil { modal = nil }
+        if session.closedReason != nil, !closeHandled {
+            closeHandled = true
+            if modal != nil { modal = nil }
+        }
         objectWillChange.send()
     }
 
@@ -926,6 +933,8 @@ final class LiveOutingController: ObservableObject {
 
     func openParticipant(_ id: String) {
         if id == session.view?.myId {
+            /* «رسالة فوق سيارتك» only while the outing runs: after the end nobody would see it. */
+            guard !tripEnded else { return }
             modal = .note
         } else {
             modal = .participant(id)

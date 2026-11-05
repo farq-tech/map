@@ -161,8 +161,10 @@ enum SatelliteLabels {
         }
     }
 
-    /// The imagery's useful maximum: Mapbox satellite tiles go to z19–20 in most of the Kingdom.
-    static let trackMaxZoom = 19.0
+    /// The satellite imagery's sharp maximum over the Kingdom (the live map's zoom limit).
+    static let imageryMaxZoom = 18.0
+    /// Framing a track: never closer than the imagery stays sharp.
+    static let trackMaxZoom = imageryMaxZoom
 
     func apply(_ m: MapboxMap) {
         for (k, v) in config { try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v) }

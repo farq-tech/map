@@ -45,6 +45,16 @@ enum MapLayer: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// The closest the map may zoom. Satellite: Mapbox imagery over the Kingdom's cities is sharp
+    /// to about z18; past it the tiles are only magnified (build 11 showed a blurry parking lot at
+    /// ~z21). The vector layers stay crisp further in.
+    var maxZoom: Double {
+        switch self {
+        case .satellite: return SatelliteLabels.imageryMaxZoom
+        case .standard, .topo: return 20
+        }
+    }
+
     /// The style's id in the Styles API (`/styles/v1/mapbox/<id>`).
     var styleId: String {
         switch self {

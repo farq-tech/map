@@ -162,6 +162,8 @@ struct OutingMapboxView: UIViewRepresentable {
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
+        /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
+        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
         context.coordinator.attach(map)
         let first = layer
@@ -464,6 +466,7 @@ struct OutingMapboxView: UIViewRepresentable {
         func setLayer(_ l: MapLayer) {
             guard l != layer, let map else { return }
             layer = l
+            try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: l.maxZoom))
             if let json = ArabicBasemap.cached(l) { map.mapboxMap.loadStyle(json) } else { map.mapboxMap.loadStyle(l.styleURI) }
             ArabicBasemap.load(l) { [weak self] json in
                 guard let self, let json, self.layer == l else { return }
