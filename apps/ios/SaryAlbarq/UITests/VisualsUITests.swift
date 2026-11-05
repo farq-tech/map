@@ -49,7 +49,8 @@ final class VisualsUITests: XCTestCase {
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.56)).press(forDuration: 1.3)
         XCTAssertTrue(app.buttons["point.copy"].waitForExistence(timeout: 6), "the long-press card")
         let drone = app.buttons["point.drone"]
-        if !drone.waitForExistence(timeout: 3) { app.swipeUp() }
+        /* «بريف المكان» (#60) sits above the actions: scroll until the drone row shows. */
+        for _ in 0..<5 where !(drone.exists && drone.isHittable) { app.swipeUp() }
         shot(app, "visuals-point-card")
         XCTAssertTrue(drone.waitForExistence(timeout: 4), "«طيران درون استكشافي» in the point card")
         XCTAssertTrue(drone.isEnabled, "enabled when not driving")
