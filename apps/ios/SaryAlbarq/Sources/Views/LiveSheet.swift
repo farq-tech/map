@@ -687,6 +687,7 @@ private struct SettingsTab: View {
                 .padding(theme.space(.s))
             }
             SpeedSettingsSection()
+            DrivingRealismSection()
             SarySection(title: "القافلة") {
                 SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
                            systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }

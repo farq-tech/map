@@ -192,7 +192,11 @@ struct OutingMapboxView: UIViewRepresentable {
             c.themeChanged()
         }
         c.setChrome(chrome)
+        #if DEBUG
+        if MotionDemo.active { c.syncDemo() } else { c.sync(members) }
+        #else
         c.sync(members)
+        #endif
         c.setRally(rally)
         c.setWaypoints(waypoints)
         c.setTrails(trails)
@@ -258,6 +262,8 @@ struct OutingMapboxView: UIViewRepresentable {
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
         let navDrawer = NavMapDrawer()
+        /// «واقعية القيادة»: smooth motion between fixes and the off-road effects (Sources/Map/Motion).
+        let fx = MotionFX()
         let exploreDrawer = ExploreMapDrawer()
         /// «المؤثرات البصرية» (Sources/Map/Visuals): terrain, sun light, sky, glow, slope, drone flight.
         let visuals = MapVisualsDirector()
@@ -371,8 +377,12 @@ struct OutingMapboxView: UIViewRepresentable {
                opens the shared-waypoint composer. */
             installLongPress(map)
             navDrawer.attach(map)
+            fx.attach(map)
             visuals.attach(map, inputs: { [weak self] in self?.visualInputs() ?? MapVisualInputs() },
                            takeCamera: { [weak self] in self?.keepGroup = false; self?.onUserGesture() })
+            #if DEBUG
+            startDemo()
+            #endif
         }
 
         func setWaypoints(_ list: [MapWaypoint]) {
@@ -406,6 +416,7 @@ struct OutingMapboxView: UIViewRepresentable {
             roadQuery?.cancel()
             waterQuery?.cancel()
             tapInteraction?.cancel()
+            fx.detach()
             cancelables.removeAll()
             visuals.detach()
         }
@@ -460,6 +471,7 @@ struct OutingMapboxView: UIViewRepresentable {
             drawPlan(force: true)
             navDrawer.styleLoaded()
             exploreDrawer.styleLoaded(m)
+            fx.styleLoaded(m)
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
@@ -635,7 +647,6 @@ struct OutingMapboxView: UIViewRepresentable {
             if t - lastRoadRefresh > 3 { lastRoadRefresh = t; refreshRoads() }
             applyLight()
             let now = CACurrentMediaTime()
-            let reduce = UIAccessibility.isReduceMotionEnabled
             var seen = Set<String>()
             for v in cars {
                 seen.insert(v.id)
@@ -656,21 +667,9 @@ struct OutingMapboxView: UIViewRepresentable {
                     if matched?.key == nil { matched = nil }
                 }
                 let target = matched?.point ?? raw
-                if existing == nil {
-                    rec.shown = target
-                    rec.from = target
-                    rec.to = target
-                    recs[v.id] = rec
-                } else if target != rec.to {
-                    let gap = v.atMs - rec.lastAt
-                    rec.from = rec.shown
-                    rec.to = target
-                    rec.start = now
-                    /* Only a confident, live fix glides; anything else is placed exactly where it was measured. */
-                    rec.duration = v.approximate || v.presence != .live ? 0 : Motion.tweenMs(gapMs: gap, distanceM: Vehicle.distanceMeters(rec.shown, target), reducedMotion: reduce)
-                    rec.lastAt = v.atMs
-                    if rec.duration == 0 { rec.shown = target }
-                }
+                if existing == nil { recs[v.id] = rec }
+                rec.to = target
+                rec.lastAt = v.atMs
                 /* Direction: the reported course, else real movement ≥ 12 m; kept while parked. */
                 if let h = v.heading {
                     rec.heading = h
@@ -681,6 +680,12 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 /* Moving along a matched road: the car points down the road. */
                 if course != nil, let h = matched?.heading { rec.heading = h }
+                /* «انسيابية الحركة»: the fix feeds the car's motion; each display frame draws its pose
+                 * (stale, parked and approximate cars rest on their fix — see `CarMotion`). */
+                if let pose = fx.ingest(v, target: target, course: rec.heading, now: now) {
+                    rec.shown = pose.position
+                    if let h = pose.heading { rec.heading = h }
+                }
                 let colorChanged = rec.item.color != v.color
                 rec.item = v
                 if colorChanged { rec.layersReady = false }
@@ -691,7 +696,8 @@ struct OutingMapboxView: UIViewRepresentable {
                 remove(rec, on: map)
                 recs[id] = nil
             }
-            if recs.values.contains(where: { $0.duration > 0 }) { startLink() }
+            fx.keep(seen)
+            startLink()
             if navDrawer.ownsCamera { navTick() } else { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
             followMe()
             layoutChips()
@@ -792,7 +798,7 @@ struct OutingMapboxView: UIViewRepresentable {
                         "id": ids.layer, "type": "symbol", "source": ids.source,
                         "layout": [
                             "icon-image": CarIcon.imageId(r.item.color), "icon-size": CarIcon.sizeExpression,
-                            "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "viewport",
+                            "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "map", "icon-keep-upright": false,
                             "icon-allow-overlap": true, "icon-ignore-placement": true,
                         ] as [String: Any],
                         "paint": ["icon-opacity": 1, "icon-emissive-strength": 1] as [String: Any],
@@ -1261,6 +1267,9 @@ struct OutingMapboxView: UIViewRepresentable {
         private func startLink() {
             guard link == nil else { return }
             let l = CADisplayLink(target: self, selector: #selector(step))
+            /* Display refresh (ProMotion up to 60 for the map); 30 in Low Power Mode. */
+            let low = ProcessInfo.processInfo.isLowPowerModeEnabled
+            l.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: low ? 30 : 60, preferred: low ? 30 : 60)
             l.add(to: .main, forMode: .common)
             link = l
         }
@@ -1269,17 +1278,22 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let m = map?.mapboxMap else { return }
             let now = CACurrentMediaTime()
             var moving = false
-            for r in recs.values where r.duration > 0 {
-                let t = (now - r.start) * 1000 / r.duration
-                if t >= 1 {
-                    r.shown = r.to
-                    r.duration = 0
-                } else {
-                    r.shown = Motion.lerp(r.from, r.to, t)
-                    moving = true
-                }
-                if styleReady, r.layersReady { setPosition(r, on: m) }
+            var cars: [MotionFX.Car] = []
+            for r in recs.values {
+                guard let pose = fx.pose(r.item.id, now: now) else { continue }
+                moving = moving || pose.animating
+                let changed = pose.position != r.shown || (pose.heading != nil && pose.heading != r.heading)
+                r.shown = pose.position
+                if let h = pose.heading { r.heading = h }
+                if changed, styleReady, r.layersReady { setPosition(r, on: m) }
+                cars.append(MotionFX.Car(id: r.item.id, layer: Vehicle.ids(r.key).layer, isMe: r.item.isMe, pose: pose,
+                                         offRoad: r.matcher.road == nil, drawn: styleReady && r.layersReady && r.model))
             }
+            fx.exploring = exploreDrawer.last.active
+            fx.drive = theme.drive
+            fx.night = theme.night
+            fx.exaggeration = terrainExaggeration
+            if fx.frame(m, now: now, cars: cars) { moving = true }
             layoutChips()
             project()
             if !moving {
