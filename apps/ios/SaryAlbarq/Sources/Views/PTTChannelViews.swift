@@ -88,6 +88,11 @@ struct PTTChannelSheet: View {
                     Text("تسمع ترددًا واحدًا وتتكلم فيه. كل تردد يتكلم فيه شخص واحد في نفس الوقت.")
                 }
 
+                /* «رسالة صوتية»: this channel's recent notes, ▶︎ each. */
+                if let vn = VoiceNoteCenters.of(walkie.outingId) {
+                    VoiceNoteSection(center: vn)
+                }
+
                 Section("الترددات العامة") {
                     ForEach(publicChannels) { c in row(c) }
                 }

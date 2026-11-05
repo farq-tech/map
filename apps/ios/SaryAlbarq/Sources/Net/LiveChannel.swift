@@ -419,7 +419,8 @@ final class LiveChannel {
         }
         s.onOpen = { [weak self, weak s] in
             guard let self, let s, self.socket === s else { return }
-            let auth: [String: Any] = ["type": "auth", "token": self.token, "outing_id": self.outingId]
+            /* caps: this build plays «رسالة صوتية» (voice_note frames instead of the old voice_clip). */
+            let auth: [String: Any] = ["type": "auth", "token": self.token, "outing_id": self.outingId, "caps": ["voice_notes"]]
             if let d = try? JSONSerialization.data(withJSONObject: auth), let t = String(data: d, encoding: .utf8) { s.send(t) }
         }
         s.onMessage = { [weak self, weak s] text in
@@ -478,6 +479,8 @@ final class LiveChannel {
                 }
             case "media_state":
                 MediaEvents.post(outingId: self.outingId, raw: msg["state"])
+            case "voice_note":
+                VoiceNoteEvents.post(outingId: self.outingId, raw: msg["note"])
             case "group_audio_state":
                 GroupAudioEvents.post(outingId: self.outingId, raw: msg["state"], serverNow: msg["server_now"] as? String)
             case "group_audio_ack":

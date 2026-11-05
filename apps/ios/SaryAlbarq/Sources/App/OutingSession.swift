@@ -35,6 +35,8 @@ struct SessionEnv {
     var lockedScreenTrailOverride: Bool?
     /// «المحادثات»: nil = the real API. Tests inject a fake.
     var chatBackend: ChatBackend?
+    /// «رسالة صوتية»: nil = the real API. Tests inject a fake.
+    var voiceNoteBackend: VoiceNoteBackend?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -108,6 +110,9 @@ final class OutingSession: ObservableObject, Identifiable {
     /// «قناة الطلعة»: the live walkie-talkie (replaces the «اضغط وتكلم» clips).
     let walkie: OutingWalkieTalkie
     private var walkieSink: AnyCancellable?
+    /// «رسالة صوتية»: the walkie-talkie as voice notes (Sources/VoiceNotes), the default mode.
+    let voiceNotes: VoiceNoteCenter
+    private var voiceNotesSink: AnyCancellable?
     /// «المحادثات»: the trip's group chat and direct chats (Sources/Chat).
     let chat: ChatStore
     private var chatSink: AnyCancellable?
@@ -147,6 +152,15 @@ final class OutingSession: ObservableObject, Identifiable {
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
         walkie = OutingWalkieTalkie(outingId: id, me: myUserId, tokenBackend: demo == nil ? api : nil, defaults: env.defaults)
         if let demo {
+            /* The demo has no server: «أبو فهد» (or the first friend) answers each note with the same recording. */
+            let friend = demo.members.keys.sorted().first { $0 != myUserId } ?? "demo-friend"
+            let b = DemoVoiceNoteBackend(friendId: friend, me: myUserId)
+            voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: b, walkie: walkie, defaults: env.defaults)
+            b.deliver = { [weak voiceNotes] n in voiceNotes?.receive(n) }
+        } else {
+            voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: env.voiceNoteBackend ?? api, walkie: walkie, defaults: env.defaults)
+        }
+        if let demo {
             let friends = Dictionary(demo.members.values.filter { $0.user_id != myUserId }.map { ($0.user_id, $0.display_name) }, uniquingKeysWith: { a, _ in a })
             let backend = DemoChatBackend(outingId: id, me: myUserId, friends: friends)
             chat = ChatStore(outingId: id, me: myUserId, backend: backend, defaults: env.defaults)
@@ -177,6 +191,10 @@ final class OutingSession: ObservableObject, Identifiable {
         walkie.channelBackend = demo == nil ? api : nil
         walkie.demoLeader = { [weak self] in self?.view?.snapshot.me.role == "owner" }
         walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        voiceNotes.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
+        voiceNotes.colorOf = { [weak self] uid in self?.view?.colors[uid] ?? 0xFFFFFF }
+        /* The talk button follows the recording / playing state (whole seconds only: the meter has its own object). */
+        voiceNotesSink = voiceNotes.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         chat.configure(.init(
             sendFrame: { [weak self] f in self?.channel?.sendChat(f) ?? false },
             isLive: { [weak self] in self?.channel?.isLive ?? false },
@@ -251,6 +269,7 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         #endif
         /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
+        voiceNotes.attach()
         guard !isDemo else {
             walkie.attach(channel: nil, mesh: mesh)
             debugKeepDemoFixLive()
@@ -361,6 +380,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* Back to «طلعاتي» as a member keeps the share armed (it resumes when the trip opens again). */
         stopSharingLocally(forget: !keepShareOnClose)
         walkie.detach(leftOuting: closedReason != nil)
+        voiceNotes.close(leftOuting: closedReason != nil)
         channel?.stop()
         channel = nil
         timers.forEach { $0.invalidate() }
@@ -792,7 +812,10 @@ final class OutingSession: ObservableObject, Identifiable {
     private func linkChanged(_ s: LiveChannel.State) {
         let was = link
         link = s
-        if s == .live, was != .live { chat.linkLive() }
+        if s == .live, was != .live {
+            chat.linkLive()
+            voiceNotes.linkLive()
+        }
         updateMesh()
         walkie.linkChanged()
         if s == .live || s == .polling, pendingServerStop {
@@ -894,6 +917,7 @@ final class OutingSession: ObservableObject, Identifiable {
         stopSharingLocally()
         if r == .outingEnded { view?.apply(.outingStatus(.ended)) }
         walkie.detach(leftOuting: true)
+        voiceNotes.close(leftOuting: true)
         channel?.stop()
     }
 
@@ -1069,7 +1093,7 @@ enum Notifier {
         c.sound = .default
         c.threadIdentifier = "outing-\(outingId)"
         c.userInfo = ["outing_id": outingId, "type": kind]
-        if kind == "sos" { c.interruptionLevel = .timeSensitive } else if kind == "ptt" { c.interruptionLevel = .active; c.sound = nil } else { c.interruptionLevel = .passive; c.sound = nil }
+        if kind == "sos" || kind == "voice_note" { c.interruptionLevel = .timeSensitive } else if kind == "ptt" { c.interruptionLevel = .active; c.sound = nil } else { c.interruptionLevel = .passive; c.sound = nil }
         let r = UNNotificationRequest(identifier: "\(kind)-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(r)
     }

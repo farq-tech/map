@@ -248,6 +248,12 @@ struct LiveOutingScreen: View {
                         .allowsHitTesting(controller.sheetDetent != .full)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
+                    /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock. */
+                    VoiceNoteDock(center: controller.session.voiceNotes, openList: { controller.modal = .pttChannels })
+                        .chromeFrame("voice-note")
+                        .padding(.horizontal, theme.space(.m))
+                        .opacity(controller.sheetDetent == .full ? 0 : 1)
+                        .allowsHitTesting(controller.sheetDetent != .full)
                     HStack(alignment: .bottom) {
                         SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode, level: controller.pttLevel)
                             .chromeFrame("ptt")

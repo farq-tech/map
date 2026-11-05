@@ -134,7 +134,8 @@ final class OutingsAPI {
     var tokenProvider: () -> String?
     var onUnauthorized: () -> Void = {}
     private let session: URLSession
-    private let base: URL
+    /// Internal so the voice-note client (Sources/VoiceNotes) builds its raw-audio requests the same way.
+    let base: URL
 
     init(base: URL = Endpoints.apiBase, session: URLSession = .shared, tokenProvider: @escaping () -> String?) {
         self.base = base
@@ -256,7 +257,9 @@ final class OutingsAPI {
     // MARK: «قناة الطلعة» — this device's PushToTalk channel token for one outing
 
     func registerPTTToken(_ outingId: String, token: String, environment: String) async throws {
-        let _: OkBox = try await call("POST", "/\(outingId)/ptt/token", body: ["token": token, "environment": environment])
+        /* voice_notes: this build plays the «رسالة صوتية» it is woken for (server: ptt_tokens.voice_notes). */
+        struct B: Encodable { var token: String; var environment: String; var voice_notes = true }
+        let _: OkBox = try await call("POST", "/\(outingId)/ptt/token", body: B(token: token, environment: environment))
     }
 
     /// Muted the channel or left the outing: no more wake-ups for this phone (every token of mine for it).
@@ -398,7 +401,7 @@ final class OutingsAPI {
         return data
     }
 
-    private func raw(_ req: URLRequest) async throws -> (Data, URLResponse) {
+    func raw(_ req: URLRequest) async throws -> (Data, URLResponse) {
         do { return try await session.data(for: req) } catch let e as URLError {
             throw OutingAPIError(code: e.code == .timedOut ? "timeout" : "network", status: 0)
         }

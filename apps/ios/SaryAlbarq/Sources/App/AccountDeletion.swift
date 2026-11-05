@@ -112,6 +112,9 @@ enum LocalAccountData {
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
+        VoiceNoteHeardStore.forgetAll(defaults: defaults)
+        for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(VoiceNoteUploader.keyPrefix) { defaults.removeObject(forKey: k) }
+        try? FileManager.default.removeItem(at: VoiceNoteUploader.defaultDir)
         /* «المحادثات»: messages still waiting to be sent (the server deletes everything else). */
         ChatOutbox.wipeAll(defaults)
         MediaShareInbox.forget()

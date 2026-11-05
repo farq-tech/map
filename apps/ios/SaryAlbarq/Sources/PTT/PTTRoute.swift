@@ -145,6 +145,8 @@ final class PTTSystemRoute: NSObject, PTTRoute {
     private(set) var joinedSystem = false
     /// A push woke us for this outing (main thread hand-off from the delegate).
     var onWokenByPush: (_ outingId: String, _ talkerName: String) -> Void = { _, _ in }
+    /// «رسالة صوتية»: the push was for a voice note (fetch it and play it through this session).
+    var onVoiceNotePush: (VoiceNotePush) -> Void = { _ in }
 
     var isSystemChannel: Bool { joinedSystem }
 
@@ -307,7 +309,11 @@ extension PTTSystemRoute: PTChannelManagerDelegate, PTChannelRestorationDelegate
         }
         Self.diag("incoming push (app \(Thread.isMainThread ? "main" : "bg") thread)")
         let outing = (pushPayload["outing_id"] as? String) ?? channelUUID.uuidString.lowercased()
-        Task { @MainActor in self.onWokenByPush(outing, name) }
+        let note = VoiceNotePush.parse(pushPayload, fallbackOuting: outing)
+        Task { @MainActor in
+            self.onWokenByPush(outing, name)
+            if let note { self.onVoiceNotePush(note) }
+        }
         return .activeRemoteParticipant(PTParticipant(name: name, image: nil))
     }
 
