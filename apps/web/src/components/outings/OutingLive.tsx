@@ -1038,6 +1038,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			data-drive={driving ? "1" : "0"}
 			data-light={light}
 			data-night={light === "night" ? "1" : "0"}
+			data-geo-denied={locationDenied && !confirm ? "1" : "0"}
 		>
 			<div className="sary-o-map">
 				<Suspense fallback={<div className="sary-map-fallback" />}>
@@ -1631,6 +1632,12 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							<li>{isRTL ? "وتأكد أن خدمات الموقع مفعّلة في جوالك." : "And make sure Location Services are on for your phone."}</li>
 						</ul>
 						<p className="sary-o-note">{webNote}</p>
+						{/* Safety: SOS stays visible and working above this screen (corner button). */}
+						<p className="sary-o-note" data-testid="outing-geo-sos-note">
+							{isRTL
+								? "في حالة طوارئ: اضغط مطولًا على زر «طوارئ» في الزاوية — يصل النداء لأعضاء الطلعة حتى بدون موقعك."
+								: "In an emergency: press and hold the SOS button in the corner — it reaches the group even without your location."}
+						</p>
 						<div className="sary-o-row">
 							<button type="button" className="sary-o-primary" onClick={requestLocation} data-testid="outing-geo-retry">
 								{isRTL ? "سمحت — حاول مرة ثانية" : "Done — try again"}
@@ -1787,7 +1794,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			 * then ONE transient — a note, else a gap alert, else a voice clip — then a toast.
 			 * The full-screen SOS alert stays a full-screen alert. */}
 			<div className="sary-o-lane" data-testid="outing-lane">
-				{mySos ? <MySosBanner isRTL={isRTL} busy={sosBusy} onCancel={() => void cancelSos()} /> : null}
+				{mySos ? <MySosBanner isRTL={isRTL} busy={sosBusy} onCancel={() => void cancelSos()} noFix={!mySos.fix} /> : null}
 				{!mySos && !sosOpen && sosViews.length ? (
 					<SosStrip names={sosViews.map((a) => a.name)} isRTL={isRTL} onOpen={() => setDismissedSos(new Set())} />
 				) : null}
