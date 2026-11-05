@@ -41,6 +41,8 @@ struct SaryAvatar: View {
     var photo: UIImage? = nil
     var presence: ParticipantPresence = .live
     var size: CGFloat = 44
+    /// A small badge of their car (CarIcon) in their colour, at the bottom corner.
+    var car: Bool = false
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -70,6 +72,14 @@ struct SaryAvatar: View {
             Circle()
                 .strokeBorder(presence.isLive ? carColor : theme.palette.stale,
                               style: StrokeStyle(lineWidth: 2.5, dash: style.dashed ? [4, 3] : []))
+        }
+        .overlay(alignment: .bottomLeading) {
+            if car, let img = CarIcon.image(color) {
+                Image(uiImage: img).resizable().scaledToFit()
+                    .frame(height: size * 0.62)
+                    .saturation(style.saturation)
+                    .offset(x: -size * 0.14, y: size * 0.12)
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             if style.paused {
@@ -252,7 +262,7 @@ struct SaryParticipantRow: View {
             stack {
                 HStack(spacing: theme.space(.m)) {
                     SaryAvatar(name: participant.name, color: participant.color, photo: participant.photo,
-                               presence: participant.presence, size: theme.drive ? 48 : 40)
+                               presence: participant.presence, size: theme.drive ? 48 : 40, car: true)
                     let ax = typeSize.isAccessibilitySize
                     let line = ax ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(spacing: 6))
                     VStack(alignment: .leading, spacing: 3) {
