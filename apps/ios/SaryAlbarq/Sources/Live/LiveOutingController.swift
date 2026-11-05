@@ -35,6 +35,8 @@ enum LiveModal: Identifiable, Equatable {
     case navPicker
     case navOptions
     case navSteps
+    /// After «ابدأ الطلعة» (the leader): «ابدأ التوجيه للكل» / «لي فقط».
+    case navStartChoice
     /// «+»: every less frequent action, grouped (docs/IA-REDESIGN.md §2.3).
     case actions
     /// Exploration: the layer switcher (+ 3D terrain, offline coverage).
@@ -74,6 +76,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navPicker: return "navPicker"
         case .navOptions: return "navOptions"
         case .navSteps: return "navSteps"
+        case .navStartChoice: return "navStartChoice"
         }
     }
 }
@@ -430,6 +433,8 @@ final class LiveOutingController: ObservableObject {
            same note heard first from a nearby car and then from the server is one card. */
         for (uid, m) in v.members where uid != v.myId {
             if let n = m.note, prev.members[uid]?.note != n, LiveOutingPresenter.activeNote(n, view: v, now: Date()) != nil {
+                /* The leader's «ابدأ التوجيه للكل» is a command, not a card (`receiveBroadcasts` says it). */
+                if NavBroadcast.isBroadcast(n.text), NavBroadcast.mayBroadcast(senderId: uid, ownerId: v.snapshot.outing.owner_id, senderIsDeputy: m.co_leader == true) { continue }
                 if let last = alertedNotes[uid], last.text == n.text, Date().timeIntervalSince(last.at) < LiveOutingPresenter.noteTTL { continue }
                 alertedNotes[uid] = (n.text, Date())
                 if RallyRecall.isRecall(n.text), let prompt = recallPrompt(from: uid, at: n.at, view: v) {
@@ -940,7 +945,11 @@ final class LiveOutingController: ObservableObject {
             chooseTripDestination()
             return
         }
-        Task { await session.setStatus("start") }
+        Task {
+            await session.setStatus("start")
+            /* Guidance is the leader's choice: for everyone, or only for him. */
+            if session.view?.status == .active { offerGuidanceChoice() }
+        }
     }
 
     // MARK: participants

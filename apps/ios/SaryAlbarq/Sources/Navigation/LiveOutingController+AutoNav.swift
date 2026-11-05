@@ -1,8 +1,9 @@
 import Foundation
 
-/// The trip's automatic guidance on the live screen (`TripAutoNav` decides, this applies):
-/// the outing is active with a destination ⇒ turn-by-turn to the next stop / the destination,
-/// for every member, after a relaunch too; on to the next stop on arrival; «وصلتوا» at the end.
+/// The trip's guidance on the live screen (`TripAutoNav` / `NavBroadcast` decide, this applies).
+/// «أمير الرحلة»: «ابدأ التوجيه للكل» (his note tells every phone) or «لي فقط». Everyone else:
+/// only for themselves. Once on, turn-by-turn to the next stop / the destination, after a
+/// relaunch too; on to the next stop on arrival; «وصلتوا» at the end.
 /// «أوقف التوجيه» / «استأنف» and the setting only change this phone.
 extension LiveOutingController {
     /// The plan's stops, in order (none on a plan without them).
@@ -17,7 +18,19 @@ extension LiveOutingController {
         return !session.isDemo
     }
 
+    /// «ابدأ التوجيه تلقائيًا مع الرحلة»: accept the leader's «للكل» without asking.
     var autoNavEnabled: Bool { TripAutoNavPrefs.enabled() }
+
+    /// I may start guidance for everyone (the current leader; the deputy only if `NavBroadcast` allows).
+    var canGuideAll: Bool {
+        guard let v = session.view, v.status == .active || v.status == .created else { return false }
+        return v.iOwn || (NavBroadcast.deputyMayBroadcast && v.members[v.myId]?.co_leader == true)
+    }
+
+    /// The trip's next target as this phone has reached it (for «وجّه الكل إلى …»).
+    var autoNavNextTarget: NavTarget? {
+        TripAutoNav.nextTarget(destination: tripDestination, stops: tripStops, reached: autoNavState.reachedStops)
+    }
 
     func registerAutoNav() {
         autoNavState = TripAutoNavState.load(session.id)
@@ -32,7 +45,6 @@ extension LiveOutingController {
 
     var autoNavInput: TripAutoNav.Input {
         var i = TripAutoNav.Input()
-        i.enabled = autoNavEnabled
         i.state = autoNavState
         i.status = session.view?.status
         i.closed = session.closedReason != nil || autoNavLeft
@@ -82,12 +94,69 @@ extension LiveOutingController {
         navCameraKey += 1
     }
 
-    /// The network came back (the live link is up again): the offline fallback tries the road now.
+    /// Every session change: the leader's group command (a note), the network coming back
+    /// (the offline fallback tries the road now), then decide.
     func autoNavSessionChanged() {
         let online = followOnline
         defer { autoNavWasOnline = online }
         if online, !autoNavWasOnline { nav.retryNow() }
+        receiveBroadcasts()
         autoNavTick()
+    }
+
+    /// «أمير الرحلة بدأ التوجيه إلى …»: a group command in a member's current note. The sender's
+    /// role is checked here, on receipt: anyone else's command is ignored. Also how a late joiner
+    /// (or a relaunch) picks up the leader's last command: it is still his note.
+    private func receiveBroadcasts() {
+        guard autoNavAllowed, let v = session.displayView, v.status == .active, session.closedReason == nil else { return }
+        let owner = v.snapshot.outing.owner_id
+        for (uid, m) in v.members where uid != v.myId {
+            guard let n = m.note, NavBroadcast.isBroadcast(n.text) else { continue }
+            var s = autoNavState
+            let r = NavBroadcast.receive(&s, text: n.text, at: n.at, senderId: uid, ownerId: owner, senderIsDeputy: m.co_leader == true,
+                                         myId: v.myId, autoAccept: autoNavEnabled)
+            if s != autoNavState { setAutoNavState(s) }
+            let target = NavBroadcast.targetName(n.text) ?? tripDestination?.name ?? "الوجهة"
+            switch r {
+            case .start:
+                toast("أمير الرحلة بدأ التوجيه إلى \(target)")
+            case .offer:
+                UINotificationFeedback.warning()
+            case .ignored, .none:
+                break
+            }
+        }
+    }
+
+    /// «ابدأ التوجيه» / «لي فقط» / «استأنف»: on this phone only.
+    func startGuidanceForMe() {
+        var s = autoNavState
+        s.active = true
+        s.paused = false
+        s.offered = false
+        setAutoNavState(s)
+        if modal == .navStartChoice { modal = nil }
+        autoNavTick()
+    }
+
+    /// «ابدأ التوجيه للكل» (the leader): my own guidance, and the group command in my note.
+    func startGuidanceForAll() {
+        guard canGuideAll else { return toast("التوجيه للكل لأمير الرحلة فقط") }
+        startGuidanceForMe()
+        let name = autoNavNextTarget?.name ?? tripDestination?.name ?? "الوجهة"
+        Task {
+            if await session.sendNote(NavBroadcast.text(targetName: name)) {
+                toast("بدأ التوجيه للكل إلى \(name)")
+            } else {
+                toast("ما وصل الأمر للمجموعة. التوجيه شغّال على جوالك، جرّب «وجّه الكل» مرة ثانية")
+            }
+        }
+    }
+
+    /// After «ابدأ الطلعة»: the leader's choice («للكل» highlighted, or «لي فقط»).
+    func offerGuidanceChoice() {
+        guard autoNavAllowed, canGuideAll, tripDestination != nil else { return }
+        modal = .navStartChoice
     }
 
     private func autoNavArrived(_ t: NavTarget) {
@@ -115,27 +184,28 @@ extension LiveOutingController {
     }
 
     /// «استأنف».
-    func resumeAutoNav() {
-        var s = autoNavState
-        s.paused = false
-        setAutoNavState(s)
-        if !autoNavEnabled { TripAutoNavPrefs.set(true) }
-        autoNavTick()
-    }
+    func resumeAutoNav() { startGuidanceForMe() }
 
-    /// «ابدأ التوجيه تلقائيًا مع الرحلة».
+    /// «ابدأ التوجيه تلقائيًا مع الرحلة» (accept the leader's «للكل» without asking).
     func setAutoNavEnabled(_ on: Bool) {
         TripAutoNavPrefs.set(on)
-        if !on, nav.auto { nav.end(); stopAutoFollow() }
         objectWillChange.send()
-        if on { autoNavTick() }
     }
 
-    /// The trip is on, its guidance is paused (or off) here: «استأنف التوجيه» in the peek.
-    var showsAutoNavResume: Bool {
+    /// The one guidance button in the peek while the trip runs without guidance on this phone:
+    /// the leader's offer, «استأنف التوجيه» after a pause, or «ابدأ التوجيه» (for me only).
+    enum GuidancePrompt: Equatable {
+        case leaderStarted
+        case resume
+        case start
+    }
+
+    var guidancePrompt: GuidancePrompt? {
         guard autoNavAllowed, !nav.isActive, nav.phase != .planning, session.view?.status == .active, session.closedReason == nil,
-              tripDestination != nil, !autoNavState.arrived, !trip.record.me.arrived else { return false }
-        return autoNavState.paused || !autoNavEnabled
+              tripDestination != nil, !autoNavState.arrived, !trip.record.me.arrived else { return nil }
+        if autoNavState.offered && !autoNavState.active { return .leaderStarted }
+        if autoNavState.paused { return .resume }
+        return autoNavState.active ? nil : .start
     }
 
     // MARK: off-road along the plan's track
@@ -168,6 +238,21 @@ extension LiveOutingController {
     private func autoNavDebugLaunch() {
         let a = ProcessInfo.processInfo.arguments
         func arg(_ k: String) -> Double? { a.firstIndex(of: k).flatMap { $0 + 1 < a.count ? Double(a[$0 + 1]) : nil } }
+        /* `-SaryAutoNavActive`: guidance already on for this phone (a relaunch mid-trip). */
+        if a.contains("-SaryAutoNavActive") { var s = autoNavState; s.active = true; setAutoNavState(s) }
+        /* `-SaryAutoNavAsk`: the setting off (the leader's «للكل» is offered, not started). */
+        if a.contains("-SaryAutoNavAsk") { TripAutoNavPrefs.set(false) }
+        /* `-SaryDemoLeaderBroadcast <s>` / `-SaryDemoFakeBroadcast <s>`: the leader's «للكل»
+           (or the same text from a non-leader, which must be ignored) reaches this phone. Play a
+           member with `-SaryDemoMe 00000000-0000-4000-8000-000000000002`. */
+        for (flag, from) in [("-SaryDemoLeaderBroadcast", DemoData.meId), ("-SaryDemoFakeBroadcast", "00000000-0000-4000-8000-000000000003")] {
+            guard let d = arg(flag) else { continue }
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in
+                guard let self else { return }
+                let name = self.tripDestination?.name ?? "الوجهة"
+                self.session.debugApply(.memberNote(userId: from, note: MemberNote(text: NavBroadcast.text(targetName: name), at: ISODate.string(Date()))))
+            }
+        }
         /* `-SaryNavRetry <s>`: the offline fallback retries the road this often (default 20 s). */
         if let r = arg("-SaryNavRetry") { nav.retryInterval = r }
         /* `-SaryAutoNavRouteEnd <s>`: the road part ends after s seconds (the off-road leg follows). */
@@ -196,4 +281,9 @@ extension LiveOutingController {
         arriveLater()
     }
     #endif
+}
+
+extension LiveOutingController {
+    /// «أمير الرحلة» (the title the outing uses for its leader).
+    var leaderName: String { "أمير الرحلة" }
 }

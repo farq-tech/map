@@ -362,6 +362,11 @@ private struct LiveTopStack: View {
                 }
             }
             navTop
+            if !exploring, let prompt = controller.guidancePrompt {
+                /* The trip runs without guidance on this phone: one tap, for me only. */
+                GuidancePromptRow(prompt: prompt, leaderName: controller.leaderName, start: controller.startGuidanceForMe)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
             if let bt = controller.backTrackUI {
                 BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
                     .transition(.move(edge: .top).combined(with: .opacity))

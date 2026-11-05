@@ -17,15 +17,6 @@ struct LiveSheet: View {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
                 NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps })
             } else {
-                if controller.showsAutoNavResume {
-                    /* The trip's guidance is paused on this phone: one tap brings it back. */
-                    Button { controller.resumeAutoNav() } label: {
-                        SaryButtonLabel(title: "استأنف التوجيه", systemImage: "location.north.line.fill")
-                    }
-                    .buttonStyle(.sary(.secondary, compact: true))
-                    .padding(.horizontal, theme.space(.l))
-                    .accessibilityIdentifier("nav.auto.resume")
-                }
                 /* One line: the people. The trip's numbers are in the header above. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
@@ -85,7 +76,9 @@ struct LiveSheet: View {
                                                                   following: controller.planModel?.following == true,
                                                                   hasRoute: controller.planModel?.plan.hasRoute ?? false,
                                                                   stuck: controller.safety.myStuck != nil,
-                                                                  ended: controller.tripEnded)),
+                                                                  ended: controller.tripEnded,
+                                                                  guideAllTarget: controller.canGuideAll && controller.session.view?.status == .active
+                                                                      ? controller.autoNavNextTarget?.name : nil)),
                             action: controller.performAction, close: { controller.modal = nil })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -158,6 +151,10 @@ struct LiveSheet: View {
         case .navOptions:
             NavOptionsSheet(nav: controller.nav, start: controller.startNav, cancel: { controller.modal = nil },
                             openInAppleMaps: controller.openInAppleMaps)
+        case .navStartChoice:
+            NavStartChoiceSheet(target: controller.autoNavNextTarget?.name ?? controller.tripDestination?.name ?? "الوجهة",
+                                forAll: controller.startGuidanceForAll, onlyMe: controller.startGuidanceForMe,
+                                later: { controller.modal = nil })
         case .navSteps:
             NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
         case .layers:

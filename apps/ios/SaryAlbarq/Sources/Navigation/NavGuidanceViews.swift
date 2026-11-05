@@ -393,3 +393,94 @@ struct NavStepsSheet: View {
         .accessibilityIdentifier("nav.steps")
     }
 }
+
+/// After «ابدأ الطلعة» (the leader only): guidance for everyone (highlighted) or only for me.
+struct NavStartChoiceSheet: View {
+    var target: String
+    var forAll: () -> Void
+    var onlyMe: () -> Void
+    var later: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: theme.space(.m)) {
+            HStack(spacing: theme.space(.m)) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(rgb: 0x2B7BF0))
+                    Image(systemName: "location.north.line.fill").font(.system(size: 24, weight: .heavy)).foregroundStyle(Color.white)
+                }
+                .frame(width: 52, height: 52)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("التوجيه إلى \(target)").saryText(.title2, weight: .heavy).foregroundStyle(p.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("صوت وخطوات حتى توصلون").saryText(.footnote).foregroundStyle(p.textSecondary)
+                }
+            }
+            Button(action: forAll) {
+                SaryButtonLabel(title: "ابدأ التوجيه للكل", systemImage: "person.3.fill")
+            }
+            .buttonStyle(.saryPrimary)
+            .accessibilityIdentifier("nav.choice.all")
+            Text("يبدأ على جوال كل عضو تلقائيًا، ويقدر كل واحد يوقفه عنده بدون ما يأثر على الباقين.")
+                .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            Button(action: onlyMe) {
+                SaryButtonLabel(title: "لي فقط", systemImage: "person.fill")
+            }
+            .buttonStyle(.sary(.secondary))
+            .accessibilityIdentifier("nav.choice.me")
+            Button(action: later) {
+                Text("لاحقًا").saryText(.callout, weight: .bold).foregroundStyle(p.textSecondary).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, theme.space(.xs))
+            .accessibilityIdentifier("nav.choice.later")
+        }
+        .padding(theme.space(.l))
+        .presentationDetents([.height(400)])
+        .presentationDragIndicator(.visible)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("nav.choice")
+    }
+}
+
+/// The trip runs without guidance on this phone: one tap starts it, for this phone only.
+struct GuidancePromptRow: View {
+    var prompt: LiveOutingController.GuidancePrompt
+    var leaderName: String
+    var start: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        switch prompt {
+        case .leaderStarted:
+            Button(action: start) {
+                HStack(spacing: theme.space(.s)) {
+                    Image(systemName: "location.north.line.fill").font(.system(size: 16, weight: .heavy)).foregroundStyle(Color.white)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Color(rgb: 0x2B7BF0)))
+                    Text("\(leaderName) بدأ التوجيه").saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    Text("ابدأ").saryText(.callout, weight: .heavy).foregroundStyle(theme.palette.onAccent)
+                        .padding(.horizontal, theme.space(.m)).padding(.vertical, 6)
+                        .background(Capsule().fill(theme.palette.accent))
+                }
+                .padding(theme.space(.s))
+                .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .panel)
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("\(leaderName) بدأ التوجيه · ابدأ"))
+            .accessibilityIdentifier("nav.auto.leaderBanner")
+        case .resume, .start:
+            Button(action: start) {
+                SaryButtonLabel(title: prompt == .resume ? "استأنف التوجيه" : "ابدأ التوجيه", systemImage: "location.north.line.fill")
+            }
+            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier(prompt == .resume ? "nav.auto.resume" : "nav.auto.start")
+        }
+    }
+}
