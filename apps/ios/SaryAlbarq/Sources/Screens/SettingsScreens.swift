@@ -469,6 +469,7 @@ struct AboutView: View {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")
                     Text("محطات الوقود من OpenStreetMap (ODbL).")
                     Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
+                    Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

@@ -192,9 +192,9 @@ final class SuvAssetTests: XCTestCase {
             if name == "TYRE" { spareZ = lo[2] }
         }
         XCTAssertEqual(mn[1], 0, accuracy: 0.03)            // on the ground
-        XCTAssertEqual(mx[2] - mn[2], 4.7, accuracy: 0.2)   // length (Z)
-        XCTAssertEqual(mx[0] - mn[0], 2.25, accuracy: 0.15) // width incl. flares and mirrors (X)
-        XCTAssertEqual(mx[1], 1.98, accuracy: 0.1)          // height incl. rack (Y)
+        XCTAssertEqual(mx[2] - mn[2], 4.9, accuracy: 0.2)   // length incl. the spare (Z)
+        XCTAssertEqual(mx[0] - mn[0], 1.95, accuracy: 0.15) // width incl. mirrors (X)
+        XCTAssertEqual(mx[1], 1.9, accuracy: 0.12)          // height incl. rack and awning (Y)
         XCTAssertEqual(mn[0] + mx[0], 0, accuracy: 0.15)    // centred
         XCTAssertGreaterThan(headZ, 2)                      // nose at +Z, as `Vehicle.rotation` expects
         XCTAssertLessThan(spareZ, -2.2)                     // spare tyre at the tail
@@ -289,8 +289,11 @@ final class CarIconTests: XCTestCase {
                 XCTAssertEqual(Array(red[i ..< i + 4]), Array(l.base[i ..< i + 4]))
             }
         }
-        XCTAssertGreaterThan(paintR.0, paintR.1 * 2) // red car is red
-        XCTAssertGreaterThan(paintB.1, paintB.0 * 2) // blue car is blue
+        /* glossy paint carries white reflections, so compare the two cars: red is redder, blue bluer */
+        XCTAssertGreaterThan(paintR.0, paintR.1 * 13 / 10)
+        XCTAssertGreaterThan(paintB.1, paintB.0 * 13 / 10)
+        XCTAssertGreaterThan(paintR.0, paintB.0 * 3 / 2)
+        XCTAssertGreaterThan(paintB.1, paintR.1 * 3 / 2)
     }
 
     func testPaintPixelFollowsTheRendererFormula() throws {
@@ -316,6 +319,19 @@ final class CarIconTests: XCTestCase {
         let px = CarIcon.paint(l, color: 0x15191C)
         let light = stride(from: 0, to: px.count, by: 4).filter { px[$0 + 3] > 200 && px[$0] > 220 && l.body[$0 + 2] == 0 }.count
         XCTAssertGreaterThan(light, 300)
+    }
+
+    func testMemberColoursShipPreRenderedOthersArePainted() throws {
+        for c in members {
+            let r = try XCTUnwrap(CarIcon.rendered(c), String(c, radix: 16))
+            XCTAssertEqual(r.scale, CarIcon.imageScale)
+            XCTAssertEqual(r.size, try XCTUnwrap(CarIcon.image(c)).size)
+        }
+        XCTAssertNil(CarIcon.rendered(0x7A5C3E))
+        let other = try XCTUnwrap(CarIcon.image(0x7A5C3E))
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        XCTAssertEqual(other.size, CGSize(width: CGFloat(l.width) / CarIcon.imageScale, height: CGFloat(l.height) / CarIcon.imageScale))
+        XCTAssertEqual(try XCTUnwrap(CarIcon.rendered(0xD6452F)).size, other.size) // same canvas, any colour
     }
 
     func testMissingLayersFallBackToTheModel() {

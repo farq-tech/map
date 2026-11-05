@@ -2,15 +2,19 @@ import UIKit
 
 /// The member's car as a 2D icon (map marker and list badge), painted in the member's colour.
 ///
-/// Two layers rendered from our own SUV model by scripts/suv/render_icon.py (no reference
-/// pixels, no logo): `CarIconBase.png` (trim, rack, awning, glass, tyres, lamps, light outline,
-/// soft shadow — transparent where the paint is) and `CarIconBody.png` (R = diffuse factor,
-/// G = clear-coat reflection, B = paint coverage). Paint (linear) = colour · D + K, through the
-/// renderer's tone curve, then over the base — so any colour gets the same glossy finish.
+/// Rendered in Blender Cycles from the CC0 "Offroader SUV", restyled (scripts/suv/blender_suv.py,
+/// baked by scripts/suv/bake_icons.py): clear-coat paint, studio softbox + rim lights, soft
+/// contact shadow, light outline; no logo or badge, no reference pixels.
+///
+/// The ten member colours ship pre-rendered (`CarIcon-<hex>.png`; the near-black one with
+/// graphite trim). Any other colour is painted from two layers: `CarIconBase.png` (everything
+/// that is not paint, outline and shadow; premultiplied) and `CarIconBody.png` (R = diffuse
+/// factor D, G = reflection K, both sRGB-encoded; B = paint coverage), from renders with white
+/// and black paint: paint (linear) = colour · D + K, then sRGB, over the base.
 enum CarIcon {
     static let baseName = "CarIconBase"
     static let bodyName = "CarIconBody"
-    /// Point size: the master is 217×352 px drawn at this scale (54×88 pt at icon-size 1).
+    /// Point size: the masters are 200×360 px drawn at this scale (50×90 pt at icon-size 1).
     static let imageScale: CGFloat = 4
 
     /// Mapbox image id per colour: `sary-car-d6452f`.
@@ -53,10 +57,19 @@ enum CarIcon {
         return x <= 0.0031308 ? x * 12.92 : 1.055 * pow(x, 1 / 2.4) - 0.055
     }
 
-    /// The renderer's tone curve.
-    static func tone(_ c: Double) -> Double { c / (1 + 0.3 * c) }
+    /// The renderer's tone curve (Cycles "Standard" view transform: none, just the clamp).
+    static func tone(_ c: Double) -> Double { c }
 
-    /// Premultiplied RGBA of the car in `rgb` — the same maths as `compose()` in render_icon.py.
+    /// File name of a pre-rendered member colour.
+    static func renderedName(_ rgb: UInt32) -> String { "CarIcon-" + Vehicle.hex(rgb) }
+
+    static func rendered(_ rgb: UInt32, bundle: Bundle = .main) -> UIImage? {
+        guard let url = bundle.url(forResource: renderedName(rgb), withExtension: "png"),
+              let cg = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
+        return UIImage(cgImage: cg, scale: imageScale, orientation: .up)
+    }
+
+    /// Premultiplied RGBA of the car in `rgb` — the same maths as `compose()` in bake_icons.py.
     static func paint(_ l: Layers, color rgb: UInt32) -> [UInt8] {
         let lin = SuvModel.linear(rgb)
         var dec = [Double](repeating: 0, count: 256)
@@ -106,9 +119,21 @@ enum CarIcon {
     private static var cachedLayers: Layers?
     private static var cache: [UInt32: UIImage] = [:]
 
-    /// The painted car, or nil if the icon layers are missing (then the map uses the 3D model).
+    /// The member's car: pre-rendered for the ten member colours, else painted from the layers;
+    /// nil if neither is bundled (then the map uses the 3D model).
     static func image(_ rgb: UInt32, bundle: Bundle = .main) -> UIImage? {
         if bundle == .main, let hit = cache[rgb] { return hit }
+        if let r = rendered(rgb, bundle: bundle) {
+            if bundle == .main { cache[rgb] = r }
+            return r
+        }
+        let p = painted(rgb, bundle: bundle)
+        if bundle == .main, let p { cache[rgb] = p }
+        return p
+    }
+
+    /// The car painted from the two layers (any colour).
+    static func painted(_ rgb: UInt32, bundle: Bundle = .main) -> UIImage? {
         guard let l = bundle == .main ? (cachedLayers ?? loadLayers(bundle)) : loadLayers(bundle) else { return nil }
         if bundle == .main { cachedLayers = l }
         var px = paint(l, color: rgb)
@@ -118,7 +143,6 @@ enum CarIcon {
                   let cg = ctx.makeImage() else { return nil }
             return UIImage(cgImage: cg, scale: imageScale, orientation: .up)
         }
-        if bundle == .main, let img { cache[rgb] = img }
         return img
     }
 }

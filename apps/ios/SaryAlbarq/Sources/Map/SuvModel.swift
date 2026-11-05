@@ -1,7 +1,7 @@
 import Foundation
 
 /// The member's car on the map. The modelled expedition SUV (bundled `SuvExpedition.glb`,
-/// built by scripts/suv/build_suv.py) is painted per member at runtime (BODY material only);
+/// built in Blender by scripts/suv/blender_suv.py from the CC0 "Offroader SUV") is painted per member at runtime (BODY material only);
 /// this file's procedural car is the fallback.
 ///
 /// Procedural fallback: the same low-poly overland 4×4 the web draws (port of `apps/web/src/lib/sary/suvModel.ts`):
