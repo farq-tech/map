@@ -313,3 +313,37 @@ final class TrackFollowTests: XCTestCase {
         XCTAssertNil(TrackFollow(points: pts, gaps: [false]))
     }
 }
+
+@MainActor
+final class TrackFollowModelTests: XCTestCase {
+    func testDemoDunesForwardThenReverse() throws {
+        let s = try XCTUnwrap(DemoTrail.dunesSubject())
+        XCTAssertEqual(s.stats.distanceM, 13_300, accuracy: 400)
+        XCTAssertNotNil(s.stats.maxKmh)
+        XCTAssertTrue(s.line.hasSpeeds)
+        let m = try XCTUnwrap(TrackFollowModel(s))
+        let now = Date().timeIntervalSince1970 * 1000
+        let fix = DeviceFix(lat: 28.191074, lng: 41.002795, accuracy: 5, heading: nil, speed: nil, atMs: now)
+        m.ingest(fix, nowMs: now)
+        let st = try XCTUnwrap(m.status)
+        XCTAssertFalse(m.reversed)
+        XCTAssertLessThan(st.offsetM, 25)
+        XCTAssertEqual(st.alongM, 5_200, accuracy: 400)
+        XCTAssertEqual(st.remainingM, s.line.lengthM - st.alongM, accuracy: 5)
+        m.reverse()
+        XCTAssertTrue(m.reversed)
+        XCTAssertNil(m.status, "a reverse starts afresh")
+        m.ingest(fix, nowMs: now)
+        XCTAssertEqual(m.status!.remainingM, st.alongM, accuracy: 30)
+    }
+
+    func testStaleFixIsNeverUsed() throws {
+        let s = try XCTUnwrap(DemoTrail.dunesSubject())
+        let m = try XCTUnwrap(TrackFollowModel(s))
+        let now = Date().timeIntervalSince1970 * 1000
+        let old = DeviceFix(lat: 28.191074, lng: 41.002795, accuracy: 5, heading: nil, speed: nil, atMs: now - 60_000)
+        m.ingest(old, nowMs: now)
+        XCTAssertNil(m.status)
+        XCTAssertEqual(m.ui(course: nil, mapBearing: 0, online: true).phase, .waitingFix)
+    }
+}

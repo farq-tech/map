@@ -75,6 +75,8 @@ struct LiveOutingScreen: View {
                     layer: exploring ? controller.mapLayer : .satellite,
                     terrain3D: exploring && controller.terrain3D,
                     explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
+                    /* Build 10: clean imagery when a track is the subject; road names while navigating. */
+                    labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) }
                 )
                 }
@@ -316,7 +318,7 @@ private struct LiveTopStack: View {
         let nav = controller.nav
         let guidance = nav.phase == .guiding || nav.phase == .offRoad || nav.phase == .arrived
         /* Driving with a banner of its own (guidance or «طريق العودة»): that banner IS the top bar. */
-        let bannerOnly = driving && (guidance || controller.backTrackUI != nil)
+        let bannerOnly = driving && (guidance || controller.backTrackUI != nil || controller.followUI != nil)
         let card = rowMode || controller.bellOpen ? nil : AlertQueue.card(alerts, driving: driving)
         let mediaQueued = media.notice != nil && (driving || card != nil || rowMode)
         let bell = AlertQueue.ordered(alerts).count - (card == nil ? 0 : 1) + (mediaQueued ? 1 : 0)
@@ -347,6 +349,11 @@ private struct LiveTopStack: View {
             navTop
             if let bt = controller.backTrackUI {
                 BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            /* «اسلك هذا المسار»; while «الملاحة» guides me to the track, its banner is the one header. */
+            if !guidance, let f = controller.followUI {
+                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.stopFollow, approach: controller.approachFollow)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if controller.bellOpen {

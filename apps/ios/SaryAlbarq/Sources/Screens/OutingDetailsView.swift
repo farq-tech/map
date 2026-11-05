@@ -143,6 +143,10 @@ struct TripSummaryView: View {
     @State private var busy = false
     @State private var shareText: String?
     @State private var story: StoryFacts?
+    /// Build 10: my trail as a precise, followable track (built once, off the body).
+    @State private var track: FollowSubject?
+    @State private var trackDetail: FollowSubject?
+    @State private var follow: TrackFollowModel?
 
     var body: some View {
         let p = theme.palette
@@ -193,7 +197,13 @@ struct TripSummaryView: View {
                         .padding(.vertical, theme.space(.xs))
                     }
                 }
-                if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
+                if let track {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                        TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
+                                         open: { trackDetail = track }, follow: { follow = TrackFollowModel(track) })
+                            .padding(.vertical, theme.space(.s))
+                    }
+                } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
                     SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
                         TrailSketch(trail: trail, color: theme.palette.accent)
                             .frame(height: 180)
@@ -228,6 +238,21 @@ struct TripSummaryView: View {
             }
         }
         .task { await load() }
+        .task(id: subtitle) {
+            guard track == nil, let name = subtitle else { return }
+            track = await model.trackSubject(outingId, name: name)
+        }
+        .fullScreenCover(item: $trackDetail) { s in
+            TrackDetailView(subject: s, close: { trackDetail = nil }) { chosen in
+                trackDetail = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { follow = TrackFollowModel(chosen) }
+            }
+            .saryPresented(appearance)
+        }
+        .fullScreenCover(item: $follow) { m in
+            TrackFollowScreen(model: m) { follow = nil }
+                .saryPresented(appearance)
+        }
         .sheet(item: Binding(get: { shareText.map(ShareText.init) }, set: { if $0 == nil { shareText = nil } })) { t in
             ShareSheet(items: [t.text]).presentationDetents([.medium, .large])
         }
@@ -314,6 +339,48 @@ struct TripSummaryView: View {
             if case .loaded = phase { return }
             phase = .failed(e.arabic)
         } catch {}
+    }
+}
+
+/// «مساري» in the summary (build 10): the track on clean satellite imagery, coloured by speed,
+/// with the three big numbers and «اسلك هذا المسار» on a dark card at its foot. Offline: the
+/// tile-free sketch instead of the imagery (the numbers and the button still work).
+struct TrackSummaryCard: View {
+    var subject: FollowSubject
+    var trail: Trail?
+    var online: Bool
+    var open: () -> Void
+    var follow: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                if online {
+                    TrackMapView(line: subject.line, interactive: false)
+                } else if let trail, trail.points.count >= 2 {
+                    TrailSketch(trail: trail, color: theme.palette.accent)
+                }
+                Button(action: open) {
+                    Label("كبّر", systemImage: "arrow.up.left.and.arrow.down.right")
+                        .saryText(.caption, weight: .bold)
+                        .padding(.horizontal, theme.space(.s)).padding(.vertical, 6)
+                }
+                .foregroundStyle(theme.palette.textPrimary)
+                .saryGlass(Capsule(), role: .control, interactive: true)
+                .padding(theme.space(.s))
+                .accessibilityIdentifier("summary.trackOpen")
+            }
+            .frame(height: 300)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
+            TrackStatsCard(stats: subject.stats, speedLegend: subject.line.hasSpeeds, follow: follow)
+                .padding(.top, -28)
+                .padding(.horizontal, theme.space(.s))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("summary.trail")
     }
 }
 

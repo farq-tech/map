@@ -412,6 +412,7 @@ struct TracksSheet: View {
     @State private var message: (text: String, tone: SaryTone)?
     @State private var shareURL: URL?
     @State private var deleting: SavedTrack?
+    @State private var detail: FollowSubject?
 
     var body: some View {
         let p = theme.palette
@@ -442,6 +443,14 @@ struct TracksSheet: View {
         .sheet(item: Binding(get: { shareURL.map(TrackShareURL.init) }, set: { if $0 == nil { shareURL = nil } })) { s in
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
         }
+        .fullScreenCover(item: $detail) { s in
+            TrackDetailView(subject: s, close: { detail = nil }) { chosen in
+                detail = nil
+                controller.modal = nil
+                /* After both covers are gone: the live map frames the track. */
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.startFollow(chosen) }
+            }
+        }
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
                     title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من قائمة المسارات على هذا الجوال. الخطة لا تتأثر.", confirmTitle: "احذف") {
             if let d = deleting { library.delete(d.id) }
@@ -470,6 +479,12 @@ struct TracksSheet: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("tracks.row")
+            Button { detail = FollowSubject.gpx(t) } label: {
+                Image(systemName: FollowIcon.follow).font(.system(size: 18, weight: .semibold)).foregroundStyle(p.accentText)
+                    .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("اسلك «\(t.name)»"))
+            .accessibilityIdentifier("tracks.follow")
             Toggle("", isOn: Binding(get: { shown }, set: { _ in library.toggleShown(t.id) }))
                 .labelsHidden()
                 .tint(p.accent)

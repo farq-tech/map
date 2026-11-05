@@ -154,4 +154,5 @@ extension LiveOutingController {
 
 enum UINotificationFeedback {
     @MainActor static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+    @MainActor static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
 }

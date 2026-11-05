@@ -23,6 +23,8 @@ enum AlertPriority: Int, Comparable {
         /* A car stopped for minutes while everyone drives may need help: as urgent as a silent car. */
         case let .convoy(c) where c.kind == .unexpectedStop: self = .silent
         case .convoy, .drift: self = .convoy
+        /* Leaving the followed track matters while driving: same tier as the convoy. */
+        case .offTrack: self = .convoy
         case .weather: self = .weather
         case .note, .voice: self = .note
         case .toast: self = .media
@@ -93,6 +95,7 @@ extension AlertQueue {
         case let .convoy(c): return ("car.2.fill", c.title)
         case let .weather(w): return ("cloud.sun.rain.fill", w.title)
         case let .silent(s): return ("antenna.radiowaves.left.and.right.slash", "انقطع إرسال \(s.name)")
+        case let .offTrack(o): return (FollowIcon.offTrack, "خرجت عن «\(o.trackName)» \(SaryFormat.distance(meters: o.meters))")
         }
     }
 

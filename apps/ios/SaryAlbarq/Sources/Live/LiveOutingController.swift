@@ -160,6 +160,13 @@ final class LiveOutingController: ObservableObject {
     /// «طريق العودة»: a frozen copy of my trail being retraced (nil when off).
     @Published private(set) var backTrack: BackTrack?
     @Published private(set) var backTrackStatus: BackTrackStatus?
+    /// «اسلك هذا المسار» (build 10): following any saved track, off-road (nil when off).
+    @Published var trackFollow: TrackFollowModel?
+    /// My trail as drawn (`TrackDisplay`), rebuilt only when the trail changes.
+    var mineTrackCache: (key: String, line: TrackLine)?
+    /// The one «خرجت عن المسار» card.
+    static let followAlertId = "follow.offtrack"
+    var followArrivedSaid = false
     /// «أظهر مسارات الأصحاب» (this device).
     @Published var showFriendTrails: Bool {
         didSet { UserDefaults.standard.set(showFriendTrails, forKey: TrailPrefs.friendsKey) }
@@ -261,6 +268,13 @@ final class LiveOutingController: ObservableObject {
         if let i = args.firstIndex(of: "-SaryBackTrack") {
             let delay = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.startBackTrack() }
+        }
+        if session.isDemo, let i = args.firstIndex(of: "-SaryFollow") {
+            /* «اسلك هذا المسار» on the demo dunes track (UI tests, screenshots). */
+            let delay = i + 1 < args.count ? Double(args[i + 1]) ?? 2.5 : 2.5
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                if let s = DemoTrail.dunesSubject() { self?.startFollow(s) }
+            }
         }
         #endif
         if let v = session.displayView { ingestFriends(v) }
@@ -432,6 +446,7 @@ final class LiveOutingController: ObservableObject {
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
+        updateFollow()
         updateTrip()
         updateAuto()
         if let f = location.lastFix {
@@ -494,6 +509,12 @@ final class LiveOutingController: ObservableObject {
         }
         out.start = shown.first?.position
         out.highlight = backTrack != nil
+        if shown.count >= 2 {
+            let key = "\(shown.count)|\(shown.first?.t ?? 0)|\(shown.last?.t ?? 0)|\(shown.last?.lat ?? 0)"
+            if mineTrackCache?.key != key { mineTrackCache = (key, TrackDisplay.line(trail: shown)) }
+            out.mineTrack = mineTrackCache?.line
+        }
+        out.followed = trackFollow?.drawLine
         out.gapLabels = runs.gaps
             .map { g -> (mid: LngLat, len: Double) in
                 var len = 0.0
@@ -538,6 +559,7 @@ final class LiveOutingController: ObservableObject {
             toast("ما فيه مسار مسجّل بعد. يبدأ التسجيل أول ما تتحرك.")
             return
         }
+        if trackFollow != nil { stopFollow() }
         backTrack = bt
         following = false
         modal = nil
@@ -684,7 +706,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     /// Lower the sheet, then move the camera once it has settled (the clear area changes size).
-    private func lowerSheetThenAsk(_ kind: MapCameraRequest.Kind) {
+    func lowerSheetThenAsk(_ kind: MapCameraRequest.Kind) {
         guard sheetDetent != .peek else { return ask(kind) }
         sheetDetent = .peek
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.ask(kind) }
