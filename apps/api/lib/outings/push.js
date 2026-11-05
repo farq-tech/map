@@ -354,7 +354,7 @@ function featurePayload(kind, { senderName, outingName, note, title, replyKind, 
 
 /** Pushes to the people holding a watch link. Web push only (the watcher has no app). */
 function watcherPayload(kind, { ownerName } = {}) {
-  const who = ownerName || 'صاحب الطلعة';
+  const who = ownerName || 'أمير الرحلة';
   if (kind === 'overdue') return { type: 'return_timer_overdue', title: `⏰ ${who} تأخروا عن وقت الرجوع`, body: 'تأخروا عن وقت الرجوع. افتح الرابط لترى آخر موقع معروف.', urgency: 'high', ttl: 12 * 3600 };
   if (kind === 'extended') return { type: 'return_timer_extended', title: `${who} مدّدوا وقت الرجوع`, body: 'مدّدوا وقت الرجوع. افتح الرابط لترى الوقت الجديد.', urgency: 'normal', ttl: 12 * 3600 };
   if (kind === 'arrived') return { type: 'return_timer_arrived', title: `✅ ${who} وصلوا بالسلامة`, body: 'وصلوا بالسلامة', urgency: 'normal', ttl: 12 * 3600 };

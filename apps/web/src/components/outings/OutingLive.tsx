@@ -873,7 +873,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			terminal === "outing_ended"
 				? isRTL ? "انتهت الطلعة. توقفت مشاركة المواقع وحُذفت." : "The outing ended. Location sharing stopped and positions were deleted."
 				: terminal === "removed"
-					? isRTL ? "أزالك صاحب الطلعة. توقفت مشاركة موقعك." : "You were removed. Your location is no longer shared."
+					? isRTL ? "أزالك أمير الرحلة. توقفت مشاركة موقعك." : "You were removed. Your location is no longer shared."
 					: terminal === "left"
 						? isRTL ? "غادرت الطلعة." : "You left the outing."
 						: terminal === "replaced"
@@ -1132,7 +1132,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار صاحب الطلعة ليبدأ" : "Waiting for the owner to start"}</p>
 					) : outing?.status === "paused" ? (
 						<p className="sary-o-stage-line" data-testid="outing-stage">
-							{canLead ? (isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "The outing is paused — sharing is off for everyone") : isRTL ? "صاحب الطلعة أوقفها مؤقتًا" : "The owner paused the outing"}
+							{canLead ? (isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "The outing is paused — sharing is off for everyone") : isRTL ? "أمير الرحلة أوقفها مؤقتًا" : "The owner paused the outing"}
 						</p>
 					) : null}
 					<div className="sary-o-tabs" role="tablist">
@@ -1200,7 +1200,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								<div>
 									<strong>
 										{isRTL ? "أنت" : "You"}
-										{isOwner ? (isRTL ? " · صاحب الطلعة" : " · owner") : me?.co_leader ? (isRTL ? " · مساعد" : " · co-leader") : ""}
+										{isOwner ? (isRTL ? " · أمير الرحلة" : " · owner") : me?.co_leader ? (isRTL ? " · نائب الأمير" : " · co-leader") : ""}
 									</strong>
 									<span>{sharingLine}</span>
 								</div>
@@ -1245,7 +1245,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					<div className="sary-o-panel" data-testid="outing-invite-panel">
 						{outing?.join_locked ? (
 							<p className="sary-o-note" data-testid="outing-invite-locked">
-								{isRTL ? "الانضمام مقفل — الرابط لا يُدخل أحدًا جديدًا حتى يفتحه صاحب الطلعة." : "Joining is locked — the link admits nobody new until the owner unlocks it."}
+								{isRTL ? "الانضمام مقفل — الرابط لا يُدخل أحدًا جديدًا حتى يفتحه أمير الرحلة." : "Joining is locked — the link admits nobody new until the owner unlocks it."}
 							</p>
 						) : null}
 						{inviteToken && invite?.active ? (
@@ -1903,8 +1903,8 @@ function MyPhone({ current, isRTL, onSaved }: { current: string | null; isRTL: b
 }
 
 function roleSuffix(m: { role: "owner" | "member"; co_leader?: boolean }, isRTL: boolean): string {
-	if (m.role === "owner") return isRTL ? " · صاحب الطلعة" : " · owner";
-	if (m.co_leader) return isRTL ? " · مساعد" : " · co-leader";
+	if (m.role === "owner") return isRTL ? " · أمير الرحلة" : " · owner";
+	if (m.co_leader) return isRTL ? " · نائب الأمير" : " · co-leader";
 	return "";
 }
 
@@ -2020,7 +2020,7 @@ function MemberCard({
 						data-testid="outing-member-coleader"
 						data-on={row.member.co_leader ? "1" : "0"}
 					>
-						{row.member.co_leader ? (isRTL ? "إلغاء المساعد" : "Remove co-leader") : isRTL ? "اجعله مساعدًا" : "Make co-leader"}
+						{row.member.co_leader ? (isRTL ? "إلغاء نيابة الأمير" : "Remove co-leader") : isRTL ? "اجعله نائبًا للأمير" : "Make co-leader"}
 					</button>
 				) : null}
 				{isOwner && row.member.role !== "owner" ? (
