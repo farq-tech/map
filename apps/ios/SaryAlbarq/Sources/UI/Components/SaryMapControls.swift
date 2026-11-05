@@ -11,9 +11,13 @@ struct SaryMapControlItem: Identifiable, Equatable {
     var isActive = false
     /// Small count badge (e.g. unread notes).
     var badge: Int?
+    /// VoiceOver hint (what a tap does next).
+    var hint: String? = nil
+    /// VoiceOver value / UI-test state (e.g. the camera mode).
+    var value: String? = nil
 
     static func == (a: Self, b: Self) -> Bool {
-        a.id == b.id && a.systemImage == b.systemImage && a.isActive == b.isActive && a.badge == b.badge && a.label == b.label
+        a.id == b.id && a.systemImage == b.systemImage && a.isActive == b.isActive && a.badge == b.badge && a.label == b.label && a.value == b.value
     }
 }
 
@@ -32,6 +36,8 @@ struct SaryMapControlButton: View {
         .buttonStyle(SaryPressStyle())
         .sensoryFeedback(.selection, trigger: item.isActive)
         .accessibilityLabel(Text(item.label))
+        .accessibilityHint(Text(item.hint ?? ""))
+        .accessibilityValue(Text(item.value ?? ""))
         .accessibilityAddTraits(item.isActive ? .isSelected : [])
         .accessibilityIdentifier(item.accessibilityID)
     }
@@ -138,6 +144,8 @@ private struct ControlAccessibility: ViewModifier {
     func body(content: Content) -> some View {
         content
             .accessibilityLabel(Text(item.label))
+            .accessibilityHint(Text(item.hint ?? ""))
+            .accessibilityValue(Text(item.value ?? ""))
             .accessibilityAddTraits(item.isActive ? .isSelected : [])
             .accessibilityIdentifier(item.accessibilityID)
             .sensoryFeedback(.selection, trigger: item.isActive)

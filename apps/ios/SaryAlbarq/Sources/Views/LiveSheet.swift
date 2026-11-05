@@ -714,6 +714,11 @@ private struct SettingsTab: View {
                 SaryToggleRow(title: "ابدأ التوجيه تلقائيًا مع الرحلة", subtitle: "إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة · على جوالك فقط",
                               systemImage: "location.north.line.fill",
                               isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
+                SaryDivider()
+                SaryToggleRow(title: "رجّعني للتوجيه تلقائيًا", subtitle: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس",
+                              systemImage: "location.north.line.fill",
+                              isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
+                                            set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
             }
             SpeedSettingsSection()
             DrivingRealismSection()

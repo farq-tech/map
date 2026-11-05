@@ -227,7 +227,7 @@ struct FeatureModals: ViewModifier {
                             PastWaypointsView(currentOuting: features.outingId, close: { features.modal = nil }, show: { p in
                                 features.modal = nil
                                 controller.sheetDetent = .peek
-                                controller.camera = MapCameraRequest(kind: .point(p), id: (controller.camera?.id ?? 0) + 1)
+                                controller.ask(.point(p))
                             })
                             .presentationDetents([.large])
                         }
@@ -436,7 +436,7 @@ struct WaypointCard: View {
                     Button {
                         features.modal = nil
                         controller.sheetDetent = .peek
-                        controller.camera = MapCameraRequest(kind: .point(w.position), id: (controller.camera?.id ?? 0) + 1)
+                        controller.ask(.point(w.position))
                     } label: { SaryButtonLabel(title: "أظهرها", systemImage: SaryIcon.showOnMap) }
                         .buttonStyle(.sarySecondary)
                         .accessibilityIdentifier("waypoint.show")

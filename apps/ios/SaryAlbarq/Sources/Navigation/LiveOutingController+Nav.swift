@@ -115,7 +115,7 @@ extension LiveOutingController {
     }
 
     func navUserMovedMap() {
-        if nav.isActive, nav.camera == .follow { nav.camera = .free }
+        if nav.isActive, nav.camera != .free { nav.camera = .free }
     }
 
     func openInAppleMaps() {
@@ -153,8 +153,10 @@ extension LiveOutingController {
         case .guiding:
             if let r = nav.active { d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true)] }
             d.camera = navCamera()
+            d.cameraKey = navCameraKey * 1000 + 500
         case .offRoad, .arrived:
             d.camera = nav.phase == .arrived ? nil : navCamera()
+            d.cameraKey = navCameraKey * 1000 + 500
         case .idle:
             break
         }
@@ -168,8 +170,8 @@ extension LiveOutingController {
 
     private func navCamera() -> MapNavDrawing.Camera? {
         switch nav.camera {
-        case .follow: return .follow
-        case .free: return nil
+        /* Following my car is the map's own frame-by-frame camera («باتجاهي», `mapFollowMode`). */
+        case .follow, .free: return nil
         case .overview:
             var pts = nav.active.map { Self.remaining($0, progress: nav.progress) } ?? []
             if let t = nav.target { pts.append(t.position) }
@@ -211,19 +213,26 @@ extension LiveOutingController {
 
     // MARK: the control cluster while navigating
 
-    /// The guidance camera, in «موقعي»'s place on the map (voice and steps sit in the guidance bar).
+    /// While guiding: the camera button («تتبعني» / «باتجاهي») and «نظرة عامة» (voice and steps sit in the guidance bar).
     var navControlItems: [SaryMapControlItem] {
         [
-            nav.camera == .follow
-                ? .init(id: "nav.overview", systemImage: "map.fill", label: "نظرة عامة", accessibilityID: "nav.overview")
-                : .init(id: "nav.follow", systemImage: SaryIcon.locateFollow, label: "تابع", accessibilityID: "nav.follow", isActive: false),
+            cameraModeItem,
+            .init(id: "nav.overview", systemImage: "map.fill", label: "نظرة عامة", accessibilityID: "nav.overview", isActive: nav.camera == .overview),
         ]
     }
 
     func navControlTapped(_ id: String) {
         switch id {
-        case "nav.overview": nav.camera = .overview
-        case "nav.follow": nav.camera = .follow
+        case "nav.overview":
+            if nav.camera == .overview {
+                recenterCamera()
+            } else {
+                nav.camera = .overview
+                navCameraKey += 1
+                followCam.release(offerBack: true, at: Date().timeIntervalSince1970)
+                followCamTimerCheck()
+            }
+        case "nav.follow": recenterCamera()
         case "nav.mute": nav.muted.toggle()
         case "nav.steps": modal = .navSteps
         default: break

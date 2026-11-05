@@ -89,7 +89,6 @@ extension LiveOutingController {
     private func autoNavGo(_ t: NavTarget, resumed: Bool) {
         stopAutoFollow()
         if modal == .navOptions || modal == .navSteps { modal = nil }
-        following = false
         nav.autoStart(to: t, intro: TripAutoNav.intro(t, resumed: resumed))
         navCameraKey += 1
     }

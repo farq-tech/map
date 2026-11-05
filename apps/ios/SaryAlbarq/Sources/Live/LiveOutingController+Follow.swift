@@ -13,7 +13,8 @@ extension LiveOutingController {
         if exploreActive { exitExplore(reframe: false) }
         m.onDeviation = { [weak self] e in self?.followDeviation(e) }
         trackFollow = m
-        following = false
+        followCam.release()
+        followCamGuidanceCheck()
         modal = nil
         updateFollow()
         var pts = s.line.points
@@ -23,6 +24,7 @@ extension LiveOutingController {
 
     func stopFollow() {
         trackFollow = nil
+        followCamGuidanceCheck()
         dismissAlert(Self.followAlertId)
     }
 
