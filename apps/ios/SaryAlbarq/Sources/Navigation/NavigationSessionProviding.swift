@@ -127,7 +127,9 @@ extension NavSession: NavigationSessionProviding {
         }
         s.offRoad = offRoad
         if let leg = offRoad {
-            s.offRoadInstruction = NavOffRoad.summary(leg)
+            /* The trip's guidance says why it is a straight line («بدون طريق معبّد» / «بلا إنترنت»). */
+            s.offRoadInstruction = auto ? NavOffRoad.line(leg, remainingM: offRoadNow?.distanceM, bearing: offRoadNow?.bearing, fallback: fallback)
+                                        : NavOffRoad.summary(leg)
             s.offRoadBearing = offRoadNow?.bearing ?? leg.bearing
         }
         return s

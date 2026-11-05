@@ -23,6 +23,7 @@ extension LiveOutingController {
         trip.startClock { [weak self] in
             guard let self else { return }
             self.updateTrip()
+            self.autoNavTick()
             /* Ages and the elapsed time tick on screen. */
             if self.trip.record.start != nil, self.session.view?.status != .ended { self.objectWillChange.send() }
         }
@@ -94,7 +95,7 @@ extension LiveOutingController {
     /// «أنهِ الرحلة» (asked first in the view): ends the outing for everyone.
     func endTrip() {
         tripConfirmEnd = false
-        if nav.isActive { endNav() }
+        if nav.isActive || nav.phase == .planning { nav.end(); modal = nil }
         if backTrack != nil { stopBackTrack() }
         /* `-demo` keeps no trip log of its own: the screen's one goes to the summary. */
         if session.isDemo { let l = speed.local; TripLogStore.update(session.id) { $0 = l } }
@@ -118,13 +119,16 @@ extension LiveOutingController {
         case .arrived:
             UINotificationFeedback.success()
             toast("وصلت \(tripDestination?.name ?? "الوجهة") 🎉")
-            if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
+            /* The trip's own guidance ends on «وصلتوا»; a person's own navigation just ends. */
+            if nav.auto { nav.finishArrival() } else if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
             /* The arrival card is at the top of «المشاركون». */
             selectedTab = .trip
             if sheetDetent == .peek { sheetDetent = .half }
         case let .memberArrived(id, _):
             guard let name = v?.members[id]?.display_name else { break }
             toast("وصل \(name) \(tripDestination?.name ?? "الوجهة")")
+            /* Driving with guidance: the screen is not for reading, so it is said too. */
+            if nav.isActive, nav.phase != .arrived { nav.voice.say("وصل \(name)") }
         }
         if let v, v.iOwn, ArrivalOrder.everyoneArrived(arrivals: trip.record.arrivals, memberIds: v.orderedMembers.map(\.user_id)) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الجميع · تقدر تنهي الرحلة") }

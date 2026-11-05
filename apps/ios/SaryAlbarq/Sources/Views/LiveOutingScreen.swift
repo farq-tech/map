@@ -434,8 +434,14 @@ private struct LiveTopStack: View {
                 .accessibilityIdentifier("nav.memberMoved")
             }
         case .offRoad:
-            NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
-                .transition(.move(edge: .top).combined(with: .opacity))
+            if controller.autoNavFollowId != nil, let f = controller.followUI {
+                /* The trip's off-road leg along the plan's drawn route: the track panel is the one header. */
+                FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.endNav, approach: controller.approachFollow)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         case .arrived:
             NavArrivalCard(nav: nav, end: controller.endNav)
                 .transition(.move(edge: .top).combined(with: .opacity))
