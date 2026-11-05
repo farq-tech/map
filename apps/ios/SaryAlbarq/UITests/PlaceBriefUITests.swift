@@ -58,7 +58,8 @@ final class PlaceBriefUITests: XCTestCase {
         XCTAssertTrue(any(app, "brief.assessment").label.contains("غبار كثيف"))
         shot(app, "place-brief-tap")
         /* The card's actions stay, under the brief. */
-        any(app, "brief.section").swipeUp()
+        /* On a smaller phone the sheet first grows to full height, then scrolls. */
+        for _ in 0..<4 where !any(app, "point.save").waitForExistence(timeout: 2) { any(app, "brief.section").swipeUp() }
         for id in ["point.copy", "point.share", "point.navigate", "point.save"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 3), "\(id) on the card")
         }
