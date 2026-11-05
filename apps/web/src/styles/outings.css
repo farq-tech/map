@@ -704,6 +704,25 @@
 	max-width: 420px;
 }
 
+/* Location-denied screen: SOS is never hidden — the button and its banners/toasts sit above it. */
+.sary-o-live[data-geo-denied="1"] .sary-sos-btn {
+	z-index: 70;
+	bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.sary-o-live[data-geo-denied="1"] .sary-o-lane {
+	z-index: 70;
+}
+
+.sary-o-steps {
+	margin: 0;
+	padding-inline-start: 1.2em;
+	display: grid;
+	gap: 6px;
+	font-size: 0.92em;
+	line-height: 1.5;
+}
+
 /* ---- participant marker ---- */
 
 .sary-peer {
@@ -928,6 +947,15 @@
 	color: #e8842c;
 	font-size: 0.8rem;
 	font-weight: 700;
+}
+
+.sary-o-dest {
+	margin: 0;
+	color: #d4c6ae;
+}
+
+.sary-o-dest strong {
+	color: #e8842c;
 }
 
 .sary-o-current {

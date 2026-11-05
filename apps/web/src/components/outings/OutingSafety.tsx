@@ -151,10 +151,12 @@ export function SosHoldButton({ isRTL, disabled, onTrigger, onShortPress }: { is
 }
 
 /** On the sender's screen while their SOS is out. */
-export function MySosBanner({ isRTL, busy, onCancel }: { isRTL: boolean; busy: boolean; onCancel: () => void }) {
+export function MySosBanner({ isRTL, busy, onCancel, noFix = false }: { isRTL: boolean; busy: boolean; onCancel: () => void; noFix?: boolean }) {
 	return (
 		<div className="sary-sos-mine" role="status" data-testid="outing-sos-mine">
 			<strong>{isRTL ? "أرسلت نداء طوارئ لكل أعضاء الطلعة" : "Your SOS went out to everyone in the outing"}</strong>
+			{/* No GPS (or location blocked): the call for help still goes out, without a position. */}
+			{noFix ? <small data-testid="outing-sos-nofix">{isRTL ? "موقعك غير متاح — وصلهم النداء بدون موقع." : "Your location is unavailable — the SOS went out without it."}</small> : null}
 			<button type="button" disabled={busy} onClick={onCancel} data-testid="outing-sos-cancel">
 				{isRTL ? "أنا بخير" : "I'm OK"}
 			</button>

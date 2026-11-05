@@ -412,3 +412,15 @@
 	color: #fff;
 	font-weight: 800;
 }
+
+/* «موقعك غير متاح»: a second line under the banner title. */
+.sary-sos-mine {
+	flex-wrap: wrap;
+}
+
+.sary-sos-mine small {
+	order: 3;
+	flex-basis: 100%;
+	font-size: 0.85rem;
+	opacity: 0.95;
+}

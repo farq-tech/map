@@ -128,7 +128,21 @@ test('personal invites — single use, rejoin, other identity, revoke, resend, e
   assert.equal(pv.body.invite.kind, 'personal');
   assert.equal(pv.body.invite.invitee_name, 'فهد أخوي');
   assert.equal(pv.body.invite.claim, 'open');
-  list = (await api('GET', `/${oid}/invites/personal`, leader.token)).body.invites;
+  assert.equal(pv.body.invite.destination_name, null, 'no «الوجهة» yet → null');
+
+  /* «الوجهة»: the invitee sees where the trip is going — the name only. */
+  const planned = await api('PUT', `/${oid}/plan`, leader.token, { destination: { name: 'روضة الثمامة', lat: 25.0123, lng: 46.6789 } });
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const pvDest = await api('POST', '/invites/preview', null, { token: fahdInvite.token });
+  assert.equal(pvDest.body.invite.destination_name, 'روضة الثمامة');
+  const raw = JSON.stringify(pvDest.body);
+  assert.ok(!raw.includes('25.0123') && !raw.includes('46.6789'), 'never the coordinates');
+  assert.ok(!('destination' in pvDest.body.invite) && !('lat' in pvDest.body.invite), 'no destination object');
+  assert.equal((await api('POST', '/invites/preview', leader.token, { token: fahdInvite.token })).body.invite.destination_name, 'روضة الثمامة');
+  await api('PUT', `/${oid}/plan`, leader.token, { destination: null });
+  assert.equal((await api('POST', '/invites/preview', null, { token: fahdInvite.token })).body.invite.destination_name, null, 'cleared → null');
+  await api('PUT', `/${oid}/plan`, leader.token, { destination: { name: 'روضة الثمامة', lat: 25.0123, lng: 46.6789 } });
+  list =(await api('GET', `/${oid}/invites/personal`, leader.token)).body.invites;
   assert.equal(list[0].status, 'opened');
 
   /* Fahd joins: he is «فهد أخوي» in this trip, his own name is the nickname. */
