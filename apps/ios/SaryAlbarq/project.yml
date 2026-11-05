@@ -60,6 +60,8 @@ targets:
         product: MapboxMaps
       # The outing's Live Activity (Lock Screen + Dynamic Island).
       - target: SaryAlbarqWidgets
+      # «شارك إلى سَرى البارق» for YouTube links (Sources/Media).
+      - target: SaryShare
     # Config/Base.xcconfig optionally includes the gitignored Config/Secrets.xcconfig
     # (MAPBOX_ACCESS_TOKEN), which Info.plist hands to Mapbox as MBXAccessToken.
     configFiles:
@@ -93,6 +95,27 @@ targets:
         PRODUCT_NAME: SaryAlbarqWidgets
         INFOPLIST_FILE: Widgets/Info.plist
         GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SUPPORTS_MACCATALYST: NO
+        LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"]
+  # Share extension: a shared YouTube link → its video id → the app's «يوتيوب ← قناتي».
+  # OWNER: register sa.sary.albarq.share and the App Group group.sa.sary.albarq
+  # (automatic signing does both). Without the group the link is still copied to the clipboard.
+  SaryShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ShareExtension
+      - Sources/Media/YouTubeLink.swift
+      - Sources/Media/MediaShareInbox.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sa.sary.albarq.share
+        PRODUCT_NAME: SaryShare
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/SaryShare.entitlements
         SKIP_INSTALL: YES
         APPLICATION_EXTENSION_API_ONLY: YES
         SUPPORTS_MACCATALYST: NO

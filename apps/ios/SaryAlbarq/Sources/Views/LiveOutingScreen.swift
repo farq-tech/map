@@ -171,6 +171,7 @@ struct LiveOutingScreen: View {
                     if !rowMode {
                         SaryAlertLane(alerts: frozenAlerts ?? ui.alerts, limit: theme.drive || controller.backTrack != nil ? 1 : 3, tapped: controller.actions.alertTapped,
                                       dismiss: controller.actions.dismissAlert, voice: controller.actions.voice)
+                        MediaNoticeLane(center: MediaCenters.of(controller))
                         LivePlanStrip(controller: controller)
                     }
                 }
