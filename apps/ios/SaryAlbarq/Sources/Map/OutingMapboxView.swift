@@ -147,6 +147,8 @@ struct OutingMapboxView: UIViewRepresentable {
     /// The map centre (the exploration crosshair), its terrain elevation in metres when the
     /// DEM tiles there are loaded (nil otherwise — never guessed) and the zoom. Throttled.
     var onCenter: (MapCenterReading) -> Void = { _ in }
+    /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
+    var hiRes = HiResRequest.off
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -201,6 +203,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setLabels(labels)
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
+        HiResImagery.of(map).update(hiRes)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {

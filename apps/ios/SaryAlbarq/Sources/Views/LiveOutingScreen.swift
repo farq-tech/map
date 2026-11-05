@@ -77,7 +77,8 @@ struct LiveOutingScreen: View {
                     explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
-                    onCenter: { controller.mapCenterChanged($0) }
+                    onCenter: { controller.mapCenterChanged($0) },
+                    hiRes: controller.hiResRequest(ui, exploring: exploring)
                 )
                 }
                 .ignoresSafeArea()

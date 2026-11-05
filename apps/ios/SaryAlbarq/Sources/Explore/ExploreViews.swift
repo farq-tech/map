@@ -233,6 +233,7 @@ struct ExploreLayersSheet: View {
                     .accessibilityIdentifier("layer.\(l.rawValue)")
                 }
             }
+            HiResLayerSection()
             SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
                 SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والكثبان",
                               systemImage: "mountain.2.fill", isOn: $controller.terrain3D, id: "explore-terrain3d")

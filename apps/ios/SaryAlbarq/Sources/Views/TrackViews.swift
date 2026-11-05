@@ -97,7 +97,7 @@ struct TrackDetailView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            TrackMapView(line: subject.line, padding: UIEdgeInsets(top: 90, left: 0, bottom: cardHeight, right: 0))
+            TrackMapView(line: subject.line, padding: UIEdgeInsets(top: 90, left: 0, bottom: cardHeight, right: 0), hiRes: HiResRequest(surface: .trackDetail))
                 .ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: theme.space(.s)) {

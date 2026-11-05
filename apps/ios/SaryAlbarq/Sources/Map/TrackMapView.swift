@@ -20,6 +20,8 @@ struct TrackMapView: UIViewRepresentable {
     /// The camera follows me (follow mode), until the map is moved by hand.
     var followMe = false
     var onUserGesture: () -> Void = {}
+    /// «صور عالية الوضوح» (Sources/Map/AIEnhance): only the full-screen track detail turns it on.
+    var hiRes = HiResRequest.off
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -48,6 +50,7 @@ struct TrackMapView: UIViewRepresentable {
 
     func updateUIView(_ map: MapView, context: Context) {
         context.coordinator.update(self)
+        HiResImagery.of(map).update(followMe ? .off : hiRes)
     }
 
     static func dismantleUIView(_ map: MapView, coordinator: Coordinator) { coordinator.cancelables.removeAll() }
