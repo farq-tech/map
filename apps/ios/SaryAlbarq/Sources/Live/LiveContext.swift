@@ -5,6 +5,8 @@ import Foundation
 /// «المزيد» → «شكل الشاشة». See docs/IA-REDESIGN.md §2.1.
 enum LiveContext: Equatable {
     case driving, stopped
+    /// «استكشاف»: layers, terrain, coordinates, saved places, GPX, offline (stage 4).
+    case exploring
 }
 
 /// «شكل الشاشة»: automatic, or pinned by the person.
@@ -61,7 +63,11 @@ enum LiveContextRule {
     /// The mode the screen shows.
     /// - Parameters:
     ///   - sheetRaised: the sheet is at half or full (the person is reading: always «stopped»).
-    static func resolve(override o: LiveContextOverride, navigating: Bool, moving: Bool, driveMode: Bool, sheetRaised: Bool) -> LiveContext {
+    ///   - exploring: the person is in exploration. Real driving (guidance or motion) always wins:
+    ///     exploration is never shown — and the controller leaves it — while driving.
+    static func resolve(override o: LiveContextOverride, navigating: Bool, moving: Bool, driveMode: Bool, sheetRaised: Bool,
+                        exploring: Bool = false) -> LiveContext {
+        if exploring && !navigating && !moving { return .exploring }
         if sheetRaised { return .stopped }
         switch o {
         case .driving: return .driving

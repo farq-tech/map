@@ -33,6 +33,8 @@ struct LiveOutingScreen: View {
     /// must not shift or cover what the person is touching); it catches up just after.
     @State private var frozenAlerts: [LiveAlertUI]?
     @State private var touching = false
+    @ObservedObject private var savedPlaces = SavedPlacesStore.shared
+    @ObservedObject private var trackLibrary = TrackLibrary.shared
 
     var body: some View {
         let ui = controller.ui
@@ -41,6 +43,7 @@ struct LiveOutingScreen: View {
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
                 let members = controller.mapMembers(theme: theme)
+                let exploring = controller.liveContext(drive: theme.drive) == .exploring
                 PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
                     members: members,
@@ -57,6 +60,7 @@ struct LiveOutingScreen: View {
                     onProjection: { controller.overlay.projection = $0 },
                     onUserGesture: {
                         controller.following = false
+                        controller.userPannedMap = true
                         controller.navUserMovedMap()
                     },
                     waypoints: controller.mapWaypoints,
@@ -65,10 +69,21 @@ struct LiveOutingScreen: View {
                     onLongPress: { controller.planLongPress($0, at: $1) },
                     onWaterways: { controller.weather.setWaterways($0) },
                     nav: controller.mapNav,
-                    onSelectRoute: { controller.nav.select($0) }
+                    onSelectRoute: { controller.nav.select($0) },
+                    /* The chosen layer and the 3D view are exploration's; the trip map stays on satellite
+                     * (the layer offline areas always cover). */
+                    layer: exploring ? controller.mapLayer : .satellite,
+                    terrain3D: exploring && controller.terrain3D,
+                    explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
+                    onCenter: { controller.mapCenterChanged($0) }
                 )
                 }
                 .ignoresSafeArea()
+
+                if exploring {
+                    ExploreCrosshair(model: controller.exploreReading)
+                        .ignoresSafeArea()
+                }
 
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full),
                                driving: controller.liveContext(drive: theme.drive) == .driving, alerting: controller.alertingMemberIds)
@@ -122,7 +137,7 @@ struct LiveOutingScreen: View {
 
     /// What our chrome covers, for the map's keep-group framing and ornaments.
     private func chromeInsets(full: CGSize) -> UIEdgeInsets {
-        let dockTop = ["dock", "cluster-row"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
+        let dockTop = ["dock", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
         let side = ["cluster", "speed"].compactMap { frames[$0] }
@@ -139,7 +154,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed", "speedlimit"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed", "speedlimit", "readout"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -147,13 +162,16 @@ struct LiveOutingScreen: View {
     @ViewBuilder
     private func chrome(_ ui: LiveOutingUIState, full: CGSize, safeBottom: CGFloat) -> some View {
         let rowMode = controller.sheetDetent == .half
-        let driving = controller.liveContext(drive: theme.drive) == .driving
+        let context = controller.liveContext(drive: theme.drive)
+        let driving = context == .driving
+        let exploring = context == .exploring
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
-        let items = groupItems(driving: driving)
+        let items = exploring ? SaryMapControlItem.explore(terrain3D: controller.terrain3D, tracksShown: trackLibrary.shown.count)
+            : groupItems(driving: driving)
         ZStack {
             VStack(spacing: theme.space(.s)) {
-                LiveTopStack(controller: controller, ui: ui, alerts: frozenAlerts ?? ui.alerts, driving: driving, rowMode: rowMode,
+                LiveTopStack(controller: controller, ui: ui, alerts: frozenAlerts ?? ui.alerts, driving: driving, exploring: exploring, rowMode: rowMode,
                              maxListHeight: max(220, full.height * 0.42), weather: controller.weather,
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller))
                     .chromeFrame("top")
@@ -176,12 +194,20 @@ struct LiveOutingScreen: View {
                             .transition(.opacity)
                     }
                     .padding(.horizontal, theme.space(.m))
-                    Spacer().frame(height: lift + theme.bigButton + (theme.drive ? 72 : 56))
+                    Spacer().frame(height: lift + theme.bigButton + (theme.drive ? 72 : 56) + (exploring ? 76 : 0))
                 }
             }
 
-            VStack {
+            VStack(spacing: theme.space(.s)) {
                 Spacer()
+                if exploring && controller.sheetDetent == .peek {
+                    ExploreReadout(model: controller.exploreReading, format: controller.coordFormat,
+                                   toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
+                                   copy: controller.copyCrosshair, save: controller.saveCrosshair)
+                        .chromeFrame("readout")
+                        .padding(.horizontal, theme.space(.m))
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 HStack(alignment: .bottom) {
                     SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: !rowMode, level: controller.pttLevel)
                         .chromeFrame("ptt")
@@ -225,7 +251,9 @@ struct LiveOutingScreen: View {
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: sheetTop)
         .animation(theme.animation(.smooth), value: driving)
+        .animation(theme.animation(.smooth), value: exploring)
         .environment(\.safetyAlertActions, controller.safety.alertActions)
+        .environment(\.convoyAlertActions, controller.convoyAlertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
         .animation(theme.animation(.smooth), value: controller.nav.phase)
     }
@@ -258,6 +286,10 @@ struct LiveOutingScreen: View {
         case "fit": a.fitGroup()
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "actions": controller.modal = .actions
+        case "layers": controller.modal = .layers
+        case "terrain": controller.terrain3D.toggle()
+        case "places": controller.modal = .places
+        case "tracks": controller.modal = .tracks
         default: controller.navControlTapped(id)
         }
     }
@@ -271,6 +303,7 @@ private struct LiveTopStack: View {
     var ui: LiveOutingUIState
     var alerts: [LiveAlertUI]
     var driving: Bool
+    var exploring = false
     var rowMode: Bool
     var maxListHeight: CGFloat
     @ObservedObject var weather: OutingWeather
@@ -299,7 +332,11 @@ private struct LiveTopStack: View {
                 MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
                              clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
             }
-            if !bannerOnly {
+            if exploring {
+                ExploreHeader(layer: controller.mapLayer, bell: bell, bellOpen: controller.bellOpen, hasHistory: !controller.alertHistory.isEmpty,
+                              back: controller.actions.back, exit: { controller.exitExplore() },
+                              bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() })
+            } else if !bannerOnly {
                 header(bell: bell)
                 if controller.statusExpanded {
                     TripStatusDetails(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings, nearbyCars: ui.nearbyCars,
@@ -366,7 +403,8 @@ private struct LiveTopStack: View {
                        weatherTapped: { controller.modal = .weather },
                        bellTapped: { controller.statusExpanded = false; controller.bellOpen.toggle() },
                        bellOpen: controller.bellOpen,
-                       hasHistory: !controller.alertHistory.isEmpty)
+                       hasHistory: !controller.alertHistory.isEmpty,
+                       exploreTapped: driving || controller.nav.isActive ? nil : { controller.enterExplore() })
         }
         .task { controller.feedWeather(force: true) }
     }

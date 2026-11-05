@@ -39,7 +39,7 @@ struct JoinByLinkSheet: View {
                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .sheet(isPresented: $scanning) {
-            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال صاحب الطلعة.") { s in
+            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الرحلة.") { s in
                 scanning = false
                 text = s
                 go(s)
@@ -119,11 +119,11 @@ struct InviteJoinSheet: View {
                 }
                 Button("ليس الآن", action: close).buttonStyle(.sary(.plain))
             case .expired:
-                SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من صاحب الطلعة رابطًا جديدًا. الروابط تنتهي أو يلغيها صاحبها."),
+                SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الرحلة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.expired")
             case .invalid:
-                SaryStateView(kind: .error(title: "رابط غير صحيح", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال صاحب الطلعة."),
+                SaryStateView(kind: .error(title: "رابط غير صحيح", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.invalid")
             case .error(let m):

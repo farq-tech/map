@@ -27,13 +27,19 @@ final class DeclutterTests: XCTestCase {
 
     func testContextRule() {
         let r = LiveContextRule.resolve
-        XCTAssertEqual(r(.auto, false, false, false, false), .stopped)
-        XCTAssertEqual(r(.auto, true, false, false, false), .driving, "navigation")
-        XCTAssertEqual(r(.auto, false, true, false, false), .driving, "moving")
-        XCTAssertEqual(r(.auto, false, false, true, false), .driving, "drive mode")
-        XCTAssertEqual(r(.auto, true, true, true, true), .stopped, "sheet raised: reading")
-        XCTAssertEqual(r(.driving, false, false, false, false), .driving, "pinned")
-        XCTAssertEqual(r(.stopped, true, true, true, false), .stopped, "pinned")
+        XCTAssertEqual(r(.auto, false, false, false, false, false), .stopped)
+        XCTAssertEqual(r(.auto, true, false, false, false, false), .driving, "navigation")
+        XCTAssertEqual(r(.auto, false, true, false, false, false), .driving, "moving")
+        XCTAssertEqual(r(.auto, false, false, true, false, false), .driving, "drive mode")
+        XCTAssertEqual(r(.auto, true, true, true, true, false), .stopped, "sheet raised: reading")
+        XCTAssertEqual(r(.driving, false, false, false, false, false), .driving, "pinned")
+        XCTAssertEqual(r(.stopped, true, true, true, false, false), .stopped, "pinned")
+        /* Exploration (build 9): wins over pinned modes and the raised sheet, never over real driving. */
+        XCTAssertEqual(r(.auto, false, false, false, false, true), .exploring)
+        XCTAssertEqual(r(.auto, false, false, false, true, true), .exploring, "sheet up: still exploring")
+        XCTAssertEqual(r(.driving, false, false, true, false, true), .exploring, "the person chose it")
+        XCTAssertEqual(r(.auto, true, false, false, false, true), .driving, "guidance leaves exploration")
+        XCTAssertEqual(r(.auto, false, true, false, false, true), .driving, "moving leaves exploration")
     }
 
     // MARK: alerts
@@ -140,10 +146,10 @@ final class DeclutterTests: XCTestCase {
 
     func testActionCatalogHoldsEveryFeature() {
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "المجموعة", "الخدمات", "الترفيه"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "المجموعة", "الخريطة", "الخدمات", "الترفيه"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
         XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-note-open", "outing-stuck",
-                                  "outing-waypoint-add", "outing-copyme", "outing-nearest-open", "outing-weather", "outing-youtube"])
+                                  "outing-waypoint-add", "outing-copyme", "outing-nearest-open", "outing-weather", "outing-youtube", "outing-explore"])
         XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
         XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق العودة")

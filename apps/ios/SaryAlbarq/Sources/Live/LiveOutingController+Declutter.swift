@@ -6,7 +6,7 @@ extension LiveOutingController {
     /// Driving or stopped, right now. `drive`: the appearance's drive mode (`theme.drive`).
     func liveContext(drive: Bool) -> LiveContext {
         LiveContextRule.resolve(override: contextOverride, navigating: nav.isActive, moving: motion.moving,
-                                driveMode: drive, sheetRaised: sheetDetent != .peek)
+                                driveMode: drive, sheetRaised: sheetDetent != .peek, exploring: exploreActive)
     }
 
     /// Tapping the trip header: the trip's details («الرحلة» at half height).
@@ -63,6 +63,7 @@ extension LiveOutingController {
         case "nearest": a.openNearestStations()
         case "weather": modal = .weather
         case "youtube": MediaCenters.of(self).open()
+        case "explore": enterExplore()
         default: break
         }
     }

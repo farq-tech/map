@@ -154,7 +154,7 @@ final class FeatureFlowTests: XCTestCase {
         XCTAssertFalse(f.canDelete(f.waypoints.first { $0.id == "theirs" }!), "a member cannot delete a friend's point")
         let (s3, lead) = open(coLeader: true); _ = s3
         await lead.reload()
-        XCTAssertTrue(lead.canDelete(lead.waypoints.first { $0.id == "theirs" }!), "«مساعد» can")
+        XCTAssertTrue(lead.canDelete(lead.waypoints.first { $0.id == "theirs" }!), "«نائب الأمير» can")
         let r5 = await lead.delete("theirs")
         XCTAssertTrue(r5)
         XCTAssertEqual(backend.deleted, ["theirs"])

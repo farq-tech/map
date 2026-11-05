@@ -59,6 +59,8 @@ struct OfflineArea: Identifiable, Equatable {
     var completed: UInt64
     var required: UInt64
     var expires: Date?
+    /// Layers saved for this area (areas from before build 9: satellite only).
+    var layers: Set<MapLayer> = [.satellite]
     var isComplete: Bool { required > 0 && completed >= required }
 }
 
@@ -110,9 +112,11 @@ final class OfflineMaps: ObservableObject {
             let meta = await metadata(r.id)
             var box: OfflinePlan.Box?
             if let b = meta["box"] as? [Double], b.count == 4 { box = .init(west: b[0], south: b[1], east: b[2], north: b[3]) }
+            let layers = Set(((meta["layers"] as? [String]) ?? ["satellite"]).compactMap(MapLayer.init))
             out.append(OfflineArea(id: r.id, name: meta["name"] as? String ?? "منطقة", box: box, outingName: meta["outing"] as? String,
                                    createdAt: (meta["created"] as? Double).map { Date(timeIntervalSince1970: $0) },
-                                   bytes: Int64(r.completedResourceSize), completed: r.completedResourceCount, required: r.requiredResourceCount, expires: r.expires))
+                                   bytes: Int64(r.completedResourceSize), completed: r.completedResourceCount, required: r.requiredResourceCount, expires: r.expires,
+                                   layers: layers.isEmpty ? [.satellite] : layers))
         }
         areas = out.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
         loaded = true
@@ -128,13 +132,23 @@ final class OfflineMaps: ObservableObject {
 
     // MARK: download
 
-    private func descriptors() -> [TilesetDescriptor] {
+    /// Complete areas that also hold the topographic layer.
+    var topoAreas: Int { areas.filter { $0.isComplete && $0.layers.contains(.topo) }.count }
+    var completeAreas: Int { areas.filter(\.isComplete).count }
+
+    private func descriptors(topo: Bool) -> [TilesetDescriptor] {
         let opts = TilesetDescriptorOptions(styleURI: OutingMapboxView.styleURI, zoomRange: OfflinePlan.minZoom...OfflinePlan.maxZoom,
                                             tilesets: OfflinePlan.extraTilesets)
-        return [offline.createTilesetDescriptor(for: opts)]
+        var out = [offline.createTilesetDescriptor(for: opts)]
+        if topo {
+            /* Mapbox Outdoors: its own tilesets (streets + terrain-v2 contours & hillshade) for the same zooms. */
+            let t = TilesetDescriptorOptions(styleURI: MapLayer.topo.styleURI, zoomRange: OfflinePlan.minZoom...OfflinePlan.maxZoom, tilesets: nil)
+            out.append(offline.createTilesetDescriptor(for: t))
+        }
+        return out
     }
 
-    private func loadOptions(_ box: OfflinePlan.Box, name: String, outing: String?) -> TileRegionLoadOptions? {
+    private func loadOptions(_ box: OfflinePlan.Box, name: String, outing: String?, topo: Bool = false) -> TileRegionLoadOptions? {
         let poly = Polygon([[
             CLLocationCoordinate2D(latitude: box.south, longitude: box.west),
             CLLocationCoordinate2D(latitude: box.south, longitude: box.east),
@@ -142,14 +156,15 @@ final class OfflineMaps: ObservableObject {
             CLLocationCoordinate2D(latitude: box.north, longitude: box.west),
             CLLocationCoordinate2D(latitude: box.south, longitude: box.west),
         ]])
-        var meta: [String: Any] = ["name": name, "box": [box.west, box.south, box.east, box.north], "created": Date().timeIntervalSince1970]
+        var meta: [String: Any] = ["name": name, "box": [box.west, box.south, box.east, box.north], "created": Date().timeIntervalSince1970,
+                                   "layers": topo ? ["satellite", "topo"] : ["satellite"]]
         if let outing { meta["outing"] = outing }
-        return TileRegionLoadOptions(geometry: .polygon(poly), descriptors: descriptors(), metadata: meta, acceptExpired: true)
+        return TileRegionLoadOptions(geometry: .polygon(poly), descriptors: descriptors(topo: topo), metadata: meta, acceptExpired: true)
     }
 
     /// Storage the area would take (Mapbox's own estimate), or nil when it cannot tell (offline).
-    func estimate(_ box: OfflinePlan.Box) async -> Int64? {
-        guard let o = loadOptions(box, name: "", outing: nil) else { return nil }
+    func estimate(_ box: OfflinePlan.Box, topo: Bool = false) async -> Int64? {
+        guard let o = loadOptions(box, name: "", outing: nil, topo: topo) else { return nil }
         return await withCheckedContinuation { c in
             let done = Locked(false)
             let cancel = tileStore.estimateTileRegion(forId: "sary-estimate", loadOptions: o, progress: { _ in }) { r in
@@ -165,13 +180,17 @@ final class OfflineMaps: ObservableObject {
     }
 
     /// Style pack (once) + the tile region. Progress is published in `job`.
-    func download(_ box: OfflinePlan.Box, name: String, outing: String?) {
-        guard let o = loadOptions(box, name: name, outing: outing) else { job = .failed("تعذّر تجهيز المنطقة."); return }
+    func download(_ box: OfflinePlan.Box, name: String, outing: String?, topo: Bool = false) {
+        guard let o = loadOptions(box, name: name, outing: outing, topo: topo) else { job = .failed("تعذّر تجهيز المنطقة."); return }
         job = .downloading(name: name, fraction: 0, bytes: 0)
         let packOpts = StylePackLoadOptions(glyphsRasterizationMode: .ideographsRasterizedLocally, metadata: ["app": "sary"], acceptExpired: true)!
         let pack = offline.loadStylePack(for: OutingMapboxView.styleURI, loadOptions: packOpts) { [weak self] r in
             let ok = (try? r.get()) != nil
             Task { @MainActor in self?.stylePackReady = ok || (self?.stylePackReady ?? false) }
+        }
+        var packs: [Cancelable] = [pack]
+        if topo {
+            packs.append(offline.loadStylePack(for: MapLayer.topo.styleURI, loadOptions: packOpts) { _ in })
         }
         let id = OfflinePlan.regionId()
         let region = tileStore.loadTileRegion(forId: id, loadOptions: o, progress: { [weak self] p in
@@ -195,7 +214,7 @@ final class OfflineMaps: ObservableObject {
                 self.reload()
             }
         }
-        cancelables = [pack, region]
+        cancelables = packs + [region]
     }
 
     func cancel() {
@@ -217,6 +236,7 @@ final class OfflineMaps: ObservableObject {
     func deleteAll() {
         for a in areas { tileStore.removeRegion(forId: a.id) { _ in } }
         offline.removeStylePack(for: OutingMapboxView.styleURI)
+        offline.removeStylePack(for: MapLayer.topo.styleURI)
         areas = []
         stylePackReady = false
     }

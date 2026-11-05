@@ -235,6 +235,23 @@ another UI test, ‡ = unit-tested.
 | Edge arrows to off-screen friends | all | max 3, alert members first | 0 ‡ |
 | GPX export, route provider | hidden taps on «حول» | Settings → «متقدم» | 2 |
 
+### Build 9 additions (stages 4–5)
+
+| Feature | Build 8 | Build 9 | Taps |
+|---|---|---|---|
+| Exploration mode (new) | — | header «استكشاف» (`trip.explore`); «+» → الخريطة (`outing-explore`); auto after panning > 5 km from every live car while stopped; never while driving; «ارجع للرحلة» (`explore-exit`) | 1 ✔ |
+| Layer switcher: satellite / standard / topographic (new) | satellite only | exploration → «الطبقات» (`explore-layers` → `layer.*`) | 2 ✔ |
+| 3D terrain view (new) | terrain always at 1.15, flat camera | exploration → (`explore-terrain`), also in «الطبقات» (`explore-terrain3d`) | 2 ✔ |
+| Elevation at the crosshair (new) | — | exploration readout (`explore.elevation`), Mapbox Terrain-DEM only, «غير متاح» otherwise | 1 ✔ ‡ |
+| Coordinates at the crosshair, decimal / DMS, copy (new) | point card only | exploration readout (`explore-coord-format`, `explore-copy`); point card unchanged | 1–2 ✔ |
+| Saved places «أماكني المحفوظة» (new) | — | exploration (`explore-places`, `explore-save`); point card «احفظ في أماكني» (`point.save`); rename / icon / delete / navigate / share / copy per row | 2 ✔ ‡ |
+| GPX tracks list + on map (new) | import/export inside the plan editor only | exploration → «مسارات GPX» (`explore-tracks`); plan import/export also lands there | 2 ✔ ‡ |
+| Offline maps | «المزيد» / Settings | + exploration → «الطبقات» → `explore-offline`; areas can include the topographic layer (`offline.topo`); «عادي» says it needs internet | 2–3 ✔ |
+| Distance from the leader, stopped duration per member (new) | — | «المجموعة» rows (`participant.convoy`) | 2 ✔ ‡ |
+| Separation / unexpected-stop alerts (new) | convoy order alerts only | one card + bell; leaders get «ارجعوا لنقطة التجمع» on the card (`convoy.recall`) | 0 ✔ ‡ |
+| «تنبيهات القافلة» rules (new) | — | «المزيد» tab (`settings-convoy-alerts`); Settings → الحساب (`settings.convoyAlerts`) | 2 ✔ ‡ |
+| Return to the meeting point (new) | rally «اتجه» only | rally card «ارجعوا لنقطة التجمع» (`rally.recall`, leaders) → members get a prompt with «اتجه» (`convoy.goRally`); who is at the rally (`rally.arrived`) | 2 ✔ ‡ |
+
 ## 6. Stages
 
 | Stage | Scope | Build 8 |
@@ -242,9 +259,42 @@ another UI test, ‡ = unit-tested.
 | 1 | Inventory, matrix, before/after counts (this doc) | ✅ shipped |
 | 2 | Driving / stopped modes, adaptive header, action center, 3 tabs, one alert + bell, map declutter, home, settings | ✅ shipped, unit + UI tested |
 | 3 | Notification history behind the bell | ✅ shipped, unit tested |
-| 4 | **Exploration mode**: layer switcher (satellite / standard / topographic from Mapbox Outdoors or Terrain-DEM hillshade + contours), elevation readout, coordinates + saved locations, GPX/route exploration, offline management entry | ⏭ next. Needs the offline style packs to cover each layer (today only `standard-satellite` is packed), so a layer must say «غير متاح بلا إنترنت» honestly instead of drawing blanks |
-| 5 | **Convoy intelligence**: distance from the leader per vehicle, stopped / disconnected states on rows and cars, separation + unexpected-stop alerts with grace periods and configurable thresholds (settings), return-to-meeting-point flow | ⏭ next. Build 8 keeps what exists (convoy order alerts, silent alerts, rally point) |
+| 4 | **Exploration mode**: layer switcher (satellite / standard / topographic from Mapbox Outdoors or Terrain-DEM hillshade + contours), elevation readout, coordinates + saved locations, GPX/route exploration, offline management entry | ✅ build 9 (see §7) |
+| 5 | **Convoy intelligence**: distance from the leader per vehicle, stopped / disconnected states on rows and cars, separation + unexpected-stop alerts with grace periods and configurable thresholds (settings), return-to-meeting-point flow | ✅ build 9 (see §8) |
 
 Main experience **Map · Group · Trip**: in build 8 «الخريطة» is the live map itself (header,
 floating group, «+»), and the sheet carries «الرحلة» and «المجموعة»; the third tab «المزيد»
 holds this outing's settings. Stage 4 turns it into «الخريطة» (layers, exploration, offline).
+
+## 7. Exploration (build 9)
+
+* **Third context mode.** `LiveContext.exploring`: entered from the header (`trip.explore`), «+» → الخريطة,
+  or automatically when a pan settles more than 5 km from every *live* car while stopped (sheet down,
+  not picking). Real driving (guidance or motion > 15 km/h) always wins: exploration is never entered and
+  is left at once while driving (toast «رجعنا لشاشة القيادة»). «ارجع للرحلة» is one tap.
+* **Layers** are real Mapbox styles with Arabic names: Standard Satellite (the trip map), Standard,
+  Outdoors v12 (contours + hillshade from mapbox-terrain-v2; contour labels rewritten to
+  `number-format` with the `ar-SA` locale → «٢٬٢٥٠ م»). The chosen layer and the 3D view apply in
+  exploration only; the trip map stays on satellite (the layer offline areas always cover). Cars, chips,
+  trails, the plan, navigation and exploration layers are re-added on every style load.
+* **Elevation** = `MapboxMap.elevation(at:)` ÷ the terrain exaggeration, only when the DEM tile is loaded;
+  otherwise «الارتفاع غير متاح». Nothing is estimated.
+* **Saved places / GPX tracks** are on-device JSON (Application Support), never sent.
+* **Offline honesty.** Areas can now include the topographic layer (an Outdoors tileset descriptor + style
+  pack, opt-in); each area lists its layers; «عادي» says it always needs internet.
+
+## 8. Convoy intelligence (build 9)
+
+* Reference = «المقدمة» when convoy mode names one, else «أمير الرحلة» (the outing owner).
+* Rows: «عن أمير الرحلة ١٫٢ كم» from two live positions only; «واقف منذ ٤ د» after 60 s at ≤ 3 km/h;
+  speed, last update and «انقطع منذ …» as before.
+* Rules (Settings → «تنبيهات القافلة», defaults): separation > 2 km for > 60 s (clears under 80 % —
+  hysteresis); unexpected stop: was > 20 km/h within 2 min before stopping, ≤ 3 km/h for 3 min, another
+  live car > 15 km/h, not within 300 m of the destination / rally / waypoints, never my own car; disconnected
+  = the server's member_silent at 10 or 30 min; behind the tail = the existing alert with an optional grace
+  (default 0, as before). Reminders at most every 5 min, 2 min quiet after a clear; stale positions reset.
+* Priority: unexpected stop = silent tier (may need help); separation = convoy tier.
+* Return to the meeting point: leaders send «↩︎ ارجعوا لنقطة التجمع» through the existing note channel
+  (older builds see a note above the leader's car); this build turns a leader's recall note into a
+  prompt with «اتجه» (in-app navigation to the rally point; the routed options sheet shows the real ETA)
+  and the straight-line distance; the rally card shows who is there.

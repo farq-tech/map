@@ -130,6 +130,15 @@ struct OutingMapboxView: UIViewRepresentable {
     var nav = MapNavDrawing()
     /// An alternative's time label was tapped.
     var onSelectRoute: (String) -> Void = { _ in }
+    /// «الطبقة»: satellite / standard / topographic (exploration's layer switcher).
+    var layer: MapLayer = .satellite
+    /// «عرض ثلاثي الأبعاد للتضاريس»: tilt the camera over a stronger terrain.
+    var terrain3D = false
+    /// Exploration: shown GPX tracks and saved places.
+    var explore = MapExplore()
+    /// The map centre (the exploration crosshair), its terrain elevation in metres when the
+    /// DEM tiles there are loaded (nil otherwise — never guessed) and the zoom. Throttled.
+    var onCenter: (MapCenterReading) -> Void = { _ in }
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -137,16 +146,20 @@ struct OutingMapboxView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MapView {
         let camera = CameraOptions(center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), zoom: 12.15, bearing: 0, pitch: 0)
-        let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: ArabicBasemap.cachedJSON == nil ? Self.styleURI : nil))
-        if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
+        let cached = ArabicBasemap.cached(layer)
+        let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: cached == nil ? layer.styleURI : nil))
+        if let cached { map.mapboxMap.loadStyle(cached) }
+        context.coordinator.layer = layer
+        context.coordinator.terrain3D = terrain3D
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
         context.coordinator.theme = theme
         context.coordinator.attach(map)
-        ArabicBasemap.load { json in
+        let first = layer
+        ArabicBasemap.load(layer) { [weak coordinator = context.coordinator] json in
             /* Same style with place names in Arabic; English labels only if it cannot be fetched. */
-            if let json { map.mapboxMap.loadStyle(json) }
+            if let json, coordinator?.layer == first { map.mapboxMap.loadStyle(json) }
         }
         return map
     }
@@ -175,6 +188,10 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setTrails(trails)
         c.setPlan(plan)
         c.setNav(nav)
+        c.onCenter = onCenter
+        c.setLayer(layer)
+        c.setTerrain3D(terrain3D)
+        c.setExplore(explore)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -227,6 +244,12 @@ struct OutingMapboxView: UIViewRepresentable {
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
         let navDrawer = NavMapDrawer()
+        let exploreDrawer = ExploreMapDrawer()
+        var layer: MapLayer = .satellite
+        var terrain3D = false
+        var onCenter: (MapCenterReading) -> Void = { _ in }
+        private var lastCenterAt: CFTimeInterval = 0
+        private var centerPending = false
         var picking = false
         var following = false
         private var lastFollowAt: CFTimeInterval = 0
@@ -290,12 +313,14 @@ struct OutingMapboxView: UIViewRepresentable {
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in
+                self?.reportCenter(force: true)
                 self?.refreshRoads()
                 self?.refreshWaterways()
             }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 self?.layoutChips()
                 self?.project()
+                self?.reportCenter()
             }.store(in: &cancelables)
             /* Chips live in our own overlay (over the map, under Mapbox's ornaments) so the
              * declutter layout can move, stack and fold them in the same frame as the camera. */
@@ -399,17 +424,64 @@ struct OutingMapboxView: UIViewRepresentable {
             if !m.sourceExists(withId: "mapbox-dem") {
                 try? m.addSource(withId: "mapbox-dem", properties: ["type": "raster-dem", "url": "mapbox://mapbox.mapbox-terrain-dem-v1", "tileSize": 512, "maxzoom": 14])
             }
-            try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": 1.15])
+            try? m.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration])
+            if layer == .topo, m.layerExists(withId: TopoLabels.contourLabelLayer) {
+                /* Contour heights in metres with Arabic-Indic digits («٦٢٠ م»), from the style's own data. */
+                try? m.setLayerProperty(for: TopoLabels.contourLabelLayer, property: "text-field", value: TopoLabels.textField)
+            }
             ensureRoadProbe()
             trailLayerKey = nil
             drawTrails()
             drawPlan(force: true)
             navDrawer.styleLoaded()
+            exploreDrawer.styleLoaded(m)
             for r in recs.values {
                 r.layersReady = false
                 r.model = false
             }
             sync(lastCars)
+        }
+
+        /// Terrain exaggeration: the outing map's usual 1.15, stronger in the 3D terrain view.
+        var terrainExaggeration: Double { terrain3D ? 1.6 : 1.15 }
+
+        /// Another base layer: load its (Arabic) style; `styleLoaded` puts every layer of ours back.
+        func setLayer(_ l: MapLayer) {
+            guard l != layer, let map else { return }
+            layer = l
+            if let json = ArabicBasemap.cached(l) { map.mapboxMap.loadStyle(json) } else { map.mapboxMap.loadStyle(l.styleURI) }
+            ArabicBasemap.load(l) { [weak self] json in
+                guard let self, let json, self.layer == l else { return }
+                self.map?.mapboxMap.loadStyle(json)
+            }
+        }
+
+        func setTerrain3D(_ on: Bool) {
+            guard on != terrain3D, let map else { return }
+            terrain3D = on
+            if styleReady { try? map.mapboxMap.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration]) }
+            let cam = CameraOptions(pitch: on ? 62 : 0)
+            map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.8)
+        }
+
+        func setExplore(_ e: MapExplore) {
+            if e.active, !exploreDrawer.last.active { keepGroup = false }
+            guard styleReady, let map else { exploreDrawer.styleLoadedPending(e); return }
+            exploreDrawer.update(map.mapboxMap, e)
+        }
+
+        /// The centre, its elevation (metres, only from loaded DEM tiles) and zoom; ≤ 6 per second.
+        private func reportCenter(force: Bool = false) {
+            guard let map, styleReady else { return }
+            let now = CACurrentMediaTime()
+            guard force || now - lastCenterAt >= 0.16 else { return }
+            lastCenterAt = now
+            let st = map.mapboxMap.cameraState
+            /* Mapbox returns the elevation multiplied by the exaggeration: undo it for real metres. */
+            let raw = map.mapboxMap.elevation(at: st.center)
+            let metres = raw.map { $0 / terrainExaggeration }
+            onCenter(MapCenterReading(center: LngLat(lng: st.center.longitude, lat: st.center.latitude), elevationM: metres, zoom: st.zoom,
+                                      screenPoint: map.mapboxMap.point(for: st.center), settled: force))
         }
 
         private func applyLight() {
@@ -1203,7 +1275,7 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func keepGroupInView(newcomers: Set<String>) {
-            guard let map, !lastCars.isEmpty, map.bounds.height > 0 else { return }
+            guard let map, !lastCars.isEmpty, map.bounds.height > 0, !exploreDrawer.last.active else { return }
             /* Frame the group when positions first arrive, and again each time someone new appears —
              * unless the person is looking somewhere on purpose (moved the map, «أظهره», «موقعي»). */
             if !newcomers.isEmpty {
@@ -1506,23 +1578,33 @@ struct MapProjection: Equatable {
     var size: CGSize
 }
 
-/// Mapbox Standard Satellite with place names in Arabic. Standard reads
-/// `name_en`; we fetch the same style once, point its labels at `name_ar`
-/// (falling back to the local `name`), and load it as the "basemap" import so
-/// its config (light preset, 3D objects) works as before.
+/// Mapbox styles with place names in Arabic. Standard (and Outdoors) read `name_en`; we
+/// fetch the same style once, point its labels at `name_ar` (falling back to the local
+/// `name`), and load it — Standard / Standard Satellite as the "basemap" import so its
+/// config (light preset, 3D objects) works as before, Outdoors as a classic style.
+/// `cachedJSON` / `load(_:)` are the satellite layer (every map but the live one uses it).
 enum ArabicBasemap {
-    /// The last fetched style is kept on disk, so an offline launch draws the same
+    /// The last fetched style per layer is kept on disk, so an offline launch draws the same
     /// Arabic style (its tiles, glyphs and sprites then come from the offline TileStore / style pack).
-    private(set) static var cachedJSON: String? = {
-        guard let u = fileURL, let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+    private static var cache: [MapLayer: String] = [:]
+    private static var refreshed = Set<MapLayer>()
+    private static var loading = Set<MapLayer>()
+    private static var waiters: [MapLayer: [(String?) -> Void]] = [:]
+
+    static var cachedJSON: String? { cached(.satellite) }
+
+    static func cached(_ layer: MapLayer) -> String? {
+        if let c = cache[layer] { return c }
+        guard let u = fileURL(layer), let s = try? String(contentsOf: u, encoding: .utf8), s.contains("name_ar") else { return nil }
+        cache[layer] = s
         return s
-    }()
-    private static var fileURL: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("arabic-basemap-v1.json")
     }
-    private static var refreshed = false
-    private static var loading = false
-    private static var waiters: [(String?) -> Void] = []
+
+    private static func fileURL(_ layer: MapLayer) -> URL? {
+        /* The satellite file keeps its build-1 name, so an update draws the cached style at once. */
+        let name = layer == .satellite ? "arabic-basemap-v1.json" : "arabic-\(layer.rawValue)-v1.json"
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent(name)
+    }
 
     static func transform(_ style: String) -> String {
         style.replacingOccurrences(of: "[\"get\", \"name_en\"]", with: "[\"coalesce\", [\"get\", \"name_ar\"], [\"get\", \"name\"]]")
@@ -1533,41 +1615,43 @@ enum ArabicBasemap {
         "{\"version\":8,\"imports\":[{\"id\":\"basemap\",\"url\":\"\",\"data\":\(style)}],\"sources\":{},\"layers\":[]}"
     }
 
-    static func load(_ done: @escaping (String?) -> Void) {
+    static func load(_ done: @escaping (String?) -> Void) { load(.satellite, done) }
+
+    static func load(_ layer: MapLayer, _ done: @escaping (String?) -> Void) {
         /* Already fetched this launch: the map was created with it. A disk copy is refreshed once per launch. */
-        if cachedJSON != nil && refreshed { return }
-        waiters.append(done)
-        guard !loading else { return }
-        loading = true
+        if cached(layer) != nil && refreshed.contains(layer) { return }
+        waiters[layer, default: []].append(done)
+        guard !loading.contains(layer) else { return }
+        loading.insert(layer)
         guard let token = Bundle.main.object(forInfoDictionaryKey: "MBXAccessToken") as? String, !token.isEmpty,
-              let url = URL(string: "https://api.mapbox.com/styles/v1/mapbox/standard-satellite?access_token=\(token)") else {
-            return finish(nil)
+              let url = URL(string: "https://api.mapbox.com/styles/v1/mapbox/\(layer.styleId)?access_token=\(token)") else {
+            return finish(layer, nil)
         }
         URLSession.shared.dataTask(with: url) { data, resp, _ in
             var out: String?
             if let data, (resp as? HTTPURLResponse)?.statusCode == 200, let s = String(data: data, encoding: .utf8), s.contains("name_en") {
-                out = wrap(transform(s))
+                out = layer.isImport ? wrap(transform(s)) : transform(s)
             }
-            DispatchQueue.main.async { finish(out) }
+            DispatchQueue.main.async { finish(layer, out) }
         }.resume()
     }
 
-    private static func finish(_ json: String?) {
-        loading = false
-        refreshed = true
-        if let json, json != cachedJSON {
-            cachedJSON = json
-            if let u = fileURL {
+    private static func finish(_ layer: MapLayer, _ json: String?) {
+        loading.remove(layer)
+        refreshed.insert(layer)
+        if let json, json != cached(layer) {
+            cache[layer] = json
+            if let u = fileURL(layer) {
                 try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? json.write(to: u, atomically: true, encoding: .utf8)
             }
         } else if json != nil {
             /* Same style as the one already drawn: nothing to reload. */
-            waiters = []
+            waiters[layer] = []
             return
         }
-        let w = waiters
-        waiters = []
+        let w = waiters[layer] ?? []
+        waiters[layer] = []
         w.forEach { $0(json) }
     }
 }

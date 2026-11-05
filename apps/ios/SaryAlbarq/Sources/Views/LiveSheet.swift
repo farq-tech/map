@@ -136,6 +136,24 @@ struct LiveSheet: View {
                             openInAppleMaps: controller.openInAppleMaps)
         case .navSteps:
             NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
+        case .layers:
+            ExploreLayersSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case .places:
+            SavedPlacesSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case let .placeEdit(d):
+            SavedPlaceEditSheet(draft: d, done: { controller.savePlace($0) }, cancel: { controller.modal = nil })
+                .presentationDetents([.large])
+        case .convoyAlerts:
+            ConvoyAlertSettingsView(close: { controller.modal = nil })
+                .presentationDetents([.large])
+        case .tracks:
+            TracksSheet(controller: controller)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -226,7 +244,7 @@ private struct ShareCallout: View {
                 VStack(spacing: theme.space(.s)) {
                     if controller.tripDestination == nil {
                         /* «لا يوجد رحلة من غير نهاية»: no start without a destination. */
-                        SaryBanner(text: v?.iLead == true ? "حدّد الوجهة أولًا، وبعدها ابدأ الطلعة." : "بانتظار الوجهة من صاحب الطلعة.",
+                        SaryBanner(text: v?.iLead == true ? "حدّد الوجهة أولًا، وبعدها ابدأ الطلعة." : "بانتظار الوجهة من أمير الرحلة.",
                                    tone: .warning, systemImage: "flag.slash")
                             .accessibilityIdentifier("live.waitingDestination")
                         if v?.iLead == true {
@@ -235,7 +253,7 @@ private struct ShareCallout: View {
                                 .accessibilityIdentifier("live.setDestination")
                         }
                     } else {
-                        SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ صاحب الطلعة.", tone: .info)
+                        SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ أمير الرحلة.", tone: .info)
                         if v?.iLead == true {
                             Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
                                 .buttonStyle(.saryPrimary)
@@ -281,7 +299,7 @@ private struct ShareCallout: View {
     private func closedText(_ r: LiveCloseReason) -> String {
         switch r {
         case .outingEnded: return "انتهت هذه الطلعة."
-        case .removed: return "أزالك صاحب الطلعة منها."
+        case .removed: return "أزالك أمير الرحلة منها."
         case .left: return "غادرت هذه الطلعة."
         case .notAMember: return "لست عضوًا في هذه الطلعة."
         case .unauthorized: return "انتهت جلستك على هذا الجهاز."
@@ -580,7 +598,7 @@ private struct InviteTab: View {
                 SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
-                SaryStateView(kind: .empty(title: "اطلب الرابط من صاحب الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
+                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الرحلة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
             }
             if s.canRevoke {
                 Button { if s.link == nil { actions.revokeLink() } else { confirmRevoke = true } } label: {
@@ -649,6 +667,11 @@ private struct SettingsTab: View {
                 .padding(theme.space(.s))
             }
             SpeedSettingsSection()
+            SarySection(title: "القافلة") {
+                SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر",
+                           systemImage: "car.2.fill", id: "settings-convoy-alerts") { controller.modal = .convoyAlerts }
+                    .padding(.horizontal, theme.space(.m))
+            }
             TrailSettingsSection(controller: controller, card: controller.trailCard)
             SarySection(title: "بلا إنترنت", footer: "احفظ خريطة منطقة الطلعة قبل ما تطلع من التغطية.") {
                 Button { controller.modal = .offlineMaps } label: {
@@ -825,7 +848,7 @@ struct ConsentView: View {
                     Image(systemName: "location.circle.fill").font(.system(size: 52)).foregroundStyle(theme.palette.accent)
                     Text("مشاركة موقعك في هذه الطلعة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
                     bullet("lock.fill", "يرى موقعك أعضاء هذه الطلعة فقط، ولا أحد غيرهم.")
-                    bullet("stop.circle.fill", "تتوقف إذا ضغطت «أوقف»، أو غادرت، أو أزالك صاحب الطلعة، أو أوقف الطلعة أو أنهاها.")
+                    bullet("stop.circle.fill", "تتوقف إذا ضغطت «أوقف»، أو غادرت، أو أزالك أمير الرحلة، أو أوقف الطلعة أو أنهاها.")
                     ShareAlwaysBullets()
                     bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة. مسارك («مساري») يبقى على جوالك فقط.")
                     Text("بعد الموافقة بيسألك iOS عن إذن الموقع: اختر «السماح دائمًا» لتستمر المشاركة والشاشة مقفلة.")

@@ -74,6 +74,8 @@ struct TripHeader: View {
     var bellOpen = false
     /// Past alerts exist: the bell stays reachable (the history) even with nothing queued.
     var hasHistory = false
+    /// «استكشاف» (stopped only): the round map button after the header.
+    var exploreTapped: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     private var barHeight: CGFloat { theme.drive ? 64 : 52 }
@@ -185,6 +187,21 @@ struct TripHeader: View {
             }
             .padding(.trailing, theme.space(.xs))
             .saryGlass(shape, role: .chrome)
+
+            if let exploreTapped {
+                Button(action: exploreTapped) {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(p.textPrimary)
+                        .frame(width: barHeight, height: barHeight)
+                        .saryGlass(Circle(), role: .chrome, interactive: true)
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("استكشاف"))
+                .accessibilityHint(Text("الطبقات والتضاريس والإحداثيات وأماكنك"))
+                .accessibilityIdentifier("trip.explore")
+                .transition(.scale.combined(with: .opacity))
+            }
         }
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .animation(theme.animation(.snappy), value: ui.bell)

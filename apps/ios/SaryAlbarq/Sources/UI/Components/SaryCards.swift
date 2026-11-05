@@ -28,6 +28,16 @@ struct SaryRallyCard: View {
                         SaryDistanceLabel(meters: rally.distanceMeters, bearing: rally.bearingDegrees, style: .headline)
                     }
                     arrivedBar(rally)
+                    if !rally.arrivedNames.isEmpty {
+                        Text("عند النقطة: " + rally.arrivedNames.joined(separator: "، "))
+                            .saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
+                            .accessibilityIdentifier("rally.arrived")
+                    }
+                    if canManage, let recall = actions.rallyRecall {
+                        Button(action: recall) { SaryButtonLabel(title: "ارجعوا لنقطة التجمع", systemImage: "arrow.uturn.backward.circle.fill") }
+                            .buttonStyle(.sary(.secondary, compact: true))
+                            .accessibilityIdentifier("rally.recall")
+                    }
                     buttons {
                         Button(action: actions.rallyGo) { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
                             .buttonStyle(.sary(.primary, compact: true))
@@ -53,7 +63,7 @@ struct SaryRallyCard: View {
                     SaryRallyGlyph(size: 40, muted: true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("ما فيه نقطة تجمع").saryText(.headline).foregroundStyle(p.textPrimary)
-                        Text(canManage ? "حدد مكانًا يتجمع عنده الكل" : "صاحب الطلعة يقدر يحددها")
+                        Text(canManage ? "حدد مكانًا يتجمع عنده الكل" : "أمير الرحلة يقدر يحددها")
                             .saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

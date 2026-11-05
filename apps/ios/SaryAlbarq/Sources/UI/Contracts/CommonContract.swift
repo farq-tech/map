@@ -20,9 +20,9 @@ enum ParticipantPresence: Equatable {
 
 /// Role inside one outing.
 enum ParticipantRole: Equatable {
-    /// Created the outing: «صاحب الطلعة».
+    /// Created the outing: «أمير الرحلة».
     case leader
-    /// Promoted by the leader: «مساعد». Can manage the rally point.
+    /// Promoted by the leader: «نائب الأمير». Can manage the rally point.
     case coLeader
     case member
 
@@ -113,13 +113,21 @@ struct ParticipantUI: Equatable, Identifiable {
     var tripRemainingApprox: Bool = true
     /// Reached the destination: the «وصل» badge.
     var tripArrived: Bool = false
+    /// «ذكاء القافلة»: metres from the convoy leader, only when both positions are LIVE (nil hides it).
+    var leaderDistanceMeters: Double? = nil
+    /// This member is the one distances are measured from («القائد»).
+    var isConvoyLeader: Bool = false
+    /// «أمير الرحلة» or «المقدمة»: what the reference is called on the rows.
+    var leaderTitle: String = "أمير الرحلة"
+    /// Live and standing still since (≤ 3 km/h), from this phone's watch; nil while moving / not live.
+    var stoppedSince: Date? = nil
 
-    /// «صاحب الطلعة» / «مساعد» / «أنت», joined with "·" when several apply.
+    /// «أمير الرحلة» / «نائب الأمير» / «أنت», joined with "·" when several apply.
     var roleLabel: String? {
         var parts: [String] = []
         switch role {
-        case .leader: parts.append("صاحب الطلعة")
-        case .coLeader: parts.append("مساعد")
+        case .leader: parts.append("أمير الرحلة")
+        case .coLeader: parts.append("نائب الأمير")
         case .member: break
         }
         if isMe { parts.append("أنت") }

@@ -97,6 +97,12 @@ struct LivePlanModalView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p) }
             }
         }
+        a.savePlace = { p, name in
+            controller.modal = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                controller.modal = .placeEdit(SavedPlaceDraft(id: nil, point: p, name: name ?? "", icon: .pin))
+            }
+        }
         if lead {
             a.setDestination = { p, name in
                 controller.modal = nil

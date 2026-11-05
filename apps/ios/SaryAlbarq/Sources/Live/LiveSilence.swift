@@ -62,7 +62,10 @@ extension LiveOutingController {
     /// Called from `sessionChanged` with the view before and after.
     func reconcileSilence(prev: OutingView, next: OutingView) {
         let change = LiveOutingPresenter.silenceChanges(prev: prev, next: next)
+        let rules = ConvoyAlertPrefs.shared.settings
         for uid in change.raised {
+            /* «تنبيهات القافلة»: the disconnected rule can be off, or wait for the 30-minute level. */
+            guard rules.silentOn, (next.silent[uid]?.level ?? 10) >= rules.silentMinutes else { continue }
             guard let a = LiveOutingPresenter.silentAlert(uid, in: next) else { continue }
             /* Stays up while they are silent; cleared below when they come back. */
             pushAlert(LiveAlertUI(id: Self.silentAlertId(uid), kind: .silent(a)), ttl: 2 * 3600)

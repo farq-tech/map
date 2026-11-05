@@ -3,6 +3,7 @@ import XCTest
 /// Build 8 «ترتيب الشاشة»: nothing was removed. Every feature of the live screen is still
 /// reachable in at most two taps from the map — the floating group, the «+» actions sheet
 /// (every group, every entry) and the three sheet tabs. docs/IA-REDESIGN.md.
+/// Build 9 adds exploration (header «استكشاف» / «+» → الخريطة) and «تنبيهات القافلة».
 final class ReachabilityUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -35,7 +36,7 @@ final class ReachabilityUITests: XCTestCase {
     /// The map itself: one top bar, one floating group, SOS and the walkie-talkie.
     func testMapKeepsOnlyTheEssentials() {
         let app = launch()
-        for id in ["outing-back", "trip.header", "outing-link-state", "weather.chip", "outing-locate", "outing-fit", "outing-actions", "outing-sos", "outing-ptt"] {
+        for id in ["outing-back", "trip.header", "outing-link-state", "weather.chip", "outing-locate", "outing-fit", "outing-actions", "outing-sos", "outing-ptt", "trip.explore"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 10), "\(id) on the map")
         }
         for id in ["outing-more", "outing-note-open", "outing-navigate", "outing-search", "outing-nearest-open", "outing-stuck", "plan.follow", "plan.openSearch"] {
@@ -56,12 +57,12 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(plus.waitForExistence(timeout: 10))
         plus.tap()
         XCTAssertTrue(any(app, "outing-actions-sheet").waitForExistence(timeout: 5))
-        for group in ["الطريق", "المجموعة", "الخدمات", "الترفيه"] {
+        for group in ["الطريق", "المجموعة", "الخريطة", "الخدمات", "الترفيه"] {
             XCTAssertTrue(app.staticTexts[group].exists, "group «\(group)»")
         }
         let entries = ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow",
                        "outing-note-open", "outing-stuck", "outing-waypoint-add", "outing-copyme",
-                       "outing-nearest-open", "outing-weather", "outing-youtube"]
+                       "outing-nearest-open", "outing-weather", "outing-youtube", "outing-explore"]
         for id in entries {
             XCTAssertTrue(any(app, id).exists, "\(id) in the actions sheet")
         }
@@ -79,7 +80,7 @@ final class ReachabilityUITests: XCTestCase {
             ("tab.trip", ["plan.destination", "plan.openEditor", "plan.openSearch", "safety-section", "timer-card", "sheet-stuck", "trail.backtrack", "trail.friends"]),
             ("tab.group", ["participant-row", "convoy.section", "rally-card", "invite-section"]),
             ("tab.more", ["settings-pause-sharing", "settings-battery", "settings-notify", "settings-ptt-mute", "media.entry",
-                        "settings-context", "settings-drive", "settings-night", "speed.alert", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),
+                        "settings-context", "settings-drive", "settings-night", "speed.alert", "settings-convoy-alerts", "trail.friends.settings", "settings-offline", "settings-phone", "settings-leave"]),
         ]
         for (tab, ids) in tabs {
             let b = app.buttons[tab]
@@ -90,6 +91,33 @@ final class ReachabilityUITests: XCTestCase {
                 XCTAssertTrue(any(app, id).waitForExistence(timeout: 3), "\(id) in «\(tab)»")
             }
             shot(app, "tab-\(tab)")
+        }
+    }
+
+    /// Exploration (build 9): every tool one tap from its map, two from the trip map.
+    func testExplorationToolsWithinTwoTaps() {
+        let app = launch()
+        app.buttons["trip.explore"].tap()
+        for id in ["explore-layers", "explore-terrain", "explore-places", "explore-tracks", "explore-save", "explore-copy", "explore-coord-format", "explore-exit"] {
+            XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id): two taps from the trip map")
+        }
+        app.buttons["explore-layers"].tap()
+        for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-offline"] {
+            XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «الطبقات»")
+        }
+    }
+
+    /// «تنبيهات القافلة»: from the live sheet («المزيد») and from Settings; every rule there.
+    func testConvoyAlertRulesReachable() {
+        let app = launch()
+        any(app, "outing-sheet-summary").tap()
+        app.buttons["tab.more"].tap()
+        let row = any(app, "settings-convoy-alerts")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        for id in ["rules.separation", "rules.separation.km", "rules.separation.grace", "rules.stop", "rules.stop.minutes",
+                   "rules.silent", "rules.silent.minutes", "rules.tail", "rules.tail.grace"] {
+            XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «تنبيهات القافلة»")
         }
     }
 

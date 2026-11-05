@@ -10,6 +10,8 @@ struct PointActions {
     /// «ملاحة إلى هنا» (turn-by-turn, live outing only): the map's single long press is the
     /// point card, so navigation to a pressed point starts from here.
     var navigateHere: ((LngLat) -> Void)? = nil
+    /// «احفظ في أماكني» (on-device saved places, live outing only).
+    var savePlace: ((LngLat, String?) -> Void)? = nil
 
     /// «الطقس هنا»: the weather branch sets this; until then the button is hidden.
     static var weatherHook: ((LngLat) -> Void)?
@@ -145,6 +147,7 @@ struct PointCard: View {
         if let f = actions.setDestination { out.append(Extra(id: "point.destination", title: "اجعلها الوجهة", icon: "flag.checkered") { f(pt, name) }) }
         if let f = actions.addPoint { out.append(Extra(id: "point.add", title: "أضف نقطة", icon: "mappin.and.ellipse") { f(pt) }) }
         if let f = actions.rally { out.append(Extra(id: "point.rally", title: "نقطة تجمع", icon: SaryIcon.rally) { f(pt) }) }
+        if let f = actions.savePlace { out.append(Extra(id: "point.save", title: "احفظ في أماكني", icon: "star.fill") { f(pt, name) }) }
         return out
     }
 
