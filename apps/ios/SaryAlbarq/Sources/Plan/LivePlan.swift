@@ -115,6 +115,11 @@ struct LivePlanModalView: View {
                 controller.saveRally(p, label: "")
             }
         }
+        a.droneFlight = { p in
+            controller.modal = nil
+            controller.sheetDetent = .peek
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { MapVisualsHub.shared.fly(to: p) }
+        }
         if let hook = PointActions.addWaypointHook {
             let id = controller.session.id
             a.addPoint = { p in controller.modal = nil; hook(id, p) }
