@@ -36,9 +36,7 @@ struct NavOptionsSheet: View {
                         SaryDivider()
                         SaryToggleRow(title: "تجنّب الطرق الترابية", subtitle: nil, systemImage: "road.lanes",
                                       isOn: binding(\.avoidUnpaved), id: "nav.opt.unpaved")
-                        SaryDivider()
-                        SaryToggleRow(title: "تجنّب الرسوم", subtitle: nil, systemImage: "dollarsign.circle",
-                                      isOn: binding(\.avoidTolls), id: "nav.opt.tolls")
+                        /* No toll roads in Saudi Arabia: the «تجنّب الرسوم» toggle is not shown. */
                     }
                     .padding(.horizontal, theme.space(.m))
                     .sarySurface(radius: SaryRadius.m)

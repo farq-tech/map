@@ -50,7 +50,7 @@ enum NavRefusal: Error, Equatable {
     }
 }
 
-/// The route options sheet: «أسرع»، «تجنّب الطرق الترابية»، «تجنّب الرسوم».
+/// The route options sheet: «أسرع»، «تجنّب الطرق الترابية». (No toll roads in KSA, so `avoidTolls` stays off and is not shown.)
 struct NavRouteOptions: Equatable {
     /// On: the traffic-aware fastest route. Off: the shortest of the returned routes.
     var fastest = true
@@ -61,7 +61,7 @@ struct NavRouteOptions: Equatable {
 
     static func load(_ d: UserDefaults = .standard) -> NavRouteOptions {
         guard let a = d.array(forKey: defaultsKey) as? [Bool], a.count == 3 else { return .init() }
-        return .init(fastest: a[0], avoidUnpaved: a[1], avoidTolls: a[2])
+        return .init(fastest: a[0], avoidUnpaved: a[1], avoidTolls: false)
     }
 
     func save(_ d: UserDefaults = .standard) { d.set([fastest, avoidUnpaved, avoidTolls], forKey: Self.defaultsKey) }
