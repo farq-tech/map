@@ -42,6 +42,8 @@ const HEARTBEAT_MS = 25_000;
 const MAX_FRAME_BYTES = 4 * 1024;
 const MAX_MSGS_PER_10S = 40;
 const MAX_SOCKETS_PER_USER_ROOM = 3;
+/* How long one text frame may hold up the next ones of the same socket (see `enqueue`). */
+const QUEUE_STALL_MS = 10_000;
 /* Close codes. 4401 means "this token is no good": clients stop for good on it, so a slow
  * auth must never be reported with it (it used to be — see AUTH_TIMEOUT_CODE). */
 const AUTH_TIMEOUT_CODE = 4408;
@@ -70,7 +72,7 @@ function createSocketStats() {
   };
 }
 
-function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, authTimeoutMs = AUTH_TIMEOUT_MS, heartbeatMs = HEARTBEAT_MS, log = null } = {}) {
+function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, authTimeoutMs = AUTH_TIMEOUT_MS, heartbeatMs = HEARTBEAT_MS, queueStallMs = QUEUE_STALL_MS, log = null } = {}) {
   const stats = createSocketStats();
   const debug = log || (process.env.SARY_WS_DEBUG === '1' ? (...a) => console.log('[outings-ws]', ...a) : null);
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES, perMessageDeflate: false });
@@ -108,7 +110,31 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
 
     const reply = (msg) => hub.send(conn, msg);
 
-    ws.on('message', async (data, isBinary) => {
+    /* Text frames of ONE socket are handled one after another, in arrival order. Several await
+     * the database (auth, ptt_join's membership / channel checks, chat…), and a phone that
+     * reconnects sends ptt_join and its deferred ptt_start back to back: handled concurrently,
+     * the start overtook the join and was denied `not_joined` («مكتوم»). Other sockets never
+     * wait on this queue, and binary audio skips it (relayed at once, or dropped as before). */
+    let queue = Promise.resolve();
+    const enqueue = (msg) => {
+      queue = queue.then(
+        () =>
+          new Promise((done) => {
+            /* A stuck database must not freeze the socket for good: after a while the next frame runs. */
+            const stall = setTimeout(done, queueStallMs);
+            stall.unref?.();
+            Promise.resolve()
+              .then(() => (ws.readyState === OPEN ? handleText(msg) : undefined))
+              .catch(() => {})
+              .finally(() => {
+                clearTimeout(stall);
+                done();
+              });
+          }),
+      );
+    };
+
+    ws.on('message', (data, isBinary) => {
       conn.msgs = (conn.msgs || 0) + 1;
       if (isBinary) {
         /* Audio for the walkie-talkie. Without a relay, or before auth, binary is not allowed. */
@@ -128,6 +154,15 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
         return;
       }
       if (!msg || typeof msg.type !== 'string') return;
+      /* A keepalive answers at once, even behind a slow frame (it changes nothing). */
+      if (msg.type === 'ping' && conn.userId && conn.outingId) {
+        hub.touch(conn.outingId, conn.userId);
+        return reply({ type: 'pong', server_now: new Date().toISOString() });
+      }
+      enqueue(msg);
+    });
+
+    async function handleText(msg) {
       try {
         if (msg.type === 'auth') {
           if (conn.userId || authing) return;
@@ -200,7 +235,7 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
         /* A failed auth leaves nothing to talk to: let the phone retry (not 4401: nothing says the token is bad). */
         if (msg.type === 'auth' && !wasReady && ws.readyState === OPEN) ws.close(1011, 'server_error');
       }
-    });
+    }
 
     ws.on('close', (code) => {
       clearTimeout(authTimer);
