@@ -101,6 +101,27 @@ final class PushRegistrarTests: XCTestCase {
         XCTAssertEqual(backend.unregistered, ["old"])
     }
 
+    /// The loop seen in production: every return to the screen asked Apple for the token and
+    /// re-sent it (GET + POST /push/apns), ~every 30 s with the PushToTalk banner up.
+    func testSameTokenIsNotReRegisteredEveryTime() async {
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+        let r = PushRegistrar(backend: backend, system: system, defaults: defaults, bundleId: "sa.sary.albarq", environment: "sandbox", now: { now })
+        var account = "u1"
+        r.accountId = { account }
+        for _ in 0..<5 { await r.register("aa", signedIn: true) }
+        XCTAssertEqual(backend.registered.count, 1, "one POST for an unchanged token")
+        XCTAssertEqual(r.state, .registered)
+        await r.register("bb", signedIn: true)
+        XCTAssertEqual(backend.registered.map(\.token), ["aa", "bb"], "a rotated token is sent")
+        XCTAssertEqual(backend.unregistered, ["aa"])
+        now = now.addingTimeInterval(PushRegistrar.reconfirmAfter + 1)
+        await r.register("bb", signedIn: true)
+        XCTAssertEqual(backend.registered.count, 3, "re-confirmed once a day")
+        account = "u2"
+        await r.register("bb", signedIn: true)
+        XCTAssertEqual(backend.registered.count, 4, "another identity on this phone registers again")
+    }
+
     func testTurningOffUnregistersAndStaysOff() async {
         let r = make()
         await r.register("tok", signedIn: true)

@@ -87,6 +87,8 @@ enum LocalAccountData {
             NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
             /* Build 9: exploration and convoy-alert rules. */
             MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
+            /* The trip's automatic guidance (setting + per-outing progress). */
+            TripAutoNavPrefs.enabledKey, TripAutoNavState.storeKey,
         ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys
     }
 

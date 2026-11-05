@@ -66,6 +66,7 @@ struct NavOptionsSheet: View {
         case .member: return "person.fill"
         case .destination: return "flag.checkered"
         case .planRouteEnd: return "point.topleft.down.to.point.bottomright.curvepath"
+        case .tripStop: return "mappin.circle.fill"
         default: return "mappin.and.ellipse"
         }
     }

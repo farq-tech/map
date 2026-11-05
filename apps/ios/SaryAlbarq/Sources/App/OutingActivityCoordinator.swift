@@ -19,6 +19,7 @@ final class OutingActivityCoordinator {
     var speed: (OutingSession) -> SpeedModel.Snapshot? = { _ in nil }
     /// «الرحلة»: the live screen's trip picture (progress, remaining, ETA), when it is open.
     var trip: (OutingSession) -> TripPanelUI? = { _ in nil }
+    var nav: (OutingSession) -> NavActivityLine? = { _ in nil }
 
     private let location: LocationSharer
     private weak var session: OutingSession?
@@ -81,7 +82,7 @@ final class OutingActivityCoordinator {
                                        link: s.link, closed: s.closedReason, wantsToShare: s.wantsToShare, isSharingNow: s.isSharingNow,
                                        sosSending: s.sosSending, now: now)
         let back = location.lastFix.flatMap { backMeters(s, $0) }
-        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s), speed: speed(s), trip: trip(s)) else { return }
+        guard let state = OutingActivityBuilder.state(input, backMeters: back, stuck: stuck(s), speed: speed(s), trip: trip(s), nav: nav(s)) else { return }
 
         guard let a = activity else {
             start(s, state)

@@ -4,6 +4,8 @@ import SwiftUI
 enum LivePlanModal: Equatable {
     /// The single long-press card for a point.
     case point(LngLat)
+    /// «بريف المكان»: a single tap on an empty map spot (or a map label, with its name).
+    case brief(LngLat, name: String?)
     /// «انسخ موقعي» (control cluster or long-press on «أنت»).
     case me
     case search
@@ -12,6 +14,7 @@ enum LivePlanModal: Equatable {
     var id: String {
         switch self {
         case let .point(p): return "plan.point.\(p.lat),\(p.lng)"
+        case let .brief(p, _): return "plan.brief.\(p.lat),\(p.lng)"
         case .me: return "plan.me"
         case .search: return "plan.search"
         case .editor: return "plan.editor"
@@ -48,6 +51,7 @@ extension LiveOutingController {
 
     var planPicked: LngLat? {
         if case let .plan(.point(p))? = modal { return p }
+        if case let .plan(.brief(p, _))? = modal { return p }
         return nil
     }
 }
@@ -58,6 +62,7 @@ struct LivePlanModalView: View {
     let modal: LivePlanModal
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var location: LocationSharer
+    @Environment(\.sary) private var theme
 
     var body: some View {
         let plan = model.plans.model(controller.session.id)
@@ -65,8 +70,9 @@ struct LivePlanModalView: View {
         Group {
             switch modal {
             case let .point(p):
-                PointCard(subject: .point(p, name: nil), actions: actions(plan), close: close)
-                    .presentationDetents([.height(440), .large])
+                briefCard(p, name: nil, plan: plan, close: close)
+            case let .brief(p, name):
+                briefCard(p, name: name, plan: plan, close: close)
             case .me:
                 if let f = CoordinateShare.Fix(location.lastFix) {
                     PointCard(subject: .me(f), actions: actions(plan), close: close)
@@ -85,6 +91,18 @@ struct LivePlanModalView: View {
             }
         }
         .rtl()
+    }
+
+    /// The point card with «بريف المكان»; compact (one weather line) in the driving layout.
+    @ViewBuilder
+    private func briefCard(_ p: LngLat, name: String?, plan: PlanModel, close: @escaping () -> Void) -> some View {
+        let compact = controller.briefCompact(drive: theme.drive)
+        let opts = PlaceBriefOptions(me: controller.briefMe(location.lastFix), compact: compact, saved: SavedPlacesStore.shared.places)
+        ScrollView {
+            PointCard(subject: .point(p, name: name), actions: actions(plan), close: close, brief: opts)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents(compact ? [.height(330), .large] : [.fraction(0.62), .large])
     }
 
     private func actions(_ plan: PlanModel) -> PointActions {

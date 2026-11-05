@@ -35,6 +35,8 @@ enum LiveModal: Identifiable, Equatable {
     case navPicker
     case navOptions
     case navSteps
+    /// After «ابدأ الطلعة» (the leader): «ابدأ التوجيه للكل» / «لي فقط».
+    case navStartChoice
     /// «+»: every less frequent action, grouped (docs/IA-REDESIGN.md §2.3).
     case actions
     /// Exploration: the layer switcher (+ 3D terrain, offline coverage).
@@ -74,6 +76,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navPicker: return "navPicker"
         case .navOptions: return "navOptions"
         case .navSteps: return "navSteps"
+        case .navStartChoice: return "navStartChoice"
         }
     }
 }
@@ -197,6 +200,18 @@ final class LiveOutingController: ObservableObject {
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
+    /// The trip's automatic guidance on this phone (`TripAutoNav`, LiveOutingController+AutoNav.swift).
+    @Published var autoNavState = TripAutoNavState()
+    /// The live link was up on the last change (the network coming back retries the road route).
+    var autoNavWasOnline = true
+    /// «اسلك هذا المسار» started by the off-road leg of the automatic guidance (stopped with it).
+    var autoNavFollowId: String?
+    /// The person left this screen: no automatic guidance from it any more (reopening starts it again).
+    var autoNavLeft = false
+    /// The outing closing (ended / left / removed) was handled: the sheet open at that moment
+    /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
+    /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
+    var closeHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -301,9 +316,11 @@ final class LiveOutingController: ObservableObject {
         session.onNearbyEvent = { [weak self] e in self?.nearbyEvent(e) }
         registerCarPlay()
         registerTrip()
+        registerAutoNav()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
+        placeBriefDebugLaunch()
         #endif
     }
 
@@ -342,6 +359,7 @@ final class LiveOutingController: ObservableObject {
             notificationsOn: notificationsOn,
             batterySharing: session.batterySharing,
             pttMuted: session.walkie.muted,
+            pttLink: PTTLinkText.line(session.linkDiag, nowMs: Date().timeIntervalSince1970 * 1000),
             speakingUserId: speakingUserId,
             heardClips: heardClips,
             mapBearing: overlay.projection.bearing,
@@ -406,6 +424,7 @@ final class LiveOutingController: ObservableObject {
     private func sessionChanged() {
         updateSpeed()
         updateTrip()
+        autoNavSessionChanged()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -415,6 +434,8 @@ final class LiveOutingController: ObservableObject {
            same note heard first from a nearby car and then from the server is one card. */
         for (uid, m) in v.members where uid != v.myId {
             if let n = m.note, prev.members[uid]?.note != n, LiveOutingPresenter.activeNote(n, view: v, now: Date()) != nil {
+                /* The leader's «ابدأ التوجيه للكل» is a command, not a card (`receiveBroadcasts` says it). */
+                if NavBroadcast.isBroadcast(n.text), NavBroadcast.mayBroadcast(senderId: uid, ownerId: v.snapshot.outing.owner_id, senderIsDeputy: m.co_leader == true) { continue }
                 if let last = alertedNotes[uid], last.text == n.text, Date().timeIntervalSince(last.at) < LiveOutingPresenter.noteTTL { continue }
                 alertedNotes[uid] = (n.text, Date())
                 if RallyRecall.isRecall(n.text), let prompt = recallPrompt(from: uid, at: n.at, view: v) {
@@ -441,7 +462,10 @@ final class LiveOutingController: ObservableObject {
         exploreDrivingCheck()
         checkConvoy()
         feedWeather()
-        if session.closedReason != nil, modal != nil { modal = nil }
+        if session.closedReason != nil, !closeHandled {
+            closeHandled = true
+            if modal != nil { modal = nil }
+        }
         objectWillChange.send()
     }
 
@@ -452,6 +476,7 @@ final class LiveOutingController: ObservableObject {
         updateBackTrack()
         updateFollow()
         updateTrip()
+        autoNavTick()
         updateAuto()
         if let f = location.lastFix {
             var m = motion
@@ -833,6 +858,7 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
         if session.isSharingNow { confirm = .backWhileSharing } else { onExit() }
     }
@@ -920,13 +946,19 @@ final class LiveOutingController: ObservableObject {
             chooseTripDestination()
             return
         }
-        Task { await session.setStatus("start") }
+        Task {
+            await session.setStatus("start")
+            /* Guidance is the leader's choice: for everyone, or only for him. */
+            if session.view?.status == .active { offerGuidanceChoice() }
+        }
     }
 
     // MARK: participants
 
     func openParticipant(_ id: String) {
         if id == session.view?.myId {
+            /* «رسالة فوق سيارتك» only while the outing runs: after the end nobody would see it. */
+            guard !tripEnded else { return }
             modal = .note
         } else {
             modal = .participant(id)

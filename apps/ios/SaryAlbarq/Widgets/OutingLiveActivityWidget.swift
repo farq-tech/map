@@ -69,6 +69,7 @@ struct OutingLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 6) {
                         if let b = d.banner { BannerView(banner: b, palette: p, compact: true) }
+                        if let n = d.navLine { NavRow(line: n, symbol: d.navSymbol, palette: p, compact: true) }
                         if let line = d.tripLine { TripRow(line: line, fraction: d.tripFraction ?? 0, palette: p, dim: d.isStale, compact: true) }
                         HStack {
                             if let f = d.farthestLine {
@@ -128,6 +129,7 @@ private struct LockScreenView: View {
                 StaleTag(d: d, palette: p)
             }
             if let b = d.banner { BannerView(banner: b, palette: p, compact: false) }
+            if let n = d.navLine { NavRow(line: n, symbol: d.navSymbol, palette: p, compact: false) }
             if let line = d.tripLine { TripRow(line: line, fraction: d.tripFraction ?? 0, palette: p, dim: d.isStale, compact: false) }
             HStack(alignment: .top, spacing: 10) {
                 Metric(icon: "arrow.uturn.backward", title: "طريق العودة", value: d.backText ?? "—", tint: p.accent, palette: p, dim: d.isStale)
@@ -240,6 +242,29 @@ private struct SpeedPill: View {
 
 
 /// «الرحلة»: start → destination bar (filled from the start, right in RTL) and one line.
+/// «الملاحة»: the next manoeuvre (or the off-road bearing line), in the accent tile.
+private struct NavRow: View {
+    let line: String
+    let symbol: String
+    let palette: Ink.Palette
+    let compact: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: compact ? 13 : 16, weight: .heavy))
+                .foregroundStyle(Color.white)
+                .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(palette.accent))
+                .environment(\.layoutDirection, .leftToRight)
+            Text(line).font(.tajawal(compact ? 14 : 16, "Bold")).foregroundStyle(palette.text).lineLimit(2).minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("الملاحة: \(line)"))
+    }
+}
+
 private struct TripRow: View {
     let line: String
     let fraction: Double

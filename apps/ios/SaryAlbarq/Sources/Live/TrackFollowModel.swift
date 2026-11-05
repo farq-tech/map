@@ -10,6 +10,8 @@ struct FollowSubject: Equatable, Identifiable {
         case gpx
         /// A group member's recent trail, as this phone saw their live positions.
         case friend
+        /// The outing plan's drawn route (the trip's off-road leg follows it).
+        case plan
     }
 
     var id: String
@@ -24,6 +26,7 @@ struct FollowSubject: Equatable, Identifiable {
         case .outingTrail: return "مسارك المسجّل"
         case .gpx: return "مسار GPX"
         case .friend: return "مسار من الطلعة"
+        case .plan: return "مسار الخطة"
         }
     }
 
@@ -46,6 +49,14 @@ struct FollowSubject: Equatable, Identifiable {
         let line = TrackDisplay.line(plain: t.points)
         guard line.isDrawable, line.lengthM > 0 else { return nil }
         return FollowSubject(id: "gpx:\(t.id)", name: t.name, kind: .gpx, line: line, stats: TrackStats.make(plain: line))
+    }
+
+    /// The plan's drawn route (no times: one colour, no speeds).
+    static func plan(points: [LngLat], name: String) -> FollowSubject? {
+        let line = TrackDisplay.line(plain: points)
+        guard line.isDrawable, line.lengthM > 0 else { return nil }
+        return FollowSubject(id: "plan:\(points.count):\(points.last.map { "\($0.lat),\($0.lng)" } ?? "")", name: name, kind: .plan,
+                             line: line, stats: TrackStats.make(plain: line))
     }
 
     /// A friend's trail: positions only reach us every few seconds, so no trusted speed («—»).

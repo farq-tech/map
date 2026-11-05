@@ -15,6 +15,15 @@ enum NavPhase: Equatable {
     case arrived
 }
 
+/// Why the guidance is a straight line instead of a road route (said on screen, honestly).
+enum NavFallback: Equatable {
+    /// The router knows no road to the target (a desert camp off the network).
+    case noRoad
+    /// Routing failed (no network, router unreachable): bearing guidance while we retry.
+    /// Never a made-up route.
+    case offline
+}
+
 enum NavCameraMode: Equatable {
     /// Behind my car, heading-up, tilted.
     case follow
@@ -53,6 +62,19 @@ final class NavSession: ObservableObject {
     }
     @Published private(set) var arrivedAt: Date?
     @Published private(set) var startedAt: Date?
+    /// Started by the trip («ابدأ الطلعة», `TripAutoNav`), not by a tap: no options sheet,
+    /// the best route at once, and a straight line (never a made-up road) when routing fails.
+    @Published private(set) var auto = false
+    @Published private(set) var fallback: NavFallback?
+    /// Arrived at the target (the stop / destination logic lives with the trip).
+    var onArrived: (NavTarget) -> Void = { _ in }
+    /// Offline fallback: try a road route again this often.
+    var retryInterval: TimeInterval = 20
+    private var retryTask: Task<Void, Never>?
+    private var retryable = false
+    private var retrying = false
+    /// Said before the first instruction of an automatic start («نبدأ التوجيه إلى …»).
+    private var autoIntro: String?
 
     let provider: NavRoutingProvider
     let voice = NavVoice()
@@ -89,6 +111,11 @@ final class NavSession: ObservableObject {
             return
         }
         if isActive { stopEngine() }
+        retryTask?.cancel()
+        locator.stop()
+        auto = false
+        fallback = nil
+        retryable = false
         target = t
         phase = .planning
         active = nil
@@ -160,6 +187,134 @@ final class NavSession: ObservableObject {
         reset()
     }
 
+    // MARK: automatic (the trip)
+
+    /// Guide to `t` now, without the options sheet: the best road route, or — when there is
+    /// no road (desert) or no network — the straight-line bearing guidance at once, retrying
+    /// the road route in the background when it was the network.
+    func autoStart(to t: NavTarget, intro: String? = nil) {
+        guard let f = myFix() else { return }
+        fetchTask?.cancel()
+        retryTask?.cancel()
+        if isActive { stopEngine() }
+        locator.stop()
+        reset()
+        auto = true
+        target = t
+        phase = .planning
+        loading = true
+        arrivedAt = nil
+        startedAt = nil
+        autoIntro = intro
+        let origin = LngLat(lng: f.lng, lat: f.lat)
+        let heading = Policy.trustedHeading(f.heading, speed: f.speed)
+        #if DEBUG
+        NavLog.log("auto start to %@", t.name)
+        #endif
+        fetchTask = Task { [weak self] in
+            guard let self else { return }
+            let r = await self.requestRoutes(origin: origin, heading: heading, target: t)
+            guard !Task.isCancelled, self.auto, self.phase == .planning, self.target == t else { return }
+            self.loading = false
+            self.applyAuto(r, origin: origin, target: t)
+            self.start()
+        }
+    }
+
+    private func requestRoutes(origin: LngLat, heading: Double?, target t: NavTarget) async -> Result<NavRoutePlan, NavRoutingError> {
+        do {
+            return .success(try await provider.routes(NavRouteRequest(origin: origin, heading: heading, target: t, options: options)))
+        } catch let e as NavRoutingError {
+            return .failure(e)
+        } catch {
+            return .failure(.failed(""))
+        }
+    }
+
+    private func applyAuto(_ r: Result<NavRoutePlan, NavRoutingError>, origin: LngLat, target t: NavTarget) {
+        switch r {
+        case let .success(p) where !p.routes.isEmpty:
+            plan = p
+            routes = NavRouteChoice.order(p.routes, options: options)
+            selectedId = routes.first?.id
+            direct = false
+            offRoad = NavOffRoad.lastLeg(routeEnd: selected?.end, target: t.position)
+            fallback = nil
+            retryable = false
+        case .success, .failure(.noRoute):
+            goDirect(origin, t)
+            fallback = .noRoad
+            retryable = false
+        case .failure(.notConfigured):
+            goDirect(origin, t)
+            fallback = .offline
+            retryable = false
+        case .failure:
+            goDirect(origin, t)
+            fallback = .offline
+            retryable = true
+        }
+        #if DEBUG
+        NavLog.log("auto routes=%d fallback=%@", routes.count, String(describing: fallback))
+        #endif
+    }
+
+    private func scheduleRetry() {
+        retryTask?.cancel()
+        guard retryable else { return }
+        let every = max(0.01, retryInterval)
+        retryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(every * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                if await self.retryRoute() { return }
+            }
+        }
+    }
+
+    /// One more try at a road route while the offline bearing guidance runs (on a timer, and
+    /// when the network comes back). True when there is nothing left to retry.
+    @discardableResult
+    func retryRoute() async -> Bool {
+        guard auto, phase == .offRoad, fallback == .offline, retryable else { return true }
+        guard !retrying, let t = target, let f = myFix() else { return false }
+        retrying = true
+        defer { retrying = false }
+        let origin = LngLat(lng: f.lng, lat: f.lat)
+        let r = await requestRoutes(origin: origin, heading: Policy.trustedHeading(f.heading, speed: f.speed), target: t)
+        guard auto, phase == .offRoad, fallback == .offline, target == t else { return true }
+        switch r {
+        case let .success(p) where !p.routes.isEmpty:
+            #if DEBUG
+            NavLog.log("retry: road route is back")
+            #endif
+            locator.stop()
+            applyAuto(r, origin: origin, target: t)
+            autoIntro = "رجع الاتصال، نوجّهك على الطريق"
+            start()
+            return true
+        case .success, .failure(.noRoute):
+            fallback = .noRoad
+            retryable = false
+            voice.say("ما فيه طريق معبّد إلى \(t.name). كمّل مع السهم")
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// The network is back: try the road route now instead of waiting for the timer.
+    func retryNow() {
+        guard auto, phase == .offRoad, fallback == .offline, retryable else { return }
+        Task { await retryRoute() }
+    }
+
+    /// The trip says I arrived (dwell at the destination): end on «وصلتوا».
+    func finishArrival() {
+        guard phase == .guiding || phase == .offRoad else { return }
+        arrive()
+    }
+
     // MARK: guidance
 
     func start() {
@@ -167,13 +322,26 @@ final class NavSession: ObservableObject {
         #if DEBUG
         NavLog.log("start provider=%@ routes=%d direct=%d", provider.name, routes.count, direct ? 1 : 0)
         #endif
-        startedAt = Date()
+        if startedAt == nil || !auto { startedAt = Date() }
         camera = .follow
+        let intro = autoIntro.map { $0 + ". " } ?? ""
+        autoIntro = nil
         if direct || selected == nil {
             phase = .offRoad
             locator.start()
             if let f = myFix() { ingest(f) }
-            if let leg = offRoad { voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")") }
+            if let leg = offRoad {
+                let way = "\(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
+                if auto, fallback == .offline {
+                    voice.say(intro + "ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال")
+                } else if auto {
+                    voice.say(intro + "بدون طريق معبّد. اتجه مع السهم \(way)")
+                } else {
+                    voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")")
+                }
+            }
+            if auto { scheduleRetry() }
+            UIApplication.shared.isIdleTimerDisabled = true
             return
         }
         guard let r = selected else { return }
@@ -198,9 +366,14 @@ final class NavSession: ObservableObject {
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
             if let first = r.steps.dropFirst().first {
-                self.voice.say(NavText.spoken(first, distanceM: r.steps.first?.distanceM ?? 0, targetName: t.name))
+                self.voice.say(intro + NavText.spoken(first, distanceM: r.steps.first?.distanceM ?? 0, targetName: t.name))
+            } else if !intro.isEmpty {
+                self.voice.say(intro)
             }
         }
+        /* The trip's guidance keeps a location stream of its own: the voice goes on with the
+         * screen locked even when this phone is not sharing (the Mapbox engine ignores the fixes). */
+        if auto { locator.start() }
         UIApplication.shared.isIdleTimerDisabled = true
     }
 
@@ -259,7 +432,8 @@ final class NavSession: ObservableObject {
             if let leg = offRoad {
                 phase = .offRoad
                 locator.start()
-                voice.say("انتهى الطريق. \(NavOffRoad.summary(leg))")
+                voice.say(auto ? "انتهى الطريق المعبّد. اتجه مع السهم \(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
+                               : "انتهى الطريق. \(NavOffRoad.summary(leg))")
                 if let f = myFix() { ingest(f) }
             } else {
                 arrive()
@@ -285,8 +459,10 @@ final class NavSession: ObservableObject {
         arrivedAt = Date()
         locator.stop()
         stopEngine()
-        voice.say("وصلت إلى \(target?.name ?? "وجهتك")")
+        retryTask?.cancel()
+        voice.say(auto ? "وصلتوا \(target?.name ?? "")" : "وصلت إلى \(target?.name ?? "وجهتك")")
         UIApplication.shared.isIdleTimerDisabled = false
+        if let t = target { onArrived(t) }
     }
 
     /// Every GPS fix (the app's own, and our locator's in the off-road phase / local engine).
@@ -306,6 +482,7 @@ final class NavSession: ObservableObject {
 
     func end() {
         fetchTask?.cancel()
+        retryTask?.cancel()
         stopEngine()
         locator.stop()
         voice.stop()
@@ -332,6 +509,10 @@ final class NavSession: ObservableObject {
         error = nil
         direct = false
         plan = NavRoutePlan(routes: [])
+        auto = false
+        fallback = nil
+        retryable = false
+        autoIntro = nil
     }
 
     // MARK: what the UI shows
@@ -380,6 +561,12 @@ final class NavSession: ObservableObject {
         self.phase = phase
         if phase == .arrived { arrivedAt = Date() }
     }
+
+    /// UI tests: arrive at the current target as if driven there (the real `arrive()` path).
+    func debugArrive() {
+        guard phase == .guiding || phase == .offRoad else { return }
+        arrive()
+    }
     #endif
 }
 
@@ -423,5 +610,33 @@ final class NavLocator: NSObject, CLLocationManagerDelegate {
                           heading: l.course >= 0 ? l.course : nil, speed: l.speed >= 0 ? l.speed : nil,
                           atMs: l.timestamp.timeIntervalSince1970 * 1000)
         Task { @MainActor in self.onFix(f) }
+    }
+}
+
+/// «الملاحة» in one line for the Lock Screen / Dynamic Island (the widget cannot link `NavText`).
+struct NavActivityLine: Equatable {
+    var text: String
+    var symbol: String
+    var arrived = false
+}
+
+extension NavSession {
+    var activityLine: NavActivityLine? {
+        switch phase {
+        case .guiding:
+            if rerouting { return NavActivityLine(text: "نعيد حساب الطريق…", symbol: "arrow.triangle.2.circlepath") }
+            guard let step = currentStep else { return nil }
+            let d = progress?.distanceToManeuverM ?? step.distanceM
+            let inD = NavText.inDistance(d).map { $0 + " " } ?? ""
+            return NavActivityLine(text: inD + NavText.instruction(step, targetName: target?.name), symbol: NavGlyph.symbol(step.maneuver))
+        case .offRoad:
+            guard let leg = offRoad else { return nil }
+            return NavActivityLine(text: NavOffRoad.line(leg, remainingM: offRoadNow?.distanceM, bearing: offRoadNow?.bearing, fallback: fallback),
+                                   symbol: "location.north.fill")
+        case .arrived:
+            return NavActivityLine(text: "\(auto ? "وصلتوا" : "وصلت") \(target?.name ?? "")", symbol: "flag.checkered", arrived: true)
+        case .idle, .planning:
+            return nil
+        }
     }
 }

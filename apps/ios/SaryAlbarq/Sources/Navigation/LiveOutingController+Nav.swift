@@ -102,7 +102,10 @@ extension LiveOutingController {
     }
 
     func endNav() {
+        /* «أوقف التوجيه» on the trip's own guidance: paused on this phone until «استأنف». */
+        if nav.auto, nav.phase != .arrived { pauseAutoNav() }
         nav.end()
+        stopAutoFollow()
         modal = nil
     }
 
@@ -298,8 +301,15 @@ extension LiveOutingController {
 final class DemoNavProvider: NavRoutingProvider {
     let name = "Demo"
 
+    /// `-SaryNavOfflineFor <s>`: no network for the first s seconds (`-SaryNavOffline`: never).
+    private static let launched = Date()
+
     func routes(_ r: NavRouteRequest) async throws -> NavRoutePlan {
         try? await Task.sleep(nanoseconds: 300_000_000)
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-SaryNavOffline") { throw NavRoutingError.offline }
+        if let i = args.firstIndex(of: "-SaryNavOfflineFor"), i + 1 < args.count, let s = Double(args[i + 1]),
+           Date().timeIntervalSince(Self.launched) < s { throw NavRoutingError.offline }
         let o = r.origin, t = r.target.position
         /* An L-shaped road route (north, then east) and a second one (east, then north), ending short of an off-road target. */
         let endsShort = r.target.name.contains("صحراء") || ProcessInfo.processInfo.arguments.contains("-SaryNavOffRoad")

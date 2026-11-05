@@ -30,6 +30,7 @@ struct LivePresenterInput {
     var batterySharing = false
     /// «اكتم القناة».
     var pttMuted = false
+    var pttLink = ""
     /// Who is on air in «قناة الطلعة» (me included), for the speaking badge on the car.
     var speakingUserId: String?
     /// Clips already played (no waveform icon over that car).
@@ -88,6 +89,7 @@ enum LiveOutingPresenter {
                 notificationsOn: i.notificationsOn,
                 batterySharingOn: i.batterySharing,
                 pttMuted: i.pttMuted,
+                pttLink: i.pttLink,
                 offline: OfflineAreasUIState(areas: []),
                 isLeader: v?.iOwn == true,
                 outingStatus: status(v?.status)

@@ -24,13 +24,24 @@ enum LiveActionCatalog {
         var following = false
         var hasRoute = true
         var stuck = false
+        /// The trip ended: only what still makes sense on this phone (map, search, weather…).
+        var ended = false
+        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone).
+        var guideAllTarget: String?
     }
 
+    /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
+    static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll"]
+
     static func groups(_ s: State) -> [LiveActionGroup] {
-        [
+        let all = [
             LiveActionGroup(title: "الطريق", items: [
                 .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate",
                       subtitle: "لصاحب، للوجهة أو لنقطة التجمع"),
+            ] + (s.guideAllTarget.map { t in
+                [LiveActionItem(id: "guideAll", title: "وجّه الكل إلى \(t)", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
+                                subtitle: "يبدأ التوجيه على جوال كل عضو · يقدر كل واحد يوقفه عنده")]
+            } ?? []) + [
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
                 .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق العودة" : "طريق العودة", systemImage: SaryIcon.backTrack,
                       accessibilityID: "outing-backtrack", subtitle: s.backTracking ? nil : "ارجع من نفس مسارك", isActive: s.backTracking),
@@ -57,6 +68,12 @@ enum LiveActionCatalog {
                 .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle.fill", accessibilityID: "outing-youtube"),
             ]),
         ]
+        guard s.ended else { return all }
+        return all.compactMap { g in
+            var g = g
+            g.items.removeAll { needsRunningTrip.contains($0.id) }
+            return g.items.isEmpty ? nil : g
+        }
     }
 }
 

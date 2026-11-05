@@ -1,4 +1,5 @@
 @_spi(Experimental) import MapboxMaps
+import MetalKit
 import SwiftUI
 import UIKit
 
@@ -118,6 +119,9 @@ struct OutingMapboxView: UIViewRepresentable {
     var onMemberTap: (String) -> Void = { _ in }
     var onRallyTap: () -> Void = {}
     var onMapTap: (LngLat) -> Void = { _ in }
+    /// «بريف المكان»: a single tap on an empty spot (not a car, pin, chip, label button or
+    /// control), with the name when it was a map label (POI). Not while picking.
+    var onEmptyTap: (LngLat, String?) -> Void = { _, _ in }
     /// Screen points of every car and the rally flag, after each camera move or glide step.
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
@@ -164,6 +168,8 @@ struct OutingMapboxView: UIViewRepresentable {
         map.accessibilityIdentifier = "outing.map"
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
+        /* No over-zoom past what the layer's tiles resolve (pinch, follow, fits all clamp to it). */
+        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
         context.coordinator.attach(map)
         let first = layer
@@ -179,6 +185,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onCarTap = onMemberTap
         c.onRallyTap = onRallyTap
         c.onMapTap = onMapTap
+        c.onEmptyTap = onEmptyTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
         c.waypointPins.onTap = onWaypointTap
@@ -204,6 +211,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setNav(nav)
         c.onCenter = onCenter
         c.setLayer(layer)
+        c.setZoomCap()
         c.setLabels(labels)
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
@@ -257,6 +265,8 @@ struct OutingMapboxView: UIViewRepresentable {
         var onCarTap: (String) -> Void = { _ in }
         var onRallyTap: () -> Void = {}
         var onMapTap: (LngLat) -> Void = { _ in }
+        var onEmptyTap: (LngLat, String?) -> Void = { _, _ in }
+        private var poiTap: Cancelable?
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
@@ -365,8 +375,20 @@ struct OutingMapboxView: UIViewRepresentable {
                     self.onMapTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
                     return true
                 }
+                if self.isEmptySpot(ctx.point) {
+                    self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), nil)
+                    return true
+                }
                 return false
             })
+            /* A map label (POI) names the brief. Registered after the map tap: Mapbox asks featureset
+               interactions first, and this one only answers where nothing of ours is on top. */
+            poiTap = map.mapboxMap.addInteraction(TapInteraction(.standardPoi) { [weak self] poi, ctx in
+                guard let self, !self.picking, self.car(at: ctx.point) == nil, self.isEmptySpot(ctx.point) else { return false }
+                self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), poi.name)
+                return true
+            })
+            MapTerrainProbe.source = self
             waypointPins.onClusterTap = { [weak self] pts in
                 guard let self else { return }
                 self.keepGroup = false
@@ -417,6 +439,8 @@ struct OutingMapboxView: UIViewRepresentable {
             waterQuery?.cancel()
             tapInteraction?.cancel()
             fx.detach()
+            poiTap?.cancel()
+            if MapTerrainProbe.source === self { MapTerrainProbe.source = nil }
             cancelables.removeAll()
             visuals.detach()
         }
@@ -497,11 +521,22 @@ struct OutingMapboxView: UIViewRepresentable {
         func setLayer(_ l: MapLayer) {
             guard l != layer, let map else { return }
             layer = l
+            try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: l.maxZoom))
             if let json = ArabicBasemap.cached(l) { map.mapboxMap.loadStyle(json) } else { map.mapboxMap.loadStyle(l.styleURI) }
             ArabicBasemap.load(l) { [weak self] json in
                 guard let self, let json, self.layer == l else { return }
                 self.map?.mapboxMap.loadStyle(json)
             }
+        }
+
+        /// Satellite: z19 with «صور عالية الوضوح» on, z18 otherwise (re-checked as the toggle changes).
+        private var zoomCap: Double?
+        func setZoomCap() {
+            guard let map else { return }
+            let z = layer.maxZoom
+            guard z != zoomCap else { return }
+            zoomCap = z
+            try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: z))
         }
 
         func setLabels(_ l: SatelliteLabels) {
@@ -1097,6 +1132,15 @@ struct OutingMapboxView: UIViewRepresentable {
             }
         }
 
+        /// Nothing of ours under the finger: not a chip / pin (overlay), a view annotation
+        /// (rally flag, route label, start pin) or an ornament — only the map itself.
+        private func isEmptySpot(_ p: CGPoint) -> Bool {
+            guard let map, let hit = map.hitTest(p, with: nil) else { return true }
+            if hit === map || hit === overlay { return true }
+            /* The map's render surface (a Metal view directly under the MapView). */
+            return hit.superview === map && hit is MTKView
+        }
+
         private func car(at p: CGPoint) -> String? {
             guard let map else { return nil }
             let m: MapboxMap = map.mapboxMap!
@@ -1678,7 +1722,9 @@ enum ArabicBasemap {
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
         guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
-        let s = tune(raw)
+        var s = tune(raw)
+        /* A copy saved before build 12 has the untuned imagery: tune it (idempotent; #67's grading kept). */
+        if layer == .satellite { s = SatelliteImagery.tune(s, keepExisting: true) }
         cache[layer] = s
         return s
     }
@@ -1724,7 +1770,8 @@ enum ArabicBasemap {
         URLSession.shared.dataTask(with: url) { data, resp, _ in
             var out: String?
             if let data, (resp as? HTTPURLResponse)?.statusCode == 200, let s = String(data: data, encoding: .utf8), s.contains("name_en") {
-                out = layer.isImport ? wrap(transform(s)) : transform(s)
+                let t = transform(s)
+                out = layer.isImport ? wrap(layer == .satellite ? SatelliteImagery.tune(t, keepExisting: true) : t) : t
             }
             DispatchQueue.main.async { finish(layer, out) }
         }.resume()
@@ -1776,5 +1823,24 @@ extension OutingMapboxView.Coordinator {
         let driving = theme.drive || navDrawer.ownsCamera || (me?.speedMps ?? 0) > 4.2
         return MapVisualInputs(me: me.map { recs[$0.id]?.shown ?? $0.position }, driving: driving, exploring: exploreDrawer.last.active,
                                terrain3D: terrain3D, night: theme.night, layer: layer, chrome: chrome, routes: routes)
+    }
+}
+
+// MARK: - «بريف المكان»: Terrain-DEM at a spot
+
+extension OutingMapboxView.Coordinator: TerrainSampling {
+    /// Elevation (metres, exaggeration undone) and a slope from four samples 60 m around —
+    /// only from DEM tiles the map has loaded; nil otherwise, never guessed.
+    func terrain(at p: LngLat) -> TerrainSample {
+        guard let map, styleReady else { return .unavailable }
+        let m: MapboxMap = map.mapboxMap!
+        let k = terrainExaggeration
+        func el(_ q: LngLat) -> Double? { m.elevation(at: CLLocationCoordinate2D(latitude: q.lat, longitude: q.lng)).map { $0 / k } }
+        let d = 60.0
+        let dLat = d / 111_320, dLng = d / (111_320 * max(0.1, cos(p.lat * .pi / 180)))
+        let c = el(p)
+        let slope = PlaceBriefRules.slopeDeg(center: c, east: el(LngLat(lng: p.lng + dLng, lat: p.lat)), west: el(LngLat(lng: p.lng - dLng, lat: p.lat)),
+                                             north: el(LngLat(lng: p.lng, lat: p.lat + dLat)), south: el(LngLat(lng: p.lng, lat: p.lat - dLat)), spacingM: d)
+        return TerrainSample(elevationM: c, slopeDeg: slope)
     }
 }

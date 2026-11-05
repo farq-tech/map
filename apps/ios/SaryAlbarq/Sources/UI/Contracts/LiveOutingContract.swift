@@ -246,6 +246,8 @@ struct SettingsTabUIState: Equatable {
     var batterySharingOn: Bool
     /// «اكتم القناة»: no live voice in or out for this outing on this phone.
     var pttMuted: Bool = false
+    /// The live link in one Arabic line («متصل منذ 3 د» / «يعيد الاتصال…» · last close code).
+    var pttLink: String = ""
     var offline: OfflineAreasUIState
     /// Leader-only actions: «أوقف مؤقتًا» / «استأنف» and «أنهِ الطلعة».
     var isLeader: Bool

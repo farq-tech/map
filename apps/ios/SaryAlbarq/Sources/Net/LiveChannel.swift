@@ -25,6 +25,23 @@ final class LiveChannel {
         var onPTT: (PTTSignal) -> Void = { _ in }
         /// «قناة الطلعة»: a binary audio frame relayed by the server.
         var onAudio: (Data) -> Void = { _ in }
+        /// The link's health for the diagnostics line («متصل» / «يعيد الاتصال» / last close code).
+        var onDiagnostics: (Diagnostics) -> Void = { _ in }
+    }
+
+    /// What the channel sheet shows about the link. Numbers and codes only.
+    struct Diagnostics: Equatable {
+        var state: State = .connecting
+        /// The last close code seen (1006 = the connection simply died).
+        var lastCloseCode: Int?
+        /// The server's close reason text, when it gave one (e.g. "auth_timeout", "replaced").
+        var lastCloseReason: String?
+        /// Sockets opened after the first one.
+        var reconnects = 0
+        /// Since when the current socket is live (ms, scheduler clock).
+        var liveSinceMs: Double?
+        /// Waiting this long before the next attempt (0 when not waiting).
+        var retryInMs: Double = 0
     }
 
     struct Deps {
@@ -62,19 +79,43 @@ final class LiveChannel {
     private var away = false
     /// In «قناة الطلعة» (re-sent after every reconnect).
     private var pttJoined = false
+    /// A floor request made while the socket was (re)connecting: sent right after `ready`, if still fresh.
+    private var pendingPTTStart: (id: Int, atMs: Double)?
+    /// When the current socket was created (a socket still handshaking is not killed by `reconnectNow`).
+    private var socketStartedMs = 0.0
+    private var readyTimer: Cancellable?
+    /// 4409 «replaced» in a row without a socket that stayed up: after a few, stop fighting.
+    private var replacedStreak = 0
+    private var opened = 0
+    private(set) var diagnostics = Diagnostics()
+    private let log: (String) -> Void
 
-    init(outingId: String, token: String, url: URL = Endpoints.liveSocket, handlers: Handlers = Handlers(), deps: Deps) {
+    /// A socket that has not reached `ready` by then is given up and retried.
+    static let readyTimeoutMs = 15_000.0
+    /// A queued floor request older than this is dropped (the person has let go or given up).
+    static let pendingStartMaxMs = 6_000.0
+    /// Live but no frame for this long: on a wake-up (push, talk button) reconnect at once rather than trust it.
+    static let staleMs = 25_000.0
+    /// After a 4409 the next try waits at least this long (another socket of ours is newer: do not fight it).
+    static let replacedWaitMs = 20_000.0
+    static let replacedGiveUp = 4
+
+    init(outingId: String, token: String, url: URL = Endpoints.liveSocket, handlers: Handlers = Handlers(), deps: Deps,
+         log: @escaping (String) -> Void = { PTTDiagnosticsLog.shared.add("link", $0) }) {
         self.outingId = outingId
         self.token = token
         self.url = url
         self.handlers = handlers
         self.deps = deps
+        self.log = log
     }
 
     func start() { connect() }
 
     func stop() {
+        if !stopped { log("stop") }
         stopped = true
+        pendingPTTStart = nil
         slot.clear()
         clearTimers()
         let s = socket
@@ -127,10 +168,25 @@ final class LiveChannel {
         sendFrame(["type": on ? "ptt_join" : "ptt_leave"])
     }
 
+    /// Ask for the floor. While the socket is (re)connecting the request waits for `ready`
+    /// (≤ `pendingStartMaxMs`) instead of being lost, and the reconnect starts now.
     @discardableResult
-    func pttStart(id: Int) -> Bool { sendFrame(["type": "ptt_start", "id": id]) }
+    func pttStart(id: Int) -> Bool {
+        if sendFrame(["type": "ptt_start", "id": id]) { return true }
+        guard !stopped else { return false }
+        pendingPTTStart = (id, deps.scheduler.nowMs)
+        log("ptt_start queued (state=\(state.rawValue))")
+        ensureLive(reason: "ptt_start")
+        return true
+    }
 
-    func pttStop() { sendFrame(["type": "ptt_stop"]) }
+    func pttStop() {
+        if pendingPTTStart != nil {
+            pendingPTTStart = nil
+            return
+        }
+        sendFrame(["type": "ptt_stop"])
+    }
 
     /// One encoded audio frame. False when the socket is not live (nothing is queued: it is live audio).
     @discardableResult
@@ -141,19 +197,52 @@ final class LiveChannel {
     }
 
     var isLive: Bool { state == .live }
+    /// Stopped for good (a terminal close, or the session closed it).
+    var isStopped: Bool { stopped }
+    /// A socket exists and is still on its way to `ready`.
+    var isConnecting: Bool { socket != nil && state != .live }
 
     /// Network came back, or the app came to the foreground.
+    ///
+    /// A live socket is kept, and so is one still handshaking (younger than `readyTimeoutMs`):
+    /// killing it and starting over on every foreground made a slow network never get through.
     func reconnectNow() {
         guard !stopped else { return }
         attempts = 0
+        if replacedStreak > 0, retry != nil { return } // waiting out a 4409: do not fight
         retry?.cancel()
         retry = nil
         if wasPolling && !everReady { startPolling() }
         if socket != nil && state == .live { return }
+        if socket != nil, deps.scheduler.nowMs - socketStartedMs < Self.readyTimeoutMs { return }
         let old = socket
         socket = nil
         old?.close(code: 1000)
         connect()
+    }
+
+    /// A wake-up that needs the link now (a pushtotalk push, the talk button, the app back on screen):
+    /// a live socket that has said nothing for `staleMs` is presumed dead and replaced at once;
+    /// otherwise a ping proves it. Not live: connect now.
+    func ensureLive(reason: String) {
+        guard !stopped else { return }
+        if state == .live, let s = socket {
+            if deps.scheduler.nowMs - lastFrameAtMs > Self.staleMs {
+                log("stale live socket on \(reason): replacing")
+                socket = nil
+                s.close(code: 1000)
+                attempts = 0
+                retry?.cancel()
+                retry = nil
+                return connect()
+            }
+            sendFrame(["type": "ping"])
+            return
+        }
+        /* Someone is waiting on this (a press, a push): no backoff, not even after a 4409. */
+        retry?.cancel()
+        retry = nil
+        reconnectNow()
     }
 
     func networkLost() {
@@ -166,16 +255,29 @@ final class LiveChannel {
     private func setState(_ s: State) {
         guard state != s else { return }
         state = s
+        log("state \(s.rawValue)")
+        diagnostics.state = s
+        if s != .live { diagnostics.liveSinceMs = nil }
         handlers.onState(s)
+        handlers.onDiagnostics(diagnostics)
+    }
+
+    private func noteClose(_ code: Int, _ reason: String?, wasReady: Bool) {
+        diagnostics.lastCloseCode = code
+        diagnostics.lastCloseReason = reason
+        log("close code=\(code)\(reason.map { " reason=\($0)" } ?? "") ready=\(wasReady)")
+        handlers.onDiagnostics(diagnostics)
     }
 
     private func clearTimers() {
         retry?.cancel()
         pollTimer?.cancel()
         pingTimer?.cancel()
+        readyTimer?.cancel()
         retry = nil
         pollTimer = nil
         pingTimer = nil
+        readyTimer = nil
     }
 
     @discardableResult
@@ -226,7 +328,23 @@ final class LiveChannel {
         if state != .polling { setState(.connecting) }
         let s = deps.makeSocket(url)
         socket = s
+        socketStartedMs = deps.scheduler.nowMs
+        opened += 1
+        if opened > 1 { diagnostics.reconnects = opened - 1 }
+        diagnostics.retryInMs = 0
+        log("connect #\(opened)")
         var reachedReady = false
+        var readyAtMs = 0.0
+        readyTimer?.cancel()
+        readyTimer = deps.scheduler.after(ms: Self.readyTimeoutMs) { [weak self, weak s] in
+            guard let self, let s, self.socket === s, !reachedReady else { return }
+            /* Handshake or auth never finished (a dead network, a stuck proxy): give up on this one. */
+            self.log("no ready after \(Int(Self.readyTimeoutMs / 1000)) s: retrying")
+            self.socket = nil
+            s.close(code: 1000)
+            self.noteClose(0, "ready_timeout", wasReady: false)
+            self.onSocketFailed()
+        }
         s.onOpen = { [weak self, weak s] in
             guard let self, let s, self.socket === s else { return }
             let auth: [String: Any] = ["type": "auth", "token": self.token, "outing_id": self.outingId]
@@ -241,9 +359,13 @@ final class LiveChannel {
             switch type {
             case "ready":
                 reachedReady = true
+                readyAtMs = self.deps.scheduler.nowMs
+                self.readyTimer?.cancel()
+                self.readyTimer = nil
                 self.everReady = true
                 self.attempts = 0
                 self.stopPolling()
+                self.diagnostics.liveSinceMs = readyAtMs
                 self.setState(.live)
                 if let raw = msg["snapshot"], let sd = try? JSONSerialization.data(withJSONObject: raw),
                    let snap = try? JSONDecoder().decode(OutingSnapshot.self, from: sd) {
@@ -253,6 +375,13 @@ final class LiveChannel {
                 if let snap = msg["snapshot"] as? [String: Any], snap.keys.contains("media") { MediaEvents.post(outingId: self.outingId, raw: snap["media"]) }
                 if self.away { self.sendFrame(["type": "presence", "away": true]) }
                 if self.pttJoined { self.sendFrame(["type": "ptt_join"]) }
+                if let p = self.pendingPTTStart {
+                    self.pendingPTTStart = nil
+                    if self.deps.scheduler.nowMs - p.atMs <= Self.pendingStartMaxMs {
+                        self.log("ptt_start sent after ready")
+                        self.sendFrame(["type": "ptt_start", "id": p.id])
+                    }
+                }
                 self.flush()
                 self.schedulePing()
             case "ack":
@@ -260,7 +389,9 @@ final class LiveChannel {
                 self.handlers.onAck(msg["ok"] as? Bool == true, msg["reason"] as? String)
             case "pong":
                 if let now = msg["server_now"] as? String { self.handlers.onServerNow(now) }
-            case "error", "closed", "note_ack":
+            case "error":
+                self.log("server error \(msg["code"] as? String ?? "?")")
+            case "closed", "note_ack":
                 break
             case _ where type.hasPrefix("ptt_"):
                 if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
@@ -279,12 +410,46 @@ final class LiveChannel {
             guard let self, let s, self.socket === s else { return }
             self.socket = nil
             self.pingTimer?.cancel()
-            if let r = LiveCloseReason(code: code) { return self.terminal(r) }
+            self.readyTimer?.cancel()
+            let reason = (s as? LiveCloseReasonSource)?.closeReasonText
+            self.noteClose(code, reason, wasReady: reachedReady)
             if self.stopped { return }
-            if !reachedReady { return self.onSocketFailed() }
-            self.scheduleReconnect()
+            if reachedReady, self.deps.scheduler.nowMs - readyAtMs > 60_000 { self.replacedStreak = 0 }
+            switch LiveClosePolicy.decide(code: code, reason: reason) {
+            case .retry:
+                if !reachedReady { return self.onSocketFailed() }
+                self.scheduleReconnect()
+            case .backOff:
+                /* 4409: a newer socket of ours (or another phone signed in as us) holds the room. Wait it out. */
+                self.replacedStreak += 1
+                if self.replacedStreak >= Self.replacedGiveUp { return self.terminal(.replaced) }
+                self.scheduleReconnect(atLeastMs: Self.replacedWaitMs * Double(self.replacedStreak))
+            case .verify(let r):
+                /* 4401 / 4404 used to end the outing on this phone for good. Ask over HTTP first:
+                 * only the API saying so (401 / not a member) is final; anything else retries. */
+                self.verifyThenClose(r, reachedReady: reachedReady)
+            case .terminal(let r):
+                self.terminal(r)
+            }
         }
         s.connect()
+    }
+
+    private func verifyThenClose(_ r: LiveCloseReason, reachedReady: Bool) {
+        let id = outingId, poll = deps.poll
+        if state != .polling { setState(.connecting) }
+        Task { @MainActor [weak self] in
+            var final = false
+            do {
+                _ = try await poll(id)
+            } catch let e as OutingAPIError {
+                final = (r == .unauthorized && e.code == "unauthorized") || (r == .notAMember && e.code == "not_a_member")
+            } catch {}
+            guard let self, !self.stopped else { return }
+            if final { return self.terminal(r) }
+            self.log("close \(r.rawValue) not confirmed over HTTP: retrying")
+            if !reachedReady { self.onSocketFailed() } else { self.scheduleReconnect() }
+        }
     }
 
     private func onSocketFailed() {
@@ -293,14 +458,19 @@ final class LiveChannel {
         scheduleReconnect()
     }
 
-    private func scheduleReconnect() {
+    private func scheduleReconnect(atLeastMs: Double = 0) {
         guard !stopped else { return }
         guard deps.online() else { return setState(.offline) }
         if state != .polling { setState(.connecting) }
         retry?.cancel()
-        let wait = Backoff.delayMs(attempt: attempts, rand: deps.random())
+        let wait = max(atLeastMs, Backoff.delayMs(attempt: attempts, rand: deps.random()))
         attempts += 1
-        retry = deps.scheduler.after(ms: wait) { [weak self] in self?.connect() }
+        diagnostics.retryInMs = wait
+        handlers.onDiagnostics(diagnostics)
+        retry = deps.scheduler.after(ms: wait) { [weak self] in
+            self?.retry = nil
+            self?.connect()
+        }
     }
 
     private func schedulePing() {
@@ -311,6 +481,7 @@ final class LiveChannel {
                 /* Half-open: the tunnel ate the socket without a close frame. */
                 self.socket = nil
                 s.close(code: 1000)
+                self.noteClose(0, "silent", wasReady: true)
                 return self.scheduleReconnect()
             }
             self.sendFrame(["type": "ping"])
@@ -386,13 +557,43 @@ protocol LiveSocket: AnyObject {
     func close(code: Int)
 }
 
+/// A socket that can say why the server closed it (the close frame's reason text).
+protocol LiveCloseReasonSource: AnyObject {
+    var closeReasonText: String? { get }
+}
+
+/// What a close code means for reconnecting. Pure, so it is tested on its own.
+enum LiveClosePolicy: Equatable {
+    case retry
+    /// Retry, but slowly: someone newer holds our place (4409).
+    case backOff
+    /// Final only if the HTTP API agrees.
+    case verify(LiveCloseReason)
+    case terminal(LiveCloseReason)
+
+    static func decide(code: Int, reason: String?) -> LiveClosePolicy {
+        switch code {
+        /* Servers before the fix closed a slow auth with 4401 "auth_timeout": not a bad token. */
+        case 4401 where reason == "auth_timeout": return .retry
+        case 4408, 1011: return .retry
+        case 4409: return .backOff
+        case 4401: return .verify(.unauthorized)
+        case 4404: return .verify(.notAMember)
+        default:
+            if let r = LiveCloseReason(code: code) { return .terminal(r) }
+            return .retry
+        }
+    }
+}
+
 /// A socket that also carries binary frames (the walkie-talkie's audio).
 protocol LiveBinarySocket: AnyObject {
     var onBinary: (Data) -> Void { get set }
     func send(data: Data)
 }
 
-final class URLSessionLiveSocket: NSObject, LiveSocket, LiveBinarySocket, URLSessionWebSocketDelegate {
+final class URLSessionLiveSocket: NSObject, LiveSocket, LiveBinarySocket, LiveCloseReasonSource, URLSessionWebSocketDelegate {
+    private(set) var closeReasonText: String?
     var onOpen: () -> Void = {}
     var onBinary: (Data) -> Void = { _ in }
     var onMessage: (String) -> Void = { _ in }
@@ -433,6 +634,7 @@ final class URLSessionLiveSocket: NSObject, LiveSocket, LiveBinarySocket, URLSes
                 case .success:
                     self.receive()
                 case .failure:
+                    self.captureReason()
                     let code = self.task?.closeCode.rawValue ?? 1006
                     self.finish(code == 0 ? 1006 : code)
                 }
@@ -466,10 +668,17 @@ final class URLSessionLiveSocket: NSObject, LiveSocket, LiveBinarySocket, URLSes
     }
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        if let reason, let t = String(data: reason, encoding: .utf8), !t.isEmpty { closeReasonText = String(t.prefix(40)) }
         finish(closeCode.rawValue)
     }
 
+    private func captureReason() {
+        guard closeReasonText == nil, let d = task?.closeReason, let t = String(data: d, encoding: .utf8), !t.isEmpty else { return }
+        closeReasonText = String(t.prefix(40))
+    }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        captureReason()
         let code = (task as? URLSessionWebSocketTask)?.closeCode.rawValue ?? 0
         finish(code == 0 ? 1006 : code)
     }

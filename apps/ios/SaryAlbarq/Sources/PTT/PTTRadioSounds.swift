@@ -296,3 +296,36 @@ struct Biquad: Equatable {
         return y
     }
 }
+
+/// The cues are built once (the recorded squelch is read from the bundle). Built on the audio
+/// queue at the first press, that took seconds on a cold start: the mic tap, the 440 Hz test
+/// tone and every received frame waited behind it, and a short press went out as a few frames
+/// («ما يوصل، وأحيانًا يوصل»). Now they are built in the background at launch, and a cue that is
+/// not ready yet is skipped rather than waited for.
+enum PTTCueWarmup {
+    private static let lock = NSLock()
+    private static var started = false
+    private static var ready = false
+
+    static func warm() {
+        lock.lock()
+        let go = !started
+        started = true
+        lock.unlock()
+        guard go else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let t0 = Date()
+            _ = PTTRadioSynth.samples(.talkPermit)
+            lock.lock()
+            ready = true
+            lock.unlock()
+            PTTDiagnosticsLog.shared.add("audio", "radio cues ready in \(Int(Date().timeIntervalSince(t0) * 1000)) ms")
+        }
+    }
+
+    static var isReady: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return ready
+    }
+}

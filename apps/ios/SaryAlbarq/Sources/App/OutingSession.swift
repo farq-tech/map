@@ -48,6 +48,8 @@ final class OutingSession: ObservableObject, Identifiable {
     let myUserId: String
     @Published private(set) var view: OutingView?
     @Published private(set) var link: LiveChannel.State = .connecting
+    /// The live link's health for the channel sheet's diagnostics line.
+    @Published private(set) var linkDiag = LiveChannel.Diagnostics()
     @Published private(set) var closedReason: LiveCloseReason?
     @Published private(set) var wantsToShare = false
     @Published private(set) var lastAck: (ok: Bool, reason: String?)?
@@ -112,6 +114,8 @@ final class OutingSession: ObservableObject, Identifiable {
     var speedSnapshot: () -> SpeedModel.Snapshot? = { nil }
     /// «الرحلة» from the live screen (for the Live Activity), when it is open.
     var tripSnapshot: () -> TripPanelUI? = { nil }
+    /// «الملاحة»'s next manoeuvre from the live screen (for the Live Activity), while guiding.
+    var navSnapshot: () -> NavActivityLine? = { nil }
     /// A friend's «غرّزت» / SOS heard over the nearby link (the screen shows a card).
     var onNearbyEvent: (MeshEvent) -> Void = { _ in }
     #if DEBUG
@@ -257,9 +261,11 @@ final class OutingSession: ObservableObject, Identifiable {
             onAck: { [weak self] ok, reason in MainActor.assumeIsolated { self?.ack(ok, reason) } },
             onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } },
             onPTT: { [weak self] sig in MainActor.assumeIsolated { self?.walkie.receive(sig) } },
-            onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } }
+            onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } },
+            onDiagnostics: { [weak self] d in MainActor.assumeIsolated { if self?.linkDiag != d { self?.linkDiag = d } } }
         )
         channel = ch
+        PTTDiagnosticsLog.shared.add("session", "open (visible=\(visible))")
         walkie.attach(channel: ch, mesh: mesh)
         ch.start()
         debugAutoTalk()
@@ -325,7 +331,9 @@ final class OutingSession: ObservableObject, Identifiable {
             stopBackgroundTrail()
             syncTrailGPS()
             channel?.setAway(false)
-            channel?.reconnectNow()
+            /* Back on screen: a live socket is proven with a ping (replaced if it went quiet), a
+             * handshaking one is left alone, none at all reconnects now. */
+            channel?.ensureLive(reason: "foreground")
             reconcileSharing()
         } else {
             channel?.dropPendingFix()
@@ -783,6 +791,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func closed(_ r: LiveCloseReason) {
         guard closedReason == nil else { return }
+        PTTDiagnosticsLog.shared.add("session", "closed for good: \(r.rawValue)")
         closedReason = r
         stopBackgroundTrail()
         saveTrail()
@@ -960,7 +969,7 @@ enum Notifier {
         c.sound = .default
         c.threadIdentifier = "outing-\(outingId)"
         c.userInfo = ["outing_id": outingId, "type": kind]
-        if kind == "sos" { c.interruptionLevel = .timeSensitive } else { c.interruptionLevel = .passive; c.sound = nil }
+        if kind == "sos" { c.interruptionLevel = .timeSensitive } else if kind == "ptt" { c.interruptionLevel = .active; c.sound = nil } else { c.interruptionLevel = .passive; c.sound = nil }
         let r = UNNotificationRequest(identifier: "\(kind)-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(r)
     }

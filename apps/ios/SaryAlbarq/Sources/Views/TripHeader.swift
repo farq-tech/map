@@ -9,9 +9,10 @@ struct TripHeaderUI: Equatable {
 }
 
 enum TripHeaderPresenter {
-    /// Title: the destination (the outing's name when there is none, or the trip is off).
-    static func title(outingName: String, trip: TripPanelUI?) -> String {
-        guard let t = trip else { return outingName }
+    /// Title: the destination (the outing's name when there is none, the trip is off, or it
+    /// ended: after «انتهت الطلعة» nobody is heading anywhere, e.g. a return trip's «نقطة البداية»).
+    static func title(outingName: String, trip: TripPanelUI?, ended: Bool = false) -> String {
+        guard !ended, let t = trip else { return outingName }
         if case .needsDestination = t.phase { return outingName }
         return t.destinationName.isEmpty ? outingName : t.destinationName
     }

@@ -34,6 +34,9 @@ final class WaypointsUITests: XCTestCase {
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.80, dy: 0.56)).press(forDuration: 1.3)
         /* The single long-press opens the point card; its «أضف نقطة» opens the composer. */
         let add = app.buttons["point.add"]
+        /* «بريف المكان» sits above the card's actions: scroll to them. */
+        let brief = app.descendants(matching: .any)["brief.section"].firstMatch
+        for _ in 0..<4 where !add.waitForExistence(timeout: 3) && brief.exists { brief.swipeUp() }
         XCTAssertTrue(add.waitForExistence(timeout: 8), "the long-press point card")
         add.tap()
         let title = app.textFields["waypoint.title"]
