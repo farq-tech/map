@@ -64,7 +64,8 @@ final class NavOptionMappingTests: XCTestCase {
         d.removePersistentDomain(forName: "nav-tests")
         XCTAssertEqual(NavRouteOptions.load(d), NavRouteOptions())
         NavRouteOptions(fastest: false, avoidUnpaved: true, avoidTolls: true).save(d)
-        XCTAssertEqual(NavRouteOptions.load(d), NavRouteOptions(fastest: false, avoidUnpaved: true, avoidTolls: true))
+        /* No toll roads in KSA (#76): a saved «تجنّب الرسوم» from an older build is dropped on load. */
+        XCTAssertEqual(NavRouteOptions.load(d), NavRouteOptions(fastest: false, avoidUnpaved: true, avoidTolls: false))
     }
 
     func testChoiceOrdersByTimeOrDistance() {
