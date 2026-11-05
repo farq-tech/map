@@ -128,7 +128,9 @@ final class PersonalInvitesUITests: XCTestCase {
     func testJoinScreens() {
         let mine = launchScreen("invite-personal")
         XCTAssertTrue(mine.descendants(matching: .any)["invite.personal"].waitForExistence(timeout: 10))
-        XCTAssertTrue(mine.buttons["invite.join"].label.contains("فهد أخوي"), mine.buttons["invite.join"].label)
+        XCTAssertTrue(mine.descendants(matching: .any)["invite.personal"].label.contains("فهد أخوي"), "joins under the inviter's name, no name field")
+        XCTAssertFalse(mine.textFields["invite.myName"].exists)
+        XCTAssertTrue(mine.buttons["invite.join"].label.contains("انضم للطلعة"), mine.buttons["invite.join"].label)
         shot(mine, "5-join-personal")
         let other = launchScreen("invite-taken")
         XCTAssertTrue(other.staticTexts["هذه الدعوة لشخص آخر"].waitForExistence(timeout: 10))

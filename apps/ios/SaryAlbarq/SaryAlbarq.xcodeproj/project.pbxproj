@@ -235,6 +235,7 @@
 		873355BA15A8FE6ECC910CC5 /* SpeedModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051727DD1152CBFFC71F0478 /* SpeedModel.swift */; };
 		87B56AB4C039A50AD80C7B11 /* TrackPrecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A32C61623D4F9DEDA5B5F1FF /* TrackPrecisionTests.swift */; };
 		87D75AF0A3843FF65D761B03 /* SaryAlertLane.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF04B63676B51DC3605ECA7 /* SaryAlertLane.swift */; };
+		87E1BC4BBA578A594BBE7D18 /* JoinFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF569B22E1459820F90EC893 /* JoinFlowTests.swift */; };
 		8872D7079BDC54E7EBBF6F2F /* OutingFeaturesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 319F5D6B850C453345A0118C /* OutingFeaturesModel.swift */; };
 		889A50A4C661CBFC2C9DAD3A /* PlanSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0D1E5F0D1A288C3E1D4AD1 /* PlanSections.swift */; };
 		898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */; };
@@ -243,6 +244,7 @@
 		8D3E7697F8138C2904FE5F87 /* OutingMapboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */; };
 		8DC94CC5C6F716F6414B2314 /* OutingActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3DFA0EF6E825443DB48CBD /* OutingActivityTests.swift */; };
 		8EDB900CFFA6E3C7960D73D6 /* SaryMapControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4370475FC1006881BCACF8 /* SaryMapControls.swift */; };
+		8EFD0F9766B96B5E67024BB0 /* JoinFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D8AFDEF4F66DAADFE8DD7A /* JoinFlow.swift */; };
 		8F9FDBCE54235143FF98E0B4 /* CarIcon-f07f2f.png in Resources */ = {isa = PBXBuildFile; fileRef = F22CE52789B31AA24730BE63 /* CarIcon-f07f2f.png */; };
 		8FA7B88996BB67B532C27B3B /* Tajawal-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */; };
 		90E9904DE376425B0849683F /* SpeedSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02EB954C26BD0D7546B7E244 /* SpeedSettingsSection.swift */; };
@@ -751,6 +753,7 @@
 		B0B5BF7DAA2399EEA639295E /* CarIcon-f2b630.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-f2b630.png"; sourceTree = "<group>"; };
 		B0FB42D448CC3008D403F34D /* NavSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavSession.swift; sourceTree = "<group>"; };
 		B25DB46CD353D74E938F0729 /* CarIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarIcon.swift; sourceTree = "<group>"; };
+		B2D8AFDEF4F66DAADFE8DD7A /* JoinFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinFlow.swift; sourceTree = "<group>"; };
 		B320D512D47E006CCF289262 /* CarPlayFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayFeatures.swift; sourceTree = "<group>"; };
 		B39DA1A289E3CC3B2A17E5CB /* CarPlayCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayCoordinator.swift; sourceTree = "<group>"; };
 		B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Tajawal-ExtraBold.ttf"; sourceTree = "<group>"; };
@@ -854,6 +857,7 @@
 		EF09C4AABF9811DD61A64B35 /* openmeteo-air-riyadh.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "openmeteo-air-riyadh.json"; sourceTree = "<group>"; };
 		EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRules.swift; sourceTree = "<group>"; };
 		EF33DCF90BC3402E874D2661 /* GroupAudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupAudioPlayer.swift; sourceTree = "<group>"; };
+		EF569B22E1459820F90EC893 /* JoinFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinFlowTests.swift; sourceTree = "<group>"; };
 		F025C4BB80157D5B8653F73E /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		F1338061A444CBC2D438FE17 /* OfflineMaps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMaps.swift; sourceTree = "<group>"; };
 		F1D84D7AC1A11FDF1EE20DB3 /* CarIcon-1fb8c4.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-1fb8c4.png"; sourceTree = "<group>"; };
@@ -1213,6 +1217,7 @@
 				6AD20F0B17D2F48318175D2C /* GroupAudioTests.swift */,
 				C347C7656CA76BEA0F9F22B6 /* HiResImageryTests.swift */,
 				947B5CE5884768A4F5647DF3 /* IntroPolicyTests.swift */,
+				EF569B22E1459820F90EC893 /* JoinFlowTests.swift */,
 				14D03FB4D57D48E36E12E175 /* LiveChannelTests.swift */,
 				816FF5DA4F1C348B22CC18E1 /* LiveDeclutterTests.swift */,
 				7A60F871C0ECFBC36E136A51 /* LivePresenterTests.swift */,
@@ -1577,6 +1582,7 @@
 			isa = PBXGroup;
 			children = (
 				E5B3FC4E224A2B94DEC5CE61 /* ContactPicker.swift */,
+				B2D8AFDEF4F66DAADFE8DD7A /* JoinFlow.swift */,
 				4F036965DD0764EAF8E4F210 /* PersonalInvites.swift */,
 				62EAD5D5D15C3EBCA897CB30 /* PersonalInvitesSection.swift */,
 			);
@@ -1994,6 +2000,7 @@
 				98E8B367F23FE491A422BF50 /* GroupAudioTests.swift in Sources */,
 				4A2F0CA38711696A90802E92 /* HiResImageryTests.swift in Sources */,
 				31FF1360A4929F73EA33DF1B /* IntroPolicyTests.swift in Sources */,
+				87E1BC4BBA578A594BBE7D18 /* JoinFlowTests.swift in Sources */,
 				260AC7155D577A3F027E45C3 /* LiveChannelTests.swift in Sources */,
 				F4C74240EB3E350477F54F33 /* LiveDeclutterTests.swift in Sources */,
 				5AEBB2630684E87173633AB6 /* LivePresenterTests.swift in Sources */,
@@ -2116,6 +2123,7 @@
 				985C8DA8BF0E4BA0DEADC512 /* IntroScene.swift in Sources */,
 				330EF24DED6EE99AA1BC7704 /* IntroSettingsSection.swift in Sources */,
 				1E02895EB7B6FDE875ADFE62 /* InviteLink.swift in Sources */,
+				8EFD0F9766B96B5E67024BB0 /* JoinFlow.swift in Sources */,
 				313D70BE3BD281350DB21478 /* LiveActionSheet.swift in Sources */,
 				6BEE9F5231818331223116B0 /* LiveChannel.swift in Sources */,
 				5BC7E6C250CAB4DE79C6FDFE /* LiveContext.swift in Sources */,

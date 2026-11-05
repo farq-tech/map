@@ -3,11 +3,11 @@ import XCTest
 /// End to end against a LOCAL API (never production): joins an outing from an invite
 /// link, shares with «دائمًا» (pre-granted with `xcrun simctl privacy … grant location-always`),
 /// sends the app to the background for a while (positions must keep arriving at the
-/// server), comes back and presses stop (positions must stop). The shell side drives
+/// server), comes back and leaves the trip — the only stop since build 14 (positions must stop). The shell side drives
 /// `xcrun simctl location … start` and watches the server. Skipped unless both
 /// `TEST_RUNNER_SARY_API_BASE` and `TEST_RUNNER_SARY_JOIN_LINK` are set.
 final class BackgroundShareE2ETests: XCTestCase {
-    func testSharingContinuesInTheBackgroundAndStopsOnStop() throws {
+    func testSharingContinuesInTheBackgroundAndStopsOnLeave() throws {
         let env = ProcessInfo.processInfo.environment
         guard let base = env["SARY_API_BASE"], let link = env["SARY_JOIN_LINK"], let url = URL(string: link) else {
             throw XCTSkip("SARY_API_BASE / SARY_JOIN_LINK not set")
@@ -34,17 +34,12 @@ final class BackgroundShareE2ETests: XCTestCase {
         let join = app.buttons["invite.join"].firstMatch
         XCTAssertTrue(join.waitForExistence(timeout: 15))
         join.tap()
-        /* After a first join the app offers notifications with its own explainer: not now. */
-        if app.buttons["notify.later"].waitForExistence(timeout: 8) { app.buttons["notify.later"].tap() }
+        /* One step: «انضم للطلعة» → (permission pre-granted) → the live trip, sharing on. */
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 60))
         sleep(2)
         summary.tap()
-        XCTAssertTrue(app.buttons["live.share"].waitForExistence(timeout: 10))
-        app.buttons["live.share"].tap()
-        XCTAssertTrue(app.buttons["consent.accept"].waitForExistence(timeout: 5))
-        app.buttons["consent.accept"].tap()
-        XCTAssertTrue(app.buttons["live.stopSharing"].waitForExistence(timeout: 15), "sharing")
+        XCTAssertTrue(app.staticTexts["live.sharing"].waitForExistence(timeout: 15), "sharing without a press")
         XCTAssertTrue(app.descendants(matching: .any)["live.shareHint"].waitForExistence(timeout: 5), "«دائمًا»: the don't-force-quit note")
         print("SARY-E2E: sharing-started")
         sleep(10)
@@ -53,11 +48,14 @@ final class BackgroundShareE2ETests: XCTestCase {
         sleep(backgroundSeconds)
         print("SARY-E2E: background-end")
         app.activate()
-        XCTAssertTrue(app.buttons["live.stopSharing"].waitForExistence(timeout: 15), "still sharing after the background stretch")
-        app.buttons["live.stopSharing"].tap()
+        XCTAssertTrue(app.staticTexts["live.sharing"].waitForExistence(timeout: 15), "still sharing after the background stretch")
+        app.buttons["live.leave"].tap()
+        let confirm = app.sheets.buttons["غادر الطلعة"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
         print("SARY-E2E: stopped")
-        XCTAssertTrue(app.buttons["live.share"].waitForExistence(timeout: 10))
-        /* Background again after stop: nothing must arrive now. */
+        XCTAssertTrue(app.buttons["list.create"].waitForExistence(timeout: 15))
+        /* Background again after leaving: nothing must arrive now. */
         XCUIDevice.shared.press(.home)
         sleep(40)
         print("SARY-E2E: done")

@@ -56,13 +56,18 @@ struct LiveSheet: View {
         .sheet(item: Binding(get: { controller.shareItem.map(ShareURL.init) }, set: { if $0 == nil { controller.shareItem = nil } })) { s in
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
         }
-        .confirmationDialog("أنت تشارك موقعك الآن", isPresented: Binding(get: { controller.confirm == .backWhileSharing }, set: { if !$0 { controller.confirm = nil } }), titleVisibility: .visible) {
-            Button("أوقف المشاركة وارجع", role: .destructive) {
-                Task { await controller.session.stopSharing(); controller.onExit() }
-            }
+        .confirmationDialog("أنت في طلعة شغّالة", isPresented: Binding(get: { controller.confirm == .backWhileSharing }, set: { if !$0 && controller.confirm == .backWhileSharing { controller.confirm = nil } }), titleVisibility: .visible) {
+            Button("ارجع للقائمة", action: controller.backToList)
+            Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("الرجوع إلى قائمة الطلعات يوقف مشاركة موقعك.")
+            Text("أعضاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة يوقف الإرسال لين ترجع للطلعة؛ لإيقافه نهائيًا غادر الطلعة.")
+        }
+        .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
+            Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
         }
         .alert("تنبيه", isPresented: Binding(get: { controller.session.errorText != nil }, set: { if !$0 { controller.session.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
@@ -120,9 +125,6 @@ struct LiveSheet: View {
         case .stations:
             NearestStationsView(state: NearestStationsUIState(phase: controller.stations), actions: controller.stationActions)
                 .presentationDetents([.medium, .large])
-        case .consent:
-            ConsentView(accept: controller.acceptConsent, cancel: { controller.modal = nil })
-                .presentationDetents([.large])
         case let .rallyLabel(p, moving):
             RallyLabelView(moving: moving, save: { controller.saveRally(p, label: $0) }, cancel: { controller.modal = nil })
                 .presentationDetents([.medium])
@@ -308,25 +310,30 @@ private struct ShareCallout: View {
             case .ended:
                 SaryBanner(text: "انتهت هذه الطلعة.", tone: .info)
             case .active:
-                if ui.sharing == .paused {
-                    Button { controller.setSharingPaused(false) } label: { SaryButtonLabel(title: "شارك موقعي", systemImage: SaryIcon.locate) }
-                        .buttonStyle(.saryPrimary)
-                        .accessibilityIdentifier("live.share")
-                    if controller.locationDenied {
-                        /* Joined (sharing by default) but iOS refused the location: stay joined, show the fix. */
-                        ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
-                    }
+                /* Build 14: sharing is automatic for every member of an active trip — no «شارك موقعي»
+                 * and no «أوقف». The only way to stop is «غادر الطلعة», right here and in «المزيد». */
+                if controller.locationDenied {
+                    /* iOS location turned off after joining: still a member, the calm fix. */
+                    ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
                 } else {
-                    HStack(spacing: theme.space(.s)) {
-                        Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
-                        Text(ui.sharing == .sharing ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "جارٍ تحديد موقعك…")
-                            .saryText(.callout, weight: .bold)
-                            .foregroundStyle(theme.palette.textPrimary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityIdentifier("live.sharing")
-                        Button { controller.setSharingPaused(true) } label: { Text("أوقف") }
-                            .buttonStyle(.sary(.secondary, width: .hug, compact: true))
-                            .accessibilityIdentifier("live.stopSharing")
+                    VStack(alignment: .leading, spacing: theme.space(.s)) {
+                        HStack(spacing: theme.space(.s)) {
+                            Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
+                            Text(ui.sharing == .sharing ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "جارٍ تحديد موقعك…")
+                                .saryText(.callout, weight: .bold)
+                                .foregroundStyle(theme.palette.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("live.sharing")
+                        }
+                        HStack(spacing: theme.space(.s)) {
+                            Text("تتوقف المشاركة إذا غادرت الطلعة أو انتهت.")
+                                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button { controller.confirm = .leave } label: { Text("غادر الطلعة") }
+                                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                                .accessibilityIdentifier("live.leave")
+                        }
                     }
                     .padding(theme.space(.m))
                     .sarySurface(radius: SaryRadius.l)
@@ -489,7 +496,7 @@ struct TrailAlwaysExplainer: View {
                     Text("عشان «طريق العودة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
-                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أعضاء الطلعة تستمر والشاشة مقفلة، إذا اخترت «شارك موقعي».")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أعضاء الطلعة تستمر والشاشة مقفلة.")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -557,7 +564,7 @@ struct ShareAlwaysExplainer: View {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
                     Text("المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text("عشان يشوفك أصحابك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text("لما طلعت من التطبيق توقف إرسال موقعك لأصحابك. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -574,13 +581,13 @@ struct ShareAlwaysExplainer: View {
     }
 }
 
-/// The same facts on the consent sheet and the «دائمًا» explainer.
+/// The facts on the «دائمًا» explainer.
 struct ShareAlwaysBullets: View {
     @Environment(\.sary) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.space(.l)) {
-            bullet("lock.iphone", "تستمر المشاركة في الخلفية والشاشة مقفلة، حتى توقفها أو تغادر الطلعة أو تنتهي.")
+            bullet("lock.iphone", "تستمر المشاركة في الخلفية والشاشة مقفلة، حتى تغادر الطلعة أو تنتهي.")
             bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة ما دامت المشاركة شغالة.")
             bullet("gearshape.fill", "تحتاج إذن «دائمًا». إذا اخترت «أثناء الاستخدام» فقط، تتوقف المشاركة إذا قفلت الشاشة.")
             bullet("xmark.app", "لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة: iOS قد لا يعيد فتحه، فتتوقف المشاركة.")
@@ -682,10 +689,7 @@ private struct SettingsTab: View {
                 }
                 .buttonStyle(.plain)
             }
-            SarySection(title: "مشاركتي", footer: "بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة حتى توقفه أو تغادر أو تنتهي الطلعة. بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر لأصحابك «آخر موقع».") {
-                SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause,
-                              isOn: Binding(get: { s.isSharingPaused }, set: { a.setSharingPaused($0) }), id: "settings-pause-sharing")
-                SaryDivider()
+            SarySection(title: "مشاركتي", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر لأصحابك «آخر موقع».") {
                 SaryToggleRow(title: "شارك البطارية", subtitle: "نسبة الشحن تظهر لأعضاء الطلعة", systemImage: SaryIcon.battery(60),
                               isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) }), id: "settings-battery")
                 SaryDivider()
@@ -881,44 +885,6 @@ struct NearestStationsView: View {
         .padding(theme.space(.l))
         .frame(maxHeight: .infinity, alignment: .top)
         .accessibilityIdentifier("stations")
-    }
-}
-
-// MARK: - Consent
-
-struct ConsentView: View {
-    var accept: () -> Void
-    var cancel: () -> Void
-    @Environment(\.sary) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: theme.space(.l)) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: theme.space(.l)) {
-                    Image(systemName: "location.circle.fill").font(.system(size: 52)).foregroundStyle(theme.palette.accent)
-                    Text("مشاركة موقعك في هذه الطلعة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    bullet("lock.fill", "يرى موقعك أعضاء هذه الطلعة فقط، ولا أحد غيرهم.")
-                    bullet("stop.circle.fill", "تتوقف إذا ضغطت «أوقف»، أو غادرت، أو أزالك أمير الرحلة، أو أوقف الطلعة أو أنهاها.")
-                    ShareAlwaysBullets()
-                    bullet("clock.arrow.circlepath", "يحفظ الخادم آخر موقع لك فقط، لا مسارك، ويحذفه عند انتهاء الطلعة. مسارك («مساري») يبقى على جوالك فقط.")
-                    Text("بعد الموافقة بيسألك iOS عن إذن الموقع: اختر «السماح دائمًا» لتستمر المشاركة والشاشة مقفلة.")
-                        .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Button(action: accept) { SaryButtonLabel(title: "أوافق، شارك موقعي", systemImage: SaryIcon.locate) }
-                .buttonStyle(.saryPrimary)
-                .accessibilityIdentifier("consent.accept")
-            Button("ليس الآن", action: cancel).buttonStyle(.saryPlain)
-        }
-        .padding(theme.space(.l))
-    }
-
-    private func bullet(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: theme.space(.m)) {
-            Image(systemName: icon).foregroundStyle(theme.palette.accentText).frame(width: 24)
-            Text(text).saryText(.body).foregroundStyle(theme.palette.textPrimary)
-        }
     }
 }
 

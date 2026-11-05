@@ -236,7 +236,7 @@ struct OfflineAreasUIState: Equatable {
 }
 
 struct SettingsTabUIState: Equatable {
-    /// My sharing switch: true = paused («أوقف مشاركة موقعي» is on).
+    /// Not sharing right now (no switch since build 14: a member shares while the trip runs).
     var isSharingPaused: Bool
     var driveMode: TriModeUI
     var nightMode: TriModeUI
@@ -382,8 +382,6 @@ struct InviteTabActions {
 }
 
 struct SettingsTabActions {
-    /// My sharing switch. `paused == true` means stop sharing my location.
-    var setSharingPaused: (_ paused: Bool) -> Void = { _ in }
     var setDriveMode: (_ mode: TriModeUI) -> Void = { _ in }
     var setNightMode: (_ mode: TriModeUI) -> Void = { _ in }
     /// «حفظ» my number: normalised "05XXXXXXXX", or nil to remove it.

@@ -51,7 +51,10 @@ struct DebugScreen: View {
         case "invite-invalid": InviteJoinSheet(token: "x", preset: .invalid)
         case "invite-error": InviteJoinSheet(token: "x", preset: .error("الشبكة بطيئة. أعد المحاولة."))
         case "notify-explainer": NotifyExplainerSheet(done: {})
-        case "consent": ConsentView(accept: {}, cancel: {})
+        case "invite-needs-location": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active, inviteeName: "فهد أخوي")),
+                                                      presetStep: .needsLocation(.denied))
+        case "invite-needs-precise": InviteJoinSheet(token: "x", preset: .ready(InvitePreviewUI(outingName: "طلعة الثمامة", inviterName: "أبو فهد", participantCount: 4, status: .active)),
+                                                     presetStep: .needsLocation(.reduced))
         case "share-always-explainer": ShareAlwaysExplainer(allow: {}, later: {})
         case "dialog-leave":
             HomeView().saryDialog($dialog, systemImage: "rectangle.portrait.and.arrow.right", title: "تغادر الطلعة؟",

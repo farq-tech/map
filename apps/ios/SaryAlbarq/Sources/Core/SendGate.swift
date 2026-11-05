@@ -8,16 +8,17 @@ import Foundation
 /// The server's own `sharing` flag is NOT consent: the server sets it to true
 /// when someone joins. A position leaves the phone only when ALL hold:
 ///
-///   * this identity gave consent for this outing on this device (the consent
-///     sheet) — recorded per identity, so a later sign-in never inherits it;
+///   * this identity joined this outing on this device (joining IS the consent,
+///     owner decision build 6; forced on, build 14) — recorded per identity, so a
+///     later sign-in never inherits it;
 ///   * iOS location permission is granted;
-///   * the person pressed «شارك موقعي» (and has not pressed stop since);
+///   * the member's share intent is on: always, while a member of the trip (no
+///     «شارك موقعي» / «أوقف» toggle since build 14 — the only way out is leaving);
 ///   * the server agrees sharing is on for this member;
 ///   * the outing is active and the session is not closed;
 ///   * the app is on screen — OR iOS permission is «دائمًا» (owner decision,
-///     2026-11: once the member chose to share, sharing keeps going with the
-///     screen locked / in another app until they stop, leave, are removed, or
-///     the outing ends). With «أثناء الاستخدام» only, nothing is sent from the
+///     2026-11: sharing keeps going with the screen locked / in another app until
+///     they leave, are removed, or the outing ends). With «أثناء الاستخدام» only, nothing is sent from the
 ///     background.
 struct SendGate: Equatable {
     var consent = false
@@ -70,12 +71,12 @@ enum ShareMemory {
     }
 
     /// The line shown on «انضم» (and on the creator's last wizard step): tapping it is the consent.
-    static let joinStatement = "بانضمامك يشوف أعضاء الطلعة موقعك مباشرة، وتقدر توقف المشاركة أو تطلع متى ما بغيت"
+    static let joinStatement = JoinCopy.statement
 
-    /// Owner decision (build 6): joining IS the consent. Tapping «انضم» (or creating the outing)
-    /// records consent for this identity + outing at that moment and arms the share, so the
-    /// member is visible without pressing «شارك موقعي». Every other `SendGate` condition still
-    /// holds (iOS permission, active outing, server sharing on, not stopped / left / ended).
+    /// Owner decision (build 6, forced on in build 14): joining IS the consent. Tapping «انضم»
+    /// (or creating / opening the outing as a member) records consent for this identity + outing
+    /// and arms the share; there is no toggle to turn it off, only «غادر الطلعة». Every other
+    /// `SendGate` condition still holds (iOS permission, active outing, server sharing on, not left / ended).
     static func consentByJoining(user: String, outing: String, defaults: UserDefaults = .standard) {
         recordConsent(user: user, outing: outing, defaults: defaults)
         setActiveShare(user: user, outing: outing, defaults: defaults)

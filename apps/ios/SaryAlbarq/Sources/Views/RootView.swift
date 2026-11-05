@@ -73,6 +73,7 @@ struct LiveOutingHost: View {
         _controller = StateObject(wrappedValue: {
             let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
             c.onExit = { [weak model] in model?.closeSession() }
+            c.onBackToList = { [weak model] in model?.closeSession(keepShare: true) }
             /* «تخطيط الطلعة»: the weather reads the plan's destination and route. */
             c.planModel = model.plans.model(session.id)
             c.setPush = { [weak model] on in
@@ -113,10 +114,11 @@ struct LiveOutingHost: View {
             }
             .onAppear { startIfAsked() }
             .onReceive(model.$offerNotifications) { offer in
-                /* First join: our notification explainer, over the live map, once things settle. */
-                guard offer, controller.modal == nil else { return }
+                /* First join: notifications are NOT asked at join (build 14). Our explainer comes with
+                 * the first alert worth sending in this trip (a friend's message, SOS, convoy alert). */
+                guard offer else { return }
                 model.offerNotifications = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { if controller.modal == nil { controller.modal = .notify } }
+                controller.notifyOfferPending = true
             }
     }
 }

@@ -121,6 +121,13 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         return LocationTuning.gpsState(auth: authorization, lastAccuracy: lastFix?.accuracy, lastFixAgeMs: age)
     }
 
+    /// Back on screen (e.g. from Settings): read what iOS says now, without waiting for the delegate.
+    func refreshAuthorization() {
+        let st = manager.authorizationStatus, acc = manager.accuracyAuthorization
+        if st != authorization { authorization = st }
+        if acc != accuracyAuthorization { accuracyAuthorization = acc }
+    }
+
     /// Step 1: When-In-Use. Returns the resulting status.
     func requestWhenInUse() async -> CLAuthorizationStatus {
         guard authorization == .notDetermined else { return authorization }
