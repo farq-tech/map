@@ -208,18 +208,13 @@ extension LiveOutingController {
 
     // MARK: the control cluster while navigating
 
+    /// The guidance camera, in «موقعي»'s place on the map (voice and steps sit in the guidance bar).
     var navControlItems: [SaryMapControlItem] {
-        var items: [SaryMapControlItem] = [
+        [
             nav.camera == .follow
                 ? .init(id: "nav.overview", systemImage: "map.fill", label: "نظرة عامة", accessibilityID: "nav.overview")
                 : .init(id: "nav.follow", systemImage: SaryIcon.locateFollow, label: "تابع", accessibilityID: "nav.follow", isActive: false),
-            .init(id: "nav.mute", systemImage: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: nav.muted ? "الصوت مكتوم" : "الصوت",
-                  accessibilityID: "nav.mute", isActive: nav.muted),
         ]
-        if nav.phase == .guiding {
-            items.append(.init(id: "nav.steps", systemImage: "list.bullet", label: "الخطوات", accessibilityID: "nav.stepsButton"))
-        }
-        return items
     }
 
     func navControlTapped(_ id: String) {

@@ -21,7 +21,7 @@ struct LivePresenterInput {
     var alerts: [LiveAlertUI] = []
     var ptt: PTTStateUI = .idle
     var sheetDetent: SheetDetentUI = .peek
-    var selectedTab: LiveTabUI = .participants
+    var selectedTab: LiveTabUI = .trip
     var inviteLink: String?
     var isRevoking = false
     var driveMode: TriModeUI = .automatic
@@ -47,6 +47,10 @@ struct LivePresenterInput {
     var tripDestination: OutingDestination?
     var tripArrivals: [String: Double] = [:]
     var myTripRemaining: RemainingDistance?
+    /// «ذكاء القافلة»: who distances are measured from, and who has been standing still since when.
+    var convoyLeaderId: String?
+    var convoyLeaderTitle = "أمير الرحلة"
+    var stoppedSince: [String: Date] = [:]
 }
 
 /// Pure mapper from the app's real data (OutingView + GPS + local UI state) to
@@ -231,6 +235,19 @@ enum LiveOutingPresenter {
                 out[out.count - 1].0.tripArrived = t.arrived
             }
         }
+        /* Distance from the leader, from two LIVE positions only (never an old fix). */
+        /* When I am the reference, the row's own distance (from me) already says it. */
+        if let lid = i.convoyLeaderId, lid != v.myId, let lp = livePosition(lid, i) {
+            for k in out.indices {
+                let id = out[k].0.id
+                out[k].0.leaderTitle = i.convoyLeaderTitle
+                if id == lid { out[k].0.isConvoyLeader = true; continue }
+                if let p = livePosition(id, i) { out[k].0.leaderDistanceMeters = Geo.haversineMeters(p, lp) }
+            }
+        }
+        for k in out.indices where out[k].0.presence.isLive {
+            out[k].0.stoppedSince = i.stoppedSince[out[k].0.id]
+        }
         /* Me first, then nearest, then the ones with no distance in join order. */
         return out.sorted { a, b in
             if a.0.isMe != b.0.isMe { return a.0.isMe }
@@ -241,6 +258,17 @@ enum LiveOutingPresenter {
             default: return a.1 < b.1
             }
         }.map(\.0)
+    }
+
+    /// A member's position only while it is live (me: sharing with a fresh fix).
+    static func livePosition(_ uid: String, _ i: LivePresenterInput) -> Geo.LatLng? {
+        guard let v = i.view else { return nil }
+        if uid == v.myId {
+            guard let f = i.myFix, i.now.timeIntervalSince1970 * 1000 - f.atMs <= myLiveMaxAgeMs else { return nil }
+            return f.coordinate
+        }
+        guard v.members[uid]?.sharing == true, v.freshness(of: uid, deviceNow: i.now) == .live else { return nil }
+        return position(of: uid, in: v, myFix: i.myFix)
     }
 
     /// A friend's speed, only while their position is live (Policy freshness); never from an old fix.
@@ -294,14 +322,18 @@ enum LiveOutingPresenter {
             bearing = relative(Geo.bearingDeg(a, p), mapBearing: i.mapBearing)
         }
         var arrived = 0
-        for m in v.members.values {
+        var names: [String] = []
+        for m in v.orderedMembers {
             let isMe = m.user_id == v.myId
             let live: Bool
             if isMe { live = i.isSharingNow } else { live = v.freshness(of: m.user_id, deviceNow: i.now) == .live }
             guard live, let at = position(of: m.user_id, in: v, myFix: i.myFix) else { continue }
-            if Geo.haversineMeters(at, p) <= arrivedRadiusM { arrived += 1 }
+            if Geo.haversineMeters(at, p) <= arrivedRadiusM {
+                arrived += 1
+                names.append(isMe ? "أنت" : m.display_name)
+            }
         }
-        return RallyPointUI(distanceMeters: dist, bearingDegrees: bearing, arrivedCount: arrived, totalCount: v.members.count, label: r.label)
+        return RallyPointUI(distanceMeters: dist, bearingDegrees: bearing, arrivedCount: arrived, totalCount: v.members.count, label: r.label, arrivedNames: names)
     }
 
     // MARK: map
@@ -365,6 +397,20 @@ enum EdgeArrows {
     enum Edge: Equatable { case top, right, bottom, left }
 
     static let margin: CGFloat = 6
+    /// At most this many arrows at the edge (docs/IA-REDESIGN.md §2.6).
+    static let maxArrows = 3
+
+    /// Which off-screen members get an arrow: members in an alert state (SOS, stuck,
+    /// silent) first, then the nearest; at most `maxArrows`. Driving: alert members only.
+    static func pick(candidates: [(id: String, distance: Double?)], alerting: Set<String>, driving: Bool, max n: Int = maxArrows) -> [String] {
+        let pool = driving ? candidates.filter { alerting.contains($0.id) } : candidates
+        return pool.sorted { a, b in
+            let aa = alerting.contains(a.id), ba = alerting.contains(b.id)
+            if aa != ba { return aa }
+            return (a.distance ?? .infinity, a.id) < (b.distance ?? .infinity, b.id)
+        }
+        .prefix(n).map(\.id)
+    }
 
     static func screenAngle(dx: CGFloat, dy: CGFloat) -> Double {
         (atan2(Double(dx), Double(-dy)) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)

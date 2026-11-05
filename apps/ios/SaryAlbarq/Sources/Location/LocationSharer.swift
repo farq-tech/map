@@ -108,6 +108,9 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     #if DEBUG
     /// Unit tests only: stands in for the iOS permission so the sharing path can be exercised.
     var testAuthorization: CLAuthorizationStatus?
+    /// Tests that drive fixes by hand: ignore the simulator's own GPS (its location leaks
+    /// in whenever the host app holds the permission, and races the scripted fixes).
+    var ignoresSystemFixes = false
     private var effectiveAuthorization: CLAuthorizationStatus { testAuthorization ?? authorization }
     #else
     private var effectiveAuthorization: CLAuthorizationStatus { authorization }
@@ -428,6 +431,9 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         let fixes = locations.compactMap(LocationTuning.deviceFix)
         Task { @MainActor in
+            #if DEBUG
+            if self.ignoresSystemFixes { return }
+            #endif
             for f in fixes {
                 if let last = self.lastFix, f.atMs <= last.atMs { continue }
                 self.lastFix = f

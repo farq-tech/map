@@ -48,13 +48,13 @@ struct OutingAPIError: Error, Equatable {
     var arabic: String {
         let t: [String: String] = [
             "invite_invalid": "رابط الدعوة غير صحيح.",
-            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من صاحب الطلعة رابطًا جديدًا.",
-            "invite_revoked": "ألغى صاحب الطلعة هذا الرابط. اطلب رابطًا جديدًا.",
+            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من أمير الرحلة رابطًا جديدًا.",
+            "invite_revoked": "ألغى أمير الرحلة هذا الرابط. اطلب رابطًا جديدًا.",
             "outing_ended": "انتهت هذه الطلعة.",
             "outing_full": "اكتمل عدد المشاركين في هذه الطلعة.",
-            "removed_from_outing": "أزالك صاحب الطلعة منها، فلا يمكنك الانضمام مرة ثانية.",
+            "removed_from_outing": "أزالك أمير الرحلة منها، فلا يمكنك الانضمام مرة ثانية.",
             "not_a_member": "لست عضوًا في هذه الطلعة.",
-            "owner_only": "هذا الإجراء لصاحب الطلعة فقط.",
+            "owner_only": "هذا الإجراء لأمير الرحلة فقط.",
             "invalid_name": "اكتب اسمًا يظهر لأصحابك.",
             "invalid_outing_name": "اكتب اسمًا للطلعة.",
             "rate_limited": "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
@@ -66,7 +66,7 @@ struct OutingAPIError: Error, Equatable {
             "timeout": "الشبكة بطيئة. أعد المحاولة.",
             "outings_unconfigured": "الطلعات المشتركة غير مفعّلة على الخادم.",
             "unauthorized": "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
-            "leader_only": "هذا الإجراء لصاحب الطلعة أو مساعده فقط.",
+            "leader_only": "هذا الإجراء لأمير الرحلة أو نائبه فقط.",
             "cannot_remove_self": "لا يمكنك إزالة نفسك. استخدم «غادر الطلعة».",
             "invalid_rally": "تعذّر وضع نقطة التجمع هنا.",
             "sos_fix_stale": "موقعك قديم، أُرسلت الطوارئ بدون موقع.",
@@ -74,7 +74,7 @@ struct OutingAPIError: Error, Equatable {
             "invalid_clip_duration": "التسجيل قصير جدًا.",
             "too_large": "التسجيل أطول من المسموح.",
             "clip_gone": "انتهت صلاحية هذا التسجيل.",
-            "join_locked": "صاحب الطلعة قفل الانضمام.",
+            "join_locked": "أمير الرحلة قفل الانضمام.",
             "recovery_invalid": "رمز الاسترجاع غير صحيح أو استُخدم من قبل. تأكد منه وحاول مرة ثانية.",
             "invalid_avatar": "الصورة كبيرة أو بصيغة غير مدعومة. جرّب صورة ثانية.",
             "outing_not_ended": "تقدر تشارك ملخصك بعد ما تنتهي الطلعة.",
@@ -295,7 +295,7 @@ final class OutingsAPI {
     func cancelSos(_ id: String) async throws {
         let _: SosBox = try await call("DELETE", "/\(id)/sos")
     }
-    /// Drop or move the meeting point (owner or «مساعد»).
+    /// Drop or move the meeting point (owner or «نائب الأمير»).
     func setRally(_ id: String, lat: Double, lng: Double, label: String?) async throws -> RallyInfo? {
         struct B: Encodable { var lat: Double; var lng: Double; var label: String? }
         let r: RallyBox = try await call("PUT", "/\(id)/rally", body: B(lat: lat, lng: lng, label: label))

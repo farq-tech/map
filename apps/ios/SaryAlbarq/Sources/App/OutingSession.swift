@@ -368,7 +368,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// iOS permission is really granted, and only for this identity.
     func beginSharing() async {
         guard let v = view, v.status == .active else {
-            errorText = "المشاركة تبدأ عندما يبدأ صاحب الطلعة الطلعة."
+            errorText = "المشاركة تبدأ عندما يبدأ أمير الرحلة الطلعة."
             return
         }
         let st = await location.requestWhenInUse()

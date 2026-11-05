@@ -324,7 +324,7 @@ final class PlanModelTests: XCTestCase {
         let refused = await m.save(TripPlan(route: nil, notes: "", destination: nil, updated_at: nil))
         XCTAssertFalse(refused)
         XCTAssertEqual(m.plan.points, route, "rolled back")
-        XCTAssertEqual(m.errorText, "تعديل الخطة لصاحب الطلعة أو مساعده فقط.")
+        XCTAssertEqual(m.errorText, "تعديل الخطة لأمير الرحلة أو نائبه فقط.")
     }
 
     func testNotDeployedIsHonest() async {

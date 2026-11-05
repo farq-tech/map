@@ -37,7 +37,7 @@ struct OutingDetailsView: View {
                 SarySection(title: "الطلعة") {
                     infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     SaryDivider()
-                    infoRow(SaryIcon.crown, "صاحب الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
+                    infoRow(SaryIcon.crown, "أمير الرحلة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
                     if let d = ISODate.parse(s.outing.started_at) {
                         SaryDivider()
                         infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))

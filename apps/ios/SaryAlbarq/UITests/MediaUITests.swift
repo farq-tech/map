@@ -18,7 +18,14 @@ final class MediaUITests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["outing-sheet-summary"].waitForExistence(timeout: 15))
+        /* A fresh simulator asks for location first: an interaction lets the monitor answer it
+         * (with «-SaryOpenMedia» the media sheet is already up and the prompt would hide the map). */
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        /* «-SaryOpenMedia» may already cover the live sheet with the media sheet. */
+        let ready = app.descendants(matching: .any)["outing-sheet-summary"].waitForExistence(timeout: 15)
+            || app.descendants(matching: .any)["media.sheet"].exists
+        XCTAssertTrue(ready)
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         return app
     }
@@ -28,6 +35,10 @@ final class MediaUITests: XCTestCase {
     func testOpenPrivateChannelAndPlayALink() {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
+        /* «يوتيوب» (قناتي / قناة الطلعة) lives in the sheet's «المزيد» tab; also in «+» → الترفيه. */
+        let moreTab = app.buttons["tab.more"]
+        XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
+        moreTab.tap()
         let entry = any(app, "media.entry")
         for _ in 0..<4 where !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5), "«يوتيوب» in the live sheet")

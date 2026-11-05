@@ -39,8 +39,8 @@ enum MediaBackendError: Error, Equatable {
         case .network: return "لا يوجد اتصال بالإنترنت."
         case let .server(code, status):
             let t: [String: String] = [
-                "not_controller": "اللي شغّل الفيديو هو اللي يتحكم فيه، أو صاحب الطلعة ومساعده.",
-                "leader_only": "هذا لصاحب الطلعة أو مساعده فقط.",
+                "not_controller": "اللي شغّل الفيديو هو اللي يتحكم فيه، أو أمير الرحلة ونائبه.",
+                "leader_only": "هذا لأمير الرحلة أو نائبه فقط.",
                 "media_idle": "ما فيه شي شغّال في قناة الطلعة.",
                 "queue_full": "القائمة مليانة (٢٠ فيديو).",
                 "invalid_video_id": "الرابط مو لفيديو يوتيوب.",

@@ -75,7 +75,7 @@ extension LiveOutingController {
             followOldTrail: { [weak self] in self?.followOldTrail() },
             expand: { [weak self] in
                 guard let self else { return }
-                self.selectedTab = .participants
+                self.selectedTab = .trip
                 self.sheetDetent = .half
             })
     }
@@ -120,7 +120,7 @@ extension LiveOutingController {
             toast("وصلت \(tripDestination?.name ?? "الوجهة") 🎉")
             if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
             /* The arrival card is at the top of «المشاركون». */
-            selectedTab = .participants
+            selectedTab = .trip
             if sheetDetent == .peek { sheetDetent = .half }
         case let .memberArrived(id, _):
             guard let name = v?.members[id]?.display_name else { break }

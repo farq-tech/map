@@ -269,7 +269,9 @@ final class NavSession: ObservableObject {
         case let .cue(routerText):
             if let step = currentStep, let p = progress {
                 voice.say(NavText.spoken(step, distanceM: p.distanceToManeuverM, targetName: target?.name))
-            } else {
+            } else if NavText.isArabic(routerText) {
+                /* Router narration only as a last resort, and never in another language
+                 * (Valhalla narrates in English around Arabic street names). */
                 voice.say(routerText)
             }
         }

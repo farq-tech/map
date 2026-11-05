@@ -124,9 +124,9 @@ final class NavigationUITests: XCTestCase {
 
     func testStaleMemberIsRefused() {
         let app = launch(["-SaryNavDemo", "-SaryNavDelay", "3"] + mode("light"))
-        /* «ملاحة» lives in «المزيد» (four cluster buttons stay on the map). */
-        app.buttons["outing-more"].tap()
-        XCTAssertTrue(app.buttons["outing-navigate"].waitForExistence(timeout: 5), "«ملاحة» in «المزيد»")
+        /* «ملاحة» lives in the «+» actions sheet (الطريق). */
+        app.buttons["outing-actions"].tap()
+        XCTAssertTrue(app.buttons["outing-navigate"].waitForExistence(timeout: 5), "«ملاحة» in «+»")
         app.buttons["outing-navigate"].tap()
         XCTAssertTrue(el(app, "nav.picker").waitForExistence(timeout: 5))
         /* The demo has members whose last fix is minutes old: they explain instead of guiding. */

@@ -85,6 +85,8 @@ enum LocalAccountData {
             /* Round 3: create flow, «دائمًا» explainer, navigation preferences. */
             RecentPlaces.key, LiveOutingController.shareAlwaysAskedKey,
             NavRouteOptions.defaultsKey, NavVoice.muteKey, NavProviderChoice.key,
+            /* Build 9: exploration and convoy-alert rules. */
+            MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
         ] + TrailPrefs.keys + SpeedPrefs.keys
     }
 
@@ -96,6 +98,15 @@ enum LocalAccountData {
         LocalDestinationStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
         MediaShareInbox.forget()
+        /* «أماكني المحفوظة» and the GPX list (on-device files). */
+        if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            for f in ["saved-places-v1.json", "tracks-v1.json"] { try? FileManager.default.removeItem(at: dir.appendingPathComponent(f)) }
+        }
+        Task { @MainActor in
+            SavedPlacesStore.shared.wipe()
+            TrackLibrary.shared.wipe()
+            ConvoyAlertPrefs.shared.reset()
+        }
     }
 }
 

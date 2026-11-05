@@ -12,7 +12,7 @@ struct ParticipantCardUIState: Equatable {
     var participant: ParticipantUI
     /// For "قبل ٤ د".
     var now: Date
-    /// I am the leader and this is someone else: shows «اجعله مساعدًا» and «أزله من الطلعة».
+    /// I am the leader and this is someone else: shows «اجعله نائبًا للأمير» and «أزله من الطلعة».
     var canManage: Bool
     /// True while promote/remove is in flight: those buttons are disabled.
     var isBusy: Bool = false
@@ -28,7 +28,7 @@ struct ParticipantCardActions {
     var showOnMap: () -> Void = {}
     /// «روح له»: turn-by-turn to their last LIVE position (refused, with the reason, when it is old).
     var navigate: () -> Void = {}
-    /// «اجعله مساعدًا» (leader only), after the UI's confirmation.
+    /// «اجعله نائبًا للأمير» (leader only), after the UI's confirmation.
     var promoteCoLeader: () -> Void = {}
     /// «أزله من الطلعة» (leader only), after the UI's confirmation.
     var removeMember: () -> Void = {}

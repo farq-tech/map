@@ -109,7 +109,7 @@ enum WaypointRules {
         return .success(out)
     }
 
-    /// Creator, owner or «مساعد» (the server checks too).
+    /// Creator, owner or «نائب الأمير» (the server checks too).
     static func canDelete(_ w: Waypoint, myId: String, iLead: Bool) -> Bool { w.user_id == myId || iLead }
 }
 

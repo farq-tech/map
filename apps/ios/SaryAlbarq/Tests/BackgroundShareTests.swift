@@ -247,6 +247,7 @@ final class BackgroundSessionTests: XCTestCase {
         sched = FakeScheduler()
         defaults = UserDefaults(suiteName: "bg-share-\(UUID().uuidString)")
         location = LocationSharer()
+        location.ignoresSystemFixes = true
         StubAPIProtocol.requests = []
         StubAPIProtocol.snapshot = Self.snapshotJSON()
     }

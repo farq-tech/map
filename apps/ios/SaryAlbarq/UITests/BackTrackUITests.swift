@@ -35,8 +35,12 @@ final class BackTrackUITests: XCTestCase {
 
     func testEnterAndLeaveFromTheControlCluster() {
         let app = launch()
+        /* «طريق العودة»: in «+» → الطريق (and by itself on the map after arrival / off the route). */
+        let plus = app.buttons["outing-actions"]
+        XCTAssertTrue(plus.waitForExistence(timeout: 10), "«+» in the floating group")
+        plus.tap()
         let button = app.buttons["outing-backtrack"]
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "«طريق العودة» is in the control cluster")
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "«طريق العودة» in the actions sheet")
         XCTAssertFalse(panel(app).exists)
         button.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5), "back-track panel")
@@ -47,10 +51,14 @@ final class BackTrackUITests: XCTestCase {
         attach(app, "backtrack")
         app.buttons["backtrack.exit"].tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5), "«إنهاء» leaves back-track mode")
-        /* The cluster button toggles too. */
+        /* Again from «+»; while it runs, «طريق العودة» sits on the map by itself and toggles it off. */
+        plus.tap()
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5))
-        button.tap()
+        let shortcut = app.buttons["outing-backtrack"]
+        XCTAssertTrue(shortcut.waitForExistence(timeout: 5), "the map shortcut while it runs")
+        shortcut.tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5))
     }
 

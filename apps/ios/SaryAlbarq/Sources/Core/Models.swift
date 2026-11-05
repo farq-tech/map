@@ -45,7 +45,7 @@ struct Member: Codable, Equatable, Identifiable {
     var last_seen_at: String?
     var gps: GpsState?
     var note: MemberNote?
-    /// «مساعد»: promoted by the owner; may manage the rally point.
+    /// «نائب الأمير»: promoted by the owner; may manage the rally point.
     var co_leader: Bool?
     /// Shared only when that member chose to (heartbeat `battery`).
     var battery: BatteryInfo?

@@ -255,6 +255,8 @@ struct NavArrivalCard: View {
 struct NavBottomBar: View {
     @ObservedObject var nav: NavSession
     var end: () -> Void
+    /// «الخطوات» (moved here from the map in build 8, with the voice: the map keeps two buttons).
+    var steps: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -287,6 +289,13 @@ struct NavBottomBar: View {
                 }
             }
             Spacer(minLength: 0)
+            if nav.phase != .arrived {
+                barIcon(nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: nav.muted ? "الصوت مكتوم" : "الصوت",
+                        id: "nav.mute", active: nav.muted) { nav.muted.toggle() }
+            }
+            if nav.phase == .guiding, let steps {
+                barIcon("list.bullet", label: "الخطوات", id: "nav.stepsButton", action: steps)
+            }
             /* Arrived: «إنهاء» is on the arrival card; one is enough. */
             if nav.phase != .arrived {
                 Button(action: end) {
@@ -300,6 +309,22 @@ struct NavBottomBar: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.bottomBar")
+    }
+
+    private func barIcon(_ symbol: String, label: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        let d: CGFloat = theme.drive ? 52 : 44
+        return Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: theme.drive ? 20 : 17, weight: .semibold))
+                .foregroundStyle(active ? p.onAccent : p.textPrimary)
+                .frame(width: d, height: d)
+                .background(Circle().fill(active ? p.accent : p.sunken))
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(label))
+        .accessibilityAddTraits(active ? .isSelected : [])
+        .accessibilityIdentifier(id)
     }
 }
 

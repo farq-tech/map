@@ -35,9 +35,27 @@ enum LiveModal: Identifiable, Equatable {
     case navPicker
     case navOptions
     case navSteps
+    /// «+»: every less frequent action, grouped (docs/IA-REDESIGN.md §2.3).
+    case actions
+    /// Exploration: the layer switcher (+ 3D terrain, offline coverage).
+    case layers
+    /// «أماكني المحفوظة».
+    case places
+    /// Save a point (the crosshair / a long-pressed point) or rename / re-icon a saved one.
+    case placeEdit(SavedPlaceDraft)
+    /// GPX tracks (imported / exported) to show in exploration.
+    case tracks
+    /// «تنبيهات القافلة» rules (same screen as Settings).
+    case convoyAlerts
 
     var id: String {
         switch self {
+        case .actions: return "actions"
+        case .layers: return "layers"
+        case .places: return "places"
+        case let .placeEdit(d): return "placeEdit:\(d.id ?? "new"):\(d.point.lat),\(d.point.lng)"
+        case .tracks: return "tracks"
+        case .convoyAlerts: return "convoyAlerts"
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
@@ -83,7 +101,7 @@ final class LiveOutingController: ObservableObject {
     var pushExplained: () -> Bool = { true }
 
     @Published var sheetDetent: SheetDetentUI = .peek
-    @Published var selectedTab: LiveTabUI = .participants
+    @Published var selectedTab: LiveTabUI = .trip
     @Published var alerts: [LiveAlertUI] = []
     @Published var acknowledgedSOS: Set<String> = []
     @Published var heardClips: Set<String> = []
@@ -100,6 +118,38 @@ final class LiveOutingController: ObservableObject {
     @Published var inviteLink: String?
     @Published var isRevoking = false
     @Published var statusExpanded = false
+    /// The trip header's bell: the queued alerts open under the header.
+    @Published var bellOpen = false
+    /// Every alert this screen showed, newest first (behind the bell): nothing is just dropped.
+    @Published var alertHistory: [AlertHistoryEntry] = []
+    /// «شكل الشاشة»: automatic, or pinned to driving / stopped.
+    @Published var contextOverride: LiveContextOverride = LiveContextOverride.saved {
+        didSet { if !debugContext { LiveContextOverride.saved = contextOverride } }
+    }
+    private var debugContext = false
+    /// Exploration («استكشاف»): the third context mode, entered by the person (header / «+») or by
+    /// panning far from the group while stopped; never while driving (docs/IA-REDESIGN.md §6, stage 4).
+    @Published var exploreActive = false
+    /// Exploration's base layer (the trip map stays on satellite, the layer offline packs cover).
+    @Published var mapLayer: MapLayer = MapLayer.saved {
+        didSet { MapLayer.saved = mapLayer }
+    }
+    @Published var terrain3D = false
+    /// Crosshair readout: decimal or degrees-minutes-seconds.
+    @Published var coordFormat: CoordinateShare.Format = ExploreRules.savedFormat {
+        didSet { ExploreRules.savedFormat = coordFormat }
+    }
+    /// The crosshair's centre + elevation (its own object: 6 Hz updates redraw the readout only).
+    let exploreReading = ExploreReadingModel()
+    /// Exploration was entered by panning away (said in the toast); the person's own entry is not.
+    var exploreAuto = false
+    /// A finger moved the map since the last settle (auto-exploration needs a real pan).
+    var userPannedMap = false
+    /// «ذكاء القافلة»: separation / unexpected-stop watch (Core/ConvoyWatch.swift).
+    var convoyWatch = ConvoyWatch()
+    var lastConvoyBuzz = Date.distantPast
+    /// Moving > 15 km/h (with hysteresis), from the GPS.
+    @Published private(set) var motion = MotionHysteresis()
     @Published var confirm: LiveConfirm?
     @Published var stations: LoadPhaseUI<[StationUI]> = .loading
     @Published var toastText: String?
@@ -166,6 +216,17 @@ final class LiveOutingController: ObservableObject {
         let shotArgs = ProcessInfo.processInfo.arguments
         func arg(_ k: String) -> String? { shotArgs.firstIndex(of: k).flatMap { $0 + 1 < shotArgs.count ? shotArgs[$0 + 1] : nil } }
         if let d = arg("-SaryLiveSheet") { sheetDetent = d == "full" ? .full : d == "half" ? .half : .peek }
+        if let c = arg("-SaryContext").flatMap(LiveContextOverride.init) { debugContext = true; contextOverride = c }
+        if arg("-SaryLiveModal") == "actions" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .actions } }
+        if shotArgs.contains("-SaryExplore") { exploreActive = true }
+        if shotArgs.contains("-SaryConvoyIntelDemo") { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.seedConvoyIntelDemo() } }
+        if let l = arg("-SaryLayer").flatMap(MapLayer.init) { mapLayer = l }
+        /* `-SaryExploreAt 18.2164,42.5053`: centre exploration somewhere with relief (screenshots, UI tests). */
+        if let at = arg("-SaryExploreAt") {
+            let n = at.split(separator: ",").compactMap { Double($0) }
+            if n.count == 2 { DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.ask(.point(LngLat(lng: n[1], lat: n[0]))) } }
+        }
+        if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
@@ -191,7 +252,7 @@ final class LiveOutingController: ObservableObject {
         /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
         nav.voice.canSpeak = { [weak session] in session?.walkie.floor.state == .idle }
         nav.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.objectWillChange.send() }
+            DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.objectWillChange.send() }
         }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
@@ -271,6 +332,11 @@ final class LiveOutingController: ObservableObject {
             nearbyCars: session.mesh.running ? session.mesh.nearbyCars : 0,
             preciseOff: location.preciseOff
         )
+        i.convoyLeaderId = convoyLeaderId
+        i.convoyLeaderTitle = ConvoyLeader.title(convoy: session.view?.convoy)
+        i.stoppedSince = Dictionary(uniqueKeysWithValues: (session.view?.members.keys.map { $0 } ?? []).compactMap { id in
+            convoyWatch.stoppedSince(id).map { (id, $0) }
+        })
         if let d = tripDestination {
             i.tripDestination = d
             i.tripArrivals = trip.record.arrivals
@@ -296,7 +362,8 @@ final class LiveOutingController: ObservableObject {
         let i = input
         let parts = Dictionary(LiveOutingPresenter.participants(i).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let showNames = theme.nameDisplay == .always
-        return LiveOutingPresenter.mapMembers(i, hideNotes: theme.drive).map { m in
+        /* Notes above cars are reading material: off while driving (docs/IA-REDESIGN.md §2.6). */
+        return LiveOutingPresenter.mapMembers(i, hideNotes: theme.drive || liveContext(drive: theme.drive) == .driving).map { m in
             var m = m
             let p = parts[m.id]
             let presence: ParticipantPresence = m.presence == .live ? .live : .stale(since: Date(timeIntervalSince1970: m.atMs / 1000))
@@ -332,6 +399,10 @@ final class LiveOutingController: ObservableObject {
             if let n = m.note, prev.members[uid]?.note != n, LiveOutingPresenter.activeNote(n, view: v, now: Date()) != nil {
                 if let last = alertedNotes[uid], last.text == n.text, Date().timeIntervalSince(last.at) < LiveOutingPresenter.noteTTL { continue }
                 alertedNotes[uid] = (n.text, Date())
+                if RallyRecall.isRecall(n.text), let prompt = recallPrompt(from: uid, at: n.at, view: v) {
+                    pushAlert(prompt, ttl: 10 * 60)
+                    continue
+                }
                 pushAlert(LiveAlertUI(id: "note:\(uid):\(n.at)", kind: .note(senderName: m.display_name, senderColor: v.colors[uid] ?? 0xFFFFFF, text: n.text)), ttl: 20)
             }
         }
@@ -344,6 +415,12 @@ final class LiveOutingController: ObservableObject {
         /* A friend cleared their SOS: forget we acknowledged it. */
         acknowledgedSOS = acknowledgedSOS.filter { key in v.members.contains { $0.key == key.split(separator: "|").first.map(String.init) && $0.value.sos != nil } }
         updateAuto()
+        if let f = location.lastFix {
+            var m = motion
+            m.ingest(speedMps: f.speed, at: f.atMs / 1000)
+            if m != motion { motion = m }
+        }
+        exploreDrivingCheck()
         checkConvoy()
         feedWeather()
         if session.closedReason != nil, modal != nil { modal = nil }
@@ -357,6 +434,12 @@ final class LiveOutingController: ObservableObject {
         updateBackTrack()
         updateTrip()
         updateAuto()
+        if let f = location.lastFix {
+            var m = motion
+            m.ingest(speedMps: f.speed, at: f.atMs / 1000)
+            if m != motion { motion = m }
+        }
+        exploreDrivingCheck()
         checkConvoy()
         feedWeather()
         objectWillChange.send()
@@ -373,6 +456,7 @@ final class LiveOutingController: ObservableObject {
 
     /// Convoy alerts from the cars drawn right now (live ones only; see `OutingFeaturesModel.liveCars`).
     private func checkConvoy() {
+        checkConvoyIntel()
         guard session.view?.convoy?.isOn == true else { return features.evaluateConvoy(members: []) }
         features.evaluateConvoy(members: LiveOutingPresenter.mapMembers(input, hideNotes: true))
     }
@@ -399,7 +483,8 @@ final class LiveOutingController: ObservableObject {
 
     /// Everything the map draws for trails. Friends' trails end at their last real fix and fade
     /// with it: an old position never looks live.
-    func mapTrails(members: [MapMember]) -> MapTrails {
+    /// `driving`: friends' trails stay off while driving (docs/IA-REDESIGN.md §2.6).
+    func mapTrails(members: [MapMember], driving: Bool = false) -> MapTrails {
         /* Road-matched where the matcher is confident, smoothed elsewhere (desert). */
         let shown = session.displayTrail
         let runs = Trail.runs(shown)
@@ -419,7 +504,7 @@ final class LiveOutingController: ObservableObject {
             .filter { $0.len >= 150 }
             .sorted { $0.len > $1.len }
             .prefix(2).map(\.mid)
-        if showFriendTrails {
+        if showFriendTrails && !driving {
             for m in members where !m.isMe {
                 guard var pts = friendTrails.byId[m.id], !pts.isEmpty else { continue }
                 /* The line ends exactly at the car (its last real fix), never beyond it. */
@@ -564,6 +649,7 @@ final class LiveOutingController: ObservableObject {
     // MARK: alerts
 
     func pushAlert(_ a: LiveAlertUI, ttl: TimeInterval) {
+        AlertQueue.record(a, at: Date(), into: &alertHistory)
         alerts.removeAll { $0.id == a.id }
         alerts.insert(a, at: 0)
         if alerts.count > 6 { alerts.removeLast(alerts.count - 6) }
@@ -593,7 +679,7 @@ final class LiveOutingController: ObservableObject {
 
     // MARK: camera
 
-    private func ask(_ kind: MapCameraRequest.Kind) {
+    func ask(_ kind: MapCameraRequest.Kind) {
         camera = MapCameraRequest(kind: kind, id: (camera?.id ?? 0) + 1)
     }
 
@@ -668,7 +754,7 @@ final class LiveOutingController: ObservableObject {
         a.selectTab = { [weak self] t in self?.selectedTab = t }
         a.participantsTab = ParticipantsTabActions(
             openParticipant: { [weak self] id in self?.openParticipant(id) },
-            addMyPhone: { [weak self] in self?.selectedTab = .settings },
+            addMyPhone: { [weak self] in self?.selectedTab = .more },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
                 self.lowerSheetThenAsk(.point(r.position))
@@ -679,7 +765,8 @@ final class LiveOutingController: ObservableObject {
             },
             rallyMove: { [weak self] in self?.startPicking(moving: true) },
             rallyRemove: { [weak self] in Task { await self?.session.clearRally() } },
-            rallyCreate: { [weak self] in self?.startPicking(moving: false) }
+            rallyCreate: { [weak self] in self?.startPicking(moving: false) },
+            rallyRecall: session.view?.iLead == true ? { [weak self] in self?.recallToRally() } : nil
         )
         a.inviteTab = InviteTabActions(
             copyLink: { [weak self] in

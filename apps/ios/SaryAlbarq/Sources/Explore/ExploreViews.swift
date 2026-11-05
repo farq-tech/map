@@ -1,0 +1,516 @@
+import SwiftUI
+import UniformTypeIdentifiers
+
+// MARK: - Map chrome
+
+/// Exploration's top bar: back · «استكشاف» + the layer · bell · «ارجع للرحلة».
+struct ExploreHeader: View {
+    var layer: MapLayer
+    var bell: Int
+    var bellOpen: Bool
+    var hasHistory: Bool
+    var back: () -> Void
+    var exit: () -> Void
+    var bellTapped: () -> Void
+    @Environment(\.sary) private var theme
+
+    private var barHeight: CGFloat { theme.drive ? 64 : 52 }
+
+    var body: some View {
+        let p = theme.palette
+        HStack(spacing: theme.space(.s)) {
+            Button(action: back) {
+                Image(systemName: SaryIcon.back)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(p.textPrimary)
+                    .frame(width: barHeight, height: barHeight)
+                    .saryGlass(Circle(), role: .chrome, interactive: true)
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("رجوع"))
+            .accessibilityIdentifier("outing-back")
+
+            HStack(spacing: theme.space(.s)) {
+                Image(systemName: "binoculars.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(p.accentText)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("استكشاف").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text("الطبقة: \(layer.label)").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
+                        .accessibilityIdentifier("explore.layerName")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if bell > 0 || bellOpen || hasHistory {
+                    Button(action: bellTapped) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: bellOpen ? "bell.slash.fill" : "bell.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(p.textPrimary)
+                                .frame(width: 30, height: 30)
+                            if bell > 0 && !bellOpen {
+                                Text(SaryFormat.number(bell))
+                                    .saryNumber(.micro, weight: .heavy)
+                                    .foregroundStyle(p.onAccent)
+                                    .padding(.horizontal, 4)
+                                    .frame(minWidth: 17, minHeight: 17)
+                                    .background(Capsule().fill(p.accent))
+                                    .offset(x: 6, y: -4)
+                            }
+                        }
+                        .frame(width: 44, height: barHeight)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text(bell == 0 ? "سجل التنبيهات" : "\(SaryFormat.number(bell)) تنبيهات"))
+                    .accessibilityIdentifier("alerts.bell")
+                }
+            }
+            .padding(.leading, theme.space(.m))
+            .padding(.trailing, theme.space(.xs))
+            .frame(minHeight: barHeight)
+            .saryGlass(RoundedRectangle(cornerRadius: barHeight / 2, style: .continuous), role: .chrome)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("explore.header")
+
+            Button(action: exit) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.uturn.backward").font(.system(size: 14, weight: .bold))
+                    Text("ارجع للرحلة").saryText(.subhead, weight: .bold).lineLimit(1)
+                }
+                .foregroundStyle(p.onAccent)
+                .padding(.horizontal, theme.space(.m))
+                .frame(minHeight: barHeight)
+                .background(Capsule().fill(p.accent))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("explore-exit")
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+    }
+}
+
+/// The centre crosshair (where «احفظ المكان» and the readout point to). Not touchable.
+struct ExploreCrosshair: View {
+    @ObservedObject var model: ExploreReadingModel
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        GeometryReader { g in
+            let pt = model.reading?.screenPoint ?? .zero
+            let at = pt == .zero ? CGPoint(x: g.size.width / 2, y: g.size.height / 2) : pt
+            ZStack {
+                Circle().stroke(Color.black.opacity(0.55), lineWidth: 4).frame(width: 30, height: 30)
+                Circle().stroke(Color.white, lineWidth: 2).frame(width: 30, height: 30)
+                ForEach(0..<4) { i in
+                    Capsule().fill(Color.white)
+                        .frame(width: 2.5, height: 10)
+                        .overlay(Capsule().stroke(Color.black.opacity(0.5), lineWidth: 0.8))
+                        .offset(y: -22)
+                        .rotationEffect(.degrees(Double(i) * 90))
+                }
+                Circle().fill(theme.palette.accent).frame(width: 5, height: 5)
+            }
+            .position(at)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Coordinates at the crosshair (decimal / DMS), the terrain elevation there, copy and save.
+struct ExploreReadout: View {
+    @ObservedObject var model: ExploreReadingModel
+    var format: CoordinateShare.Format
+    var toggleFormat: () -> Void
+    var copy: () -> Void
+    var save: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let r = model.reading
+        HStack(spacing: theme.space(.s)) {
+            Button(action: toggleFormat) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(r.map { ExploreRules.coordinateText($0.center, format) } ?? "…")
+                        .saryNumber(.callout, weight: .bold)
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityIdentifier("explore.coordinate")
+                    HStack(spacing: 6) {
+                        Image(systemName: "mountain.2.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
+                        Text(ExploreRules.elevationText(r?.elevationM))
+                            .saryNumber(.footnote, weight: .bold)
+                            .foregroundStyle(r?.elevationM == nil ? p.textTertiary : p.textSecondary)
+                            .accessibilityIdentifier("explore.elevation")
+                        Text(format == .decimal ? "· عشري" : "· درجات").saryText(.caption, weight: .bold).foregroundStyle(p.accentText)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(Text("اضغط للتبديل بين العشري والدرجات"))
+            .accessibilityIdentifier("explore-coord-format")
+            SaryIconButton(systemImage: SaryIcon.copy, label: "انسخ الإحداثية", id: "explore-copy", action: copy)
+            Button(action: save) {
+                Label("احفظ", systemImage: "star.fill").labelStyle(.titleAndIcon)
+                    .saryText(.subhead, weight: .bold)
+            }
+            .buttonStyle(.sary(.primary, width: .hug, compact: true))
+            .accessibilityLabel(Text("احفظ المكان في أماكني"))
+            .accessibilityIdentifier("explore-save")
+        }
+        .padding(.leading, theme.space(.m))
+        .padding(.trailing, theme.space(.s))
+        .padding(.vertical, theme.space(.s))
+        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .panel)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.readout")
+    }
+}
+
+extension SaryMapControlItem {
+    /// Exploration's floating group.
+    static func explore(terrain3D: Bool, tracksShown: Int) -> [SaryMapControlItem] {
+        [
+            SaryMapControlItem(id: "layers", systemImage: "square.3.layers.3d", label: "الطبقات", accessibilityID: "explore-layers"),
+            SaryMapControlItem(id: "terrain", systemImage: "mountain.2.fill", label: terrain3D ? "أوقف العرض ثلاثي الأبعاد" : "عرض ثلاثي الأبعاد للتضاريس",
+                               accessibilityID: "explore-terrain", isActive: terrain3D),
+            SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني المحفوظة", accessibilityID: "explore-places"),
+            SaryMapControlItem(id: "tracks", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath.fill", label: "مسارات GPX",
+                               accessibilityID: "explore-tracks", badge: tracksShown > 0 ? tracksShown : nil),
+            SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate"),
+        ]
+    }
+}
+
+// MARK: - Layers
+
+/// «الطبقات»: satellite / standard / topographic, the 3D terrain view, and what works offline.
+struct ExploreLayersSheet: View {
+    @ObservedObject var controller: LiveOutingController
+    @ObservedObject private var offline = OfflineMaps.shared
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "الطبقات", close: { controller.modal = nil }) {
+            VStack(spacing: theme.space(.s)) {
+                ForEach(MapLayer.allCases) { l in
+                    let on = controller.mapLayer == l
+                    Button { controller.mapLayer = l } label: {
+                        HStack(spacing: theme.space(.m)) {
+                            Image(systemName: l.systemImage)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(on ? p.onAccent : p.accentText)
+                                .frame(width: 46, height: 46)
+                                .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(on ? p.accent : p.accent.opacity(0.14)))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(l.label).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                                Text(l.detail).saryText(.footnote).foregroundStyle(p.textSecondary)
+                                Text(ExploreRules.offlineNote(l, areas: offline.completeAreas, topoAreas: offline.topoAreas))
+                                    .saryText(.caption, weight: .bold)
+                                    .foregroundStyle(l.canBeOffline && (l == .satellite ? offline.completeAreas : offline.topoAreas) > 0 ? p.liveText : p.textTertiary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(on ? p.accent : p.textTertiary)
+                        }
+                        .padding(theme.space(.m))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SaryRowPressStyle())
+                    .sarySurface(radius: SaryRadius.l)
+                    .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(on ? p.accent : .clear, lineWidth: 2))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityIdentifier("layer.\(l.rawValue)")
+                }
+            }
+            SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
+                SaryToggleRow(title: "عرض ثلاثي الأبعاد", subtitle: "يميل الخريطة ويبرز الجبال والكثبان",
+                              systemImage: "mountain.2.fill", isOn: $controller.terrain3D, id: "explore-terrain3d")
+                    .padding(.horizontal, theme.space(.m))
+            }
+            SarySection(title: "بلا إنترنت") {
+                SaryNavRow(title: "الخرائط بلا إنترنت",
+                           detail: offline.completeAreas > 0
+                               ? "\(SaryFormat.number(offline.completeAreas)) منطقة محفوظة · \(SaryFormat.number(offline.topoAreas)) منها مع الطبوغرافي"
+                               : "ما حفظت مناطق بعد",
+                           systemImage: "arrow.down.circle.fill", id: "explore-offline") {
+                    controller.modal = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.modal = .offlineMaps }
+                }
+                .padding(.horizontal, theme.space(.m))
+            }
+        }
+        .onAppear { offline.reload() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.layers.sheet")
+    }
+}
+
+// MARK: - Saved places
+
+struct SavedPlacesSheet: View {
+    let controller: LiveOutingController
+    @ObservedObject private var store = SavedPlacesStore.shared
+    @EnvironmentObject private var location: LocationSharer
+    @Environment(\.sary) private var theme
+    @State private var share: ShareItem?
+    @State private var deleting: SavedPlace?
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "أماكني المحفوظة", subtitle: "على هذا الجوال فقط", close: { controller.modal = nil }) {
+            Button { controller.modal = nil; DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.saveCrosshair() } } label: {
+                SaryButtonLabel(title: "احفظ مكان علامة الوسط", systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.sary(.primary))
+            .accessibilityIdentifier("places.addCenter")
+            if store.places.isEmpty {
+                SaryStateView(kind: .empty(title: "ما حفظت أماكن بعد",
+                                           message: "حرّك الخريطة حتى تكون العلامة على المكان واضغط «احفظ»، أو اضغط مطولًا على أي نقطة.",
+                                           systemImage: "star"))
+                    .sarySurface(radius: SaryRadius.l)
+            } else {
+                SarySection(title: "\(SaryFormat.number(store.places.count)) مكان") {
+                    ForEach(Array(store.places.enumerated()), id: \.element.id) { i, place in
+                        if i > 0 { SaryDivider().padding(.leading, 56) }
+                        row(place)
+                    }
+                }
+            }
+        }
+        .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
+        .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
+            if let d = deleting { store.delete(d.id) }
+            deleting = nil
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("places.sheet")
+        .tint(p.accent)
+    }
+
+    private func row(_ place: SavedPlace) -> some View {
+        let p = theme.palette
+        let me = location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }
+        return HStack(spacing: theme.space(.m)) {
+            Button { controller.showOnMap(place.position) } label: {
+                HStack(spacing: theme.space(.m)) {
+                    SaryRowIcon(systemImage: place.icon.systemImage)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(place.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text(CoordinateShare.displayDecimal(place.position)).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if let me { Text(SaryFormat.distance(meters: PlanGeo.meters(me, place.position))).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
+                }
+                .frame(minHeight: theme.minTarget + 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("places.row")
+            Menu {
+                Button { controller.showOnMap(place.position) } label: { Label("اعرضه على الخريطة", systemImage: "map") }
+                Button { controller.navigateToPlace(place) } label: { Label("ملاحة إليه", systemImage: SaryIcon.directions) }
+                Button { PlanClipboard.copy(CoordinateShare.copy(place.position, controller.coordFormat)); controller.toast("نُسخت الإحداثية") } label: {
+                    Label("انسخ الإحداثية", systemImage: SaryIcon.copy)
+                }
+                Button { share = ShareItem(text: CoordinateShare.pointMessage(place.position, name: place.name, link: .google)) } label: {
+                    Label("شارك", systemImage: SaryIcon.share)
+                }
+                Button {
+                    controller.modal = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        controller.modal = .placeEdit(SavedPlaceDraft(id: place.id, point: place.position, name: place.name, icon: place.icon))
+                    }
+                } label: { Label("عدّل الاسم والأيقونة", systemImage: "pencil") }
+                Button(role: .destructive) { deleting = place } label: { Label("احذف", systemImage: "trash") }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(p.textSecondary)
+                    .frame(width: theme.minTarget, height: theme.minTarget)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("خيارات \(place.name)"))
+            .accessibilityIdentifier("places.menu")
+        }
+        .padding(.horizontal, theme.space(.m))
+    }
+}
+
+/// Name + icon for a new or existing saved place.
+struct SavedPlaceEditSheet: View {
+    var draft: SavedPlaceDraft
+    var done: (SavedPlaceDraft) -> Void
+    var cancel: () -> Void
+    @Environment(\.sary) private var theme
+    @State private var name = ""
+    @State private var icon: SavedPlaceIcon = .pin
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: draft.id == nil ? "احفظ المكان" : "عدّل المكان", close: cancel) {
+            Text(CoordinateShare.displayDecimal(draft.point)).saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                .accessibilityIdentifier("placeEdit.coordinate")
+            SaryTextField(title: "الاسم", placeholder: "مثل: مخيم الشتاء", text: $name, id: "placeEdit.name", maxLength: SavedPlace.nameMax)
+            SarySection(title: "الأيقونة") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: theme.space(.s)), count: 4), spacing: theme.space(.s)) {
+                    ForEach(SavedPlaceIcon.allCases) { i in
+                        let on = i == icon
+                        Button { icon = i } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: i.systemImage).font(.system(size: 18, weight: .semibold))
+                                Text(i.label).saryText(.caption, weight: .bold)
+                            }
+                            .foregroundStyle(on ? p.onAccent : p.textPrimary)
+                            .frame(maxWidth: .infinity, minHeight: 60)
+                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(on ? p.accent : p.sunken))
+                        }
+                        .buttonStyle(SaryPressStyle())
+                        .accessibilityLabel(Text(i.label))
+                        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityIdentifier("placeEdit.icon.\(i.rawValue)")
+                    }
+                }
+                .padding(theme.space(.s))
+            }
+            Button {
+                var d = draft
+                d.name = name
+                d.icon = icon
+                done(d)
+            } label: { SaryButtonLabel(title: "احفظ", systemImage: "star.fill") }
+                .buttonStyle(.sary(.primary))
+                .accessibilityIdentifier("placeEdit.save")
+            Text("يُحفظ على هذا الجوال فقط، ولا يُرسل لأحد.").saryText(.footnote).foregroundStyle(p.textTertiary)
+        }
+        .onAppear {
+            name = draft.name
+            icon = draft.icon
+        }
+    }
+}
+
+// MARK: - GPX tracks
+
+struct TracksSheet: View {
+    let controller: LiveOutingController
+    @ObservedObject private var library = TrackLibrary.shared
+    @Environment(\.sary) private var theme
+    @State private var importing = false
+    @State private var busy = false
+    @State private var message: (text: String, tone: SaryTone)?
+    @State private var shareURL: URL?
+    @State private var deleting: SavedTrack?
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "مسارات GPX", subtitle: "المستوردة والمصدّرة على هذا الجوال", close: { controller.modal = nil }) {
+            Button { importing = true } label: { SaryButtonLabel(title: "استورد ملف GPX أو KML", systemImage: "square.and.arrow.down", busy: busy) }
+                .buttonStyle(.sary(.primary))
+                .disabled(busy)
+                .accessibilityIdentifier("tracks.import")
+            if let m = message { SaryBanner(text: m.text, tone: m.tone) }
+            if library.tracks.isEmpty {
+                SaryStateView(kind: .empty(title: "ما فيه مسارات بعد",
+                                           message: "المسارات اللي تستوردها أو تصدّرها من «الخطة» تظهر هنا، وتقدر تعرضها على الخريطة.",
+                                           systemImage: "point.bottomleft.forward.to.point.topright.scurvepath"))
+                    .sarySurface(radius: SaryRadius.l)
+            } else {
+                SarySection(title: "\(SaryFormat.number(library.tracks.count)) مسار", footer: "المسارات المعروضة تظهر على الخريطة في الاستكشاف.") {
+                    ForEach(Array(library.tracks.enumerated()), id: \.element.id) { i, t in
+                        if i > 0 { SaryDivider().padding(.leading, 56) }
+                        row(t)
+                    }
+                }
+            }
+            Text("الخطة نفسها تُستورد وتُصدّر من «الرحلة» ← «الخطة وقائمة التجهيز».").saryText(.footnote).foregroundStyle(p.textTertiary)
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: RouteFile.contentTypes, allowsMultipleSelection: false) { r in
+            if case let .success(urls) = r, let u = urls.first { importFile(u) }
+        }
+        .sheet(item: Binding(get: { shareURL.map(TrackShareURL.init) }, set: { if $0 == nil { shareURL = nil } })) { s in
+            ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
+        }
+        .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من قائمة المسارات على هذا الجوال. الخطة لا تتأثر.", confirmTitle: "احذف") {
+            if let d = deleting { library.delete(d.id) }
+            deleting = nil
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("tracks.sheet")
+    }
+
+    private func row(_ t: SavedTrack) -> some View {
+        let p = theme.palette
+        let shown = library.shown.contains(t.id)
+        return HStack(spacing: theme.space(.m)) {
+            Button { controller.showTrack(t) } label: {
+                HStack(spacing: theme.space(.m)) {
+                    SaryRowIcon(systemImage: t.origin == .imported ? "square.and.arrow.down" : "square.and.arrow.up")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        Text("\(t.origin == .imported ? "مستورد" : "مصدَّر") · \(SaryFormat.distance(meters: t.lengthM)) · \(SaryFormat.number(t.points.count)) نقطة")
+                            .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: theme.minTarget + 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("tracks.row")
+            Toggle("", isOn: Binding(get: { shown }, set: { _ in library.toggleShown(t.id) }))
+                .labelsHidden()
+                .tint(p.accent)
+                .accessibilityLabel(Text("اعرض \(t.name) على الخريطة"))
+                .accessibilityIdentifier("tracks.toggle")
+            Menu {
+                Button { shareURL = try? RouteFile.exportFile(name: t.name, points: t.points) } label: { Label("شارك ملف GPX", systemImage: SaryIcon.share) }
+                Button(role: .destructive) { deleting = t } label: { Label("احذف", systemImage: "trash") }
+            } label: {
+                Image(systemName: "ellipsis.circle").font(.system(size: 20, weight: .semibold)).foregroundStyle(p.textSecondary)
+                    .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("خيارات \(t.name)"))
+        }
+        .padding(.horizontal, theme.space(.m))
+    }
+
+    private func importFile(_ url: URL) {
+        busy = true
+        message = nil
+        Task {
+            let r: Result<RouteFile.Imported, RouteFile.ImportError> = await Task.detached(priority: .userInitiated) {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > RouteFile.maxBytes { return .failure(.tooLarge) }
+                guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return .failure(.malformed) }
+                return RouteFile.parse(data, fileName: url.lastPathComponent)
+            }.value
+            busy = false
+            switch r {
+            case let .success(im):
+                let name = im.name ?? url.deletingPathExtension().lastPathComponent
+                if let id = library.add(name: name, origin: .imported, points: im.points) {
+                    library.shown.insert(id)
+                    message = ("استوردنا «\(TrackRules.cleanName(name, origin: .imported))» (\(SaryFormat.number(im.points.count)) نقطة) وعرضناه على الخريطة.", .success)
+                }
+            case let .failure(e):
+                message = (e.arabic, .error)
+            }
+        }
+    }
+}
+
+private struct TrackShareURL: Identifiable { let url: URL; var id: String { url.absoluteString } }

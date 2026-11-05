@@ -43,14 +43,15 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["outing.map"].waitForExistence(timeout: 15) || app.maps.firstMatch.waitForExistence(timeout: 5))
         // Tap the status bar, not the map centre: a demo car sits there and would open its card.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the interruption monitor answer a permission prompt
-        XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "status capsule")
+        XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "trip header")
         XCTAssertTrue(app.buttons["outing-fit"].exists, "control cluster")
         XCTAssertTrue(app.buttons["outing-locate"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["outing-sos"].exists, "SOS dock")
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         summary.tap()
-        XCTAssertTrue(app.buttons["المشاركون"].waitForExistence(timeout: 5) || app.staticTexts["المشاركون"].exists, "tabs at half height")
+        XCTAssertTrue(app.buttons["tab.trip"].waitForExistence(timeout: 5) || app.staticTexts["الرحلة"].exists, "tabs at half height")
+        app.buttons["tab.group"].tap()
         XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "participant-row").count, 4)
         XCTAssertTrue(app.staticTexts["أبو فهد"].exists)
         sleep(1)

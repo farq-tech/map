@@ -41,21 +41,21 @@ final class TripUITests: XCTestCase {
         move(to: approach(2200))
         app.launch()
 
-        let peek = app.descendants(matching: .any)["trip.peek"]
-        XCTAssertTrue(peek.waitForExistence(timeout: 20), "the trip strip sits in the sheet's peek row")
+        let peek = app.descendants(matching: .any)["trip.header"]
+        XCTAssertTrue(peek.waitForExistence(timeout: 20), "the trip header sits at the top of the map")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
 
         /* Drive in: 100 m every 4 s (25 m/s), with the GPS ticking each second in between. */
         var first: String?
         for m in stride(from: 2100.0, through: 100, by: -100) {
             for k in 0..<4 { move(to: approach(m + 100 - Double(k + 1) * 25)); usleep(1_000_000) }
-            if first == nil, peek.label.contains("قطعنا") { first = peek.label }
+            if first == nil, peek.label.contains("باقي") { first = peek.label }
         }
         let progressed = peek.label
         attach(app, "drive")
         XCTAssertNotNil(first, "progress shows while driving: \(peek.label)")
         XCTAssertNotEqual(first, progressed, "and it moves as we drive")
-        XCTAssertTrue(progressed.contains("قطعنا"), progressed)
+        XCTAssertTrue(progressed.contains("باقي"), progressed)
 
         /* Parked inside 150 m: the GPS wobbles a few metres; after 30 s we have arrived. */
         for k in 0..<40 {

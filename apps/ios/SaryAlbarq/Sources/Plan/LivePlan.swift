@@ -97,6 +97,12 @@ struct LivePlanModalView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p) }
             }
         }
+        a.savePlace = { p, name in
+            controller.modal = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                controller.modal = .placeEdit(SavedPlaceDraft(id: nil, point: p, name: name ?? "", icon: .pin))
+            }
+        }
         if lead {
             a.setDestination = { p, name in
                 controller.modal = nil
@@ -126,119 +132,98 @@ struct LivePlanModalView: View {
     }
 }
 
-/// Under the status capsule: the weather chip (always), «اتبع الخطة» and the
-/// destination, or the follow status. `weatherOnly` (sheet at half height) keeps just the chip.
-struct LivePlanStrip: View {
+/// «الرحلة» tab: the destination (open in Maps, copy), the plan & checklist, «اتبع الخطة»
+/// and search — what used to be the pills under the status capsule (docs/IA-REDESIGN.md §2.4).
+struct TripPlanCard: View {
     let controller: LiveOutingController
-    var weatherOnly = false
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        LivePlanStripContent(controller: controller, plan: model.plans.model(controller.session.id), weatherOnly: weatherOnly)
+        TripPlanCardContent(controller: controller, plan: model.plans.model(controller.session.id))
     }
 }
 
-private struct LivePlanStripContent: View {
+private struct TripPlanCardContent: View {
     let controller: LiveOutingController
     @ObservedObject var plan: PlanModel
-    var weatherOnly: Bool
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
 
     var body: some View {
         let tp = plan.plan
         let lead = controller.session.view?.iLead == true
-        let chip = LiveWeatherChip(controller: controller, weather: controller.weather)
-        if weatherOnly {
-            HStack { chip; Spacer(minLength: 0) }
-        } else if plan.following, tp.hasRoute {
-            VStack(alignment: .leading, spacing: theme.space(.s)) {
-                TimelineView(.periodic(from: .now, by: 5)) { ctx in
-                    followBar(plan.followStatus(fix: location.lastFix, now: ctx.date))
+        let p = theme.palette
+        SarySection(title: "الوجهة والخطة") {
+            VStack(spacing: 0) {
+                if let d = tp.destination {
+                    destinationRow(d)
+                    SaryDivider()
                 }
-                HStack { chip; Spacer(minLength: 0) }
-            }
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: theme.space(.s)) {
-                    /* Always first: the weather is never hidden (destination > group > me). */
-                    chip
-                    if tp.hasRoute {
-                        pill("اتبع الخطة", "point.topleft.down.to.point.bottomright.curvepath.fill", id: "plan.follow") { plan.following = true }
+                if plan.following, tp.hasRoute {
+                    TimelineView(.periodic(from: .now, by: 5)) { ctx in
+                        let st = plan.followStatus(fix: location.lastFix, now: ctx.date)
+                        HStack(spacing: theme.space(.m)) {
+                            SaryRowIcon(systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", color: st.kind == .offRoute ? p.warning : p.live)
+                            Text(TripHeaderPresenter.follow(st)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("plan.followStatus")
+                            Button("إيقاف") { plan.following = false }
+                                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                                .accessibilityIdentifier("plan.followStop")
+                        }
+                        .frame(minHeight: theme.minTarget + 4)
                     }
-                    if let d = tp.destination { destinationPill(d) }
-                    if tp.hasRoute || tp.destination != nil || lead {
-                        pill(tp.isEmpty ? "خطّط" : "الخطة", "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
-                        pill("بحث", "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
-                    }
+                    SaryDivider()
+                } else if tp.hasRoute {
+                    SaryNavRow(title: "اتبع الخطة", detail: "ينبهك إذا خرجت عن المسار", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
+                               id: "plan.followRow") { plan.following = true }
+                    SaryDivider()
                 }
+                SaryNavRow(title: tp.isEmpty ? (lead ? "خطّط الطلعة" : "الخطة") : "الخطة وقائمة التجهيز",
+                           detail: planDetail(tp), systemImage: "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
+                SaryDivider()
+                SaryNavRow(title: "ابحث أو إحداثية", systemImage: "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
             }
+            .padding(.horizontal, theme.space(.m))
         }
     }
 
-    private func pill(_ t: String, _ icon: String, id: String, _ run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            Label(t, systemImage: icon)
-                .saryText(.subhead, weight: .bold)
-                .foregroundStyle(theme.palette.textPrimary)
-                .padding(.horizontal, theme.space(.m))
-                .frame(minHeight: theme.drive ? 52 : 40)
-                .saryGlass(Capsule(), role: .control, interactive: true)
+    private func planDetail(_ tp: TripPlan) -> String? {
+        var parts: [String] = []
+        if tp.hasRoute { parts.append("مسار من \(SaryFormat.number(tp.points.count)) نقاط") }
+        if plan.checklistPhase == .loaded, !plan.checklist.items.isEmpty {
+            let done = plan.checklist.items.filter(\.done).count
+            parts.append("التجهيز \(SaryFormat.number(done))/\(SaryFormat.number(plan.checklist.items.count))")
         }
-        .buttonStyle(SaryPressStyle())
-        .accessibilityIdentifier(id)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func destinationPill(_ d: OutingDestination) -> some View {
+    private func destinationRow(_ d: OutingDestination) -> some View {
         let dest = LngLat(lng: d.lng, lat: d.lat)
         let fix = location.lastFix
         let fresh = fix.map { Date().timeIntervalSince1970 - $0.atMs / 1000 <= FollowPlan.maxFixAgeS } ?? false
+        let p = theme.palette
         return Menu {
             Button("افتح في Apple Maps") { UIApplication.shared.open(CoordinateShare.directionsLink(dest, .apple)) }
             Button("افتح في Google Maps") { UIApplication.shared.open(CoordinateShare.directionsLink(dest, .google)) }
             Button("انسخ إحداثية الوجهة") { PlanClipboard.copy(CoordinateShare.copyDecimal(dest)); controller.toast("نُسخ") }
         } label: {
-            HStack(spacing: 6) {
-                if let fix, fresh {
-                    let me = LngLat(lng: fix.lng, lat: fix.lat)
-                    let b = PlanGeo.bearing(me, dest)
-                    Image(systemName: "location.north.fill").rotationEffect(.degrees(fix.heading.map { b - $0 } ?? b))
-                    Text("\(d.name) · \(SaryFormat.distance(meters: PlanGeo.meters(me, dest)))").saryNumber(.subhead, weight: .bold)
-                } else {
-                    Image(systemName: "flag.checkered")
-                    Text(d.name).saryText(.subhead, weight: .bold)
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: "flag.checkered")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(d.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                    if let fix, fresh {
+                        let me = LngLat(lng: fix.lng, lat: fix.lat)
+                        Text("\(SaryFormat.distance(meters: PlanGeo.meters(me, dest))) خط مستقيم · \(Geo.directionLabel(PlanGeo.bearing(me, dest)))")
+                            .saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                    }
                 }
-                Text("اتجه").saryText(.caption, weight: .bold).foregroundStyle(theme.palette.accentText)
+                Spacer(minLength: 0)
+                Text("افتح في الخرائط").saryText(.caption, weight: .bold).foregroundStyle(p.accentText)
             }
-            .foregroundStyle(theme.palette.textPrimary)
-            .padding(.horizontal, theme.space(.m))
-            .frame(minHeight: theme.drive ? 52 : 40)
-            .saryGlass(Capsule(), role: .control, interactive: true)
+            .frame(minHeight: theme.minTarget + 4)
+            .contentShape(Rectangle())
         }
         .accessibilityIdentifier("plan.destination")
-    }
-
-    private func followBar(_ s: FollowPlanStatus) -> some View {
-        let p = theme.palette
-        let (icon, text, tone): (String, String, Color) = {
-            switch s.kind {
-            case .waitingForFix: return (SaryIcon.gpsOff, "بانتظار موقعك الحالي…", p.textSecondary)
-            case .onRoute: return ("checkmark.circle.fill", "على المسار · باقي \(SaryFormat.distance(meters: s.remainingM))", p.liveText)
-            case .offRoute: return (SaryIcon.warning, "خارج المسار بـ \(SaryFormat.distance(meters: s.offM)) · ارجع باتجاه \(Geo.directionLabel(s.backBearing))", p.warningText)
-            case .arrived: return (SaryIcon.rallyArrived, "وصلت نهاية الخطة", p.liveText)
-            }
-        }()
-        return HStack(spacing: theme.space(.s)) {
-            Image(systemName: icon).font(.system(size: 16, weight: .bold)).foregroundStyle(tone)
-            Text(text).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
-                .accessibilityIdentifier("plan.followStatus")
-            Spacer(minLength: 0)
-            Button("إيقاف") { plan.following = false }
-                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
-                .accessibilityIdentifier("plan.followStop")
-        }
-        .padding(theme.space(.s))
-        .saryGlass(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous), role: .control)
-        .accessibilityElement(children: .contain)
     }
 }

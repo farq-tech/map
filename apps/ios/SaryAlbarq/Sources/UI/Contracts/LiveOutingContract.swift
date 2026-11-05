@@ -17,13 +17,14 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    case participants, invite, settings
+    /// «الرحلة» (default) · «المجموعة» · «المزيد» (docs/IA-REDESIGN.md §2.4).
+    case trip, group, more
 
     var label: String {
         switch self {
-        case .participants: return "المشاركون"
-        case .invite: return "الدعوة"
-        case .settings: return "الإعدادات"
+        case .trip: return "الرحلة"
+        case .group: return "المجموعة"
+        case .more: return "المزيد"
         }
     }
 }
@@ -192,6 +193,8 @@ struct RallyPointUI: Equatable {
     var totalCount: Int
     /// Optional label, e.g. «عند الطعس الكبير».
     var label: String?
+    /// Who is there now (live fix inside the radius).
+    var arrivedNames: [String] = []
 }
 
 struct ParticipantsTabUIState: Equatable {
@@ -360,6 +363,8 @@ struct ParticipantsTabActions {
     var rallyRemove: () -> Void = {}
     /// «حدد نقطة تجمع» (leader/co-leader, when there is none).
     var rallyCreate: () -> Void = {}
+    /// «ارجعوا لنقطة التجمع» (leaders; nil hides it).
+    var rallyRecall: (() -> Void)? = nil
 }
 
 struct InviteTabActions {
