@@ -142,6 +142,7 @@ struct SettingsView: View {
                 SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
                               isOn: $radioSounds, id: "settings.radioSounds")
             }
+            IntroSettingsSection()
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
             }
