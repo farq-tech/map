@@ -57,14 +57,14 @@ struct LiveOutingScreen: View {
                     chrome: chromeInsets(full: full),
                     theme: theme,
                     picking: controller.picking.active,
-                    following: controller.following,
+                    followMode: controller.mapFollowMode,
                     onMemberTap: { controller.openParticipant($0) },
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onEmptyTap: { controller.mapTappedEmpty($0, name: $1) },
                     onProjection: { controller.overlay.projection = $0 },
                     onUserGesture: {
-                        controller.following = false
+                        controller.cameraUserMoved()
                         controller.userPannedMap = true
                         controller.navUserMovedMap()
                     },
@@ -125,6 +125,7 @@ struct LiveOutingScreen: View {
 
     private func touchChanged(_ down: Bool) {
         touching = down
+        controller.cameraTouch(down: down)
         if down {
             if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
         } else {
@@ -166,7 +167,7 @@ struct LiveOutingScreen: View {
     }
 
     private func avoidRects(full: CGSize) -> [CGRect] {
-        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed", "speedlimit", "readout"].compactMap { frames[$0] }
+        ["cluster", "cluster-row", "sos", "ptt", "top", "picking", "speed", "speedlimit", "readout", "recenter"].compactMap { frames[$0] }
     }
 
     // MARK: chrome
@@ -187,6 +188,13 @@ struct LiveOutingScreen: View {
                              maxListHeight: max(220, full.height * 0.42), weather: controller.weather,
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller))
                     .chromeFrame("top")
+                if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
+                    /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. Under the
+                       banner, where «استأنف التوجيه» sits too: never over the speed or the dock. */
+                    RecenterPill(title: title, action: controller.recenterCamera)
+                        .chromeFrame("recenter")
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if controller.picking.active {
                     PickingBanner(moving: controller.picking.moving, cancel: controller.cancelPicking)
                         .chromeFrame("picking")
@@ -288,6 +296,7 @@ struct LiveOutingScreen: View {
         .animation(theme.animation(.smooth), value: sheetTop)
         .animation(theme.animation(.smooth), value: driving)
         .animation(theme.animation(.smooth), value: exploring)
+        .animation(theme.animation(.snappy), value: controller.recenterTitle)
         .environment(\.safetyAlertActions, controller.safety.alertActions)
         .environment(\.convoyAlertActions, controller.convoyAlertActions)
         .animation(theme.animation(.smooth), value: controller.backTrack != nil)
@@ -315,10 +324,10 @@ struct LiveOutingScreen: View {
         let all = SaryMapControlItem.liveDefaults(following: controller.following, backTracking: controller.backTrack != nil)
         let pick = { (id: String) in all.first { $0.id == id } }
         var items: [SaryMapControlItem] = []
-        if controller.nav.isActive, let cam = controller.navControlItems.first {
-            items = [cam] + [pick("fit")].compactMap { $0 }
+        if controller.nav.isActive {
+            items = controller.navControlItems
         } else {
-            items = ["locate", "fit"].compactMap(pick)
+            items = [controller.cameraModeItem] + [pick("fit")].compactMap { $0 }
             if controller.showsBackTrackShortcut, let b = pick("backtrack") { items.append(b) }
         }
         if !driving {
@@ -719,5 +728,35 @@ private struct EdgeArrowLayer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(theme.animation(.snappy), value: spots.map(\.id))
+    }
+}
+
+/// «رجّعني للتوجيه»: big, one tap, above the dock (≥ 56 pt while driving).
+struct RecenterPill: View {
+    var title: String
+    var action: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: theme.space(.s)) {
+                Image(systemName: "location.north.line.fill")
+                    .font(.system(size: theme.drive ? 22 : 18, weight: .bold))
+                Text(title)
+                    .saryText(theme.drive ? .headline : .callout, weight: .bold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(theme.palette.onAccent)
+            .padding(.horizontal, theme.space(.l))
+            .frame(minHeight: theme.drive ? 60 : 50)
+            .background(Capsule().fill(theme.palette.accent))
+            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+        }
+        .buttonStyle(SaryPressStyle())
+        .sensoryFeedback(.impact, trigger: title)
+        .accessibilityLabel(Text(title))
+        .accessibilityHint(Text("يرجّع الخريطة خلف سيارتك وباتجاه سيرك"))
+        .accessibilityIdentifier("camera.recenter")
     }
 }

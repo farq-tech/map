@@ -119,7 +119,18 @@ final class LiveOutingController: ObservableObject {
     @Published var heardClips: Set<String> = []
     @Published var clipPlayback: [String: VoicePlaybackUI] = [:]
     @Published var camera: MapCameraRequest?
-    @Published var following = false
+    /// «تتبعني» / «باتجاهي» and «رجّعني للتوجيه» (see `LiveOutingController+FollowCamera.swift`).
+    @Published var followCam = FollowCameraState()
+    var lastGuidanceOn = false
+    var followCamTimer: Timer?
+    /// The camera follows my car (either mode). Setting false hands the camera back
+    /// (keeping «رجّعني للتوجيه» while guidance is on); true turns «تتبعني» on.
+    var following: Bool {
+        get { followCam.mode != .free }
+        set {
+            if newValue { if followCam.mode == .free { followCam.cycle() } } else if followCam.mode != .free { releaseCamera() }
+        }
+    }
     @Published var picking: (moving: Bool, active: Bool) = (false, false)
     @Published var modal: LiveModal? {
         didSet {
@@ -290,7 +301,7 @@ final class LiveOutingController: ObservableObject {
         /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
         nav.voice.canSpeak = { [weak session] in session?.walkie.floor.state == .idle }
         nav.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.objectWillChange.send() }
+            DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.followCamGuidanceCheck(); self?.objectWillChange.send() }
         }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
@@ -602,7 +613,8 @@ final class LiveOutingController: ObservableObject {
         }
         if trackFollow != nil { stopFollow() }
         backTrack = bt
-        following = false
+        followCam.release()
+        followCamGuidanceCheck()
         modal = nil
         updateBackTrack()
         var pts = bt.path.map(\.position)
@@ -613,6 +625,7 @@ final class LiveOutingController: ObservableObject {
     func stopBackTrack() {
         backTrack = nil
         backTrackStatus = nil
+        followCamGuidanceCheck()
     }
 
     private func updateBackTrack() {
@@ -743,6 +756,11 @@ final class LiveOutingController: ObservableObject {
     // MARK: camera
 
     func ask(_ kind: MapCameraRequest.Kind) {
+        /* Looking somewhere on purpose: the follow camera steps aside (the pill stays while guiding). */
+        if followCam.mode != .free {
+            followCam.release(offerBack: guidanceOn)
+            followCamTimerCheck()
+        }
         camera = MapCameraRequest(kind: kind, id: (camera?.id ?? 0) + 1)
     }
 
@@ -788,9 +806,7 @@ final class LiveOutingController: ObservableObject {
         )
         a.locateMe = { [weak self] in
             guard let self else { return }
-            if self.location.lastFix == nil { self.toast("ننتظر أول قراءة من GPS") }
-            self.following = true
-            self.ask(.me)
+            self.cycleCameraMode()
         }
         a.fitGroup = { [weak self] in
             self?.following = false

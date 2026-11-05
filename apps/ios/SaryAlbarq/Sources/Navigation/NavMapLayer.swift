@@ -19,9 +19,9 @@ struct MapNavDrawing: Equatable {
         var selected: Bool
     }
 
+    /// The guidance camera's one-shot framings. Following my car («باتجاهي») is the map's
+    /// own follow camera (`FollowCamera.swift`), driven every frame from the smoothed car.
     enum Camera: Equatable {
-        /// Behind my car, heading-up.
-        case follow
         /// Fit these points (the remaining route / the planning preview).
         case fit([LngLat], bottomShare: Double)
     }
@@ -47,7 +47,6 @@ final class NavMapDrawer {
     private var targetPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<NavTargetPin>)?
     private var labelPins: [String: (label: MapNavDrawing.Label, annotation: ViewAnnotation, host: UIHostingController<NavRouteLabel>)] = [:]
     private var lastCameraKey = -1
-    private var lastFollowAt: CFTimeInterval = 0
     var theme: SaryTheme = .default
     var onSelectRoute: (String) -> Void = { _ in }
 
@@ -58,7 +57,6 @@ final class NavMapDrawer {
 
     /// Guidance owns the camera (the group framing and «موقعي» stand aside).
     var ownsCamera: Bool { drawing.camera != nil }
-    var following: Bool { drawing.camera == .follow }
 
     func attach(_ map: MapView) { self.map = map }
 
@@ -178,17 +176,6 @@ final class NavMapDrawer {
         guard let map, map.bounds.height > 0, let cam = drawing.camera else { return }
         let reduce = UIAccessibility.isReduceMotionEnabled
         switch cam {
-        case .follow:
-            guard let me else { return }
-            let now = CACurrentMediaTime()
-            guard now - lastFollowAt > 0.9 else { return }
-            lastFollowAt = now
-            /* My car in the lower third of the clear area, looking ahead. */
-            let clear = max(1, map.bounds.height - chrome.top - chrome.bottom)
-            let pad = UIEdgeInsets(top: chrome.top + clear * 0.42, left: 0, bottom: chrome.bottom, right: 0)
-            var o = CameraOptions(center: me.coordinate, padding: pad, zoom: 16.2, pitch: 48)
-            if let heading { o.bearing = heading }
-            map.camera.ease(to: o, duration: reduce ? 0 : 0.95)
         case let .fit(pts, share):
             guard drawing.cameraKey != lastCameraKey, let b = GroupFraming.bounds(pts) else { return }
             lastCameraKey = drawing.cameraKey

@@ -114,8 +114,9 @@ struct OutingMapboxView: UIViewRepresentable {
     var theme: SaryTheme = .default
     /// While true, a tap on empty map reports its coordinate («حدد نقطة تجمع»).
     var picking = false
-    /// «موقعي» is on: the camera follows my car until the map is moved by hand.
-    var following = false
+    /// «تتبعني» / «باتجاهي»: the camera follows my car (north-up, or heading-up and tilted)
+    /// until the map is moved by hand (see `FollowCamera.swift`).
+    var followMode: MapFollowMode = .free
     var onMemberTap: (String) -> Void = { _ in }
     var onRallyTap: () -> Void = {}
     var onMapTap: (LngLat) -> Void = { _ in }
@@ -192,7 +193,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onLongPress = onLongPress
         c.onWaterways = onWaterways
         c.picking = picking
-        c.following = following
+        c.setFollowMode(followMode)
         c.navDrawer.onSelectRoute = onSelectRoute
         if c.theme != theme {
             c.theme = theme
@@ -283,8 +284,13 @@ struct OutingMapboxView: UIViewRepresentable {
         private var lastCenterAt: CFTimeInterval = 0
         private var centerPending = false
         var picking = false
-        var following = false
-        private var lastFollowAt: CFTimeInterval = 0
+        /// «تتبعني» / «باتجاهي»: driven every display frame from my car's smoothed pose.
+        private(set) var followMode: MapFollowMode = .free
+        private var followSmoother = FollowCameraSmoother()
+        private var headingSource = FollowHeadingSource()
+        private let compass = FollowCompass()
+        /// My car's last drawn speed (m/s), from its motion pose.
+        private var mySpeedMps: Double?
         var theme: SaryTheme = .default
         var lastCamera = -1
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
@@ -733,21 +739,56 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             fx.keep(seen)
             startLink()
-            if navDrawer.ownsCamera { navTick() } else { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
-            followMe()
+            if navDrawer.ownsCamera { navTick() } else if followMode == .free { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
             layoutChips()
             project()
         }
 
-        /// «موقعي»: keep my car centred (gently, at most once a second).
-        private func followMe() {
-            guard following, !navDrawer.ownsCamera, let map, let me = lastCars.first(where: \.isMe) else { return }
+        // MARK: «تتبعني» / «باتجاهي»
+
+        func setFollowMode(_ m: MapFollowMode) {
+            guard m != followMode else { return }
+            followMode = m
+            compass.active = m == .heading
+            compass.onChange = { [weak self] in self?.startLink() }
+            guard m != .free, let map else { return }
             keepGroup = false
-            let now = CACurrentMediaTime()
-            guard now - lastFollowAt > 1 else { return }
-            lastFollowAt = now
-            let pad = UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0)
-            map.camera.ease(to: CameraOptions(center: me.position.coordinate, padding: pad), duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.9)
+            map.camera.cancelAnimations()
+            let st = map.mapboxMap.cameraState
+            let pad = st.padding
+            followSmoother.enter(m, from: FollowCameraPose(center: LngLat(lng: st.center.longitude, lat: st.center.latitude), zoom: st.zoom,
+                                                           bearing: st.bearing, pitch: st.pitch, topPadding: pad.top, bottomPadding: pad.bottom),
+                                 at: CACurrentMediaTime())
+            northZoom = max(st.zoom, FollowZoom.northMinZoom)
+            if st.zoom < FollowZoom.northMinZoom { northZoom = 16 }
+            startLink()
+        }
+        private var northZoom = 16.0
+
+        /// One display frame of the follow camera. True while it still moves by itself.
+        private func followFrame(_ m: MapboxMap, now: CFTimeInterval) -> Bool {
+            guard followMode != .free, !navDrawer.ownsCamera, let map, map.bounds.height > 0,
+                  let me = lastCars.first(where: \.isMe), let r = recs[me.id] else { return false }
+            let h = Double(map.bounds.height)
+            let kmh = (mySpeedMps ?? me.speedMps).map { $0 * 3.6 }
+            let target: FollowCameraPose
+            switch followMode {
+            case .heading:
+                let c = compass.reading
+                let bearing = headingSource.update(speedKmh: kmh, course: r.heading, compass: c?.heading, compassError: c?.error)
+                    ?? followSmoother.shown?.bearing ?? m.cameraState.bearing
+                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: FollowZoom.carScreenShare)
+                target = FollowCameraPose(center: r.shown, zoom: FollowZoom.zoom(kmh: kmh), bearing: bearing, pitch: FollowZoom.headingPitch,
+                                          topPadding: pad.top, bottomPadding: pad.bottom)
+            default:
+                let pad = FollowZoom.padding(clearTop: Double(chrome.top), clearBottom: Double(chrome.bottom), height: h, share: 0.5)
+                target = FollowCameraPose(center: r.shown, zoom: northZoom, bearing: 0, pitch: 0, topPadding: pad.top, bottomPadding: pad.bottom)
+            }
+            let (p, settling) = followSmoother.step(target: target, at: now, reduceMotion: UIAccessibility.isReduceMotionEnabled)
+            let cam = CameraOptions(center: p.center.coordinate, padding: UIEdgeInsets(top: p.topPadding, left: 0, bottom: p.bottomPadding, right: 0),
+                                    zoom: p.zoom, bearing: p.bearing, pitch: p.pitch)
+            m.setCamera(to: cam)
+            return settling
         }
 
         func themeChanged() {
@@ -1326,6 +1367,7 @@ struct OutingMapboxView: UIViewRepresentable {
             for r in recs.values {
                 guard let pose = fx.pose(r.item.id, now: now) else { continue }
                 moving = moving || pose.animating
+                if r.item.isMe { mySpeedMps = pose.speedMps }
                 let changed = pose.position != r.shown || (pose.heading != nil && pose.heading != r.heading)
                 r.shown = pose.position
                 if let h = pose.heading { r.heading = h }
@@ -1338,6 +1380,7 @@ struct OutingMapboxView: UIViewRepresentable {
             fx.night = theme.night
             fx.exaggeration = terrainExaggeration
             if fx.frame(m, now: now, cars: cars) { moving = true }
+            if followFrame(m, now: now) { moving = true }
             layoutChips()
             project()
             if !moving {
@@ -1428,6 +1471,10 @@ struct OutingMapboxView: UIViewRepresentable {
             /* A tap (on a car, a name, or empty map) is not "let me look"; drag, pinch, rotate and tilt are. */
             if gestureType != .singleTap {
                 keepGroup = false
+                /* The camera is the person's from this touch: stop driving it now (the screen
+                   hears it through `onUserGesture` and offers «رجّعني للتوجيه»). */
+                followMode = .free
+                compass.active = false
                 onUserGesture()
                 if !expandedGroups.isEmpty {
                     expandedGroups.removeAll()

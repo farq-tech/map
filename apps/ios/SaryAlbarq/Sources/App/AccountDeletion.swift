@@ -89,7 +89,7 @@ enum LocalAccountData {
             MapLayer.key, ExploreRules.formatKey, ConvoyAlertPrefs.key, "sary.tracks.shown.v1",
             /* The trip's automatic guidance (setting + per-outing progress). */
             TripAutoNavPrefs.enabledKey, TripAutoNavState.storeKey,
-        ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys
+        ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys + FollowCameraPrefs.keys
     }
 
     static func wipe(defaults: UserDefaults = .standard) {
