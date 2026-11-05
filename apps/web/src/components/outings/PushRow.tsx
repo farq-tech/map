@@ -71,7 +71,7 @@ export function PushRow({ isRTL }: { isRTL: boolean }) {
 			</div>
 			<p className="sary-o-note">
 				{isRTL
-					? "تصلك رسائل أصحابك ونداء الاستغاثة حتى والشاشة مطفأة. لا يُرسل موقعك في التنبيهات."
+					? "تصلك رسائل العيال ونداء الاستغاثة حتى والشاشة مطفأة. لا يُرسل موقعك في التنبيهات."
 					: "Friends' notes and SOS reach you even with the screen off. Your location is never sent in a notification."}
 			</p>
 			{state === "ios-needs-home-screen" ? (

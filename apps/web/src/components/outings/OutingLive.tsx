@@ -253,7 +253,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		try {
 			await OutingsApi.note(outingId, text);
 			setComposing(false);
-			setToast(text ? (isRTL ? "وصلت رسالتك لأصحابك ✓" : "Sent to the group ✓") : isRTL ? "مُسحت الرسالة" : "Note cleared");
+			setToast(text ? (isRTL ? "وصلت رسالتك للعيال ✓" : "Sent to the group ✓") : isRTL ? "مُسحت الرسالة" : "Note cleared");
 		} catch (e) {
 			setNoteError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
 		} finally {
@@ -989,9 +989,9 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 		hasLocationPermission === false || gpsState === "denied" ? "denied" : canSend && gpsState === "unavailable" ? "unavailable" : canSend && held ? "held" : null;
 	const gpsProblem =
 		gpsKind === "denied"
-			? isRTL ? "الموقع غير مسموح — أصحابك لا يرون موقعك. فعّله من إعدادات المتصفح." : "Location is denied — friends cannot see you. Allow it in browser settings."
+			? isRTL ? "الموقع غير مسموح — العيال لا يرون موقعك. فعّله من إعدادات المتصفح." : "Location is denied — friends cannot see you. Allow it in browser settings."
 			: gpsKind === "unavailable"
-				? isRTL ? "لا توجد قراءة GPS حديثة — أصحابك يرون آخر موقع معروف لك مع وقته." : "No recent GPS fix — friends see your last known position with its time."
+				? isRTL ? "لا توجد قراءة GPS حديثة — العيال يرون آخر موقع معروف لك مع وقته." : "No recent GPS fix — friends see your last known position with its time."
 				: gpsKind === "held"
 					? isRTL ? "قراءة GPS غير منطقية أو ضعيفة — لم نرسلها، بانتظار قراءة تؤكدها." : "GPS reading looked wrong or weak — held back until the next one confirms it."
 					: null;
@@ -1134,7 +1134,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			</header>
 
 			{arrows.length ? (
-				<div className="sary-o-edges" aria-label={isRTL ? "أصحابك خارج الشاشة" : "Friends off screen"}>
+				<div className="sary-o-edges" aria-label={isRTL ? "العيال خارج الشاشة" : "Friends off screen"}>
 					{arrows.map((a) => {
 						const r = rows.find((x) => x.member.user_id === a.id);
 						if (!r) return null;
@@ -1207,13 +1207,13 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 					<>
 					{canLead && outing?.status === "created" ? (
 						<div className="sary-o-stage" data-testid="outing-stage">
-							<p>{isRTL ? "شارك الرابط مع أصحابك ثم ابدأ" : "Share the link with your friends, then start"}</p>
+							<p>{isRTL ? "شارك الرابط مع العيال ثم ابدأ" : "Share the link with your friends, then start"}</p>
 							<button type="button" className="sary-o-primary" disabled={busy} onClick={() => void run(() => OutingsApi.setStatus(outingId, "start"))} data-testid="outing-start">
 								{isRTL ? "ابدأ الطلعة" : "Start the outing"}
 							</button>
 						</div>
 					) : !canLead && outing?.status === "created" ? (
-						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار صاحب الطلعة ليبدأ" : "Waiting for the owner to start"}</p>
+						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار أمير الرحلة ليبدأ" : "Waiting for the owner to start"}</p>
 					) : outing?.status === "paused" ? (
 						<p className="sary-o-stage-line" data-testid="outing-stage">
 							{canLead ? (isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "The outing is paused — sharing is off for everyone") : isRTL ? "أمير الرحلة أوقفها مؤقتًا" : "The owner paused the outing"}
@@ -1324,7 +1324,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 								</li>
 							))}
 							{!rows.length ? (
-								<li className="sary-o-note">{isRTL ? "لا أحد بعد — أرسل رابط الدعوة لأصحابك." : "Nobody yet — send the invite link."}</li>
+								<li className="sary-o-note">{isRTL ? "لا أحد بعد — أرسل رابط الدعوة للعيال." : "Nobody yet — send the invite link."}</li>
 							) : null}
 						</ul>
 						</>
@@ -1615,7 +1615,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						<h2 id="outing-geo-title">{isRTL ? "نحتاج إذن الموقع لتكمل الطلعة" : "Allow location to continue the outing"}</h2>
 						<p>
 							{isRTL
-								? "انضمامك للطلعة يعني أن أصحابك يشوفون موقعك، لكن المتصفح مانع الوصول للموقع الآن. فعّله وتكمل الطلعة تلقائيًا:"
+								? "انضمامك للطلعة يعني أن العيال يشوفون موقعك، لكن المتصفح مانع الوصول للموقع الآن. فعّله وتكمل الطلعة تلقائيًا:"
 								: "Joining means your friends see your location, but the browser is blocking it right now. Allow it and the outing continues by itself:"}
 						</p>
 						<ul className="sary-o-steps" data-testid="outing-geo-steps">
@@ -1917,7 +1917,7 @@ function savePref(key: string, v: DrivePref): void {
 		/* private mode: the choice lasts this visit */
 	}
 }
-const NOTE_PRESETS_AR = ["بوقف عند المحطة ⛽", "انتظروني", "وقفت، تعالوا", "عندي عطل", "تمام، ماشي"];
+const NOTE_PRESETS_AR = ["بوقف عند المحطة ⛽", "اصبروا لي", "وقفت، تعالوا", "عندي عطل", "تمام، ماشي"];
 const NOTE_PRESETS_EN = ["Stopping for fuel ⛽", "Wait for me", "Stopped — come over", "Car trouble", "All good, moving"];
 
 function memberLine(r: Row, isRTL: boolean): string {
@@ -1981,7 +1981,7 @@ function MyPhone({ current, isRTL, onSaved }: { current: string | null; isRTL: b
 		try {
 			await OutingsApi.updateProfile({ phone });
 			setOpen(false);
-			onSaved(phone ? (isRTL ? "أصحابك يقدرون يتصلون عليك الآن ✓" : "Friends can call you now ✓") : isRTL ? "حُذف رقمك" : "Number removed");
+			onSaved(phone ? (isRTL ? "العيال يقدرون يتصلون عليك الآن ✓" : "Friends can call you now ✓") : isRTL ? "حُذف رقمك" : "Number removed");
 		} catch (e) {
 			setError(outingErrorText(e instanceof OutingApiError ? e.code : "network", isRTL));
 		} finally {
@@ -2002,7 +2002,7 @@ function MyPhone({ current, isRTL, onSaved }: { current: string | null; isRTL: b
 					}}
 					data-testid="outing-my-phone-edit"
 				>
-					{current ? (isRTL ? "تعديل" : "Edit") : isRTL ? "أضف رقمك ليتصل بك أصحابك" : "Add your number so friends can call"}
+					{current ? (isRTL ? "تعديل" : "Edit") : isRTL ? "أضف رقمك ليتصل بك العيال" : "Add your number so friends can call"}
 				</button>
 			</div>
 		);
@@ -2143,7 +2143,7 @@ function MemberCard({
 			)}
 			<div className="sary-o-row">
 				<button type="button" className="sary-o-secondary" disabled={!p} onClick={onFocus} data-testid="outing-member-focus">
-					{isRTL ? "أنا وياه على الخريطة" : "Both of us on the map"}
+					{isRTL ? "أنا وهو على الخريطة" : "Both of us on the map"}
 				</button>
 				{p ? (
 					<a

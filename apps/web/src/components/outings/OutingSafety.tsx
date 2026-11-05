@@ -190,7 +190,7 @@ export function SosAlert({ alert, isRTL, onShow, onDismiss }: { alert: SosAlertV
 		<div className="sary-sos-alert" role="alertdialog" aria-modal="true" aria-labelledby="sos-alert-title" data-testid="outing-sos-alert" data-user={alert.userId}>
 			<div className="sary-sos-alert__body">
 				<span className="sary-sos-alert__badge" aria-hidden="true">SOS</span>
-				<h2 id="sos-alert-title">{isRTL ? `${alert.name} يطلب المساعدة` : `${alert.name} needs help`}</h2>
+				<h2 id="sos-alert-title">{isRTL ? `${alert.name} يطلب فزعة` : `${alert.name} needs help`}</h2>
 				<p data-testid="outing-sos-where">{where}</p>
 				{f && alert.fixAgeMs != null ? (
 					<p className="sary-sos-alert__age">
@@ -229,7 +229,7 @@ export function SosAlert({ alert, isRTL, onShow, onDismiss }: { alert: SosAlertV
 export function SosStrip({ names, isRTL, onOpen }: { names: string[]; isRTL: boolean; onOpen: () => void }) {
 	return (
 		<button type="button" className="sary-sos-strip" role="alert" onClick={onOpen} data-testid="outing-sos-strip">
-			<b>SOS</b> {isRTL ? `${names.join("، ")} يطلب المساعدة` : `${names.join(", ")} needs help`}
+			<b>SOS</b> {isRTL ? `${names.join("، ")} يطلب فزعة` : `${names.join(", ")} needs help`}
 		</button>
 	);
 }

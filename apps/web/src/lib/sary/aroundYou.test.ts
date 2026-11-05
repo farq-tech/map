@@ -51,6 +51,6 @@ describe("around you", () => {
 		expect(s.nearestWell?.id).toBe("w");
 		expect(s.nearestRawdah?.id).toBe("r");
 		expect(aroundLines(s, true).some((l) => l.includes("مسار واحد"))).toBe(true);
-		expect(aroundLines(s, true).some((l) => l.startsWith("أقرب بئر") && l.includes("كم"))).toBe(true);
+		expect(aroundLines(s, true).some((l) => l.startsWith("أقرب قليب") && l.includes("كم"))).toBe(true);
 	});
 });

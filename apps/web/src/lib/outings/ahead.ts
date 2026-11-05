@@ -106,7 +106,7 @@ export function needWider(ranked: Ranked[], heading: number | null, want = 3): b
 
 /** The line that goes over your car when you share it («⛽ محطة … — ١٢ كم قدّام»). */
 export function shareLine(r: Ranked, isRTL: boolean, fmtKm: (m: number, rtl: boolean) => string): string {
-	const label = r.name || r.brand || (r.kind === "fuel" ? (isRTL ? "محطة وقود" : "Fuel station") : isRTL ? "بئر" : "Well");
+	const label = r.name || r.brand || (r.kind === "fuel" ? (isRTL ? "محطة بنزين" : "Fuel station") : isRTL ? "قليب" : "Well");
 	const icon = r.kind === "fuel" ? "⛽" : "💧";
 	const where = r.ahead == null ? "" : r.ahead ? (isRTL ? " قدّام" : " ahead") : isRTL ? " ورانا" : " behind";
 	const text = `${icon} ${label} — ${fmtKm(r.distanceM, isRTL)}${where}`;

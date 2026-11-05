@@ -23,7 +23,7 @@ export default function SaryPlaceSheet({
 	const track = nearby.find((e) => e.group === "movement");
 	const rows: Array<{ label: string; e: OutdoorEntity }> = [];
 	if (track) rows.push({ label: isRTL ? "أقرب مسار" : "Nearest track", e: track });
-	if (well) rows.push({ label: isRTL ? "أقرب بئر" : "Nearest well", e: well });
+	if (well) rows.push({ label: isRTL ? "أقرب قليب" : "Nearest well", e: well });
 	if (shaib) rows.push({ label: isRTL ? "أقرب شعيب" : "Nearest shaib", e: shaib });
 
 	return (

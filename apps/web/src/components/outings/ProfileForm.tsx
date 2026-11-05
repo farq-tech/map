@@ -36,7 +36,7 @@ export default function ProfileForm({ isRTL, onDone, submitLabel }: { isRTL: boo
 			}}
 		>
 			<label>
-				<span>{isRTL ? "اسمك كما يظهر لأصحابك" : "Your name, as friends will see it"}</span>
+				<span>{isRTL ? "اسمك كما يظهر للعيال" : "Your name, as friends will see it"}</span>
 				<input
 					value={name}
 					onChange={(e) => setName(e.target.value)}

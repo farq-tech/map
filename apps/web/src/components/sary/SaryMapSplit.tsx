@@ -644,7 +644,7 @@ export default function SaryMapSplit({ search }: { search: MapSearch }) {
 								<li>
 									{userLocation && locationPinKind === "gps"
 										? isRTL
-											? "لا توجد معالم برية مرصودة ضمن ١٥ كم منك. ابحث باسم روضة أو نفود، أو حرّك الخريطة إلى البر."
+											? "لا توجد معالم برية مرصودة ضمن ١٥ كم منك. ابحث باسم روضة أو نفود أو نقرة، أو حرّك الخريطة إلى البر."
 											: "No observed outdoor features within 15 km of you. Search for a rawdah or nafud, or pan out to the desert."
 										: isRTL
 											? "اسمح بالموقع لنلخّص ما حولك، أو حرّك الخريطة وابحث."
