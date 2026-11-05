@@ -153,6 +153,205 @@ final class SuvModelTests: XCTestCase {
     }
 }
 
+/// The modelled expedition SUV (Resources/Models/SuvExpedition.glb) and its per-member paint.
+final class SuvAssetTests: XCTestCase {
+    private func json(_ glb: Data) throws -> [String: Any] {
+        let len = Int(glb.subdata(in: 12 ..< 16).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) })
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: glb.subdata(in: 20 ..< 20 + len)) as? [String: Any])
+    }
+
+    private func color(_ glb: Data, _ material: String) throws -> [Double] {
+        let mats = try XCTUnwrap(try json(glb)["materials"] as? [[String: Any]])
+        let m = try XCTUnwrap(mats.first { $0["name"] as? String == material })
+        return try XCTUnwrap((m["pbrMetallicRoughness"] as? [String: Any])?["baseColorFactor"] as? [Double])
+    }
+
+    private let members: [UInt32] = [0xE8EEF0, 0xD6452F, 0x2F6FD6, 0xF2B630, 0x2FA56A, 0x8A4FD1, 0xF07F2F, 0x1FB8C4, 0xE05A9C, 0x15191C]
+
+    func testAssetIsBundledSmallAndHasTheMaterialContract() throws {
+        let glb = try XCTUnwrap(SuvModel.bundledGlb())
+        XCTAssertLessThan(glb.count, 1_000_000)
+        let names = Set(try XCTUnwrap(try json(glb)["materials"] as? [[String: Any]]).compactMap { $0["name"] as? String })
+        XCTAssertTrue(names.isSuperset(of: ["BODY", "TRIM", "GLASS", "TYRE", "RIM", "HEADLIGHT", "TAILLIGHT", "SHADOW"]))
+    }
+
+    func testAssetSitsOnTheGroundNoseForwardAtCarSize() throws {
+        let j = try json(try XCTUnwrap(SuvModel.bundledGlb()))
+        let accessors = try XCTUnwrap(j["accessors"] as? [[String: Any]])
+        let prims = try XCTUnwrap((j["meshes"] as? [[String: Any]])?.first?["primitives"] as? [[String: Any]])
+        let mats = try XCTUnwrap(j["materials"] as? [[String: Any]])
+        var mn = [Double.infinity, .infinity, .infinity], mx = [-Double.infinity, -.infinity, -.infinity]
+        var spareZ = 0.0, headZ = 0.0
+        for p in prims {
+            let name = mats[p["material"] as! Int]["name"] as? String ?? ""
+            guard !name.hasPrefix("SHADOW"), name != "RIMLIGHT" else { continue }
+            let a = accessors[(p["attributes"] as! [String: Int])["POSITION"]!]
+            let lo = a["min"] as! [Double], hi = a["max"] as! [Double]
+            for k in 0 ..< 3 { mn[k] = min(mn[k], lo[k]); mx[k] = max(mx[k], hi[k]) }
+            if name == "HEADLIGHT" { headZ = hi[2] }
+            if name == "TYRE" { spareZ = lo[2] }
+        }
+        XCTAssertEqual(mn[1], 0, accuracy: 0.03)            // on the ground
+        XCTAssertEqual(mx[2] - mn[2], 4.9, accuracy: 0.2)   // length incl. the spare (Z)
+        XCTAssertEqual(mx[0] - mn[0], 1.95, accuracy: 0.15) // width incl. mirrors (X)
+        XCTAssertEqual(mx[1], 1.9, accuracy: 0.12)          // height incl. rack and awning (Y)
+        XCTAssertEqual(mn[0] + mx[0], 0, accuracy: 0.15)    // centred
+        XCTAssertGreaterThan(headZ, 2)                      // nose at +Z, as `Vehicle.rotation` expects
+        XCTAssertLessThan(spareZ, -2.2)                     // spare tyre at the tail
+    }
+
+    func testEachMemberColourPaintsOnlyTheBody() throws {
+        let src = try XCTUnwrap(SuvModel.bundledGlb())
+        let glass = try color(src, "GLASS")
+        for c in members {
+            let out = try XCTUnwrap(SuvModel.recolored(src, body: c))
+            let body = try color(out, "BODY")
+            let rgb = SuvModel.linear(c)
+            for k in 0 ..< 3 { XCTAssertEqual(body[k], rgb[k], accuracy: 1e-9) }
+            XCTAssertEqual(body[3], 1)
+            for (a, b) in zip(try color(out, "GLASS"), glass) { XCTAssertEqual(a, b, accuracy: 1e-9) }
+            /* Binary chunk is untouched: same total minus the JSON difference. */
+            XCTAssertEqual(out.count % 4, 0)
+            let len = Int(out.subdata(in: 8 ..< 12).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) })
+            XCTAssertEqual(len, out.count)
+        }
+    }
+
+    func testBlackBodyGetsLighterTrimOthersKeepBlack() throws {
+        let src = try XCTUnwrap(SuvModel.bundledGlb())
+        let black = try XCTUnwrap(SuvModel.recolored(src, body: 0x15191C))
+        XCTAssertEqual(try color(black, "TRIM")[0], SuvModel.linear(SuvModel.darkBodyTrimHex)[0], accuracy: 1e-9)
+        XCTAssertGreaterThan(try color(black, "TRIM")[0], try color(black, "BODY")[0] * 3)
+        for c in members.dropLast() {
+            XCTAssertFalse(SuvModel.needsLightTrim(c), String(c, radix: 16))
+            for (a, b) in zip(try color(try XCTUnwrap(SuvModel.recolored(src, body: c)), "TRIM"), try color(src, "TRIM")) { XCTAssertEqual(a, b, accuracy: 1e-9) }
+        }
+        XCTAssertTrue(SuvModel.needsLightTrim(0x15191C))
+        XCTAssertEqual(SuvModel.trim(for: 0x15191C), SuvModel.darkBodyTrimHex)
+        XCTAssertEqual(SuvModel.trim(for: 0xD6452F), SuvModel.trimHex)
+    }
+
+    func testFallsBackToTheProceduralCar() throws {
+        XCTAssertNil(SuvModel.recolored(Data("not a glb".utf8), body: 0xD6452F))
+        XCTAssertNil(SuvModel.recolored(SuvModel.glb(body: 0xD6452F), body: 0xD6452F)) // no BODY material
+        let empty = Bundle(for: SuvAssetTests.self) // the test bundle has no SuvExpedition.glb
+        let m = SuvModel.modelData(body: 0xD6452F, bundle: empty)
+        XCTAssertFalse(m.modelled)
+        XCTAssertEqual(m.data, SuvModel.glb(body: 0xD6452F))
+        XCTAssertTrue(SuvModel.modelData(body: 0xD6452F).modelled)
+    }
+
+    func testCarCamArgument() throws {
+        let c = try XCTUnwrap(CarCam.parse(["x", "-SaryCarCam", "17.5,60,30"]))
+        XCTAssertEqual(c.zoom, 17.5); XCTAssertEqual(c.pitch, 60); XCTAssertEqual(c.bearing, 30)
+        XCTAssertEqual(CarCam.parse(["-SaryCarCam", "14"])?.pitch, 0)
+        XCTAssertNil(CarCam.parse(["-SaryCarCam", "zoom"]))
+        XCTAssertNil(CarCam.parse(["-SaryCarCam"]))
+        XCTAssertEqual(CarCam.parse(["-SaryCarCam", "19,60,0,25.25,46.62"])?.at, LngLat(lng: 46.62, lat: 25.25))
+    }
+
+    func testCachedFilesPerColourAndKind() throws {
+        let url = try XCTUnwrap(SuvModel.fileURL(body: 0x2F6FD6))
+        let version = SuvModel.geometryVersion(try XCTUnwrap(SuvModel.bundledGlb()))
+        XCTAssertTrue(url.lastPathComponent.hasSuffix("2f6fd6-\(version).glb"))
+        XCTAssertNotEqual(version, SuvModel.geometryVersion(Data([1, 2, 3])))
+        XCTAssertEqual(try Data(contentsOf: url), SuvModel.modelData(body: 0x2F6FD6).data)
+        let fb = try XCTUnwrap(SuvModel.fileURL(body: 0x2F6FD6, bundle: Bundle(for: SuvAssetTests.self)))
+        XCTAssertTrue(fb.lastPathComponent.hasSuffix("-\(SuvModel.fallbackGeometryVersion).glb"))
+        XCTAssertNotEqual(url, fb)
+    }
+}
+
+/// The 2D car icon: layers bundled, each member's colour paints only the paint.
+final class CarIconTests: XCTestCase {
+    private let members: [UInt32] = [0xE8EEF0, 0xD6452F, 0x2F6FD6, 0xF2B630, 0x2FA56A, 0x8A4FD1, 0xF07F2F, 0x1FB8C4, 0xE05A9C, 0x15191C]
+
+    func testLayersAreBundledAndMatch() throws {
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        XCTAssertEqual(l.base.count, l.width * l.height * 4)
+        XCTAssertEqual(l.body.count, l.base.count)
+        XCTAssertGreaterThan(l.height, l.width) // nose up, portrait
+        let paint = stride(from: 2, to: l.body.count, by: 4).filter { l.body[$0] > 250 }.count
+        XCTAssertGreaterThan(paint, l.width * l.height / 10) // plenty of paint to carry the colour
+    }
+
+    func testPaintTakesTheColourAndLeavesTrimAlone() throws {
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        let red = CarIcon.paint(l, color: 0xD6452F), blue = CarIcon.paint(l, color: 0x2F6FD6)
+        var paintR = (0, 0), paintB = (0, 0)
+        for i in stride(from: 0, to: l.body.count, by: 4) {
+            if l.body[i + 2] == 255 {
+                paintR.0 += Int(red[i]); paintR.1 += Int(red[i + 2])
+                paintB.0 += Int(blue[i]); paintB.1 += Int(blue[i + 2])
+            } else if l.body[i + 2] == 0 {
+                /* not paint: identical whatever the colour (trim, rack, tyres, glass, shadow) */
+                XCTAssertEqual(red[i ..< i + 4], blue[i ..< i + 4])
+                XCTAssertEqual(Array(red[i ..< i + 4]), Array(l.base[i ..< i + 4]))
+            }
+        }
+        /* glossy paint carries white reflections, so compare the two cars: red is redder, blue bluer */
+        XCTAssertGreaterThan(paintR.0, paintR.1 * 13 / 10)
+        XCTAssertGreaterThan(paintB.1, paintB.0 * 13 / 10)
+        XCTAssertGreaterThan(paintR.0, paintB.0 * 3 / 2)
+        XCTAssertGreaterThan(paintB.1, paintR.1 * 3 / 2)
+    }
+
+    func testPaintPixelFollowsTheRendererFormula() throws {
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        let i = try XCTUnwrap(stride(from: 0, to: l.body.count, by: 4).first { l.body[$0 + 2] == 255 && l.body[$0] > 100 })
+        let out = CarIcon.paint(l, color: 0x2FA56A)
+        let lin = SuvModel.linear(0x2FA56A)
+        let d = CarIcon.decode(l.body[i]), k = CarIcon.decode(l.body[i + 1])
+        for c in 0 ..< 3 {
+            XCTAssertEqual(Double(out[i + c]), (CarIcon.encode(CarIcon.tone(lin[c] * d + k)) * 255).rounded(), accuracy: 1)
+        }
+        XCTAssertEqual(out[i + 3], 255)
+    }
+
+    func testEveryMemberGetsAnImageAndBlackStaysReadable() throws {
+        for c in members {
+            let img = try XCTUnwrap(CarIcon.image(c))
+            XCTAssertEqual(img.scale, CarIcon.imageScale)
+            XCTAssertGreaterThan(img.size.height, img.size.width)
+        }
+        /* The black car keeps a light outline around it (readable on night maps). */
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        let px = CarIcon.paint(l, color: 0x15191C)
+        let light = stride(from: 0, to: px.count, by: 4).filter { px[$0 + 3] > 200 && px[$0] > 220 && l.body[$0 + 2] == 0 }.count
+        XCTAssertGreaterThan(light, 300)
+    }
+
+    func testMemberColoursShipPreRenderedOthersArePainted() throws {
+        for c in members {
+            let r = try XCTUnwrap(CarIcon.rendered(c), String(c, radix: 16))
+            XCTAssertEqual(r.scale, CarIcon.imageScale)
+            XCTAssertEqual(r.size, try XCTUnwrap(CarIcon.image(c)).size)
+        }
+        XCTAssertNil(CarIcon.rendered(0x7A5C3E))
+        let other = try XCTUnwrap(CarIcon.image(0x7A5C3E))
+        let l = try XCTUnwrap(CarIcon.loadLayers())
+        XCTAssertEqual(other.size, CGSize(width: CGFloat(l.width) / CarIcon.imageScale, height: CGFloat(l.height) / CarIcon.imageScale))
+        XCTAssertEqual(try XCTUnwrap(CarIcon.rendered(0xD6452F)).size, other.size) // same canvas, any colour
+    }
+
+    func testMissingLayersFallBackToTheModel() {
+        XCTAssertNil(CarIcon.loadLayers(Bundle(for: CarIconTests.self)))
+        XCTAssertNil(CarIcon.image(0xD6452F, bundle: Bundle(for: CarIconTests.self)))
+    }
+
+    func testRotationAndSize() {
+        XCTAssertEqual(CarIcon.rotate(0), 0)
+        XCTAssertEqual(CarIcon.rotate(-90), 270)
+        XCTAssertEqual(CarIcon.rotate(nil), 0)
+        XCTAssertEqual(CarIcon.rotate(.nan), 0)
+        XCTAssertEqual(CarIcon.imageId(0xD6452F), "sary-car-d6452f")
+        let s = CarIcon.sizeStops
+        XCTAssertEqual(s.first?.size, s[1].size)                       // constant at map zooms
+        XCTAssertTrue(zip(s, s.dropFirst()).allSatisfy { $0.size <= $1.size }) // only grows
+        XCTAssertEqual(Vehicle.marker, .icon)
+    }
+}
+
 final class RoadSnapTests: XCTestCase {
     private let street: [[Double]] = [[46.66, 24.78], [46.67, 24.78]]
 

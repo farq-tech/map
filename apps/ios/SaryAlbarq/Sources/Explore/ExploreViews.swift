@@ -184,6 +184,7 @@ extension SaryMapControlItem {
             SaryMapControlItem(id: "places", systemImage: "star.fill", label: "أماكني المحفوظة", accessibilityID: "explore-places"),
             SaryMapControlItem(id: "tracks", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath.fill", label: "مسارات GPX",
                                accessibilityID: "explore-tracks", badge: tracksShown > 0 ? tracksShown : nil),
+            SaryMapControlItem(id: "realistic", systemImage: RealisticEntryButton.icon, label: "الوضع الواقعي", accessibilityID: "explore-realistic"),
             SaryMapControlItem(id: "locate", systemImage: SaryIcon.locate, label: "موقعي", accessibilityID: "outing-locate"),
         ]
     }
@@ -234,6 +235,7 @@ struct ExploreLayersSheet: View {
                     .accessibilityIdentifier("layer.\(l.rawValue)")
                 }
             }
+            HiResLayerSection()
             SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap عبر Mapbox: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
                 SaryToggleRow(title: "مسارات البر (OSM)", subtitle: "طبعات الطرق الترابية مثل OsmAnd",
                               systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", isOn: $osmTracks, id: "explore-osm-tracks")
@@ -271,6 +273,7 @@ struct SavedPlacesSheet: View {
     @Environment(\.sary) private var theme
     @State private var share: ShareItem?
     @State private var deleting: SavedPlace?
+    @State private var realistic: RealisticScene?
 
     var body: some View {
         let p = theme.palette
@@ -295,6 +298,7 @@ struct SavedPlacesSheet: View {
             }
         }
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
+        .realisticCover($realistic)
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
                     title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
             if let d = deleting { store.delete(d.id) }
@@ -324,6 +328,7 @@ struct SavedPlacesSheet: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("places.row")
+            SaryIconButton(systemImage: RealisticEntryButton.icon, label: "الوضع الواقعي", id: "places.realistic") { realistic = .place(place) }
             Menu {
                 Button { controller.showOnMap(place.position) } label: { Label("اعرضه على الخريطة", systemImage: "map") }
                 Button { controller.navigateToPlace(place) } label: { Label("ملاحة إليه", systemImage: SaryIcon.directions) }
