@@ -64,7 +64,12 @@ final class ConvoyIntelUITests: XCTestCase {
         let app = launch([])
         any(app, "outing-sheet-summary").tap()
         app.buttons["tab.more"].tap()
-        any(app, "settings-convoy-alerts").tap()
+        /* Bring the row fully into view first: a tap that has to scroll it in can land twice
+         * (XCUITest retries), opening the page twice — the switch tapped is then the hidden one. */
+        let entry = any(app, "settings-convoy-alerts")
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.scrollIntoView(in: app, margin: 160)
+        entry.tap()
         let toggle = any(app, "rules.stop")
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         XCTAssertTrue(any(app, "rules.stop.minutes").exists)

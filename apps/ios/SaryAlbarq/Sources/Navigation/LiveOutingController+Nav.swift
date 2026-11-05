@@ -270,6 +270,9 @@ extension LiveOutingController {
         let name = parts.count > 2 ? parts[2] : nil
         let delay = arg("-SaryNavDelay").flatMap(Double.init) ?? 4
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            /* On a clean simulator the first fix can come late (the permission prompt): wait for it
+             * rather than be refused with «ننتظر أول قراءة من GPS». */
+            self?.navWhenFixIn(tries: 80) { [weak self] in
             guard let self else { return }
             self.navigate(NavTargets.point(LngLat(lng: lng, lat: lat), name: name))
             guard args.contains("-SaryNavStart") || arg("-SaryNavState") != nil else { return }
@@ -282,7 +285,13 @@ extension LiveOutingController {
                     if let st = arg("-SaryNavState") { self.navFreeze(st) } else { self.startNav() }
                 }
             }
+            }
         }
+    }
+
+    private func navWhenFixIn(tries: Int, _ go: @escaping () -> Void) {
+        if location.lastFix != nil || tries <= 0 { return go() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.navWhenFixIn(tries: tries - 1, go) }
     }
 
     private func navWhenRoutesIn(tries: Int, _ go: @escaping () -> Void) {

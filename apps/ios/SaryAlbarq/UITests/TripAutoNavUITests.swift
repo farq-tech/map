@@ -29,6 +29,7 @@ final class TripAutoNavUITests: XCTestCase {
             return false
         }
         app.launch()
+        app.allowLocationIfAsked()
         /* The reinstall resets the location permission: answer iOS's prompt directly, whenever it shows. */
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deadline = Date().addingTimeInterval(45)

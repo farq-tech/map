@@ -20,6 +20,7 @@ final class FollowCameraUITests: XCTestCase {
             return false
         }
         app.launch()
+        app.allowLocationIfAsked()
         /* The live screen — or, after a slow launch, the guidance already over it (the route
          * options sheet hides the live sheet's summary while it shows). */
         let ids = ["outing-sheet-summary", "nav.options", "nav.banner"]

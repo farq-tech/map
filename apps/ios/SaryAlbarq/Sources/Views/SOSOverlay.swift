@@ -67,6 +67,9 @@ final class SOSOverlayWindow: UIWindow {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Never the key window: keyboard focus, sheets and alerts stay with the app's own window.
+    override var canBecomeKey: Bool { false }
+
     func update(_ m: SOSAnchorView.Model) {
         host.rootView = AnyView(
             ZStack(alignment: .bottomLeading) {

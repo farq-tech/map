@@ -24,6 +24,7 @@ final class NavigationUITests: XCTestCase {
             return false
         }
         app.launch()
+        app.allowLocationIfAsked()
         /* The live screen — or, with `-SaryNavDelay` short and a slow launch, the navigation UI
          * already over it (a presented sheet hides the live sheet's summary). */
         let ids = ["outing-sheet-summary", "nav.options", "nav.banner", "nav.rerouting", "nav.offroad", "nav.arrived", "nav.offroad.note"]
@@ -66,7 +67,7 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(el(app, "nav.options").waitForExistence(timeout: 15), "the route options sheet")
             XCTAssertTrue(el(app, "nav.route.selected").waitForExistence(timeout: 10), "routes listed")
             XCTAssertTrue(app.switches["nav.opt.fastest"].exists || el(app, "nav.opt.fastest").exists)
-            XCTAssertTrue(el(app, "map.navLabel.selected").waitForExistence(timeout: 8), "time/distance on the map")
+            XCTAssertTrue(el(app, "map.navLabel.selected").waitForExistence(timeout: 20), "time/distance on the map")
             XCTAssertTrue(el(app, "map.navLabel").exists, "the alternative too")
             sleep(2)
             shot(app, "nav-options-\(m)")

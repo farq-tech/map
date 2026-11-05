@@ -16,6 +16,9 @@ extension XCUIElement {
         func waitChange() -> Bool {
             XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: timeout) == .completed
         }
+        /* A page still sliding in takes the tap without acting on it: wait until it settles. */
+        _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: self)], timeout: 4)
+        Thread.sleep(forTimeInterval: 0.6)
         let inner = switches.firstMatch
         if inner.exists, inner.frame != frame {
             inner.tap()
@@ -44,6 +47,23 @@ extension XCUIElement {
     func scrollIntoView(in app: XCUIApplication, margin: CGFloat = 140, maxSwipes: Int = 10) {
         for _ in 0..<maxSwipes where !(exists && isHittable && frame.maxY < app.frame.maxY - margin) {
             app.swipeUp()
+        }
+    }
+}
+
+extension XCUIApplication {
+    /// Answers iOS's location prompt if it shows within `seconds` (a clean simulator asks on the
+    /// first launch; the interruption monitor only fires on the next interaction, often too late).
+    func allowLocationIfAsked(within seconds: TimeInterval = 6) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let labels = ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow Once", "السماح مرة واحدة"]
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            for l in labels {
+                let b = springboard.buttons[l]
+                if b.exists { b.tap(); return }
+            }
+            usleep(300_000)
         }
     }
 }
