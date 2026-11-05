@@ -24,6 +24,7 @@ extension LiveOutingController {
         s.upsertAlert = { [weak self] a, ttl in self?.upsertAlert(a, ttl: ttl) }
         s.removeAlert = { [weak self] id in self?.dismissAlert(id) }
         s.toast = { [weak self] t in self?.toast(t) }
+        s.openEnjad = { [weak self] k in self?.openEnjad(k) }
         s.bind(events: session.safetyEvents.eraseToAnyPublisher(),
                viewChanged: session.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
                locationChanged: location.objectWillChange.map { _ in () }.eraseToAnyPublisher(),

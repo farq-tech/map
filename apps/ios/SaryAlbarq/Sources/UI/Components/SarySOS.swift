@@ -125,6 +125,8 @@ struct SaryMySOSStrip: View {
     var imOK: () -> Void = {}
     /// False when the alert went out without a position (I was not sharing): say so, never imply a location.
     var withLocation = true
+    /// «اطلب إنجاد» (nil: not offered).
+    var enjad: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -148,6 +150,18 @@ struct SaryMySOSStrip: View {
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("outing-sos-ok")
+            if let enjad {
+                Button(action: enjad) {
+                    Text("إنجاد").saryText(.callout, weight: .heavy)
+                        .foregroundStyle(p.emergency)
+                        .padding(.horizontal, theme.space(.m))
+                        .frame(minHeight: theme.minTarget)
+                        .background(Capsule().fill(Color.white.opacity(0.85)))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
+                .accessibilityIdentifier("sos-enjad")
+            }
         }
         .foregroundStyle(p.onEmergency)
         .padding(.leading, theme.space(.l))
@@ -155,7 +169,7 @@ struct SaryMySOSStrip: View {
         .padding(.vertical, theme.space(.s))
         .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.emergency))
         .saryShadow(.floating, theme)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }
 

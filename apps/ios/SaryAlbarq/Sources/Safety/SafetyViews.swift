@@ -172,6 +172,8 @@ struct MyStuckStrip: View {
     var now: Date
     var clear: () -> Void
     var busy = false
+    /// «اطلب إنجاد» (nil: not offered).
+    var enjad: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -195,6 +197,18 @@ struct MyStuckStrip: View {
             .buttonStyle(SaryPressStyle())
             .disabled(busy)
             .accessibilityIdentifier("stuck-clear")
+            if let enjad {
+                Button(action: enjad) {
+                    Text("إنجاد").saryText(.callout, weight: .heavy)
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, theme.space(.m))
+                        .frame(minHeight: theme.minTarget)
+                        .background(Capsule().fill(p.emergency))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
+                .accessibilityIdentifier("stuck-enjad")
+            }
         }
         .foregroundStyle(Color.black.opacity(0.85))
         .padding(.leading, theme.space(.l))
@@ -202,7 +216,7 @@ struct MyStuckStrip: View {
         .padding(.vertical, theme.space(.s))
         .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.warning))
         .saryShadow(.floating, theme)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("my-stuck-strip")
     }
 }
@@ -267,6 +281,9 @@ struct SafetySection: View {
                     .buttonStyle(.saryPrimary)
                     .disabled(safety.stuckBusy)
                     .accessibilityIdentifier("sheet-stuck-clear")
+                Button { safety.openEnjad(.stuck) } label: { SaryButtonLabel(title: "اطلب إنجاد (واتساب)", systemImage: "message.fill") }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("sheet-stuck-enjad")
             }
         } else {
             HStack(spacing: theme.space(.m)) {
@@ -485,6 +502,7 @@ struct SafetyPrompts: View {
             Color.clear
                 .confirmationDialog("غرّزت؟", isPresented: $safety.confirmStuck, titleVisibility: .visible) {
                     Button("إيه، غرّزت", role: .destructive) { Task { await safety.reportStuck() } }
+                    Button("اطلب إنجاد (واتساب)") { safety.openEnjad(.stuck) }
                     Button("إلغاء", role: .cancel) {}
                 } message: {
                     Text(safety.isSharingNow()

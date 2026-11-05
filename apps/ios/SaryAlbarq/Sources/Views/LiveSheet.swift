@@ -164,6 +164,11 @@ struct LiveSheet: View {
         case .convoyAlerts:
             ConvoyAlertSettingsView(close: { controller.modal = nil })
                 .presentationDetents([.large])
+        case let .enjad(situation):
+            EnjadSheet(input: controller.enjadInput(situation), online: controller.followOnline,
+                       addPhone: { controller.modal = nil; controller.actions.participantsTab.addMyPhone() },
+                       close: { controller.modal = nil })
+                .presentationDetents([.large])
         case .tracks:
             TracksSheet(controller: controller)
                 .presentationDetents([.medium, .large])

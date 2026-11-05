@@ -325,14 +325,16 @@ private struct LiveTopStack: View {
         VStack(spacing: theme.space(.s)) {
             if case let .active(since) = ui.sos.mine {
                 SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
-                               withLocation: controller.session.displayView?.me?.sos?.fix != nil)
+                               withLocation: controller.session.displayView?.me?.sos?.fix != nil,
+                               enjad: { controller.openEnjad(.emergency) })
             }
             ForEach(ui.sos.incoming.filter(\.acknowledged)) { a in
                 SaryFriendSOSStrip(alert: a, now: ui.now, show: { controller.showSOS(a.id) })
             }
             if let stuck = controller.safety.myStuck {
                 MyStuckStrip(report: stuck, sharing: controller.session.isSharingNow, now: ui.now,
-                             clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy)
+                             clear: { Task { await controller.safety.clearStuck() } }, busy: controller.safety.stuckBusy,
+                             enjad: { controller.openEnjad(.stuck) })
             }
             if exploring {
                 ExploreHeader(layer: controller.mapLayer, bell: bell, bellOpen: controller.bellOpen, hasHistory: !controller.alertHistory.isEmpty,

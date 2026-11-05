@@ -47,6 +47,10 @@
 	</array>
 
 	<!-- Base strings (Arabic, the development language). English in en.lproj/InfoPlist.strings. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه مع أعضاء الطلعة فقط بعد ما تختار «شارك موقعي».</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

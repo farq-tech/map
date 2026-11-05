@@ -56,6 +56,8 @@ final class SafetyController: ObservableObject {
     var upsertAlert: (LiveAlertUI, TimeInterval) -> Void = { _, _ in }
     var removeAlert: (String) -> Void = { _ in }
     var toast: (String) -> Void = { _ in }
+    /// «اطلب إنجاد» (wired by the live screen).
+    var openEnjad: (Enjad.Situation) -> Void = { _ in }
 
     private var bag = Set<AnyCancellable>()
     /// Subscriptions the live controller hangs on this object (released with it).

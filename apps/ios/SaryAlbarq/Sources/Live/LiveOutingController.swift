@@ -47,6 +47,8 @@ enum LiveModal: Identifiable, Equatable {
     case tracks
     /// «تنبيهات القافلة» rules (same screen as Settings).
     case convoyAlerts
+    /// «اطلب إنجاد»: the prefilled help request (the person sends it).
+    case enjad(Enjad.Situation)
 
     var id: String {
         switch self {
@@ -56,6 +58,7 @@ enum LiveModal: Identifiable, Equatable {
         case let .placeEdit(d): return "placeEdit:\(d.id ?? "new"):\(d.point.lat),\(d.point.lng)"
         case .tracks: return "tracks"
         case .convoyAlerts: return "convoyAlerts"
+        case let .enjad(s): return "enjad:\(s.label)"
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
