@@ -239,7 +239,7 @@ final class SunsetWayBackTests: XCTestCase {
         /* Way back 45 min ≥ 60 − 30: warn. */
         let w = SunsetWarning.evaluate(now: now, sunset: sunset, wayBackS: 45 * 60, warned: [])
         XCTAssertEqual(w?.step, 60)
-        XCTAssertEqual(w?.title, "باقي ساعة على المغرب وطريق العودة ٤٥ دقيقة تقريبًا")
+        XCTAssertEqual(w?.title, "باقي ساعة على المغرب وطريق الرجعة ٤٥ دقيقة تقريبًا")
         XCTAssertNil(SunsetWarning.evaluate(now: now, sunset: sunset, wayBackS: 45 * 60, warned: [60]), "once per step")
         XCTAssertNil(SunsetWarning.evaluate(now: now, sunset: sunset, wayBackS: 20 * 60, warned: []), "20 min back with an hour left: no need")
         XCTAssertNil(SunsetWarning.evaluate(now: now, sunset: sunset, wayBackS: nil, warned: []), "no trail: silent")
@@ -248,7 +248,7 @@ final class SunsetWayBackTests: XCTestCase {
         XCTAssertEqual(SunsetWarning.evaluate(now: later, sunset: sunset, wayBackS: 45 * 60, warned: [60])?.step, 45)
         /* After sunset: once, then quiet after 45 min. */
         XCTAssertEqual(SunsetWarning.evaluate(now: sunset.addingTimeInterval(600), sunset: sunset, wayBackS: 45 * 60, warned: [60, 45, 30, 15])?.title,
-                       "غابت الشمس وطريق العودة ٤٥ دقيقة تقريبًا")
+                       "غابت الشمس وطريق الرجعة ٤٥ دقيقة تقريبًا")
         XCTAssertNil(SunsetWarning.evaluate(now: sunset.addingTimeInterval(50 * 60), sunset: sunset, wayBackS: 45 * 60, warned: []))
         XCTAssertEqual(SunsetWarning.step(minutesToSunset: 100), 120)
         XCTAssertEqual(SunsetWarning.step(minutesToSunset: 59.5), 60)
@@ -508,7 +508,7 @@ final class SafetyControllerTests: XCTestCase {
         }
         guard case let .safety(.sunset(title, _))? = alerts["safety:sunset"]?.kind else { return XCTFail("no warning: \(String(describing: safety.wayBackS)) \(String(describing: safety.sunset))") }
         XCTAssertTrue(title.contains("على المغرب"), title)
-        XCTAssertTrue(title.contains("طريق العودة ٥٠ دقيقة"), title)
+        XCTAssertTrue(title.contains("طريق الرجعة ٥٠ دقيقة"), title)
         alerts = [:]
         safety.tick()
         XCTAssertNil(alerts["safety:sunset"], "once per step")

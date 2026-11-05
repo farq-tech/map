@@ -645,8 +645,8 @@ struct BackTrackPanel: View {
 
     private var title: String {
         switch ui.phase {
-        case .waitingFix: return "طريق العودة"
-        case .onTrail: return "طريق العودة"
+        case .waitingFix: return "طريق الرجعة"
+        case .onTrail: return "طريق الرجعة"
         case .offTrack: return "خرجت عن الطريق"
         case .arrived: return "وصلت نقطة البداية"
         }

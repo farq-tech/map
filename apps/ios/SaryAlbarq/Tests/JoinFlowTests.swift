@@ -86,7 +86,7 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertEqual(ShareMemory.joinStatement, JoinCopy.statement, "same line on the creator's last step and «انضم برابط»")
         XCTAssertEqual(JoinCopy.button, "انضم للطلعة")
-        XCTAssertEqual(JoinCopy.needsTitle, "الطلعة تحتاج موقعك عشان أصحابك يشوفونك")
+        XCTAssertEqual(JoinCopy.needsTitle, "الطلعة تحتاج موقعك عشان العيال يشوفونك")
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))
         for t in [JoinCopy.statement, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced)] {
             XCTAssertFalse(t.contains("أوقف"), "no stop switch is promised: \(t)")

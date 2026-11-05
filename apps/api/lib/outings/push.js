@@ -279,7 +279,7 @@ function pushPayloadFor(event, { senderName, outingName } = {}) {
     const line = trimText(event.text || event.message || event.note?.text || '', 200);
     return {
       type: 'sos',
-      title: `🆘 ${who} يطلب المساعدة${where}`,
+      title: `🆘 ${who} يطلب فزعة${where}`,
       body: line || 'افتح الطلعة لترى موقعه على الخريطة.',
       tag: `sary-sos-${event.user_id || 'x'}`,
       ttl: 60 * 60,

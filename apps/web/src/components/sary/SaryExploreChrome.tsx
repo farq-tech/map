@@ -94,7 +94,7 @@ export default function SaryExploreChrome({
 					value={query}
 					onChange={(e) => onQueryChange(e.target.value)}
 					placeholder={isRTL ? "روضة خريم، نفود الثمامة، شعيب…" : "Rawdat Khuraim, Nafud, shaib…"}
-					aria-label={isRTL ? "ابحث عن روضة أو شعيب أو معلم" : "Search for a rawdah, shaib or place"}
+					aria-label={isRTL ? "ابحث عن روضة أو شعيب أو نقرة أو معلم" : "Search for a rawdah, shaib or place"}
 					enterKeyHint="search"
 					data-testid="sary-search"
 				/>

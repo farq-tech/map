@@ -89,8 +89,8 @@ extension AlertQueue {
             switch s {
             case let .friendStuck(f): return (SafetyIcon.stuck, "\(f.name) غرّز")
             case let .sunset(title, _): return ("sunset.fill", title)
-            case .myTimerOverdue: return ("timer", "تأخرت عن موعد العودة")
-            case let .friendTimerOverdue(name, _): return ("timer", "\(name) تأخر عن موعد عودته")
+            case .myTimerOverdue: return ("timer", "تأخرت عن وقت الرجوع")
+            case let .friendTimerOverdue(name, _): return ("timer", "\(name) تأخر عن وقت رجوعه")
             }
         case let .convoy(c): return ("car.2.fill", c.title)
         case let .weather(w): return ("cloud.sun.rain.fill", w.title)

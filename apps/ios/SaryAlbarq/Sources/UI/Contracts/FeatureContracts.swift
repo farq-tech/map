@@ -39,7 +39,7 @@ struct ConvoyAlertUI: Equatable {
     var detail: String {
         let d = SaryFormat.distance(meters: meters)
         switch kind {
-        case .behindTail: return "خلف المؤخرة بـ \(d)"
+        case .behindTail: return "ورا المؤخرة بـ \(d)"
         case .aheadOfLead: return "قدّام المقدمة بـ \(d)"
         case .tailFar: return "بين المقدمة والمؤخرة \(d)"
         case .separated: return "على بعد \(d) من \(otherName ?? leaderTitle)"

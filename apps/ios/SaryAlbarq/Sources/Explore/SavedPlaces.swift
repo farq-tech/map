@@ -37,7 +37,7 @@ enum SavedPlaceIcon: String, Codable, CaseIterable, Identifiable {
         case .pin: return "نقطة"
         case .camp: return "مخيم"
         case .water: return "ماء"
-        case .fuel: return "وقود"
+        case .fuel: return "بنزين"
         case .view: return "إطلالة"
         case .car: return "موقف"
         case .flag: return "علامة"

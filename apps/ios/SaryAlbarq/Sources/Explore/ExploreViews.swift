@@ -239,7 +239,7 @@ struct ExploreLayersSheet: View {
                         SaryRowIcon(systemImage: "mountain.2.fill", color: controller.terrain3D ? p.accent : nil)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("عرض ثلاثي الأبعاد").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
-                            Text("يميل الخريطة ويبرز الجبال والكثبان").saryText(.footnote).foregroundStyle(p.textSecondary)
+                            Text("يميل الخريطة ويبرز الجبال والطعوس").saryText(.footnote).foregroundStyle(p.textSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Text(controller.terrain3D ? "شغّال" : "طافي")
@@ -374,6 +374,7 @@ struct SavedPlacesSheet: View {
                     }
                 } label: { Label("عدّل الاسم والأيقونة", systemImage: "pencil") }
                 Button(role: .destructive) { deleting = place } label: { Label("احذف", systemImage: "trash") }
+                    .accessibilityIdentifier("places.delete")
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 20, weight: .semibold))

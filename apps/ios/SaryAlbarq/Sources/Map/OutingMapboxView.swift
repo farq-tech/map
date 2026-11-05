@@ -254,8 +254,17 @@ struct OutingMapboxView: UIViewRepresentable {
         private var lastCars: [MapMember] = []
         private var link: CADisplayLink?
         private var chrome: UIEdgeInsets = .zero
-        private var roads: [RoadSnap.RoadLine] = []
+        private var roads: [RoadSnap.RoadLine] = [] { didSet { roadsVersion &+= 1 } }
+        /// Bumped with every new road set: a car's cached `RoadSnap.nearby` is valid for one version only.
+        private var roadsVersion = 0
         private var lastRoadRefresh: CFTimeInterval = 0
+        /// The camera of the last road query. The periodic refresh (for a camera that follows a moving car
+        /// and so never goes idle) only re-queries once the camera moved: querying every road of the loaded
+        /// tiles and converting them runs on the main thread, and repeating it for a still camera (exploring,
+        /// parked) kept the main thread busy for nothing — the app never went idle.
+        private var roadsCamera: (center: CLLocationCoordinate2D, zoom: CGFloat)?
+        /// A road query already ran when the map went idle at `roadsCamera` (tiles there are loaded).
+        private var idleQueried = false
         private var roadQuery: Cancelable?
         private var tapInteraction: Cancelable?
         let waypointPins = WaypointPins()
@@ -329,6 +338,10 @@ struct OutingMapboxView: UIViewRepresentable {
             var heading: Double?
             var anchor: LngLat
             let matcher = RoadSnap.Matcher()
+            /// `RoadSnap.nearby` for `nearAt` under road set `nearVersion` (reused while neither changed).
+            var near: [RoadSnap.RoadLine] = []
+            var nearAt: LngLat?
+            var nearVersion = -1
             var model = false
             /// Drawn grey (the fix is not live).
             var greyed = false
@@ -363,9 +376,12 @@ struct OutingMapboxView: UIViewRepresentable {
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &cancelables)
             /* Road tiles arrive as the camera settles: refresh the street lines cars are matched to. */
             map.mapboxMap.onMapIdle.observe { [weak self] _ in
-                self?.reportCenter(force: true)
-                self?.refreshRoads()
-                self?.refreshWaterways()
+                guard let self else { return }
+                self.reportCenter(force: true)
+                /* Once per camera position (the map goes idle again after every layer update). */
+                guard self.roadsCameraMoved() || !self.idleQueried else { return }
+                self.refreshRoads(idle: true)
+                self.refreshWaterways()
             }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 self?.layoutChips()
@@ -480,6 +496,9 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let map else { return }
             styleReady = true
             addedModels.removeAll()
+            /* A new style: query its roads again even if the camera did not move. */
+            roadsCamera = nil
+            idleQueried = false
             let m: MapboxMap = map.mapboxMap!
             /* Same Standard config as the web's applyBasemap() for the outing map; labels per `SatelliteLabels`. */
             try? m.setStyleImportConfigProperty(for: "basemap", config: "show3dObjects", value: true)
@@ -648,9 +667,12 @@ struct OutingMapboxView: UIViewRepresentable {
             }
         }
 
-        private func refreshRoads() {
+        private func refreshRoads(idle: Bool = false) {
             guard styleReady, let m = map?.mapboxMap else { return }
             roadQuery?.cancel()
+            if roadsCameraMoved() { idleQueried = false }
+            if idle { idleQueried = true }
+            roadsCamera = (m.cameraState.center, m.cameraState.zoom)
             roadQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["road"], filter: RoadSnap.drivableFilter)) { [weak self] result in
                 guard let self, case let .success(feats) = result else { return }
                 var lines: [RoadSnap.RoadLine] = []
@@ -675,7 +697,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     }
                 }
                 let changed = lines.count != self.roads.count || lines.first?.coords != self.roads.first?.coords
-                self.roads = lines
+                if lines != self.roads { self.roads = lines }
                 guard changed else { return }
                 /* A car drawn before its street loaded gets matched now. */
                 for r in self.recs.values where r.matcher.road == nil && !r.matcher.offRoad {
@@ -685,6 +707,15 @@ struct OutingMapboxView: UIViewRepresentable {
             }
         }
 
+        /// True before the first query, or when the camera moved ≥ 30 m or zoomed since the last query.
+        private func roadsCameraMoved() -> Bool {
+            guard let last = roadsCamera, let m = map?.mapboxMap else { return true }
+            let st = m.cameraState
+            if abs(st.zoom - last.zoom) > 0.1 { return true }
+            return Vehicle.distanceMeters(LngLat(lng: last.center.longitude, lat: last.center.latitude),
+                                          LngLat(lng: st.center.longitude, lat: st.center.latitude)) >= 30
+        }
+
         // MARK: cars
 
         func sync(_ cars: [MapMember]) {
@@ -692,7 +723,7 @@ struct OutingMapboxView: UIViewRepresentable {
             guard let map else { return }
             /* While following a moving car the map is never idle: refresh the streets every few seconds too. */
             let t = CACurrentMediaTime()
-            if t - lastRoadRefresh > 3 { lastRoadRefresh = t; refreshRoads() }
+            if t - lastRoadRefresh > 3, roadsCameraMoved() { lastRoadRefresh = t; refreshRoads() }
             applyLight()
             let now = CACurrentMediaTime()
             var seen = Set<String>()
@@ -711,7 +742,12 @@ struct OutingMapboxView: UIViewRepresentable {
                 if v.approximate && !driving {
                     rec.matcher.reset()
                 } else {
-                    matched = rec.matcher.match(raw, RoadSnap.nearby(roads, raw), course: course, speed: v.speedMps, accuracy: v.accuracyM, atMs: v.atMs)
+                    if rec.nearAt != raw || rec.nearVersion != roadsVersion {
+                        rec.near = RoadSnap.nearby(roads, raw)
+                        rec.nearAt = raw
+                        rec.nearVersion = roadsVersion
+                    }
+                    matched = rec.matcher.match(raw, rec.near, course: course, speed: v.speedMps, accuracy: v.accuracyM, atMs: v.atMs)
                     if matched?.key == nil { matched = nil }
                 }
                 let target = matched?.point ?? raw

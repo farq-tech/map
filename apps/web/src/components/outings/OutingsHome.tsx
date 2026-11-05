@@ -38,7 +38,7 @@ export default function OutingsHome() {
 	useSaryChrome();
 	usePageMeta({
 		title: isRTL ? "طلعة مشتركة · سَرى البارق" : "Shared outing · Sary Albarq",
-		description: isRTL ? "أنشئ طلعة، أرسل الرابط لأصحابك، وشوفوا بعض على الخريطة." : "Create an outing, invite friends, and see each other on one map.",
+		description: isRTL ? "أنشئ طلعة، أرسل الرابط للعيال، وشوفوا بعض على الخريطة." : "Create an outing, invite friends, and see each other on one map.",
 		path: "/outings",
 		robots: "noindex",
 	});
@@ -180,7 +180,7 @@ export default function OutingsHome() {
 							</form>
 						) : (
 							<p className="sary-o-note sary-o-identity">
-								{isRTL ? `تظهر لأصحابك باسم «${identity.user.display_name}».` : `Friends will see you as “${identity.user.display_name}”.`}
+								{isRTL ? `تظهر للعيال باسم «${identity.user.display_name}».` : `Friends will see you as “${identity.user.display_name}”.`}
 								<button
 									type="button"
 									className="sary-o-link-btn"

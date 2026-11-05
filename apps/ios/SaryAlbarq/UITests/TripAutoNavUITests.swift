@@ -162,7 +162,7 @@ final class TripAutoNavUITests: XCTestCase {
         let app = launch(Self.on + ["-demoPlanStops", "-SaryAutoNavArrive", "14"])
         let eta = el(app, "nav.banner.eta")
         XCTAssertTrue(eta.waitForExistence(timeout: 15))
-        XCTAssertTrue(eta.label.contains("محطة الوقود"), "the next planned stop first: \(eta.label)")
+        XCTAssertTrue(eta.label.contains("محطة البنزين"), "the next planned stop first: \(eta.label)")
         shot(app, "autonav-3-to-stop")
         XCTAssertTrue(el(app, "nav.arrived.title").waitForExistence(timeout: 20), "«وصلتوا» at the stop")
         shot(app, "autonav-4-at-stop")

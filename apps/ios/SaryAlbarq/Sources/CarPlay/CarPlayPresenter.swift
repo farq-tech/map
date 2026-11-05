@@ -236,7 +236,7 @@ enum CarPlayTripKind: String, Equatable, CaseIterable {
 
     var title: String {
         switch self {
-        case .wayBack: return "طريق العودة"
+        case .wayBack: return "طريق الرجعة"
         case .rally: return "إلى نقطة التجمع"
         case .destination: return "إلى الوجهة"
         }
@@ -292,7 +292,7 @@ enum CarPlayGuide {
         let rel = relative(st.bearing, course: course)
         let dir = Geo.directionLabel(st.bearing)
         if st.arrived {
-            return CarPlayGuidance(kind: .wayBack, phase: .arrived, instruction: "وصلت نقطة البداية", detail: "انتهى طريق العودة",
+            return CarPlayGuidance(kind: .wayBack, phase: .arrived, instruction: "وصلت نقطة البداية", detail: "انتهى طريق الرجعة",
                                    remainingM: 0, arrowDegrees: 0, bearing: nil, offsetM: st.offsetM, symbol: "flag.checkered")
         }
         if st.offTrack {
@@ -368,7 +368,7 @@ enum CarPlayAlerts {
                 guard let s = m.sos else { continue }
                 let row = rows[m.user_id]
                 out.append(CarPlayAlert(id: LiveOutingPresenter.sosKey(m.user_id, s), kind: .friendSOS,
-                                        title: "\(CarPlayPresenter.shortName(m.display_name)) يطلب نجدة",
+                                        title: "\(CarPlayPresenter.shortName(m.display_name)) يطلب فزعة",
                                         subtitle: sosSubtitle(m, s, i: i, view: v), memberId: m.user_id, phone: row?.phone,
                                         position: row?.position, since: LiveOutingPresenter.deviceDate(s.at, view: v) ?? i.now))
             }

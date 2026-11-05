@@ -221,7 +221,7 @@ final class SaryAlbarqUITests: XCTestCase {
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the calm screen")
-        XCTAssertEqual(needs.label, "الطلعة تحتاج موقعك عشان أصحابك يشوفونك")
+        XCTAssertEqual(needs.label, "الطلعة تحتاج موقعك عشان العيال يشوفونك")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
         XCTAssertTrue(app.buttons["join.cancel"].exists)
         XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined: no live map")

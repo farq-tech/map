@@ -45,7 +45,8 @@ enum LiveActionCatalog {
     static func groups(_ s: State) -> [LiveActionGroup] {
         let all = [
             LiveActionGroup(title: "الطريق", items: [
-                .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate"),
+                .init(id: "navigate", title: "ملاحة", systemImage: SaryIcon.directions, accessibilityID: "outing-navigate",
+                      subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع"),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
                 .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق الرجعة" : "طريق الرجعة", systemImage: SaryIcon.backTrack,
                       accessibilityID: "outing-backtrack", isActive: s.backTracking),

@@ -8,6 +8,10 @@ final class EnjadUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryDrive", "0"]
         app.launch()
+        /* The launch intro covers the map while the controls under it are already in the tree: a tap on
+           «+» then lands on the intro (or, as it fades, on the map, which opens «نبذة المكان»). Wait it out. */
+        let intro = app.descendants(matching: .any)["intro"]
+        if intro.waitForExistence(timeout: 3) { XCTAssertTrue(intro.waitForNonExistence(timeout: 20), "the intro ends") }
         return app
     }
 
@@ -37,7 +41,9 @@ final class EnjadUITests: XCTestCase {
 
     func testFromMyStuckStrip() {
         let app = launch()
-        any(app, "outing-actions").tap()
+        let more = any(app, "outing-actions")
+        XCTAssertTrue(more.waitForExistence(timeout: 20))
+        more.tap()
         XCTAssertTrue(any(app, "outing-stuck").waitForExistence(timeout: 5))
         any(app, "outing-stuck").tap()
         app.buttons["إيه، غرّزت"].tap()

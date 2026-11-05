@@ -259,7 +259,7 @@ struct SaryFriendSOSAlert: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
-                    Text("يحتاج مساعدة · \(SaryFormat.elapsed(since: alert.since, now: now))")
+                    Text("يحتاج فزعة · \(SaryFormat.elapsed(since: alert.since, now: now))")
                         .saryText(.title2, weight: .medium)
                         .opacity(0.92)
                 }

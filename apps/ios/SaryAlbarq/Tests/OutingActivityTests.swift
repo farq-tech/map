@@ -164,7 +164,7 @@ final class OutingActivityTests: XCTestCase {
     func testEmergencyBannerTakesPriorityOverConnectionProblems() {
         let sos = state { $0.alert = .init(kind: .sos, name: "نورة", isMe: false, since: now, more: 2); $0.online = false; $0.gpsOK = false }
         let d = OutingActivityDisplay.make(sos, now: now)
-        XCTAssertEqual(d.banner, .init(text: "طوارئ: نورة يطلب المساعدة +٢", tone: .emergency))
+        XCTAssertEqual(d.banner, .init(text: "طوارئ: نورة يطلب فزعة +٢", tone: .emergency))
         XCTAssertTrue(d.showAlertDot)
         XCTAssertEqual(d.minimalText, "!", "the SOS mark wins the minimal island")
         XCTAssertEqual(OutingActivityDisplay.banner(state { $0.alert = .init(kind: .sos, name: "", isMe: true, since: now) })?.text, "طوارئك مفعّلة")

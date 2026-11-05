@@ -134,7 +134,14 @@ final class LiveOutingController: ObservableObject {
     /// «تتبعني» / «باتجاهي» and «رجّعني للتوجيه» (see `LiveOutingController+FollowCamera.swift`).
     @Published var followCam = FollowCameraState()
     var lastGuidanceOn = false
-    var followCamTimer: Timer?
+    /// The one-second auto-recenter check (main run loop). `nonisolated(unsafe)` only so `deinit`
+    /// can invalidate it: the timer holds the controller weakly, so without this it kept firing
+    /// (doing nothing) after the outing screen went away.
+    nonisolated(unsafe) var followCamTimer: Timer?
+    deinit {
+        guard let t = followCamTimer else { return }
+        if Thread.isMainThread { t.invalidate() } else { DispatchQueue.main.async { t.invalidate() } }
+    }
     /// The camera follows my car (either mode). Setting false hands the camera back
     /// (keeping «رجّعني للتوجيه» while guidance is on); true turns «تتبعني» on.
     var following: Bool {
@@ -1130,7 +1137,7 @@ final class LiveOutingController: ObservableObject {
                 stationList = got
                 let rows = got.map { s -> StationUI in
                     let p = Geo.LatLng(lat: s.lat, lng: s.lng)
-                    return StationUI(id: s.id, name: s.name ?? s.brand ?? "محطة وقود", distanceMeters: Geo.haversineMeters(origin, p),
+                    return StationUI(id: s.id, name: s.name ?? s.brand ?? "محطة بنزين", distanceMeters: Geo.haversineMeters(origin, p),
                                      bearingDegrees: LiveOutingPresenter.relative(Geo.bearingDeg(origin, p), mapBearing: overlay.projection.bearing),
                                      detail: s.brand.flatMap { $0 == s.name ? nil : $0 })
                 }.sorted { $0.distanceMeters < $1.distanceMeters }.prefix(6)
@@ -1145,7 +1152,7 @@ final class LiveOutingController: ObservableObject {
         NearestStationsActions(
             go: { [weak self] id in
                 guard let s = self?.stationList.first(where: { $0.id == id }) else { return }
-                Directions.open(lat: s.lat, lng: s.lng, name: s.name ?? "محطة وقود")
+                Directions.open(lat: s.lat, lng: s.lng, name: s.name ?? "محطة بنزين")
             },
             show: { [weak self] id in
                 guard let self, let s = self.stationList.first(where: { $0.id == id }) else { return }

@@ -198,14 +198,14 @@ final class CarPlayCoordinator: NSObject {
 
     private func updateButtons(_ i: CarPlayInput) {
         let mySOS = i.view?.me?.sos != nil
-        let leading = tripKind != nil ? "إنهاء" : "طريق العودة"
+        let leading = tripKind != nil ? "إنهاء" : "طريق الرجعة"
         let sos = mySOS ? "ألغِ النداء" : "نداء"
         let key = "\(leading)|\(sos)"
         guard key != buttonKey else { return }
         buttonKey = key
         mapTemplate.leadingNavigationBarButtons = [
-            tripKind != nil ? bar("إنهاء") { $0.endTrip(cancelled: true) } : bar("طريق العودة") { $0.startTrip(.wayBack) },
-            bar("الأصحاب") { $0.showMembers() },
+            tripKind != nil ? bar("إنهاء") { $0.endTrip(cancelled: true) } : bar("طريق الرجعة") { $0.startTrip(.wayBack) },
+            bar("العيال") { $0.showMembers() },
         ]
         mapTemplate.trailingNavigationBarButtons = [
             bar("إلى…") { $0.showTrips() },
@@ -292,7 +292,7 @@ final class CarPlayCoordinator: NSObject {
 
     private func showMembers() {
         guard let s = session else { return }
-        let t = CPListTemplate(title: "الأصحاب", sections: memberSections(input(s)))
+        let t = CPListTemplate(title: "العيال", sections: memberSections(input(s)))
         t.emptyViewTitleVariants = ["ما فيه أحد غيرك في الطلعة"]
         membersTemplate = t
         interface.pushTemplate(t, animated: true, completion: nil)
@@ -402,7 +402,7 @@ final class CarPlayCoordinator: NSObject {
         }
         var tools = [pan]
         if let src = CarPlayFeatures.source, src.carPlayStuckReportSupported {
-            let stuck = CPListItem(text: "غرّزت", detailText: "يوصل للأصحاب أنك تحتاج سحب", image: UIImage(systemName: "exclamationmark.triangle.fill"))
+            let stuck = CPListItem(text: "غرّزت", detailText: "يوصل للعيال إنك تحتاج سحبة", image: UIImage(systemName: "exclamationmark.triangle.fill"))
             stuck.handler = { [weak self] _, done in
                 MainActor.assumeIsolated { self?.confirmStuck() }
                 done()
@@ -427,7 +427,7 @@ final class CarPlayCoordinator: NSObject {
         let no = CPAlertAction(title: "لا", style: .cancel) { [weak self] _ in
             MainActor.assumeIsolated { self?.interface.dismissTemplate(animated: true, completion: nil) }
         }
-        interface.presentTemplate(CPAlertTemplate(titleVariants: ["تبلّغ الأصحاب أنك غرّزت؟"], actions: [yes, no]), animated: true, completion: nil)
+        interface.presentTemplate(CPAlertTemplate(titleVariants: ["تبلّغ العيال إنك غرّزت؟"], actions: [yes, no]), animated: true, completion: nil)
     }
 
     private func targetFor(_ kind: CarPlayTripKind, _ i: CarPlayInput) -> (position: LngLat, label: String)? {

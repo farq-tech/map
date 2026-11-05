@@ -108,7 +108,7 @@ enum JoinCopy {
     static let button = "انضم للطلعة"
     /// The honest line under the button (also on the creator's last step and «انضم برابط»).
     static let statement = "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
-    static let needsTitle = "الطلعة تحتاج موقعك عشان أصحابك يشوفونك"
+    static let needsTitle = "الطلعة تحتاج موقعك عشان العيال يشوفونك"
 
     static func needsMessage(_ p: JoinPermission) -> String {
         switch p {

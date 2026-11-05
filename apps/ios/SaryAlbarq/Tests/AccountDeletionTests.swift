@@ -116,6 +116,21 @@ final class AccountDeletionTests: XCTestCase {
         }
     }
 
+    func testLocalWipeRemovesEverySaryKeyButDeviceSettings() {
+        let d = UserDefaults(suiteName: "acct-all-\(UUID().uuidString)")!
+        let personal = ["sary.ptt.channel.o1", "sary.ptt.muted.o1", "sary.live.context.v1", "sary.position",
+                        "sary.groupAudio.state", "sary.media.state", "sary.outings.notify.v1", "sary.plan.localDestination.v1.o1",
+                        "sary.someFutureKey.v9"]
+        let kept = ["sary.appearance.v1", "sary.intro.lastShown", "sary.debug.apiBase", "sary.dev.unlocked"]
+        for k in personal + kept { d.set("x", forKey: k) }
+        d.set("other", forKey: "notSary.key")
+        LocalAccountData.wipe(defaults: d)
+        for k in personal { XCTAssertNil(d.object(forKey: k), k) }
+        for k in kept { XCTAssertEqual(d.string(forKey: k), "x", k) }
+        XCTAssertEqual(d.string(forKey: "notSary.key"), "other")
+        XCTAssertTrue(LocalAccountData.allAccountKeys(in: d).isEmpty)
+    }
+
     func testForgetDeviceStopsApnsWithoutCallingTheServer() async {
         final class Backend: PushBackend {
             var unregistered: [String] = []

@@ -21,7 +21,7 @@ struct SplashView: View {
                         Text("سَرى البارق")
                             .font(.sary(34, .heavy))
                             .foregroundStyle(Color(rgb: 0xF4EFE6))
-                        Text("طلعات البر مع أصحابك")
+                        Text("طلعات البر مع العيال")
                             .saryText(.callout)
                             .foregroundStyle(Color(rgb: 0xB9AE9C))
                     }
@@ -159,7 +159,7 @@ private struct IntroStep: View {
                 .font(.sary(36, .heavy))
                 .foregroundStyle(p.textPrimary)
                 .padding(.top, theme.space(.xl))
-            Text("شوف أصحابك على الخريطة في الطلعة، وكل سيارة بلونها.")
+            Text("شوف العيال على الخريطة في الطلعة، وكل سيارة بلونها.")
                 .saryText(.title2, weight: .medium)
                 .foregroundStyle(p.textSecondary)
                 .multilineTextAlignment(.center)
@@ -215,7 +215,7 @@ struct ProfileStep: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let phoneOK = phone.trimmingCharacters(in: .whitespaces).isEmpty || SaryFormat.normalizeSaudiMobile(phone) != nil
-        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه أصحابك في الطلعة فقط", back: back) {
+        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه العيال في الطلعة فقط", back: back) {
             VStack(spacing: theme.space(.s)) {
                 PhotosPicker(selection: $item, matching: .images) {
                     ZStack(alignment: .bottomTrailing) {
@@ -293,7 +293,7 @@ private struct LocationStep: View {
                 .foregroundStyle(p.textPrimary)
                 .multilineTextAlignment(.center)
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                line("map.fill", "لنعرض مكانك ومسافة أصحابك عنك على الخريطة.")
+                line("map.fill", "لنعرض مكانك ومسافة العيال عنك على الخريطة.")
                 line("hand.raised.fill", "لا يُرسل موقعك لأحد إلا لأعضاء طلعة انضممت لها، تلقائيًا ما دامت شغّالة؛ لإيقافه غادر الطلعة.")
                 line("lock.iphone", "بإذن «دائمًا» تستمر المشاركة والشاشة مقفلة حتى تغادر أو تنتهي الطلعة، ويظهر مؤشر الموقع الأزرق. خارج الطلعات لا نتتبعك أبدًا.")
                 line("trash", "الخادم يحتفظ بآخر موقع لك فقط، ويحذفه إذا غادرت الطلعة أو انتهت.")

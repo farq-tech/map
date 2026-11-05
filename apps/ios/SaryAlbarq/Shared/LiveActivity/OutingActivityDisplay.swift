@@ -144,7 +144,7 @@ struct OutingActivityDisplay: Equatable {
             let text: String
             switch (a.kind, a.isMe) {
             case (.sos, true): text = "طوارئك مفعّلة"
-            case (.sos, false): text = "طوارئ: \(a.name) يطلب المساعدة"
+            case (.sos, false): text = "طوارئ: \(a.name) يطلب فزعة"
             case (.stuck, true): text = "أبلغت المجموعة أنك غرّزت"
             case (.stuck, false): text = "\(a.name) غرّز"
             }

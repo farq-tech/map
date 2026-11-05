@@ -10,7 +10,7 @@ import { loadIdentity, OutingApiError } from "./api";
 
 export const CHAT_TEXT_MAX = 1000;
 /** The note presets, offered as quick replies (the server sends its own list too). */
-export const QUICK_REPLIES = ["بوقف", "محطة بنزين", "انتظروني", "تعبت نرتاح", "وصلت"];
+export const QUICK_REPLIES = ["بوقف", "محطة بنزين", "اصبروا لي", "تعبت، نوقف نرتاح", "وصلت"];
 
 export type ChatPoint = { lat: number; lng: number; label: string | null };
 

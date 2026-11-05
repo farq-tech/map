@@ -156,7 +156,7 @@ struct ChatDraft: Codable, Equatable, Identifiable {
 enum ChatRules {
     static let textMax = 1000
     /// The note presets, offered as quick replies (the server sends its own list too).
-    static let quickReplies = ["بوقف", "محطة بنزين", "انتظروني", "تعبت نرتاح", "وصلت"]
+    static let quickReplies = ["بوقف", "محطة بنزين", "اصبروا لي", "تعبت، نوقف نرتاح", "وصلت"]
     /// Socket frames are capped at 4 KB on the server; bigger messages go over HTTP.
     static let maxSocketBytes = 3_500
     /// Server answers that will never succeed on retry: drop from the outbox, show why.

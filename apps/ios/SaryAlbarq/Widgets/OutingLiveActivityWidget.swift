@@ -54,7 +54,7 @@ struct OutingLiveActivityWidget: Widget {
             let p = Ink.island
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    IslandMetric(icon: "arrow.uturn.backward", value: d.backShort, caption: "طريق العودة", tint: p.accent, dim: d.isStale)
+                    IslandMetric(icon: "arrow.uturn.backward", value: d.backShort, caption: "طريق الرجعة", tint: p.accent, dim: d.isStale)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     IslandMetric(icon: "dot.radiowaves.left.and.right", value: ActivityFormat.number(context.state.liveCount), caption: "مباشر", tint: d.isStale ? p.stale : p.live, dim: d.isStale)
@@ -132,7 +132,7 @@ private struct LockScreenView: View {
             if let n = d.navLine { NavRow(line: n, symbol: d.navSymbol, palette: p, compact: false) }
             if let line = d.tripLine { TripRow(line: line, fraction: d.tripFraction ?? 0, palette: p, dim: d.isStale, compact: false) }
             HStack(alignment: .top, spacing: 10) {
-                Metric(icon: "arrow.uturn.backward", title: "طريق العودة", value: d.backText ?? "—", tint: p.accent, palette: p, dim: d.isStale)
+                Metric(icon: "arrow.uturn.backward", title: "طريق الرجعة", value: d.backText ?? "—", tint: p.accent, palette: p, dim: d.isStale)
                 Metric(icon: "dot.radiowaves.left.and.right", title: "الأعضاء", value: d.liveLine, tint: d.isStale ? p.stale : p.live, palette: p, dim: d.isStale)
                 Metric(icon: "arrow.up.and.down.and.arrow.left.and.right", title: "الأبعد", value: d.farthestLine ?? "—", tint: p.secondary, palette: p, dim: d.isStale)
             }

@@ -92,9 +92,22 @@ enum LocalAccountData {
         ] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys + FollowCameraPrefs.keys
     }
 
+    /// Device settings that are not about the person and survive a wipe: the appearance, the intro,
+    /// and developer switches. Every other `sary.` key is wiped, including ones added later.
+    static let keptPrefixes = ["sary.appearance", "sary.intro.", "sary.debug.", "sary.dev."]
+
+    /// Every `sary.` key in `defaults` except the kept device settings.
+    static func allAccountKeys(in defaults: UserDefaults) -> [String] {
+        defaults.dictionaryRepresentation().keys.filter { k in
+            k.hasPrefix("sary.") && !keptPrefixes.contains { k.hasPrefix($0) }
+        }
+    }
+
     static func wipe(defaults: UserDefaults = .standard) {
         IdentityStore.save(nil)
         for k in keys { defaults.removeObject(forKey: k) }
+        /* Per-outing and late-added keys («sary.ptt.channel.<id>», «sary.live.context.v1», …) go too. */
+        for k in allAccountKeys(in: defaults) { defaults.removeObject(forKey: k) }
         WaypointCache.wipeAll()
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)

@@ -102,17 +102,17 @@ final class StoryPrivacyTests: XCTestCase {
 
     func testNamesHiddenByDefault() {
         var f = StoryFixtures.facts()
-        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع ٥ رفاق")
+        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع ٥ من العيال")
         XCTAssertFalse(StoryRenderer.companionsLine(f, show: false).contains("سلطان"))
         XCTAssertEqual(StoryRenderer.companionsLine(f, show: true), "مع أبو فهد، سلطان، نورة واثنين آخرين")
         f.companionNames = ["سلطان", "نورة"]
         XCTAssertEqual(StoryRenderer.companionsLine(f, show: true), "مع سلطان ونورة")
         f.memberCount = 2
-        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع رفيق واحد")
+        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع واحد من العيال")
         f.memberCount = 1
         XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "طلعة فردية")
         f.memberCount = 14
-        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع ١٣ رفيقًا")
+        XCTAssertEqual(StoryRenderer.companionsLine(f, show: false), "مع ١٣ من العيال")
     }
 
     func testTrailFileDecoding() throws {

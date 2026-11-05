@@ -71,7 +71,7 @@ export function aroundLines(summary: AroundSummary, isRTL: boolean): string[] {
 				: `${summary.places} place${summary.places === 1 ? "" : "s"} around you`,
 		);
 	}
-	if (summary.nearestWell) lines.push(near(isRTL ? "أقرب بئر" : "Nearest well", summary.nearestWell, isRTL));
+	if (summary.nearestWell) lines.push(near(isRTL ? "أقرب قليب" : "Nearest well", summary.nearestWell, isRTL));
 	if (summary.nearestRawdah) lines.push(near(isRTL ? "أقرب روضة" : "Nearest rawdah", summary.nearestRawdah, isRTL));
 	if (summary.nearestShaib) lines.push(near(isRTL ? "أقرب شعيب" : "Nearest shaib", summary.nearestShaib, isRTL));
 	return lines;

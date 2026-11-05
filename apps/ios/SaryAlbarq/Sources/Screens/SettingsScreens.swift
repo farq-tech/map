@@ -41,7 +41,7 @@ struct ProfileView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            SaryTextField(title: "الاسم", placeholder: "اسمك كما يراه أصحابك", text: $name, id: "profile.name", maxLength: ServerRules.nameMax)
+            SaryTextField(title: "الاسم", placeholder: "اسمك كما يراه العيال", text: $name, id: "profile.name", maxLength: ServerRules.nameMax)
             SaryTextField(title: "رقم الجوال (اختياري)", placeholder: "05XXXXXXXX", text: $phone, id: "profile.phone", keyboard: .phonePad, maxLength: 14,
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
                           help: "يظهر لأعضاء طلعاتك فقط (اتصال وواتساب). امسحه واحفظ لتحذفه من الخادم.")
@@ -140,7 +140,7 @@ struct SettingsView: View {
                 SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
                            id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
-            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الأصحاب بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت العيال بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
                 SaryToggleRow(title: "أصوات اللاسلكي", subtitle: "كشش وتنبيه البدء والانتهاء", systemImage: "antenna.radiowaves.left.and.right",
                               isOn: $radioSounds, id: "settings.radioSounds")
                 SaryDivider()
@@ -222,7 +222,7 @@ struct PrivacySettingsView: View {
                     fact("lock.iphone", "بإذن «دائمًا» تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى تغادر، أو يزيلك أمير الرحلة، أو تتوقف الطلعة أو تنتهي. لا نطلب «دائمًا» عند الانضمام؛ نعرضه لاحقًا إذا قفلت الشاشة أثناء الطلعة.")
                     fact("iphone", "بإذن «أثناء الاستخدام» فقط: تُرسل والتطبيق مفتوح أمامك، وتتوقف إذا قفلت الشاشة.")
                     fact("xmark.app", "إذا قفلت التطبيق من قائمة التطبيقات، قد لا يعيد iOS فتحه، فتتوقف المشاركة حتى تفتحه.")
-                    fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل لأصحابك ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
+                    fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل للعيال ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
                     fact("person.wave.2.fill", "«انقطع الإرسال»: إذا كنت تشارك وتوقف وصول موقعك ١٠ دقائق، يخبر الخادم أعضاء الطلعة بذلك مع آخر موقع معروف لك.")
                     fact("person.2.fill", "يراه أعضاء تلك الطلعة فقط، لا أحد غيرهم.")
                     fact(SaryNearbyMark.icon, "إذا انقطع الإنترنت وأنت تشارك، يتبادل جوالك موقعك مباشرة مع جوالات أعضاء الطلعة القريبين (بلوتوث وواي فاي مباشر)، مشفّرًا ولا يقرؤه غيرهم، ويمرّر لهم آخر مواقع الباقين بعمرها الحقيقي. يتوقف مع توقف المشاركة، ولا يُرسل للخادم شيء مما يصل بهذه الطريقة.")
@@ -338,7 +338,7 @@ struct DeleteAccountView: View {
             SarySection(title: "يبقى") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("arrow.down.circle.fill", "الخرائط التي نزّلتها بلا إنترنت: صور خرائط فقط، تبقى على جوالك وتحذفها من «الخرائط بلا إنترنت».")
-                    fact("person.3.fill", "طلعات أصحابك وملخصاتهم تبقى لهم، ولا يظهر اسمك فيها بعد الآن.")
+                    fact("person.3.fill", "طلعات العيال وملخصاتهم تبقى لهم، ولا يظهر اسمك فيها بعد الآن.")
                     fact("paintbrush.fill", "إعدادات المظهر على هذا الجهاز.")
                 }
                 .padding(.vertical, theme.space(.s))
@@ -428,7 +428,7 @@ struct NotificationSettingsView: View {
                     kind(SaryIcon.sos, p.emergency, "طوارئ", "تنبيه عاجل بصوت، حتى في وضع التركيز إذا سمحت بالتنبيهات العاجلة. يُستبدل بـ«أنا بخير» إذا انتهت.")
                     kind(SaryIcon.note, nil, "رسالة فوق السيارة", "بهدوء، بدون صوت.")
                     kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل دردشة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
-                    kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت أصحابك مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
+                    kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت العيال مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }

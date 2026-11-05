@@ -89,7 +89,7 @@ final class ChatTests: XCTestCase {
         XCTAssertEqual(ChatRules.check(String(repeating: "🚙", count: 1000)).isOK, true, "code points, like the server")
         XCTAssertFalse(ChatRules.canType(moving: true), "«وقّف عشان تكتب»")
         XCTAssertTrue(ChatRules.canType(moving: false))
-        XCTAssertEqual(ChatRules.quickReplies.prefix(3), ["بوقف", "محطة بنزين", "انتظروني"])
+        XCTAssertEqual(ChatRules.quickReplies.prefix(3), ["بوقف", "محطة بنزين", "اصبروا لي"])
         XCTAssertEqual(ChatRules.deletedLabel(Self.message(1, from: Self.fahd).deletedBy("leader")), "حذفها أمير الرحلة")
         let id = ChatRules.newClientId()
         XCTAssertTrue(id.range(of: "^[A-Za-z0-9_.:-]{1,64}$", options: .regularExpression) != nil, "a client_id the server accepts")

@@ -66,13 +66,13 @@ export function NearestServices({ people, isRTL, onShare, onClose, busy }: { peo
 				{motion && items === null && !error ? <p className="sary-o-note">…</p> : null}
 				{items ? (
 					<>
-						<h3>{isRTL ? "⛽ محطات الوقود" : "⛽ Fuel"}</h3>
+						<h3>{isRTL ? "⛽ محطات البنزين" : "⛽ Fuel"}</h3>
 						{fuel.length ? (
 							<ResultList rows={fuel} isRTL={isRTL} onShare={onShare} busy={busy} />
 						) : (
 							<p className="sary-o-note" data-testid="outing-nearest-nofuel">
 								{isRTL
-									? "لا توجد محطة وقود مسجّلة في بيانات OSM المحمّلة قرب المجموعة. لا نخمّن مكانها."
+									? "لا توجد محطة بنزين مسجّلة في بيانات OSM المحمّلة قرب المجموعة. لا نخمّن مكانها."
 									: "No fuel station in the loaded OSM data near the group. We don't guess."}
 							</p>
 						)}
@@ -99,11 +99,11 @@ function ResultList({ rows, isRTL, onShare, busy }: { rows: Ranked[]; isRTL: boo
 	return (
 		<ul className="sary-o-nearest">
 			{rows.map((r) => {
-				const where = r.ahead == null ? "" : r.ahead ? (isRTL ? "قدّامكم" : "ahead") : isRTL ? "ليس في طريقكم" : "off your way";
+				const where = r.ahead == null ? "" : r.ahead ? (isRTL ? "قدّامكم" : "ahead") : isRTL ? "مو على طريقكم" : "off your way";
 				return (
 					<li key={r.id} data-testid="outing-nearest-row" data-kind={r.kind} data-ahead={r.ahead == null ? "na" : r.ahead ? "1" : "0"}>
 						<div>
-							<strong>{r.name || r.brand || (r.kind === "fuel" ? (isRTL ? "محطة بلا اسم في OSM" : "Unnamed station (OSM)") : isRTL ? "بئر بلا اسم" : "Unnamed well")}</strong>
+							<strong>{r.name || r.brand || (r.kind === "fuel" ? (isRTL ? "محطة بلا اسم في OSM" : "Unnamed station (OSM)") : isRTL ? "قليب بلا اسم" : "Unnamed well")}</strong>
 							<span>
 								{formatKm(r.distanceM, isRTL)} · {directionLabel(r.bearing, isRTL)}
 								{where ? ` · ${where}` : ""}

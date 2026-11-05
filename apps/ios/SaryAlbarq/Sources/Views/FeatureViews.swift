@@ -287,7 +287,7 @@ struct WaypointComposer: View {
                 }
                 SaryTextField(title: "الاسم", placeholder: "مثل: مخيم الشباب", text: Binding(get: { title }, set: { title = $0; titleEdited = true }),
                               id: "waypoint.title", maxLength: WaypointRules.titleMax)
-                SaryTextField(title: "ملاحظة (اختياري)", placeholder: "مثل: نزّل الهواء قبلها", text: $note, id: "waypoint.note", maxLength: WaypointRules.noteMax)
+                SaryTextField(title: "ملاحظة (اختياري)", placeholder: "مثل: نفّس كفراتك قبلها", text: $note, id: "waypoint.note", maxLength: WaypointRules.noteMax)
                 photoRow
                 if let e = features.composeError {
                     SaryInlineMessage(text: e, tone: .error).accessibilityIdentifier("waypoint.error")
