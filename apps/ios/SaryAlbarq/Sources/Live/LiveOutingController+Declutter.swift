@@ -63,6 +63,7 @@ extension LiveOutingController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.modal = .plan(.editor) }
             }
         case "note": a.openNoteComposer()
+        case "chat": if chat.isAvailable { openChat() }
         case "stuck": stuckControlTapped()
         case "waypoint": features.composeAtMe(location.lastFix)
         case "copyme": modal = .plan(.me)

@@ -33,6 +33,8 @@ struct SessionEnv {
     var trailMatching: TrailMatchingService? = MapboxTrailMatching.fromBundle()
     /// Tests only: stands in for "iOS keeps a When-In-Use app's updates alive with the screen locked" (iOS 17+).
     var lockedScreenTrailOverride: Bool?
+    /// «المحادثات»: nil = the real API. Tests inject a fake.
+    var chatBackend: ChatBackend?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -106,6 +108,9 @@ final class OutingSession: ObservableObject, Identifiable {
     /// «قناة الطلعة»: the live walkie-talkie (replaces the «اضغط وتكلم» clips).
     let walkie: OutingWalkieTalkie
     private var walkieSink: AnyCancellable?
+    /// «المحادثات»: the trip's group chat and direct chats (Sources/Chat).
+    let chat: ChatStore
+    private var chatSink: AnyCancellable?
     private var meshActivation = MeshActivation()
     private var meshSink: AnyCancellable?
     /// «غرّزت» marks from the live screen's SafetyController, for the Live Activity.
@@ -141,6 +146,14 @@ final class OutingSession: ObservableObject, Identifiable {
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
         walkie = OutingWalkieTalkie(outingId: id, me: myUserId, tokenBackend: demo == nil ? api : nil, defaults: env.defaults)
+        if let demo {
+            let friends = Dictionary(demo.members.values.filter { $0.user_id != myUserId }.map { ($0.user_id, $0.display_name) }, uniquingKeysWith: { a, _ in a })
+            let backend = DemoChatBackend(outingId: id, me: myUserId, friends: friends)
+            chat = ChatStore(outingId: id, me: myUserId, backend: backend, defaults: env.defaults)
+            backend.emit = { [weak chat] f in chat?.receive(f) }
+        } else {
+            chat = ChatStore(outingId: id, me: myUserId, backend: env.chatBackend ?? api, defaults: env.defaults)
+        }
         if demo != nil { link = .live }
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
@@ -161,6 +174,13 @@ final class OutingSession: ObservableObject, Identifiable {
         walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
         walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
         walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        chat.configure(.init(
+            sendFrame: { [weak self] f in self?.channel?.sendChat(f) ?? false },
+            isLive: { [weak self] in self?.channel?.isLive ?? false },
+            myName: { [weak self] in self?.view?.me?.display_name }
+        ))
+        chat.snapshot(unread: demo?.snapshot.chat_unread)
+        chatSink = chat.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: the privacy gate
@@ -187,6 +207,8 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func open() {
         visible = env.isForeground()
+        /* «المحادثات»: the conversation list and badges, then whatever waited in the outbox. */
+        Task { await chat.refresh() }
         location.setOffScreen(!visible)
         location.onTrailFix = { [weak self] f in self?.trailFix(f) }
         matcher?.onChange = { [weak self] in
@@ -262,7 +284,8 @@ final class OutingSession: ObservableObject, Identifiable {
             onServerNow: { [weak self] now in MainActor.assumeIsolated { self?.syncClock(now) } },
             onPTT: { [weak self] sig in MainActor.assumeIsolated { self?.walkie.receive(sig) } },
             onAudio: { [weak self] d in MainActor.assumeIsolated { self?.walkie.receiveAudio(d) } },
-            onDiagnostics: { [weak self] d in MainActor.assumeIsolated { if self?.linkDiag != d { self?.linkDiag = d } } }
+            onDiagnostics: { [weak self] d in MainActor.assumeIsolated { if self?.linkDiag != d { self?.linkDiag = d } } },
+            onChat: { [weak self] f in MainActor.assumeIsolated { self?.chat.receive(f) } }
         )
         channel = ch
         PTTDiagnosticsLog.shared.add("session", "open (visible=\(visible))")
@@ -334,6 +357,7 @@ final class OutingSession: ObservableObject, Identifiable {
             /* Back on screen: a live socket is proven with a ping (replaced if it went quiet), a
              * handshaking one is left alone, none at all reconnects now. */
             channel?.ensureLive(reason: "foreground")
+            chat.flushOutbox()
             reconcileSharing()
         } else {
             channel?.dropPendingFix()
@@ -701,7 +725,9 @@ final class OutingSession: ObservableObject, Identifiable {
     // MARK: inbound
 
     private func linkChanged(_ s: LiveChannel.State) {
+        let was = link
         link = s
+        if s == .live, was != .live { chat.linkLive() }
         updateMesh()
         walkie.linkChanged()
         if s == .live || s == .polling, pendingServerStop {
@@ -720,6 +746,7 @@ final class OutingSession: ObservableObject, Identifiable {
     private func applySnapshot(_ s: OutingSnapshot) {
         let previous = view
         view = OutingView.merge(view, s)
+        chat.snapshot(unread: s.chat_unread)
         mesh.setServerKey(s.mesh_key, outingId: id)
         if let previous { notifyChanges(from: previous) }
         if s.outing.status == .ended { closed(.outingEnded) }

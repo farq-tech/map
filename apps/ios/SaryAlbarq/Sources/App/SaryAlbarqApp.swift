@@ -63,7 +63,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let info = response.notification.request.content.userInfo
         let id = PushRegistrar.outingId(from: info) ?? Self.localOutingId(response.notification.request)
         guard let id else { return }
-        await MainActor.run { NotificationCenter.default.post(name: .saryOpenOuting, object: id) }
+        let chat = PushRegistrar.chatWith(from: info)
+        await MainActor.run {
+            /* «المحادثات»: a chat notification opens that conversation, inside its trip. */
+            if let chat { ChatDeepLink.request(outingId: id, with: chat) }
+            NotificationCenter.default.post(name: .saryOpenOuting, object: id)
+        }
     }
 
     /// Local notifications carry the outing in their thread id ("outing-<id>").

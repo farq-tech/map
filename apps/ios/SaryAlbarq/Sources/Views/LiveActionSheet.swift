@@ -28,6 +28,8 @@ enum LiveActionCatalog {
         var ended = false
         /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone).
         var guideAllTarget: String?
+        /// «المحادثات» only when the server has it (an older server: hidden, see ChatStore.availability).
+        var chat = true
     }
 
     /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
@@ -49,7 +51,10 @@ enum LiveActionCatalog {
                       systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", accessibilityID: "plan.follow",
                       subtitle: s.hasRoute ? nil : "ارسم المسار في الخطة أولًا", isActive: s.following),
             ]),
-            LiveActionGroup(title: "المجموعة", items: [
+            LiveActionGroup(title: "المجموعة", items: (s.chat ? [
+                LiveActionItem(id: "chat", title: "المحادثات", systemImage: "bubble.left.and.bubble.right.fill", accessibilityID: "outing-chat",
+                               subtitle: "دردشة الطلعة ورسائل خاصة"),
+            ] : []) + [
                 .init(id: "note", title: "رسالة فوق سيارتي", systemImage: SaryIcon.note, accessibilityID: "outing-note-open"),
                 .init(id: "stuck", title: s.stuck ? "أنا مغرّز · التفاصيل" : "غرّزت", systemImage: SafetyIcon.stuck,
                       accessibilityID: "outing-stuck", isActive: s.stuck),

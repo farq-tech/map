@@ -51,6 +51,8 @@ enum LiveModal: Identifiable, Equatable {
     case convoyAlerts
     /// «اطلب إنجاد»: the prefilled help request (the person sends it).
     case enjad(Enjad.Situation)
+    /// «المحادثات»: the conversation list, or straight into one conversation.
+    case chat(ChatWith?)
 
     var id: String {
         switch self {
@@ -61,6 +63,7 @@ enum LiveModal: Identifiable, Equatable {
         case .tracks: return "tracks"
         case .convoyAlerts: return "convoyAlerts"
         case let .enjad(s): return "enjad:\(s.label)"
+        case let .chat(w): return "chat:\(w?.wire ?? "")"
         case let .participant(id): return "p:\(id)"
         case .note: return "note"
         case .stations: return "stations"
@@ -156,6 +159,8 @@ final class LiveOutingController: ObservableObject {
     var lastConvoyBuzz = Date.distantPast
     /// Moving > 15 km/h (with hysteresis), from the GPS.
     @Published private(set) var motion = MotionHysteresis()
+    /// DEBUG `-SaryChatMoving`: the chat behaves as if the car were moving.
+    var debugChatMoving = false
     @Published var confirm: LiveConfirm?
     @Published var stations: LoadPhaseUI<[StationUI]> = .loading
     @Published var toastText: String?
@@ -251,6 +256,9 @@ final class LiveOutingController: ObservableObject {
             let n = at.split(separator: ",").compactMap { Double($0) }
             if n.count == 2 { DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.ask(.point(LngLat(lng: n[1], lat: n[0]))) } }
         }
+        /* «المحادثات»: `-SaryChat home|group`, `-SaryChatMoving` (the driving block without a car). */
+        if let c = arg("-SaryChat") { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .chat(c == "group" ? .group : nil) } }
+        if shotArgs.contains("-SaryChatMoving") { debugChatMoving = true }
         if let t = arg("-SaryLiveTab") { selectedTab = t == "group" ? .group : t == "more" ? .more : .trip }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
@@ -273,6 +281,7 @@ final class LiveOutingController: ObservableObject {
             DispatchQueue.main.async { self?.objectWillChange.send() }
         }.store(in: &bag)
         features.start()
+        wireChatToasts()
         nav.myFix = { [weak location] in location?.lastFix }
         nav.toast = { [weak self] t in self?.toast(t) }
         /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */

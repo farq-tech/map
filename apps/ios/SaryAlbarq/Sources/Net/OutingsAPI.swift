@@ -145,8 +145,14 @@ final class OutingsAPI {
     private struct Empty: Encodable {}
 
     /// Internal (not private) so the feature clients in other files (waypoints, convoy, plan) use the same path.
-    func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12) async throws -> T {
-        var req = URLRequest(url: base.appendingPathComponent("api/outings" + path), timeoutInterval: timeout)
+    func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12, query: String? = nil) async throws -> T {
+        var url = base.appendingPathComponent("api/outings" + path)
+        /* «المحادثات»: cursor pagination (?before=/?after=). Never anything personal in a query. */
+        if let query, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.percentEncodedQuery = query
+            url = c.url ?? url
+        }
+        var req = URLRequest(url: url, timeoutInterval: timeout)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

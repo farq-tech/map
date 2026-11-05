@@ -27,6 +27,8 @@ final class LiveChannel {
         var onAudio: (Data) -> Void = { _ in }
         /// The link's health for the diagnostics line («متصل» / «يعيد الاتصال» / last close code).
         var onDiagnostics: (Diagnostics) -> Void = { _ in }
+        /// «المحادثات»: chat_message / chat_ack / chat_read / chat_typing / chat_deleted frames.
+        var onChat: ([String: Any]) -> Void = { _ in }
     }
 
     /// What the channel sheet shows about the link. Numbers and codes only.
@@ -153,6 +155,13 @@ final class LiveChannel {
         self.away = away
         sendFrame(["type": "presence", "away": away])
         if !away && state == .offline && deps.online() { reconnectNow() }
+    }
+
+    /// «المحادثات»: one chat frame (chat_message / chat_read / chat_typing). False when not live.
+    @discardableResult
+    func sendChat(_ frame: [String: Any]) -> Bool {
+        guard let type = frame["type"] as? String, type.hasPrefix("chat_") else { return false }
+        return sendFrame(frame)
     }
 
     func sendNote(_ text: String) -> Bool {
@@ -397,6 +406,8 @@ final class LiveChannel {
                 if let sig = PTTSignal.decode(msg) { self.handlers.onPTT(sig) }
             case "media_state":
                 MediaEvents.post(outingId: self.outingId, raw: msg["state"])
+            case _ where type.hasPrefix("chat_"):
+                self.handlers.onChat(msg)
             default:
                 if let e = LiveEvent.decode(msg) { self.handlers.onEvent(e) }
             }

@@ -99,6 +99,8 @@ enum LocalAccountData {
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
+        /* «المحادثات»: messages still waiting to be sent (the server deletes everything else). */
+        ChatOutbox.wipeAll(defaults)
         MediaShareInbox.forget()
         /* «أماكني المحفوظة» and the GPX list (on-device files). */
         if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
