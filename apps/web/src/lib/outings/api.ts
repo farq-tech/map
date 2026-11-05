@@ -23,7 +23,14 @@ export type OutingStatus = "created" | "active" | "paused" | "ended";
 
 export type Member = {
 	user_id: string;
+	/** How the trip shows them: for a personal invite, the name the inviter gave them («فهد أخوي»). */
 	display_name: string;
+	/** Their own name, shown secondarily, when it differs from the inviter's name for them. */
+	nickname?: string | null;
+	/** Joined through a personal invite. */
+	invited?: boolean;
+	/** Last four digits of the number the inviter invited (personal invites only). */
+	phone_last4?: string | null;
 	avatar: string | null;
 	/** Optional, shown only to fellow members (E.164, e.g. +9665…). */
 	phone?: string | null;
@@ -87,7 +94,9 @@ export type OutingSnapshot = {
 	me: { user_id: string; role: "owner" | "member"; co_leader?: boolean; can_lead?: boolean; sharing: boolean };
 	members: Member[];
 	positions: Position[];
-	invite: { active: boolean; expires_at: string | null } | null;
+	invite: { active: boolean; expires_at: string | null; open_links?: boolean } | null;
+	/** Leaders only: one line per person invited personally. */
+	personal_invites?: PersonalInvite[] | null;
 	/** Push-to-talk clips still held (10 min, memory only on the server). */
 	voice_clips?: ClipMeta[];
 	/** Once ended: the totals people chose to share («شارك ملخصي»). */
@@ -119,6 +128,26 @@ export type InvitePreview = {
 	member_count: number;
 	expires_at: string;
 	join_locked?: boolean;
+	/** "personal": one link for one person — whoever joins becomes `invitee_name` in the trip. */
+	kind?: "group" | "personal";
+	invitee_name?: string | null;
+	/** open · yours (used by you: rejoin) · taken (used by someone else) · claimed (used; anonymous viewer). */
+	claim?: "open" | "yours" | "taken" | "claimed";
+	already_member?: boolean;
+};
+
+/** «دعوة شخصية» as the leader sees it. */
+export type PersonalInvite = {
+	id: string;
+	kind: "personal";
+	invitee_name: string;
+	phone_last4: string | null;
+	status: "sent" | "opened" | "joined" | "expired" | "revoked";
+	opened: boolean;
+	created_at: string;
+	expires_at: string;
+	member_user_id: string | null;
+	token?: string;
 };
 
 export type RecoveryStatus = { active: boolean; created_at: string | null };
@@ -329,7 +358,8 @@ export const OutingsApi = {
 	setCoLeader: (id: string, userId: string, co_leader: boolean) =>
 		call<{ user_id: string; co_leader: boolean }>("POST", `/${id}/members/${userId}/co-leader`, { co_leader }),
 	setJoinLock: (id: string, locked: boolean) => call<{ join_locked: boolean }>("POST", `/${id}/lock`, { locked }),
-	previewInvite: (token: string) => call<{ invite: InvitePreview }>("POST", "/invites/preview", { token }, { auth: false }),
+	/* With this device's identity when there is one, so a used personal invite can say «yours» or «taken». */
+	previewInvite: (token: string) => call<{ invite: InvitePreview }>("POST", "/invites/preview", { token }),
 	join: (token: string) => call<{ outing_id: string; already: boolean }>("POST", "/invites/join", { token }),
 };
 
@@ -339,6 +369,13 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		invite_invalid: "رابط الدعوة غير صحيح.",
 		invite_expired: "انتهت صلاحية رابط الدعوة. اطلب من أمير الرحلة رابطًا جديدًا.",
 		invite_revoked: "ألغى أمير الرحلة هذا الرابط. اطلب رابطًا جديدًا.",
+		invite_taken: "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.",
+		open_links_disabled: "أوقف أمير الرحلة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
+		invite_used: "استُخدمت هذه الدعوة، وصاحبها في الطلعة.",
+		invite_replaced: "أُرسلت لهذا الشخص دعوة أحدث.",
+		invite_not_found: "لم نجد هذه الدعوة.",
+		invalid_invitee_name: "اكتب اسم الشخص كما تعرفه.",
+		too_many_invites: "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
 		outing_ended: "انتهت هذه الطلعة.",
 		outing_full: "اكتمل عدد المشاركين في هذه الطلعة.",
 		removed_from_outing: "أزالك أمير الرحلة منها، فلا يمكنك الانضمام مرة ثانية.",
@@ -373,6 +410,13 @@ export function outingErrorText(code: string, isRTL: boolean): string {
 		invite_invalid: "This invite link is not valid.",
 		invite_expired: "This invite has expired. Ask for a new link.",
 		invite_revoked: "This invite was cancelled. Ask for a new link.",
+		invite_taken: "This invite is for someone else. Ask the leader for one in your name.",
+		open_links_disabled: "The leader turned the open link off. Ask for a personal invite.",
+		invite_used: "This invite was already used; that person is in the outing.",
+		invite_replaced: "A newer invite was sent to this person.",
+		invite_not_found: "Invite not found.",
+		invalid_invitee_name: "Enter the person's name as you know them.",
+		too_many_invites: "This outing reached the invite limit.",
 		outing_ended: "This outing has ended.",
 		outing_full: "This outing is full.",
 		removed_from_outing: "You were removed from this outing and cannot rejoin.",

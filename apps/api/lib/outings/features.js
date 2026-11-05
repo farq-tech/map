@@ -41,8 +41,10 @@ function createFeatures(ctx) {
 
   async function namesOf(outingId, senderId) {
     const [row] = await q(
-      `SELECT o.name AS outing_name, u.display_name AS sender_name
-       FROM sary.outings o LEFT JOIN sary.users u ON u.id = $2::uuid WHERE o.id = $1`,
+      `SELECT o.name AS outing_name, COALESCE(m.invited_name, u.display_name) AS sender_name
+       FROM sary.outings o LEFT JOIN sary.users u ON u.id = $2::uuid
+       LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = u.id
+       WHERE o.id = $1`,
       [outingId, v.isUuid(senderId) ? senderId : null],
     );
     return row || null;
@@ -205,7 +207,7 @@ function createFeatures(ctx) {
     const live = r.state === 'armed' || r.state === 'overdue';
     const members = live
       ? await q(
-          `SELECT u.display_name AS name FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
+          `SELECT COALESCE(m.invited_name, u.display_name) AS name FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
            WHERE m.outing_id = $1 AND m.status = 'active' ORDER BY m.role = 'owner' DESC, m.joined_at`,
           [r.outing_id],
         )
@@ -253,7 +255,12 @@ function createFeatures(ctx) {
     const pos = await positions(outingId, o.status);
     if (!pos.length) return [];
     const names = new Map(
-      (await q(`SELECT id, display_name FROM sary.users WHERE id = ANY($1::uuid[])`, [pos.map((p) => p.user_id)])).map((u) => [u.id, u.display_name]),
+      (await q(
+        `SELECT u.id, COALESCE(m.invited_name, u.display_name) AS display_name
+         FROM sary.users u LEFT JOIN sary.outing_members m ON m.outing_id = $2 AND m.user_id = u.id
+         WHERE u.id = ANY($1::uuid[])`,
+        [pos.map((p) => p.user_id), outingId],
+      )).map((u) => [u.id, u.display_name]),
     );
     return pos.map((p) => ({ user_id: p.user_id, name: names.get(p.user_id) || '', lat: p.lat, lng: p.lng, at: p.recorded_at }));
   }

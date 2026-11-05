@@ -22,6 +22,7 @@ const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
 const { createMedia } = require('./media');
+const { createPersonalInvites } = require('./invites');
 
 class OutingError extends Error {
   constructor(code, status = 400) {
@@ -136,6 +137,14 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     requireMember: (...a) => requireMember(...a),
   });
 
+  /* «دعوة شخصية»: one link per person, single use — see invites.js. */
+  const personal = createPersonalInvites({
+    q, tx, now, err, cfg,
+    events: () => hub,
+    requireLeader: (...a) => requireLeader(...a),
+    forgetOuting: (...a) => forgetOuting(...a),
+  });
+
   function dropLatest(outingId, userId) {
     const room = latest.get(outingId);
     if (!room) return;
@@ -218,12 +227,29 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const next = publicUser(row);
     /* Every open outing of this person sees the new name/photo. */
     const rooms = await q(
-      `SELECT m.outing_id FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+      `SELECT m.outing_id, m.invited_name FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
        WHERE m.user_id = $1 AND m.status = 'active' AND o.status <> 'ended'`,
       [user.id],
     );
-    for (const r of rooms) hub.emit(r.outing_id, { type: 'member_updated', member: { user_id: next.id, display_name: next.display_name, avatar: next.avatar, phone: next.phone } });
+    /* In a trip they joined through a personal invite, the inviter's name for
+     * them stays the display name; their own name travels as the nickname. */
+    for (const r of rooms) {
+      hub.emit(r.outing_id, {
+        type: 'member_updated',
+        member: { user_id: next.id, ...memberNames(r.invited_name, next.display_name), avatar: next.avatar, phone: next.phone },
+      });
+    }
     return next;
+  }
+
+  /**
+   * How a member is named inside one trip. Personal invite → the inviter's
+   * name for them («فهد أخوي») is `display_name` everywhere (old clients show
+   * just that); the person's own name is `nickname`, shown secondarily.
+   */
+  function memberNames(invitedName, ownName) {
+    if (!invitedName) return { display_name: ownName, nickname: null, invited: false };
+    return { display_name: invitedName, nickname: ownName && ownName !== invitedName ? ownName : null, invited: true };
   }
 
   /* ---------- recovery ---------- */
@@ -299,8 +325,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const hit = room?.get(userId);
     if (!fresh && hit && now() - hit.at < cfg.membershipCacheMs) return hit.row;
     const [row] = await q(
-      `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id, o.join_locked,
-              m.role, m.status, m.sharing, m.co_leader
+      `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id, o.join_locked, o.open_links,
+              m.role, m.status, m.sharing, m.co_leader, m.invited_name
        FROM sary.outings o
        LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = $2
        WHERE o.id = $1`,
@@ -348,29 +374,38 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     return { token, expires_at: row.expires_at };
   }
 
-  async function createOuting(user, { name, ttl_hours } = {}) {
+  /**
+   * `invites: 'personal'` (new clients): no open group link at all — the
+   * leader invites people one by one (invites.js) and `invite` is null.
+   * Anything else (build 9–11): today's behaviour, an open link is made.
+   */
+  async function createOuting(user, { name, ttl_hours, invites } = {}) {
     const clean = v.outingName(name);
     if (!clean) throw err('invalid_outing_name');
+    const personalOnly = invites === 'personal';
     return tx(async (run) => {
       const [o] = await run(
-        `INSERT INTO sary.outings (name, owner_id) VALUES ($1, $2) RETURNING id`,
-        [clean, user.id],
+        `INSERT INTO sary.outings (name, owner_id, open_links) VALUES ($1, $2, $3) RETURNING id`,
+        [clean, user.id, !personalOnly],
       );
       await run(
         `INSERT INTO sary.outing_members (outing_id, user_id, role) VALUES ($1, $2, 'owner')`,
         [o.id, user.id],
       );
-      const invite = await createInviteRow(run, o.id, user.id, ttl_hours);
-      return { outing_id: o.id, invite };
+      const invite = personalOnly ? null : await createInviteRow(run, o.id, user.id, ttl_hours);
+      return { outing_id: o.id, invite, open_links: !personalOnly };
     });
   }
 
+  /** A new open group link (build 9–11 «رابط جديد»). Personal invites are untouched. */
   async function rotateInvite(user, outingId, { ttl_hours } = {}) {
     const m = await requireLeader(user, outingId);
     if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (m.open_links === false) throw err('open_links_disabled', 409);
     return tx(async (run) => {
       await run(
-        `UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`,
+        `UPDATE sary.outing_invites SET revoked_at = now()
+         WHERE outing_id = $1 AND kind = 'group' AND revoked_at IS NULL`,
         [outingId],
       );
       return createInviteRow(run, outingId, user.id, ttl_hours);
@@ -381,7 +416,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     await requireLeader(user, outingId);
     const rows = await q(
       `UPDATE sary.outing_invites SET revoked_at = now()
-       WHERE outing_id = $1 AND revoked_at IS NULL RETURNING id`,
+       WHERE outing_id = $1 AND kind = 'group' AND revoked_at IS NULL RETURNING id`,
       [outingId],
     );
     return { revoked: rows.length };
@@ -393,34 +428,60 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (row.revoked_at) return 'invite_revoked';
     if (new Date(row.expires_at).getTime() <= now()) return 'invite_expired';
     if (row.outing_status === 'ended') return 'outing_ended';
+    /* The leader switched the open link off: only personal invites admit people. */
+    if (row.kind !== 'personal' && row.open_links === false) return 'open_links_disabled';
     return null;
   }
 
-  async function inviteState(outingId) {
+  /** The open group link's state, for leaders. Personal invites: `personal_invites`. */
+  async function inviteState(outingId, openLinks = true) {
     const [inv] = await q(
       `SELECT expires_at FROM sary.outing_invites
-       WHERE outing_id = $1 AND revoked_at IS NULL AND expires_at > now()
+       WHERE outing_id = $1 AND kind = 'group' AND revoked_at IS NULL AND expires_at > now()
        ORDER BY created_at DESC LIMIT 1`,
       [outingId],
     );
-    return { active: Boolean(inv), expires_at: inv?.expires_at || null };
+    return { active: Boolean(inv) && openLinks !== false, expires_at: inv?.expires_at || null, open_links: openLinks !== false };
   }
 
-  async function previewInvite(token) {
+  /**
+   * Who a personal invite is for, relative to the viewer:
+   *   open      — not used yet: whoever joins becomes this person
+   *   yours     — used by the viewer (rejoin is fine)
+   *   taken     — used by someone else: «هذه الدعوة لشخص آخر»
+   *   claimed   — used, and the viewer is anonymous (build 9–11 previews
+   *               without a token): joining decides
+   */
+  function claimOf(row, viewer) {
+    if (!row.consumed_at) return 'open';
+    if (!viewer) return 'claimed';
+    return row.consumed_by === viewer.id ? 'yours' : 'taken';
+  }
+
+  /** `viewer` is optional (the preview route authenticates when it can). */
+  async function previewInvite(token, viewer = null) {
     if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
     const [row] = await q(
-      `SELECT i.outing_id, i.expires_at, i.revoked_at,
-              o.name, o.status AS outing_status, o.join_locked, u.display_name AS owner_name,
+      `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.consumed_by, i.consumed_at, i.opened_at,
+              o.name, o.status AS outing_status, o.join_locked, o.open_links, u.display_name AS owner_name,
               (SELECT count(*)::int FROM sary.outing_members m
-                WHERE m.outing_id = o.id AND m.status = 'active') AS member_count
+                WHERE m.outing_id = o.id AND m.status = 'active') AS member_count,
+              (SELECT status FROM sary.outing_members m
+                WHERE m.outing_id = o.id AND m.user_id = $2::uuid) AS viewer_status
        FROM sary.outing_invites i
        JOIN sary.outings o ON o.id = i.outing_id
        JOIN sary.users u ON u.id = o.owner_id
        WHERE i.token_hash = $1`,
-      [v.digest(token)],
+      [v.digest(token), viewer?.id || null],
     );
     const problem = inviteProblem(row);
     if (problem) throw err(problem, problem === 'invite_invalid' ? 404 : 410);
+    const isPersonal = row.kind === 'personal';
+    /* «فتحها»: the first look by someone who is not already in the trip (the
+     * leader checking their own link does not count). */
+    if (isPersonal && !row.opened_at && !row.consumed_at && row.viewer_status !== 'active') {
+      await q(`UPDATE sary.outing_invites SET opened_at = now() WHERE id = $1 AND opened_at IS NULL`, [row.id]);
+    }
     return {
       outing_id: row.outing_id,
       name: row.name,
@@ -430,6 +491,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       expires_at: row.expires_at,
       /* Shown so the invitee learns why joining will fail, before typing a name. */
       join_locked: row.join_locked === true,
+      kind: isPersonal ? 'personal' : 'group',
+      invitee_name: isPersonal ? row.invitee_name : null,
+      claim: isPersonal ? claimOf(row, viewer) : 'open',
+      already_member: row.viewer_status === 'active',
     };
   }
 
@@ -437,18 +502,30 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
     const result = await tx(async (run) => {
       const [row] = await run(
-        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, o.status AS outing_status, o.join_locked
+        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.invitee_phone_last4,
+                i.consumed_by, i.consumed_at, o.status AS outing_status, o.join_locked, o.open_links
          FROM sary.outing_invites i JOIN sary.outings o ON o.id = i.outing_id
          WHERE i.token_hash = $1
          FOR UPDATE OF i, o`,
         [v.digest(token)],
       );
+      const isPersonal = row?.kind === 'personal';
+      const [existing] = row
+        ? await run(
+            `SELECT status, invited_name FROM sary.outing_members WHERE outing_id = $1 AND user_id = $2`,
+            [row.outing_id, user.id],
+          )
+        : [];
+      /* A personal link used by someone else admits nobody else — checked
+       * before expiry so the answer is the true reason. */
+      if (isPersonal && row.consumed_at && row.consumed_by !== user.id) throw err('invite_taken', 409);
+      /* The person it is bound to, already in the trip: nothing to do (even
+       * if the link has since expired or been revoked). */
+      if (isPersonal && existing?.status === 'active' && row.outing_status !== 'ended') {
+        return { outing_id: row.outing_id, already: true };
+      }
       const problem = inviteProblem(row);
       if (problem) throw err(problem, problem === 'invite_invalid' ? 404 : 410);
-      const [existing] = await run(
-        `SELECT status FROM sary.outing_members WHERE outing_id = $1 AND user_id = $2`,
-        [row.outing_id, user.id],
-      );
       if (existing?.status === 'active') return { outing_id: row.outing_id, already: true };
       if (existing?.status === 'removed') throw err('removed_from_outing', 403);
       if (row.join_locked) throw err('join_locked', 403);
@@ -457,30 +534,54 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         [row.outing_id],
       );
       if (n >= cfg.maxMembers) throw err('outing_full', 409);
+      /* Personal: the member is that person — the inviter's name for them. A
+       * group link keeps whatever name an earlier personal invite gave them. */
+      const invitedName = isPersonal ? row.invitee_name : existing?.invited_name || null;
+      const last4 = isPersonal ? row.invitee_phone_last4 || null : null;
       if (existing) {
         await run(
-          `UPDATE sary.outing_members SET status = 'active', sharing = true, co_leader = false, left_at = NULL, joined_at = now()
+          `UPDATE sary.outing_members SET status = 'active', sharing = true, co_leader = false, left_at = NULL, joined_at = now(),
+                  invited_name = $3, invited_phone_last4 = COALESCE($4, invited_phone_last4), invite_id = COALESCE($5, invite_id)
            WHERE outing_id = $1 AND user_id = $2`,
-          [row.outing_id, user.id],
+          [row.outing_id, user.id, invitedName, last4, isPersonal ? row.id : null],
         );
       } else {
         await run(
-          `INSERT INTO sary.outing_members (outing_id, user_id) VALUES ($1, $2)`,
-          [row.outing_id, user.id],
+          `INSERT INTO sary.outing_members (outing_id, user_id, invited_name, invited_phone_last4, invite_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [row.outing_id, user.id, invitedName, last4, isPersonal ? row.id : null],
         );
       }
-      await run(`UPDATE sary.outing_invites SET uses = uses + 1 WHERE id = $1`, [row.id]);
+      if (isPersonal && !row.consumed_at) {
+        await run(
+          `UPDATE sary.outing_invites SET uses = uses + 1, consumed_by = $2, consumed_at = now() WHERE id = $1`,
+          [row.id, user.id],
+        );
+      } else {
+        await run(`UPDATE sary.outing_invites SET uses = uses + 1 WHERE id = $1`, [row.id]);
+      }
       await run(`UPDATE sary.outings SET updated_at = now() WHERE id = $1`, [row.outing_id]);
-      return { outing_id: row.outing_id, already: false };
+      return { outing_id: row.outing_id, already: false, invitedName, last4, inviteId: isPersonal ? row.id : null };
     });
     forgetOuting(result.outing_id);
+    const { invitedName, last4, inviteId, ...out } = result;
     if (!result.already) {
       hub.emit(result.outing_id, {
         type: 'member_joined',
-        member: { user_id: user.id, display_name: user.display_name, avatar: user.avatar, phone: user.phone || null, role: 'member', co_leader: false, sharing: true },
+        member: {
+          user_id: user.id,
+          ...memberNames(invitedName, user.display_name),
+          phone_last4: last4,
+          avatar: user.avatar,
+          phone: user.phone || null,
+          role: 'member',
+          co_leader: false,
+          sharing: true,
+        },
       });
+      if (inviteId) hub.emit(result.outing_id, { type: 'invite_used', invite_id: inviteId, user_id: user.id });
     }
-    return result;
+    return out;
   }
 
   /* ---------- offline mesh key ---------- */
@@ -498,13 +599,18 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   }
 
   async function members(outingId) {
-    return q(
-      `SELECT m.user_id, u.display_name, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
+    const rows = await q(
+      `SELECT m.user_id, u.display_name, m.invited_name, m.invited_phone_last4, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
        FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
        WHERE m.outing_id = $1 AND m.status = 'active'
        ORDER BY m.role = 'owner' DESC, m.joined_at`,
       [outingId],
     );
+    return rows.map(({ invited_name, invited_phone_last4, display_name, ...r }) => ({
+      ...r,
+      ...memberNames(invited_name, display_name),
+      phone_last4: invited_phone_last4 || null,
+    }));
   }
 
   function shapePosition(userId, p) {
@@ -550,7 +656,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   async function getOuting(user, outingId) {
     const m = await requireMember(user, outingId, { fresh: true });
     const [o] = await q(
-      `SELECT id, name, status, owner_id, join_locked, created_at, started_at, ended_at,
+      `SELECT id, name, status, owner_id, join_locked, open_links, created_at, started_at, ended_at,
               rally_lat, rally_lng, rally_label, rally_set_at, rally_set_by,
               convoy_lead_user_id, convoy_tail_user_id, convoy_max_gap_m, mesh_key
        FROM sary.outings WHERE id = $1`,
@@ -565,8 +671,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const [mem, pos, inv] = await Promise.all([
       members(outingId),
       positions(outingId, outing.status),
-      leads ? inviteState(outingId) : Promise.resolve(null),
+      leads ? inviteState(outingId, m.open_links) : Promise.resolve(null),
     ]);
+    const personalInvites = leads && outing.status !== 'ended' ? await personal.personalOf(outingId) : null;
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
@@ -591,6 +698,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
       summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
+      /* Leaders only: one line per person invited — «أُرسلت / فتحها / انضم / لم يفتحها». */
+      personal_invites: personalInvites,
       /* Offline car-to-car mesh secret: active members only (requireMember above). */
       mesh_key: meshKey,
       server_now: new Date(now()).toISOString(),
@@ -1049,8 +1158,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!push.enabled) return null;
     try {
       const [row] = await q(
-        `SELECT o.name AS outing_name, u.display_name AS sender_name
+        `SELECT o.name AS outing_name, COALESCE(m.invited_name, u.display_name) AS sender_name
          FROM sary.outings o LEFT JOIN sary.users u ON u.id = $2::uuid
+         LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = u.id
          WHERE o.id = $1`,
         [outingId, v.isUuid(senderId) ? senderId : null],
       );
@@ -1106,8 +1216,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   async function summariesOf(outingIds) {
     const rows = await q(
-      `SELECT s.outing_id, s.user_id, u.display_name, s.distance_m, s.duration_s, s.moving_s, s.shared_at
+      `SELECT s.outing_id, s.user_id, COALESCE(m.invited_name, u.display_name) AS display_name, s.distance_m, s.duration_s, s.moving_s, s.shared_at
        FROM sary.trip_summaries s JOIN sary.users u ON u.id = s.user_id
+       LEFT JOIN sary.outing_members m ON m.outing_id = s.outing_id AND m.user_id = s.user_id
        WHERE s.outing_id = ANY($1::uuid[])
        ORDER BY s.distance_m DESC`,
       [outingIds],
@@ -1142,7 +1253,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
        RETURNING distance_m, duration_s, moving_s, shared_at`,
       [outingId, user.id, s.distance_m, s.duration_s, s.moving_s],
     );
-    return { summary: { user_id: user.id, display_name: user.display_name, ...row } };
+    return { summary: { user_id: user.id, display_name: m.invited_name || user.display_name, ...row } };
   }
 
   async function withdrawSummary(user, outingId) {
@@ -1291,6 +1402,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     push,
     ...features.api,
     ...media.api,
+    ...personal.api,
+    memberNames,
     setEvents(next) {
       hub = next || noopEvents();
     },

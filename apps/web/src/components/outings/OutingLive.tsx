@@ -1215,6 +1215,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 										<div>
 											<strong>
 												{r.member.display_name}
+												{r.member.nickname ? <small className="sary-o-nick" dir="auto" data-testid="outing-member-nickname"> ({r.member.nickname})</small> : null}
 												{roleSuffix(r.member, isRTL)}
 											</strong>
 											<span>{memberLine(r, isRTL)}</span>
