@@ -64,6 +64,10 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     ptt,
     router,
     ready,
+    /** Live-socket lifetimes and close codes, plus the walkie-talkie relay's counters (numbers only). */
+    socketStats() {
+      return socket ? { ...socket.stats(), ptt: ptt ? { ...ptt.stats } : null } : null;
+    },
     attach(server) {
       if (!service) return;
       socket = attachOutingsSocket(server, { service, hub, ptt });
