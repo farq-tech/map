@@ -22,6 +22,9 @@
  *   → chat_read { with, seq }   → chat_typing { with, on }
  *   ← chat_message · chat_read · chat_typing · chat_deleted   («المحادثات», see lib/outings/chat.js;
  *     HTTP fallback: GET/POST /api/outings/:id/chat…)
+ *   → { type: 'group_audio_cmd', id, cmd }  ← { type: 'group_audio_ack', id, ok, state?, reason? }
+ *   → { type: 'group_audio_sync' }          ← group_audio_state { state, server_now }
+ *   ← group_audio_state { state, server_now }  («إذاعة الطلعة» — see lib/outings/group-audio.js)
  *   (older builds' voice clips go over HTTP: POST/GET /api/outings/:id/clips — see routes/outings.js)
  *
  * Live push-to-talk «قناة الطلعة» (lib/outings/ptt.js): ptt_join / ptt_leave /
@@ -172,6 +175,19 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
           } catch (e) {
             return reply({ type: 'note_ack', id: msg.id ?? null, ok: false, reason: e.code || 'server_error' });
           }
+        }
+        /* «إذاعة الطلعة» (lib/outings/group-audio.js): the same command as POST /:id/group-audio. */
+        if (msg.type === 'group_audio_cmd') {
+          try {
+            const r = await service.groupAudioCommand(conn.user, conn.outingId, msg.cmd);
+            return reply({ type: 'group_audio_ack', id: msg.id ?? null, ok: true, state: r.group_audio, server_now: r.server_now });
+          } catch (e) {
+            return reply({ type: 'group_audio_ack', id: msg.id ?? null, ok: false, reason: e.code || 'server_error' });
+          }
+        }
+        if (msg.type === 'group_audio_sync') {
+          const r = await service.getGroupAudio(conn.user, conn.outingId);
+          return reply({ type: 'group_audio_state', state: r.group_audio, server_now: r.server_now });
         }
         if (msg.type === 'position') {
           const r = await service.recordPosition(conn.user, conn.outingId, msg.fix);

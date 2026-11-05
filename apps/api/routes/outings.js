@@ -20,6 +20,7 @@ const { battery } = require('../lib/outings/validate');
 const { CLIP_MAX_BYTES } = require('../lib/outings/clips');
 const { parseSubscription } = require('../lib/outings/push');
 const { createRoutingRouter } = require('../lib/outings/routing');
+const { catalog: groupAudioCatalog } = require('../lib/outings/group-audio-catalog');
 
 function clientKey(req) {
   const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -477,6 +478,21 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, lim
   router.post('/:id/media/takeover', auth, asyncHandler(async (req, res) => {
     if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     res.json({ ok: true, ...(await service.takeoverMedia(req.user, req.params.id)) });
+  }));
+
+  /* ---- «إذاعة الطلعة»: shared trip audio (state only — every phone plays the source itself) ---- */
+  router.get('/group-audio/catalog', (_req, res) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json({ ok: true, stations: groupAudioCatalog() });
+  });
+
+  router.get('/:id/group-audio', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.getGroupAudio(req.user, req.params.id)) });
+  }));
+
+  router.post('/:id/group-audio', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.json({ ok: true, ...(await service.groupAudioCommand(req.user, req.params.id, req.body || {})) });
   }));
 
   /* «المحادثات» — HTTP side of the trip chat (the live socket carries the same

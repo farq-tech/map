@@ -22,6 +22,7 @@ const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
 const { createMedia } = require('./media');
+const { createGroupAudio } = require('./group-audio');
 const { createPersonalInvites } = require('./invites');
 const { createChat } = require('./chat');
 
@@ -142,6 +143,13 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   /* «قناة الطلعة»: shared YouTube channel state, memory only — see media.js. */
   const media = createMedia({
+    q, now, err, canLead,
+    events: () => hub,
+    requireMember: (...a) => requireMember(...a),
+  });
+
+  /* «إذاعة الطلعة»: shared trip audio state (written through to sary.group_audio) — see group-audio.js. */
+  const groupAudio = createGroupAudio({
     q, now, err, canLead,
     events: () => hub,
     requireMember: (...a) => requireMember(...a),
@@ -709,6 +717,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       /* Members whose sharing went silent (≥10 min without a fix): never draw them as live. */
       silent: outing.status === 'active' ? silence.list(outingId) : [],
       media: outing.status === 'ended' ? null : media.mediaOf(outingId),
+      group_audio: outing.status === 'ended' ? null : await groupAudio.stateFor(outingId),
       voice_clips: outing.status === 'ended' ? [] : clips.list(outingId),
       summaries: outing.status === 'ended' ? await summariesOf([outingId]).then((r) => r.get(outingId) || []) : [],
       invite: inv,
@@ -764,6 +773,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     /* «غرّزت» ends with the outing, like SOS. A return timer does NOT: people end outings in the desert. */
     features.dropStuck(outingId);
     media.dropMedia(outingId);
+    groupAudio.dropGroupAudio(outingId);
     await run(
       `UPDATE sary.outing_invites SET revoked_at = now() WHERE outing_id = $1 AND revoked_at IS NULL`,
       [outingId],
@@ -880,6 +890,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     clips.dropUser(outingId, userId);
     if (!outcome.ended) void features.dropFromConvoy(outingId, userId);
     if (outcome.ended) media.dropMedia(outingId);
+    if (outcome.ended) groupAudio.dropGroupAudio(outingId);
     else void media.memberGone(outingId, userId);
     if (outcome.ended) pttChannels?.outingEnded(outingId);
     else pttChannels?.memberGone(outingId, userId);
@@ -1407,6 +1418,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       dropSos(id);
       features.dropStuck(id);
       media.dropMedia(id);
+      groupAudio.dropGroupAudio(id);
       clips.dropOuting(id);
       hub.emit(id, { type: 'outing_status', status: 'ended' });
       hub.closeRoom(id, 'outing_ended');
@@ -1424,6 +1436,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     await chat.purge().catch((e) => console.warn('[outings-chat] purge', e.code || e.message));
     await features.sweepFeatures();
     media.sweepMedia();
+    groupAudio.sweepGroupAudio();
     return { ended: ended.length };
   }
 
@@ -1432,6 +1445,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     push,
     ...features.api,
     ...media.api,
+    ...groupAudio.api,
     ...personal.api,
     ...chat.api,
     memberNames,
