@@ -1,4 +1,5 @@
 import XCTest
+import MapKit
 @testable import SaryAlbarq
 
 // MARK: - GPX / KML import
@@ -540,6 +541,16 @@ final class CoordinateShareTests: XCTestCase {
 // MARK: - place search
 
 final class PlaceSearchTests: XCTestCase {
+    func testCategoryWordsAreAskedAsAppleCategories() {
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "محطة بنزين"), .gasStation)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: " محطه وقود "), .gasStation)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "صيدلية"), .pharmacy)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "مستشفى"), .hospital)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "Gas Station"), .gasStation)
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "ماكدونالدز"), "a name stays a name")
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة بنزين الدريس"), "a named station stays a name search")
+    }
+
     static let fixture = Data("""
     {"type":"FeatureCollection","features":[
       {"type":"Feature","id":"dXJuOm1ieHBsYzpBUU","geometry":{"type":"Point","coordinates":[46.83,24.92]},

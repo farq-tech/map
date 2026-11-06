@@ -166,9 +166,38 @@ enum PlaceSearch {
         }
     }
 
+    /// A query that names a kind of place («محطة بنزين», «صيدلية»…) rather than a place: Apple's natural-language
+    /// search matches it against names (and answered «محطة بنزين» with a station in Kuwait), so around you it
+    /// is asked as a category instead.
+    static func poiCategory(forQuery query: String) -> MKPointOfInterestCategory? {
+        let q = normalize(query)
+        let table: [(MKPointOfInterestCategory, [String])] = [
+            (.gasStation, ["محطه بنزين", "محطات بنزين", "محطه وقود", "محطات وقود", "بنزين", "بنزينه", "محطه", "محطات", "وقود",
+                           "gas station", "gas", "petrol", "petrol station", "fuel"]),
+            (.pharmacy, ["صيدليه", "صيدليات", "pharmacy"]),
+            (.hospital, ["مستشفي", "مستشفيات", "مستوصف", "طوارئ", "hospital"]),
+            (.cafe, ["مقهي", "مقاهي", "كافيه", "كوفي", "قهوه", "cafe", "coffee"]),
+            (.restaurant, ["مطعم", "مطاعم", "restaurant"]),
+            (.hotel, ["فندق", "فنادق", "hotel"]),
+            (.atm, ["صراف", "صراف الي", "atm"]),
+            (.parking, ["موقف", "مواقف", "parking"]),
+            (.foodMarket, ["بقاله", "تموينات", "سوبرماركت", "supermarket", "grocery"]),
+        ]
+        return table.first { $0.1.contains(q) }?.0
+    }
+
     static let appleSearch: LocalSearch = { query, scope in
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
+        if case let .around(p) = scope, let cat = PlaceSearch.poiCategory(forQuery: q) {
+            let poi = MKLocalPointsOfInterestRequest(center: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng),
+                                                     radius: min(PlaceSearch.nearbyRadiusM / 2, MKLocalPointsOfInterestRequest.maxRadius))
+            poi.pointOfInterestFilter = MKPointOfInterestFilter(including: [cat])
+            if let resp = try? await MKLocalSearch(request: poi).start() {
+                let found = resp.mapItems.compactMap { PlaceSearch.place(from: $0) }
+                if !found.isEmpty { return found }
+            }
+        }
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = String(q.prefix(256))
         req.resultTypes = [.pointOfInterest, .address]

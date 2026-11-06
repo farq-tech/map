@@ -109,7 +109,8 @@ enum FarqTiles {
         guard available else { return }
         try? m.setStyleImportConfigProperty(for: "basemap", config: "showRoadLabels", value: false)
         let roads = labels == .driving ? "visible" : "none"
-        let places = labels == .clean ? "none" : "visible"
+        /* Places are for looking around: none over a track, and none while navigating (the guidance is the subject). */
+        let places = labels == .standard ? "visible" : "none"
         if m.layerExists(withId: roadLabelId) { try? m.setLayerProperty(for: roadLabelId, property: "visibility", value: roads) }
         for id in [placeCircleId, placeLabelId] where m.layerExists(withId: id) {
             try? m.setLayerProperty(for: id, property: "visibility", value: places)
@@ -184,7 +185,9 @@ enum FarqTiles {
         [
             "id": placeCircleId, "type": "circle", "source": source, "source-layer": placesLayer, "slot": "top", "minzoom": 15,
             "paint": [
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 3, 18, 6],
+                /* Small until you are close: Olaya alone has hundreds; far ones shrink when the camera tilts. */
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 2, 17, 3.5, 18, 6],
+                "circle-pitch-scale": "map", "circle-pitch-alignment": "map",
                 "circle-color": ["case", ["boolean", ["get", "temp_closed"], false], "hsl(0, 0%, 60%)", "hsl(203, 90%, 58%)"],
                 "circle-stroke-color": "hsl(0, 0%, 100%)", "circle-stroke-width": 1, "circle-emissive-strength": 1,
             ] as [String: Any],
@@ -193,8 +196,10 @@ enum FarqTiles {
 
     static func placeLabelLayer() -> [String: Any] {
         [
-            "id": placeLabelId, "type": "symbol", "source": source, "source-layer": placesLayer, "slot": "top", "minzoom": 16,
+            "id": placeLabelId, "type": "symbol", "source": source, "source-layer": placesLayer, "slot": "top", "minzoom": 17,
             "layout": [
+                /* Brands win a crowded spot. */
+                "symbol-sort-key": ["case", ["has", "brand"], 0, 1],
                 "text-field": ["coalesce", ["get", "name_ar"], ["get", "name_en"]],
                 "text-size": 11, "text-offset": [0, 1.0], "text-anchor": "top", "text-max-width": 8,
                 "text-optional": true,
