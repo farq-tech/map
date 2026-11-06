@@ -350,7 +350,7 @@ test('014 on a database at 013: only 014 is new, RLS on, the row goes with the o
   await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
   await pool.query(`CREATE SCHEMA sary`);
   await pool.query(`CREATE TABLE sary.schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const f of ALL.filter((x) => x !== '014_sary_group_audio.sql' && x !== '015_sary_ptt_voice_notes.sql' && x !== '016_sary_outing_legs.sql' && x !== '017_sary_hidden_location.sql')) {
+  for (const f of ALL.filter((x) => x !== '014_sary_group_audio.sql' && x !== '015_sary_ptt_voice_notes.sql' && x !== '016_sary_outing_legs.sql' && x !== '017_sary_hidden_location.sql' && x !== '018_sary_chat_moderation.sql')) {
     await pool.query(fs.readFileSync(path.join(DIR, f), 'utf8'));
     await pool.query('INSERT INTO sary.schema_migrations (name) VALUES ($1)', [f]);
   }
