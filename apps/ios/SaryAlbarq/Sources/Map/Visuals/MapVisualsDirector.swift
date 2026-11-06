@@ -61,6 +61,8 @@ final class MapVisualsDirector: NSObject {
     /// `SandGrade`'s `sarySand` last set on the imported satellite basemap.
     private var appliedSand: Double?
     private let overlay = VisualsSourceView()
+    /// «تفاصيل الرمال» (`SandDetail`): natural micro-relief over the desert imagery up close.
+    private let sandDetail = SandDetailLayer()
 
     private var flight: DroneOrbit?
     private var flightStart: CFTimeInterval = 0
@@ -196,6 +198,7 @@ final class MapVisualsDirector: NSObject {
         }
         applyBuildings(pitch: st.pitch)
         applySand(st)
+        applySandDetail()
         publishCityTilt(st)
     }
 
@@ -211,6 +214,7 @@ final class MapVisualsDirector: NSObject {
         appliedExaggeration = nil
         appliedBuildingsOpacity = nil
         appliedSand = nil
+        sandDetail.styleLoaded()
         let m: MapboxMap = map.mapboxMap
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
@@ -236,6 +240,23 @@ final class MapVisualsDirector: NSObject {
         publishCityTilt(st)
     }
 
+    // MARK: sand detail
+
+    /// «تفاصيل الرمال»: on with the budget, lit from the sun over the map centre (the hillshade's light).
+    private func applySandDetail() {
+        guard styleReady, let map else { return }
+        let c = map.mapboxMap.cameraState.center
+        let here = sun.map { _ in SunPosition.at(clock, lat: c.latitude, lng: c.longitude) }
+        var on = effective.sandDetail
+        #if DEBUG
+        /* Before / after shots: `-SarySandDetail off`. */
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SarySandDetail"), i + 1 < a.count, a[i + 1] == "off" { on = false }
+        #endif
+        sandDetail.apply(on, map: map, light: SandDetail.Light.from(here, night: lastInputs.night),
+                         scale: VisualBudget.sandDetailScale(driving: lastInputs.driving))
+    }
+
     // MARK: sand grade
 
     /// The imagery's warm sand grade (`SandGrade`) at full strength in the open desert, faded out
@@ -247,6 +268,11 @@ final class MapVisualsDirector: NSObject {
         guard v != appliedSand else { return }
         appliedSand = v
         try? m.setStyleImportConfigProperty(for: "basemap", config: SandGrade.configKey, value: v)
+        /* «صور عالية الوضوح» carries a fixed copy of the grade: keep it in step, or tiles enhanced after
+           panning out of a city stay city-grey over the orange desert. */
+        if m.layerExists(withId: HiResImagery.layerId) {
+            try? m.setLayerProperties(for: HiResImagery.layerId, properties: SandGrade.paint(sand: v))
+        }
     }
 
     // MARK: city buildings
@@ -342,6 +368,7 @@ final class MapVisualsDirector: NSObject {
         applyHillshade()
         applyFog()
         ensureGlow(restyle: true)
+        applySandDetail()
     }
 
     /// The sun the sky is drawn for: the real one, unless night mode is forced on.
@@ -693,6 +720,10 @@ final class MapVisualsDirector: NSObject {
         frameTimes = []
         MapVisualsHub.shared.lastFlightStats = stats
         if !stats.isEmpty { Logger(subsystem: "sa.sary.albarq", category: "MapVisuals").info("drone flight: \(stats, privacy: .public)") }
+        #if DEBUG
+        /* Performance notes: the last flight's pacing, as numbers, in tmp/. */
+        try? stats.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("drone-stats.txt"), atomically: true, encoding: .utf8)
+        #endif
         MapVisualsHub.shared.setFlying(false)
         map?.accessibilityValue = nil
         refresh(force: false)

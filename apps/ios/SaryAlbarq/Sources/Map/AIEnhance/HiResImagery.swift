@@ -138,7 +138,8 @@ final class HiResImagery: NSObject {
             layer.rasterFadeDuration = .constant(250)
             layer.rasterResampling = .constant(.linear)
             layer.rasterOpacity = .constant(1)
-            try m.addLayer(layer)
+            /* Under «تفاصيل الرمال» when that is there: the micro-relief lies over enhanced tiles too. */
+            try m.addLayer(layer, layerPosition: m.layerExists(withId: SandDetailLayer.layerId) ? .below(SandDetailLayer.layerId) : nil)
             /* The same colour grade as the imagery it covers (`SandGrade`: warm sand in the open,
                neutral in a city), so an enhanced tile never changes colour as it fades in. */
             let c = m.cameraState.center
@@ -283,7 +284,7 @@ final class HiResImagery: NSObject {
             let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             Self.log.debug("tile \(plan.tile.description, privacy: .public) x\(plan.factor) \(Int(ms))ms")
             #if DEBUG
-            HiResStats.record(tileMs: ms, inferenceMs: e.recentMs.last ?? ms)
+            HiResStats.record(tileMs: ms, inferenceMs: e.recentMs.last ?? ms, lineRejected: e.rejected)
             #endif
             guard let img else { deliver(plan.tile, nil, gen: gen); continue }
             Self.enhanced.set(plan.tile, img, cost: HiResEnhancer.outputSize * HiResEnhancer.outputSize * 4)
@@ -442,7 +443,7 @@ enum HiResStats {
     private static var tiles: [Double] = []
     private static var inference: [Double] = []
 
-    static func record(tileMs: Double, inferenceMs: Double) {
+    static func record(tileMs: Double, inferenceMs: Double, lineRejected: Int = 0) {
         lock.withLock {
             tiles.append(tileMs)
             inference.append(inferenceMs)
@@ -450,7 +451,8 @@ enum HiResStats {
             func p90(_ a: [Double]) -> Double { a.sorted()[min(a.count - 1, Int(Double(a.count) * 0.9))] }
             let json: [String: Any] = ["count": tiles.count, "tileMedianMs": med(tiles), "tileP90Ms": p90(tiles),
                                        "inferenceMedianMs": med(inference), "footprintMB": footprintMB(),
-                                       "cacheMB": Double(HiResImagery.enhanced.bytes) / 1_048_576, "cacheTiles": HiResImagery.enhanced.count]
+                                       "cacheMB": Double(HiResImagery.enhanced.bytes) / 1_048_576, "cacheTiles": HiResImagery.enhanced.count,
+                                       "lineRejected": lineRejected, "thermal": ProcessInfo.processInfo.thermalState.rawValue]
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("hires-stats.json")
             try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]).write(to: url)
         }

@@ -209,3 +209,55 @@ as the single lookup point. A missing model already means `off(.noModel)`.
 - The city boxes are coarse. A town outside them is treated as desert, so it is enhanced
   from z17.
 - The simulator has no ANE, so its timings are CPU-only and not representative.
+
+## 10. Desert detail round 2 (feat/desert-ai-detail)
+
+Goal: up-close desert imagery that reads as rich natural sand (ripples, grain, relief) while
+never inventing a track, road, building or landform. Three layers, from the bottom:
+
+1. **Satellite + `SandGrade`** (PR #97, unchanged): the real photo, warm-orange grade.
+2. **«صور عالية الوضوح» (AI, unchanged gating)**: Real-ESRGAN x4plus, exploration only, «مُحسّنة»
+   badge. New in this round, in `HiResEnhancer.mergeDetail`:
+   - **Frequency split.** Output = `blur(source) + 0.85 × (ai − blur(ai))` (blur ≈ the parent's
+     pixel). Every shape, dune edge, road, shadow and colour comes from the real photo; the
+     model only contributes texture finer than one source pixel. It can no longer move a
+     landform or shift the `SandGrade` colour.
+   - **`LineGuard`.** A gradient-constrained Hough transform scores the strongest straight edge
+     in the merged tile and in the plain up-sampled source. If the tile gains a line
+     (`score ≥ 0.42` and `+0.14` over the source), the tile is refused and the original
+     imagery stays. Counted as `lineRejected` in `tmp/hires-stats.json` (DEBUG).
+   - Still RAM-only (no disk cache): Mapbox terms §2.8 / §2.8.2 (§5 above). A disk cache of
+     derived imagery would add to that risk.
+3. **«تفاصيل الرمال» (`SandDetail` + `SandDetailLayer`, not AI, no badge)**: a procedural "detail
+   map", the terrain-rendering technique: band-limited wind ripples (≈3.4 m, crests across a
+   regional prevailing-wind field, warped, broken and patchy), sand-sheet undulation (≈8 m and
+   21 m) and gravel grain, shaded from the real sun (`SunPosition`, quantised to 20°) and
+   drawn as a translucent light / shade overlay (≤ 24 % alpha, mean ≈ 0, warm colours).
+   - Zoom: none at z14.2, full from z17. Ripples fade out by z19.5 (one crest across a tile
+     would be too close to a line). Every frequency fades out before it is under ~2 px (no moiré).
+   - Cities: per-pixel `UrbanAreas` weight, nothing over a city (Riyadh unchanged).
+   - Slot `bottom`, over the imagery and the AI tiles, under the hillshade, roads and labels.
+   - No network, no AI, deterministic and seamless across tiles. RAM LRU 24 MB.
+   - Budget: «المؤثرات البصرية» → «تفاصيل الرمال» (default on). Off in Low Power Mode. No new
+     tiles at thermal `.serious`+. On while driving at 70 % strength: it is texture, never a
+     shape, and the safety test below covers it.
+   - Safety test: `SandDetailTests.testDetailNeverDrawsALine` renders 5 deserts × 6 suns ×
+     z14–22 over plain sand, and `LineGuard` must find no line. The worst score is 0.38
+     against a 0.42 threshold. A synthetic two-rut track scores 1.06.
+4. **DEM relief** (existing): the two hillshade passes lit from the real sun.
+
+Performance (measured 2026-11-06):
+
+| What | Release, M4 Pro CPU | Debug, iOS 27.2 simulator |
+|---|---|---|
+| `SandDetail.render`, one 512 px tile | 5–8 ms (6 threads) | 31 ms (unit test), 47 ms median in app |
+| `mergeDetail` + `LineGuard`, one AI tile | 5 ms | ≈ 0.3–0.4 s (on top of 4–8 s CPU-only inference) |
+| App footprint, detail on (no AI) | | 97–123 MB |
+| App footprint, AI + detail, exploration z18 | | 129–142 MB |
+| Drone orbit at z16 over the Nafud (frame pacing) | | detail off: 51.0 / 56.4 fps; on: 51.5 / 54.7 fps (two runs each; noise ±3) |
+
+Thermal state stayed `nominal` in every run (`thermal` in the DEBUG stats JSON).
+
+Not used: SwinIR / HAT (transformers, too slow on the ANE at 256 px and not trained on aerial
+imagery), diffusion SR (hallucinates structures), and a second model (app size). See the PR
+for the "next round" list.
