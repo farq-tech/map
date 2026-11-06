@@ -65,7 +65,7 @@ final class VoiceNotesUITests: XCTestCase {
         let card = any(app, "voice-note-playing")
         XCTAssertTrue(card.waitForExistence(timeout: 10), "«فلان يتكلم…» while it plays")
         let speaker = any(app, "voice-note-speaker")
-        XCTAssertTrue(speaker.label.contains("يتكلم"), speaker.label)
+        XCTAssertTrue(speaker.label.contains("رسالة من"), speaker.label)
         shot("vn-02-playing")
         /* ≈3 s of voice plus the cues, then it is over. */
         let gone = NSPredicate(format: "exists == false")

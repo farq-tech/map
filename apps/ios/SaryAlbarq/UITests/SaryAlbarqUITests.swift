@@ -169,7 +169,7 @@ final class SaryAlbarqUITests: XCTestCase {
         /* Build 21: iOS never asked → the Najdi pre-prompt is right above the button (no extra screen). */
         let pre = any(app, "join.prePrompt").firstMatch
         XCTAssertTrue(pre.exists, "the pre-prompt before the system alert")
-        XCTAssertTrue(pre.label.contains("عشان العيال يشوفونك وتوصلك الفزعة"), pre.label)
+        XCTAssertTrue(pre.label.contains("عشان الربع يشوفونك وتوصلهم الطوارئ"), pre.label)
         sleep(1)
         shot("1-invite-one-screen", app)
 

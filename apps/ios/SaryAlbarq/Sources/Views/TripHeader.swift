@@ -93,18 +93,20 @@ struct TripHeader: View {
     var settingsTapped: (() -> Void)? = nil
 
     private var barHeight: CGFloat { theme.drive ? 80 : 70 }
+    /// UX ٢١: every header button is at least 44 pt wide, 56 pt while driving.
+    private var hit: CGFloat { theme.drive ? 56 : 44 }
 
     /// Lovable: ONE dark card, 22 pt corners — title and «إلى … · ١٢٫٤ كم» on the right; the weather
     /// pill, the alerts' history and the gear on the left. «رجوع» is a small chevron before the title.
     var body: some View {
         let p = theme.palette
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        HStack(spacing: 6) {
+        HStack(spacing: 2) {
             Button(action: back) {
                 Image(systemName: SaryIcon.back)
                     .font(.system(size: theme.drive ? 18 : 15, weight: .semibold))
                     .foregroundStyle(p.textSecondary)
-                    .frame(width: 28, height: barHeight)
+                    .frame(width: hit, height: barHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
@@ -136,7 +138,7 @@ struct TripHeader: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(accessibility))
-            .accessibilityHint(Text("يفتح تفاصيل الرحلة"))
+            .accessibilityHint(Text("يفتح تفاصيل الطلعة"))
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("trip.header")
 
@@ -146,7 +148,7 @@ struct TripHeader: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(r.muted ? p.textSecondary : p.accentText)
                         .symbolEffect(.pulse, isActive: r.playing && !r.muted && !theme.reduceMotion)
-                        .frame(width: 32, height: 44)
+                        .frame(width: hit, height: hit)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
@@ -172,7 +174,7 @@ struct TripHeader: View {
                     .padding(.horizontal, 10)
                     .frame(height: 24)
                     .background(Capsule().fill(p.sunken.opacity(0.7)))
-                    .frame(minHeight: 44)
+                    .frame(minWidth: hit, minHeight: hit)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -189,7 +191,7 @@ struct TripHeader: View {
                     Image(systemName: bellOpen ? "xmark" : "clock.arrow.circlepath")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(p.textPrimary)
-                        .frame(width: 36, height: 44)
+                        .frame(width: hit, height: hit)
                     if ui.bell > 0 && !bellOpen {
                         Text(SaryFormat.number(ui.bell))
                             .font(.sary(10, .heavy))
@@ -211,7 +213,7 @@ struct TripHeader: View {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(p.textPrimary)
-                        .frame(width: 36, height: 44)
+                        .frame(width: hit, height: hit)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
@@ -219,8 +221,8 @@ struct TripHeader: View {
                 .accessibilityIdentifier("tab.more")
             }
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 12)
+        .padding(.leading, 2)
+        .padding(.trailing, 6)
         .frame(minHeight: barHeight)
         .background { shape.fill(p.chromeOpaque.opacity(0.88)) }
         .saryGlass(shape, role: .chrome)
@@ -233,7 +235,7 @@ struct TripHeader: View {
         Button(action: statusTapped) {
             Circle().fill(ui.level.color(theme.palette))
                 .frame(width: 8, height: 8)
-                .frame(width: 20, height: 44)
+                .frame(width: 28, height: hit)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

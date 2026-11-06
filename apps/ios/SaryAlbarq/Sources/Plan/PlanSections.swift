@@ -68,7 +68,7 @@ struct PlanDetailsSections: View {
                         Text(tp.notes).saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                     }
                     if tp.isEmpty {
-                        Text(iLead ? "ما فيه خطة بعد. ارسم المسار أو استورد ملف GPX." : "ما فيه خطة بعد.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        Text(iLead ? "ما فيه خطة بعد. ارسم المسار أو استورد ملف مسار." : "ما فيه خطة بعد.").saryText(.subhead).foregroundStyle(p.textSecondary)
                     }
                     HStack(spacing: theme.space(.s)) {
                         if iLead || !tp.isEmpty {
@@ -82,7 +82,7 @@ struct PlanDetailsSections: View {
                             Button {
                                 share = try? RouteFile.exportFile(name: snapshot.outing.name, plan: tp)
                                 TrackLibrary.shared.add(name: snapshot.outing.name, origin: .exported, points: tp.points)
-                            } label: { SaryButtonLabel(title: "GPX", systemImage: SaryIcon.share) }
+                            } label: { SaryButtonLabel(title: "ملف المسار", systemImage: SaryIcon.share) }
                                 .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                                 .accessibilityIdentifier("details.planExport")
                         }

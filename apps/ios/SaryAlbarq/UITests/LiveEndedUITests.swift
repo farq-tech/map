@@ -43,7 +43,7 @@ final class LiveEndedUITests: XCTestCase {
         let end = app.buttons["trip.end"]
         XCTAssertTrue(end.waitForExistence(timeout: 45), "«أنهِ الرحلة» on the arrived trip card")
         end.tap()
-        let confirm = app.buttons["أنهِ الرحلة للجميع"]
+        let confirm = app.buttons["أنهِ الطلعة للجميع"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertTrue(app.buttons["trip.summary"].waitForExistence(timeout: 10), "the trip has ended")

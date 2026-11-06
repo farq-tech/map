@@ -145,7 +145,13 @@ targets:
   SaryAlbarqTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests]
+    sources:
+      - path: Tests
+        excludes: [TestRoutes]
+      # Shared drive scenarios (GPX + expected results), one folder in the test bundle.
+      - path: Tests/TestRoutes
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: SaryAlbarq
     settings:
