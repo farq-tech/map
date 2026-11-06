@@ -1026,7 +1026,9 @@ final class LiveOutingController: ObservableObject {
         if session.joinedJustNow {
             session.joinedJustNow = false
             if location.canLocate, !session.hasAlwaysPermission, !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+                /* After the one-time welcome card («حياك في …»), never on top of it. */
+                let wait = arrival.welcomePending || arrivalWelcome != nil ? InviteeArrival.welcomeSeconds + 0.8 : 0.9
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
                     guard let self, self.modal == nil, self.session.wantsToShare, !self.session.hasAlwaysPermission else { return }
                     self.shareAlwaysAfterJoin = true
                     self.modal = .shareAlways
