@@ -720,6 +720,10 @@ final class MapVisualsDirector: NSObject {
         frameTimes = []
         MapVisualsHub.shared.lastFlightStats = stats
         if !stats.isEmpty { Logger(subsystem: "sa.sary.albarq", category: "MapVisuals").info("drone flight: \(stats, privacy: .public)") }
+        #if DEBUG
+        /* Performance notes: the last flight's pacing, as numbers, in tmp/. */
+        try? stats.write(to: FileManager.default.temporaryDirectory.appendingPathComponent("drone-stats.txt"), atomically: true, encoding: .utf8)
+        #endif
         MapVisualsHub.shared.setFlying(false)
         map?.accessibilityValue = nil
         refresh(force: false)

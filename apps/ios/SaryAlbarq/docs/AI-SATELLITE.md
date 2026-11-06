@@ -254,6 +254,7 @@ Performance (measured 2026-11-06):
 | `mergeDetail` + `LineGuard`, one AI tile | 5 ms | ≈ 0.3–0.4 s (on top of 4–8 s CPU-only inference) |
 | App footprint, detail on (no AI) | | 97–123 MB |
 | App footprint, AI + detail, exploration z18 | | 129–142 MB |
+| Drone orbit at z16 over the Nafud (frame pacing) | | detail off: 51.0 / 56.4 fps; on: 51.5 / 54.7 fps (two runs each; noise ±3) |
 
 Thermal state stayed `nominal` in every run (`thermal` in the DEBUG stats JSON).
 
