@@ -5,6 +5,24 @@ import Foundation
 // fix while sharing is on); this file turns that into the red-amber card,
 // the «انقطع منذ ١٠ د» badge and the quiet «رجع إرسال فهد» toast.
 
+/// «أرسل له طريقة التحميل»: what the leader sends a friend following from the browser.
+/// Same three steps as the invite page (apps/web/src/lib/outings/installGuide.ts).
+enum InstallGuide {
+    static let appName = "سرى البارق"
+    static let testFlightApp = "https://apps.apple.com/app/testflight/id899247664"
+    static let betaLink = "https://testflight.apple.com/join/8K62z9Vj"
+    static let sendTitle = "أرسل له طريقة التحميل"
+
+    static var message: String {
+        [
+            "عشان يوصل موقعك للربع والجوال مقفل، نزّل \(appName):",
+            "١ نزّل TestFlight: \(testFlightApp)",
+            "٢ نزّل \(appName): \(betaLink)",
+            "٣ افتح \(appName)، وافتح رابط الدعوة مرة ثانية",
+        ].joined(separator: "\n")
+    }
+}
+
 extension LiveOutingPresenter {
     /// Device time of their last fix reaching the server, while the server says they are silent.
     static func silentSince(_ uid: String, in v: OutingView) -> Date? {
@@ -23,7 +41,8 @@ extension LiveOutingPresenter {
             participantId: uid, name: m.display_name, color: v.colors[uid] ?? 0xFFFFFF,
             since: deviceDate(s.since, view: v) ?? now, level: s.level,
             lastLat: lat, lastLng: lng, lastAt: lastAt,
-            hasPhone: !(m.phone ?? "").isEmpty
+            hasPhone: !(m.phone ?? "").isEmpty,
+            onWeb: s.reason == "web"
         )
     }
 

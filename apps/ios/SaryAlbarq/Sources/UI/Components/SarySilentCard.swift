@@ -19,6 +19,8 @@ struct SilentAlertUI: Equatable {
     var lastAt: Date?
     /// They added a phone number: «اتصال».
     var hasPhone: Bool
+    /// Following from the browser (server reason "web"): «أرسل له طريقة التحميل».
+    var onWeb: Bool = false
 
     var hasLast: Bool { lastLat != nil && lastLng != nil }
 }
@@ -74,7 +76,7 @@ struct SarySilentCard: View {
                     .accessibilityHint(Text("اضغط لعرض آخر موقع على الخريطة"))
                     SaryDismissButton(action: dismiss)
                 }
-                if alert.hasLast || alert.hasPhone {
+                if alert.hasLast || alert.hasPhone || alert.onWeb {
                     HStack(spacing: theme.space(.s)) {
                         if alert.hasLast {
                             pill("اتجه", icon: SaryIcon.directions, fill: p.warning, ink: p.warningText) { actions.go(alert.participantId) }
@@ -83,6 +85,13 @@ struct SarySilentCard: View {
                         if alert.hasPhone {
                             pill("اتصال", icon: SaryIcon.phone, fill: p.emergency, ink: p.emergencyText) { actions.call(alert.participantId) }
                                 .accessibilityIdentifier("silent-call")
+                        }
+                        if alert.onWeb {
+                            ShareLink(item: InstallGuide.message) {
+                                pillLabel(InstallGuide.sendTitle, icon: "square.and.arrow.up", fill: p.accent, ink: p.textPrimary)
+                            }
+                            .buttonStyle(SaryPressStyle())
+                            .accessibilityIdentifier("silent-send-install")
                         }
                     }
                     .padding(.leading, 36 + theme.space(.m))
@@ -103,16 +112,20 @@ struct SarySilentCard: View {
 
     private func pill(_ title: String, icon: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: icon)
-                .saryText(.footnote, weight: .bold)
-                .foregroundStyle(ink)
-                .padding(.horizontal, theme.space(.m))
-                .frame(minHeight: max(36, theme.minTarget - 8))
-                .background(Capsule().fill(fill.opacity(0.16)))
-                .overlay(Capsule().strokeBorder(fill.opacity(0.45), lineWidth: 1))
-                .contentShape(Capsule())
+            pillLabel(title, icon: icon, fill: fill, ink: ink)
         }
         .buttonStyle(SaryPressStyle())
+    }
+
+    private func pillLabel(_ title: String, icon: String, fill: Color, ink: Color) -> some View {
+        Label(title, systemImage: icon)
+            .saryText(.footnote, weight: .bold)
+            .foregroundStyle(ink)
+            .padding(.horizontal, theme.space(.m))
+            .frame(minHeight: max(36, theme.minTarget - 8))
+            .background(Capsule().fill(fill.opacity(0.16)))
+            .overlay(Capsule().strokeBorder(fill.opacity(0.45), lineWidth: 1))
+            .contentShape(Capsule())
     }
 }
 

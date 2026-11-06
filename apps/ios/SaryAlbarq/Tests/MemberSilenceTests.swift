@@ -48,6 +48,18 @@ final class MemberSilenceTests: XCTestCase {
         XCTAssertNil(LiveEvent.decode(["type": "member_silent", "since": "x"]), "no user")
     }
 
+    func testWebMemberGetsTheInstallGuideAction() {
+        let e = LiveEvent.decode([
+            "type": "member_silent", "user_id": "b", "since": "2026-11-04T09:50:01.000Z", "level": 10, "last": NSNull(), "reason": "web",
+        ])
+        guard case let .memberSilent(info)? = e else { return XCTFail("not decoded") }
+        XCTAssertEqual(info.reason, "web")
+        let m = InstallGuide.message
+        XCTAssertTrue(m.contains(InstallGuide.testFlightApp) && m.contains(InstallGuide.betaLink))
+        XCTAssertTrue(m.contains("سرى البارق"))
+        XCTAssertEqual(m.split(separator: "\n").count, 4)
+    }
+
     func testDecodesMemberResumed() {
         XCTAssertEqual(LiveEvent.decode(["type": "member_resumed", "user_id": "b"]), .memberResumed(userId: "b", reason: nil))
         XCTAssertEqual(LiveEvent.decode(["type": "member_resumed", "user_id": "b", "reason": "left"]), .memberResumed(userId: "b", reason: "left"))
