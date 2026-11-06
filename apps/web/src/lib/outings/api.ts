@@ -63,6 +63,9 @@ export type Sos = { at: string; fix: SosFix | null };
 
 export type Rally = { lat: number; lng: number; label: string | null; set_at: string | null; set_by: string | null };
 
+/** Presence hints (PR #114 `presence.js`); `web_hidden` = the browser page went to the background. */
+export type HeartbeatHint = "web_hidden" | "fg";
+
 export type GpsState = "ok" | "weak" | "unavailable" | "denied";
 
 export type Position = {
@@ -294,8 +297,9 @@ export const OutingsApi = {
 	},
 	get: (id: string) => call<OutingSnapshot>("GET", `/${id}`),
 	poll: (id: string) => call<OutingSnapshot>("GET", `/${id}/live`),
-	heartbeat: (id: string, gps: GpsState, battery?: { level: number; charging: boolean } | null) =>
-		call<{ ok: true }>("POST", `/${id}/heartbeat`, battery ? { gps, battery } : { gps }, { timeoutMs: 8_000 }),
+	/** `hint`: why the next silence will happen (e.g. `web_hidden`); servers that do not know it ignore it. */
+	heartbeat: (id: string, gps: GpsState, battery?: { level: number; charging: boolean } | null, hint?: HeartbeatHint) =>
+		call<{ ok: true }>("POST", `/${id}/heartbeat`, { gps, ...(battery ? { battery } : {}), ...(hint ? { hint } : {}) }, { timeoutMs: 8_000 }),
 	sendPosition: (id: string, fix: unknown) => call<{ ok: true }>("POST", `/${id}/positions`, { fix }, { timeoutMs: 8_000 }),
 	/** Opt-in field-test aggregates: numbers only, re-validated by the server. */
 	sendDiagnostics: (id: string, report: unknown) => call<{ ok: true }>("POST", `/${id}/diagnostics`, { report }),
