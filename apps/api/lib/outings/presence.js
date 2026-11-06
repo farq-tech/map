@@ -33,7 +33,8 @@ const OFFLINE_MS = 10 * 60_000;
 /* We "still hear" a phone whose heartbeat / request is this recent. */
 const HEARD_MS = 90_000;
 
-const HINTS = new Set(['fg', 'bg_always', 'bg_when_in_use', 'low_power', 'terminated', 'location_off']);
+/* `web_hidden`: the web page went to the background (apps/web live.ts, PR #117). */
+const HINTS = new Set(['fg', 'bg_always', 'bg_when_in_use', 'low_power', 'terminated', 'location_off', 'web_hidden']);
 const REASONS = ['hidden', 'location_off', 'app_closed', 'when_in_use', 'web', 'no_gps', 'low_power', 'no_network'];
 
 /** The short Najdi line for each reason (the app has the same table: PresenceReason). */
@@ -87,7 +88,7 @@ function presenceOf({ nowMs, fixAtMs = null, heardAtMs = null, gps = null, hint 
   if (gps === 'denied' || h === 'location_off') reason = 'location_off';
   else if (h === 'terminated') reason = 'app_closed';
   else if (h === 'bg_when_in_use') reason = 'when_in_use';
-  else if (client === 'web') reason = 'web';
+  else if (client === 'web' || h === 'web_hidden') reason = 'web';
   else if (heard) reason = h === 'low_power' || lowPower ? 'low_power' : 'no_gps';
   else if (h === 'low_power' || lowPower) reason = 'low_power';
   else reason = 'no_network';
