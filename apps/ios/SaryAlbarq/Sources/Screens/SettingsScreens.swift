@@ -530,6 +530,7 @@ struct AboutView: View {
                     Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
                     HiResLicenseNotice()
                     VoiceDenoiseLicenseNotice()
+                    CampSitesAttributionNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

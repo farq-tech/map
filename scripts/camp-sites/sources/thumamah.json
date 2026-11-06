@@ -1,0 +1,98 @@
+{
+ "region": "thumamah",
+ "bbox": [
+  25.0,
+  46.4,
+  25.4,
+  46.9
+ ],
+ "arcsec": 2,
+ "sources": [
+  {
+   "dataset": "Copernicus DEM GLO-30",
+   "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N25_00_E046_00_DEM/Copernicus_DSM_COG_10_N25_00_E046_00_DEM.tif",
+   "etag": "888bca737ba8861570e0a97171a1ce7e",
+   "bytes": 38210940
+  },
+  {
+   "dataset": "ESA WorldCover 10m 2021 v200",
+   "url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N24E045_Map.tif",
+   "etag": "0155f70444210d96d3cddbc4604c45e4-2",
+   "bytes": 13249205
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_38RPN_20250317_1_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_38RPP_20250317_1_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPN_20250317_0_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPP_20250317_0_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPN_20250409_0_L2A",
+   "date": "2025-04-09",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPP_20250409_0_L2A",
+   "date": "2025-04-09",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPN_20250208_0_L2A",
+   "date": "2025-02-08",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPP_20250208_0_L2A",
+   "date": "2025-02-08",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_38RPN_20260928_1_L2A",
+   "date": "2026-09-28",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_38RPP_20260928_1_L2A",
+   "date": "2026-09-28",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPN_20260928_0_L2A",
+   "date": "2026-09-28",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RPP_20260928_0_L2A",
+   "date": "2026-09-28",
+   "use": "ground type"
+  }
+ ],
+ "output": "rasters_2.npz",
+ "sha256": "94383b7b5ef87b2eae2b16b4038d210a2d07bef3aa4f81b18532c9283b61de64"
+}
