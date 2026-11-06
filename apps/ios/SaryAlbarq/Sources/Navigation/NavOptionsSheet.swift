@@ -18,6 +18,10 @@ struct NavOptionsSheet: View {
                     Text("الملاحة إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                     Text(nav.target?.name ?? "").saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2)
                         .accessibilityIdentifier("nav.options.target")
+                    if let note = nav.target?.staleNote() {
+                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warning)
+                            .accessibilityIdentifier("nav.options.stale")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: cancel) {
@@ -67,6 +71,7 @@ struct NavOptionsSheet: View {
         case .destination: return "flag.checkered"
         case .planRouteEnd: return "point.topleft.down.to.point.bottomright.curvepath"
         case .tripStop: return "mappin.circle.fill"
+        case .lastKnown: return "clock.arrow.circlepath"
         default: return "mappin.and.ellipse"
         }
     }

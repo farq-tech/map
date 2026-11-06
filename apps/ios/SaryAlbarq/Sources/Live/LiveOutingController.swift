@@ -1178,7 +1178,7 @@ final class LiveOutingController: ObservableObject {
         NearestStationsActions(
             go: { [weak self] id in
                 guard let s = self?.stationList.first(where: { $0.id == id }) else { return }
-                Directions.open(lat: s.lat, lng: s.lng, name: s.name ?? "محطة بنزين")
+                self?.directions(NavTargets.station(name: s.name ?? s.brand, lat: s.lat, lng: s.lng))
             },
             show: { [weak self] id in
                 guard let self, let s = self.stationList.first(where: { $0.id == id }) else { return }
@@ -1290,10 +1290,24 @@ enum LiveConfirm: Identifiable, Equatable {
     case backWhileSharing
     /// «غادر الطلعة» from the trip tab's sharing row.
     case leave
-    var id: Int { self == .leave ? 1 : 0 }
+    /// «اتجه» while guiding: «نغيّر الوجهة إلى …؟» («غيّر» / «لا»).
+    case retarget(NavTarget)
+    var id: String {
+        switch self {
+        case .backWhileSharing: return "back"
+        case .leave: return "leave"
+        case .retarget: return "retarget"
+        }
+    }
+
+    var retargetTarget: NavTarget? {
+        if case let .retarget(t) = self { return t }
+        return nil
+    }
 }
 
-/// Directions in Apple Maps (no third party sees the request from us).
+/// Apple Maps, ONLY where the person explicitly picks another app («افتح في خرائط Apple»,
+/// a coordinate's share sheet). Every «اتجه» is our own guidance (`directions(_:)`).
 enum Directions {
     static func open(lat: Double, lng: Double, name: String) {
         var c = URLComponents(string: "https://maps.apple.com/")!

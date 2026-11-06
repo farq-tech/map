@@ -76,6 +76,41 @@ extension LiveOutingController {
 
     func navigate(to t: NavTarget) { navigate(.success(t)) }
 
+    /// «اتجه» on a card (a waypoint, a fuel station, a silent member's last fix): our own
+    /// guidance on this map, never another app. While guiding, ask first («نغيّر الوجهة…؟»).
+    func directions(_ r: Result<NavTarget, NavRefusal>) {
+        if case let .failure(e) = r { return toast(e.message) }
+        guard case let .success(t) = r else { return }
+        guard location.lastFix != nil else { return toast(NavRefusal.noFix.message) }
+        modal = nil
+        let ask = Self.directionsNeedsConfirm(nav.phase)
+        /* After the card's sheet has gone (a dialog or sheet over a closing one is dropped). */
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            if ask { self.confirm = .retarget(t) } else { self.navigate(.success(t)) }
+        }
+    }
+
+    /// Guidance is on (or being planned): a new «اتجه» would replace it, so we ask.
+    static func directionsNeedsConfirm(_ phase: NavPhase) -> Bool {
+        phase == .guiding || phase == .offRoad || phase == .planning
+    }
+
+    /// «غيّر»: re-plan to the new target. The trip's own guidance comes back by itself once this
+    /// one ends (`TripAutoNav`: idle → start); a person's own target is in «أدوات ← الطريق».
+    func retarget(to t: NavTarget) {
+        if case .retarget = confirm { confirm = nil }
+        let wasAuto = nav.auto
+        let hadTarget = nav.target != nil
+        navigate(.success(t))
+        guard hadTarget, nav.target == t else { return }
+        toast(Self.retargetHint(wasAuto: wasAuto))
+    }
+
+    static func retargetHint(wasAuto: Bool) -> String {
+        wasAuto ? "يرجع توجيه الرحلة للوجهة لما تنهي هذا التوجيه" : "ترجع للوجهة من أدوات ← الطريق"
+    }
+
     /// «روح له»: refused in the card itself (with the reason) when their position is old.
     func navigateToMember(_ id: String) {
         let r = memberTarget(id)
@@ -118,6 +153,7 @@ extension LiveOutingController {
         if nav.isActive, nav.camera != .free { nav.camera = .free }
     }
 
+    /// «افتح في خرائط Apple» in the route options: the person explicitly picks another app.
     func openInAppleMaps() {
         guard let t = nav.target else { return }
         Directions.open(lat: t.position.lat, lng: t.position.lng, name: t.name)
@@ -134,6 +170,7 @@ extension LiveOutingController {
         guard nav.phase != .idle, let t = nav.target else { return d }
         d.target = t.position
         d.targetName = t.name
+        d.targetNote = t.staleNote()
         switch nav.phase {
         case .planning:
             let sel = nav.selectedId ?? nav.routes.first?.id

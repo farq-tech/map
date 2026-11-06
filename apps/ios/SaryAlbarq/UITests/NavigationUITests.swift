@@ -144,6 +144,36 @@ final class NavigationUITests: XCTestCase {
         shot(app, "nav-picker-light")
     }
 
+    /// The owner's build-20 report: «اتجه» on «انقطع إرسال …» opened Apple Maps. Now it asks while
+    /// guiding («نغيّر الوجهة إلى آخر موقع نورة؟»), then plans in OUR map, labelled «آخر موقع معروف».
+    func testSilentMemberDirectionsStayInApp() {
+        let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding", "-demoSilent",
+                          "-SaryContext", "stopped"] + mode("light"))
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 20), "guidance is on")
+        /* The card's own identifier covers its pills: find «اتجه» inside «silent-card». */
+        let go = app.buttons.matching(NSPredicate(format: "(identifier == 'silent-go' OR identifier == 'silent-card') AND label == 'اتجه'")).firstMatch
+        if !go.waitForExistence(timeout: 15), app.buttons["alerts.bell"].exists {
+            app.buttons["alerts.bell"].tap()
+        }
+        XCTAssertTrue(go.waitForExistence(timeout: 10), "the silent card's «اتجه»")
+        go.tap()
+        let change = app.buttons["غيّر"]
+        XCTAssertTrue(change.waitForExistence(timeout: 5), "guidance is on: ask before changing the destination")
+        /* (SwiftUI wraps the interpolated name in bidi isolates.) */
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'نغيّر الوجهة إلى' AND label CONTAINS 'آخر موقع نورة'"))
+            .firstMatch.exists, "the question names the target")
+        shot(app, "nav-silent-retarget-confirm")
+        change.tap()
+        XCTAssertTrue(el(app, "nav.options").waitForExistence(timeout: 10), "planned in our own map, not Apple Maps")
+        XCTAssertEqual(XCUIApplication(bundleIdentifier: "com.apple.Maps").state, .notRunning, "Apple Maps never opened")
+        /* (The sheet's own identifier covers its texts: match by label.) */
+        let texts = app.staticTexts
+        XCTAssertTrue(texts.matching(NSPredicate(format: "label == 'آخر موقع نورة'")).firstMatch.waitForExistence(timeout: 5), "the target's name")
+        XCTAssertTrue(texts.matching(NSPredicate(format: "label BEGINSWITH 'آخر موقع معروف · قبل'")).firstMatch.exists, "labelled «آخر موقع معروف», never live")
+        sleep(1)
+        shot(app, "nav-silent-lastknown-options")
+    }
+
     // MARK: live (real Mapbox routing + simulated drive)
 
     func testLiveRiyadhDrive() throws {
