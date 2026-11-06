@@ -32,14 +32,6 @@ enum BackgroundCadence {
     /// Each base stays under the «مباشر» window others judge me by (`Policy.liveMovingMs` 15 s
     /// moving, `Policy.liveParkedMs` 45 s parked), with room for a slow desert uplink: at the
     /// old 20 s / 60 s a locked phone flickered to «آخر موقع معروف» between every two sends.
-    ///
-    /// Low Power Mode used to double every tier: parked became 80 s and moving 24 s, both over the
-    /// «مباشر» windows (45 s / 15 s), so a locked phone flickered between «مباشر» and «آخر موقع»
-    /// between every two sends (field, build 21, 2026-11-06: one POST every 81 s, mode saver).
-    /// Now Low Power keeps the same send cadence (one small POST is cheap); the saving comes from
-    /// the GPS accuracy tiers, and nothing is ever sent slower than the «مباشر» window.
-    static let lowPowerMaxMs = 40_000.0
-
     static func intervalMs(_ m: Motion, lowPower: Bool) -> Double {
         let base: Double
         switch m {
@@ -47,7 +39,7 @@ enum BackgroundCadence {
         case .moving: base = 12_000
         case .parked: base = 40_000
         }
-        return lowPower ? min(lowPowerMaxMs, base) : base
+        return lowPower ? base * 2 : base
     }
 
     struct Last: Equatable {

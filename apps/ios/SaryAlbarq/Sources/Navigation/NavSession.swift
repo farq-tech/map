@@ -99,6 +99,105 @@ final class NavSession: ObservableObject {
         voice.onSpoken = { [weak self] t in self?.spokenSubject.send(t) }
         locator.onFix = { [weak self] f in self?.ingest(f) }
         voice.onReevaluate = { [weak self] in self?.restateCurrent() }
+        voice.atPlayback = { [weak self] l, c in self?.playback(l, choice: c) ?? .play(l) }
+    }
+
+    /// The arrival time: the engine's (Mapbox: live traffic) remaining time, smoothed (`NavETASmoother`).
+    private(set) var etaSmoother = NavETASmoother()
+    private var etaAnnouncer = NavETAAnnouncer()
+
+    /// «باقي ربع ساعة وتوصل.» at the start, every 10 min, and when the arrival moved by more than 5 —
+    /// never over a maneuver (only with 20 s and 150 m of road before the next one, the speaker free).
+    func announceETAIfDue(_ p: NavProgress, now: Date = Date()) {
+        guard phase == .guiding, !rerouting, let a = etaSmoother.arrival, etaAnnouncer.isDue(arrival: a, now: now),
+              !voice.isSpeaking else { return }
+        let v = max(3, guidanceSpeed(now) ?? 0)
+        guard p.distanceToManeuverM > 150, p.distanceToManeuverM / v > 20 else { return }
+        let s = a.timeIntervalSince(now)
+        etaAnnouncer.said(arrival: a, now: now)
+        voice.say(NavLine(NavETAAnnouncer.text(arrival: a, remainingS: s), clips: NavETAAnnouncer.clip(remainingS: s).map { [$0] } ?? [],
+                          routeRevision: routeRevision, expiresAt: now.addingTimeInterval(15)))
+    }
+
+    /// When the last progress came, and my speed along the route from progress to progress.
+    private var progressAt = Date.distantPast
+    private var progressSpeed: Double?
+
+    /// Mapbox's map-matched position while it guides (not published: progress redraws anyway).
+    private(set) var matchedFix: DeviceFix?
+
+    private func fresh(_ f: DeviceFix?, _ now: Date) -> DeviceFix? {
+        guard let f, now.timeIntervalSince1970 * 1000 - f.atMs < 3000 else { return nil }
+        return f
+    }
+
+    /// «أنت» on the map while guiding: Mapbox's matched position (on the road, the same point the
+    /// distances are measured from, no smoothing lag) — else what the map draws otherwise.
+    func mapFix(_ f: DeviceFix?, now: Date = Date()) -> DeviceFix? {
+        guard phase == .guiding, !rerouting, var m = fresh(matchedFix, now) else { return f }
+        m.heading = HeadingChooser.course(m) ?? f?.heading
+        return m
+    }
+
+    /// My speed for prompt timing: the matched / raw fix's own (Doppler) when fresh, else along the route.
+    func guidanceSpeed(_ now: Date = Date()) -> Double? {
+        if let v = fresh(matchedFix, now)?.speed, v >= 0 { return v }
+        if let f = myFix(), let v = f.speed, v >= 0, now.timeIntervalSince1970 * 1000 - f.atMs < 3000 { return v }
+        return progressSpeed
+    }
+
+    private func noteProgress(_ p: NavProgress, now: Date = Date()) {
+        if let old = progress, old.stepIndex == p.stepIndex {
+            let dt = now.timeIntervalSince(progressAt)
+            if dt > 0.2, dt < 5 {
+                let v = max(0, (old.distanceToManeuverM - p.distanceToManeuverM) / dt)
+                progressSpeed = progressSpeed.map { 0.5 * $0 + 0.5 * v } ?? v
+            }
+        }
+        progressAt = now
+    }
+
+    /// The line as it is about to play (build 22, `NavPromptTiming`): rebuilt for the distance
+    /// when it ENDS, from the engine's distance now (projected from its last progress), rounded
+    /// down; the action alone when the turn is right there; held so it ends at the distance it
+    /// says; dropped when the maneuver is behind me.
+    func playback(_ line: NavLine, choice c: NavVoiceChoice, now: Date = Date()) -> NavVoice.Playback {
+        guard phase == .guiding, let id = line.maneuverID, let r = active, let p = progress,
+              let colon = id.firstIndex(of: ":"), Int(id[..<colon]) == routeRevision,
+              let index = Int(id[id.index(after: colon)...]), r.steps.indices.contains(index) else { return .play(line) }
+        if p.stepIndex > index { return .drop }
+        guard p.stepIndex == index else { return .play(line) }
+        let v = guidanceSpeed(now)
+        let age = min(3, max(0, now.timeIntervalSince(progressAt)))
+        let dNow = max(0, p.distanceToManeuverM - (v ?? 0) * age)
+        let step = r.steps[index]
+        let next = r.steps.indices.contains(index + 1) ? r.steps[index + 1] : nil
+        func build(_ spoken: Double?) -> NavLine {
+            let d = spoken ?? 0
+            var clips = SaryVoiceScript.step(step, distanceM: d, auto: auto, stop: isStopTarget)
+            if spoken != nil {
+                clips = SaryVoiceScript.withThen(clips, next: next, gapM: step.distanceM, distanceToManeuverM: dNow, speedMps: v, stop: isStopTarget)
+            }
+            var out = line
+            let text = NavText.spoken(step, distanceM: d, targetName: target?.name)
+            out.text = [line.leadText, text].filter { !$0.isEmpty }.joined(separator: ". ")
+            out.clips = line.leadClips + clips
+            return out
+        }
+        let plan = NavPromptTiming.plan(distanceNowM: dNow, speedMps: v, latencyS: NavPromptTiming.startLatencyS(c),
+                                        canHold: true, heldS: line.heldS, band: NavPromptTiming.band(c)) { s in
+            let l = build(s)
+            return NavPromptTiming.duration(c, clips: l.clips, text: l.text)
+        }
+        var out = build(plan.spokenM)
+        out.expiresAt = now.addingTimeInterval(plan.holdS + 5)
+        /* The «now» was said: no later cue repeats it. */
+        saidAtM[id] = plan.spokenM == nil ? 0 : dNow
+        #if DEBUG
+        NavLog.log("prompt step=%d now=%.0fm v=%.1f said=%@ ends=%.0fm hold=%.1fs", index, dNow, v ?? -1,
+                   plan.spokenM.map { String(format: "%.0f", $0) } ?? "now", plan.endM, plan.holdS)
+        #endif
+        return plan.holdS > 0 ? .hold(out, plan.holdS) : .play(out)
     }
 
     /// Bumped on every new route (start, reroute): lines built for an older one are dropped.
@@ -430,6 +529,10 @@ final class NavSession: ObservableObject {
     private func attach(_ e: NavGuidanceEngine) {
         engine = e
         e.onEvent = { [weak self] ev in self?.handle(ev) }
+        matchedFix = nil
+        if let m = e as? MapboxGuidanceEngine {
+            m.onMatched = { [weak self] f in self?.matchedFix = f }
+        }
         if let local = e as? LocalGuidanceEngine {
             local.reroute = { [weak self] from, heading in await self?.rerouteLocally(from: from, heading: heading) }
             locator.start()
@@ -457,8 +560,11 @@ final class NavSession: ObservableObject {
         switch ev {
         case let .progress(p):
             guard phase == .guiding else { return }
+            noteProgress(p)
             progress = p
             if rerouting { rerouting = false }
+            etaSmoother.update(remainingS: p.durationRemainingS, speedMps: guidanceSpeed())
+            announceETAIfDue(p)
         case .offRoute:
             guard phase == .guiding else { return }
             rerouting = true
@@ -563,6 +669,11 @@ final class NavSession: ObservableObject {
 
     private func reset() {
         phase = .idle
+        progressAt = .distantPast
+        progressSpeed = nil
+        etaSmoother.reset()
+        etaAnnouncer.reset()
+        matchedFix = nil
         target = nil
         routes = []
         selectedId = nil
@@ -600,7 +711,7 @@ final class NavSession: ObservableObject {
     }
 
     var remainingSeconds: Double? {
-        if let p = progress { return p.durationRemainingS }
+        if let p = progress { return etaSmoother.remaining() ?? p.durationRemainingS }
         return active?.durationS
     }
 

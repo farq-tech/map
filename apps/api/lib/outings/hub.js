@@ -203,18 +203,13 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return [...(rooms.get(outingId) || [])];
   }
 
-  /** Outings someone is watching right now (socket or HTTP poll): the presence sweep's scope. */
-  function roomIds() {
-    return [...new Set([...rooms.keys(), ...pollers.keys()])];
-  }
-
   function stats() {
     let sockets = 0;
     for (const r of rooms.values()) sockets += r.size;
     return { rooms: rooms.size, sockets };
   }
 
-  return { roomIds, join, leave, emit, connectionsOf, roomOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
+  return { join, leave, emit, connectionsOf, roomOf, touch, heartbeat, batteryOut, linkState, kick, dropUser, closeRoom, onlineUsers, awayUsers, setAway, touchPoll, sweepPollers, stats, send };
 }
 
 module.exports = { createHub };

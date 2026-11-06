@@ -121,7 +121,7 @@ struct NavManeuverBanner: View {
     }
 }
 
-/// The header's bottom line (Lovable): «١٨ د · وصول ٧:٤٢ م» on the right, «باقي ١٢٫٤ كم» on the left.
+/// The header's bottom line, always while guiding: «توصل ٧:٤٢ م · باقي ١٨ د» on the right, «١٢٫٤ كم» on the left.
 struct NavETARow: View {
     @ObservedObject var nav: NavSession
     @Environment(\.sary) private var theme
@@ -133,17 +133,16 @@ struct NavETARow: View {
             VStack(spacing: 0) {
                 Rectangle().fill(p.separator).frame(height: 0.75).padding(.horizontal, 13)
                 HStack(spacing: 4) {
-                    if let s = nav.remainingSeconds {
-                        Text(NavText.remaining(seconds: s)).font(.sary(size, .bold)).foregroundStyle(p.liveText)
-                            .accessibilityIdentifier("nav.remainingTime")
-                    }
                     if let eta = nav.etaDate {
-                        Text("· وصول \(NavText.clock(eta))").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                        Text("توصل \(NavText.clock(eta))").font(.sary(size, .bold)).foregroundStyle(p.liveText)
                             .accessibilityIdentifier("nav.eta")
+                    }
+                    if let s = nav.remainingSeconds {
+                        Text("· باقي \(NavText.remaining(seconds: s))").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                            .accessibilityIdentifier("nav.remainingTime")
                     }
                     Spacer(minLength: theme.space(.s))
                     if let m = nav.remainingMeters {
-                        Text("باقي").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
                         Text(SaryFormat.distance(meters: m)).font(.sary(size, .bold)).foregroundStyle(p.textPrimary)
                             .accessibilityIdentifier("nav.remainingDistance")
                     }
@@ -160,8 +159,8 @@ struct NavETARow: View {
     }
 
     private var label: String {
-        [nav.target.map { "إلى \($0.name)" }, nav.remainingSeconds.map { NavText.remaining(seconds: $0) },
-         nav.etaDate.map { "الوصول \(NavText.clock($0))" }, nav.remainingMeters.map { "باقي \(SaryFormat.distance(meters: $0))" }]
+        [nav.target.map { "إلى \($0.name)" }, nav.etaDate.map { "توصل \(NavText.clock($0))" },
+         nav.remainingSeconds.map { "باقي \(NavText.remaining(seconds: $0))" }, nav.remainingMeters.map { SaryFormat.distance(meters: $0) }]
             .compactMap { $0 }.joined(separator: " · ")
     }
 }
