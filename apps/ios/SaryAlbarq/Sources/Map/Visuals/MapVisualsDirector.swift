@@ -268,6 +268,11 @@ final class MapVisualsDirector: NSObject {
         guard v != appliedSand else { return }
         appliedSand = v
         try? m.setStyleImportConfigProperty(for: "basemap", config: SandGrade.configKey, value: v)
+        /* «صور عالية الوضوح» carries a fixed copy of the grade: keep it in step, or tiles enhanced after
+           panning out of a city stay city-grey over the orange desert. */
+        if m.layerExists(withId: HiResImagery.layerId) {
+            try? m.setLayerProperties(for: HiResImagery.layerId, properties: SandGrade.paint(sand: v))
+        }
     }
 
     // MARK: city buildings
