@@ -226,10 +226,8 @@ struct ChatThreadView: View {
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
-    /// «بلّغ عن الرسالة»: the message whose reason is being chosen.
-    @State private var reportTarget: ChatMessage?
-    /// «احظر فلان»: the message whose sender is about to be blocked.
-    @State private var blockTarget: ChatMessage?
+    /// «بلّغ عن الرسالة» / «احظر فلان»: one sheet at a time (two `.sheet` on one view conflict).
+    @State private var moderating: ChatModerationTarget?
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
@@ -240,20 +238,26 @@ struct ChatThreadView: View {
 
     var body: some View {
         threadBody
-            /* Sheets, not a confirmationDialog/alert: those do not reliably present from a context
-             * menu (the menu is still dismissing). «بلّغ» picks a reason; «احظر» confirms. */
-            .sheet(item: $reportTarget) { m in
-                ChatReportSheet(name: senderName(m),
-                                report: { reason, block in Task { await chat.report(m, reason: reason, block: block); reportTarget = nil } },
-                                cancel: { reportTarget = nil })
-                    .saryPresented(appearance)
+            /* One sheet (not a confirmationDialog/alert, and not two `.sheet`s): those do not present
+             * reliably from a context menu. «بلّغ» picks a reason; «احظر» confirms. */
+            .sheet(item: $moderating) { t in
+                moderationSheet(t).saryPresented(appearance)
             }
-            .sheet(item: $blockTarget) { m in
-                ChatBlockSheet(name: senderName(m),
-                               block: { Task { await chat.block(m.sender_id, name: senderName(m)); blockTarget = nil } },
-                               cancel: { blockTarget = nil })
-                    .saryPresented(appearance)
-            }
+    }
+
+    @ViewBuilder
+    private func moderationSheet(_ t: ChatModerationTarget) -> some View {
+        let m = t.message
+        switch t.mode {
+        case .report:
+            ChatReportSheet(name: senderName(m),
+                            report: { reason, block in Task { await chat.report(m, reason: reason, block: block); moderating = nil } },
+                            cancel: { moderating = nil })
+        case .block:
+            ChatBlockSheet(name: senderName(m),
+                           block: { Task { await chat.block(m.sender_id, name: senderName(m)); moderating = nil } },
+                           cancel: { moderating = nil })
+        }
     }
 
     private func senderName(_ m: ChatMessage) -> String { context.name(m.sender_id, fallback: m.sender_name) }
@@ -430,9 +434,9 @@ struct ChatThreadView: View {
             Button { UIPasteboard.general.string = m.text } label: { Label("نسخ", systemImage: "doc.on.doc") }
         }
         if chat.canReport(m) {
-            Button { reportTarget = m } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
+            Button { moderating = ChatModerationTarget(message: m, mode: .report) } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
                 .accessibilityIdentifier("chat.menu.report")
-            Button(role: .destructive) { blockTarget = m } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
+            Button(role: .destructive) { moderating = ChatModerationTarget(message: m, mode: .block) } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
                 .accessibilityIdentifier("chat.menu.block")
         }
         if chat.canDelete(m) {
@@ -564,6 +568,14 @@ struct ChatThreadView: View {
 }
 
 // MARK: - «بلّغ» و«احظر» sheets (App Store 1.2)
+
+/// Which moderation sheet is open, and for which message.
+struct ChatModerationTarget: Identifiable, Equatable {
+    enum Mode { case report, block }
+    var message: ChatMessage
+    var mode: Mode
+    var id: String { "\(mode)-\(message.id)" }
+}
 
 /// «بلّغ عن الرسالة»: pick a reason (or report-and-block). Presented as a sheet so it opens
 /// reliably from the message's context menu.
