@@ -380,6 +380,7 @@
 		CC6ECCCF436D90DE5E65BDFC /* FollowCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092715A1A8B404DE61FFB43B /* FollowCameraTests.swift */; };
 		CCDA69E0723F760AE240E152 /* VoiceNoteModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CC14D77892BC8845BC5B6CA /* VoiceNoteModels.swift */; };
 		CD1803F06895A058CDE03F6B /* LocationSharer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13815A9D77BC92625010C184 /* LocationSharer.swift */; };
+		CE5746906247CF9EC3AB211A /* ExternalNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4062EB6BA56B4633268C6A33 /* ExternalNav.swift */; };
 		CEFA0C0CE4A181D829CA27FC /* RadioSoundsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A2D5E7719A828DE7D7A254 /* RadioSoundsTests.swift */; };
 		CF5AE8658B6E71FD7847FC85 /* TripPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = B769B419B2E935D279F5F004 /* TripPlan.swift */; };
 		CFFD2C6973DA826E03887019 /* ConvoyIntelUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0B91A3644AA5117E588A56 /* ConvoyIntelUITests.swift */; };
@@ -617,6 +618,7 @@
 		3E043F5C27C4C92CB91D4B35 /* BackTrackUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackTrackUITests.swift; sourceTree = "<group>"; };
 		3E68459CC2E8963AB00C2FD8 /* UrbanAreas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UrbanAreas.swift; sourceTree = "<group>"; };
 		3EF358BF19FE19AA52A0BA89 /* AppearanceSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettings.swift; sourceTree = "<group>"; };
+		4062EB6BA56B4633268C6A33 /* ExternalNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalNav.swift; sourceTree = "<group>"; };
 		4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryAppearancePanel.swift; sourceTree = "<group>"; };
 		41E23F43635E8B00FFAABBDF /* TripViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripViews.swift; sourceTree = "<group>"; };
 		4268C5DABBBC6BA6C587658B /* CarIcon-d6452f.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-d6452f.png"; sourceTree = "<group>"; };
@@ -1030,6 +1032,7 @@
 		14C8DCC62E4CE07DF8C5DC49 /* Navigation */ = {
 			isa = PBXGroup;
 			children = (
+				4062EB6BA56B4633268C6A33 /* ExternalNav.swift */,
 				E887418CECB2ECD3024F8BBA /* FarqValhallaRouteProvider.swift */,
 				872B1A9B5A4C5E680453C2E0 /* LiveOutingController+AutoNav.swift */,
 				5DD9630148B2C6CF8EA3C48C /* LiveOutingController+Nav.swift */,
@@ -2239,6 +2242,7 @@
 				615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */,
 				45CE81ED805ACB142CF75916 /* ExploreMapDrawer.swift in Sources */,
 				1240CAB1AA388FFFC9E3760C /* ExploreViews.swift in Sources */,
+				CE5746906247CF9EC3AB211A /* ExternalNav.swift in Sources */,
 				E7ACCDE352758DAD9E2B3E50 /* FarqValhallaRouteProvider.swift in Sources */,
 				A8F0D7298496491D5258091A /* FeatureContracts.swift in Sources */,
 				F9A265D3F3C4F03650F6EECE /* FeatureViews.swift in Sources */,

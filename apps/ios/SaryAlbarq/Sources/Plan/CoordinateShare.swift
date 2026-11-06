@@ -10,7 +10,8 @@ enum CoordinateShare {
     static let freshS = 60.0
 
     enum Format: String, CaseIterable { case decimal, dms }
-    enum MapLink: String, CaseIterable { case google, apple }
+    /// No Apple Maps: it does not work in Saudi Arabia (owner, build 21).
+    enum MapLink: String, CaseIterable { case google, waze }
 
     struct Fix: Equatable {
         var point: LngLat
@@ -48,24 +49,12 @@ enum CoordinateShare {
     // MARK: links (Western digits only)
 
     static func link(_ p: LngLat, _ kind: MapLink, label: String? = nil) -> URL {
-        let c = String(format: "%.5f,%.5f", p.lat, p.lng)
-        switch kind {
-        case .google:
-            return URL(string: "https://www.google.com/maps/search/?api=1&query=\(c)")!
-        case .apple:
-            var comps = URLComponents(string: "https://maps.apple.com/")!
-            comps.queryItems = [.init(name: "ll", value: c), .init(name: "q", value: label ?? c)]
-            return comps.url!
-        }
+        ExternalNav.placeURL(kind.app, lat: p.lat, lng: p.lng)
     }
 
-    /// Turn-by-turn in the other app («اتجه»).
+    /// Turn-by-turn in the other app, as a link (`ExternalNav.webURL`).
     static func directionsLink(_ p: LngLat, _ kind: MapLink) -> URL {
-        let c = String(format: "%.5f,%.5f", p.lat, p.lng)
-        switch kind {
-        case .google: return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(c)")!
-        case .apple: return URL(string: "https://maps.apple.com/?daddr=\(c)")!
-        }
+        ExternalNav.webURL(kind.app, lat: p.lat, lng: p.lng)
     }
 
     // MARK: my fix
@@ -114,5 +103,14 @@ enum CoordinateShare {
     static func pointMessage(_ p: LngLat, name: String? = nil, link kind: MapLink = .google) -> String {
         let head = name.map { "\($0): " } ?? "نقطة على الخريطة: "
         return head + link(p, kind, label: name).absoluteString + " — " + copyDecimal(p)
+    }
+}
+
+extension CoordinateShare.MapLink {
+    var app: ExternalNav.App {
+        switch self {
+        case .google: return .google
+        case .waze: return .waze
+        }
     }
 }

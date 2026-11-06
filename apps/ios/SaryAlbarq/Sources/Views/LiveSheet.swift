@@ -198,7 +198,7 @@ struct LiveSheet: View {
                             close: { controller.modal = nil })
         case .navOptions:
             NavOptionsSheet(nav: controller.nav, start: controller.startNav, cancel: { controller.modal = nil },
-                            openInAppleMaps: controller.openInAppleMaps)
+                            openExternally: controller.openExternally)
         case .navStartChoice:
             NavStartChoiceSheet(target: controller.autoNavNextTarget?.name ?? controller.tripDestination?.name ?? "الوجهة",
                                 forAll: controller.startGuidanceForAll, onlyMe: controller.startGuidanceForMe,

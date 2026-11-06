@@ -50,6 +50,9 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>
+		<!-- «افتح في Google Maps» / «افتح في Waze» (ExternalNav): the app when installed. -->
+		<string>comgooglemaps</string>
+		<string>waze</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه تلقائيًا مع أعضاء الطلعة التي انضممت لها فقط، ما دامت شغّالة. تتوقف المشاركة إذا غادرت الطلعة أو انتهت.</string>

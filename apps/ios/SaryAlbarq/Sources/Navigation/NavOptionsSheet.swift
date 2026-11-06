@@ -6,7 +6,7 @@ struct NavOptionsSheet: View {
     @ObservedObject var nav: NavSession
     var start: () -> Void
     var cancel: () -> Void
-    var openInAppleMaps: () -> Void
+    var openExternally: (ExternalNav.App) -> Void
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -95,8 +95,11 @@ struct NavOptionsSheet: View {
             .accessibilityIdentifier("nav.loading")
         } else if let e = nav.error {
             SaryInlineMessage(text: e, tone: .error)
-            Button(action: openInAppleMaps) { SaryButtonLabel(title: "افتح في خرائط Apple", systemImage: SaryIcon.directions) }
-                .buttonStyle(.sary(.secondary))
+            ForEach(ExternalNav.App.allCases) { app in
+                Button { openExternally(app) } label: { SaryButtonLabel(title: app.openTitle, systemImage: SaryIcon.directions) }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("nav.open.\(app.rawValue)")
+            }
         } else if nav.direct {
             SaryInlineMessage(text: "ما فيه طريق معروف يوصل لهذه النقطة. نعطيك اتجاهًا مباشرًا (خط مستقيم) ومسافته — ليس طريقًا، انتبه للتضاريس.", tone: .warning)
             if let leg = nav.offRoad { offRoadNote(leg, whole: true) }
