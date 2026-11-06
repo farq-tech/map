@@ -26,13 +26,14 @@ final class OutingLegsUITests: XCTestCase {
         app.allowLocationIfAsked()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let deadline = Date().addingTimeInterval(45)
-        while !el(app, "flow.cta").exists && Date() < deadline {
+        let cta = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'flow.cta.'")).firstMatch
+        while !cta.exists && Date() < deadline {
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق"] where springboard.buttons[label].exists {
                 springboard.buttons[label].tap()
             }
             usleep(250_000)
         }
-        XCTAssertTrue(el(app, "flow.cta").waitForExistence(timeout: 5), "the big button")
+        XCTAssertTrue(cta.waitForExistence(timeout: 5), "the big button")
         return app
     }
 
@@ -90,7 +91,7 @@ final class OutingLegsUITests: XCTestCase {
         shot(app, "05-on-leg")
         tap(app, "flow.cta.arrived")
         XCTAssertTrue(waitLine(app, contains: "واقفين عند محطة الوقود"), line(app))
-        XCTAssertTrue(el(app, "flow.moment").waitForExistence(timeout: 4), "«وصلنا محطة الوقود»")
+        XCTAssertFalse(el(app, "flow.cta.endOuting").exists, "ONE primary button: «وين رايحين؟»")
         shot(app, "06-arrived")
 
         /* Leg 2: → مخيم النفود; the outing goes on. */
@@ -100,12 +101,17 @@ final class OutingLegsUITests: XCTestCase {
         tap(app, "flow.cta.arrived")
         XCTAssertTrue(waitLine(app, contains: "واقفين عند مخيم النفود"), line(app))
 
-        /* «أنهِ الطلعة» → confirm → the summary lists both legs. */
-        tap(app, "flow.cta.endOuting")
-        /* The dialog's button, not the 🏠 that opened it (same label). */
-        let confirm = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "أنهِ الطلعة", "flow.cta.endOuting")).firstMatch
+        /* «أنهِ الطلعة» lives in the «الرحلة» sheet (secondary) → confirm → the summary lists both legs. */
+        shot(app, "07-stopped-second")
+        tap(app, "trip.header")
+        if app.buttons["tab.trip"].waitForExistence(timeout: 4) { app.buttons["tab.trip"].tap() }
+        let end = el(app, "settings-end")
+        for _ in 0..<8 where !(end.exists && end.isHittable) { app.swipeUp(); usleep(500_000) }
+        XCTAssertTrue(end.waitForExistence(timeout: 6), "«أنهِ الطلعة» in the sheet")
+        end.tap()
+        let confirm = app.buttons["أنهِ الطلعة للجميع"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "asked first")
-        shot(app, "07-ending")
+        shot(app, "08-ending")
         confirm.tap()
         /* The ended screen offers «ملخص الطلعة» (some builds open the summary by themselves). */
         let summaryButton = el(app, "live.ended.summary")
@@ -120,7 +126,20 @@ final class OutingLegsUITests: XCTestCase {
         XCTAssertEqual(rows.count, 2, "two legs")
         XCTAssertTrue(app.staticTexts["المشاوير (٢)"].exists || el(app, "summary.legs").label.contains("٢"))
         el(app, "summary.legs").scrollIntoView(in: app)
-        shot(app, "08-summary")
+        shot(app, "09-summary")
+    }
+
+    /// Driving: the walkie-talkie is the big button, «وصلنا» is compact.
+    func testOnALegWhileDriving() {
+        let app = launch(["-SaryDrive", "1"])
+        tap(app, "flow.cta.startOuting")
+        XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
+        pick(app, "مخيم النفود")
+        tap(app, "flow.cta.startLeg")
+        XCTAssertTrue(waitLine(app, contains: "في الطريق إلى مخيم النفود"), line(app))
+        XCTAssertTrue(el(app, "flow.cta.arrived").waitForExistence(timeout: 5))
+        sleep(2)
+        shot(app, "05b-on-leg-driving")
     }
 
     func testMemberWaitsForTheLeader() {

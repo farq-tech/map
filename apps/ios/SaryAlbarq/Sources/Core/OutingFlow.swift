@@ -204,19 +204,18 @@ struct OutingFlowInput: Equatable {
     var now = Date()
 }
 
+/// ONE primary action per state (the owner's rule: «زر رئيسي واحد بس»). «أنهِ الطلعة» and
+/// «غادر الطلعة» live in the «الرحلة» sheet, quietly; the arrival moment is a 4-second toast.
 struct OutingFlowUI: Equatable {
     var state: OutingFlowState
     /// The header's second line: the state, in Najdi.
     var line: String
     var primary: OutingCTA?
-    var secondary: OutingCTA?
-    /// «وصلنا X 🎉»: a small moment right after an arrival.
-    var arrivalMoment: String?
 }
 
 enum OutingFlow {
-    /// How long «وصلنا X» stays on screen as a moment.
-    static let momentS: TimeInterval = 90
+    /// How long «وصلنا X» stays on screen as a moment (one toast).
+    static let momentS: TimeInterval = 4
 
     static func state(_ i: OutingFlowInput) -> OutingFlowState {
         switch i.status {
@@ -236,26 +235,23 @@ enum OutingFlow {
 
     static func ui(_ i: OutingFlowInput) -> OutingFlowUI {
         let s = state(i)
+        let endFirst = i.endSuggested && i.iOwn
         switch s {
         case .notStarted:
-            return OutingFlowUI(state: s, line: i.iLead ? "ما بدأت الطلعة" : "بانتظار أمير الرحلة يبدأ",
-                                primary: i.iLead ? .startOuting : .waitLeader, secondary: nil)
+            return OutingFlowUI(state: s, line: i.iLead ? "ما بدأت الطلعة" : "بانتظار أمير الرحلة يبدأ", primary: i.iLead ? .startOuting : .waitLeader)
         case .paused:
-            return OutingFlowUI(state: s, line: "الطلعة متوقفة مؤقتًا", primary: nil, secondary: nil)
+            return OutingFlowUI(state: s, line: "الطلعة متوقفة مؤقتًا", primary: nil)
         case .idle:
-            return OutingFlowUI(state: s, line: liveLine(i.liveCount), primary: i.endSuggested && i.iOwn ? .endOuting : .whereTo,
-                                secondary: i.iOwn ? (i.endSuggested ? .whereTo : .endOuting) : nil)
+            return OutingFlowUI(state: s, line: liveLine(i.liveCount), primary: endFirst ? .endOuting : .whereTo)
         case let .picked(d):
-            return OutingFlowUI(state: s, line: "الوجهة \(d.name) · جاهزين؟", primary: .startLeg, secondary: .changeDestination)
+            return OutingFlowUI(state: s, line: "الوجهة \(d.name) · جاهزين؟", primary: .startLeg)
         case let .onLeg(leg):
             let parts = ["في الطريق إلى \(leg.destination.name)", i.remainingM.map { SaryFormat.distance(meters: $0) }, minutesLine(i.eta, now: i.now)]
-            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " · "), primary: .arrived, secondary: nil)
-        case let .stopped(at, since):
-            let moment = i.now.timeIntervalSince(since) <= momentS ? "وصلنا \(at) 🎉" : nil
-            return OutingFlowUI(state: s, line: "واقفين عند \(at)", primary: i.endSuggested && i.iOwn ? .endOuting : .whereTo,
-                                secondary: i.iOwn ? (i.endSuggested ? .whereTo : .endOuting) : nil, arrivalMoment: moment)
+            return OutingFlowUI(state: s, line: parts.compactMap { $0 }.joined(separator: " · "), primary: .arrived)
+        case let .stopped(at, _):
+            return OutingFlowUI(state: s, line: "واقفين عند \(at)", primary: endFirst ? .endOuting : .whereTo)
         case .ended:
-            return OutingFlowUI(state: s, line: "انتهت الطلعة", primary: .summary, secondary: nil)
+            return OutingFlowUI(state: s, line: "انتهت الطلعة", primary: .summary)
         }
     }
 

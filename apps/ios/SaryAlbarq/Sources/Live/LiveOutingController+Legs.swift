@@ -18,18 +18,56 @@ extension LiveOutingController {
         }.store(in: &bag)
         c.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         c.poll { [weak self] in self?.session.view?.status == .active && self?.session.isVisible == true }
+        /* After `registerAutoNav()` has set its own arrival handler: chain, never replace. */
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let prev = self.nav.onArrived
+            self.nav.onArrived = { [weak self] t in
+                prev(t)
+                self?.legNavArrived(t)
+            }
+        }
         Task { await c.refresh() }
+    }
+
+    /// One arrival moment, 4 s (`OutingFlow.momentS`).
+    func arrivalToast(_ text: String) {
+        pushAlert(LiveAlertUI(id: "toast:arrived:\(UUID().uuidString)", kind: .toast(text)), ttl: OutingFlow.momentS)
+    }
+
+    /// The guidance's «وصلتوا» card is the moment: it gives the screen back after 4 s,
+    /// so the header's «واقفين عند X» and the one primary button are all that stays.
+    func closeArrivalCardSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + OutingFlow.momentS) { [weak self] in
+            guard let self, self.nav.phase == .arrived else { return }
+            self.endNav()
+        }
+    }
+
+    /// The trip's guidance reached the leg's destination: that is the leg's arrival too.
+    func legNavArrived(_ t: NavTarget) {
+        guard t.source == .destination, legs.current != nil else { return }
+        closeArrivalCardSoon()
+        if !trip.record.me.arrived { trip.markArrived(myId: session.displayView?.myId ?? session.myUserId) }
     }
 
     // MARK: state
 
-    /// The leader's plan destination counts as «picked» while no leg goes there yet
-    /// (chosen with «اجعلها الوجهة», or the outing's from «طلعة جديدة»).
+    /// «ابدأ المشوار» is waiting: chosen in «وين رايحين؟», or (the leader) a new plan destination
+    /// after earlier legs (chosen with «اجعلها الوجهة» in the place search).
     var legPicked: OutingDestination? {
         if let p = legs.picked { return p }
-        guard session.view?.iLead == true, legs.current == nil, let d = planModel?.plan.destination else { return nil }
-        if let last = legs.timeline.last, Vehicle.distanceMeters(LngLat(lng: last.destination.lng, lat: last.destination.lat), LngLat(lng: d.lng, lat: d.lat)) < 100 { return nil }
+        guard session.view?.iLead == true, legs.current == nil, let last = legs.timeline.last, let d = planModel?.plan.destination else { return nil }
+        if Vehicle.distanceMeters(LngLat(lng: last.destination.lng, lat: last.destination.lat), LngLat(lng: d.lng, lat: d.lat)) < 100 { return nil }
         return d
+    }
+
+    /// An outing from before legs (builds ≤ 22, or a destination set straight from the place
+    /// search) that is running toward its plan's destination: that IS its current leg.
+    var implicitLeg: OutingLeg? {
+        guard legs.legs.isEmpty, legs.picked == nil, let v = session.displayView, v.status == .active,
+              let d = planModel?.plan.destination else { return nil }
+        return OutingLeg(id: "plan", seq: 0, scope: .group, destination: d, started_at: v.snapshot.outing.started_at ?? ISODate.string(Date()))
     }
 
     var flowInput: OutingFlowInput {
@@ -38,20 +76,22 @@ extension LiveOutingController {
         i.status = v?.status
         i.iLead = v?.iLead == true
         i.iOwn = v?.iOwn == true
-        i.legs = legs.legs
+        let implicit = implicitLeg
+        i.legs = implicit.map { [$0] } ?? legs.legs
         i.picked = legPicked
-        if legs.current != nil, let a = trip.record.me.arrivedAtMs { i.myArrivedAt = Date(timeIntervalSince1970: a / 1000) }
+        if legs.current != nil || implicit != nil, let a = trip.record.me.arrivedAtMs { i.myArrivedAt = Date(timeIntervalSince1970: a / 1000) }
         i.now = Date()
         if let v {
             let others = v.positions.keys.filter { $0 != v.myId && v.members[$0]?.sharing == true && v.freshness(of: $0, deviceNow: i.now) == .live }
-            i.liveCount = others.count + (session.isSharingNow ? 1 : 0)
+            /* The same count as the sheet's «… مباشر». */
+            i.liveCount = ui.participantsTab.participants.filter { $0.presence.isLive }.count
             let livePts = v.positions.filter { others.contains($0.key) }.map { LngLat(lng: $0.value.lng, lat: $0.value.lat) }
                 + (location.lastFix.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])
             i.endSuggested = OutingEndSuggest.shouldSuggest(
                 startedAt: LiveOutingPresenter.deviceDate(v.snapshot.outing.started_at, view: v),
-                groupStart: trip.record.groupStart?.position, livePositions: livePts, hasActiveLeg: legs.current != nil, now: i.now)
+                groupStart: trip.record.groupStart?.position, livePositions: livePts, hasActiveLeg: legs.current != nil || implicitLeg != nil, now: i.now)
         }
-        if legs.current != nil {
+        if legs.current != nil || implicit != nil {
             let p = tripPanel
             i.remainingM = p.remainingMeters
             i.eta = p.eta
@@ -81,7 +121,7 @@ extension LiveOutingController {
         Task {
             await session.setStatus("start")
             guard session.view?.status == .active else { return }
-            if let d = legPicked {
+            if let d = legs.picked ?? planModel?.plan.destination {
                 await beginLeg(to: d)
             } else {
                 toast("بدأت الطلعة · وين رايحين؟")

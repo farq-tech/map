@@ -36,7 +36,6 @@ final class OutingFlowTests: XCTestCase {
         let member = OutingFlow.ui(input(.created, lead: false))
         XCTAssertEqual(member.line, "بانتظار أمير الرحلة يبدأ")
         XCTAssertEqual(member.primary, .waitLeader)
-        XCTAssertNil(member.secondary)
     }
 
     func testRunningWithoutALegAsksWhereTo() {
@@ -46,15 +45,13 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(ui.state, .idle)
         XCTAssertEqual(ui.line, "الطلعة شغّالة · ٤ مباشر")
         XCTAssertEqual(ui.primary?.title, "وين رايحين؟")
-        XCTAssertEqual(ui.secondary, .endOuting, "the owner can always end it")
-        XCTAssertNil(OutingFlow.ui(input(.active, lead: false)).secondary, "a member cannot end the outing")
+        XCTAssertEqual(OutingFlow.ui(input(.active, lead: false)).primary, .whereTo, "members start their own legs")
     }
 
     func testPickedThenOnLegThenArrived() {
         let picked = OutingFlow.ui(input(.active, picked: camp))
         XCTAssertEqual(picked.state, .picked(camp))
         XCTAssertEqual(picked.primary?.title, "ابدأ المشوار")
-        XCTAssertEqual(picked.secondary, .changeDestination)
 
         var i = input(.active, legs: [leg("l1", camp)])
         i.remainingM = 12_000
@@ -68,8 +65,7 @@ final class OutingFlowTests: XCTestCase {
         i.myArrivedAt = t0.addingTimeInterval(-10)
         let here = OutingFlow.ui(i)
         XCTAssertEqual(here.line, "واقفين عند مخيم النفود")
-        XCTAssertEqual(here.arrivalMoment, "وصلنا مخيم النفود 🎉")
-        XCTAssertEqual(here.primary, .whereTo, "the outing goes on")
+        XCTAssertEqual(here.primary, .whereTo, "the outing goes on: ONE primary")
     }
 
     func testArrivedLegStopsUntilTheNextOne() {
@@ -78,11 +74,11 @@ final class OutingFlowTests: XCTestCase {
         var i = input(.active, legs: [arrived])
         let ui = OutingFlow.ui(i)
         XCTAssertEqual(ui.line, "واقفين عند مخيم النفود")
-        XCTAssertNil(ui.arrivalMoment, "the moment is short")
         XCTAssertEqual(ui.primary, .whereTo)
         i.endSuggested = true
         XCTAssertEqual(OutingFlow.ui(i).primary, .endOuting, "back near the start after hours: «أنهِ الطلعة» first")
-        XCTAssertEqual(OutingFlow.ui(i).secondary, .whereTo)
+        XCTAssertEqual(OutingFlowUI(state: .idle, line: "", primary: nil).primary, nil)
+        XCTAssertEqual(OutingFlow.momentS, 4, "the arrival moment is a 4-second toast")
     }
 
     func testPausedAndEnded() {
@@ -139,6 +135,16 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(legs.map(\.state), [.arrived, .ended])
         XCTAssertEqual(LegText.title(legs[1]), "إلى مخيم النفود (ما كمل)")
         XCTAssertEqual(LegText.title(legs[0]), "وصلنا محطة الوقود")
+    }
+
+    func testLegNumbersAreOnlyRealOnes() {
+        var l = leg("a", gas, at: t0)
+        l = LegLifecycle.arrive([l], id: "a", at: t0.addingTimeInterval(20), distanceM: 0)[0]
+        let d = LegText.detail(l, now: t0)
+        XCTAssertFalse(d.contains("٠ م"), d)
+        XCTAssertFalse(d.contains("٠ د"), d)
+        l = LegLifecycle.arrive([leg("b", gas, at: t0)], id: "b", at: t0.addingTimeInterval(18 * 60), distanceM: 12_000)[0]
+        XCTAssertTrue(LegText.detail(l, now: t0).contains("١٢ كم"), LegText.detail(l, now: t0))
     }
 
     func testDecodesTheServerShapeAndToleratesNewStates() throws {

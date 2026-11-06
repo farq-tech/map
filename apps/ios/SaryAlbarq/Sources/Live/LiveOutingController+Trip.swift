@@ -42,6 +42,11 @@ extension LiveOutingController {
         var i = TripPresenterInput()
         let v = session.displayView
         i.record = trip.record
+        /* A leg's numbers start with the leg (not the outing): «قطعنا» / «المدة» / ETA agree with «سجل الطلعة». */
+        if let leg = legs.current ?? LegLifecycle.lastArrived(legs.legs), let ls = leg.startedDate, var st = i.record.start {
+            st.atMs = max(st.atMs, ls.timeIntervalSince1970 * 1000)
+            i.record.start = st
+        }
         i.destination = tripDestination
         i.status = v?.status
         i.iLead = v?.iOwn == true
@@ -121,12 +126,17 @@ extension LiveOutingController {
         case .arrived:
             legArrivedHere()
             UINotificationFeedback.success()
-            toast("وصلت \(tripDestination?.name ?? "الوجهة") 🎉")
-            /* The trip's own guidance ends on «وصلتوا»; a person's own navigation just ends. */
-            if nav.auto { nav.finishArrival() } else if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
-            /* The arrival card is at the top of «المشاركون». */
-            selectedTab = .trip
-            if sheetDetent == .peek { sheetDetent = .half }
+            /* The arrival is said ONCE (the owner's «زحمة» review): the header already reads
+             * «واقفين عند X»; the moment is either the guidance's «وصلتوا» card or one toast, for
+             * 4 s; the leg's numbers are in the «الرحلة» sheet only (not opened by itself). */
+            if nav.auto, nav.phase == .guiding || nav.phase == .offRoad {
+                nav.finishArrival()
+                closeArrivalCardSoon()
+            } else {
+                if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
+                /* The guidance's own «وصلتوا» card is already the moment. */
+                if nav.phase != .arrived { arrivalToast("وصلنا \(tripDestination?.name ?? "الوجهة") 🎉") }
+            }
         case let .memberArrived(id, _):
             guard let name = v?.members[id]?.display_name else { break }
             toast("وصل \(name) \(tripDestination?.name ?? "الوجهة")")

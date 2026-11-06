@@ -261,9 +261,21 @@ private struct TripTab: View {
             if controller.showsTripStrip, ui.status != .notStarted {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
             }
-            if ui.status != .notStarted {
-                OutingLegTimeline(legs: controller.legs.timeline, now: ui.now)
-                    .sarySurface(radius: SaryRadius.m)
+            /* «سجل الطلعة»: the legs so far (and a quiet «غيّر الوجهة» while one is picked). */
+            if ui.status != .notStarted, !controller.legs.timeline.isEmpty || controller.legPicked != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !controller.legs.timeline.isEmpty { OutingLegTimeline(legs: controller.legs.timeline, now: ui.now) }
+                    if let d = controller.legPicked {
+                        Button { controller.flowTapped(.changeDestination) } label: {
+                            Label("الوجهة \(d.name) · غيّر", systemImage: "arrow.triangle.swap").saryText(.footnote, weight: .bold)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("flow.changeDestination")
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .sarySurface(radius: SaryRadius.m)
             }
             TripPlanCard(controller: controller)
             TripRouteActions(controller: controller)
@@ -399,6 +411,8 @@ private struct ShareCallout: View {
     @ObservedObject var controller: LiveOutingController
     var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
+    /// The «دائمًا» hint, closed once on this phone.
+    @AppStorage("sary.live.shareHint.dismissed.v1") private var hintDismissed = false
 
     var body: some View {
         let v = controller.session.view
@@ -428,29 +442,36 @@ private struct ShareCallout: View {
                     /* iOS location turned off after joining: still a member, the calm fix. */
                     ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
                 } else {
-                    VStack(alignment: .leading, spacing: theme.space(.s)) {
-                        HStack(spacing: theme.space(.s)) {
-                            Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
-                            Text(ui.sharing == .sharing ? "موقعك مُشارَك الآن مع أعضاء الطلعة" : "جارٍ تحديد موقعك…")
-                                .saryText(.callout, weight: .bold)
-                                .foregroundStyle(theme.palette.textPrimary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityIdentifier("live.sharing")
+                    /* A thin strip (the owner's «زحمة» review): sharing state + the quiet way out. */
+                    HStack(spacing: theme.space(.s)) {
+                        Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
+                        Text(ui.sharing == .sharing ? "موقعك مُشارَك مع الطلعة" : "جارٍ تحديد موقعك…")
+                            .saryText(.footnote, weight: .bold)
+                            .foregroundStyle(theme.palette.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("live.sharing")
+                        Button { controller.confirm = .leave } label: {
+                            Text("غادر الطلعة").saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+                                .frame(minHeight: 32).contentShape(Rectangle())
                         }
-                        HStack(spacing: theme.space(.s)) {
-                            Text("تتوقف المشاركة إذا غادرت الطلعة أو انتهت.")
-                                .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Button { controller.confirm = .leave } label: { Text("غادر الطلعة") }
-                                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
-                                .accessibilityIdentifier("live.leave")
-                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("live.leave")
                     }
-                    .padding(theme.space(.m))
-                    .sarySurface(radius: SaryRadius.l)
-                    if let hint = controller.shareBackgroundHint {
-                        ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
+                    .padding(.horizontal, theme.space(.m))
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(theme.palette.sunken.opacity(0.6)))
+                    /* «دائمًا»: once, small, closable (also in the settings). */
+                    if let hint = controller.shareBackgroundHint, !hintDismissed {
+                        HStack(spacing: 0) {
+                            ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
+                            Button { hintDismissed = true } label: {
+                                Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+                                    .frame(width: 36, height: 36).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text("أخفِ"))
+                            .accessibilityIdentifier("live.shareHint.close")
+                        }
                     }
                 }
             }

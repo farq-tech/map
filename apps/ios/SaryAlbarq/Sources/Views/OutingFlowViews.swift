@@ -1,62 +1,56 @@
 import SwiftUI
 
-/// The one big button at the bottom of the live screen (ux/الطلعة-والمشوار.md): its label
-/// follows the outing's state — «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا» / «أنهِ الطلعة».
-/// Members waiting for the leader see a calm, non-tappable «بانتظار أمير الرحلة يبدأ».
+/// The one primary button of the live screen (ux/الطلعة-والمشوار.md): its label follows the
+/// outing's state — «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا». ONE at a time.
+/// Stopped, it is the big one (the walkie-talkie shrinks to a round button beside it); driving,
+/// it is `compact` and the walkie-talkie is the big one. Members waiting for the leader see a
+/// calm, non-tappable «بانتظار أمير الرحلة يبدأ».
 struct OutingPrimaryCTA: View {
     var ui: OutingFlowUI
+    var compact = false
     var tapped: (OutingCTA) -> Void
     @Environment(\.sary) private var theme
 
     var body: some View {
         let p = theme.palette
-        VStack(spacing: 8) {
-            if let m = ui.arrivalMoment {
-                Text(m)
-                    .font(.sary(15, .heavy))
-                    .foregroundStyle(p.textPrimary)
-                    .padding(.horizontal, 16).padding(.vertical, 8)
+        if let c = ui.primary {
+            Group {
+                if c == .waitLeader {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(c.title).font(.sary(compact ? 14 : 16, .bold)).foregroundStyle(p.textPrimary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: compact ? nil : .infinity, minHeight: compact ? 48 : 56)
                     .saryGlass(Capsule(), role: .chrome)
-                    .transition(.scale.combined(with: .opacity))
-                    .accessibilityIdentifier("flow.moment")
-            }
-            if let c = ui.primary {
-                HStack(spacing: 8) {
-                    if c == .waitLeader {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(c.title).font(.sary(16, .bold)).foregroundStyle(p.textPrimary)
+                    .accessibilityElement(children: .combine)
+                } else if compact {
+                    Button { tapped(c) } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: c.systemImage).font(.system(size: 16, weight: .heavy))
+                            Text(c.title).font(.sary(15, .heavy)).lineLimit(1)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .saryGlass(RoundedRectangle(cornerRadius: 18, style: .continuous), role: .chrome)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier(c.id)
-                    } else {
-                        Button { tapped(c) } label: {
-                            SaryButtonLabel(title: c.title, systemImage: c.systemImage)
-                                .font(.sary(18, .heavy))
-                                .frame(minHeight: 34)
-                        }
-                        .buttonStyle(.saryPrimary)
-                        .accessibilityIdentifier(c.id)
+                        .foregroundStyle(p.onAccent)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 48)
+                        .background(Capsule().fill(p.accent))
+                        .contentShape(Capsule())
                     }
-                    if let s = ui.secondary {
-                        Button { tapped(s) } label: {
-                            Image(systemName: s.systemImage).font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(p.textPrimary)
-                                .frame(width: 54, height: 54)
-                                .saryGlass(RoundedRectangle(cornerRadius: 18, style: .continuous), role: .chrome)
-                        }
-                        .buttonStyle(SaryPressStyle())
-                        .accessibilityLabel(Text(s.title))
-                        .accessibilityIdentifier(s.id)
+                    .buttonStyle(SaryPressStyle())
+                } else {
+                    Button { tapped(c) } label: {
+                        SaryButtonLabel(title: c.title, systemImage: c.systemImage)
+                            .font(.sary(18, .heavy))
+                            .frame(minHeight: 30)
                     }
+                    .buttonStyle(.saryPrimary)
                 }
             }
+            .accessibilityIdentifier(c.id)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .animation(theme.animation(.snappy), value: ui)
         }
-        .animation(theme.animation(.snappy), value: ui)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("flow.cta")
     }
 }
 
@@ -133,14 +127,18 @@ struct WhereToSheet: View {
 struct OutingLegTimeline: View {
     var legs: [OutingLeg]
     var now: Date = Date()
+    /// Off where a section already titles it («المشاوير» in the summary).
+    var showsTitle = true
     @Environment(\.sary) private var theme
 
     var body: some View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: 0) {
-            Text("سجل الطلعة").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
-                .accessibilityAddTraits(.isHeader)
-                .padding(.bottom, 6)
+            if showsTitle {
+                Text("سجل الطلعة").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, 6)
+            }
             if legs.isEmpty {
                 Text("ما فيه مشاوير بعد. «وين رايحين؟» تبدأ أول مشوار.")
                     .saryText(.subhead).foregroundStyle(p.textSecondary)
@@ -183,9 +181,10 @@ enum LegText {
         if let s = l.startedDate {
             parts.append(l.arrivedDate.map { "\(NavText.clock(s)) ← \(NavText.clock($0))" } ?? NavText.clock(s))
         }
-        if let d = l.distance_m, d > 0 { parts.append(SaryFormat.distance(meters: Double(d))) }
-        if let s = l.duration_s { parts.append(SaryFormat.duration(seconds: s)) }
-        else if l.isActive, let st = l.startedDate { parts.append(SaryFormat.duration(seconds: max(0, Int(now.timeIntervalSince(st))))) }
+        /* Only real numbers: no «٠ م», no «٠ د». */
+        if let d = l.distance_m, d >= 50 { parts.append(SaryFormat.distance(meters: Double(d))) }
+        let secs = l.duration_s ?? (l.isActive ? l.startedDate.map { Int(now.timeIntervalSince($0)) } : nil)
+        if let s = secs, s >= 60 { parts.append(SaryFormat.duration(seconds: s)) }
         if l.scope == .personal { parts.append("مشواري") }
         return parts.joined(separator: " · ")
     }
@@ -200,7 +199,7 @@ struct TripLegsSection: View {
         let legs = OutingLegsCenters.storedTimeline(outingId)
         if !legs.isEmpty {
             SarySection(title: "المشاوير (\(SaryFormat.number(legs.count)))", footer: nil) {
-                OutingLegTimeline(legs: legs)
+                OutingLegTimeline(legs: legs, showsTitle: false)
                     .padding(.vertical, theme.space(.s))
             }
             .accessibilityIdentifier("summary.legs")
