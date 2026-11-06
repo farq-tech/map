@@ -434,6 +434,10 @@ private struct LiveTopStack: View {
                 }
             }
             navTop
+            if !exploring && !controller.tripEnded {
+                /* After an invite: «نحدد موقعك…», the one-time welcome, «موقعك مو ظاهر للعيال». */
+                InviteeArrivalStack(controller: controller)
+            }
             if !exploring, let prompt = controller.guidancePrompt {
                 /* The trip runs without guidance on this phone: one tap, for me only. */
                 GuidancePromptRow(prompt: prompt, leaderName: controller.leaderName, start: controller.startGuidanceForMe)

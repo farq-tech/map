@@ -227,8 +227,11 @@ private struct TripPlanCardContent: View {
         let fresh = fix.map { Date().timeIntervalSince1970 - $0.atMs / 1000 <= FollowPlan.maxFixAgeS } ?? false
         let p = theme.palette
         return Menu {
-            Button("افتح في Apple Maps") { UIApplication.shared.open(CoordinateShare.directionsLink(dest, .apple)) }
-            Button("افتح في Google Maps") { UIApplication.shared.open(CoordinateShare.directionsLink(dest, .google)) }
+            /* «اتجه» is our own guidance; the other apps only by name. */
+            Button("اتجه") { controller.directions(NavTargets.destination(d)) }
+            ForEach(ExternalNav.App.allCases) { app in
+                Button(app.openTitle) { ExternalNav.open(app, dest) }
+            }
             Button("انسخ إحداثية الوجهة") { PlanClipboard.copy(CoordinateShare.copyDecimal(dest)); controller.toast("نُسخ") }
         } label: {
             HStack(spacing: theme.space(.m)) {

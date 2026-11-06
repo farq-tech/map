@@ -27,6 +27,9 @@ final class AppModel: ObservableObject {
     private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
+    /// First launch after installing from an invite page: the pasteboard probably holds the
+    /// link (`DeferredInvite`). The first page offers «كمّل دعوتك» with the system «لصق» button.
+    @Published var deferredInviteHint = false
     @Published var errorText: String?
     @Published var loading = false
     /// The device has a network path (NWPathMonitor).
@@ -168,6 +171,7 @@ final class AppModel: ObservableObject {
         }
         #endif
         activity.endOrphans()
+        lookForDeferredInvite()
         #if DEBUG
         if let i = arguments.firstIndex(of: "-SaryActivity"), i + 1 < arguments.count {
             let name = arguments[i + 1]
@@ -451,6 +455,7 @@ final class AppModel: ObservableObject {
         if isDemo {
             pendingInvite = nil
             openDemoSession()
+            session?.arrivedByInvite = true
             consentByJoining(DemoData.outingId)
             startSharingAfterJoin(DemoData.outingId)
             if !push.explained { offerNotifications = true }
@@ -463,6 +468,7 @@ final class AppModel: ObservableObject {
             consentByJoining(r.outing_id)
             await refresh()
             open(r.outing_id)
+            if session?.id == r.outing_id { session?.arrivedByInvite = true }
             startSharingAfterJoin(r.outing_id)
             if !push.explained { offerNotifications = true }
             return true
@@ -626,6 +632,33 @@ final class AppModel: ObservableObject {
         open(id)
         startSharingAfterJoin(id)
         return id
+    }
+
+    /// The web invite page copies the link before sending the person to the App Store / TestFlight.
+    /// `detectPatterns` only says "probably a link" and shows no paste banner; the link itself is
+    /// read only when the person taps the system «لصق» button (`acceptPastedInvite`).
+    private func lookForDeferredInvite() {
+        guard DeferredInvite.shouldLook(hasIdentity: identity != nil, pendingInvite: pendingInvite != nil, isDemo: isDemo) else { return }
+        let p = ProcessInfo.processInfo
+        /* Tests and automation leave the pasteboard alone unless they ask (`-SaryDeferredInvite`). */
+        if (p.environment["XCTestConfigurationFilePath"] != nil || p.arguments.contains("-resetState")) && !p.arguments.contains("-SaryDeferredInvite") { return }
+        UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { [weak self] r in
+            guard case let .success(found) = r, found.contains(.probableWebURL) else { return }
+            Task { @MainActor in
+                guard let self, self.identity == nil, self.pendingInvite == nil else { return }
+                self.deferredInviteHint = true
+                IntroController.shared.interrupt()
+            }
+        }
+    }
+
+    /// The «لصق» button on the first page brought these strings.
+    @discardableResult
+    func acceptPastedInvite(_ strings: [String]) -> Bool {
+        guard let t = DeferredInvite.token(fromPasted: strings) else { return false }
+        deferredInviteHint = false
+        pendingInvite = t
+        return true
     }
 
     func handle(url: URL) {

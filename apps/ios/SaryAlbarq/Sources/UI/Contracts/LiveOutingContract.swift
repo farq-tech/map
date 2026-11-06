@@ -53,7 +53,7 @@ enum LiveWarningUI: Equatable, Hashable {
         case .weakGPS: return "إشارة الموقع ضعيفة"
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
         case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
-        case .locationOff: return "إذن الموقع مقفل · افتح الإعدادات"
+        case .locationOff: return "موقعك مو ظاهر للعيال · افتح الإعدادات"
         case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
         }
     }

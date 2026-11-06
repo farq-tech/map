@@ -105,6 +105,13 @@ enum SilenceText {
         return "آخر موقع قبل \(ArabicFormat.number(Double(m))) د"
     }
 
+    /// «قبل ١٤ د» / «قبل ٢ س» (same rounding as the card).
+    static func ago(_ at: Date, now: Date) -> String {
+        let m = minutes(since: at, now: now)
+        if m >= 60 { return "قبل \(ArabicFormat.number(Double(m / 60))) س" }
+        return "قبل \(ArabicFormat.number(Double(m))) د"
+    }
+
     /// «رجع إرسال فهد»
     static func resumed(name: String) -> String { "رجع إرسال \(name)" }
 }

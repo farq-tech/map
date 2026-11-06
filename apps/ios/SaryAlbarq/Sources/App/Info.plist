@@ -50,6 +50,9 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>whatsapp</string>
+		<!-- «افتح في Google Maps» / «افتح في Waze» (ExternalNav): the app when installed. -->
+		<string>comgooglemaps</string>
+		<string>waze</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يعرض سَرى البارق موقعك على خريطة الطلعة، ويشاركه تلقائيًا مع أعضاء الطلعة التي انضممت لها فقط، ما دامت شغّالة. تتوقف المشاركة إذا غادرت الطلعة أو انتهت.</string>
@@ -65,6 +68,9 @@
 	     audio: the walkie-talkie («قناة الطلعة») and the spoken Arabic turn instructions. -->
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
+		<!-- Sharing with the convoy during a trip (LocationSharer.tripPurposeKey). -->
+		<key>ConvoyTrip</key>
+		<string>«الموقع الدقيق» مقفل، فيشوفك ربعك بالطلعة بعيد عن مكانك بالكيلوات. خلّه دقيق لين تخلص الطلعة عشان يلقونك وأنتم ماشين، ولو صار لك شي توصلك الفزعة على مكانك بالضبط.</string>
 		<key>TrailRecording</key>
 		<string>«الموقع الدقيق» مقفل، فيصير «مساري» تقريبيًا بالكيلومترات. اسمح بالموقع الدقيق لهذه الطلعة ليُرسم طريقك على الشوارع اللي مشيت فيها بالضبط، ويرجّعك «طريق الرجعة» من نفس الطريق.</string>
 	</dict>

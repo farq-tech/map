@@ -244,6 +244,8 @@ final class LiveOutingController: ObservableObject {
     var startReturnTrip: () -> Void = {}
     /// «أنهِ الرحلة؟» is asked.
     @Published var tripConfirmEnd = false
+    /// The first seconds after an invite join (`LiveOutingController+Arrival.swift`).
+    @Published var arrival = InviteeArrivalState()
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
@@ -310,7 +312,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin() }
+            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
         }.store(in: &bag)
         location.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.locationChanged() }
@@ -389,6 +391,7 @@ final class LiveOutingController: ObservableObject {
         registerCarPlay()
         registerTrip()
         registerAutoNav()
+        beginArrivalIfNeeded()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
@@ -545,6 +548,7 @@ final class LiveOutingController: ObservableObject {
 
     private func locationChanged() {
         followUpJoin()
+        arrivalTick()
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()
@@ -1178,7 +1182,7 @@ final class LiveOutingController: ObservableObject {
         NearestStationsActions(
             go: { [weak self] id in
                 guard let s = self?.stationList.first(where: { $0.id == id }) else { return }
-                Directions.open(lat: s.lat, lng: s.lng, name: s.name ?? "محطة بنزين")
+                self?.directions(NavTargets.station(name: s.name ?? s.brand, lat: s.lat, lng: s.lng))
             },
             show: { [weak self] id in
                 guard let self, let s = self.stationList.first(where: { $0.id == id }) else { return }
@@ -1290,14 +1294,18 @@ enum LiveConfirm: Identifiable, Equatable {
     case backWhileSharing
     /// «غادر الطلعة» from the trip tab's sharing row.
     case leave
-    var id: Int { self == .leave ? 1 : 0 }
-}
+    /// «اتجه» while guiding: «نغيّر الوجهة إلى …؟» («غيّر» / «لا»).
+    case retarget(NavTarget)
+    var id: String {
+        switch self {
+        case .backWhileSharing: return "back"
+        case .leave: return "leave"
+        case .retarget: return "retarget"
+        }
+    }
 
-/// Directions in Apple Maps (no third party sees the request from us).
-enum Directions {
-    static func open(lat: Double, lng: Double, name: String) {
-        var c = URLComponents(string: "https://maps.apple.com/")!
-        c.queryItems = [.init(name: "daddr", value: "\(lat),\(lng)"), .init(name: "q", value: name)]
-        if let u = c.url { UIApplication.shared.open(u) }
+    var retargetTarget: NavTarget? {
+        if case let .retarget(t) = self { return t }
+        return nil
     }
 }

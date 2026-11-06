@@ -228,6 +228,9 @@ struct FeatureModals: ViewModifier {
                                 features.modal = nil
                                 controller.sheetDetent = .peek
                                 controller.ask(.point(p))
+                            }, go: { w in
+                                features.modal = nil
+                                controller.directions(NavTargets.waypoint(title: w.title, lat: w.lat, lng: w.lng))
                             })
                             .presentationDetents([.large])
                         }
@@ -440,7 +443,10 @@ struct WaypointCard: View {
                     } label: { SaryButtonLabel(title: "أظهرها", systemImage: SaryIcon.showOnMap) }
                         .buttonStyle(.sarySecondary)
                         .accessibilityIdentifier("waypoint.show")
-                    Button { Directions.open(lat: w.lat, lng: w.lng, name: w.title) } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
+                    Button {
+                        features.modal = nil
+                        controller.directions(NavTargets.waypoint(title: w.title, lat: w.lat, lng: w.lng))
+                    } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
                         .buttonStyle(.saryPrimary)
                         .accessibilityIdentifier("waypoint.go")
                 }
@@ -578,6 +584,8 @@ struct PastWaypointsView: View {
     var currentOuting: String
     var close: () -> Void
     var show: ((LngLat) -> Void)?
+    /// «اتجه» in our own guidance (from the live screen).
+    var go: ((Waypoint) -> Void)? = nil
     @Environment(\.sary) private var theme
     @State private var open: Waypoint?
 
@@ -610,7 +618,8 @@ struct PastWaypointsView: View {
         .padding(theme.space(.l))
         .frame(maxHeight: .infinity, alignment: .top)
         .sheet(item: $open) { w in
-            PastWaypointDetail(waypoint: w, show: show.map { s in { open = nil; s(w.position) } })
+            PastWaypointDetail(waypoint: w, show: show.map { s in { open = nil; s(w.position) } },
+                               go: go.map { g in { open = nil; g(w) } })
                 .presentationDetents([.medium, .large])
         }
     }
@@ -620,6 +629,8 @@ struct PastWaypointsView: View {
 struct PastWaypointDetail: View {
     var waypoint: Waypoint
     var show: (() -> Void)?
+    /// «اتجه» in our own guidance (the live screen). Nil (the trip summary): «افتح في Google Maps» / «افتح في Waze».
+    var go: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -646,8 +657,24 @@ struct PastWaypointDetail: View {
                     if let show {
                         Button(action: show) { SaryButtonLabel(title: "أظهرها", systemImage: SaryIcon.showOnMap) }.buttonStyle(.sarySecondary)
                     }
-                    Button { Directions.open(lat: w.lat, lng: w.lng, name: w.title) } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
-                        .buttonStyle(.saryPrimary)
+                    if let go {
+                        /* On the live screen: our own guidance. */
+                        Button(action: go) { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
+                            .buttonStyle(.saryPrimary)
+                            .accessibilityIdentifier("waypoint.go")
+                    }
+                }
+                if go == nil {
+                    /* The trip summary has no live map to guide on: the person picks another app, said plainly. */
+                    VStack(spacing: theme.space(.s)) {
+                        ForEach(ExternalNav.App.allCases) { app in
+                            Button { ExternalNav.open(app, lat: w.lat, lng: w.lng) } label: {
+                                SaryButtonLabel(title: app.openTitle, systemImage: SaryIcon.directions)
+                            }
+                            .buttonStyle(.sarySecondary)
+                            .accessibilityIdentifier("waypoint.open.\(app.rawValue)")
+                        }
+                    }
                 }
             }
             .padding(theme.space(.l))

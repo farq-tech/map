@@ -172,7 +172,7 @@ struct LiveSettingsPage: View {
             WhoSeesPage(controller: controller, header: header(title: "من يشوف موقعي", back: { path.removeLast() }, id: "settings.sub.back"))
         case .diagnostics:
             sub("تشخيص", footer: "حالة «قناة الطلعة» الآن، و«سجل القناة» تشاركه مع اللي يصلّح المشكلة.") {
-                PTTLinkRow(line: controller.ui.settingsTab.pttLink)
+                GpsDevGate(location: controller.location) { PTTLinkRow(line: controller.ui.settingsTab.pttLink) }
             }
         }
     }

@@ -466,6 +466,7 @@ final class CoordinateParserTests: XCTestCase {
         assertNear(p("https://www.google.com/maps/dir/?api=1&destination=24.7136%2C46.6753"), 24.7136, 46.6753)
         assertNear(p("https://maps.apple.com/?ll=24.7136,46.6753&q=Pin"), 24.7136, 46.6753)
         assertNear(p("https://maps.apple.com/?daddr=24.7136,46.6753"), 24.7136, 46.6753)
+        assertNear(p("https://waze.com/ul?ll=24.7136,46.6753&navigate=yes"), 24.7136, 46.6753)
         XCTAssertNil(p("https://example.com/?q=24.7136,46.6753"), "only map links are read as links")
     }
 
@@ -511,8 +512,10 @@ final class CoordinateShareTests: XCTestCase {
 
     func testLinksUseWesternDigits() {
         XCTAssertEqual(CoordinateShare.link(pt, .google).absoluteString, "https://www.google.com/maps/search/?api=1&query=24.71360,46.67530")
-        XCTAssertEqual(CoordinateShare.link(pt, .apple).absoluteString, "https://maps.apple.com/?ll=24.71360,46.67530&q=24.71360,46.67530")
-        XCTAssertEqual(CoordinateShare.directionsLink(pt, .apple).absoluteString, "https://maps.apple.com/?daddr=24.71360,46.67530")
+        XCTAssertEqual(CoordinateShare.link(pt, .waze).absoluteString, "https://waze.com/ul?ll=24.71360,46.67530")
+        XCTAssertEqual(CoordinateShare.directionsLink(pt, .google).absoluteString, "https://www.google.com/maps/dir/?api=1&destination=24.71360,46.67530&travelmode=driving")
+        XCTAssertEqual(CoordinateShare.directionsLink(pt, .waze).absoluteString, "https://waze.com/ul?ll=24.71360,46.67530&navigate=yes")
+        XCTAssertEqual(CoordinateShare.MapLink.allCases, [.google, .waze], "no Apple Maps")
         /* Every link parses back to the same point. */
         for k in CoordinateShare.MapLink.allCases {
             XCTAssertEqual(CoordinateParser.parse(CoordinateShare.link(pt, k).absoluteString)?.point.lat ?? 0, 24.7136, accuracy: 0.00001)
@@ -526,8 +529,8 @@ final class CoordinateShareTests: XCTestCase {
         XCTAssertEqual(CoordinateShare.myLocationCopy(fix, now: at.addingTimeInterval(10), timeZone: riyadh), "24.71360, 46.67530 — دقة ±٨ م — ٣:٤٥ م")
 
         let later = at.addingTimeInterval(5 * 60)
-        let stale = CoordinateShare.myLocationMessage(fix, link: .apple, now: later, timeZone: riyadh)
-        XCTAssertTrue(stale.hasPrefix("آخر موقع معروف قبل ٥ د: https://maps.apple.com/?ll=24.71360,46.67530"))
+        let stale = CoordinateShare.myLocationMessage(fix, link: .waze, now: later, timeZone: riyadh)
+        XCTAssertTrue(stale.hasPrefix("آخر موقع معروف قبل ٥ د: https://waze.com/ul?ll=24.71360,46.67530"))
         XCTAssertFalse(stale.contains("الحين"), "a stale fix is never called current")
         XCTAssertTrue(CoordinateShare.myLocationCopy(fix, format: .dms, now: later, timeZone: riyadh).hasPrefix("آخر موقع معروف قبل ٥ د: 24°42'49.0\"N"))
         XCTAssertEqual(CoordinateShare.pointMessage(pt, name: "روضة"), "روضة: https://www.google.com/maps/search/?api=1&query=24.71360,46.67530 — 24.71360, 46.67530")

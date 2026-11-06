@@ -6,7 +6,7 @@ struct NavOptionsSheet: View {
     @ObservedObject var nav: NavSession
     var start: () -> Void
     var cancel: () -> Void
-    var openInAppleMaps: () -> Void
+    var openExternally: (ExternalNav.App) -> Void
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -18,6 +18,10 @@ struct NavOptionsSheet: View {
                     Text("الملاحة إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                     Text(nav.target?.name ?? "").saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2)
                         .accessibilityIdentifier("nav.options.target")
+                    if let note = nav.target?.staleNote() {
+                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warning)
+                            .accessibilityIdentifier("nav.options.stale")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: cancel) {
@@ -67,6 +71,7 @@ struct NavOptionsSheet: View {
         case .destination: return "flag.checkered"
         case .planRouteEnd: return "point.topleft.down.to.point.bottomright.curvepath"
         case .tripStop: return "mappin.circle.fill"
+        case .lastKnown: return "clock.arrow.circlepath"
         default: return "mappin.and.ellipse"
         }
     }
@@ -90,8 +95,11 @@ struct NavOptionsSheet: View {
             .accessibilityIdentifier("nav.loading")
         } else if let e = nav.error {
             SaryInlineMessage(text: e, tone: .error)
-            Button(action: openInAppleMaps) { SaryButtonLabel(title: "افتح في خرائط Apple", systemImage: SaryIcon.directions) }
-                .buttonStyle(.sary(.secondary))
+            ForEach(ExternalNav.App.allCases) { app in
+                Button { openExternally(app) } label: { SaryButtonLabel(title: app.openTitle, systemImage: SaryIcon.directions) }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("nav.open.\(app.rawValue)")
+            }
         } else if nav.direct {
             SaryInlineMessage(text: "ما فيه طريق معروف يوصل لهذه النقطة. نعطيك اتجاهًا مباشرًا (خط مستقيم) ومسافته — ليس طريقًا، انتبه للتضاريس.", tone: .warning)
             if let leg = nav.offRoad { offRoadNote(leg, whole: true) }

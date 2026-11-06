@@ -154,6 +154,8 @@ struct DeviceFix: Equatable {
     var atMs: Double
     /// CoreLocation's speed error, m/s (nil when unknown). Local only: never sent.
     var speedAccuracy: Double? = nil
+    /// CoreLocation's course error, degrees (nil when unknown). Local only: never sent.
+    var courseAccuracy: Double? = nil
 
     var coordinate: Geo.LatLng { Geo.LatLng(lat: lat, lng: lng) }
 }

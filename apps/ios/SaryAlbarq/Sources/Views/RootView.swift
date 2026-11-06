@@ -16,6 +16,10 @@ struct RootView: View {
                     .id(session.id)
             } else if let screen = model.debugScreen {
                 DebugScreen(name: screen)
+            } else if model.pendingInvite != nil && (model.identity == nil || needsOnboarding) {
+                /* Arriving by an invite: no onboarding pages behind the join sheet (build 21) —
+                 * the invite IS the onboarding. «إلغاء» there brings the usual first page back. */
+                SplashView().transition(.opacity)
             } else if model.identity == nil || needsOnboarding {
                 OnboardingFlow(start: model.identity == nil ? .intro : .locationExplainer)
                     .transition(.opacity)

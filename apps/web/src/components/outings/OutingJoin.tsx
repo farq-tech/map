@@ -12,6 +12,7 @@ import {
 	type InvitePreview,
 } from "../../lib/outings/api";
 import { formatNumber } from "../../lib/sary/domain";
+import { appOpenUrl, copyText, installTarget, inviteLink, isAppleMobile } from "../../lib/outings/appInstall";
 import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
@@ -54,6 +55,18 @@ export default function OutingJoin() {
 	const [name, setName] = useState("");
 	const [sharePhoto, setSharePhoto] = useState(false);
 	const [recovering, setRecovering] = useState(false);
+	/* iPhone: the app is the way in (forced sharing off screen too); the web join stays as a fallback. */
+	const [onIPhone] = useState(() => typeof navigator !== "undefined" && isAppleMobile(navigator.userAgent, navigator.maxTouchPoints || 0));
+	const [copied, setCopied] = useState(false);
+	const openInApp = token ? appOpenUrl(token) : null;
+	const install = installTarget();
+
+	/* «نزّل التطبيق»: keep the invite for after the install (the app offers «لصق» on its first page). */
+	const goInstall = async () => {
+		const link = token ? inviteLink(window.location.origin, token) : null;
+		if (link) setCopied(await copyText(link));
+		window.location.href = install.url;
+	};
 
 	useSaryChrome();
 	usePageMeta({
@@ -118,6 +131,27 @@ export default function OutingJoin() {
 						: "A map for desert trips: see your friends on one map during the outing, and they see you."}
 				</p>
 			</header>
+			{preview && onIPhone && openInApp && preview.status !== "ended" ? (
+				<section className="sary-o-card" data-testid="outing-join-app">
+					<span className="sary-o-kicker">{isRTL ? "على الآيفون؟" : "On iPhone?"}</span>
+					<a className="sary-o-primary" href={openInApp} data-testid="outing-join-open-app">
+						{isRTL ? "افتح الدعوة في التطبيق" : "Open the invite in the app"}
+					</a>
+					<button type="button" className="sary-o-secondary" onClick={() => void goInstall()} data-testid="outing-join-install">
+						{isRTL ? "ما عندي التطبيق — نزّله وكمّل الدعوة" : "No app yet — install it and continue"}
+					</button>
+					<p className="sary-o-note" data-testid="outing-join-install-note">
+						{install.kind === "testflight-app"
+							? isRTL
+								? "ننسخ لك رابط الدعوة. نزّل TestFlight، افتح رابط التجربة اللي أرسله لك أمير الرحلة، وأول ما يفتح سَرى البارق اضغط «لصق»."
+								: "We copy your invite. Install TestFlight, open the beta link the trip leader sent you, then tap «Paste» when Sary Albarq opens."
+							: isRTL
+								? "ننسخ لك رابط الدعوة. بعد التثبيت افتح سَرى البارق واضغط «لصق» — تدخل الطلعة على طول."
+								: "We copy your invite. After installing, open Sary Albarq and tap «Paste» — you go straight into the outing."}
+						{copied ? (isRTL ? " ✓ نُسخ." : " ✓ Copied.") : ""}
+					</p>
+				</section>
+			) : null}
 			{preview ? (
 				<section className="sary-o-card" data-testid="outing-join-preview">
 					<span className="sary-o-kicker">{isRTL ? "دعوة إلى طلعة" : "Outing invite"}</span>

@@ -1739,3 +1739,10 @@
 	background: rgba(127, 127, 127, 0.12);
 	border: 1px solid rgba(127, 127, 127, 0.35);
 }
+
+/* Invite page on iPhone: «افتح الدعوة في التطبيق» is a link styled as the primary button. */
+a.sary-o-primary {
+	display: block;
+	text-align: center;
+	text-decoration: none;
+}

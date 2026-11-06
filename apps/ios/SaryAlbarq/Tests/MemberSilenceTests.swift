@@ -142,11 +142,18 @@ final class MemberSilenceTests: XCTestCase {
         XCTAssertTrue(a.hasPhone, "«اتصال» when the phone is shared")
         XCTAssertEqual(SilenceText.title(name: a.name, since: a.since, now: t0), "انقطع إرسال فهد منذ ١٠ د")
         XCTAssertEqual(SilenceText.lastFix(a.lastAt, now: t0), "آخر موقع قبل ١٠ د")
+        /* «اتجه»: our own guidance to the last known fix, labelled as old. */
+        let go = try LiveOutingPresenter.silentTarget(a).get()
+        XCTAssertEqual(go.source, .lastKnown)
+        XCTAssertEqual(go.name, "آخر موقع فهد")
+        XCTAssertEqual(go.position, LngLat(lng: 46.7, lat: 24.7))
+        XCTAssertEqual(go.staleNote(now: t0), "آخر موقع معروف · قبل ١٠ د")
 
         let noPhone = OutingView(snap(silent: [SilentInfo(user_id: "b", since: bLastAt, level: 30, last: nil)], phone: nil), deviceNow: t0)
         let n = try XCTUnwrap(LiveOutingPresenter.silentAlert("b", in: noPhone, now: t0))
         XCTAssertFalse(n.hasPhone)
         XCTAssertFalse(n.hasLast, "no last position: no «اتجه»")
+        XCTAssertEqual(LiveOutingPresenter.silentTarget(n), .failure(.missing))
         XCTAssertEqual(SilenceText.lastFix(nil, now: t0), "لا يوجد موقع معروف")
         XCTAssertEqual(SilenceText.resumed(name: "فهد"), "رجع إرسال فهد")
     }
