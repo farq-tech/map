@@ -23,7 +23,7 @@ const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
 const { createMedia } = require('./media');
 const { createGroupAudio } = require('./group-audio');
-const { createPersonalInvites } = require('./invites');
+const { createPersonalInvites, phoneDigest } = require('./invites');
 const { createChat } = require('./chat');
 
 class OutingError extends Error {
@@ -472,33 +472,65 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
    *   taken     — used by someone else: «هذه الدعوة لشخص آخر»
    *   claimed   — used, and the viewer is anonymous (build 9–11 previews
    *               without a token): joining decides
+   *
+   * «رجوع بحساب جديد»: the person the leader invited lost their account on
+   * this phone (signed out, reinstalled, a new identity) and comes back with
+   * another one. Accounts have no password, so the only thing that ties the
+   * new account to the invite is the number the leader picked from contacts:
+   * when the viewer's account phone gives the invite's per-trip digest, the
+   * invite is theirs again (`reclaim`), and joining moves it — and the trip
+   * seat — to this account. Without a number on both sides it stays `taken`.
    */
+  function reclaims(row, viewer) {
+    if (!viewer?.phone || !row.invitee_phone_hash) return false;
+    /* Removed by the leader: a new account must not walk back in through the same link. */
+    if (row.consumer_status === 'removed') return false;
+    return phoneDigest(row.outing_id, viewer.phone) === row.invitee_phone_hash;
+  }
+
   function claimOf(row, viewer) {
     if (!row.consumed_at) return 'open';
     if (!viewer) return 'claimed';
-    return row.consumed_by === viewer.id ? 'yours' : 'taken';
+    if (row.consumed_by === viewer.id) return 'yours';
+    return reclaims(row, viewer) ? 'reclaim' : 'taken';
+  }
+
+  /** The bound person coming back through their own link: expiry no longer applies (revoke / end still do). */
+  function boundProblem(row) {
+    const p = inviteProblem(row);
+    return p === 'invite_expired' ? null : p;
   }
 
   /** `viewer` is optional (the preview route authenticates when it can). */
-  async function previewInvite(token, viewer = null) {
-    if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
+  async function previewInvite(rawToken, viewer = null) {
+    const token = v.inviteToken(rawToken);
+    if (!token) throw err('invite_invalid', 404);
     const [row] = await q(
-      `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.consumed_by, i.consumed_at, i.opened_at,
+      `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.invitee_phone_hash, i.consumed_by, i.consumed_at, i.opened_at,
               o.name, o.status AS outing_status, o.join_locked, o.open_links, u.display_name AS owner_name,
               o.plan_destination->>'name' AS destination_name,
               (SELECT count(*)::int FROM sary.outing_members m
                 WHERE m.outing_id = o.id AND m.status = 'active') AS member_count,
               (SELECT status FROM sary.outing_members m
-                WHERE m.outing_id = o.id AND m.user_id = $2::uuid) AS viewer_status
+                WHERE m.outing_id = o.id AND m.user_id = $2::uuid) AS viewer_status,
+              (SELECT status FROM sary.outing_members m
+                WHERE m.outing_id = o.id AND m.user_id = i.consumed_by) AS consumer_status
        FROM sary.outing_invites i
        JOIN sary.outings o ON o.id = i.outing_id
        JOIN sary.users u ON u.id = o.owner_id
        WHERE i.token_hash = $1`,
       [v.digest(token), viewer?.id || null],
     );
-    const problem = inviteProblem(row);
-    if (problem) throw err(problem, problem === 'invite_invalid' ? 404 : 410);
-    const isPersonal = row.kind === 'personal';
+    const isPersonal = row?.kind === 'personal';
+    const claim = isPersonal ? claimOf(row, viewer) : 'open';
+    /* Taken is the true reason even after expiry; the bound person may come back after it. */
+    if (claim === 'taken') {
+      const p = inviteProblem(row);
+      if (p === 'invite_revoked' || p === 'outing_ended') throw err(p, 410);
+    } else {
+      const problem = claim === 'yours' || claim === 'reclaim' ? boundProblem(row) : inviteProblem(row);
+      if (problem) throw err(problem, problem === 'invite_invalid' ? 404 : 410);
+    }
     /* «فتحها»: the first look by someone who is not already in the trip (the
      * leader checking their own link does not count). */
     if (isPersonal && !row.opened_at && !row.consumed_at && row.viewer_status !== 'active') {
@@ -515,7 +547,10 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
       join_locked: row.join_locked === true,
       kind: isPersonal ? 'personal' : 'group',
       invitee_name: isPersonal ? row.invitee_name : null,
-      claim: isPersonal ? claimOf(row, viewer) : 'open',
+      /* Build ≤ 20 apps know only open / yours / taken / claimed: a reclaim reads as
+       * `open` there (the join button), and `reclaim: true` for newer clients. */
+      claim: claim === 'reclaim' ? 'open' : claim,
+      reclaim: claim === 'reclaim',
       already_member: row.viewer_status === 'active',
       /* «الوجهة» as the plan names it (e.g. «روضة الثمامة») — the name only,
        * never its coordinates: the invitee is not a member yet. */
@@ -523,11 +558,12 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     };
   }
 
-  async function joinByInvite(user, token) {
-    if (!v.isSecretShaped(token)) throw err('invite_invalid', 404);
+  async function joinByInvite(user, rawToken) {
+    const token = v.inviteToken(rawToken);
+    if (!token) throw err('invite_invalid', 404);
     const result = await tx(async (run) => {
       const [row] = await run(
-        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.invitee_phone_last4,
+        `SELECT i.id, i.outing_id, i.expires_at, i.revoked_at, i.kind, i.invitee_name, i.invitee_phone_last4, i.invitee_phone_hash,
                 i.consumed_by, i.consumed_at, o.status AS outing_status, o.join_locked, o.open_links
          FROM sary.outing_invites i JOIN sary.outings o ON o.id = i.outing_id
          WHERE i.token_hash = $1
@@ -543,13 +579,22 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         : [];
       /* A personal link used by someone else admits nobody else — checked
        * before expiry so the answer is the true reason. */
-      if (isPersonal && row.consumed_at && row.consumed_by !== user.id) throw err('invite_taken', 409);
+      if (isPersonal && row.consumed_by && row.consumed_by !== user.id) {
+        const [c] = await run(
+          `SELECT status FROM sary.outing_members WHERE outing_id = $1 AND user_id = $2`,
+          [row.outing_id, row.consumed_by],
+        );
+        row.consumer_status = c?.status || null;
+      }
+      const reclaim = Boolean(isPersonal && row.consumed_at && row.consumed_by !== user.id && reclaims(row, user));
+      if (isPersonal && row.consumed_at && row.consumed_by !== user.id && !reclaim) throw err('invite_taken', 409);
       /* The person it is bound to, already in the trip: nothing to do (even
        * if the link has since expired or been revoked). */
       if (isPersonal && existing?.status === 'active' && row.outing_status !== 'ended') {
         return { outing_id: row.outing_id, already: true };
       }
-      const problem = inviteProblem(row);
+      const bound = isPersonal && row.consumed_at && (row.consumed_by === user.id || reclaim);
+      const problem = bound ? boundProblem(row) : inviteProblem(row);
       if (problem) throw err(problem, problem === 'invite_invalid' ? 404 : 410);
       if (existing?.status === 'active') return { outing_id: row.outing_id, already: true };
       if (existing?.status === 'removed') throw err('removed_from_outing', 403);
@@ -577,7 +622,21 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
           [row.outing_id, user.id, invitedName, last4, isPersonal ? row.id : null],
         );
       }
-      if (isPersonal && !row.consumed_at) {
+      /* The seat the old account held for this person is theirs now: that account leaves
+       * (normal leave rules), so the trip keeps one line per person. */
+      let retired = null;
+      if (reclaim && row.consumed_by) {
+        const [old] = await run(
+          `SELECT m.role, m.status, o.status AS outing_status FROM sary.outing_members m
+           JOIN sary.outings o ON o.id = m.outing_id
+           WHERE m.outing_id = $1 AND m.user_id = $2 FOR UPDATE OF m`,
+          [row.outing_id, row.consumed_by],
+        );
+        if (old?.status === 'active') {
+          retired = { userId: row.consumed_by, outcome: await leaveRows(run, old, row.outing_id, row.consumed_by) };
+        }
+      }
+      if (isPersonal && (!row.consumed_at || reclaim)) {
         await run(
           `UPDATE sary.outing_invites SET uses = uses + 1, consumed_by = $2, consumed_at = now() WHERE id = $1`,
           [row.id, user.id],
@@ -586,10 +645,11 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         await run(`UPDATE sary.outing_invites SET uses = uses + 1 WHERE id = $1`, [row.id]);
       }
       await run(`UPDATE sary.outings SET updated_at = now() WHERE id = $1`, [row.outing_id]);
-      return { outing_id: row.outing_id, already: false, invitedName, last4, inviteId: isPersonal ? row.id : null };
+      return { outing_id: row.outing_id, already: false, invitedName, last4, inviteId: isPersonal ? row.id : null, retired };
     });
     forgetOuting(result.outing_id);
-    const { invitedName, last4, inviteId, ...out } = result;
+    const { invitedName, last4, inviteId, retired, ...out } = result;
+    if (retired) afterLeave(result.outing_id, retired.userId, retired.outcome);
     if (!result.already) {
       hub.emit(result.outing_id, {
         type: 'member_joined',
