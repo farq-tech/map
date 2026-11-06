@@ -253,6 +253,8 @@ final class LiveOutingController: ObservableObject {
     @Published var fixWait: NavFixWait?
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
+    /// «المسارات» was opened mid-guidance: closing the options without choosing goes back to guiding.
+    var navResumeOnClose = false
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
     /// The trip's automatic guidance on this phone (`TripAutoNav`, LiveOutingController+AutoNav.swift).

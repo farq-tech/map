@@ -150,6 +150,9 @@ struct NavRoute: Equatable, Identifiable {
     var hasTolls = false
     /// A few road names the route is mostly on («عبر طريق الملك فهد»).
     var via: String? = nil
+    /// Traffic on each segment (`coordinates[i]`→`coordinates[i+1]`), from Mapbox `driving-traffic`
+    /// congestion annotations. Nil off the traffic profile (Valhalla, the desert): one colour.
+    var congestion: [NavCongestion]? = nil
 
     var end: LngLat? { coordinates.last }
     var start: LngLat? { coordinates.first }
@@ -186,4 +189,68 @@ struct NavOffRoadLeg: Equatable {
     var distanceM: Double
     /// From `from` to `to`, degrees clockwise from north.
     var bearing: Double
+}
+
+/// Traffic on a stretch of road, as Mapbox's congestion annotation says (numeric 0–100 → the
+/// SDK's default bands: <40 low, <60 moderate, <80 heavy, else severe).
+enum NavCongestion: Int, Equatable {
+    case unknown = 0, low, moderate, heavy, severe
+
+    init(numeric v: Int?) {
+        guard let v else { self = .unknown; return }
+        switch v {
+        case ..<40: self = .low
+        case ..<60: self = .moderate
+        case ..<80: self = .heavy
+        default: self = .severe
+        }
+    }
+
+    /// The map's line colour group: 0 = the normal route blue (low / unknown), then orange, red, dark red.
+    var band: Int {
+        switch self {
+        case .unknown, .low: return 0
+        case .moderate: return 1
+        case .heavy: return 2
+        case .severe: return 3
+        }
+    }
+}
+
+/// A run of the remaining route in one traffic band (what the map draws, one feature per run).
+struct NavTrafficRun: Equatable {
+    var band: Int
+    var coordinates: [LngLat]
+}
+
+enum NavTraffic {
+    /// The route from `done` metres on, cut into runs of equal band. Nil when the annotation does
+    /// not fit the line (then the map draws one plain colour, never a wrong one).
+    static func runs(_ coords: [LngLat], congestion: [NavCongestion]?, from done: Double) -> [NavTrafficRun]? {
+        guard let c = congestion, coords.count >= 2, c.count == coords.count - 1 else { return nil }
+        guard c.contains(where: { $0.band > 0 }) else { return nil }
+        var out: [NavTrafficRun] = []
+        var acc = 0.0
+        func add(_ band: Int, _ a: LngLat, _ b: LngLat) {
+            if var last = out.last, last.band == band, last.coordinates.last == a {
+                last.coordinates.append(b)
+                out[out.count - 1] = last
+            } else {
+                out.append(NavTrafficRun(band: band, coordinates: [a, b]))
+            }
+        }
+        for i in 0..<(coords.count - 1) {
+            let a = coords[i], b = coords[i + 1]
+            let seg = Vehicle.distanceMeters(a, b)
+            defer { acc += seg }
+            if acc + seg <= done { continue }
+            var from = a
+            if acc < done, seg > 0 {
+                let u = (done - acc) / seg
+                from = LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
+            }
+            add(c[i].band, from, b)
+        }
+        return out.isEmpty ? nil : out
+    }
 }

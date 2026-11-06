@@ -596,3 +596,83 @@ final class ExternalNavTests: XCTestCase {
         XCTAssertEqual(q.left, 50)
     }
 }
+
+/// The guidance HUD v2 rules and the traffic colours on the route.
+final class NavHUDTests: XCTestCase {
+    private func step(_ kind: NavManeuverKind, road: String? = nil, sign: String? = nil, dist: Double = 1000) -> NavStep {
+        NavStep(maneuver: .init(kind: kind, direction: .left), roadName: road, signText: sign, location: riyadh, distanceM: dist, durationS: 60)
+    }
+
+    func testThenOnlyWhenTheNextTurnIsClose() {
+        let next = step(.turn, road: "طريق العليا")
+        XCTAssertTrue(NavHUD.showsThen(step(.turn, dist: 250), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 400), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 3300), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 100), next: nil))
+        XCTAssertFalse(NavHUD.showsThen(step(.arrive, dist: 0), next: next))
+    }
+
+    func testDistanceSplitsNumberAndUnit() {
+        let km = NavHUD.distanceParts(3300)
+        XCTAssertEqual(km.value, "٣٫٣")
+        XCTAssertEqual(km.unit, "كم")
+        let m = NavHUD.distanceParts(480)
+        XCTAssertEqual(m.value, "٤٨٠")
+        XCTAssertEqual(m.unit, "م")
+    }
+
+    func testTitleIsTheRoadElseTheAction() {
+        XCTAssertEqual(NavHUD.title(step(.turn, road: "طريق الملك فهد"), targetName: nil), "طريق الملك فهد")
+        XCTAssertEqual(NavHUD.title(step(.offRamp, sign: "مخرج 5"), targetName: nil), NavText.arabicDigitsOnly("مخرج 5"))
+        XCTAssertEqual(NavHUD.title(step(.turn), targetName: nil), NavText.action(.init(kind: .turn, direction: .left)))
+        XCTAssertEqual(NavHUD.title(step(.arrive), targetName: "حطين"), "حطين")
+        XCTAssertEqual(NavHUD.title(step(.arrive), targetName: nil), "وجهتك")
+    }
+
+    func testOverLimit() {
+        XCTAssertTrue(NavHUD.overLimit(kmh: 90, limit: 80))
+        XCTAssertTrue(NavHUD.overLimit(kmh: 80.6, limit: 80))
+        XCTAssertFalse(NavHUD.overLimit(kmh: 80.4, limit: 80))
+        XCTAssertFalse(NavHUD.overLimit(kmh: 120, limit: nil))
+        XCTAssertFalse(NavHUD.overLimit(kmh: nil, limit: 80))
+    }
+
+    func testTripLineAndShare() {
+        let eta = Date(timeIntervalSince1970: 1_762_466_160) // 00:56 Riyadh
+        XCTAssertEqual(NavHUD.tripLine(meters: 19_000, eta: eta), "١٩ كم · ١٢:٥٦ ص")
+        let s = NavHUD.shareText(target: "حطين", eta: eta, seconds: 22 * 60)
+        XCTAssertTrue(s.contains("إلى حطين") && s.contains("١٢:٥٦ ص") && s.contains("٢٢ د"), s)
+    }
+
+    func testCongestionBands() {
+        XCTAssertEqual(NavCongestion(numeric: 10), .low)
+        XCTAssertEqual(NavCongestion(numeric: 45), .moderate)
+        XCTAssertEqual(NavCongestion(numeric: 70), .heavy)
+        XCTAssertEqual(NavCongestion(numeric: 95), .severe)
+        XCTAssertEqual(NavCongestion(numeric: nil), .unknown)
+        XCTAssertEqual([NavCongestion.unknown, .low, .moderate, .heavy, .severe].map(\.band), [0, 0, 1, 2, 3])
+    }
+
+    func testTrafficRunsMergeAndTrimBehindTheCar() {
+        /* Five ~111 m segments north. */
+        let pts = (0...5).map { LngLat(lng: 46.7, lat: 24.7 + Double($0) * 0.001) }
+        let c: [NavCongestion] = [.low, .low, .heavy, .severe, .moderate]
+        let all = NavTraffic.runs(pts, congestion: c, from: 0)!
+        XCTAssertEqual(all.map(\.band), [0, 2, 3, 1])
+        XCTAssertEqual(all[0].coordinates.count, 3, "two low segments merge")
+        /* 1.5 segments driven: the first run starts mid-segment, still blue. */
+        let seg = Vehicle.distanceMeters(pts[0], pts[1])
+        let ahead = NavTraffic.runs(pts, congestion: c, from: seg * 1.5)!
+        XCTAssertEqual(ahead.map(\.band), [0, 2, 3, 1])
+        XCTAssertEqual(ahead[0].coordinates.first!.lat, 24.7015, accuracy: 0.0001)
+        /* Past the jam: only what is ahead. */
+        XCTAssertEqual(NavTraffic.runs(pts, congestion: c, from: seg * 3.5)!.map(\.band), [3, 1])
+    }
+
+    func testNoTrafficMeansOnePlainColour() {
+        let pts = (0...3).map { LngLat(lng: 46.7, lat: 24.7 + Double($0) * 0.001) }
+        XCTAssertNil(NavTraffic.runs(pts, congestion: nil, from: 0), "Valhalla / the desert: no annotation")
+        XCTAssertNil(NavTraffic.runs(pts, congestion: [.low, .low, .low], from: 0), "all free: the plain route")
+        XCTAssertNil(NavTraffic.runs(pts, congestion: [.heavy], from: 0), "a mismatched annotation is never drawn")
+    }
+}
