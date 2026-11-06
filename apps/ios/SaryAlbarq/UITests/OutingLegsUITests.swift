@@ -25,12 +25,15 @@ final class OutingLegsUITests: XCTestCase {
         app.launch()
         app.allowLocationIfAsked()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let deadline = Date().addingTimeInterval(45)
+        /* A fresh install on a small simulator can take a while, and iOS may ask more than once. */
+        let deadline = Date().addingTimeInterval(90)
         let cta = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'flow.cta.'")).firstMatch
         while !cta.exists && Date() < deadline {
-            for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق"] where springboard.buttons[label].exists {
+            for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where springboard.buttons[label].exists {
                 springboard.buttons[label].tap()
             }
+            /* The interruption monitor answers only on an interaction: nudge the app now and then. */
+            if Int(Date().timeIntervalSince1970) % 5 == 0 { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap() }
             usleep(250_000)
         }
         XCTAssertTrue(cta.waitForExistence(timeout: 5), "the big button")
