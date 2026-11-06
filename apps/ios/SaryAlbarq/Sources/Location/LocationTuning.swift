@@ -67,8 +67,94 @@ enum LocationTuning {
             heading: l.course >= 0 ? l.course : nil,
             speed: l.speed >= 0 ? l.speed : nil,
             atMs: l.timestamp.timeIntervalSince1970 * 1000,
-            speedAccuracy: l.speedAccuracy >= 0 ? l.speedAccuracy : nil
+            speedAccuracy: l.speedAccuracy >= 0 ? l.speedAccuracy : nil,
+            courseAccuracy: l.courseAccuracy >= 0 ? l.courseAccuracy : nil
         )
+    }
+
+    /// Where the fix came from (`CLLocation.sourceInformation`, iOS 15+), for «جودة GPS».
+    static func sourceLabel(_ l: CLLocation) -> String {
+        guard let s = l.sourceInformation else { return "device" }
+        if s.isSimulatedBySoftware { return "simulated" }
+        if s.isProducedByAccessory { return "accessory" }
+        return "device"
+    }
+
+    /// What the GPS is asked to do right now: every use, every motion, in one place.
+    struct Need: Equatable {
+        var watching = false
+        var sharing = false
+        /// «مساري» recording (on screen, or kept alive off screen) or the screen-locked trail.
+        var trail = false
+        var offScreen = false
+        /// Sharing armed for the background («دائمًا»).
+        var backgroundShare = false
+        var mode: ShareMode = .balanced
+        var motion: MotionClass = .parked
+        var speedMps: Double?
+        /// The road matcher found a road recently (trail only).
+        var onRoad = false
+    }
+
+    struct Plan: Equatable {
+        var desiredAccuracy: CLLocationAccuracy
+        var distanceFilter: CLLocationDistance
+        var activityType: CLActivityType
+    }
+
+    /// Activity model: on foot → `.fitness` (pedestrian model, no car smoothing); on a matched road
+    /// while recording → `.automotiveNavigation`; everywhere else (the dunes) `.otherNavigation`,
+    /// which keeps the navigation treatment without snapping a car to a road it is not on.
+    static func activity(_ n: Need) -> CLActivityType {
+        if n.motion == .walking { return .fitness }
+        if n.trail && n.onRoad && n.motion != .parked { return .automotiveNavigation }
+        return .otherNavigation
+    }
+
+    /// nil: nothing needs the GPS. The trail wins (best, every fix); then a background share
+    /// (`BackgroundCadence`); then the on-screen share tiers; then the plain map dot.
+    static func plan(_ n: Need) -> Plan? {
+        let act = activity(n)
+        if n.trail {
+            let t = trailSettings(onRoad: n.onRoad)
+            return Plan(desiredAccuracy: n.motion == .walking ? kCLLocationAccuracyBest : t.desiredAccuracy, distanceFilter: t.distanceFilter, activityType: act)
+        }
+        if n.sharing {
+            if n.offScreen && n.backgroundShare {
+                /* Speed unknown: the motion class (hysteresis) decides, never a coarse tier by accident. */
+                let m = n.speedMps.map { BackgroundCadence.motion(speedMps: $0) } ?? (n.motion == .parked ? .parked : .moving)
+                let a = BackgroundCadence.accuracy(m)
+                return Plan(desiredAccuracy: a.desiredAccuracy, distanceFilter: a.distanceFilter, activityType: act)
+            }
+            let s = settings(mode: n.mode, speedMps: n.speedMps)
+            return Plan(desiredAccuracy: s.desiredAccuracy, distanceFilter: s.distanceFilter, activityType: act)
+        }
+        if n.watching {
+            /* No distance filter: a parked phone still gets fresh fixes, so its age stays honest. */
+            return Plan(desiredAccuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: kCLDistanceFilterNone, activityType: act)
+        }
+        return nil
+    }
+
+    static func describe(_ p: Plan?) -> String {
+        guard let p else { return "off" }
+        let a: String
+        switch p.desiredAccuracy {
+        case kCLLocationAccuracyBestForNavigation: a = "nav"
+        case kCLLocationAccuracyBest: a = "best"
+        case kCLLocationAccuracyNearestTenMeters: a = "10m"
+        case kCLLocationAccuracyHundredMeters: a = "100m"
+        default: a = String(format: "%.0fm", p.desiredAccuracy)
+        }
+        let f = p.distanceFilter == kCLDistanceFilterNone ? "none" : String(format: "%.0fm", p.distanceFilter)
+        let t: String
+        switch p.activityType {
+        case .automotiveNavigation: t = "auto"
+        case .otherNavigation: t = "otherNav"
+        case .fitness: t = "fitness"
+        default: t = "other"
+        }
+        return "\(a) · \(f) · \(t)"
     }
 
     static func gpsState(auth: CLAuthorizationStatus, lastAccuracy: Double?, lastFixAgeMs: Double?) -> GpsState {

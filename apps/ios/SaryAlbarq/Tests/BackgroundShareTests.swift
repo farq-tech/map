@@ -19,9 +19,9 @@ final class BackgroundCadenceTests: XCTestCase {
 
     func testIntervalsAndDistance() {
         let last = BackgroundCadence.Last(fix: fix(24.7, speed: 0, at: 0), sentAtMs: 0)
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 20, at: 1), last: last, lowPower: false), 15_000)
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: false), 60_000, "parked: once a minute")
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 120_000, "Low Power doubles it")
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 20, at: 1), last: last, lowPower: false), 10_000)
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: false), 40_000, "parked: inside the 45 s live window")
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 80_000, "Low Power doubles it")
         /* ~111 m away: due after the 5 s floor. */
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.701, speed: 20, at: 1), last: last, lowPower: false), 5_000)
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: nil, lowPower: false), -.infinity, "first fix goes now")
@@ -93,15 +93,15 @@ final class BackgroundPositionSenderTests: XCTestCase {
         s.offer(fix(0), mode: .balanced)
         await settle()
         XCTAssertEqual(posted.count, 1)
-        /* Ten more fixes within 10 s (a metre apart): coalesced into one pending slot. */
-        for i in 1...10 {
+        /* Nine more fixes within 9 s (a metre apart): coalesced into one pending slot. */
+        for i in 1...9 {
             await advance(1_000)
             s.offer(fix(i), mode: .balanced)
         }
-        XCTAssertEqual(posted.count, 1, "not yet: 15 s while driving")
-        await advance(5_000)
+        XCTAssertEqual(posted.count, 1, "not yet: 10 s while driving")
+        await advance(1_500)
         XCTAssertEqual(posted.count, 2)
-        XCTAssertEqual(posted.last?.lat ?? 0, fix(10).lat, accuracy: 1e-9, "only the latest fix is sent")
+        XCTAssertEqual(posted.last?.lat ?? 0, fix(9).lat, accuracy: 1e-9, "only the latest fix is sent")
     }
 
     func testStaleFixIsDroppedNeverSentLate() async {

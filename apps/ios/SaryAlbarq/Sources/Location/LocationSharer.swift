@@ -38,7 +38,14 @@ import UIKit
 final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var authorization: CLAuthorizationStatus
     @Published private(set) var accuracyAuthorization: CLAccuracyAuthorization
+    /// The latest fix the quality gate believes (`FixQualityGate`), exactly as CoreLocation gave it:
+    /// never smoothed (SOS, mesh, navigation, the trip log use it as is).
     @Published private(set) var lastFix: DeviceFix?
+    /// My dot as the map draws it: `lastFix` through `DisplaySmoother` (anchored when parked,
+    /// light Kalman on the move, heading only when the course is trustworthy). Display only.
+    @Published private(set) var displayFix: DeviceFix?
+    /// «جودة GPS» (developer readout).
+    @Published private(set) var quality = GpsQualityStats()
     @Published private(set) var isSharing = false
     @Published private(set) var effectiveMode: ShareMode = .balanced
 
@@ -59,7 +66,14 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// The trail's iOS 17+ `CLBackgroundActivitySession` / iOS 18+ `CLServiceSession` (typed `AnyObject` for the availability checks).
     private var trailActivitySession: AnyObject?
     private var trailServiceSession: AnyObject?
-    private var askedTemporaryFull = false
+    /// Purpose keys already asked this launch (iOS shows the prompt at most once per key anyway).
+    private var askedTemporaryFull: Set<String> = []
+    private var gate = FixQualityGate()
+    private var smoother = DisplaySmoother()
+    private var motion: MotionClass = .parked
+    private var recentFixTimes: [Double] = []
+    /// What the manager is set to (nil: nothing needs the GPS).
+    private(set) var plan: LocationTuning.Plan?
     /// Sharing is armed to keep going off screen («دائمًا» + sharing).
     @Published private(set) var backgroundShare = false
     /// The app is off screen (set by the session): background accuracy tiers apply.
@@ -189,12 +203,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         backgroundTrail = true
         applyBackgroundMode()
         manager.pausesLocationUpdatesAutomatically = false
-        if trailActive {
-            applyTrailSettings()
-        } else if !isSharing {
-            manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-            manager.distanceFilter = kCLDistanceFilterNone
-        }
+        applySettings()
         manager.startUpdatingLocation()
     }
 
@@ -228,25 +237,20 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         trailServiceSession = nil
         if backgroundTrail { stopBackgroundTrail() }
         applyBackgroundMode()
-        manager.activityType = .otherNavigation
-        if isSharing {
-            retune(speed: lastFix?.speed)
-        } else if watching {
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = kCLDistanceFilterNone
-        } else {
-            manager.stopUpdatingLocation()
-        }
+        applySettings()
+        if plan == nil { manager.stopUpdatingLocation() }
     }
 
-    /// Info.plist `NSLocationTemporaryUsageDescriptionDictionary` key.
+    /// Info.plist `NSLocationTemporaryUsageDescriptionDictionary` key: «مساري» recording.
     static let fullAccuracyPurposeKey = "TrailRecording"
+    /// Info.plist `NSLocationTemporaryUsageDescriptionDictionary` key: sharing with the convoy during a trip.
+    static let tripPurposeKey = "ConvoyTrip"
 
     /// «الموقع الدقيق» is off: ask iOS for full accuracy for this outing (once per launch).
-    func askFullAccuracyIfReduced() {
-        guard accuracyAuthorization == .reducedAccuracy, canLocate, !askedTemporaryFull else { return }
-        askedTemporaryFull = true
-        manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.fullAccuracyPurposeKey) { [weak self] _ in
+    func askFullAccuracyIfReduced(purposeKey: String = LocationSharer.fullAccuracyPurposeKey) {
+        guard accuracyAuthorization == .reducedAccuracy, canLocate, !askedTemporaryFull.contains(purposeKey) else { return }
+        askedTemporaryFull.insert(purposeKey)
+        manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.accuracyAuthorization = self.manager.accuracyAuthorization
@@ -254,14 +258,48 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         }
     }
 
+    /// For permission / onboarding screens (owned elsewhere): with «الموقع الدقيق» off, ask iOS for
+    /// precise location for this trip (iOS's own sheet, our Najdi purpose string). Answers true when
+    /// precise location is on afterwards. Asks at most once per launch; a no-op when already precise.
+    @discardableResult
+    func requestPreciseForTrip() async -> Bool {
+        guard canLocate else { return false }
+        guard accuracyAuthorization == .reducedAccuracy else { return true }
+        guard !askedTemporaryFull.contains(Self.tripPurposeKey) else { return false }
+        askedTemporaryFull.insert(Self.tripPurposeKey)
+        let acc: CLAccuracyAuthorization = await withCheckedContinuation { c in
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.tripPurposeKey) { [weak self] _ in
+                Task { @MainActor in c.resume(returning: self?.manager.accuracyAuthorization ?? .reducedAccuracy) }
+            }
+        }
+        accuracyAuthorization = acc
+        return acc == .fullAccuracy
+    }
+
     var preciseOff: Bool { accuracyAuthorization == .reducedAccuracy }
 
-    private func applyTrailSettings() {
-        let s = LocationTuning.trailSettings(onRoad: onRoad)
-        if manager.desiredAccuracy != s.desiredAccuracy { manager.desiredAccuracy = s.desiredAccuracy }
-        if manager.distanceFilter != s.distanceFilter { manager.distanceFilter = s.distanceFilter }
-        if manager.activityType != s.activityType { manager.activityType = s.activityType }
-        manager.pausesLocationUpdatesAutomatically = false
+    private func applyTrailSettings() { applySettings() }
+
+    /// What every use needs right now (see `LocationTuning.plan`).
+    var need: LocationTuning.Need {
+        LocationTuning.Need(watching: watching, sharing: isSharing, trail: trailActive || backgroundTrail,
+                            offScreen: offScreen, backgroundShare: backgroundShare, mode: effectiveMode,
+                            motion: motion, speedMps: lastFix?.speed, onRoad: onRoad)
+    }
+
+    /// The one place the manager's accuracy, distance filter and activity type are set.
+    /// Touches the manager only when something changed (cheap to call on every fix).
+    private func applySettings() {
+        let p = LocationTuning.plan(need)
+        plan = p
+        let described = LocationTuning.describe(p)
+        if quality.settings != described { quality.settings = described }
+        guard let p else { return }
+        if manager.desiredAccuracy != p.desiredAccuracy { manager.desiredAccuracy = p.desiredAccuracy }
+        if manager.distanceFilter != p.distanceFilter { manager.distanceFilter = p.distanceFilter }
+        if manager.activityType != p.activityType { manager.activityType = p.activityType }
+        /* Never auto-paused: a parked convoy (tea stop, stuck in sand) is when others most need you. */
+        if manager.pausesLocationUpdatesAutomatically { manager.pausesLocationUpdatesAutomatically = false }
     }
 
     /// Back to foreground-only. Stops the GPS too unless the map or sharing still needs it.
@@ -269,26 +307,14 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         guard backgroundTrail else { return }
         backgroundTrail = false
         applyBackgroundMode()
-        if trailActive {
-            /* Still recording (on screen, or off screen through the trail's activity session). */
-        } else if isSharing {
-            retune(speed: lastFix?.speed)
-        } else if watching {
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = kCLDistanceFilterNone
-        } else {
-            manager.stopUpdatingLocation()
-        }
+        applySettings()
+        if plan == nil { manager.stopUpdatingLocation() }
     }
 
     func watchForeground() {
         guard canLocate, !watching else { return }
         watching = true
-        if !isSharing && !trailActive {
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            /* No distance filter: a parked phone still gets fresh fixes, so its age stays honest. */
-            manager.distanceFilter = kCLDistanceFilterNone
-        }
+        applySettings()
         manager.startUpdatingLocation()
     }
 
@@ -307,6 +333,8 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         applyBackgroundMode()
         retune(speed: lastFix?.speed)
         manager.startUpdatingLocation()
+        /* «الموقع الدقيق» off: the convoy sees you kilometres off (and fixes over 150 m are not sent). */
+        askFullAccuracyIfReduced(purposeKey: Self.tripPurposeKey)
     }
 
     /// «دائمًا» + sharing: keep the GPS and the app alive off screen as much as iOS allows.
@@ -315,7 +343,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         backgroundShare = true
         if shareActivitySession == nil { shareActivitySession = CLBackgroundActivitySession() }
         if #available(iOS 18.0, *), shareServiceSession == nil {
-            shareServiceSession = CLServiceSession(authorization: .always)
+            shareServiceSession = CLServiceSession(authorization: .always, fullAccuracyPurposeKey: Self.tripPurposeKey)
         }
         /* Backstop: relaunches the app in the background if iOS terminates it (~500 m moves). */
         if CLLocationManager.significantLocationChangeMonitoringAvailable() {
@@ -372,15 +400,8 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         isSharing = false
         applyBackgroundMode()
         filter.reset()
-        if trailActive || backgroundTrail {
-            applyTrailSettings()
-        } else if watching {
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            /* No distance filter: a parked phone still gets fresh fixes, so its age stays honest. */
-            manager.distanceFilter = kCLDistanceFilterNone
-        } else {
-            manager.stopUpdatingLocation()
-        }
+        applySettings()
+        if plan == nil { manager.stopUpdatingLocation() }
     }
 
     @objc private func powerChanged() {
@@ -395,20 +416,12 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
             batteryLevel: d.batteryLevel,
             charging: d.batteryState == .charging || d.batteryState == .full
         )
-        guard isSharing else { return }
         /* While «مساري» records, the GPS stays at its best (on screen and off); the send
-         * policy (`Policy` on screen, `BackgroundCadence` off screen) still decides what is sent. */
-        if trailActive { applyTrailSettings(); return }
-        if offScreen && backgroundShare {
-            /* Off screen: best when moving, reduced when parked (BackgroundCadence). */
-            let a = BackgroundCadence.accuracy(BackgroundCadence.motion(speedMps: speed))
-            if manager.desiredAccuracy != a.desiredAccuracy { manager.desiredAccuracy = a.desiredAccuracy }
-            if manager.distanceFilter != a.distanceFilter { manager.distanceFilter = a.distanceFilter }
-            return
-        }
-        let s = LocationTuning.settings(mode: effectiveMode, speedMps: speed)
-        if manager.desiredAccuracy != s.desiredAccuracy { manager.desiredAccuracy = s.desiredAccuracy }
-        if manager.distanceFilter != s.distanceFilter { manager.distanceFilter = s.distanceFilter }
+         * policy (`Policy` on screen, `BackgroundCadence` off screen) still decides what is sent.
+         * Off screen with a background share: best when moving, reduced when parked. */
+        motion = MotionClass.next(motion, speedMps: speed)
+        if quality.motion != motion { quality.motion = motion }
+        applySettings()
     }
 
     // MARK: CLLocationManagerDelegate
@@ -436,26 +449,51 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let fixes = locations.compactMap(LocationTuning.deviceFix)
+        let fixes = locations.map { (LocationTuning.deviceFix($0), LocationTuning.sourceLabel($0)) }
         Task { @MainActor in
             #if DEBUG
             if self.ignoresSystemFixes { return }
             #endif
-            for f in fixes {
-                if let last = self.lastFix, f.atMs <= last.atMs { continue }
-                self.lastFix = f
-                /* Every fix goes to the trail (raw log + smoother); no accuracy downgrade when parked:
-                 * a coarse chip at a red light used to cost the next minutes of the drive. */
-                self.onTrailFix(f)
-                guard self.isSharing else { continue }
-                if let ok = self.filter.accept(f) {
-                    self.rearmRegion(ok)
-                    self.onFix(ok)
-                }
-                /* Cheap: only touches the manager when the tier's settings change. */
-                self.retune(speed: f.speed)
-            }
+            for (f, source) in fixes { self.ingest(f, source: source, nowMs: Date().timeIntervalSince1970 * 1000) }
         }
+    }
+
+    /// One fix from CoreLocation (nil: invalid accuracy). Internal for tests (`GpsQualityTests`).
+    func ingest(_ fix: DeviceFix?, source: String = "device", nowMs: Double) {
+        guard let f = fix else { gate.countInvalid(); return publishStats(nil, source: source, nowMs: nowMs) }
+        guard case let .accept(ok) = gate.judge(f, nowMs: nowMs) else { return publishStats(f, source: source, nowMs: nowMs) }
+        lastFix = ok
+        displayFix = smoother.update(ok)
+        publishStats(ok, source: source, nowMs: nowMs)
+        /* Every believable fix goes to the trail (raw log + its own smoother); no accuracy downgrade
+         * when parked: a coarse chip at a red light used to cost the next minutes of the drive. */
+        onTrailFix(ok)
+        /* Cheap: only touches the manager when the tier's settings change. */
+        retune(speed: ok.speed)
+        guard isSharing else { return }
+        if let sent = filter.accept(ok) {
+            rearmRegion(sent)
+            onFix(sent)
+        }
+    }
+
+    private func publishStats(_ f: DeviceFix?, source: String, nowMs: Double) {
+        var q = quality
+        if let f {
+            recentFixTimes.append(nowMs)
+            recentFixTimes.removeAll { nowMs - $0 > 10_000 }
+            q.lastAccuracyM = f.accuracy
+            q.lastSpeedAccuracy = f.speedAccuracy
+            q.lastCourseAccuracy = f.courseAccuracy
+            q.lastAgeMs = max(0, nowMs - f.atMs)
+        }
+        q.hz = GpsQualityStats.rate(recentFixTimes)
+        q.source = source
+        q.accepted = gate.accepted
+        q.rejected = gate.rejected
+        q.precise = accuracyAuthorization != .reducedAccuracy
+        q.headingSource = displayFix.flatMap { $0.heading } != nil ? .course : .none
+        if q != quality { quality = q }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
