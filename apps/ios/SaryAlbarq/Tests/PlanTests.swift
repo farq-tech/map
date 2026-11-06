@@ -552,6 +552,11 @@ final class PlaceSearchTests: XCTestCase {
         XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة"), "«محطة» alone may be a metro or bus station")
     }
 
+    func testMapboxDetailWithoutALeadingSeparator() {
+        let json = #"{"features":[{"id":"x","geometry":{"coordinates":[46.67,24.72]},"properties":{"name":"الغريراء","place_formatted":"، الرياض، السعودية","feature_type":"street"}}]}"#
+        XCTAssertEqual(PlaceSearch.parse(Data(json.utf8)).first?.detail, "الرياض، السعودية")
+    }
+
     func testApplePlacesPiledOnACityCentreAreLeftOut() {
         let centre = LngLat(lng: 46.6753, lat: 24.7136)
         func apple(_ n: String, _ p: LngLat) -> PlaceSearch.Place { .init(id: "apple:\(n)", name: n, detail: nil, point: p, country: "SA") }

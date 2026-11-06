@@ -100,7 +100,10 @@ enum PlaceSearch {
             guard let lng, let lat, PlanGeo.valid(lat: lat, lng: lng) else { return nil }
             let name = (props["name_preferred"] as? String) ?? (props["name"] as? String) ?? (props["full_address"] as? String) ?? ""
             guard !name.isEmpty else { return nil }
-            let detail = (props["place_formatted"] as? String) ?? (props["full_address"] as? String).flatMap { $0 == name ? nil : $0 }
+            /* Mapbox leaves an empty part's separator in front («، الرياض، السعودية»). */
+            let detail = ((props["place_formatted"] as? String) ?? (props["full_address"] as? String).flatMap { $0 == name ? nil : $0 })
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "،,").union(.whitespacesAndNewlines)) }
+                .flatMap { $0.isEmpty ? nil : $0 }
             let id = (f["id"] as? String) ?? (props["mapbox_id"] as? String) ?? "\(lat),\(lng)"
             let ctx = props["context"] as? [String: Any]
             let country = ((ctx?["country"] as? [String: Any])?["country_code"] as? String)?.uppercased()
