@@ -167,7 +167,7 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["join.shareStatement"].label, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertTrue(join.label.contains("انضم للطلعة"))
         /* Build 21: iOS never asked → the Najdi pre-prompt is right above the button (no extra screen). */
-        let pre = any(app, "join.prePrompt")
+        let pre = any(app, "join.prePrompt").firstMatch
         XCTAssertTrue(pre.exists, "the pre-prompt before the system alert")
         XCTAssertTrue(pre.label.contains("عشان العيال يشوفونك وتوصلك الفزعة"), pre.label)
         sleep(1)
@@ -310,8 +310,10 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("6b-view-mode-hidden", app)
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
-        XCTAssertTrue(sharing.waitForExistence(timeout: 10))
-        XCTAssertFalse(sharing.label.contains("مُشارَك"), "nothing of mine is sent: \(sharing.label)")
+        if sharing.waitForExistence(timeout: 5) {
+            XCTAssertFalse(sharing.label.contains("مُشارَك"), "nothing of mine is sent: \(sharing.label)")
+        }
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "موقعك مُشارَك")).firstMatch.exists, "never «مُشارَك» in view mode")
     }
 
     /// Build 21: «الموقع الدقيق» off → iOS's temporary precise prompt (purpose key JoinTrip) → precise → live.

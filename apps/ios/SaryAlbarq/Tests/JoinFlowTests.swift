@@ -56,11 +56,12 @@ final class JoinMachineTests: XCTestCase {
     func testStillApproximateGoesToRecoveryWithAWayIn() {
         let s = run([.tapJoin(hasIdentity: true), .permission(.reduced), .precise(.reduced)])
         XCTAssertEqual(s, .needsLocation(.reduced))
-        XCTAssertEqual(JoinMachine.next(s, .enterWithoutLocation), .joining(viewOnly: true))
+        XCTAssertEqual(JoinMachine.next(s, .enterWithoutLocation), JoinFlags.viewOnlyJoin ? .joining(viewOnly: true) : s)
         XCTAssertEqual(JoinMachine.next(s, .sceneActive(.granted)), .joining(viewOnly: false), "precise turned on in Settings: in, sharing")
     }
 
-    func testDeniedRecoveryOpensTheTripInViewMode() {
+    func testDeniedRecoveryOpensTheTripInViewMode() throws {
+        try XCTSkipUnless(JoinFlags.viewOnlyJoin, "view mode switched off by the owner")
         let s = run([.tapJoin(hasIdentity: false), .identityReady, .permission(.denied)])
         XCTAssertEqual(s, .needsLocation(.denied))
         let v = JoinMachine.next(s, .enterWithoutLocation)

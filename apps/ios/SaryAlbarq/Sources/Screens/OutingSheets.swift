@@ -364,14 +364,16 @@ struct JoinNeedsLocationView: View {
             Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("join.openSettings")
-            Button(action: enterWithout) { SaryButtonLabel(title: JoinCopy.enterWithout, systemImage: "map") }
-                .buttonStyle(.sary(.secondary))
-                .accessibilityIdentifier("join.enterWithout")
-            Text(JoinCopy.enterWithoutNote)
-                .saryText(.footnote)
-                .foregroundStyle(p.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            if JoinFlags.viewOnlyJoin {
+                Button(action: enterWithout) { SaryButtonLabel(title: JoinCopy.enterWithout, systemImage: "map") }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("join.enterWithout")
+                Text(JoinCopy.enterWithoutNote)
+                    .saryText(.footnote)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button(JoinCopy.cancel, action: cancel)
                 .buttonStyle(.sary(.plain))
                 .accessibilityIdentifier("join.cancel")

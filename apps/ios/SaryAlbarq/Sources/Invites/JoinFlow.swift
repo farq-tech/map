@@ -16,6 +16,14 @@ import Foundation
 ///
 /// «دائمًا» is never asked here (Apple: it cannot be forced); it comes later, in the trip.
 /// Notifications and the microphone are not asked at join either.
+/// Owner switches for the invitee's way in.
+enum JoinFlags {
+    /// «ادخل الطلعة بدون موقعي» (build 21, awaiting the owner's decision): refused / approximate
+    /// location can still open the trip in view mode. `false` = back to build 14 (not joined
+    /// until iOS allows the location; the recovery screen offers only «افتح الإعدادات» / «إلغاء»).
+    static let viewOnlyJoin = true
+}
+
 enum JoinPermission: Equatable {
     /// iOS has not asked yet.
     case notAsked
@@ -106,7 +114,7 @@ enum JoinMachine {
             case .notAsked: return s
             }
         case (.needsLocation, .enterWithoutLocation):
-            return .joining(viewOnly: true)
+            return JoinFlags.viewOnlyJoin ? .joining(viewOnly: true) : s
         case (.joining, .joined):
             return .entered
         case (.joining, .joinFailed(let m)):
