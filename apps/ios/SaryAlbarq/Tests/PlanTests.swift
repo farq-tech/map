@@ -549,6 +549,17 @@ final class PlaceSearchTests: XCTestCase {
         XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "Gas Station"), .gasStation)
         XCTAssertNil(PlaceSearch.poiCategory(forQuery: "ماكدونالدز"), "a name stays a name")
         XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة بنزين الدريس"), "a named station stays a name search")
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة"), "«محطة» alone may be a metro or bus station")
+    }
+
+    func testApplePlacesPiledOnACityCentreAreLeftOut() {
+        let centre = LngLat(lng: 46.6753, lat: 24.7136)
+        func apple(_ n: String, _ p: LngLat) -> PlaceSearch.Place { .init(id: "apple:\(n)", name: n, detail: nil, point: p, country: "SA") }
+        let pile = ["جدة", "Banderseed", "Fuelco"].map { apple($0, LngLat(lng: centre.lng, lat: centre.lat - 0.00005)) }
+        let real = apple("Asia", LngLat(lng: 46.67793, lat: 24.71438))
+        let twin = [apple("الدريس", LngLat(lng: 46.70, lat: 24.70)), apple("الدريس", LngLat(lng: 46.70, lat: 24.70))]
+        let out = PlaceSearch.rank(query: "محطة بنزين", around: pile + [real] + twin, saudi: [], mapbox: [], near: centre)
+        XCTAssertEqual(out.map(\.name), ["Asia", "الدريس"], "the pile goes; one real place and one of the twins stay")
     }
 
     static let fixture = Data("""

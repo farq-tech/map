@@ -172,7 +172,7 @@ enum PlaceSearch {
     static func poiCategory(forQuery query: String) -> MKPointOfInterestCategory? {
         let q = normalize(query)
         let table: [(MKPointOfInterestCategory, [String])] = [
-            (.gasStation, ["محطه بنزين", "محطات بنزين", "محطه وقود", "محطات وقود", "بنزين", "بنزينه", "محطه", "محطات", "وقود",
+            (.gasStation, ["محطه بنزين", "محطات بنزين", "محطه وقود", "محطات وقود", "بنزين", "بنزينه", "وقود",
                            "gas station", "gas", "petrol", "petrol station", "fuel"]),
             (.pharmacy, ["صيدليه", "صيدليات", "pharmacy"]),
             (.hospital, ["مستشفي", "مستشفيات", "مستوصف", "طوارئ", "hospital"]),
@@ -325,7 +325,7 @@ enum PlaceSearch {
     /// Duplicates (the same name within 150 m) are dropped, keeping the first (Apple's, which has the category).
     static func rank(query: String, around: [Place], saudi: [Place], mapbox: [Place], near: LngLat?, limit: Int = PlaceSearch.maxResults) -> [Place] {
         var all: [Place] = []
-        for p in around + saudi + mapbox where !all.contains(where: { duplicate($0, p) }) { all.append(p) }
+        for p in stackedDropped(around + saudi) + mapbox where !all.contains(where: { duplicate($0, p) }) { all.append(p) }
 
         let nq = normalize(query)
         func dist(_ p: Place) -> Double { near.map { PlanGeo.meters($0, p.point) } ?? .infinity }
@@ -346,6 +346,16 @@ enum PlaceSearch {
         }
         let ordered = exact.sorted(by: byDistance) + nearby.sorted(by: byDistance) + kingdom + world
         return Array(ordered.map { $0.element }.prefix(limit))
+    }
+
+    /// Apple puts businesses it cannot locate on a city's centre point: in Riyadh five «petrol stations» sat on
+    /// exactly 24.7136,46.6753, shown as «٥ م» from you. Three or more differently named Apple places on one
+    /// spot (~10 m) are that pile, not places: they are left out.
+    static func stackedDropped(_ places: [Place]) -> [Place] {
+        func cell(_ p: Place) -> String { String(format: "%.4f,%.4f", p.point.lat, p.point.lng) }
+        var names: [String: Set<String>] = [:]
+        for p in places { names[cell(p), default: []].insert(normalize(p.name)) }
+        return places.filter { (names[cell($0)]?.count ?? 0) < 3 }
     }
 
     static func duplicate(_ a: Place, _ b: Place) -> Bool {
