@@ -227,7 +227,7 @@ final class ChatTests: XCTestCase {
     }
 
     func testReadReceiptsAndTypingFromTheSocket() {
-        let s = store(FakeBackend())
+        let s = ChatStore(outingId: "o1", me: Self.me, backend: ChatTests.FakeBackend(), defaults: defaults)
         s.receive(["type": "chat_message", "message": Self.wire(Self.message(9, from: Self.me, to: Self.fahd))])
         s.receive(["type": "chat_read", "conv": "direct", "user_id": Self.fahd, "peer_id": Self.me, "seq": 9])
         XCTAssertEqual(s.threads[.direct(Self.fahd)]?.reads[Self.fahd], 9)
@@ -355,11 +355,18 @@ private extension ChatMessage {
         c.deleted_by = r
         return c
     }
+}
+
+/// «بلّغ عن الرسالة» و«احظر» (App Store 1.2): the store reports, blocks and hides.
+@MainActor
+final class ChatModerationTests: XCTestCase {
+    private var defaults: UserDefaults!
+    override func setUp() { defaults = UserDefaults(suiteName: "chat-mod-\(UUID().uuidString)") }
 
     // MARK: «بلّغ» و«احظر» (App Store 1.2)
 
     final class ModBackend: ChatBackend, ChatModerationBackend {
-        let inner = FakeBackend()
+        let inner = ChatTests.FakeBackend()
         var reports: [(String, ChatReportReason, Bool)] = []
         var blocked: [String] = []
         func chatOverview(_ o: String) async throws -> ChatOverview { try await inner.chatOverview(o) }
@@ -375,33 +382,33 @@ private extension ChatMessage {
 
     func testReportAndBlockHideTheSendersMessagesAndLaterOnes() async {
         let b = ModBackend()
-        let s = ChatStore(outingId: "o1", me: Self.me, backend: b, defaults: defaults)
-        s.receive(["type": "chat_message", "message": Self.wire(Self.message(4, from: Self.fahd))])
-        s.receive(["type": "chat_message", "message": Self.wire(Self.message(5, from: Self.saad))])
-        let m = s.threads[.group]!.messages.first { $0.sender_id == Self.fahd }!
+        let s = ChatStore(outingId: "o1", me: ChatTests.me, backend: b, defaults: defaults)
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(4, from: ChatTests.fahd))])
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(5, from: ChatTests.saad))])
+        let m = s.threads[.group]!.messages.first { $0.sender_id == ChatTests.fahd }!
         XCTAssertTrue(s.canReport(m))
-        XCTAssertFalse(s.canReport(Self.message(9, from: Self.me)), "not my own")
+        XCTAssertFalse(s.canReport(ChatTests.message(9, from: ChatTests.me)), "not my own")
         let ok = await s.report(m, reason: .harassment)
         XCTAssertTrue(ok)
         XCTAssertEqual(b.reports.first?.1, .harassment)
         XCTAssertNotNil(s.notice)
 
-        let blocked = await s.block(Self.fahd, name: "فهد")
+        let blocked = await s.block(ChatTests.fahd, name: "فهد")
         XCTAssertTrue(blocked)
-        XCTAssertEqual(b.blocked, [Self.fahd])
-        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == Self.fahd }, "gone at once")
-        XCTAssertTrue(s.threads[.group]!.messages.contains { $0.sender_id == Self.saad }, "the others stay")
-        XCTAssertTrue(BlockedUsers.storedIds(defaults).contains(Self.fahd))
+        XCTAssertEqual(b.blocked, [ChatTests.fahd])
+        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd }, "gone at once")
+        XCTAssertTrue(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.saad }, "the others stay")
+        XCTAssertTrue(BlockedUsers.storedIds(defaults).contains(ChatTests.fahd))
         /* a late frame from him (old server) is still hidden */
-        s.receive(["type": "chat_message", "message": Self.wire(Self.message(6, from: Self.fahd))])
-        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == Self.fahd })
-        BlockedUsers.remove(Self.fahd, defaults: defaults)
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(6, from: ChatTests.fahd))])
+        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd })
+        BlockedUsers.remove(ChatTests.fahd, defaults: defaults)
         XCTAssertTrue(BlockedUsers.load(defaults).isEmpty)
     }
 
     func testABackendWithoutModerationOffersNoReport() {
-        let s = store(FakeBackend())
-        XCTAssertFalse(s.canReport(Self.message(4, from: Self.fahd)))
+        let s = ChatStore(outingId: "o1", me: ChatTests.me, backend: ChatTests.FakeBackend(), defaults: defaults)
+        XCTAssertFalse(s.canReport(ChatTests.message(4, from: ChatTests.fahd)))
     }
 
     func testReportReasonsMatchTheServer() {
