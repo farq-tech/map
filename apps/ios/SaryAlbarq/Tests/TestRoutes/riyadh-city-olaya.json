@@ -1,0 +1,98 @@
+{
+  "name": "riyadh-city-olaya",
+  "description": "Olaya → Tahlia area (Mapbox Directions geometry): ten city turns at 50 km/h (13.9 m/s, the owner's build 21 drive).",
+  "gpx": "riyadh-city-olaya.gpx",
+  "unpaved": false,
+  "maneuvers": [
+    {
+      "kind": "depart",
+      "direction": null,
+      "lat": 24.711104,
+      "lng": 46.674504,
+      "distanceM": 154.3
+    },
+    {
+      "kind": "turn",
+      "direction": "slightRight",
+      "lat": 24.710004,
+      "lng": 46.674614,
+      "distanceM": 56.0
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.709791,
+      "lng": 46.674112,
+      "distanceM": 379.4
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.712244,
+      "lng": 46.672188,
+      "distanceM": 247.0
+    },
+    {
+      "kind": "turn",
+      "direction": "slightRight",
+      "lat": 24.711265,
+      "lng": 46.669997,
+      "distanceM": 741.1
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.708523,
+      "lng": 46.663328,
+      "distanceM": 881.6
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.701331,
+      "lng": 46.66696,
+      "distanceM": 441.8
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.699623,
+      "lng": 46.663044,
+      "distanceM": 182.4
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.701137,
+      "lng": 46.662354,
+      "distanceM": 147.1
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.700609,
+      "lng": 46.661021,
+      "distanceM": 61.2
+    },
+    {
+      "kind": "arrive",
+      "direction": "right",
+      "lat": 24.700112,
+      "lng": 46.661279,
+      "distanceM": 0
+    }
+  ],
+  "expect": {
+    "speedKmh": 50,
+    "prompts": {
+      "neverOverstate": true,
+      "maxErrorM": 15,
+      "immediateBelowM": 40,
+      "announceIfApproachM": 150
+    },
+    "arrival": {
+      "withinM": 30
+    }
+  },
+  "events": []
+}

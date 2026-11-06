@@ -167,7 +167,7 @@ final class SaryVoiceClipsTests: XCTestCase {
         keys.formUnion(SaryVoiceScript.distances.map(\.key))
         keys.formUnion(SaryVoiceScript.imperial.map(\.key))
         for b in stride(from: 0.0, to: 360, by: 15) { keys.insert(SaryVoiceScript.compass(b)) }
-        keys.formUnion(["rr_01", "rr_05", "rr_06", "bar_01", "dir_05", "dir_06", "dir_07", "grp_14", "start_01", "start_02"])
+        keys.formUnion(["start_08", "rr_05", "rr_06", "bar_01", "dir_05", "dir_06", "dir_07", "grp_14", "start_01", "start_02"])
         for t in [-600.0, 600, 1800, 3600, 7200] as [Double] { for w in [1200.0, 3600, 9000] as [Double] {
             keys.formUnion(SunsetWarning.saryClips(toSunsetS: t, wayBackS: w))
         } }
@@ -229,12 +229,13 @@ final class SaryVoiceScriptTests: XCTestCase {
         XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 3), distanceM: 200), ["dist_04", "rb_04"])
     }
 
-    func testDistancesRoundToRecordedRoundNumbers() {
+    func testDistancesRoundDownToRecordedRoundNumbers() {
+        /* Build 22: rounded DOWN — never a distance larger than the real one (75 m said «بعد مية»). */
         let cases: [(Double, String?)] = [
-            (10, nil), (29, nil), (30, "m_07"), (48, "dist_01"), (120, "dist_02"), (140, "dist_03"), (280, "dist_05"),
-            (330, "dist_05"), (380, "dist_06"), (640, "m_03"), (980, "dist_09"), (1240, "dist_09"), (1300, "dist_10"),
-            (2400, "km_18"), (3600, "km_19"), (4200, "km_01"), (11_000, "dist_14"), (13_000, "x_13"), (14_000, "km_06"), (35_900, "x_14"), (45_200, "x_15"), (47_600, "km_11"),
-            (87_000, "km_14"), (95_000, "km_15"), (199_000, "km_17"), (230_000, nil),
+            (10, nil), (29, nil), (30, "m_07"), (48, "m_07"), (120, "dist_02"), (140, "dist_02"), (280, "m_02"),
+            (330, "dist_05"), (380, "dist_05"), (640, "m_03"), (980, "m_05"), (1240, "dist_09"), (1300, "dist_09"),
+            (2400, "dist_11"), (3600, "km_19"), (4200, "km_01"), (11_000, "dist_14"), (13_000, "x_13"), (14_000, "x_13"), (35_900, "x_14"), (45_200, "x_15"), (47_600, "x_15"),
+            (87_000, "km_14"), (95_000, "km_14"), (199_000, "km_16"), (230_000, nil),
         ]
         for (m, k) in cases { XCTAssertEqual(SaryVoiceScript.distance(m), k, "\(m) m") }
         /* Every recorded value maps to itself. */
@@ -247,11 +248,11 @@ final class SaryVoiceScriptTests: XCTestCase {
 
     func testMilesAndFeetWhenTheUnitIsMiles() {
         let cases: [(Double, String?)] = [
-            (60, nil), (120, "x_11"), (290, "x_12"), (420, "x_07"), (760, "x_06"), (1500, "x_05"), (2900, "x_08"),
-            (6000, "x_09"), (14_000, "x_10"), (30_000, nil),
+            (60, nil), (120, nil), (160, "x_11"), (290, "x_11"), (310, "x_12"), (420, "x_07"), (760, "x_07"), (810, "x_06"), (1500, "x_06"), (1610, "x_05"), (2900, "x_05"),
+            (3300, "x_08"), (6000, "x_08"), (8100, "x_09"), (14_000, "x_09"), (16_100, "x_10"), (30_000, nil),
         ]
         for (m, k) in cases { XCTAssertEqual(SaryVoiceScript.distance(m, miles: true), k, "\(m) m in miles") }
-        XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 1600, miles: true), ["x_05", "turns_02"], "«بعد ميل.» «لف يسار.»")
+        XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 1610, miles: true), ["x_05", "turns_02"], "«بعد ميل.» «لف يسار.»")
         XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 40_000, miles: true), ["mv_02"])
         XCTAssertEqual(SaryVoiceCatalog.byKey["x_12"]?.text, "بعد ألف قدم.")
     }
@@ -411,7 +412,7 @@ final class SaryVoicePlaybackTests: XCTestCase {
         let v = NavVoice()
         v.muted = true
         v.choice = { .sary }
-        v.say("خرجت عن الطريق، نحسب طريقًا جديدًا", clips: ["rr_01"])
+        v.say("طلعت عن الدرب، نضبط لك الطريق", clips: ["start_08"])
         XCTAssertNil(v.lastPlayed)
     }
 
@@ -603,5 +604,19 @@ enum Loudness {
         let rel = lk(abs.reduce(0, +) / Double(abs.count)) - 10
         let gated = abs.filter { lk($0) > rel }
         return lk(gated.reduce(0, +) / Double(gated.count))
+    }
+
+    /// Build 22: the clips that say «جديد» came out as «يديد» (Emirati) — never asked for anywhere.
+    /// The files stay in the bundle; no code path requests them.
+    func testNoCodePathAsksForTheYadeedClips() throws {
+        let banned = ["rr_01", "rr_02", "rr_03", "rr_04", "grp_13"]
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)).compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        XCTAssertGreaterThan(files.count, 50, "the app's sources are readable from the test")
+        for f in files {
+            let text = try String(contentsOf: f, encoding: .utf8)
+            for k in banned { XCTAssertFalse(text.contains("\"\(k)\""), "\(f.lastPathComponent) asks for «\(k)»") }
+        }
+        XCTAssertNotNil(SaryVoiceCatalog.byKey["start_08"], "«طلعت عن الدرب. نضبط لك الطريق.»")
     }
 }

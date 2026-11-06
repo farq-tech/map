@@ -1,0 +1,56 @@
+{
+  "name": "desert-thumamah-track",
+  "description": "A sand track in Thumamah (synthetic, unpaved): three bends at 30 km/h.",
+  "gpx": "desert-thumamah-track.gpx",
+  "unpaved": true,
+  "maneuvers": [
+    {
+      "kind": "depart",
+      "direction": null,
+      "lat": 24.85,
+      "lng": 46.85,
+      "distanceM": 1000.8
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.859,
+      "lng": 46.85,
+      "distanceM": 1152.0
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.864,
+      "lng": 46.86,
+      "distanceM": 1111.9
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.874,
+      "lng": 46.86,
+      "distanceM": 1047.1
+    },
+    {
+      "kind": "arrive",
+      "direction": null,
+      "lat": 24.88,
+      "lng": 46.852,
+      "distanceM": 0
+    }
+  ],
+  "expect": {
+    "speedKmh": 30,
+    "prompts": {
+      "neverOverstate": true,
+      "maxErrorM": 15,
+      "immediateBelowM": 40,
+      "announceIfApproachM": 200
+    },
+    "arrival": {
+      "withinM": 30
+    }
+  },
+  "events": []
+}

@@ -175,18 +175,37 @@ final class NavMapDrawer {
 
     // MARK: camera
 
+    /// The padding that fits the routes in the map left visible by the header (`chrome.top`) and
+    /// the sheet (`bottomShare` of the height, or `chrome.bottom` if taller). Always leaves at least
+    /// `minVisibleShare` of the height and of the width for the routes (top and bottom shrink in proportion).
+    static let minVisibleShare: CGFloat = 0.2
+
+    static func fitPadding(size: CGSize, chrome: UIEdgeInsets, bottomShare: Double) -> UIEdgeInsets {
+        var top = chrome.top + 70
+        var bottom = max(chrome.bottom, size.height * bottomShare) + 24
+        let room = size.height * (1 - minVisibleShare)
+        if top + bottom > room, top + bottom > 0 {
+            let k = room / (top + bottom)
+            top *= k
+            bottom *= k
+        }
+        let side = min(50, size.width * (1 - minVisibleShare) / 2)
+        return UIEdgeInsets(top: top, left: side, bottom: bottom, right: side)
+    }
+
     private func camera(chrome: UIEdgeInsets, me: LngLat?, heading: Double?) {
         guard let map, map.bounds.height > 0, let cam = drawing.camera else { return }
         let reduce = UIAccessibility.isReduceMotionEnabled
         switch cam {
         case let .fit(pts, share):
             guard drawing.cameraKey != lastCameraKey, let b = GroupFraming.bounds(pts) else { return }
-            lastCameraKey = drawing.cameraKey
             let coords = [CLLocationCoordinate2D(latitude: b.south, longitude: b.west), CLLocationCoordinate2D(latitude: b.north, longitude: b.east)]
-            let bottom = max(chrome.bottom, map.bounds.height * share) + 24
-            let pad = UIEdgeInsets(top: chrome.top + 70, left: 50, bottom: bottom, right: 50)
+            let pad = Self.fitPadding(size: map.bounds.size, chrome: chrome, bottomShare: share)
+            /* Build 18+: the header and the options sheet together could pad more than the map is tall;
+             * Mapbox then threw, the error was swallowed and the key spent — the map stayed at city zoom. */
             guard var c = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(padding: .zero, bearing: 0, pitch: 0),
                                                     coordinatesPadding: pad, maxZoom: 16.5, offset: nil) else { return }
+            lastCameraKey = drawing.cameraKey
             c.padding = nil
             map.camera.ease(to: c, duration: reduce ? 0 : 0.9)
         }
