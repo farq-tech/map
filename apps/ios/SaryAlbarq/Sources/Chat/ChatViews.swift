@@ -226,8 +226,6 @@ struct ChatThreadView: View {
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
-    /// «بلّغ عن الرسالة» / «احظر فلان»: one sheet at a time (two `.sheet` on one view conflict).
-    @State private var moderating: ChatModerationTarget?
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
@@ -236,29 +234,7 @@ struct ChatThreadView: View {
     }
     private var title: String { with.isGroup ? "دردشة الطلعة" : context.name(with.peer ?? "", fallback: thread.latest?.sender_name) }
 
-    var body: some View {
-        threadBody
-            /* One sheet (not a confirmationDialog/alert, and not two `.sheet`s): those do not present
-             * reliably from a context menu. «بلّغ» picks a reason; «احظر» confirms. */
-            .sheet(item: $moderating) { t in
-                moderationSheet(t).saryPresented(appearance)
-            }
-    }
-
-    @ViewBuilder
-    private func moderationSheet(_ t: ChatModerationTarget) -> some View {
-        let m = t.message
-        switch t.mode {
-        case .report:
-            ChatReportSheet(name: senderName(m),
-                            report: { reason, block in Task { await chat.report(m, reason: reason, block: block); moderating = nil } },
-                            cancel: { moderating = nil })
-        case .block:
-            ChatBlockSheet(name: senderName(m),
-                           block: { Task { await chat.block(m.sender_id, name: senderName(m)); moderating = nil } },
-                           cancel: { moderating = nil })
-        }
-    }
+    var body: some View { threadBody }
 
     private func senderName(_ m: ChatMessage) -> String { context.name(m.sender_id, fallback: m.sender_name) }
 
@@ -434,9 +410,21 @@ struct ChatThreadView: View {
             Button { UIPasteboard.general.string = m.text } label: { Label("نسخ", systemImage: "doc.on.doc") }
         }
         if chat.canReport(m) {
-            Button { moderating = ChatModerationTarget(message: m, mode: .report) } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
+            /* Submenus, not a sheet: a sheet does not present reliably from a context menu that is
+             * itself inside the chat sheet. The reason and the block confirm live in the menu. */
+            Menu {
+                ForEach(ChatReportReason.allCases) { r in
+                    Button(r.label) { Task { await chat.report(m, reason: r) } }
+                        .accessibilityIdentifier("chat.report.\(r.rawValue)")
+                }
+                Button("بلّغ واحظر \(senderName(m))", role: .destructive) { Task { await chat.report(m, reason: .abuse, block: true) } }
+                    .accessibilityIdentifier("chat.report.block")
+            } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
                 .accessibilityIdentifier("chat.menu.report")
-            Button(role: .destructive) { moderating = ChatModerationTarget(message: m, mode: .block) } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
+            Menu {
+                Button("احظر", role: .destructive) { Task { await chat.block(m.sender_id, name: senderName(m)) } }
+                    .accessibilityIdentifier("chat.block.confirm")
+            } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
                 .accessibilityIdentifier("chat.menu.block")
         }
         if chat.canDelete(m) {
@@ -564,78 +552,5 @@ struct ChatThreadView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(id)
-    }
-}
-
-// MARK: - «بلّغ» و«احظر» sheets (App Store 1.2)
-
-/// Which moderation sheet is open, and for which message.
-struct ChatModerationTarget: Identifiable, Equatable {
-    enum Mode { case report, block }
-    var message: ChatMessage
-    var mode: Mode
-    var id: String { "\(mode)-\(message.id)" }
-}
-
-/// «بلّغ عن الرسالة»: pick a reason (or report-and-block). Presented as a sheet so it opens
-/// reliably from the message's context menu.
-struct ChatReportSheet: View {
-    var name: String
-    var report: (ChatReportReason, Bool) -> Void
-    var cancel: () -> Void
-    @Environment(\.sary) private var theme
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let p = theme.palette
-        SaryPage(title: "بلّغ عن الرسالة", subtitle: "ليش تبلّغ؟ يوصل لفريق سَرى البارق ونراجعه خلال ٢٤ ساعة، وما يدري المرسل مين بلّغ.",
-                 close: { cancel(); dismiss() }) {
-            SarySection {
-                ForEach(Array(ChatReportReason.allCases.enumerated()), id: \.element.id) { i, r in
-                    if i > 0 { SaryDivider() }
-                    Button { report(r, false) } label: {
-                        HStack {
-                            Text(r.label).saryText(.body).foregroundStyle(p.textPrimary)
-                            Spacer()
-                            Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
-                        }
-                        .frame(minHeight: 44).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("chat.report.\(r.rawValue)")
-                }
-            }
-            SarySection(footer: "يحجب رسائله ورسائله الصوتية عنك ويمنع رسائله الخاصة لك. الطوارئ منه توصلك دايم.") {
-                Button(role: .destructive) { report(.abuse, true) } label: {
-                    SaryButtonLabel(title: "بلّغ واحظر \(name)", systemImage: "hand.raised.fill")
-                }
-                .buttonStyle(.sary(.secondary))
-                .accessibilityIdentifier("chat.report.block")
-            }
-        }
-    }
-}
-
-/// «احظر فلان»: confirm, then his messages and voice notes disappear for me.
-struct ChatBlockSheet: View {
-    var name: String
-    var block: () -> Void
-    var cancel: () -> Void
-    @Environment(\.sary) private var theme
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let p = theme.palette
-        SaryPage(title: "تحظر \(name)؟", close: { cancel(); dismiss() }) {
-            SarySection(footer: "تختفي رسائله ورسائله الصوتية عندك، وما يقدر يراسلك على الخاص. الطوارئ منه توصلك دايم. تقدر تلغي الحظر من الإعدادات ← المحظورين.") {
-                Button(role: .destructive, action: block) {
-                    SaryButtonLabel(title: "احظر", systemImage: "hand.raised.fill")
-                }
-                .buttonStyle(.sary(.primary))
-                .accessibilityIdentifier("chat.block.confirm")
-                Button { cancel(); dismiss() } label: { SaryButtonLabel(title: "إلغاء", systemImage: "xmark") }
-                    .buttonStyle(.sary(.secondary))
-            }
-        }
     }
 }
