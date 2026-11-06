@@ -323,7 +323,7 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("6b-denied-then-allowed-joined", app)
     }
 
-    /// Build 21: «الموقع الدقيق» off → iOS's temporary precise prompt (purpose key JoinTrip) → precise → live.
+    /// Build 21: «الموقع الدقيق» off → iOS's temporary precise prompt (requestPreciseForTrip, key ConvoyTrip) → precise → live.
     /// The simulator cannot turn precise off, so `-SaryJoinReduced` plays the approximate answer.
     func testApproximateAsksPreciseThenJoins() {
         let app = launchInvite("personal", noIdentity: true, extra: ["-SaryJoinReduced", "allow"])

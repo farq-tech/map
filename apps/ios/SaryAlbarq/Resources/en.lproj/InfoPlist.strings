@@ -8,4 +8,3 @@
 
 /* Precise Location is off: temporary full accuracy for the trail. */
 "TrailRecording" = "Precise Location is off, so your trail would be kilometres off. Allow precise location for this outing so your trail follows the exact streets you drove and \"Way back\" can lead you the same way.";
-
