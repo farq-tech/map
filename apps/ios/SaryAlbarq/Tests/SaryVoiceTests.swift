@@ -404,7 +404,7 @@ final class SaryVoicePlaybackTests: XCTestCase {
         v.onSpoken = { said.append($0) }
         v.say("Turn right onto King Fahd Road", clips: [])
         XCTAssertEqual(said.count, 1, "still reported (CarPlay, logs)")
-        XCTAssertNil(v.lastPlayed, "nothing in the device voice while «صوت سرى» is on")
+        XCTAssertNil(v.lastPlayed, "router text in another language is never read out")
     }
 
     func testMutedSaysNothing() {
@@ -545,9 +545,11 @@ final class SaryVoicePlaybackTests: XCTestCase {
         n.handle(.offRoute)
         n.handle(.rerouted(route))
         XCTAssertEqual(n.routeRevision, rev + 1)
-        XCTAssertNotNil(n.guidanceLine(stepIndex: 1, distanceM: route.steps[0].distanceM), "a new route: its cues are new")
-        await wait { n.voice.lastPlayed?.clips == ["rr_01"] }
-        XCTAssertEqual(n.voice.lastPlayed?.clips, ["rr_01"], "said after the current line ends")
+        /* The new route's first maneuver is said at once on «rerouted» (Mapbox's own first cue for it
+         * came before the event and was lost): it replaces the waiting «خرجت عن الطريق». */
+        XCTAssertNil(n.guidanceLine(stepIndex: 1, distanceM: route.steps[0].distanceM), "already said for the new route")
+        await wait { n.voice.lastPlayed?.clips.last == "start_06" && n.routeRevision == rev + 1 && n.voice.lastPlayed?.clips.first != "start_01" }
+        XCTAssertEqual(n.voice.lastPlayed?.clips.last, "start_06", "the new route's line, after the current one ends")
         await wait { !n.voice.isSpeaking }
         n.finishArrival()
         await wait { n.voice.lastPlayed?.clips == ["arr_01"] }

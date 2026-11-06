@@ -186,6 +186,18 @@ enum TripAutoNav {
         }
     }
 
+    /// Guidance would start (or move on) right now if only my fix were fresh: the wait is shown
+    /// («ننتظر موقعك…») instead of doing nothing in silence.
+    static func waitsForFix(_ i: Input) -> Bool {
+        guard !i.hasFix else { return false }
+        var fresh = i
+        fresh.hasFix = true
+        switch decide(fresh) {
+        case .start, .retarget: return true
+        default: return false
+        }
+    }
+
     static func same(_ a: NavTarget, _ b: NavTarget) -> Bool {
         a.source == b.source && Vehicle.distanceMeters(a.position, b.position) < 1
     }
