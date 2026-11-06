@@ -478,6 +478,10 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Opened right after «انضم» / creating (the one-step join already asked iOS for the location).
     @Published var joinedJustNow = false
 
+    /// Opened right after an invite join (build 21): the live screen frames me, the convoy and the
+    /// destination once a good fix comes, and shows the one-time welcome (`InviteeArrival`).
+    var arrivedByInvite = false
+
     /// The app left the screen while sharing with «أثناء الاستخدام» only: on return, the live
     /// screen explains «دائمًا» (the contextual upgrade; Apple does not let us force it at join).
     @Published var askAlwaysOnReturn = false

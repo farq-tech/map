@@ -244,6 +244,8 @@ final class LiveOutingController: ObservableObject {
     var startReturnTrip: () -> Void = {}
     /// «أنهِ الرحلة؟» is asked.
     @Published var tripConfirmEnd = false
+    /// The first seconds after an invite join (`LiveOutingController+Arrival.swift`).
+    @Published var arrival = InviteeArrivalState()
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
@@ -310,7 +312,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         #endif
         session.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin() }
+            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
         }.store(in: &bag)
         location.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.locationChanged() }
@@ -389,6 +391,7 @@ final class LiveOutingController: ObservableObject {
         registerCarPlay()
         registerTrip()
         registerAutoNav()
+        beginArrivalIfNeeded()
         #if DEBUG
         pttDebugLaunch()
         navDebugLaunch()
@@ -545,6 +548,7 @@ final class LiveOutingController: ObservableObject {
 
     private func locationChanged() {
         followUpJoin()
+        arrivalTick()
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
         updateBackTrack()

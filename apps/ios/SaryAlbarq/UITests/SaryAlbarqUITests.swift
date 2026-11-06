@@ -103,12 +103,12 @@ final class SaryAlbarqUITests: XCTestCase {
         return false
     }
 
-    private func launchInvite(_ kind: String, noIdentity: Bool) -> XCUIApplication {
+    private func launchInvite(_ kind: String, noIdentity: Bool, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         /* A fresh permission state: the system prompt must come from the join tap itself. */
         app.resetAuthorizationStatus(for: .location)
         app.launchArguments = ["-resetState", "-demo", "-SaryDemoInvite", kind, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
-            + (noIdentity ? ["-SaryNoIdentity"] : [])
+            + (noIdentity ? ["-SaryNoIdentity"] : []) + extra
         app.launch()
         if !app.buttons["invite.join"].waitForExistence(timeout: 20) {
             print("LAUNCH-TREE:\n" + app.debugDescription)
@@ -166,6 +166,10 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(app.textFields["invite.myName"].exists, "no name to type: the identity is made silently")
         XCTAssertEqual(app.staticTexts["join.shareStatement"].label, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertTrue(join.label.contains("انضم للطلعة"))
+        /* Build 21: iOS never asked → the Najdi pre-prompt is right above the button (no extra screen). */
+        let pre = any(app, "join.prePrompt").firstMatch
+        XCTAssertTrue(pre.exists, "the pre-prompt before the system alert")
+        XCTAssertTrue(pre.label.contains("عشان العيال يشوفونك وتوصلك الفزعة"), pre.label)
         sleep(1)
         shot("1-invite-one-screen", app)
 
@@ -174,6 +178,22 @@ final class SaryAlbarqUITests: XCTestCase {
 
         let summary = any(app, "outing-sheet-summary")
         XCTAssertTrue(summary.waitForExistence(timeout: 20), "in the live trip")
+        /* The trip's atmosphere: the one-time welcome over the map, the SOS dock and the walkie-talkie
+         * ready, «نحدد موقعك…» until a good fix (then the camera frames me, the convoy, the destination). */
+        let welcome = any(app, "arrival.welcome")
+        XCTAssertTrue(welcome.waitForExistence(timeout: 10), "the welcome card")
+        XCTAssertTrue(welcome.label.hasPrefix("حياك في"), welcome.label)
+        let withDest = Date().addingTimeInterval(5)
+        while welcome.exists && !welcome.label.contains("الوجهة") && Date() < withDest { usleep(250_000) }
+        XCTAssertTrue(welcome.label.contains("الوجهة روضة الثمامة"), welcome.label)
+        XCTAssertTrue(any(app, "outing-sos").exists, "SOS is never hidden")
+        XCTAssertFalse(any(app, "arrival.hidden").exists, "allowed: nothing says my location is hidden")
+        shot("2b-arrival-welcome", app)
+        let locating = any(app, "arrival.locating")
+        let located = Date().addingTimeInterval(25)
+        while locating.exists && Date() < located { usleep(400_000) }
+        XCTAssertFalse(locating.exists, "a good fix arrives (simulator location set) and «نحدد موقعك…» goes")
+        shot("2c-arrival-located", app)
         XCTAssertFalse(app.buttons["notify.allow"].exists, "notifications are not asked at join")
         XCTAssertFalse(app.buttons["share.always.allow"].exists, "«دائمًا» is not asked at join")
         summary.tap()
@@ -226,10 +246,11 @@ final class SaryAlbarqUITests: XCTestCase {
         answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"])
 
         let needs = app.staticTexts["join.needsLocation"]
-        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the calm screen")
-        XCTAssertEqual(needs.label, "الطلعة تحتاج موقعك عشان العيال يشوفونك")
+        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
+        XCTAssertEqual(needs.label, "موقعك مقفل، والعيال ما راح يشوفونك")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
         XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists, "owner: never in a trip without the location")
         XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined: no live map")
         sleep(1)
         shot("6-denied-needs-location", app)
@@ -257,5 +278,82 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(sharing.label.contains("مُشارَك"), sharing.label)
         sleep(1)
         shot("9-auto-joined-sharing", app)
+    }
+
+    /// Owner decision (build 21): never in a trip without the location. A new invitee refuses → the
+    /// recovery screen has only «افتح الإعدادات» and «إلغاء», nothing is joined; allowed in Settings →
+    /// back in the app it joins and enters by itself, sharing.
+    func testDeniedRecoveryOnlySettingsThenJoinsByItself() {
+        let app = launchInvite("personal", noIdentity: true)
+        let join = app.buttons["invite.join"]
+        XCTAssertTrue(join.waitForExistence(timeout: 20))
+        join.tap()
+        answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"])
+        let needs = app.staticTexts["join.needsLocation"]
+        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
+        XCTAssertTrue(app.buttons["join.openSettings"].exists)
+        XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "بدون موقعي")).count, 0, "no view-only words anywhere")
+        XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined: no live map")
+        sleep(1)
+        shot("6-denied-recovery", app)
+
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.terminate()
+        app.buttons["join.openSettings"].tap()
+        XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 15))
+        openAppLocationPage(settings)
+        let whileUsing = settings.staticTexts.matching(NSPredicate(format: "label IN %@", ["While Using the App", "أثناء استخدام التطبيق"])).firstMatch
+        XCTAssertTrue(whileUsing.waitForExistence(timeout: 10))
+        whileUsing.tap()
+        let precise = settings.switches.matching(NSPredicate(format: "label IN %@", ["Precise Location", "الموقع الدقيق"])).firstMatch
+        if precise.waitForExistence(timeout: 3), (precise.value as? String) == "0" { precise.tap() }
+
+        app.activate()
+        let summary = any(app, "outing-sheet-summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 20), "allowed: joined and in the trip by itself")
+        XCTAssertFalse(any(app, "arrival.hidden").exists, "allowed: nothing says my location is hidden")
+        summary.tap()
+        let sharing = app.staticTexts["live.sharing"]
+        XCTAssertTrue(sharing.waitForExistence(timeout: 10))
+        let deadline = Date().addingTimeInterval(10)
+        while !sharing.label.contains("مُشارَك") && Date() < deadline { usleep(300_000) }
+        XCTAssertTrue(sharing.label.contains("مُشارَك"), sharing.label)
+        shot("6b-denied-then-allowed-joined", app)
+    }
+
+    /// Build 21: «الموقع الدقيق» off → iOS's temporary precise prompt (requestPreciseForTrip, key ConvoyTrip) → precise → live.
+    /// The simulator cannot turn precise off, so `-SaryJoinReduced` plays the approximate answer.
+    func testApproximateAsksPreciseThenJoins() {
+        let app = launchInvite("personal", noIdentity: true, extra: ["-SaryJoinReduced", "allow"])
+        let join = app.buttons["invite.join"]
+        XCTAssertTrue(join.waitForExistence(timeout: 20))
+        join.tap()
+        answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"])
+        let asking = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "نطلب الموقع الدقيق")).firstMatch
+        XCTAssertTrue(asking.waitForExistence(timeout: 5), "the precise request comes right after the location prompt")
+        shot("10-invite-asks-precise", app)
+        let summary = any(app, "outing-sheet-summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 20), "precise allowed: in the live trip")
+        XCTAssertFalse(app.staticTexts["join.needsLocation"].exists)
+    }
+
+    /// Still approximate after the precise prompt: the recovery screen says so; not joined.
+    func testApproximateRefusedShowsPreciseRecovery() {
+        let app = launchInvite("group", noIdentity: false, extra: ["-SaryJoinReduced", "deny"])
+        let join = app.buttons["invite.join"]
+        XCTAssertTrue(join.waitForExistence(timeout: 20))
+        join.tap()
+        answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"])
+        let needs = app.staticTexts["join.needsLocation"]
+        XCTAssertTrue(needs.waitForExistence(timeout: 10))
+        XCTAssertEqual(needs.label, "موقعك تقريبي بالكيلومترات")
+        XCTAssertTrue(app.buttons["join.openSettings"].exists)
+        XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists, "never in a trip without the (precise) location")
+        shot("11-invite-needs-precise", app)
+        sleep(2)
+        XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined")
     }
 }
