@@ -43,6 +43,15 @@ struct NavLine: Equatable {
     var expiresAt: Date? = nil
     /// A safety line: while I am talking on the walkie-talkie it becomes a vibration and a text instead.
     var safety = false
+    /// Said before the guidance part («نبدأ التوجيه» + the first instruction): kept when the
+    /// guidance part is rebuilt at playback (`NavPromptTiming`).
+    var leadText = ""
+    var leadClips: [String] = []
+    /// Held until then so it ends at a recorded distance; `heldS`: held so far (at most `NavPromptTiming.maxHoldS`).
+    var notBefore: Date? = nil
+    var heldS = 0.0
+
+    func isHeld(_ now: Date = Date()) -> Bool { notBefore.map { $0 > now } ?? false }
 
     init(_ text: String, clips: [String], maneuverID: String? = nil, routeRevision: Int? = nil, expiresAt: Date? = nil, safety: Bool = false) {
         self.text = text
@@ -60,6 +69,8 @@ struct NavLine: Equatable {
         out.text = t
         out.clips = a.clips + b.clips
         out.safety = a.safety || b.safety
+        out.leadText = [a.leadText, a.text, b.leadText].filter { !$0.isEmpty }.joined(separator: ". ")
+        out.leadClips = a.leadClips + a.clips + b.leadClips
         return out
     }
 }
@@ -91,17 +102,22 @@ enum SaryVoiceScript {
     /// Past the last recorded distance (200 km) by more than half a step: no «بعد …» we could say honestly.
     static let farM = 225_000.0
 
-    /// The «بعد …» clip for `m` metres: the nearest recorded distance after the same rounding
-    /// as the banner (`NavText.roundedMeters`). nil when it is right here, or farther than we recorded.
+    /// The «بعد …» clip for `m` metres: the largest recorded distance NOT above `m` (rounded
+    /// down, never up: build 21 said «بعد مية متر» at 75 m because 75 rounded to the nearer 100).
+    /// nil when it is right here, or farther than we recorded.
     static func distance(_ m: Double, miles: Bool = DistanceUnits.miles) -> String? {
+        floorBand(m, miles: miles)?.key
+    }
+
+    /// The recorded distance (metres, clip) said for `m`: the largest one ≤ `m`.
+    static func floorBand(_ m: Double, miles: Bool = DistanceUnits.miles) -> (m: Double, key: String)? {
         guard m.isFinite else { return nil }
         if miles {
             guard m >= imperialNowM, m <= imperialFarM else { return nil }
-            return imperial.min { abs($0.m - m) < abs($1.m - m) }?.key
+            return imperial.last { $0.m <= m + 0.5 }
         }
         guard m >= nowM, m <= farM else { return nil }
-        let r = NavText.roundedMeters(m)
-        return distances.min { abs($0.m - r) < abs($1.m - r) }?.key
+        return distances.last { $0.m <= m + 0.5 }
     }
 
     static func isFar(_ m: Double, miles: Bool = DistanceUnits.miles) -> Bool { m > (miles ? imperialFarM : farM) }

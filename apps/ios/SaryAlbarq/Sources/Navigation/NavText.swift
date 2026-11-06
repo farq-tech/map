@@ -14,6 +14,14 @@ enum NavText {
         return (m / 100).rounded() * 100
     }
 
+    /// Rounded down for the voice: under 100 m to 10, under 1 km to 50, then 0.1 km.
+    static func flooredMeters(_ m: Double) -> Double {
+        let m = max(0, m) + 0.5
+        if m < 100 { return (m / 10).rounded(.down) * 10 }
+        if m < 1000 { return (m / 50).rounded(.down) * 50 }
+        return (m / 100).rounded(.down) * 100
+    }
+
     /// «٥٠٠ م»، «١٫٢ كم»، «٣ كم».
     static func distance(_ m: Double) -> String {
         let r = roundedMeters(m)
@@ -29,7 +37,8 @@ enum NavText {
     /// For the voice: «بعد خمسمية» is not needed, the synthesizer reads digits; we only spell the unit.
     static func spokenInDistance(_ m: Double) -> String? {
         guard m >= 30 else { return nil }
-        let r = roundedMeters(m)
+        /* Spoken: rounded DOWN (never a distance larger than the real one); the banner rounds to nearest. */
+        let r = flooredMeters(m)
         if r < 1000 { return "بعد \(SaryFormat.number(Int(r))) متر" }
         let km = (r / 100).rounded() / 10
         let s = km == km.rounded() ? SaryFormat.number(Int(km)) : SaryFormat.digits(String(format: "%.1f", km))

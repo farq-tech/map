@@ -415,7 +415,8 @@ final class LiveOutingController: ObservableObject {
         var i = LivePresenterInput(
             view: nearby.view,
             /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
-            myFix: session.smoothedFix(location.lastFix),
+            /* While guiding: Mapbox's road-matched position (`NavSession.mapFix`). */
+            myFix: nav.mapFix(session.smoothedFix(location.lastFix)),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
