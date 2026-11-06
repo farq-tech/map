@@ -24,6 +24,7 @@ final class DesertDetailShotsUITests: XCTestCase {
         if env["SARY_DETAIL"] == "off" { a += ["-SarySandDetail", "off", "-SaryHiRes", "off"] } else { a += ["-SaryHiRes", "on", "-SaryHiResRemote", "on"] }
         /* SARY_LEVEL=strong|light: «قوي» / «خفيف» (round 3). */
         if let l = env["SARY_LEVEL"] { a += ["-SaryHiResLevel", l] }
+        if env["SARY_TINT"] == "1" { a += ["-SaryHiResTint"] }
         return a
     }
 

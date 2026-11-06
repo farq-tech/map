@@ -40,11 +40,22 @@ final class HiResEnhancer {
         return CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
     }
 
-    /// A JPEG decoded right away (off the main thread), for handing to Mapbox.
+    /// A JPEG decoded right away (off the main thread) into the pixel format Mapbox draws:
+    /// 8-bit sRGB RGBA, premultiplied (what «تفاصيل الرمال» hands over). An opaque RGB / skip-alpha
+    /// image was accepted by `setCustomRasterSourceTileData` but never drawn (round 3 tint test).
     static func decodeNow(_ data: Data) -> UIImage? {
         guard let src = CGImageSourceCreateWithData(data as CFData, nil),
               let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
-        return UIImage(cgImage: cg)
+        return mapboxReady(cg).map(UIImage.init(cgImage:))
+    }
+
+    /// `image` redrawn as 8-bit sRGB RGBA, premultiplied (opaque).
+    static func mapboxReady(_ image: CGImage) -> CGImage? {
+        let w = image.width, h = image.height
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage()
     }
 
     /// The enhanced display tile for `plan` (`profile.outputSize` px), made from the decoded

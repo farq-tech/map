@@ -247,7 +247,12 @@ final class HiResImagery: NSObject {
             try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))))
             installed = true
             #if DEBUG
-            HiResStats.note("installed gen \(gen)")
+            /* `-SaryHiResTint`: tint the enhanced layer so the shots show where its tiles are drawn. */
+            if ProcessInfo.processInfo.arguments.contains("-SaryHiResTint") {
+                try? m.setLayerProperty(for: Self.layerId, property: "raster-hue-rotate", value: 150)
+                try? m.setLayerProperty(for: Self.layerId, property: "raster-saturation", value: 0.6)
+            }
+            HiResStats.note("installed gen \(gen) layers=\(m.allLayerIdentifiers.map(\.id).filter { $0.hasPrefix("sary-hires") || $0.hasPrefix("wow-sand") || $0.contains("satellite") })")
             #endif
         } catch {
             #if DEBUG
@@ -462,6 +467,9 @@ final class HiResImagery: NSObject {
                   m.sourceExists(withId: Self.sourceId) else { return }
             try? m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
                                                  tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+            #if DEBUG
+            if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px") }
+            #endif
             if image != nil { self.lock.withLock { self.visible.delivered(t) } }
             self.refreshBadge()
         }

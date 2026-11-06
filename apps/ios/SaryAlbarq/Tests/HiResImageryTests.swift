@@ -115,6 +115,16 @@ final class HiResImageryTests: XCTestCase {
         XCTAssertLessThan(light.inferencesPerMinute, strong.inferencesPerMinute)
     }
 
+    func testTilesAreHandedOverAsPremultipliedRGBA() throws {
+        let d = [UInt8](repeating: 200, count: 512 * 512 * 4)
+        let opaque = try XCTUnwrap(HiResEnhancer.cgImage(d, 512))
+        let jpeg = try XCTUnwrap(UIImage(cgImage: opaque).jpegData(compressionQuality: 0.9))
+        let img = try XCTUnwrap(HiResEnhancer.decodeNow(jpeg)?.cgImage)
+        XCTAssertEqual(img.width, 512)
+        XCTAssertEqual(img.alphaInfo, .premultipliedLast)
+        XCTAssertEqual(img.bitsPerPixel, 32)
+    }
+
     func testRateLimitPerMinute() {
         var r = HiResRateLimit(perMinute: 5)
         XCTAssertTrue(r.take(now: 0, count: 4))
