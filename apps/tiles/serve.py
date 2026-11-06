@@ -9,7 +9,8 @@ Environment:
     PUBLIC_URL          the URL the apps reach this service at (for TileJSON)    default http://localhost:$PORT
     PORT                                                                          default 8080
     REBUILD_HOURS       0 = never; otherwise rebuild that often (build.sh)       default 168 (weekly)
-    BUILD_ON_START      1 = build at boot when there is no archive yet           default 1
+    BUILD_ON_START      1 = build at boot when there is no archive yet; always = rebuild at every boot (the old
+                        archive keeps serving until the new one is complete)  default 1
 
 A rebuild writes a new file and renames it over the old one; the server notices the new file and switches to it on
 the next request, so tiles are never served from half an archive.
@@ -133,7 +134,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def rebuild_forever():
-    if os.environ.get('BUILD_ON_START', '1') == '1' and not os.path.exists(ARCHIVE):
+    mode = os.environ.get('BUILD_ON_START', '1')
+    if mode == 'always' or (mode == '1' and not os.path.exists(ARCHIVE)):
         run_build()
     if REBUILD_HOURS <= 0:
         return
