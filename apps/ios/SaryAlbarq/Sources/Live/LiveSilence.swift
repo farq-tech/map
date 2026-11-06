@@ -6,6 +6,16 @@ import Foundation
 // the «انقطع منذ ١٠ د» badge and the quiet «رجع إرسال فهد» toast.
 
 extension LiveOutingPresenter {
+    /// Why a friend is not live, as the server judged it (presence.js); nil while live here or
+    /// there (the phone may hold a fresher fix than the server's last sweep), or not sharing.
+    static func presenceReason(_ m: Member, in v: OutingView, now: Date = Date()) -> PresenceReason? {
+        guard m.user_id != v.myId, v.status == .active, m.sharing else { return nil }
+        if m.presence?.state == .hidden { return .hidden }
+        if v.positions[m.user_id] != nil, v.freshness(of: m.user_id, deviceNow: now) == .live { return nil }
+        if let p = m.presence, p.state != .live, let r = p.reasonKind { return r }
+        return v.silent[m.user_id]?.reasonKind
+    }
+
     /// Device time of their last fix reaching the server, while the server says they are silent.
     static func silentSince(_ uid: String, in v: OutingView) -> Date? {
         guard uid != v.myId, let s = v.silent[uid] else { return nil }

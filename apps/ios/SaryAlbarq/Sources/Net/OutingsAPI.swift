@@ -387,10 +387,27 @@ final class OutingsAPI {
     }
     func get(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)") }
     func poll(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)/live") }
-    func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil) async throws {
+    /// `hint` / `lowPower`: why this phone may go quiet («أثناء الاستخدام» in the background, Low
+    /// Power Mode…), so the others see the reason (server presence.js), never a vague «انقطع».
+    func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil, hint: PresenceHint? = nil, lowPower: Bool? = nil) async throws {
         struct Bat: Encodable { var level: Double; var charging: Bool }
-        struct B: Encodable { var gps: String; var battery: Bat? }
-        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: B(gps: gps.rawValue, battery: battery.map { Bat(level: $0.level, charging: $0.charging) }), timeout: 8)
+        struct B: Encodable { var gps: String; var battery: Bat?; var hint: String?; var low_power: Bool? }
+        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: B(gps: gps.rawValue, battery: battery.map { Bat(level: $0.level, charging: $0.charging) },
+                                                                          hint: hint?.rawValue, low_power: lowPower), timeout: 8)
+    }
+
+    /// The app is being closed (`applicationWillTerminate`): tell the server in the ~2 s left, so
+    /// the others read «سرى مسكّر عنده» instead of guessing. Blocking on purpose; best effort.
+    func heartbeatTerminatingNow(_ id: String, gps: GpsState, wait: TimeInterval = 2) {
+        guard let t = tokenProvider() else { return }
+        var req = URLRequest(url: base.appendingPathComponent("api/outings/\(id)/heartbeat"), timeoutInterval: wait)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["gps": gps.rawValue, "hint": PresenceHint.terminated.rawValue])
+        let done = DispatchSemaphore(value: 0)
+        session.dataTask(with: req) { _, _, _ in done.signal() }.resume()
+        _ = done.wait(timeout: .now() + wait)
     }
     func sendPosition(_ id: String, fix: WireFix) async throws {
         struct B: Encodable { var fix: WireFix }
