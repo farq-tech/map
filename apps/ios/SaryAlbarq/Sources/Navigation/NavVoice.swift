@@ -66,6 +66,12 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
     /// After an interruption: say the current instruction again, rebuilt for where I am now.
     var onReevaluate: () -> Void = {}
 
+    /// What to do with a line at the moment it would start playing (build 22): the guidance
+    /// rebuilds it for where I am NOW (`NavPromptTiming`), holds it a moment so it ends at a
+    /// recorded distance, or drops it (the maneuver is behind me). Default: play as is.
+    enum Playback: Equatable { case play(NavLine), hold(NavLine, TimeInterval), drop }
+    var atPlayback: (NavLine, NavVoiceChoice) -> Playback = { l, _ in .play(l) }
+
     var muted: Bool {
         didSet {
             UserDefaults.standard.set(muted, forKey: Self.muteKey)
@@ -157,7 +163,7 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
             if !muted { stats.dropped(.stale) }
             return dropPending()
         }
-        guard !isSpeaking, canSpeak() else { return }
+        guard !isSpeaking, canSpeak(), !n.line.isHeld() else { return }
         dropPending()
         speak(n.line)
     }
@@ -168,8 +174,27 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
         pendingTimer = nil
     }
 
-    private func speak(_ line: NavLine) {
+    private func speak(_ queued: NavLine) {
         var c = choice()
+        /* The distance is the one when the line ENDS, from where I am now — not when it was asked for. */
+        let line: NavLine
+        switch atPlayback(queued, c) {
+        case let .play(l): line = l
+        case let .hold(l, s):
+            var h = l
+            h.notBefore = Date().addingTimeInterval(s)
+            h.heldS += s
+            enqueue(h)
+            /* On time, not at the next 0.4 s tick (0.4 s is 6 m at 50 km/h). */
+            DispatchQueue.main.asyncAfter(deadline: .now() + s + 0.01) { [weak self] in self?.pump() }
+            return
+        case .drop:
+            stats.dropped(.stale)
+            if next == nil, !isSpeaking { releaseAudio() }
+            return
+        }
+        /* A held line for the same maneuver is superseded by this one. */
+        if let n = next, let id = line.maneuverID, n.line.maneuverID == id { dropPending() }
         /* «صوت سرى» with no clip for this line: the device voice says it — a guidance line is never silent. */
         if c == .sary, line.clips.isEmpty {
             /* Arabic only: router narration in another language is never read out. */
@@ -253,10 +278,14 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
     private func finished() {
         speaking = false
         guard !synth.isSpeaking, !clips.isPlaying else { return }
-        if let n = next, !muted, !isStale(n.line), canSpeak() {
+        if let n = next, !muted, !isStale(n.line), canSpeak(), !n.line.isHeld() {
             dropPending()
             return speak(n.line)
         }
+        releaseAudio()
+    }
+
+    private func releaseAudio() {
         GroupAudioDuck.ended(.nav)
         guard !GroupAudioDuck.musicOwnsSession, !GroupAudioDuck.pttActive else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)

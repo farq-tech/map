@@ -168,7 +168,10 @@ final class NavDeviceTraceTests: XCTestCase {
                 n.handle(.cue("text"))
                 lastVoiced = lines.count > before
             }
-            if lastVoiced { voiced += 1 }
+            /* A soft maneuver that keeps straight on (continue / new-name with no side) says nothing
+             * by design (build 22): its «silence» counts as covered. */
+            let soft = n.isSoft(idx) && NavPromptBudget.softLine(steps[idx]) == nil
+            if lastVoiced || soft { voiced += 1 }
             remaining -= len
         }
         n.end()
