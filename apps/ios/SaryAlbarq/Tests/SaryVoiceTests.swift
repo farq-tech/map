@@ -229,12 +229,13 @@ final class SaryVoiceScriptTests: XCTestCase {
         XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 3), distanceM: 200), ["dist_04", "rb_04"])
     }
 
-    func testDistancesRoundToRecordedRoundNumbers() {
+    func testDistancesRoundDownToRecordedRoundNumbers() {
+        /* Build 22: rounded DOWN — never a distance larger than the real one (75 m said «بعد مية»). */
         let cases: [(Double, String?)] = [
-            (10, nil), (29, nil), (30, "m_07"), (48, "dist_01"), (120, "dist_02"), (140, "dist_03"), (280, "dist_05"),
-            (330, "dist_05"), (380, "dist_06"), (640, "m_03"), (980, "dist_09"), (1240, "dist_09"), (1300, "dist_10"),
-            (2400, "km_18"), (3600, "km_19"), (4200, "km_01"), (11_000, "dist_14"), (13_000, "x_13"), (14_000, "km_06"), (35_900, "x_14"), (45_200, "x_15"), (47_600, "km_11"),
-            (87_000, "km_14"), (95_000, "km_15"), (199_000, "km_17"), (230_000, nil),
+            (10, nil), (29, nil), (30, "m_07"), (48, "m_07"), (120, "dist_02"), (140, "dist_02"), (280, "m_02"),
+            (330, "dist_05"), (380, "dist_05"), (640, "m_03"), (980, "m_05"), (1240, "dist_09"), (1300, "dist_09"),
+            (2400, "dist_11"), (3600, "km_19"), (4200, "km_01"), (11_000, "dist_14"), (13_000, "x_13"), (14_000, "x_13"), (35_900, "x_14"), (45_200, "x_15"), (47_600, "x_15"),
+            (87_000, "km_14"), (95_000, "km_14"), (199_000, "km_16"), (230_000, nil),
         ]
         for (m, k) in cases { XCTAssertEqual(SaryVoiceScript.distance(m), k, "\(m) m") }
         /* Every recorded value maps to itself. */
@@ -247,11 +248,11 @@ final class SaryVoiceScriptTests: XCTestCase {
 
     func testMilesAndFeetWhenTheUnitIsMiles() {
         let cases: [(Double, String?)] = [
-            (60, nil), (120, "x_11"), (290, "x_12"), (420, "x_07"), (760, "x_06"), (1500, "x_05"), (2900, "x_08"),
-            (6000, "x_09"), (14_000, "x_10"), (30_000, nil),
+            (60, nil), (120, nil), (160, "x_11"), (290, "x_11"), (310, "x_12"), (420, "x_07"), (760, "x_07"), (810, "x_06"), (1500, "x_06"), (1610, "x_05"), (2900, "x_05"),
+            (3300, "x_08"), (6000, "x_08"), (8100, "x_09"), (14_000, "x_09"), (16_100, "x_10"), (30_000, nil),
         ]
         for (m, k) in cases { XCTAssertEqual(SaryVoiceScript.distance(m, miles: true), k, "\(m) m in miles") }
-        XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 1600, miles: true), ["x_05", "turns_02"], "«بعد ميل.» «لف يسار.»")
+        XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 1610, miles: true), ["x_05", "turns_02"], "«بعد ميل.» «لف يسار.»")
         XCTAssertEqual(SaryVoiceScript.step(step(.turn, .left), distanceM: 40_000, miles: true), ["mv_02"])
         XCTAssertEqual(SaryVoiceCatalog.byKey["x_12"]?.text, "بعد ألف قدم.")
     }

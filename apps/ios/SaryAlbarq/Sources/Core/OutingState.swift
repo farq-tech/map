@@ -30,8 +30,6 @@ enum LiveEvent: Equatable {
     case memberSilent(SilentInfo)
     /// `reason` nil = a fresh fix arrived; else left / removed / sharing_off / going_offline.
     case memberResumed(userId: String, reason: String?)
-    /// «مباشر / متأخر / منقطع» + why (MemberPresence.swift).
-    case memberPresence(userId: String, presence: MemberPresence)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -88,10 +86,6 @@ enum LiveEvent: Equatable {
             return .convoy(decodeJSON(obj["convoy"]))
         case "plan_updated":
             return .planUpdated(decodeJSON(obj["plan"]))
-        case "member_presence":
-            guard let uid, let st = (obj["state"] as? String).flatMap(MemberPresence.State.init(rawValue:)) else { return nil }
-            return .memberPresence(userId: uid, presence: MemberPresence(state: st, reason: obj["reason"] as? String,
-                                                                          last_fix_at: obj["last_fix_at"] as? String, since: obj["since"] as? String))
         case "checklist_updated":
             return (decodeJSON(obj["items"]) as [ChecklistItem]?).map(LiveEvent.checklistUpdated)
         default:
@@ -145,8 +139,6 @@ struct OutingView: Equatable {
         switch e {
         case .memberSilent, .memberResumed:
             break
-        case let .memberPresence(uid, p):
-            members[uid]?.presence = p
         case let .position(p):
             guard members[p.user_id]?.sharing == true, status == .active else { return }
             if let old = positions[p.user_id],

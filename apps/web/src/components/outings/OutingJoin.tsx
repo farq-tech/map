@@ -12,9 +12,7 @@ import {
 	type InvitePreview,
 } from "../../lib/outings/api";
 import { formatNumber } from "../../lib/sary/domain";
-import { appOpenUrl } from "../../lib/outings/appInstall";
-import { platformOf } from "../../lib/outings/installGuide";
-import { InstallGuide } from "./InstallGuide";
+import { appOpenUrl, copyText, installTarget, inviteLink, isAppleMobile } from "../../lib/outings/appInstall";
 import { usePageMeta } from "../../lib/usePageMeta";
 import { useSaryChrome } from "../../lib/sary/useSaryChrome";
 import { statusLabel } from "./labels";
@@ -57,11 +55,18 @@ export default function OutingJoin() {
 	const [name, setName] = useState("");
 	const [sharePhoto, setSharePhoto] = useState(false);
 	const [recovering, setRecovering] = useState(false);
-	/* iPhone: the app is the way in (sharing goes on with the phone locked); the browser stays as a small link. */
-	const [platform] = useState(() => (typeof navigator === "undefined" ? "other" : platformOf(navigator.userAgent, navigator.maxTouchPoints || 0)));
-	const onIPhone = platform === "iphone";
-	const [inBrowser, setInBrowser] = useState(false);
+	/* iPhone: the app is the way in (forced sharing off screen too); the web join stays as a fallback. */
+	const [onIPhone] = useState(() => typeof navigator !== "undefined" && isAppleMobile(navigator.userAgent, navigator.maxTouchPoints || 0));
+	const [copied, setCopied] = useState(false);
 	const openInApp = token ? appOpenUrl(token) : null;
+	const install = installTarget();
+
+	/* «نزّل التطبيق»: keep the invite for after the install (the app offers «لصق» on its first page). */
+	const goInstall = async () => {
+		const link = token ? inviteLink(window.location.origin, token) : null;
+		if (link) setCopied(await copyText(link));
+		window.location.href = install.url;
+	};
 
 	useSaryChrome();
 	usePageMeta({
@@ -116,14 +121,6 @@ export default function OutingJoin() {
 		}
 	};
 
-	const guide = Boolean(preview && token && onIPhone && openInApp && preview.status !== "ended" && !inBrowser && !error);
-	if (guide && preview && token)
-		return (
-			<main className="sary-o-page is-guide" dir="rtl" data-testid="outing-join">
-				<InstallGuide owner={preview.owner_name} outingName={preview.name} token={token} onBrowser={() => setInBrowser(true)} />
-			</main>
-		);
-
 	return (
 		<main className="sary-o-page" dir={isRTL ? "rtl" : "ltr"} data-testid="outing-join">
 			<header className="sary-o-top sary-o-brand">
@@ -134,6 +131,27 @@ export default function OutingJoin() {
 						: "A map for desert trips: see your friends on one map during the outing, and they see you."}
 				</p>
 			</header>
+			{preview && onIPhone && openInApp && preview.status !== "ended" ? (
+				<section className="sary-o-card" data-testid="outing-join-app">
+					<span className="sary-o-kicker">{isRTL ? "على الآيفون؟" : "On iPhone?"}</span>
+					<a className="sary-o-primary" href={openInApp} data-testid="outing-join-open-app">
+						{isRTL ? "افتح الدعوة في التطبيق" : "Open the invite in the app"}
+					</a>
+					<button type="button" className="sary-o-secondary" onClick={() => void goInstall()} data-testid="outing-join-install">
+						{isRTL ? "ما عندي التطبيق — نزّله وكمّل الدعوة" : "No app yet — install it and continue"}
+					</button>
+					<p className="sary-o-note" data-testid="outing-join-install-note">
+						{install.kind === "testflight-app"
+							? isRTL
+								? "ننسخ لك رابط الدعوة. نزّل TestFlight، افتح رابط التجربة اللي أرسله لك أمير الرحلة، وأول ما يفتح سَرى البارق اضغط «لصق»."
+								: "We copy your invite. Install TestFlight, open the beta link the trip leader sent you, then tap «Paste» when Sary Albarq opens."
+							: isRTL
+								? "ننسخ لك رابط الدعوة. بعد التثبيت افتح سَرى البارق واضغط «لصق» — تدخل الطلعة على طول."
+								: "We copy your invite. After installing, open Sary Albarq and tap «Paste» — you go straight into the outing."}
+						{copied ? (isRTL ? " ✓ نُسخ." : " ✓ Copied.") : ""}
+					</p>
+				</section>
+			) : null}
 			{preview ? (
 				<section className="sary-o-card" data-testid="outing-join-preview">
 					<span className="sary-o-kicker">{isRTL ? "دعوة إلى طلعة" : "Outing invite"}</span>
@@ -168,12 +186,8 @@ export default function OutingJoin() {
 					</p>
 					<p className="sary-o-note" data-testid="outing-join-web-note">
 						{isRTL
-							? platform === "android"
-								? "تطبيق أندرويد قريب. الحين تنضم من هنا: خلّ الصفحة مفتوحة عشان يوصل موقعك."
-								: "خلّ الصفحة مفتوحة عشان يوصل موقعك — يوقف إذا قفلت الجوال."
-							: platform === "android"
-								? "The Android app is coming. For now join here: keep this page open so your location gets through."
-								: "Keep this page open so your location gets through — it stops when the phone locks."}
+							? "المتصفح يرسل موقعك والصفحة مفتوحة فقط؛ للمشاركة المستمرة استخدم تطبيق الآيفون"
+							: "The browser sends your location only while the page is open; for continuous sharing use the iPhone app"}
 					</p>
 					{recovering && !identity ? (
 						<RecoveryForm

@@ -1,7 +1,5 @@
 'use strict';
 
-const { reasonText } = require('./presence');
-
 /**
  * Web Push for outing events that matter when the screen is off: a note over
  * a car, and an SOS. Positions are never pushed.
@@ -309,7 +307,7 @@ function arDigits(n) {
   return String(n).replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d)));
 }
 
-function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId, silentMinutes, lastMinutes, level, reason } = {}) {
+function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId, silentMinutes, lastMinutes, level } = {}) {
   const who = senderName || 'أحد أعضاء الطلعة';
   const where = outingName ? ` · ${outingName}` : '';
   switch (kind) {
@@ -344,8 +342,7 @@ function featurePayload(kind, { senderName, outingName, note, title, replyKind, 
       return {
         type: 'member_silent',
         title: `📡 انقطع إرسال ${who}${where}`,
-        /* With a known reason: «فهد: جواله مقفل الموقع — آخر موقع قبل ١٠ د» (never a vague «انقطع»). */
-        body: reasonText(reason) ? `${who}: ${reasonText(reason)}${lastAgo || ` — منذ ${since} د`}` : `انقطع إرسال ${who} منذ ${since} د${lastAgo}`,
+        body: `انقطع إرسال ${who} منذ ${since} د${lastAgo}`,
         tag: `sary-silent-${userId || 'x'}`,
         ttl: 3600,
         urgency: 'high',

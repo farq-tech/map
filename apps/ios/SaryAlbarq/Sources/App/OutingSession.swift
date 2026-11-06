@@ -37,12 +37,6 @@ struct SessionEnv {
     var chatBackend: ChatBackend?
     /// «رسالة صوتية»: nil = the real API. Tests inject a fake.
     var voiceNoteBackend: VoiceNoteBackend?
-    /// Offline backfill upload (outingId, fixes, upToMs) → started. nil = `BackfillUploader` (background URLSession).
-    var postBackfill: ((String, [WireFix], Double) -> Bool)?
-    /// Tests only: stands in for «أثناء الاستخدام» + the background activity session.
-    var backgroundSessionOverride: Bool?
-    /// Presence hint heartbeat (outingId, hint, lowPower). nil = the real API.
-    var postHint: ((String, PresenceHint, Bool) async -> Void)?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -95,8 +89,6 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Internal so the per-person invites model (Sources/Invites) shares this client.
     let api: OutingsAPI
     private let token: String
-    /// Positions that could not go out (no network): uploaded in one batch when it is back.
-    private(set) var offlineQueue = OfflineFixQueue()
     private let env: SessionEnv
     private var channel: LiveChannel?
     private var backgroundSender: BackgroundPositionSender?
@@ -223,7 +215,7 @@ final class OutingSession: ObservableObject, Identifiable {
             outingActive: view?.status == .active,
             foreground: visible && env.isForeground(),
             closed: closedReason != nil,
-            alwaysAuthorized: sharesInBackground
+            alwaysAuthorized: hasAlwaysPermission
         )
     }
 
@@ -305,13 +297,7 @@ final class OutingSession: ObservableObject, Identifiable {
             keepAlive: { [env] in MainActor.assumeIsolated { env.keepAlive() } }
         ))
         sender.onResult = { [weak self] r in self?.backgroundResult(r) }
-        sender.onUndelivered = { [weak self] f, m in self?.queueOffline(f, mode: m) }
         backgroundSender = sender
-        offlineQueue = OfflineFixQueue.load(user: myUserId, outing: id, defaults: env.defaults)
-        if env.postBackfill == nil {
-            BackfillUploader.shared.onDone = { [weak self] outing, upTo, ok in MainActor.assumeIsolated { self?.backfillDone(outing, upToMs: upTo, ok: ok) } }
-            BackfillUploader.shared.resume()
-        }
         ch.handlers = .init(
             onSnapshot: { [weak self] s in MainActor.assumeIsolated { self?.applySnapshot(s) } },
             onEvent: { [weak self] e in MainActor.assumeIsolated { self?.apply(e) } },
@@ -409,7 +395,6 @@ final class OutingSession: ObservableObject, Identifiable {
     func foreground(_ active: Bool) {
         visible = active
         location.setOffScreen(!active)
-        sendPresenceHint(foreground: active)
         if active {
             backgroundSender?.stop()
             location.watchForeground()
@@ -439,7 +424,7 @@ final class OutingSession: ObservableObject, Identifiable {
                 askAlwaysOnReturn = true
             }
             if gate.allowsBackgroundPosition && (location.isSharing || isDemo) {
-                /* «دائمًا» or «أثناء الاستخدام» + activity session: keep sharing off screen, over HTTP. */
+                /* «دائمًا»: keep sharing off screen, over HTTP. */
                 backgroundSender?.start()
             } else {
                 backgroundSender?.stop()
@@ -453,70 +438,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func beat() {
         guard visible else { return }
-        channel?.heartbeat(gps: location.gpsState, battery: batterySharing ? Self.batteryNow() : nil,
-                           hint: currentHint(foreground: true), lowPower: env.lowPower())
-    }
-
-    // MARK: «ليش مو مباشر؟» — presence hints and the offline backfill
-
-    /// What I tell the others about myself now (server presence.js).
-    func currentHint(foreground: Bool) -> PresenceHint {
-        PresenceHint.forState(foreground: foreground, canLocate: env.authorizationOverride ?? location.canLocate, always: sharesInBackground)
-    }
-
-    /// Leaving / returning to the screen: one heartbeat with the hint, over HTTP (the socket is
-    /// about to be suspended), so the others read «الموقع «أثناء الاستخدام» بس» right away
-    /// instead of «انقطع» ten minutes later.
-    func sendPresenceHint(foreground: Bool) {
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil else { return }
-        let hint = currentHint(foreground: foreground), low = env.lowPower(), outing = id
-        if let post = env.postHint {
-            Task { await post(outing, hint, low) }
-            return
-        }
-        let gps = location.gpsState
-        let done = env.keepAlive()
-        Task { [api] in
-            defer { done() }
-            try? await api.heartbeat(outing, gps: gps, hint: hint, lowPower: low)
-        }
-    }
-
-    /// iOS is closing the app (swiped away, or terminated while running): say so in the seconds left.
-    /// With «دائمًا» iOS relaunches it on the next significant move and sharing resumes by itself.
-    func appWillTerminate() {
-        saveOfflineQueue()
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil, env.postHint == nil else { return }
-        api.heartbeatTerminatingNow(id, gps: location.gpsState)
-    }
-
-    /// A fix that could not reach the server: kept (thinned, capped, persisted) for the batch.
-    func queueOffline(_ f: DeviceFix, mode: ShareMode) {
-        guard !isDemo, gate.allowsPosition || gate.allowsBackgroundPosition else { return }
-        if offlineQueue.enqueue(f, mode: mode) { saveOfflineQueue() }
-    }
-
-    private func saveOfflineQueue() {
-        offlineQueue.save(user: myUserId, outing: id, defaults: env.defaults)
-    }
-
-    /// The network is back (socket live, a background POST went through): upload what waited, once.
-    func flushBackfill() {
-        guard !isDemo, !offlineQueue.isEmpty, view?.status == .active || view == nil, closedReason == nil, hasConsent else { return }
-        let now = env.now()
-        offlineQueue.prune(nowMs: now)
-        guard let b = offlineQueue.batch(nowMs: now) else { return saveOfflineQueue() }
-        if let post = env.postBackfill {
-            if post(id, b.fixes, b.upToMs) { backfillDone(id, upToMs: b.upToMs, ok: true) }
-            return
-        }
-        BackfillUploader.shared.upload(outingId: id, fixes: b.fixes, upToMs: b.upToMs, token: token, base: api.base)
-    }
-
-    func backfillDone(_ outing: String, upToMs: Double, ok: Bool) {
-        guard outing == id, ok else { return }
-        offlineQueue.ack(upToMs: upToMs)
-        saveOfflineQueue()
+        channel?.heartbeat(gps: location.gpsState, battery: batterySharing ? Self.batteryNow() : nil)
     }
 
     static func batteryNow() -> BatteryInfo? {
@@ -598,7 +520,6 @@ final class OutingSession: ObservableObject, Identifiable {
     func stopSharingLocally(forget: Bool = true) {
         wantsToShare = false
         lastSent = nil
-        if forget { offlineQueue.clear(); saveOfflineQueue() }
         channel?.dropPendingFix()
         backgroundSender?.stop()
         if forget, ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id {
@@ -650,9 +571,7 @@ final class OutingSession: ObservableObject, Identifiable {
         ShareLog.log.notice("background send: \(String(describing: r))")
         #endif
         switch r {
-        case .sent:
-            lastAck = (true, nil)
-            flushBackfill()
+        case .sent: lastAck = (true, nil)
         case let .refused(reason): ack(false, reason)
         case .notAMember: closed(.notAMember)
         case .unauthorized: closed(.unauthorized)
@@ -760,8 +679,6 @@ final class OutingSession: ObservableObject, Identifiable {
         guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok else { return }
         lastSent = .init(fix: f, sentAtMs: now)
         if isDemo { return }
-        /* No link at all (dead zone): keep it for the batch upload when the network is back. */
-        if link == .offline || link == .connecting { queueOffline(f, mode: m) }
         channel?.sendFix(f, mode: m)
     }
 
@@ -774,10 +691,6 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     var hasAlwaysPermission: Bool { env.alwaysOverride ?? location.hasAlways }
-
-    /// Sharing may keep going off screen: «دائمًا», or «أثناء الاستخدام» with the iOS 17+
-    /// background activity session taken on screen (LocationSharer.sharesInBackground).
-    var sharesInBackground: Bool { hasAlwaysPermission || (env.backgroundSessionOverride ?? location.sharesInBackground) }
 
     /// iOS keeps the trail running with the screen locked: «دائمًا», or (iOS 17+) «أثناء الاستخدام»
     /// with the background activity session taken while on screen.
@@ -913,7 +826,6 @@ final class OutingSession: ObservableObject, Identifiable {
             chat.linkLive()
             voiceNotes.linkLive()
         }
-        if s == .live || s == .polling { flushBackfill() }
         updateMesh()
         walkie.linkChanged()
         if s == .live || s == .polling, pendingServerStop {

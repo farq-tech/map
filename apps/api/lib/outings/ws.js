@@ -89,8 +89,8 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
-  wss.on('connection', (ws, req) => {
-    const conn = { ws, userId: null, outingId: null, user: null, window: [], ua: req?.headers?.['user-agent'] || null };
+  wss.on('connection', (ws) => {
+    const conn = { ws, userId: null, outingId: null, user: null, window: [] };
     const openedAt = Date.now();
     let authing = false;
     let wasReady = false;
@@ -178,7 +178,6 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
            * (it would count as "online" and as one of this person's sockets forever). */
           if (ws.readyState !== OPEN) return;
           conn.userId = user.id;
-          service.notePresence?.(msg.outing_id, user.id, { ua: conn.ua });
           /* What this client understands beyond the basics: 'voice_notes' (lib/outings/voice-notes.js). */
           conn.caps = new Set(Array.isArray(msg.caps) ? msg.caps.filter((c) => typeof c === 'string' && c.length <= 32).slice(0, 8) : []);
           /* In this trip they carry the inviter's name for them, if any (PTT «يتكلم …»). */
@@ -197,11 +196,7 @@ function attachOutingsSocket(server, { service, hub, ptt = null, path = PATH, au
         }
         if (!conn.userId || !conn.outingId) return;
         hub.touch(conn.outingId, conn.userId);
-        if (msg.type === 'heartbeat') {
-          /* «ليش مو مباشر؟»: the app says why it may go quiet (background «أثناء الاستخدام», Low Power…). */
-          service.notePresence?.(conn.outingId, conn.userId, { hint: msg.hint, lowPower: msg.low_power, ua: conn.ua });
-          return hub.heartbeat(conn.outingId, conn.userId, msg.gps, battery(msg.battery));
-        }
+        if (msg.type === 'heartbeat') return hub.heartbeat(conn.outingId, conn.userId, msg.gps, battery(msg.battery));
         if (msg.type === 'ping') return reply({ type: 'pong', server_now: new Date().toISOString() });
         if (msg.type === 'presence') return hub.setAway(conn.outingId, conn.userId, msg.away === true);
         if (ptt && msg.type.startsWith('ptt_')) return void (await ptt.handle(conn, msg));

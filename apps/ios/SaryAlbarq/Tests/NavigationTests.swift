@@ -579,4 +579,20 @@ final class ExternalNavTests: XCTestCase {
         XCTAssertTrue(schemes.contains("comgooglemaps"))
         XCTAssertTrue(schemes.contains("waze"))
     }
+
+    /// «خيارات المسار»: the routes are framed in the map left between the header and the sheet —
+    /// never a padding taller than the map (Mapbox refused it and the map stayed where it was).
+    func testRouteOptionsCameraAlwaysLeavesRoomForTheRoutes() {
+        let size = CGSize(width: 402, height: 874)
+        /* The build 21 case: header 160 pt, options sheet 520 pt tall. */
+        let p = NavMapDrawer.fitPadding(size: size, chrome: UIEdgeInsets(top: 160, left: 0, bottom: 520, right: 0), bottomShare: 0.55)
+        XCTAssertLessThanOrEqual(p.top + p.bottom, size.height * (1 - NavMapDrawer.minVisibleShare) + 0.5)
+        XCTAssertGreaterThan(size.height - p.top - p.bottom, 170, "a strip of map is left for the routes")
+        XCTAssertGreaterThan(p.bottom, 450, "still clears most of the sheet")
+        /* Plenty of room: the plain margins. */
+        let q = NavMapDrawer.fitPadding(size: size, chrome: UIEdgeInsets(top: 50, left: 0, bottom: 100, right: 0), bottomShare: 0.3)
+        XCTAssertEqual(q.top, 120)
+        XCTAssertEqual(q.bottom, 874 * 0.3 + 24, accuracy: 0.5)
+        XCTAssertEqual(q.left, 50)
+    }
 }

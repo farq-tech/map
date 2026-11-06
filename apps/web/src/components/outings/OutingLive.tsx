@@ -27,8 +27,6 @@ import { wireFix } from "../../lib/outings/live";
 import { PinMarkers, type MapPin } from "../../lib/outings/pinMarker";
 import { arrived, batteryFresh, batteryLow, GapWatcher, type GapAlert, type GapInput } from "../../lib/outings/safety";
 import { createWakeKeeper } from "../../lib/outings/wakeLock";
-import { browserBanner, keepOpenNote, platformOf } from "../../lib/outings/installGuide";
-import { IOS_TESTFLIGHT_PUBLIC_URL, TESTFLIGHT_APP_URL } from "../../lib/outings/appInstall";
 import { refreshPushSubscription } from "../../lib/outings/push";
 import { ParticipantMarkers, type ParticipantView } from "../../lib/outings/participantMarkers";
 import { memberColors } from "../../lib/outings/carColors";
@@ -810,9 +808,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 			wakeRef.current = null;
 		};
 	}, []);
-	/* Phones following in the browser: a strip that stays — the page must stay open (#invite-no-app). */
-	const [platform] = useState(() => (typeof navigator === "undefined" ? "other" : platformOf(navigator.userAgent, navigator.maxTouchPoints || 0)));
-	const strip = platform === "other" ? null : browserBanner(platform);
 	const wantWake = wake && canSend && outing?.status === "active";
 	useEffect(() => {
 		wakeRef.current?.set(wantWake);
@@ -1121,21 +1116,6 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 						</button>
 					</div>
 				</div>
-				{strip ? (
-					<div className="sary-o-browser-strip" role="note" data-testid="outing-browser-strip" data-platform={platform}>
-						<span>{strip.line} ·</span>
-						{platform === "iphone" ? (
-							<a href={IOS_TESTFLIGHT_PUBLIC_URL ?? TESTFLIGHT_APP_URL} data-testid="outing-browser-strip-install">
-								{strip.action}
-							</a>
-						) : (
-							<span>{strip.action}</span>
-						)}
-						<span className="sary-o-browser-keep" data-testid="outing-keep-open">
-							{keepOpenNote(wakeHeld)}
-						</span>
-					</div>
-				) : null}
 				<div className="sary-o-detail" id="outing-status-detail" hidden={!statusOpen} data-testid="outing-status-detail">
 					<p>
 						{isRTL ? "الطلعة" : "Outing"}: {outing ? statusLabel(outing.status, isRTL) : "…"} · {isRTL ? "الاتصال" : "Link"}: {liveStateLabel(liveState, isRTL)}

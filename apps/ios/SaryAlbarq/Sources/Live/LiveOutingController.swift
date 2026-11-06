@@ -415,7 +415,8 @@ final class LiveOutingController: ObservableObject {
         var i = LivePresenterInput(
             view: nearby.view,
             /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
-            myFix: session.smoothedFix(location.lastFix),
+            /* While guiding: Mapbox's road-matched position (`NavSession.mapFix`). */
+            myFix: nav.mapFix(session.smoothedFix(location.lastFix)),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
@@ -486,7 +487,7 @@ final class LiveOutingController: ObservableObject {
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
                                     stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
-                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince, silentReason: p?.presenceReason)
+                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -1016,26 +1017,10 @@ final class LiveOutingController: ObservableObject {
         session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
     }
 
-    /// The «دائمًا» explainer is the after-join one («خلّ الربع يشوفونك طول الطلعة»).
-    @Published var shareAlwaysAfterJoin = false
-
-    /// Right after «انضم» (field 2026-11-06: members on «أثناء الاستخدام» went dark the moment
-    /// they locked the phone): explain «دائمًا» and ask iOS now, once per device. Otherwise it
-    /// comes in context: the first time the person is back after sending paused off screen.
+    /// Right after «انضم» nothing more is asked (the one-step join asked for the location).
+    /// «دائمًا» comes in context: the first time the person is back after sending paused off screen.
     func followUpJoin() {
-        if session.joinedJustNow {
-            session.joinedJustNow = false
-            if location.canLocate, !session.hasAlwaysPermission, !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) {
-                /* After the one-time welcome card («حياك في …»), never on top of it. */
-                let wait = arrival.welcomePending || arrivalWelcome != nil ? InviteeArrival.welcomeSeconds + 0.8 : 0.9
-                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
-                    guard let self, self.modal == nil, self.session.wantsToShare, !self.session.hasAlwaysPermission else { return }
-                    self.shareAlwaysAfterJoin = true
-                    self.modal = .shareAlways
-                }
-                return
-            }
-        }
+        if session.joinedJustNow { session.joinedJustNow = false }
         guard session.askAlwaysOnReturn, session.isVisible, UIApplication.shared.applicationState == .active else { return }
         session.askAlwaysOnReturn = false
         if location.canLocate { offerShareAlwaysIfNeeded() }

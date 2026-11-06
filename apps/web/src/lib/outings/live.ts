@@ -11,7 +11,7 @@
  */
 
 import { API_BASE_URL } from "../api";
-import { OutingApiError, OutingsApi, type Battery, type GpsState, type HeartbeatHint, type Member, type MemberNote, type OutingSnapshot, type Position, type Rally, type Sos } from "./api";
+import { OutingApiError, OutingsApi, type Battery, type GpsState, type Member, type MemberNote, type OutingSnapshot, type Position, type Rally, type Sos } from "./api";
 import type { DeviceFix, ShareMode } from "./policy";
 import type { ClipMeta } from "./voice";
 
@@ -59,7 +59,7 @@ type Handlers = {
 type Deps = {
 	WebSocketImpl?: typeof WebSocket;
 	poll?: (id: string) => Promise<OutingSnapshot>;
-	beat?: (id: string, gps: GpsState, battery?: BatteryReading | null, hint?: HeartbeatHint) => Promise<unknown>;
+	beat?: (id: string, gps: GpsState, battery?: BatteryReading | null) => Promise<unknown>;
 	post?: (id: string, fix: unknown) => Promise<unknown>;
 	now?: () => number;
 	setTimeout?: typeof setTimeout;
@@ -189,10 +189,10 @@ export class LiveChannel {
 	}
 
 	/** "Still here", with no coordinates — kept apart from fixes so others can tell no-GPS from no-network. */
-	heartbeat(gps: GpsState, battery: BatteryReading | null = null, hint?: HeartbeatHint): void {
+	heartbeat(gps: GpsState, battery: BatteryReading | null = null): void {
 		if (this.stopped) return;
-		if (this.state === "live") this.sendFrame({ type: "heartbeat", gps, ...(battery ? { battery } : {}), ...(hint ? { hint } : {}) });
-		else if (this.state === "polling") this.deps.beat(this.outingId, gps, battery, hint).catch(() => undefined);
+		if (this.state === "live") this.sendFrame(battery ? { type: "heartbeat", gps, battery } : { type: "heartbeat", gps });
+		else if (this.state === "polling") this.deps.beat(this.outingId, gps, battery).catch(() => undefined);
 	}
 
 	setAway(away: boolean): void {
