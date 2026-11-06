@@ -7,3 +7,9 @@ xcuserdata/
 *.xcuserstate
 DerivedData/
 build/
+
+# «مساعد سرى»: the GGUF model is downloaded on demand by the app, never committed;
+# local evaluation copies and SwiftPM's unpacked llama.cpp XCFramework stay out too.
+*.gguf
+*.gguf.part
+SaryAlbarq/Packages/LlamaCpp/.build/

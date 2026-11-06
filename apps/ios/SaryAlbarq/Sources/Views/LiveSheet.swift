@@ -212,6 +212,13 @@ struct LiveSheet: View {
                             close: { controller.modal = nil })
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        case .assistant:
+            AssistantSheet(assistant: controller.assistant, store: AssistantModelStore.shared,
+                           driving: controller.liveContext(drive: theme.drive) == .driving,
+                           sosState: controller.ui.sos.mine, sosTrigger: controller.actions.sos.trigger,
+                           close: { controller.modal = nil })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .layers:
             ExploreLayersSheet(controller: controller)
                 .presentationDetents([.medium, .large])

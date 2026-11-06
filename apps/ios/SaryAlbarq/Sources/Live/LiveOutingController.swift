@@ -54,6 +54,8 @@ enum LiveModal: Identifiable, Equatable {
     case chat(ChatWith?)
     /// «ترددات»: the walkie-talkie's channels (five public + private ones).
     case pttChannels
+    /// «اسأل سرى»: the on-device assistant.
+    case assistant
 
     var id: String {
         switch self {
@@ -81,6 +83,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navSteps: return "navSteps"
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
+        case .assistant: return "assistant"
         }
     }
 
@@ -266,8 +269,10 @@ final class LiveOutingController: ObservableObject {
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
     var carPlayNav: CarPlayNavAdapter?
+    /// «اسأل سرى» (`Sources/Assistant`).
+    lazy var assistant: AssistantController = makeAssistant()
     private var lastView: OutingView?
-    private var stationList: [OutdoorAPI.Station] = []
+    var stationList: [OutdoorAPI.Station] = []
     /// Plays clips that members on older builds still send («اضغط وتكلم» before «قناة الطلعة»).
     private let player = VoicePlayer()
     private var alertTimers: [String: Timer] = [:]

@@ -1,0 +1,16 @@
+# «مساعد سرى»: the only thing the on-device model may write: one intent and its one parameter.
+# {member} is filled per trip with the members' names ("" = everyone), so a name can only be one of theirs.
+root ::= "{\"intent\": " body "}"
+body ::= ( "\"members_where\", \"who\": " who
+       | "\"trip_remaining\""
+       | "\"nearest_fuel\""
+       | "\"weather\", \"aspect\": " ( "\"general\"" | "\"wind\"" | "\"dust\"" | "\"temp\"" | "\"rain\"" )
+       | "\"sunset\", \"aspect\": " ( "\"time\"" | "\"remaining\"" | "\"way_back\"" )
+       | "\"rally_point\""
+       | "\"navigate\", \"to\": " ( "\"destination\"" | "\"rally\"" | "\"station\"" | "\"back\"" | who )
+       | "\"radio\", \"action\": " ( "\"play\"" | "\"stop\"" )
+       | "\"set_channel\", \"channel\": " [1-5]
+       | "\"open_chat\""
+       | "\"sos_help\""
+       | "\"unknown\"" )
+who ::= "\"everyone\"" {member}
