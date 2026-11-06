@@ -546,7 +546,7 @@ struct AdvancedSettingsView: View {
     var back: () -> Void
     @Environment(\.sary) private var theme
     @State private var gpx: [(id: String, url: URL)] = []
-    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.mapbox.rawValue
+    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
 
     var body: some View {
         let p = theme.palette
@@ -564,9 +564,9 @@ struct AdvancedSettingsView: View {
                     .accessibilityIdentifier("about.gpx.\(n)")
                 }
             }
-            SarySection(title: "مزوّد المسارات", footer: "مزوّد الخرائط هو الافتراضي. «فرق» يجرّب خادمنا أول، و«تلقائي» يستخدمه بس إذا كان شغّال؛ وإذا ما رد نرجع للافتراضي لحالنا.") {
+            SarySection(title: "مزوّد المسارات", footer: "«تلقائي» هو الافتراضي: مزوّد الخرائط بالزحام الحي في المدن والطرق المعبّدة (وقت وصول دقيق)، وخادمنا للبر والطرق اللي ما يغطيها أو إذا تعذّر. «فرق» يجرّب خادمنا أول دايم، والثالث ما يسأل خادمنا أبد.") {
                 SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
-                    get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },
+                    get: { NavProviderChoice(rawValue: navProvider) ?? .auto },
                     set: { navProvider = $0.rawValue }), label: \.label, id: "dev.navProvider")
             }
         }

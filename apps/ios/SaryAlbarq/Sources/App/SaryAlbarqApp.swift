@@ -14,6 +14,8 @@ struct SaryAlbarqApp: App {
         WindowGroup {
             RootView()
                 .onAppear { AppDelegate.model = model }
+                /* Farq's streets and places (apps/tiles): once the server answers, maps switch to them. */
+                .task { await FarqTiles.check() }
                 .environmentObject(model)
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)

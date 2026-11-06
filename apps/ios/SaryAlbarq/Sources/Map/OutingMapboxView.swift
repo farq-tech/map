@@ -218,6 +218,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setLayer(layer)
         c.setZoomCap()
         c.setLabels(labels)
+        c.applyFarqIfReady()
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
         HiResImagery.of(map).update(hiRes)
@@ -281,6 +282,10 @@ struct OutingMapboxView: UIViewRepresentable {
         var onMapTap: (LngLat) -> Void = { _ in }
         var onEmptyTap: (LngLat, String?) -> Void = { _, _ in }
         private var poiTap: Cancelable?
+        private var farqPlaceTap: Cancelable?
+        private var farqObserver: NSObjectProtocol?
+        /// Farq's own streets/places are on this style (`FarqTiles`); false until the server answered.
+        private var farqApplied = false
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
@@ -422,6 +427,18 @@ struct OutingMapboxView: UIViewRepresentable {
                 self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), poi.name)
                 return true
             })
+            farqObserver = NotificationCenter.default.addObserver(forName: FarqTiles.didBecomeAvailable, object: nil, queue: .main) { [weak self] _ in
+                self?.applyFarqIfReady()
+            }
+            farqPlaceTap = map.mapboxMap.addInteraction(TapInteraction(.layer(FarqTiles.placeCircleId)) { [weak self] place, ctx in
+                guard let self, !self.picking, self.car(at: ctx.point) == nil else { return false }
+                var name: String?
+                for k in ["name_ar", "name_en"] where name == nil {
+                    if case let .string(v)?? = place.properties[k], !v.isEmpty { name = v }
+                }
+                self.onEmptyTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude), name)
+                return true
+            })
             MapTerrainProbe.source = self
             waypointPins.onClusterTap = { [weak self] pts in
                 guard let self else { return }
@@ -508,6 +525,9 @@ struct OutingMapboxView: UIViewRepresentable {
             /* Same Standard config as the web's applyBasemap() for the outing map; labels per `SatelliteLabels`. */
             try? m.setStyleImportConfigProperty(for: "basemap", config: "show3dObjects", value: true)
             labels.apply(m)
+            /* Farq's streets (weekly OSM) and Atlas places replace Mapbox's older roads on satellite. */
+            farqApplied = FarqTiles.available
+            FarqTiles.install(m, layer: layer, labels: labels)
             light = nil
             applyLight()
             if let r = rallyPin?.point {
@@ -576,10 +596,24 @@ struct OutingMapboxView: UIViewRepresentable {
             try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: z))
         }
 
+        /// `FarqTiles.check()` answered after the style loaded: switch the probe and the satellite roads now.
+        func applyFarqIfReady() {
+            guard styleReady, !farqApplied, FarqTiles.available, let m = map?.mapboxMap else { return }
+            farqApplied = true
+            if m.layerExists(withId: RoadSnap.probeLayer) { try? m.removeLayer(withId: RoadSnap.probeLayer) }
+            ensureRoadProbe()
+            roadsCamera = nil
+            refreshRoads()
+            FarqTiles.install(m, layer: layer, labels: labels)
+        }
+
         func setLabels(_ l: SatelliteLabels) {
             guard l != labels else { return }
             labels = l
-            if styleReady, let m = map?.mapboxMap { l.apply(m) }
+            if styleReady, let m = map?.mapboxMap {
+                l.apply(m)
+                FarqTiles.applyLabels(m, l)
+            }
         }
 
         func setTerrain3D(_ on: Bool) {
@@ -624,13 +658,18 @@ struct OutingMapboxView: UIViewRepresentable {
         /// Invisible, but drawn, so Mapbox Streets' road tiles load where the camera is (as on the web).
         private func ensureRoadProbe() {
             guard let m = map?.mapboxMap else { return }
+            /* Mapbox Streets stays for watercourses (the wadi hint); streets come from Farq once it answered. */
             if !m.sourceExists(withId: RoadSnap.source) {
                 try? m.addSource(withId: RoadSnap.source, properties: ["type": "vector", "url": "mapbox://mapbox.mapbox-streets-v8"])
             }
+            let probe = FarqTiles.probe
+            if !m.sourceExists(withId: probe.source) {
+                try? m.addSource(withId: probe.source, properties: ["type": "vector", "url": probe.url])
+            }
             if !m.layerExists(withId: RoadSnap.probeLayer) {
                 try? m.addLayer(with: [
-                    "id": RoadSnap.probeLayer, "type": "line", "source": RoadSnap.source, "source-layer": "road", "minzoom": 12,
-                    "filter": RoadSnap.drivableFilter, "paint": ["line-opacity": 0, "line-width": 1],
+                    "id": RoadSnap.probeLayer, "type": "line", "source": probe.source, "source-layer": probe.sourceLayer, "minzoom": 12,
+                    "filter": probe.filter, "paint": ["line-opacity": 0, "line-width": 1],
                 ], layerPosition: nil)
             }
             /* Same source: an invisible waterway layer so watercourse tiles load too (weather's wadi hint). */
@@ -678,7 +717,8 @@ struct OutingMapboxView: UIViewRepresentable {
             if roadsCameraMoved() { idleQueried = false }
             if idle { idleQueried = true }
             roadsCamera = (m.cameraState.center, m.cameraState.zoom)
-            roadQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["road"], filter: RoadSnap.drivableFilter)) { [weak self] result in
+            let probe = FarqTiles.probe
+            roadQuery = m.querySourceFeatures(for: probe.source, options: SourceQueryOptions(sourceLayerIds: [probe.sourceLayer], filter: probe.filter)) { [weak self] result in
                 guard let self, case let .success(feats) = result else { return }
                 var lines: [RoadSnap.RoadLine] = []
                 for q in feats {
@@ -693,7 +733,9 @@ struct OutingMapboxView: UIViewRepresentable {
                     switch f.identifier {
                     case let .string(s)?: key = "id:\(s)"
                     case let .number(n)?: key = "id:\(n)"
-                    default: key = "\(str("class")):\(str("name").isEmpty ? str("ref") : str("name"))"
+                    default:
+                        let name = [str("name"), str("name_ar"), str("ref")].first { !$0.isEmpty } ?? ""
+                        key = "\(str("class")):\(name)"
                     }
                     switch f.geometry {
                     case let .lineString(l)?: lines.append(.init(key: key, coords: l.coordinates.map { [$0.longitude, $0.latitude] }))

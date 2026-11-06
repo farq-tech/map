@@ -21,6 +21,10 @@ struct CarPlayInput {
     var trip: CarPlayTripProgress?
     var stuck: [CarPlayStuck] = []
     var convoy: CarPlayConvoy?
+    /// A member's voice note playing now («أبو فهد يتكلم»).
+    var talking: CarPlayTalking?
+    /// Why a member's position is not live (presence reasons, PR #114), by member id.
+    var presenceReasons: [String: String] = [:]
     var now = Date()
 
     var myPosition: LngLat? {
@@ -38,6 +42,13 @@ struct CarPlayInput {
         i.now = now
         return i
     }
+}
+
+/// Someone's voice note playing over the car speakers.
+struct CarPlayTalking: Equatable {
+    var noteId: String
+    var userId: String
+    var name: String
 }
 
 // MARK: - members («الأصحاب»)
@@ -136,6 +147,7 @@ enum CarPlayPresenter {
                 parts.append(dd?.text ?? "مباشر")
             case let .stale(since):
                 parts.append(ageText(since: since, now: i.now))
+                if let r = i.presenceReasons[m.user_id], !r.isEmpty { parts.append(r) }
                 if let dd { parts.append(ArabicFormat.distance(dd.m)) }
             case .paused:
                 parts.append("ما يشارك موقعه الحين")
@@ -183,6 +195,7 @@ enum CarPlayPresenter {
             case .recent: label += " · " + ArabicFormat.ago(max(0, i.now.timeIntervalSince1970 * 1000 - m.atMs))
             case .lost: label += " · انقطع"
             }
+            if m.presence != .live, let r = i.presenceReasons[m.id], !r.isEmpty { label += " · " + r }
             return CarPlayMapCar(id: m.id, position: m.position, color: m.color, label: label, live: m.presence == .live,
                                  heading: m.heading, isMe: m.isMe)
         }
@@ -232,13 +245,15 @@ enum CarPlayPresenter {
 // MARK: - guidance
 
 enum CarPlayTripKind: String, Equatable, CaseIterable {
-    case wayBack, rally, destination
+    /// `place`: a searched / recent place or a member («روح لفلان»); its label lives with the trip.
+    case wayBack, rally, destination, place
 
     var title: String {
         switch self {
-        case .wayBack: return "طريق الرجعة"
+        case .wayBack: return "طريق العودة"
         case .rally: return "إلى نقطة التجمع"
         case .destination: return "إلى الوجهة"
+        case .place: return "إلى المكان"
         }
     }
 
@@ -340,7 +355,7 @@ enum CarPlayGuide {
 struct CarPlayAlert: Equatable, Identifiable {
     enum Kind: Int, Equatable, Comparable {
         /// Lower raw value = more urgent.
-        case friendSOS = 0, stuck, offTrack, convoyGap, arrived
+        case friendSOS = 0, stuck, offTrack, convoyGap, arrived, talking
         static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
     }
 
@@ -355,7 +370,7 @@ struct CarPlayAlert: Equatable, Identifiable {
 
     /// Help requests stay until the driver acts; the rest time out.
     var sticky: Bool { kind == .friendSOS || kind == .stuck }
-    var durationS: TimeInterval { sticky ? 0 : 8 }
+    var durationS: TimeInterval { sticky ? 0 : (kind == .talking ? 5 : 8) }
 }
 
 enum CarPlayAlerts {
@@ -387,6 +402,11 @@ enum CarPlayAlerts {
         }
         if let w = i.convoy?.gapWarning, !w.isEmpty {
             out.append(CarPlayAlert(id: "convoy:\(w)", kind: .convoyGap, title: "القافلة", subtitle: w, since: i.now))
+        }
+        if let t = i.talking, t.userId != i.view?.myId {
+            /* A small banner while their note plays over the car speakers. */
+            out.append(CarPlayAlert(id: "talk:\(t.noteId)", kind: .talking, title: "\(CarPlayPresenter.shortName(t.name)) يتكلم",
+                                    subtitle: "رسالة صوتية", memberId: t.userId, since: i.now))
         }
         if let g = guidance, g.arrived {
             out.append(CarPlayAlert(id: "arrived:\(g.kind.rawValue)", kind: .arrived, title: g.instruction, subtitle: g.detail, since: i.now))

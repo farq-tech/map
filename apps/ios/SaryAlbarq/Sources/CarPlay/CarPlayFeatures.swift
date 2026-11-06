@@ -60,6 +60,9 @@ protocol CarPlayFeatureSource: AnyObject {
     var carPlayStuckReportSupported: Bool { get }
     /// «غرّزت» from the car. Return false when the feature is not available.
     func carPlayReportStuck() -> Bool
+    /// Why a member's position is not live («الجوال مقفل», «بلا إنترنت», …) — presence
+    /// reasons from fix/always-live (PR #114). Nil = no reason known (CarPlay shows the age only).
+    func carPlayPresenceReason(_ memberId: String) -> String?
 }
 
 extension CarPlayFeatureSource {
@@ -69,6 +72,7 @@ extension CarPlayFeatureSource {
     func carPlayConvoy() -> CarPlayConvoy? { nil }
     var carPlayStuckReportSupported: Bool { false }
     func carPlayReportStuck() -> Bool { false }
+    func carPlayPresenceReason(_ memberId: String) -> String? { nil }
 }
 
 // MARK: - turn-by-turn road navigation (seam for feat/ios-navigation)
@@ -83,6 +87,24 @@ struct CarPlayRoadManeuver: Equatable {
     var distanceM: Double
     /// SF Symbol for the turn arrow («arrow.turn.up.right», …).
     var symbol: String
+    /// The router's time for this step (traffic-aware with Mapbox), seconds; nil = unknown.
+    var durationS: Double? = nil
+    /// Lanes at this maneuver (empty = no lane data).
+    var lanes: [NavLane] = []
+    /// `CPManeuverType` name («rightTurn», «roundaboutExit2», …); nil = not known.
+    var cpManeuverType: String? = nil
+}
+
+/// One road route offered on the trip preview («الأسرع», «الأقصر»).
+struct CarPlayRouteOption: Equatable {
+    var id: String
+    var distanceM: Double
+    var durationS: Double
+    /// «عبر طريق الملك فهد».
+    var via: String?
+    var hasUnpaved = false
+    /// The route geometry (the preview draws the selected one).
+    var line: [LngLat] = []
 }
 
 /// Progress of the active road route (CPTravelEstimates + upcoming maneuvers).
@@ -113,10 +135,39 @@ protocol CarPlayRoadNavigationSource: AnyObject {
     func carPlayStartRoadRoute(to target: LngLat, label: String) -> Bool
     /// «إنهاء» on CarPlay.
     func carPlayStopRoadRoute()
+    /// Plan road routes to a point WITHOUT starting guidance (the CarPlay trip preview).
+    /// `memberId`: «روح لفلان». False when no road routing exists.
+    func carPlayPlanRoadRoute(to target: LngLat, label: String, memberId: String?) -> Bool
+    /// The planned routes, best first; empty while planning or when routing failed.
+    func carPlayRouteOptions() -> [CarPlayRouteOption]
+    /// Planning ended without a road route (no road near, no network): CarPlay falls back.
+    var carPlayPlanFailed: Bool { get }
+    /// «يلّا» on the preview: start guidance on that route.
+    func carPlayStartGuidance(routeId: String)
 }
 
 extension CarPlayRoadNavigationSource {
     func carPlayStartRoadRoute(to target: LngLat, label: String) -> Bool { false }
+    func carPlayPlanRoadRoute(to target: LngLat, label: String, memberId: String?) -> Bool { false }
+    func carPlayRouteOptions() -> [CarPlayRouteOption] { [] }
+    var carPlayPlanFailed: Bool { false }
+    func carPlayStartGuidance(routeId: String) {}
+}
+
+// MARK: - walkie-talkie in the car (seam over VoiceNoteCenter)
+
+/// «أبو فهد يتكلم» and «اضغط وسجّل» from the car. The phone's `VoiceNoteCenter` adopts it
+/// (CarPlayWiring.swift); playback goes through the phone's own audio session, which iOS
+/// routes to the car speakers.
+@MainActor
+protocol CarPlayWalkieSource: AnyObject {
+    /// The note playing right now (someone else's): id + display name.
+    var carPlayTalking: (id: String, userId: String, name: String)? { get }
+    var carPlayRecording: Bool { get }
+    /// Idle → start recording; recording → send (the phone's own talk button).
+    func carPlayTalkTapped()
+    func carPlayCancelRecording()
+    func carPlayStopPlaying()
 }
 
 /// Where feature branches register. Weak: CarPlay never keeps a screen's controller alive.

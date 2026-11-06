@@ -23,17 +23,20 @@ enum CityBuildings {
     /// The fill-extrusion layer: sand walls (lighter stone for towers), light roofs (the sun lights
     /// the tops, a vertical gradient grounds the walls), soft ambient occlusion where walls meet
     /// the ground, grown in over half a zoom level so nothing pops.
-    static func layer(id: String, source: String, opacity: Double) -> [String: Any] {
+    /// `atlas`: Farq Atlas footprints (`FarqTiles`, layer «buildings»: `height` in metres, no `extrude` /
+    /// `underground` flags); otherwise Mapbox Streets' «building» layer.
+    static func layer(id: String, source: String, opacity: Double, sourceLayer: String = "building", atlas: Bool = false) -> [String: Any] {
         [
             "id": id,
             "type": "fill-extrusion",
             "source": source,
-            "source-layer": "building",
+            "source-layer": sourceLayer,
             "minzoom": minZoom,
             /* Only what stands tall: low-rise blocks barely lean in the photo and read better as imagery
                (as boxes they bury whole districts in sand-coloured slabs). */
-            "filter": ["all", ["==", ["get", "extrude"], "true"], ["==", ["get", "underground"], "false"],
-                       [">=", ["coalesce", ["get", "height"], 0], minHeight]],
+            "filter": atlas ? [">=", ["coalesce", ["get", "height"], 0], minHeight] as [Any]
+                : ["all", ["==", ["get", "extrude"], "true"], ["==", ["get", "underground"], "false"],
+                   [">=", ["coalesce", ["get", "height"], 0], minHeight]] as [Any],
             "layout": ["fill-extrusion-edge-radius": 0.3],
             "paint": [
                 "fill-extrusion-color": ["interpolate", ["linear"], ["coalesce", ["get", "height"], 0],
