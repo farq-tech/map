@@ -428,6 +428,23 @@ final class ChatStore: ObservableObject {
         return false
     }
 
+    /// «إلغاء الحظر»: the server is told and the local copy cleared. The chat shows his messages
+    /// again on its next load (the `insert` filter no longer drops them).
+    @discardableResult
+    func unblock(_ userId: String) async -> Bool {
+        guard let mod = backend as? ChatModerationBackend else { return false }
+        do {
+            try await mod.unblockUser(userId)
+            BlockedUsers.remove(userId, defaults: defaults)
+            return true
+        } catch let e as OutingAPIError {
+            lastError = ChatRules.errorText(e.code)
+        } catch {
+            lastError = ChatRules.errorText("network")
+        }
+        return false
+    }
+
     private func hideSender(_ userId: String, name: String?) {
         BlockedUsers.add(userId, name: name, defaults: defaults)
         for (w, var t) in threads {

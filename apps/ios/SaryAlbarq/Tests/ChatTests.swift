@@ -402,8 +402,12 @@ final class ChatModerationTests: XCTestCase {
         /* a late frame from him (old server) is still hidden */
         s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(6, from: ChatTests.fahd))])
         XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd })
-        BlockedUsers.remove(ChatTests.fahd, defaults: defaults)
+        /* «إلغاء الحظر» (الإعدادات ← المحظورين): his messages are no longer filtered — a reload shows them. */
+        await s.unblock(ChatTests.fahd)
+        XCTAssertEqual(b.blocked, [], "the server is told too")
         XCTAssertTrue(BlockedUsers.load(defaults).isEmpty)
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(7, from: ChatTests.fahd))])
+        XCTAssertTrue(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd }, "restored after unblock")
     }
 
     func testABackendWithoutModerationOffersNoReport() {

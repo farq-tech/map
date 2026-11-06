@@ -421,11 +421,12 @@ struct ChatThreadView: View {
                     .accessibilityIdentifier("chat.report.block")
             } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
                 .accessibilityIdentifier("chat.menu.report")
-            Menu {
-                Button("احظر", role: .destructive) { Task { await chat.block(m.sender_id, name: senderName(m)) } }
-                    .accessibilityIdentifier("chat.block.confirm")
-            } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
-                .accessibilityIdentifier("chat.menu.block")
+            /* Direct (no submenu/sheet): blocks at once — reversible from الإعدادات ← المحظورين, so
+             * no destructive confirm. A submenu cannot be driven from a context menu by XCUITest. */
+            Button(role: .destructive) { Task { await chat.block(m.sender_id, name: senderName(m)) } } label: {
+                Label("احظر \(senderName(m))", systemImage: "hand.raised.fill")
+            }
+            .accessibilityIdentifier("chat.menu.block")
         }
         if chat.canDelete(m) {
             Button(role: .destructive) { Task { await chat.delete(m) } } label: {

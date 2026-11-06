@@ -70,41 +70,34 @@ final class ChatUITests: XCTestCase {
         shot(app, "chat-04-conversations-after")
     }
 
-    /// App Store 1.2: long-press a friend's message → «بلّغ عن الرسالة» (a reason) and «احظر فلان»
-    /// (his messages go). «المحظورين» in Settings is covered by unit tests.
-    func testReportAndBlockFromAMessageThenUnblockInSettings() {
+    /// App Store 1.2: the message context menu offers «بلّغ عن الرسالة» and «احظر فلان», and
+    /// blocking removes that sender's bubbles from the chat. (The reason picker is a submenu that
+    /// XCUITest cannot open; it is covered in ChatModerationTests. Settings → «المحظورين» → «إلغاء
+    /// الحظر» restoring messages is covered there too.)
+    func testReportAndBlockFromAMessage() {
         let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
         let entry = any(app, "chat.entry")
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
         entry.tap()
         XCTAssertTrue(any(app, "chat.row.group").waitForExistence(timeout: 5))
         any(app, "chat.row.group").tap()
-        let bubble = app.descendants(matching: .any).matching(identifier: "chat.bubble").firstMatch
-        XCTAssertTrue(bubble.waitForExistence(timeout: 5), "a friend's message")
+        /* «أبو فهد» greets the group at the top of the demo chat: his bubble is the one we act on. */
+        let his = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "هلا بالشباب")).firstMatch
+        XCTAssertTrue(his.waitForExistence(timeout: 5), "a friend's message")
         let before = app.descendants(matching: .any).matching(identifier: "chat.bubble").count
 
-        bubble.press(forDuration: 1.0)
-        let report = app.buttons["chat.menu.report"].exists ? app.buttons["chat.menu.report"] : app.buttons["بلّغ عن الرسالة"]
-        XCTAssertTrue(report.waitForExistence(timeout: 4), "«بلّغ عن الرسالة» in the menu")
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch.exists, "«احظر فلان» in the menu")
-        shot(app, "chat-10-message-menu")
-        report.tap()
-        let reason = app.buttons["كلام مسيء أو سب"]
-        XCTAssertTrue(reason.waitForExistence(timeout: 4), "the reasons")
-        shot(app, "chat-11-report-reasons")
-        reason.tap()
-        XCTAssertTrue(any(app, "chat.notice").waitForExistence(timeout: 5), "«وصل بلاغك…»")
-
-        bubble.press(forDuration: 1.0)
+        his.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["chat.menu.report"].waitForExistence(timeout: 4) || app.buttons["بلّغ عن الرسالة"].waitForExistence(timeout: 1), "«بلّغ عن الرسالة» in the menu")
         let block = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch
-        XCTAssertTrue(block.waitForExistence(timeout: 4))
+        XCTAssertTrue(block.waitForExistence(timeout: 4), "«احظر فلان» in the menu")
+        shot(app, "chat-10-message-menu")
+
+        /* Block him: his bubbles leave the chat (the server also filters; the phone hides at once). */
         block.tap()
-        let confirm = app.buttons["chat.block.confirm"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 4), "asks before blocking")
-        confirm.tap()
         let fewer = NSPredicate { _, _ in app.descendants(matching: .any).matching(identifier: "chat.bubble").count < before }
-        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: fewer, object: nil)], timeout: 5), .completed, "his messages are gone")
-        shot(app, "chat-12-after-block")
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: fewer, object: nil)], timeout: 6), .completed, "his messages are gone")
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "هلا بالشباب")).firstMatch.exists, "his greeting is gone")
+        shot(app, "chat-11-after-block")
     }
 
     func testPlusOpensChatsInTwoTaps() {
