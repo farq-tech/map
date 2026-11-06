@@ -144,13 +144,13 @@ final class TripAutoNavUITests: XCTestCase {
     /// Build 21 regression: guidance on, my only fix 5 minutes old. Never silent: «ننتظر موقعك…»,
     /// then the guidance starts by itself with the first fresh fix.
     func testOldFixWaitsVisiblyThenGuidanceStartsByItself() {
-        let app = launch(Self.on + ["-SaryStaleFixThenFresh", "8"])
-        XCTAssertTrue(el(app, "nav.waitFix").waitForExistence(timeout: 8), "«ننتظر موقعك…» is shown")
+        let app = launch(Self.on + ["-SaryStaleFixThenFresh", "25"])
+        XCTAssertTrue(el(app, "nav.waitFix.text").waitForExistence(timeout: 15), "«ننتظر موقعك…» is shown")
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'ننتظر موقعك'")).firstMatch.exists)
         XCTAssertFalse(el(app, "nav.banner").exists, "no guidance from a 5-minute-old fix")
         shot(app, "autonav-wait-fix")
-        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 20), "starts by itself with the fresh fix")
-        XCTAssertTrue(el(app, "nav.waitFix").waitForNonExistence(timeout: 5))
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 40), "starts by itself with the fresh fix")
+        XCTAssertTrue(el(app, "nav.waitFix.text").waitForNonExistence(timeout: 5))
     }
 
     func testArrivalSaysWasaltuAndStops() {
