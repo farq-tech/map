@@ -644,7 +644,7 @@ final class OutingSession: ObservableObject, Identifiable {
             let name = v.members[e.u]?.display_name ?? ""
             switch e.k {
             case .sos:
-                Notifier.post(title: "طوارئ: \(name)", body: "يطلب فزعة · عبر الأجهزة القريبة", outingId: id, kind: "sos")
+                Notifier.post(title: "طوارئ: \(name)", body: "يحتاج مساعدة · عبر الأجهزة القريبة", outingId: id, kind: "sos")
             case .stuck:
                 Notifier.post(title: "\(name) غرّز", body: e.text.map { "\($0) · عبر الأجهزة القريبة" } ?? "عبر الأجهزة القريبة", outingId: id, kind: "sos")
             default:
@@ -873,7 +873,7 @@ final class OutingSession: ObservableObject, Identifiable {
         case let .memberNote(uid, note?) where uid != v.myId && before.members[uid]?.note != note:
             Notifier.post(title: v.members[uid]?.display_name ?? "ملاحظة جديدة", body: note.text, outingId: id, kind: "note")
         case let .sos(uid, sos?, refresh) where uid != v.myId && !refresh:
-            Notifier.post(title: "طوارئ: \(v.members[uid]?.display_name ?? "")", body: sos.fix == nil ? "يطلب فزعة (بدون موقع)" : "يطلب فزعة الآن", outingId: id, kind: "sos")
+            Notifier.post(title: "طوارئ: \(v.members[uid]?.display_name ?? "")", body: sos.fix == nil ? "يحتاج مساعدة (بدون موقع)" : "يحتاج مساعدة الحين", outingId: id, kind: "sos")
         case let .sos(uid, nil, _):
             mesh.serverClearedSOS(uid)
         case let .memberLeft(uid) where uid == v.myId:

@@ -368,7 +368,7 @@ enum CarPlayAlerts {
                 guard let s = m.sos else { continue }
                 let row = rows[m.user_id]
                 out.append(CarPlayAlert(id: LiveOutingPresenter.sosKey(m.user_id, s), kind: .friendSOS,
-                                        title: "\(CarPlayPresenter.shortName(m.display_name)) يطلب فزعة",
+                                        title: "\(CarPlayPresenter.shortName(m.display_name)) يحتاج مساعدة",
                                         subtitle: sosSubtitle(m, s, i: i, view: v), memberId: m.user_id, phone: row?.phone,
                                         position: row?.position, since: LiveOutingPresenter.deviceDate(s.at, view: v) ?? i.now))
             }

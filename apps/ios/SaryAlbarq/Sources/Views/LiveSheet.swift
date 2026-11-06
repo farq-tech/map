@@ -545,7 +545,7 @@ struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل للعيال ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه إلى Mapbox فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -564,7 +564,7 @@ struct TrailSettingsSection: View {
                 .padding(.bottom, theme.space(.s))
             }
             SaryDivider()
-            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها (Mapbox) · في البر يبقى كما سجّله GPS", systemImage: "road.lanes",
+            SaryToggleRow(title: "طابق مساري مع الطرق", subtitle: "يرسمه على الشوارع اللي مشيت فيها · في البر يبقى مثل ما سجّله الجوال", systemImage: "road.lanes",
                           isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
                 .disabled(!card.recordingOn)
             SaryDivider()

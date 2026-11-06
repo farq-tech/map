@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - SOS hold-to-fire
 
@@ -36,10 +37,18 @@ struct SarySOSButton: View {
                 ProgressView().tint(p.onEmergency).controlSize(.regular)
             } else {
                 if compactLabel && !active {
-                    Text("SOS")
-                        .font(.system(size: max(14, size * 0.26), weight: .heavy, design: .rounded))
-                        .foregroundStyle(p.onEmergency)
-                        .environment(\.layoutDirection, .leftToRight)
+                    /* UX ٢١: «SOS» alone is English; «طوارئ» goes with it. */
+                    VStack(spacing: 0) {
+                        Text("SOS")
+                            .font(.system(size: max(13, size * 0.24), weight: .heavy, design: .rounded))
+                            .environment(\.layoutDirection, .leftToRight)
+                        Text("طوارئ")
+                            .font(.sary(max(9, size * 0.15), .heavy))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .dynamicTypeSize(...DynamicTypeSize.large)
+                    }
+                    .foregroundStyle(p.onEmergency)
                 } else {
                 VStack(spacing: 0) {
                     Image(systemName: active ? SaryIcon.checkCircle : SaryIcon.sos)
@@ -85,9 +94,10 @@ struct SarySOSButton: View {
         .sensoryFeedback(.warning, trigger: fired)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(active ? "تم إرسال طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
-        .accessibilityHint(Text("اضغط مطولًا ثانية واحدة لإرسال طوارئ لكل أعضاء الطلعة"))
+        .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الربع"))
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: Text("أرسل طوارئ الآن")) { fire() }
+        /* VoiceOver: the system already confirms a custom action, so this one sends at once. */
+        .accessibilityAction(named: Text("أرسل طوارئ الآن")) { fired += 1; trigger() }
         .accessibilityIdentifier("outing-sos")
     }
 
@@ -121,9 +131,133 @@ struct SarySOSButton: View {
         stage = 0
     }
 
+    /// UX ٢١: a held SOS does not go out at once — «نرسل طوارئ بعد ٣…» with a big «تراجع».
     private func fire() {
         fired += 1
-        trigger()
+        SOSCountdown.shared.begin(theme: theme, send: trigger)
+    }
+}
+
+// MARK: - SOS countdown («تراجع»)
+
+/// After the hold: 3 s, over everything (its own window, above the sheets and the SOS window),
+/// with a 56 pt «تراجع» and «أرسل الآن». One countdown at a time; a second hold does nothing.
+@MainActor
+final class SOSCountdown: ObservableObject {
+    static let shared = SOSCountdown()
+    /// How long the «تراجع» window lasts.
+    static let seconds = 3
+
+    @Published private(set) var remaining: Int? = nil
+    private var send: (() -> Void)?
+    private var tick: Task<Void, Never>?
+    private var window: UIWindow?
+
+    var isRunning: Bool { remaining != nil }
+
+    func begin(theme: SaryTheme, send: @escaping () -> Void) {
+        guard remaining == nil else { return }
+        self.send = send
+        remaining = Self.seconds
+        show(theme)
+        UIAccessibility.post(notification: .announcement, argument: "نرسل طوارئ بعد ٣ ثوانٍ. تقدر تتراجع")
+        tick = Task { @MainActor [weak self] in
+            while let self, let r = self.remaining, r > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                self.remaining = r - 1
+            }
+            self?.sendNow()
+        }
+    }
+
+    func cancel() {
+        tick?.cancel()
+        send = nil
+        remaining = nil
+        hide()
+        UIAccessibility.post(notification: .announcement, argument: "تراجعت، ما أرسلنا شي")
+    }
+
+    func sendNow() {
+        tick?.cancel()
+        let s = send
+        send = nil
+        remaining = nil
+        hide()
+        s?()
+    }
+
+    private func show(_ theme: SaryTheme) {
+        guard window == nil,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        else { return }
+        let w = UIWindow(windowScene: scene)
+        w.windowLevel = .alert + 1
+        w.backgroundColor = .clear
+        let host = UIHostingController(rootView: SOSCountdownView(center: self).environment(\.sary, theme))
+        host.view.backgroundColor = .clear
+        w.rootViewController = host
+        w.isHidden = false
+        window = w
+    }
+
+    private func hide() {
+        window?.isHidden = true
+        window = nil
+    }
+}
+
+struct SOSCountdownView: View {
+    @ObservedObject var center: SOSCountdown
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(spacing: theme.space(.l)) {
+                Text("نرسل طوارئ بعد")
+                    .saryText(.title2, weight: .bold)
+                    .foregroundStyle(p.onEmergency)
+                Text(SaryFormat.number(center.remaining ?? 0))
+                    .font(.system(size: 96, weight: .heavy, design: .rounded))
+                    .foregroundStyle(p.onEmergency)
+                    .contentTransition(.numericText(countsDown: true))
+                    .accessibilityIdentifier("sos-countdown-seconds")
+                Text("توصل لكل الربع مع موقعك")
+                    .saryText(.callout, weight: .medium)
+                    .foregroundStyle(p.onEmergency.opacity(0.9))
+                Button(action: center.cancel) {
+                    Text("تراجع")
+                        .font(.sary(22, .heavy))
+                        .foregroundStyle(p.emergency)
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .background(Capsule().fill(Color.white))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityIdentifier("sos-countdown-cancel")
+                .accessibilityHint(Text("يلغي الطوارئ قبل ما ترسل"))
+                Button(action: center.sendNow) {
+                    Text("أرسل الآن")
+                        .font(.sary(17, .bold))
+                        .foregroundStyle(p.onEmergency)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .overlay(Capsule().stroke(p.onEmergency.opacity(0.8), lineWidth: 2))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityIdentifier("sos-countdown-send")
+            }
+            .padding(theme.space(.xl))
+            .frame(maxWidth: 360)
+            .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(p.emergency))
+            .padding(theme.space(.l))
+            .animation(theme.animation(.snappy), value: center.remaining)
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sos-countdown")
     }
 }
 
@@ -139,6 +273,8 @@ struct SaryMySOSStrip: View {
     /// «اطلب إنجاد» (nil: not offered).
     var enjad: (() -> Void)? = nil
     @Environment(\.sary) private var theme
+    /// UX ٢١: stopping a sent SOS asks first (one slip must not call it off).
+    @State private var confirmOK = false
 
     var body: some View {
         let p = theme.palette
@@ -152,7 +288,7 @@ struct SaryMySOSStrip: View {
                     .saryText(.footnote, weight: .medium).opacity(0.9)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: imOK) {
+            Button { confirmOK = true } label: {
                 Text("أنا بخير").saryText(.callout, weight: .heavy)
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
@@ -161,6 +297,14 @@ struct SaryMySOSStrip: View {
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("outing-sos-ok")
+            .accessibilityHint(Text("يسألك قبل ما يوقف الطوارئ"))
+            .confirmationDialog("نوقف الطوارئ؟", isPresented: $confirmOK, titleVisibility: .visible) {
+                Button("إيه، أنا بخير", role: .destructive, action: imOK)
+                    .accessibilityIdentifier("outing-sos-ok-confirm")
+                Button("لا، خلها", role: .cancel) {}
+            } message: {
+                Text("يوصل للربع إنك بخير ويختفي تنبيهك عندهم.")
+            }
             if let enjad {
                 Button(action: enjad) {
                     Text("إنجاد").saryText(.callout, weight: .heavy)
@@ -270,7 +414,7 @@ struct SaryFriendSOSAlert: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
-                    Text("يحتاج فزعة · \(SaryFormat.elapsed(since: alert.since, now: now))")
+                    Text("يحتاج مساعدة · \(SaryFormat.elapsed(since: alert.since, now: now))")
                         .saryText(.title2, weight: .medium)
                         .opacity(0.92)
                 }

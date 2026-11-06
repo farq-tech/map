@@ -150,7 +150,7 @@ struct PlanEditorView: View {
                         tool(drawing ? "إيقاف الرسم" : "ارسم", drawing ? "pencil.slash" : "pencil.tip", id: "plan.draw", active: drawing) { drawing.toggle() }
                         tool("تراجع", "arrow.uturn.backward", id: "plan.undo", disabled: undo.isEmpty) { if let last = undo.popLast() { draft = last } }
                         tool("امسح", "trash", id: "plan.clear", disabled: draft.isEmpty) { confirmClear = true }
-                        tool("استورد GPX/KML", "square.and.arrow.down", id: "plan.import", busy: importBusy) { importing = true }
+                        tool("استورد ملف مسار", "square.and.arrow.down", id: "plan.import", busy: importBusy) { importing = true }
                         tool("النهاية وجهة", "flag.checkered", id: "plan.endAsDestination", disabled: draft.count < 2) {
                             if let e = draft.last { destination = OutingDestination(name: destination?.name ?? "نهاية المسار", lat: e.lat, lng: e.lng) }
                         }
@@ -161,7 +161,7 @@ struct PlanEditorView: View {
                 Text(notes).saryText(.subhead).foregroundStyle(p.textSecondary).lineLimit(4)
             }
             if plan.plan.hasRoute || plan.plan.destination != nil {
-                Button { exportGPX() } label: { SaryButtonLabel(title: "صدّر الخطة GPX", systemImage: SaryIcon.share) }
+                Button { exportGPX() } label: { SaryButtonLabel(title: "صدّر الخطة كملف مسار", systemImage: SaryIcon.share) }
                     .buttonStyle(.sary(.secondary, compact: true))
                     .accessibilityIdentifier("plan.export")
             }

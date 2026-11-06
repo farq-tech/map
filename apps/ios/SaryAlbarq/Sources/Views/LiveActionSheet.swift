@@ -71,7 +71,7 @@ enum LiveActionCatalog {
             LiveActionGroup(title: "السلامة", items: [
                 .init(id: "stuck", title: s.stuck ? "أنا مغرّز" : "غرّزت", systemImage: "car.side.rear.and.collision.and.car.side.front",
                       accessibilityID: "outing-stuck", isActive: s.stuck, tone: .emergency),
-                .init(id: "enjad", title: "اطلب فزعة (إنجاد)", systemImage: "lifepreserver", accessibilityID: "outing-enjad", tone: .emergency),
+                .init(id: "enjad", title: "اتصل بإنجاد", systemImage: "lifepreserver", accessibilityID: "outing-enjad", tone: .emergency),
                 .init(id: "timer", title: "مؤقت الرجوع", systemImage: "timer", accessibilityID: "outing-timer"),
             ]),
             LiveActionGroup(title: "المكان", items: [

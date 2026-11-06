@@ -244,7 +244,7 @@ final class OfflineMaps: ObservableObject {
     static func arabic(_ e: Error) -> String {
         if let t = e as? TileRegionError {
             switch t {
-            case .tileCountExceeded: return "المنطقة كبيرة جدًا على حد Mapbox. صغّرها."
+            case .tileCountExceeded: return "المنطقة كبيرة مرة. صغّرها."
             case .diskFull: return "لا توجد مساحة كافية في الجوال."
             default: break
             }

@@ -113,7 +113,7 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertEqual(ShareMemory.joinStatement, JoinCopy.statement, "same line on the creator's last step and «انضم برابط»")
         XCTAssertEqual(JoinCopy.button, "انضم للطلعة")
-        XCTAssertEqual(JoinCopy.prePromptTitle, "عشان العيال يشوفونك وتوصلك الفزعة", "the Najdi pre-prompt, before the system alert")
+        XCTAssertEqual(JoinCopy.prePromptTitle, "عشان الربع يشوفونك وتوصلهم الطوارئ", "the Najdi pre-prompt, before the system alert")
         XCTAssertTrue(JoinCopy.prePromptDetail.contains("السماح أثناء استخدام التطبيق"))
         XCTAssertNotEqual(JoinCopy.needsTitle(.denied), JoinCopy.needsTitle(.reduced))
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))

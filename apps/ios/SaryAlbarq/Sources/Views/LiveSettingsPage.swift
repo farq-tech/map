@@ -77,7 +77,7 @@ struct LiveSettingsPage: View {
             Button(action: back) {
                 Image(systemName: SaryIcon.back).font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(theme.palette.textPrimary)
-                    .frame(width: 36, height: 36).background(Circle().fill(theme.palette.sunken))
+                    .frame(width: 44, height: 44).background(Circle().fill(theme.palette.sunken))
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text("رجوع"))
@@ -85,7 +85,7 @@ struct LiveSettingsPage: View {
             Text(title).font(.sary(20, .bold)).foregroundStyle(theme.palette.textPrimary).accessibilityAddTraits(.isHeader)
             Spacer()
             if !controller.tripEnded {
-                SarySOSButton(state: controller.ui.sos.mine, trigger: controller.actions.sos.trigger, size: 36, compactLabel: true)
+                SarySOSButton(state: controller.ui.sos.mine, trigger: controller.actions.sos.trigger, size: 44, compactLabel: true)
                     .padding(6)
             }
         }
@@ -99,7 +99,7 @@ struct LiveSettingsPage: View {
     private func page(_ p: Page) -> some View {
         switch p {
         case .tripType:
-            sub("نوع الطلعة", footer: "مشي، كشتة، رحلة أو قافلة، بحث ومسح: يحدد وش يظهر على الشاشة. قريبًا (البناء ١٩).") {
+            sub("نوع الطلعة", footer: "مشي، كشتة، طلعة أو قافلة، بحث ومسح: يحدد وش يظهر على الشاشة. قريبًا.") {
                 Text("قريبًا").font(.sary(16, .bold)).foregroundStyle(theme.palette.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 80)
                     .accessibilityIdentifier("settings.tripType.soon")
@@ -135,7 +135,7 @@ struct LiveSettingsPage: View {
                 TrailSettingsSection(controller: controller, card: controller.trailCard)
             }
         case .defaultChannel:
-            sub("التردد الافتراضي", footer: "التردد اللي تنضم له أول ما تبدأ طلعة جديدة. تقدر تغيّره في أي وقت من «تردد ١» تحت «اضغط وتكلم».") {
+            sub("التردد الافتراضي", footer: "التردد اللي تنضم له أول ما تبدأ طلعة جديدة. تقدر تغيّره في أي وقت من «تردد ١» تحت زر اللاسلكي.") {
                 ForEach(Array(PTTChannels.publicIds.enumerated()), id: \.element) { i, c in
                     choice(PTTChannels.publicName(c), on: PTTChannels.preferredDefault == c, id: "settings.channel.\(c)", last: i == PTTChannels.publicIds.count - 1) {
                         PTTChannels.preferredDefault = c
@@ -144,7 +144,7 @@ struct LiveSettingsPage: View {
                 }
             }
         case .talkMode:
-            sub("طريقة اللاسلكي", footer: "«رسالة صوتية»: اضغط وسجّل (لين دقيقة)، ثم «أرسل». توصل لكل اللي على ترددك وتشتغل عندهم لحالها، ولو انقطع النت شوي توصل أول ما يرجع. «مباشر (تجريبي)»: اضغط مطولًا وتكلم على الهواء، ويحتاج اتصال قوي عند الكل.") {
+            sub("طريقة اللاسلكي", footer: "«رسالة صوتية»: اضغط وسجّل (لين دقيقة)، ثم «أرسل». توصل لكل اللي على ترددك وتشتغل عندهم لحالها، ولو انقطع النت شوي توصل أول ما يرجع. «بث مباشر»: امسك الزر وتكلم على الهواء، ويحتاج شبكة قوية عند الكل.") {
                 ForEach(Array(PTTTalkMode.allCases.enumerated()), id: \.element) { i, m in
                     choice(m.label, on: talkMode == m, id: "settings.talkMode.\(m.rawValue)", last: i == PTTTalkMode.allCases.count - 1) {
                         talkMode = m

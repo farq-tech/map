@@ -26,7 +26,7 @@ enum PTTTalkMode: String, CaseIterable, Hashable {
     var label: String {
         switch self {
         case .notes: "رسالة صوتية"
-        case .live: "مباشر (تجريبي)"
+        case .live: "بث مباشر"
         }
     }
 }

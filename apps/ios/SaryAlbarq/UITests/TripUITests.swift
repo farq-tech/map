@@ -79,7 +79,7 @@ final class TripUITests: XCTestCase {
         let end = app.buttons["trip.end"]
         XCTAssertTrue(end.waitForExistence(timeout: 5))
         end.tap()
-        let confirm = app.buttons["أنهِ الرحلة للجميع"]
+        let confirm = app.buttons["أنهِ الطلعة للجميع"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
 

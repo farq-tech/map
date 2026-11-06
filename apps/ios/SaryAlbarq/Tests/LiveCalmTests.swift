@@ -18,8 +18,8 @@ final class LiveCalmTests: XCTestCase {
 
     func testConvoyLineAloneOrWithoutDistances() {
         XCTAssertNil(LiveCalmRules.convoyLine([p("me", me: true, .live, nil)]), "alone: nothing to say")
-        XCTAssertEqual(LiveCalmRules.convoyLine([p("me", me: true, .live, nil), p("a", .stale(since: Date()), 300)]), "٠ مباشر",
-                       "a stale friend's old distance is not «الأبعد»")
+        XCTAssertNil(LiveCalmRules.convoyLine([p("me", me: true, .live, nil), p("a", .stale(since: Date()), 300)]),
+                     "nobody live: no «٠ مباشر», and a stale friend's old distance is not «الأبعد»")
     }
 
     // MARK: the map's side
@@ -62,7 +62,7 @@ final class LiveCalmTests: XCTestCase {
         XCTAssertTrue(Set(LiveActionCatalog.groups(.init(guideAllTarget: "روضة")).flatMap(\.items).map(\.id)).isSuperset(of: trip),
                       "and in the tools, as in Lovable")
         /* Lovable's tiles, in its sections. */
-        XCTAssertEqual(groups.first { $0.title == "السلامة" }?.items.map(\.title), ["غرّزت", "اطلب فزعة (إنجاد)", "مؤقت الرجوع"])
+        XCTAssertEqual(groups.first { $0.title == "السلامة" }?.items.map(\.title), ["غرّزت", "اتصل بإنجاد", "مؤقت الرجوع"])
         XCTAssertEqual(groups.first { $0.title == "الخريطة" }?.items.prefix(4).map(\.title), ["الطبقات", "صور عالية الوضوح", "الوضع الواقعي", "المؤثرات"])
         /* Every action the old «+» had is still one or two taps away. */
         let old: Set<String> = ["navigate", "search", "backtrack", "chat", "note", "stuck", "waypoint", "nearest", "weather", "radio", "youtube", "explore"]
@@ -137,7 +137,17 @@ final class LiveCalmTests: XCTestCase {
     func testTimings() {
         XCTAssertEqual(VisualsSourceView.sourceSeconds, 5, "«الأجواء من الطقس» folds after 5 s")
         XCTAssertEqual(NoteFold.seconds, 10, "a note bubble folds to an icon after 10 s")
-        XCTAssertEqual(SaryPTTButton.quietSeconds, 5, "«القناة غير متاحة» spelled out for 5 s")
+    }
+
+    /// UX ٢١: the talk button says what it does in each «طريقة اللاسلكي».
+    func testPTTLabelsFollowTheTalkMode() {
+        XCTAssertEqual(SaryPTTButton.label(for: .idle, notes: true), "سجّل رسالة")
+        XCTAssertEqual(SaryPTTButton.label(for: .idle, notes: false), "اضغط وتكلم")
+        XCTAssertEqual(SaryPTTButton.label(for: .talking(seconds: 5, remaining: 55), notes: true), "يسجّل ٠:٠٥")
+        XCTAssertEqual(SaryPTTButton.label(for: .talking(seconds: 5, remaining: 55), notes: false), "على الهواء ٠:٠٥")
+        XCTAssertEqual(SaryPTTButton.label(for: .listening(name: "فهد", color: 0), notes: true), "رسالة من فهد")
+        XCTAssertEqual(SaryPTTButton.label(for: .listening(name: "فهد", color: 0), notes: false), "فهد يتكلم")
+        XCTAssertEqual(SaryPTTButton.label(for: .unavailable, notes: false), "اللاسلكي واقف · ما فيه شبكة", "persistent, with the reason")
     }
 
     func testSourceLineFoldsAndComesBackWhenItChanges() {

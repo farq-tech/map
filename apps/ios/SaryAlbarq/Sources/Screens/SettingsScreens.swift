@@ -142,14 +142,14 @@ struct SettingsView: View {
                 SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
                            id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
-            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت العيال بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+            SarySection(title: "اللاسلكي", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الربع بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     HStack(spacing: theme.space(.m)) {
                         SaryRowIcon(systemImage: "waveform")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("طريقة اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
                             Text(talkMode == .notes ? "اضغط وسجّل، ثم «أرسل»: توصل لكل اللي على ترددك ولو انقطع النت شوي"
-                                                    : "اضغط مطولًا وتكلم مباشرة — يحتاج اتصال قوي عند الكل")
+                                                    : "امسك الزر وتكلم مباشرة · يحتاج شبكة قوية عند الكل")
                                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
                         }
                     }
@@ -182,7 +182,7 @@ struct SettingsView: View {
             SarySection(title: "الخرائط والبيانات") {
                 SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
                 SaryDivider()
-                SaryNavRow(title: "متقدم", detail: "سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
+                SaryNavRow(title: "متقدم", detail: "سجل المسار، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
             }
             VisualEffectsSection()
             SarySection {
@@ -551,20 +551,20 @@ struct AdvancedSettingsView: View {
     var body: some View {
         let p = theme.palette
         SaryPage(title: "متقدم", back: back) {
-            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) بصيغة GPX، لترسله لفريق سَرى البارق إذا طلبوه.") {
+            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
                     Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
                         .padding(.vertical, theme.space(.s))
                 }
                 ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
                     ShareLink(item: item.url) {
-                        SaryButtonLabel(title: n == 0 ? "تصدير سجل المسار (GPX)" : "تصدير سجل المسار (GPX) · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
+                        SaryButtonLabel(title: n == 0 ? "صدّر سجل المسار" : "صدّر سجل المسار · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("about.gpx.\(n)")
                 }
             }
-            SarySection(title: "مزوّد المسارات", footer: "Mapbox هو الافتراضي. «فرق» يجرّب خادم الشركة (Valhalla) أولًا، و«تلقائي» يستخدمه فقط إذا كان مفعّلًا على الخادم؛ وإذا ما قدر يرد نرجع لـ Mapbox تلقائيًا.") {
+            SarySection(title: "مزوّد المسارات", footer: "مزوّد الخرائط هو الافتراضي. «فرق» يجرّب خادمنا أول، و«تلقائي» يستخدمه بس إذا كان شغّال؛ وإذا ما رد نرجع للافتراضي لحالنا.") {
                 SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
                     get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },
                     set: { navProvider = $0.rawValue }), label: \.label, id: "dev.navProvider")

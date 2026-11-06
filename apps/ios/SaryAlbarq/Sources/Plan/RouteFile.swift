@@ -38,8 +38,8 @@ enum RouteFile {
             switch self {
             case .tooLarge: return "الملف كبير جدًا (الحد ٢٥ م.ب)."
             case .tooManyPoints: return "الملف فيه نقاط كثيرة جدًا. صدّر جزءًا أصغر من المسار."
-            case .malformed: return "تعذّرت قراءة الملف. تأكد أنه GPX أو KML سليم."
-            case .unsupported: return "نوع الملف غير مدعوم. استخدم GPX أو KML (ملفات KMZ: فكّ ضغطها أولًا)."
+            case .malformed: return "ما قدرنا نقرا الملف. تأكد إنه ملف مسار سليم."
+            case .unsupported: return "نوع الملف مو مدعوم. استخدم ملف مسار من تطبيق ملاحة (والمضغوط فكّ ضغطه أول)."
             case .noRoute: return "ما وجدنا مسارًا في الملف (نحتاج نقطتين على الأقل)."
             }
         }

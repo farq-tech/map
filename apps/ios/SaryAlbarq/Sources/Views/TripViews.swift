@@ -145,10 +145,10 @@ struct TripCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("trip.card")
         .confirmationDialog("تنهي الرحلة للجميع؟", isPresented: $confirmEnd, titleVisibility: .visible) {
-            Button("أنهِ الرحلة للجميع", role: .destructive, action: actions.endTrip)
+            Button("أنهِ الطلعة للجميع", role: .destructive, action: actions.endTrip)
             Button("ليس الآن", role: .cancel) {}
         } message: {
-            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الرحلة."
+            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الطلعة."
                                     : "ما وصل الجميع بعد. تنتهي الطلعة للجميع ويتوقف إرسال المواقع.")
         }
     }
@@ -272,9 +272,9 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الجميع. أنهِ الرحلة ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الجميع. أنهِ الطلعة ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
-            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الرحلة", systemImage: "flag.checkered") }
+            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "flag.checkered") }
                 .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
                 .accessibilityIdentifier("trip.end")
         } else {
@@ -286,7 +286,7 @@ struct TripCard: View {
 
     @ViewBuilder
     private var ended: some View {
-        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الرحلة", systemImage: "chart.bar.doc.horizontal") }
+        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الطلعة", systemImage: "chart.bar.doc.horizontal") }
             .buttonStyle(.saryPrimary)
             .accessibilityIdentifier("trip.summary")
         Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }

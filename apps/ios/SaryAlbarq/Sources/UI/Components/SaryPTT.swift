@@ -23,23 +23,20 @@ struct SaryPTTButton: View {
     @Environment(\.sary) private var theme
     @State private var pressing = false
     @State private var pulse = false
-    /// «القناة غير متاحة» / «القناة مكتومة» say so for a few seconds when it happens, then the
-    /// capsule just stays dim («تخفيف الزحمة» ٣).
-    @State private var quietShown = false
+    /// «طريقة اللاسلكي»: the wording follows what the button really does (tap to record vs hold).
+    @AppStorage(PTTTalkMode.key) private var talkModeRaw = PTTTalkMode.default.rawValue
+
+    private var notesMode: Bool { (PTTTalkMode(rawValue: talkModeRaw) ?? .default) == .notes }
 
     var body: some View {
         if pill { pillBody } else { discBody }
     }
 
-    /// How long «القناة غير متاحة» is spelled out after the state changes.
-    static let quietSeconds: UInt64 = 5
-
     private var isQuiet: Bool { state == .unavailable || state == .muted }
 
-    private var pillTitle: String {
-        if isQuiet && !quietShown { return "اضغط وتكلم" }
-        return stateLabel
-    }
+    /// UX ٢١ (٤): «اللاسلكي واقف» stays on the button with its reason as long as it lasts
+    /// (no 5-second toast that leaves a dim «اضغط وتكلم» behind).
+    private var pillTitle: String { stateLabel }
 
     private var pillBody: some View {
         let p = theme.palette
@@ -68,20 +65,14 @@ struct SaryPTTButton: View {
         .contentShape(Capsule())
         .gesture(pressGesture)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("قناة الطلعة، اضغط وتكلم"))
+        .accessibilityLabel(Text(a11yLabel))
         .accessibilityValue(Text(stateLabel))
-        .accessibilityHint(Text("اضغط مطولًا وتكلم، يسمعك أعضاء الطلعة مباشرة. ارفع إصبعك لتتوقف"))
+        .accessibilityHint(Text(a11yHint))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("outing-ptt")
-        .accessibilityAction(named: Text("ابدأ التكلم")) { actions.pressBegan() }
-        .accessibilityAction(named: Text("أوقف التكلم")) { actions.pressEnded() }
+        .accessibilityAction(named: Text(notesMode ? "ابدأ التسجيل" : "ابدأ التكلم")) { actions.pressBegan() }
+        .accessibilityAction(named: Text(notesMode ? "أرسل الرسالة" : "أوقف التكلم")) { notesMode ? actions.pressBegan() : actions.pressEnded() }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .task(id: isQuiet) {
-            guard isQuiet else { quietShown = false; return }
-            quietShown = true
-            try? await Task.sleep(nanoseconds: Self.quietSeconds * 1_000_000_000)
-            if !Task.isCancelled { quietShown = false }
-        }
         .onChange(of: isOnAir) { _, on in
             guard on, !theme.reduceMotion else { pulse = false; return }
             pulse = false
@@ -90,7 +81,6 @@ struct SaryPTTButton: View {
         .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
         .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
         .animation(theme.animation(.snappy), value: state)
-        .animation(theme.animation(.snappy), value: quietShown)
             if channelLabel != nil, openChannels != nil {
                 pillFace(h: h, d: d, fill: nil, ink: ink, placeholder: true)
             }
@@ -124,18 +114,19 @@ struct SaryPTTButton: View {
         }
     }
 
+    /// «تردد ١ ▾» — 13 pt bold (was 10 pt), the ▾ says it opens something (UX ٢١ ١٠).
     @ViewBuilder
     private func channelText(_ c: String, ink: Color, placeholder: Bool) -> some View {
-        let t = Text(c)
-            .font(.sary(10, .medium))
-            .foregroundStyle(ink.opacity(0.85))
+        let t = Text(openChannels == nil ? c : "\(c) ▾")
+            .font(.sary(big ? 14 : 13, .bold))
+            .foregroundStyle(ink.opacity(0.9))
             .lineLimit(1)
         if placeholder {
             Button { openChannels?() } label: {
-                t.padding(.vertical, 6).padding(.horizontal, 6).contentShape(Rectangle())
+                t.padding(.vertical, 12).padding(.horizontal, 10).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.vertical, -6).padding(.horizontal, -6)
+            .padding(.vertical, -12).padding(.horizontal, -10)
             .accessibilityLabel(Text("التردد: \(c)"))
             .accessibilityHint(Text("اضغط لتغيّر التردد"))
             .accessibilityIdentifier("ptt-channel-chip")
@@ -241,13 +232,13 @@ struct SaryPTTButton: View {
             .contentShape(Circle())
             .gesture(pressGesture)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("قناة الطلعة، اضغط وتكلم"))
+            .accessibilityLabel(Text(a11yLabel))
             .accessibilityValue(Text(stateLabel))
-            .accessibilityHint(Text("اضغط مطولًا وتكلم، يسمعك أعضاء الطلعة مباشرة. ارفع إصبعك لتتوقف"))
+            .accessibilityHint(Text(a11yHint))
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("outing-ptt")
-            .accessibilityAction(named: Text("ابدأ التكلم")) { actions.pressBegan() }
-            .accessibilityAction(named: Text("أوقف التكلم")) { actions.pressEnded() }
+            .accessibilityAction(named: Text(notesMode ? "ابدأ التسجيل" : "ابدأ التكلم")) { actions.pressBegan() }
+            .accessibilityAction(named: Text(notesMode ? "أرسل الرسالة" : "أوقف التكلم")) { notesMode ? actions.pressBegan() : actions.pressEnded() }
 
             if showsCaption {
                 Text(stateLabel)
@@ -344,15 +335,31 @@ struct SaryPTTButton: View {
         .scaleEffect(pressing && !theme.reduceMotion ? 1.06 : 1)
     }
 
-    private var stateLabel: String {
+    private var stateLabel: String { Self.label(for: state, notes: notesMode) }
+
+    /// The button's words (UX ٢١: the label says what the button does). Unit-tested.
+    /// · رسالة صوتية: «سجّل رسالة» → «يسجّل ٠:٠٥» → a friend's note: «رسالة من فلان».
+    /// · بث مباشر: «اضغط وتكلم» → «على الهواء ٠:٠٥» → «فلان يتكلم».
+    static func label(for state: PTTStateUI, notes: Bool) -> String {
         switch state {
-        case .idle: return "اضغط وتكلم"
-        case .arming: return "جارٍ فتح القناة…"
-        case let .talking(s, _): return "على الهواء \(SaryFormat.clock(seconds: s))"
-        case let .listening(name, _): return "\(name) يتكلم"
-        case .muted: return "القناة مكتومة"
-        case .unavailable: return "القناة غير متاحة"
+        case .idle: return notes ? "سجّل رسالة" : "اضغط وتكلم"
+        case .arming: return "نفتح التردد…"
+        case let .talking(s, _): return notes ? "يسجّل \(SaryFormat.clock(seconds: s))" : "على الهواء \(SaryFormat.clock(seconds: s))"
+        case let .listening(name, _): return notes ? "رسالة من \(name)" : "\(name) يتكلم"
+        case .muted: return "اللاسلكي مكتوم"
+        case .unavailable: return "اللاسلكي واقف · ما فيه شبكة"
         }
+    }
+
+    private var a11yLabel: String { notesMode ? "اللاسلكي، سجّل رسالة" : "اللاسلكي، اضغط وتكلم" }
+
+    private var a11yHint: String {
+        if state == .unavailable { return "اللاسلكي واقف لأن ما فيه شبكة. يرجع لحاله أول ما يرجع الاتصال" }
+        if notesMode {
+            if case .talking = state { return "اضغط مرة ثانية ترسل الرسالة لكل اللي على ترددك" }
+            return "اضغط مرة وحدة تبدأ التسجيل، واضغط مرة ثانية أو «أرسل» ترسلها لكل اللي على ترددك"
+        }
+        return "امسك الزر وتكلم، يسمعك الربع مباشرة. ارفع إصبعك لتوقف"
     }
 
     private var captionColor: Color {

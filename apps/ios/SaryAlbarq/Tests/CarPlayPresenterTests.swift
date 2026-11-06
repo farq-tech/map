@@ -171,7 +171,7 @@ final class CarPlayPresenterTests: XCTestCase {
         g.phase = .offTrack
         let a = CarPlayAlerts.current(i, guidance: g)
         XCTAssertEqual(a.map(\.kind), [.friendSOS, .stuck, .offTrack, .convoyGap])
-        XCTAssertEqual(a[0].title, "سلطان يطلب فزعة")
+        XCTAssertEqual(a[0].title, "سلطان يحتاج مساعدة")
         XCTAssertTrue(a[0].subtitle.contains("آخر موقع قبل ١٠ د"), "an old SOS fix says its age: \(a[0].subtitle)")
         XCTAssertTrue(a[0].sticky)
         XCTAssertEqual(a[0].durationS, 0)

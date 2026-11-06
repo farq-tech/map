@@ -48,6 +48,43 @@ final class SOSAlwaysUITests: XCTestCase {
         add(a)
     }
 
+    /// UX ٢١: a held SOS waits 3 s with «تراجع» (cancel sends nothing); stopping a sent SOS asks first.
+    func testSOSCountdownCanBeUndoneAndImOKAsksFirst() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryDrive", "0", "-SaryContext", "stopped"]
+        app.launch()
+        let intro = app.descendants(matching: .any)["intro"]
+        if intro.waitForExistence(timeout: 3) { _ = intro.waitForNonExistence(timeout: 20) }
+        let sos = any(app, "outing-sos")
+        XCTAssertTrue(sos.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["اضغط مطوّل"].exists, "the caption says hold, not «اضغط ثانية»")
+
+        /* Hold → countdown → «تراجع»: nothing is sent. */
+        sos.press(forDuration: 1.6)
+        let cancel = any(app, "sos-countdown-cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3), "«تراجع» after the hold")
+        XCTAssertTrue(any(app, "sos-countdown-seconds").exists)
+        cancel.tap()
+        XCTAssertTrue(any(app, "sos-countdown").waitForNonExistence(timeout: 3))
+        XCTAssertFalse(any(app, "outing-sos-ok").waitForExistence(timeout: 4), "undone: no SOS went out")
+
+        /* Hold → let the 3 s run out → sent. */
+        sos.press(forDuration: 1.6)
+        XCTAssertTrue(any(app, "sos-countdown").waitForExistence(timeout: 3))
+        let ok = any(app, "outing-sos-ok")
+        XCTAssertTrue(ok.waitForExistence(timeout: 8), "sent after the countdown")
+
+        /* «أنا بخير» asks first; «لا، خلها» keeps it. */
+        ok.tap()
+        let keep = app.buttons["لا، خلها"]
+        XCTAssertTrue(keep.waitForExistence(timeout: 3), "a confirmation before stopping the SOS")
+        keep.tap()
+        XCTAssertTrue(ok.waitForExistence(timeout: 2), "still active")
+        ok.tap()
+        app.buttons["إيه، أنا بخير"].tap()
+        XCTAssertTrue(ok.waitForNonExistence(timeout: 5), "stopped after the confirmation")
+    }
+
     /// Big enough and fully on screen, on the left under the header where the map's SOS sits (Lovable).
     /// (Not `isHittable`: XCUITest's hit test does not look into the app's extra overlay window.)
     private func assertOnScreen(_ app: XCUIApplication, _ e: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {

@@ -145,6 +145,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var layer: MapLayer = .satellite
     /// «عرض ثلاثي الأبعاد للتضاريس»: tilt the camera over a stronger terrain.
     var terrain3D = false
+    /// The trip is over: no «طلعة قوية» slope colours or legend on the map any more (UX ٢١).
+    var tripEnded = false
     /// Exploration: shown GPX tracks and saved places.
     var explore = MapExplore()
     /// Standard Satellite's labels: clean over a recorded / followed track, roads while driving.
@@ -194,6 +196,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onLongPress = onLongPress
         c.onWaterways = onWaterways
         c.picking = picking
+        c.tripEnded = tripEnded
         c.setFollowMode(followMode)
         c.navDrawer.onSelectRoute = onSelectRoute
         if c.theme != theme {
@@ -290,6 +293,7 @@ struct OutingMapboxView: UIViewRepresentable {
         let visuals = MapVisualsDirector()
         var layer: MapLayer = .satellite
         var terrain3D = false
+        var tripEnded = false
         var onCenter: (MapCenterReading) -> Void = { _ in }
         private var lastCenterAt: CFTimeInterval = 0
         private var centerPending = false
@@ -1950,6 +1954,8 @@ extension OutingMapboxView.Coordinator {
         if exploreDrawer.last.active { routes += exploreDrawer.last.tracks.map(\.points) }
         if let r = navLast.routes.first(where: \.selected) { routes.append(r.coordinates) }
         if planDrawing.plan.route.count >= 2 { routes.append(planDrawing.plan.route) }
+        /* UX ٢١: after the end the slope warning is history — no routes, no legend. */
+        if tripEnded { routes = [] }
         /* Same idea as LiveContextRule: guidance, drive mode, or clearly moving (> ~15 km/h). */
         let driving = theme.drive || navDrawer.ownsCamera || (me?.speedMps ?? 0) > 4.2
         return MapVisualInputs(me: me.map { recs[$0.id]?.shown ?? $0.position }, driving: driving, exploring: exploreDrawer.last.active,
