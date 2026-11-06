@@ -246,6 +246,17 @@ never inventing a track, road, building or landform. Three layers, from the bott
      against a 0.42 threshold. A synthetic two-rut track scores 1.06.
 4. **DEM relief** (existing): the two hillshade passes lit from the real sun.
 
+Performance (measured 2026-11-06):
+
+| What | Release, M4 Pro CPU | Debug, iOS 27.2 simulator |
+|---|---|---|
+| `SandDetail.render`, one 512 px tile | 5–8 ms (6 threads) | 31 ms (unit test), 47 ms median in app |
+| `mergeDetail` + `LineGuard`, one AI tile | 5 ms | ≈ 0.3–0.4 s (on top of 4–8 s CPU-only inference) |
+| App footprint, detail on (no AI) | | 97–123 MB |
+| App footprint, AI + detail, exploration z18 | | 129–142 MB |
+
+Thermal state stayed `nominal` in every run (`thermal` in the DEBUG stats JSON).
+
 Not used: SwinIR / HAT (transformers, too slow on the ANE at 256 px and not trained on aerial
 imagery), diffusion SR (hallucinates structures), and a second model (app size). See the PR
 for the "next round" list.

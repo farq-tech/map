@@ -87,6 +87,15 @@ final class DesertDetailShotsUITests: XCTestCase {
     func test4NafudTop() { view("nafud-z14-top", 28.30, 41.40, zoom: 14.5, pitch: 0, bearing: 0) }
     func test5DahnaClose() { view("dahna-z16-top", 24.2, 47.6, zoom: 16.5, pitch: 0, bearing: 0) }
     func test6RiyadhClose() { view("riyadh-z17-top", 24.7113, 46.6744, zoom: 17, pitch: 0, bearing: 0) }
+    /// Frame pacing over fresh detail tiles: a drone orbit low over the Nafud (the app logs
+    /// "drone flight: …" under MapVisuals; read with `log show`).
+    func test8NafudDroneFrames() {
+        let app = launch(at: 28.30, 41.40, clock: day, ["-SaryContext", "stopped", "-SaryVisualsCamera", "28.30,41.40,16.2,55,250", "-SaryVisualsDrone", "6"])
+        sleep(45)
+        shot("nafud-drone")
+        app.terminate()
+    }
+
     func test7NafudExploreHiRes() {
         /* Exploration at z18 (the AI layer may draw there), the detail over it. */
         let app = launch(at: 28.30, 41.40, clock: day, ["-SaryExplore", "-SaryHiResCam", "28.30,41.40,18.0"])
