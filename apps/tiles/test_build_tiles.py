@@ -87,6 +87,29 @@ class PlacesTests(Fixture):
         self.assertEqual([l['id'] for l in meta['vector_layers']], ['roads', 'places'])
         self.assertIn('OpenStreetMap', meta['attribution'])
 
+    def test_no_phone_number_or_email_inside_a_name(self):
+        path = os.path.join(self.dir, 'contacts.parquet')
+        lon, lat = RIYADH
+        self.db.execute(f"""copy (select * from (values
+            ('hh:1', 'ورشة المدينة أوتوماتيك للتواصل واتساب 0502892123', 'Madina Auto 050 289 2123', {lon}, {lat}),
+            ('hh:2', '0551234567 مطعم الريف', 'info@reef.sa Reef', {lon + 0.0005}, {lat}),
+            ('hh:3', 'مغسلة 24 ساعة', 'Open 247', {lon + 0.001}, {lat}),
+            ('hh:4', '+966 55 123 4567', null, {lon + 0.0015}, {lat}),
+            ('hh:5', 'محل جوالات الهاتف الذكي', null, {lon + 0.002}, {lat}),
+            ('hh:6', 'صيدلية ٠٥٠١٢٣٤٥٦٧', null, {lon + 0.0025}, {lat})
+        ) t(poi_key, name_ar, name_en, longitude, latitude)) to '{path}' (format parquet)""")
+        bt.load_places(self.db, path)
+        rows = dict((r[0], (r[1], r[2])) for r in self.db.execute('select fid, name_ar, name_en from places').fetchall())
+        self.assertEqual(rows['hh:1'], ('ورشة المدينة أوتوماتيك', 'Madina Auto'))
+        self.assertEqual(rows['hh:2'], ('مطعم الريف', 'Reef'))
+        self.assertEqual(rows['hh:3'], ('مغسلة 24 ساعة', 'Open 247'), 'short numbers in a name stay')
+        self.assertNotIn('hh:4', rows, 'a name that is only a number is no name')
+        self.assertEqual(rows['hh:5'], ('محل جوالات الهاتف الذكي', None), 'no contact in it: untouched')
+        self.assertEqual(rows['hh:6'], ('صيدلية', None), 'Arabic-Indic digits too')
+        for ar, en in rows.values():
+            for v in (ar, en):
+                self.assertNotRegex(v or '', r'[0-9٠-٩]{7}|@', v)
+
     def test_missing_columns_do_not_break_an_older_release(self):
         path = os.path.join(self.dir, 'old.parquet')
         self.db.execute(f"copy (select 'hh:9' poi_key, 'بقالة' name_ar, {RIYADH[0]} longitude, {RIYADH[1]} latitude) to '{path}' (format parquet)")

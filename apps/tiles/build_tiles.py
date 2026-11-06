@@ -134,6 +134,26 @@ def load_roads(db, pbf: str, bbox=None) -> int:
 
 # ---------------------------------------------------------------- places (Farq Atlas)
 
+# Contacts never reach a map (CLAUDE.md): some directory names carry a mobile number or «واتساب 05…» inside the name.
+DIGIT = '[0-9٠-٩۰-۹]'
+PHONE_RE = rf'\+?{DIGIT}[0-9٠-٩۰-۹ ().\-]{{5,}}{DIGIT}'          # 7+ characters of digits: a phone, never a name
+EMAIL_RE = r'[^\s@]+@[^\s@]+\.[A-Za-z]{2,}'
+CONTACT_RE = r'(?i)(للتواصل|تواصل|اتصل|واتس ?[اآ]ب|واتساب|وتساب|واتس|whats ?app|wa\.me|call|tel[.:]?|mobile|phone|جوال ?:|هاتف ?:|ج ?:|ت ?:)'
+TRAILING_RE = r'[\s\-–—:|/,،.(\[]+$'
+
+
+def scrubbed(expr: str) -> str:
+    """SQL: a name without any phone number, e-mail or «للتواصل / واتساب …» tail; null when nothing is left.
+    With a contact in it, the name is cut at the first contact word or number; if that leaves nothing (the
+    number came first), only the numbers and e-mails are taken out."""
+    has = f"(regexp_matches({expr}, '{PHONE_RE}') or regexp_matches({expr}, '{EMAIL_RE}'))"
+    cut = f"regexp_replace({expr}, '({CONTACT_RE}|{PHONE_RE}|{EMAIL_RE}).*$', '')"
+    bare = f"regexp_replace(regexp_replace({expr}, '{PHONE_RE}', '', 'g'), '{EMAIL_RE}', '', 'g')"
+    def clean(e):
+        return f"nullif(trim(regexp_replace(trim({e}), '{TRAILING_RE}', '')), '')"
+    return f"(case when {has} then coalesce({clean(cut)}, {clean(bare)}) else nullif(trim({expr}), '') end)"
+
+
 def load_places(db, path: str, bbox=None) -> int:
     cols = columns_of(db, path)
     status = f"lower(trim(replace(coalesce({col(cols, 'company_status')}, ''), 'ـ', '')))"
@@ -143,23 +163,24 @@ def load_places(db, path: str, bbox=None) -> int:
     temporary = "('temporary closed','temporarily closed','closed temporary','closed temporarily','مغلق مؤقتا','مغلق مؤقتاً'," \
                 "'مغلقة مؤقتا','مغلقة مؤقتاً','مغلقه مؤقتا','مغلقه مؤقتاً')"
     precision = f"coalesce({col(cols, 'location_precision')}, 'point')"
-    name = f"coalesce(nullif(trim({col(cols, 'name_ar')}), ''), nullif(trim({col(cols, 'name_en')}), ''))"
+    name_ar, name_en, brand = (scrubbed(col(cols, c)) for c in ('name_ar', 'name_en', 'brand_name'))
+    name = f"coalesce({name_ar}, {name_en})"
     category = f"split_part(coalesce({col(cols, 'category')}, ''), '|', 1)"
     db.execute(f"""create or replace temp table places as
         select p.poi_key::varchar as fid,
                ST_Point(p.longitude::double, p.latitude::double) g,
                {PLACE_MIN_ZOOM} as minzoom,
-               nullif(trim({col(cols, 'name_ar')}), '') as name_ar,
-               nullif(trim({col(cols, 'name_en')}), '') as name_en,
+               {name_ar} as name_ar,
+               {name_en} as name_en,
                nullif(trim({category}), '') as cat,
                nullif(trim({col(cols, 'category_ar')}), '') as cat_ar,
                nullif(trim({col(cols, 'secondary_category')}), '') as sub,
-               nullif(trim({col(cols, 'brand_name')}), '') as brand,
+               {brand} as brand,
                nullif(trim({col(cols, 'working_hours')}), '') as hours,
                nullif(trim({col(cols, 'district_ar')}), '') as district,
                ({status} in {temporary}) as temp_closed,
                -- labels kept first when a tile is full: brands, then places with hours, then the rest
-               (case when nullif(trim({col(cols, 'brand_name')}), '') is not null then 2 else 0 end
+               (case when {brand} is not null then 2 else 0 end
                 + case when nullif(trim({col(cols, 'working_hours')}), '') is not null then 1 else 0 end) as rank
         from read_parquet('{path}') p
         where p.poi_key is not null and p.longitude between -180 and 180 and p.latitude between -85 and 85
