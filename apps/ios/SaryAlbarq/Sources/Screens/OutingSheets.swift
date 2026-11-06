@@ -60,11 +60,12 @@ struct JoinByLinkSheet: View {
 
 // MARK: - Invite preview → join (one step)
 
-/// The invitee's whole onboarding (owner decision, build 14; `JoinMachine`): who invited you,
-/// the trip, «انضم للطلعة» and one honest line. One tap makes the identity silently (the name
-/// the inviter gave), asks iOS for the location, and — granted — joins and enters the live trip
-/// with sharing on. Refused / imprecise: not joined; one calm «افتح الإعدادات» screen that joins
-/// by itself the moment iOS says yes. Expired / taken / invalid / retryable error as before.
+/// The invitee's whole onboarding (build 14, tightened in build 21; `JoinMachine`): who invited
+/// you, the trip, the destination, the Najdi pre-prompt (iOS has not asked yet) and «انضم للطلعة».
+/// One tap makes the identity silently (the name the inviter gave), asks iOS for the location
+/// (then for «الموقع الدقيق» if it is off) and — granted — joins and enters the live trip with
+/// sharing on. Refused / still approximate: not joined — the recovery screen «افتح الإعدادات» /
+/// «إلغاء», which joins by itself the moment iOS says yes. Expired / taken / invalid as before.
 struct InviteJoinSheet: View {
     let token: String
     @EnvironmentObject private var model: AppModel
@@ -105,7 +106,21 @@ struct InviteJoinSheet: View {
         }
     }
 
-    private var currentPermission: JoinPermission { JoinPermission.from(location.authorization, location.accuracyAuthorization) }
+    private var currentPermission: JoinPermission {
+        let p = JoinPermission.from(location.authorization, location.accuracyAuthorization)
+        #if DEBUG
+        /* UI tests: `-SaryJoinReduced allow|deny` plays «الموقع الدقيق» off (the simulator cannot set it). */
+        if JoinDebug.reduced != nil, p == .granted, !debugPreciseGranted { return .reduced }
+        #endif
+        return p
+    }
+
+    #if DEBUG
+    @State private var debugPreciseGranted = false
+    #endif
+
+    /// iOS has not asked for the location yet: the pre-prompt says why before the system alert.
+    private var showsPrePrompt: Bool { location.authorization == .notDetermined }
 
     private var page: some View {
         let p = theme.palette
@@ -154,8 +169,9 @@ struct InviteJoinSheet: View {
                         SaryTextField(title: "اسمك", placeholder: "كما يراه العيال", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
                     }
                     if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
+                    if showsPrePrompt { JoinPrePrompt() }
                     Button { join(inv) } label: {
-                        SaryButtonLabel(title: JoinCopy.button, systemImage: SaryIcon.locate, busy: step.busy, busyTitle: "ننضم…")
+                        SaryButtonLabel(title: JoinCopy.button, systemImage: SaryIcon.locate, busy: step.busy, busyTitle: step == .askingPrecise ? "نطلب الموقع الدقيق…" : "ننضم…")
                     }
                     .buttonStyle(.sary(.primary))
                     .disabled(step.busy || (needsTypedName(inv) && name.trimmingCharacters(in: .whitespaces).isEmpty))
@@ -268,11 +284,28 @@ struct InviteJoinSheet: View {
             }
         case .askingLocation:
             Task {
-                /* The only prompt at join: When In Use (precise). Already answered → what iOS says now. */
+                /* Right after the pre-prompt: When In Use. Already answered → what iOS says now. */
                 _ = await location.requestWhenInUse()
                 send(.permission(currentPermission))
             }
+        case .askingPrecise:
+            Task {
+                /* «الموقع الدقيق» off: iOS's temporary full accuracy (GPS's `requestPreciseForTrip`, purpose key ConvoyTrip). */
+                #if DEBUG
+                if let allow = JoinDebug.reduced {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    debugPreciseGranted = allow
+                    send(.precise(currentPermission))
+                    return
+                }
+                #endif
+                _ = await location.requestPreciseForTrip()
+                send(.precise(currentPermission))
+            }
         case .joining:
+            /* The GPS starts now, while the server join is in flight: the first fix is on its way
+             * before the live map opens (no-op without permission; the session keeps it running). */
+            location.watchForeground()
             Task {
                 if await model.join(token) {
                     send(.joined)
@@ -298,7 +331,8 @@ struct InviteJoinSheet: View {
     }
 }
 
-/// Refused, or «الموقع الدقيق» off: not joined. One calm screen; it joins by itself once iOS says yes.
+/// Refused, or «الموقع الدقيق» still off: not joined (owner decision: never in a trip without the
+/// location). «افتح الإعدادات» / «إلغاء»; it joins by itself once iOS says yes.
 struct JoinNeedsLocationView: View {
     var permission: JoinPermission
     var openSettings: () -> Void
@@ -313,7 +347,7 @@ struct JoinNeedsLocationView: View {
                 .font(.system(size: 64, weight: .semibold))
                 .foregroundStyle(p.accentText)
                 .accessibilityHidden(true)
-            Text(JoinCopy.needsTitle)
+            Text(JoinCopy.needsTitle(permission))
                 .saryText(.title, weight: .bold)
                 .foregroundStyle(p.textPrimary)
                 .multilineTextAlignment(.center)
@@ -338,6 +372,51 @@ struct JoinNeedsLocationView: View {
         .background(theme.palette.background.ignoresSafeArea())
     }
 }
+
+/// The Najdi pre-prompt above «انضم للطلعة» while iOS has not asked for the location yet:
+/// why, then the system alert comes from the same tap (no extra screen).
+struct JoinPrePrompt: View {
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        HStack(alignment: .top, spacing: theme.space(.m)) {
+            Image(systemName: "location.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(p.accentText)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                Text(JoinCopy.prePromptTitle)
+                    .saryText(.headline, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("join.prePrompt")
+                Text(JoinCopy.prePromptDetail)
+                    .saryText(.footnote)
+                    .foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(theme.space(.m))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sarySurface(radius: SaryRadius.l)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+#if DEBUG
+/// DEBUG launch hooks of the join (UI tests).
+enum JoinDebug {
+    /// `-SaryJoinReduced allow|deny`: the location comes back approximate; the precise prompt is
+    /// answered with `allow` (true) or `deny` (false). nil: the real iOS answers.
+    static let reduced: Bool? = {
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryJoinReduced") else { return nil }
+        return i + 1 < a.count ? a[i + 1] == "allow" : false
+    }()
+}
+#endif
 
 // MARK: - Notifications explainer (before the system prompt)
 
