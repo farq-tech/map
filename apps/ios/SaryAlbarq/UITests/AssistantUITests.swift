@@ -96,10 +96,10 @@ final class AssistantUITests: XCTestCase {
 
     func testDrivingIsVoiceOnly() {
         let app = launch(context: "driving", drive: "1")
-        app.buttons["outing-actions"].tap()
-        let tile = any(app, "outing-assistant")
-        XCTAssertTrue(tile.waitForExistence(timeout: 5))
-        tile.tap()
+        /* Driving: no «أدوات» on the map; a long press on the trip header opens it. */
+        let header = any(app, "outing-title")
+        XCTAssertTrue(header.waitForExistence(timeout: 5))
+        header.press(forDuration: 1.0)
         XCTAssertTrue(any(app, "assistant.sheet").waitForExistence(timeout: 5))
         XCTAssertTrue(any(app, "assistant.mic").exists)
         XCTAssertFalse(any(app, "assistant.field").exists, "no typing while driving")

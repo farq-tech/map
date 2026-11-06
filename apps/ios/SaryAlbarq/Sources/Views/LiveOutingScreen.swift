@@ -557,7 +557,7 @@ private struct LiveTopStack: View {
                        },
                        settingsTapped: { controller.statusExpanded = false; controller.openSettings() })
                 /* «اسأل سرى»: a long press on the header (nothing new on the map). */
-                .simultaneousGesture(LongPressGesture(minimumDuration: 0.6).onEnded { _ in controller.openAssistant() })
+                .highPriorityGesture(LongPressGesture(minimumDuration: 0.6).onEnded { _ in controller.openAssistant() })
                 .accessibilityAction(named: Text("اسأل سرى")) { controller.openAssistant() }
         }
         .task { controller.feedWeather(force: true) }
