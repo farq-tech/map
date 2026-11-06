@@ -3,6 +3,9 @@
 // makes the include optional, so a fresh clone still builds (the map then
 // shows a token message instead of tiles).
 MAPBOX_ACCESS_TOKEN =
+// Farq map tiles (apps/tiles, Railway service farq-map-tiles in project farq-targeting): the server's TileJSON.
+// Empty keeps Mapbox's roads. xcconfig reads «//» as a comment, hence «https:/$()/» (Secrets.xcconfig may override).
+FARQ_TILES_URL = https:/$()/farq-map-tiles-production.up.railway.app/farq.json
 #include? "Secrets.xcconfig"
 
 // CarPlay (Navigation category, com.apple.developer.carplay-maps). The entitlement must be
