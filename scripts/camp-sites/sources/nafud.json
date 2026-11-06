@@ -1,0 +1,122 @@
+{
+ "region": "nafud",
+ "bbox": [
+  28.0,
+  41.0,
+  28.6,
+  41.8
+ ],
+ "arcsec": 2,
+ "sources": [
+  {
+   "dataset": "Copernicus DEM GLO-30",
+   "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N28_00_E041_00_DEM/Copernicus_DSM_COG_10_N28_00_E041_00_DEM.tif",
+   "etag": "6f2700f3b361d1e4a5863f87ba9d6a44",
+   "bytes": 40683058
+  },
+  {
+   "dataset": "ESA WorldCover 10m 2021 v200",
+   "url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N27E039_Map.tif",
+   "etag": "25d79d299a7a3a872bb6876ce0af0e78",
+   "bytes": 6246171
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_37RFL_20250316_0_L2A",
+   "date": "2025-03-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_37RGL_20250316_0_L2A",
+   "date": "2025-03-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_37RFM_20250316_0_L2A",
+   "date": "2025-03-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_37RGM_20250316_0_L2A",
+   "date": "2025-03-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RFL_20250430_0_L2A",
+   "date": "2025-04-30",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RGL_20250430_0_L2A",
+   "date": "2025-04-30",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RFM_20250430_0_L2A",
+   "date": "2025-04-30",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RGM_20250430_0_L2A",
+   "date": "2025-04-30",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RFL_20250420_0_L2A",
+   "date": "2025-04-20",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RGL_20250420_0_L2A",
+   "date": "2025-04-20",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RFM_20250420_0_L2A",
+   "date": "2025-04-20",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_37RGM_20250420_0_L2A",
+   "date": "2025-04-20",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_37RFL_20260914_0_L2A",
+   "date": "2026-09-14",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_37RGL_20260914_0_L2A",
+   "date": "2026-09-14",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_37RFM_20260914_0_L2A",
+   "date": "2026-09-14",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2A_37RGM_20260914_0_L2A",
+   "date": "2026-09-14",
+   "use": "ground type"
+  }
+ ],
+ "output": "rasters_2.npz",
+ "sha256": "1316ed36e1eb99b2f7dca97c18ae4a9b9dabdd5b99adcf0570aa0c876c55c590"
+}

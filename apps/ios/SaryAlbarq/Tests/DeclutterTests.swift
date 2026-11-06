@@ -153,7 +153,7 @@ final class DeclutterTests: XCTestCase {
         /* Lovable's tiles, plus ours (never dropped). */
         XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-chat", "outing-rally", "outing-convoy",
                                   "outing-note-open", "outing-stuck", "outing-enjad", "outing-timer", "outing-brief", "outing-save-place",
-                                  "outing-weather", "outing-waypoint-add", "outing-nearest-open", "outing-radio", "outing-youtube",
+                                  "outing-weather", "outing-waypoint-add", "outing-nearest-open", "outing-camp-suggest", "outing-desert-route", "outing-radio", "outing-youtube",
                                   "outing-explore", "outing-hires", "outing-realistic", "outing-effects", "outing-fit"])
         XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"], "also in «الرحلة»")
         XCTAssertFalse(LiveActionCatalog.groups(.init(chat: false)).flatMap(\.items).contains { $0.id == "chat" }, "no chat on an older server")

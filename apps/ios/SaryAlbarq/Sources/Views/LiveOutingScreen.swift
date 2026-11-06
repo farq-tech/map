@@ -104,6 +104,11 @@ struct LiveOutingScreen: View {
         }
         .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .onChange(of: controller.realisticRequest) { _, _ in openRealistic() }
+        /* «أماكن مقترحة للكشتة»: a site tapped on the map opens its card. */
+        .onReceive(CampSitesHub.shared.$tapped.compactMap { $0 }) { id in
+            CampSitesHub.shared.tapped = nil
+            if controller.modal == nil { controller.modal = .campSite(id) }
+        }
         .ignoresSafeArea(.keyboard)
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
          * its own window (the dock's copy is hidden or covered then). */
