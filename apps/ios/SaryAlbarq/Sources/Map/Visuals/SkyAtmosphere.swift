@@ -80,7 +80,8 @@ struct SkyAtmosphere: Equatable {
     /// The sky for the real sun altitude alone (keyframes, blended smoothly between).
     static func sky(sunAltitude a: Double) -> SkyAtmosphere {
         struct K { var alt: Double; var color: RGBA; var high: RGBA; var space: RGBA; var blend: Double; var stars: Double; var start: Double; var end: Double }
-        /* The haze starts past the map centre (a crisp foreground) and is warm desert-beige by day;
+        /* The haze starts past the map centre (a crisp foreground) and is warm sand by day (a grey-white
+           noon haze washed the far dunes grey at a tilt);
            night is deep blue, never black, so the dunes stay readable under the stars. */
         let keys: [K] = [
             K(alt: -18, color: RGBA(22, 26, 42), high: RGBA(12, 22, 54), space: RGBA(3, 6, 16), blend: 0.04, stars: 0.85, start: 0.7, end: 9),
@@ -89,7 +90,7 @@ struct SkyAtmosphere: Equatable {
             K(alt: -2, color: RGBA(170, 118, 108), high: RGBA(72, 86, 158), space: RGBA(22, 30, 80), blend: 0.11, stars: 0.06, start: 1.0, end: 10.5),
             K(alt: 0, color: RGBA(244, 172, 122), high: RGBA(88, 106, 176), space: RGBA(30, 42, 100), blend: 0.12, stars: 0.0, start: 1.1, end: 11.5),
             K(alt: 6, color: RGBA(252, 206, 156), high: RGBA(110, 152, 222), space: RGBA(70, 116, 200), blend: 0.09, stars: 0, start: 1.2, end: 12.5),
-            K(alt: 20, color: RGBA(236, 234, 228), high: RGBA(56, 120, 226), space: RGBA(150, 192, 244), blend: 0.05, stars: 0, start: 1.3, end: 13),
+            K(alt: 20, color: RGBA(234, 212, 180), high: RGBA(56, 120, 226), space: RGBA(150, 192, 244), blend: 0.04, stars: 0, start: 1.3, end: 13),
         ]
         let lo = keys.last { $0.alt <= a } ?? keys[0]
         let hi = keys.first { $0.alt > a } ?? keys[keys.count - 1]

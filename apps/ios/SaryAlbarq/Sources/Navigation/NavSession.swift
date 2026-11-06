@@ -74,7 +74,7 @@ final class NavSession: ObservableObject {
     private var retryable = false
     private var retrying = false
     /// Said before the first instruction of an automatic start («نبدأ التوجيه إلى …»).
-    private var autoIntro: String?
+    private var autoIntro: NavLine?
 
     let provider: NavRoutingProvider
     let voice = NavVoice()
@@ -98,7 +98,42 @@ final class NavSession: ObservableObject {
         }
         voice.onSpoken = { [weak self] t in self?.spokenSubject.send(t) }
         locator.onFix = { [weak self] f in self?.ingest(f) }
+        voice.onReevaluate = { [weak self] in self?.restateCurrent() }
     }
+
+    /// Bumped on every new route (start, reroute): lines built for an older one are dropped.
+    private(set) var routeRevision = 0 {
+        didSet { voice.routeRevision = routeRevision; saidStages = [:] }
+    }
+    /// Per maneuver («<revision>:<step>»), the cues already said (early / confirm / immediate).
+    private var saidStages: [String: Set<Int>] = [:]
+
+    /// The guidance line for step `index`, `d` metres ahead — nil when that cue was already said.
+    /// «صوت سرى»: no name, «ثم …» when the next maneuver follows closely and there is time.
+    func guidanceLine(stepIndex index: Int, distanceM d: Double, force: Bool = false) -> NavLine? {
+        guard let r = active, r.steps.indices.contains(index) else { return nil }
+        let step = r.steps[index]
+        let speed = myFix()?.speed
+        let stage = NavCueBands.stage(distanceM: d, bands: NavCueBands.distances(speedMps: speed, unpaved: r.hasUnpaved))
+        let key = "\(routeRevision):\(index)"
+        if !force, saidStages[key, default: []].contains(stage.rawValue) { return nil }
+        saidStages[key, default: []].insert(stage.rawValue)
+        var clips = SaryVoiceScript.step(step, distanceM: d, auto: auto, stop: isStopTarget)
+        let next = r.steps.indices.contains(index + 1) ? r.steps[index + 1] : nil
+        clips = SaryVoiceScript.withThen(clips, next: next, gapM: step.distanceM, distanceToManeuverM: d, speedMps: speed, stop: isStopTarget)
+        return NavLine(NavText.spoken(step, distanceM: d, targetName: target?.name), clips: clips,
+                       maneuverID: key, routeRevision: routeRevision, expiresAt: Date().addingTimeInterval(10))
+    }
+
+    /// After a call / Siri cut a line: the current maneuver, rebuilt for the distance now.
+    func restateCurrent() {
+        guard phase == .guiding, let p = progress,
+              let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM, force: true) else { return }
+        voice.say(line)
+    }
+
+    /// A stop on the way or the rally point (said «على يمينك», not «وجهتك …»).
+    var isStopTarget: Bool { target?.source == .tripStop || target?.source == .rally }
 
     var isActive: Bool { phase == .guiding || phase == .offRoad || phase == .arrived }
     var selected: NavRoute? { routes.first { $0.id == selectedId } ?? routes.first }
@@ -192,7 +227,7 @@ final class NavSession: ObservableObject {
     /// Guide to `t` now, without the options sheet: the best road route, or — when there is
     /// no road (desert) or no network — the straight-line bearing guidance at once, retrying
     /// the road route in the background when it was the network.
-    func autoStart(to t: NavTarget, intro: String? = nil) {
+    func autoStart(to t: NavTarget, intro: String? = nil, introClips: [String]? = nil) {
         guard let f = myFix() else { return }
         fetchTask?.cancel()
         retryTask?.cancel()
@@ -205,7 +240,7 @@ final class NavSession: ObservableObject {
         loading = true
         arrivedAt = nil
         startedAt = nil
-        autoIntro = intro
+        autoIntro = intro.map { NavLine($0, clips: introClips ?? SaryVoiceScript.intro(resumed: false)) }
         let origin = LngLat(lng: f.lng, lat: f.lat)
         let heading = Policy.trustedHeading(f.heading, speed: f.speed)
         #if DEBUG
@@ -290,13 +325,13 @@ final class NavSession: ObservableObject {
             #endif
             locator.stop()
             applyAuto(r, origin: origin, target: t)
-            autoIntro = "رجع الاتصال، نوجّهك على الطريق"
+            autoIntro = NavLine("رجع الاتصال، نوجّهك على الطريق", clips: ["rr_05"])
             start()
             return true
         case .success, .failure(.noRoute):
             fallback = .noRoad
             retryable = false
-            voice.say("ما فيه طريق معبّد إلى \(t.name). كمّل مع السهم")
+            voice.say("ما فيه طريق معبّد إلى \(t.name). كمّل مع السهم", clips: ["dir_06"])
             return true
         default:
             return false
@@ -324,7 +359,7 @@ final class NavSession: ObservableObject {
         #endif
         if startedAt == nil || !auto { startedAt = Date() }
         camera = .follow
-        let intro = autoIntro.map { $0 + ". " } ?? ""
+        let intro = autoIntro ?? NavLine("", clips: [])
         autoIntro = nil
         if direct || selected == nil {
             phase = .offRoad
@@ -332,12 +367,13 @@ final class NavSession: ObservableObject {
             if let f = myFix() { ingest(f) }
             if let leg = offRoad {
                 let way = "\(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
+                let arrow = { (lead: String) in SaryVoiceScript.arrow(lead: lead, bearing: leg.bearing, distanceM: leg.distanceM) }
                 if auto, fallback == .offline {
-                    voice.say(intro + "ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال")
+                    voice.say(intro + NavLine("ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال", clips: arrow("rr_06")))
                 } else if auto {
-                    voice.say(intro + "بدون طريق معبّد. اتجه مع السهم \(way)")
+                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("bar_01")))
                 } else {
-                    voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")")
+                    voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")", clips: arrow("dir_07"))
                 }
             }
             if auto { scheduleRetry() }
@@ -346,6 +382,7 @@ final class NavSession: ObservableObject {
         }
         guard let r = selected else { return }
         active = r
+        routeRevision += 1
         phase = .guiding
         offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position)
         let e = makeEngine(plan)
@@ -365,9 +402,9 @@ final class NavSession: ObservableObject {
                 self.attach(local)
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
-            if let first = r.steps.dropFirst().first {
-                self.voice.say(intro + NavText.spoken(first, distanceM: r.steps.first?.distanceM ?? 0, targetName: t.name))
-            } else if !intro.isEmpty {
+            if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0) {
+                self.voice.say(intro + line)
+            } else if !intro.clips.isEmpty || !intro.text.isEmpty {
                 self.voice.say(intro)
             }
         }
@@ -415,12 +452,13 @@ final class NavSession: ObservableObject {
             /* Once, not on every reroute while the driver is still finding the way back. */
             if Date().timeIntervalSince(lastOffRouteSpoken) > 45 {
                 lastOffRouteSpoken = Date()
-                voice.say("خرجت عن الطريق، نحسب طريقًا جديدًا")
+                voice.say("خرجت عن الطريق، نحسب طريقًا جديدًا", clips: ["rr_01"])
             }
         case let .rerouted(r):
             guard phase == .guiding else { return }
             rerouting = false
             active = r
+            routeRevision += 1
             if let t = target { offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position) }
             toast("مسار جديد")
         case let .rerouteFailed(m):
@@ -433,20 +471,27 @@ final class NavSession: ObservableObject {
                 phase = .offRoad
                 locator.start()
                 voice.say(auto ? "انتهى الطريق المعبّد. اتجه مع السهم \(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
-                               : "انتهى الطريق. \(NavOffRoad.summary(leg))")
+                               : "انتهى الطريق. \(NavOffRoad.summary(leg))",
+                          clips: SaryVoiceScript.arrow(lead: "dir_05", bearing: leg.bearing, distanceM: leg.distanceM))
                 if let f = myFix() { ingest(f) }
             } else {
                 arrive()
             }
         case let .speak(t):
-            voice.say(t)
+            /* Our own engine names the step: build the line here (stage, «ثم», revision). */
+            if let i = t.maneuverID.flatMap(Int.init) {
+                if let line = guidanceLine(stepIndex: i, distanceM: progress?.distanceToManeuverM ?? 0) { voice.say(line) }
+            } else {
+                voice.say(t)
+            }
         case let .cue(routerText):
-            if let step = currentStep, let p = progress {
-                voice.say(NavText.spoken(step, distanceM: p.distanceToManeuverM, targetName: target?.name))
+            if let p = progress, active?.steps.indices.contains(p.stepIndex) == true {
+                if let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM) { voice.say(line) }
             } else if NavText.isArabic(routerText) {
                 /* Router narration only as a last resort, and never in another language
-                 * (Valhalla narrates in English around Arabic street names). */
-                voice.say(routerText)
+                 * (Valhalla narrates in English around Arabic street names). No clips: free
+                 * text has no structure to map, so «صوت سرى» waits for the next cue. */
+                voice.say(routerText, clips: [])
             }
         }
     }
@@ -460,7 +505,7 @@ final class NavSession: ObservableObject {
         locator.stop()
         stopEngine()
         retryTask?.cancel()
-        voice.say(auto ? "وصلتوا \(target?.name ?? "")" : "وصلت إلى \(target?.name ?? "وجهتك")")
+        voice.say(auto ? "وصلتوا \(target?.name ?? "")" : "وصلت إلى \(target?.name ?? "وجهتك")", clips: [target?.source == .rally ? "start_07" : auto ? "arr_01" : "arr_02"])
         UIApplication.shared.isIdleTimerDisabled = false
         if let t = target { onArrived(t) }
     }

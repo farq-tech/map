@@ -36,7 +36,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "19"
+    CURRENT_PROJECT_VERSION: "20"
     # Apple Team ID (same account as FarqNavigate).
     DEVELOPMENT_TEAM: MH7J92HV9N
     CODE_SIGN_STYLE: Automatic
@@ -60,7 +60,13 @@ targets:
     platform: iOS
     sources:
       - Sources
-      - Resources
+      - path: Resources
+        excludes:
+          - "SaryVoice/**"
+      # «صوت سرى»: the owner's recorded guidance clips + manifest.json, kept as a folder in the bundle.
+      - path: Resources/SaryVoice
+        type: folder
+        buildPhase: resources
       - Shared
     dependencies:
       - package: MapboxMaps

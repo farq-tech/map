@@ -14,10 +14,12 @@ struct LiveSettingsPage: View {
     @AppStorage(VoiceAutoplay.key) private var voiceAutoplay = VoiceAutoplay.default
     /// «طريقة اللاسلكي»: «رسالة صوتية» (default) or «مباشر (تجريبي)».
     @AppStorage(PTTTalkMode.key) private var talkMode = PTTTalkMode.default
+    /// «صوت التوجيه»: «صوت سرى» (default, the owner's recorded voice) or «صوت الجهاز».
+    @AppStorage(NavVoiceChoice.key) private var navVoice = NavVoiceChoice.default
     @AppStorage(OutingSession.modeKey) private var shareMode: String = ShareMode.balanced.rawValue
 
     enum Page: Hashable {
-        case tripType, sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, talkMode, volume, media, whoSees, diagnostics
+        case tripType, sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, talkMode, navVoice, volume, media, whoSees, diagnostics
     }
 
     var body: some View {
@@ -38,6 +40,7 @@ struct LiveSettingsPage: View {
                 group("الصوت واللاسلكي") {
                     row("التردد الافتراضي", id: "settings.defaultChannel") { path.append(.defaultChannel) }
                     row("طريقة اللاسلكي", id: "settings.talkMode") { path.append(.talkMode) }
+                    row("صوت التوجيه", id: "settings.navVoice") { path.append(.navVoice) }
                     toggle("تشغيل تلقائي للرسائل الصوتية", isOn: $voiceAutoplay, id: "settings.voiceAutoplay")
                     row("مستوى الصوت", id: "settings.volume") { path.append(.volume) }
                     row("الإذاعة ويوتيوب", id: "settings.media", last: true) { path.append(.media) }
@@ -145,6 +148,15 @@ struct LiveSettingsPage: View {
                 ForEach(Array(PTTTalkMode.allCases.enumerated()), id: \.element) { i, m in
                     choice(m.label, on: talkMode == m, id: "settings.talkMode.\(m.rawValue)", last: i == PTTTalkMode.allCases.count - 1) {
                         talkMode = m
+                        controller.objectWillChange.send()
+                    }
+                }
+            }
+        case .navVoice:
+            sub("صوت التوجيه", footer: "«صوت سرى»: التوجيه بصوت مسجّل باللهجة النجدية، ويشتغل بدون إنترنت. ما يقول أسماء الشوارع والأماكن، تشوفها مكتوبة في لوحة التوجيه. «صوت الجهاز»: صوت الجوال العربي، ويقول الأسماء.") {
+                ForEach(Array(NavVoiceChoice.allCases.enumerated()), id: \.element) { i, v in
+                    choice(v.label, on: navVoice == v, id: "settings.navVoice.\(v.rawValue)", last: i == NavVoiceChoice.allCases.count - 1) {
+                        navVoice = v
                         controller.objectWillChange.send()
                     }
                 }
