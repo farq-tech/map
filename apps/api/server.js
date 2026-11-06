@@ -15,6 +15,9 @@ const createMapRouter = require('./routes/map');
 const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
 const createOutdoorRouter = require('./routes/outdoor');
+const { createCamerasRouter } = require('./routes/cameras');
+const { createCameras } = require('./lib/cameras');
+const { getOutingsPool } = require('./lib/outings/db');
 const { setupOutings } = require('./lib/outings');
 const { routingConfigFromEnv } = require('./lib/outings/routing');
 const { warmCityCache } = require('./lib/city-opportunities');
@@ -33,6 +36,11 @@ app.disable('x-powered-by');
 /* Behind Railway's proxy: rate limits key on the client, not the proxy. */
 app.set('trust proxy', 1);
 const outings = setupOutings();
+/* «كاميرات الرصد» ride the same database as outings. Without a DB the router
+ * answers 503 cameras_unconfigured, like the rest. A Bearer token only ties a
+ * report to a user server-side for dedupe; the public layer carries no identity. */
+const camerasPool = getOutingsPool();
+const cameras = camerasPool ? createCameras({ pool: camerasPool }) : null;
 /* The city read model is ~2.7 MB of JSON and ~380 KB gzipped; never send it raw. */
 app.use(compression({ threshold: 1024 }));
 app.use(
@@ -137,6 +145,7 @@ app.use('/api/outdoor', createOutdoorRouter());
 app.use('/api/copilot', createCopilotRouter());
 app.use('/api/analytics', createAnalyticsRouter());
 app.use('/api/outings', outings.router);
+app.use('/api/cameras', createCamerasRouter({ cameras, authenticate: outings.service ? outings.service.authenticate : null }));
 
 async function proxyFarqCatalog(id) {
   if (!FARQ_API_ORIGIN) return null;
@@ -218,6 +227,7 @@ if (FARQ_API_ORIGIN) {
       req.path.startsWith('/intelligence') ||
       req.path.startsWith('/outdoor') ||
       req.path.startsWith('/outings') ||
+      req.path.startsWith('/cameras') ||
       req.path.startsWith('/restaurant/') ||
       req.path.startsWith('/comparison/')
     ) {
