@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Security
 
 enum Endpoints {
@@ -157,6 +158,13 @@ enum IdentityStore {
     static var keychain: IdentityKeychain = SystemIdentityKeychain()
     private static let lock = NSLock()
     private static var cached: Identity?
+    /// Whether iOS has protected data available (false before first unlock / during prewarm).
+    /// Injectable for tests.
+    static var protectedDataAvailable: () -> Bool = {
+        if Thread.isMainThread { return MainActor.assumeIsolated { UIApplication.shared.isProtectedDataAvailable } }
+        return true
+    }
+    private static var migrated = false
 
     static func read() -> Read {
         let (st, data) = keychain.read()
@@ -164,9 +172,16 @@ enum IdentityStore {
         case errSecSuccess:
             guard let data, let id = try? JSONDecoder().decode(Identity.self, from: data) else { return .unavailable(errSecDecode) }
             lock.withLock { cached = id }
+            /* Items saved by builds before 21 may still be «when unlocked only»: such an item is
+             * invisible (errSecItemNotFound) when iOS relaunches the app with the phone locked.
+             * Re-write it once per process so it moves to «after first unlock» (update in place). */
+            let first = lock.withLock { () -> Bool in defer { migrated = true }; return !migrated }
+            if first { _ = keychain.write(data) }
             return .found(id)
         case errSecItemNotFound:
-            return .none
+            /* Not found while protected data is unavailable is not an answer: a «when unlocked»
+             * item hides then. Only an unlocked phone can say "nothing saved". */
+            return protectedDataAvailable() ? .none : .unavailable(st)
         default:
             return .unavailable(st)
         }
@@ -200,7 +215,7 @@ enum IdentityStore {
     }
 
     /// Tests: forget the in-process copy, as a new launch would.
-    static func forgetCache() { lock.withLock { cached = nil } }
+    static func forgetCache() { lock.withLock { cached = nil; migrated = false } }
 }
 
 /// REST client for `/api/outings`. Invite tokens travel in bodies, never URLs.
