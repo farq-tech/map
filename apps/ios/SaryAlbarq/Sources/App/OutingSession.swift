@@ -309,7 +309,7 @@ final class OutingSession: ObservableObject, Identifiable {
         backgroundSender = sender
         offlineQueue = OfflineFixQueue.load(user: myUserId, outing: id, defaults: env.defaults)
         if env.postBackfill == nil {
-            BackfillUploader.shared.onDone = { [weak self] outing, upTo, ok in self?.backfillDone(outing, upToMs: upTo, ok: ok) }
+            BackfillUploader.shared.onDone = { [weak self] outing, upTo, ok in MainActor.assumeIsolated { self?.backfillDone(outing, upToMs: upTo, ok: ok) } }
             BackfillUploader.shared.resume()
         }
         ch.handlers = .init(
