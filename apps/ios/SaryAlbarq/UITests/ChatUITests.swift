@@ -88,12 +88,15 @@ final class ChatUITests: XCTestCase {
 
         his.press(forDuration: 1.0)
         XCTAssertTrue(app.buttons["chat.menu.report"].waitForExistence(timeout: 4) || app.buttons["بلّغ عن الرسالة"].waitForExistence(timeout: 1), "«بلّغ عن الرسالة» in the menu")
-        let block = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch
-        XCTAssertTrue(block.waitForExistence(timeout: 4), "«احظر فلان» in the menu")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch.waitForExistence(timeout: 4), "«احظر فلان» in the menu")
         shot(app, "chat-10-message-menu")
 
-        /* Block him: his bubbles leave the chat (the server also filters; the phone hides at once). */
-        block.tap()
+        /* Block him: his bubbles leave the chat (the server also filters; the phone hides at once).
+         * A SwiftUI context menu exposes non-hittable duplicates, so tap the hittable «احظر» (as
+         * ExploreUITests does for «احذف»). */
+        let block = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).allElementsBoundByIndex.first { $0.isHittable }
+        XCTAssertNotNil(block, "a hittable «احظر فلان»")
+        block?.tap()
         let fewer = NSPredicate { _, _ in app.descendants(matching: .any).matching(identifier: "chat.bubble").count < before }
         XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: fewer, object: nil)], timeout: 6), .completed, "his messages are gone")
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "هلا بالشباب")).firstMatch.exists, "his greeting is gone")
