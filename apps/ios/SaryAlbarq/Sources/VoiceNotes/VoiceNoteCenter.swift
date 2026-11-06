@@ -232,9 +232,11 @@ final class VoiceNoteCenter: ObservableObject {
         let ch = channel
         sending += 1
         Task {
-            /* ≈24 kbps AAC before it goes (a minute ≈ 200 KB). */
+            /* Denoised (DeepFilterNet3, on the phone) and ≈24 kbps AAC before it goes (a minute ≈ 200 KB).
+               The DEBUG test tone is not speech: it skips the denoise so the receive tests stay exact. */
             let raw = take.file
-            let file = await Task.detached(priority: .userInitiated) { VoiceNoteRecorder.transcode(raw) }.value
+            let denoise = !recorder.useTestTone
+            let file = await Task.detached(priority: .userInitiated) { VoiceNoteRecorder.transcode(raw, denoise: denoise) }.value
             guard uploader.enqueue(file: file, channel: ch, durationMs: take.durationMs, recordedAt: take.stoppedAt) != nil else {
                 sending = uploader.pending
                 return say("ما قدرنا نحفظ التسجيل")
