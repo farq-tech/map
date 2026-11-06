@@ -527,6 +527,7 @@ struct AboutView: View {
                     Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
                     Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
                     HiResLicenseNotice()
+                    VoiceDenoiseLicenseNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

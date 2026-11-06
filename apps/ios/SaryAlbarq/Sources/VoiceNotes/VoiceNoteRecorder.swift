@@ -162,11 +162,14 @@ final class VoiceNoteRecorder: NSObject, AVAudioRecorderDelegate {
         try encodeAAC(b, to: url)
     }
 
-    /// The recording as it goes out: decoded and re-encoded as AAC-LC 16 kHz mono at a constant
+    /// The recording as it goes out: decoded, «تنقية الصوت» (`VoiceNoteDenoise`, DeepFilterNet3 on
+    /// the device: wind, engine and tyre noise out) and re-encoded as AAC-LC 16 kHz mono at a constant
     /// `bitRate` (AVAudioRecorder / AVAudioFile ignore the bit rate asked for: ≈70–100 kbps).
-    /// Falls back to the original file if anything fails. Off the main thread.
-    nonisolated static func transcode(_ raw: URL) -> URL {
-        guard let data = try? Data(contentsOf: raw), let pcm = VoiceNotePlayer.decode(data) else { return raw }
+    /// If the denoise fails the original voice is sent; if anything else fails, the original file.
+    /// Off the main thread.
+    nonisolated static func transcode(_ raw: URL, denoise: Bool = true) -> URL {
+        guard let data = try? Data(contentsOf: raw), var pcm = VoiceNotePlayer.decode(data) else { return raw }
+        if denoise { pcm = denoised(pcm) }
         let out = raw.deletingLastPathComponent().appendingPathComponent("sary-voice-\(UUID().uuidString).m4a")
         do {
             try encodeAAC(pcm, to: out)
@@ -176,6 +179,20 @@ final class VoiceNoteRecorder: NSObject, AVAudioRecorderDelegate {
             try? FileManager.default.removeItem(at: out)
             return raw
         }
+    }
+
+    /// The denoised take, or the same buffer when the model is missing, the phone is too hot, or it fails.
+    nonisolated static func denoised(_ pcm: AVAudioPCMBuffer) -> AVAudioPCMBuffer {
+        guard ProcessInfo.processInfo.thermalState != .critical else {
+            PTTDiagnosticsLog.shared.add("voice", "denoise skipped (thermal critical)")
+            return pcm
+        }
+        guard let (clean, r) = VoiceNoteDenoise.process(pcm) else {
+            PTTDiagnosticsLog.shared.add("voice", "denoise unavailable → original")
+            return pcm
+        }
+        PTTDiagnosticsLog.shared.add("voice", "denoised \(Int(r.audioMs)) ms in \(Int(r.tookMs)) ms")
+        return clean
     }
 
     /// 16 kHz mono float → AAC-LC m4a at a constant bit rate (ExtAudioFile + its converter).
