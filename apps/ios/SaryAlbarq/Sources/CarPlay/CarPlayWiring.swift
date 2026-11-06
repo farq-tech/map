@@ -47,13 +47,14 @@ final class CarPlayNavAdapter: CarPlayRoadNavigationSource {
         var maneuvers = s.carPlayManeuvers.map { m in
             CarPlayRoadManeuver(instruction: m.instructionVariants.first ?? "",
                                 shortInstruction: m.instructionVariants.count > 1 ? m.instructionVariants.last : nil,
-                                distanceM: m.distanceM, symbol: m.symbolName)
+                                distanceM: m.distanceM, symbol: m.symbolName,
+                                durationS: m.durationS > 0 ? m.durationS : nil, lanes: m.lanes, cpManeuverType: m.cpManeuverType)
         }
         if s.phase == .offRoad, let text = s.offRoadInstruction {
             /* «آخر جزء بدون طريق»: one straight-line step toward the target. */
             maneuvers = [CarPlayRoadManeuver(instruction: text, shortInstruction: nil,
                                              distanceM: s.offRoad.map(\.distanceM) ?? s.distanceRemainingM ?? 0,
-                                             symbol: "location.north.fill")]
+                                             symbol: "location.north.fill", cpManeuverType: "straightAhead")]
         }
         let line = s.routes.first(where: { $0.id == s.activeRouteId })?.coordinates ?? s.routes.first?.coordinates ?? []
         return CarPlayRoadProgress(destinationLabel: s.target?.name ?? "",
@@ -64,6 +65,12 @@ final class CarPlayNavAdapter: CarPlayRoadNavigationSource {
                                    rerouting: s.rerouting)
     }
 
+    /// Pure mapping (tested): the planned routes → the trip preview's choices.
+    nonisolated static func options(_ s: NavSnapshot) -> [CarPlayRouteOption] {
+        guard s.phase == .planning else { return [] }
+        return s.routes.map { CarPlayRouteOption(id: $0.id, distanceM: $0.distanceM, durationS: $0.durationS, via: $0.via, hasUnpaved: $0.hasUnpaved, line: $0.coordinates) }
+    }
+
     func carPlayStartRoadRoute(to target: LngLat, label: String) -> Bool {
         guard let provider else { return false }
         autoStart = true
@@ -71,10 +78,46 @@ final class CarPlayNavAdapter: CarPlayRoadNavigationSource {
         return true
     }
 
+    func carPlayPlanRoadRoute(to target: LngLat, label: String, memberId: String?) -> Bool {
+        guard let provider else { return false }
+        autoStart = false
+        let name = label.isEmpty ? "النقطة المحددة" : label
+        provider.startNavigation(to: NavTarget(source: memberId == nil ? .point : .member, name: name, position: target, memberId: memberId))
+        return true
+    }
+
+    func carPlayRouteOptions() -> [CarPlayRouteOption] {
+        provider.map { Self.options($0.snapshot) } ?? []
+    }
+
+    var carPlayPlanFailed: Bool {
+        /* Read-only look at the phone's planning state (NavSession owns it). */
+        guard let n = provider as? NavSession else { return false }
+        return n.phase == .planning && !n.loading && n.routes.isEmpty && n.error != nil
+    }
+
+    func carPlayStartGuidance(routeId: String) {
+        autoStart = false
+        provider?.startGuidance(routeId: routeId)
+    }
+
     func carPlayStopRoadRoute() {
         autoStart = false
         provider?.endNavigation()
     }
+}
+
+/// «أبو فهد يتكلم» / «اضغط وسجّل» from the car, over the phone's voice notes.
+extension VoiceNoteCenter: CarPlayWalkieSource {
+    var carPlayTalking: (id: String, userId: String, name: String)? {
+        guard let p = playing, p.userId != me else { return nil }
+        return (p.id, p.userId, p.name)
+    }
+
+    var carPlayRecording: Bool { isRecording }
+    func carPlayTalkTapped() { talkTapped() }
+    func carPlayCancelRecording() { cancel() }
+    func carPlayStopPlaying() { stopPlaying() }
 }
 
 extension LiveOutingController: CarPlayFeatureSource {
