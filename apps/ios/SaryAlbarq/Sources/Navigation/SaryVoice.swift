@@ -263,9 +263,9 @@ enum SaryVoiceCatalog {
         return d
     }
 
-    /// The whole line said: clips plus the gaps between them.
+    /// The whole line said: clips plus the gaps between them, minus the pads cut at the joins (at most).
     static func duration(_ keys: [String]) -> Double {
-        keys.map(duration).reduce(0, +) + Double(max(0, keys.count - 1)) * SaryClipPlayer.gapS
+        keys.map(duration).reduce(0, +) + Double(max(0, keys.count - 1)) * (SaryClipPlayer.gapS - 2 * SaryClipPlayer.padS)
     }
 }
 
@@ -297,12 +297,19 @@ enum NavCueBands {
 
 // MARK: - Playing a line
 
-/// Joins the clips of one line into ONE PCM buffer (a short silence between them, no crossfade)
+/// Joins the clips of one line into ONE PCM buffer (pads cut at the joins, a short silence between them, no crossfade)
 /// and plays it on one AVAudioPlayerNode. Decoding happens off the main thread.
 @MainActor
 final class SaryClipPlayer: NSObject {
-    /// Between two clips of one line.
-    nonisolated static let gapS = 0.045
+    /// Between two clips of one line (added after the silent pads at the join are cut).
+    nonisolated static let gapS = 0.035
+    /// Every clip has an 80 ms digital-silence pad at both ends. Inside a line the pads at the
+    /// joins are cut (never more than the pad, never past the first sample above
+    /// `edgeThresholdDB`), so «بعد ثلاث مية متر» + «لف يمين» flow: ~70–100 ms audible gap.
+    /// The outer edges of the line keep their pads.
+    nonisolated static let padS = 0.080
+    nonisolated static let edgeThresholdDB: Float = -50
+    nonisolated static let edgeWindowS = 0.002
     /// A micro fade at both edges of every clip (no click at the joins; not a crossfade).
     nonisolated static let fadeS = 0.008
     nonisolated static let sampleRate = 44_100.0
@@ -381,9 +388,32 @@ final class SaryClipPlayer: NSObject {
                 cacheLock.unlock()
             }
             if i > 0 { out += [Float](repeating: 0, count: Int(gap * sampleRate)) }
-            out += faded(s ?? [])
+            out += faded(joinTrimmed(s ?? [], head: i > 0, tail: i < keys.count - 1))
         }
         return (out, sampleRate)
+    }
+
+    /// Silent samples (below `edgeThresholdDB`, `edgeWindowS` windows) at the start (`fromEnd` false)
+    /// or the end of a clip, capped at the pad: speech is never cut.
+    nonisolated static func silentEdge(_ s: [Float], fromEnd: Bool) -> Int {
+        let w = max(1, Int(edgeWindowS * sampleRate)), cap = min(Int(padS * sampleRate), s.count / 2)
+        let thr = pow(10, edgeThresholdDB / 20)
+        var n = 0
+        while n + w <= cap {
+            var e: Float = 0
+            for j in n..<(n + w) { let v = s[fromEnd ? s.count - 1 - j : j]; e += v * v }
+            if (e / Float(w)).squareRoot() > thr { break }
+            n += w
+        }
+        return n
+    }
+
+    /// The clip with the silent pad cut at the edges that are joins inside the line.
+    nonisolated static func joinTrimmed(_ s: [Float], head: Bool, tail: Bool) -> [Float] {
+        let a = head ? silentEdge(s, fromEnd: false) : 0
+        let b = tail ? silentEdge(s, fromEnd: true) : 0
+        guard a + b < s.count else { return s }
+        return Array(s[a..<(s.count - b)])
     }
 
     /// `fadeS` linear ramp in and out at the clip's edges (the middle is untouched).

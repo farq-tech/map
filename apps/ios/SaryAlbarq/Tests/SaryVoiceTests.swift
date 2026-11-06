@@ -99,12 +99,41 @@ final class SaryVoiceClipsTests: XCTestCase {
         let b = try SaryClipPlayer.decode(XCTUnwrap(SaryVoiceCatalog.url("turns_01")))
         let line = try SaryClipPlayer.compose(["dist_05", "turns_01"])
         XCTAssertEqual(line.sampleRate, 44100)
-        let gap = line.samples.count - a.samples.count - b.samples.count
+        let ta = SaryClipPlayer.joinTrimmed(a.samples, head: false, tail: true)
+        let tb = SaryClipPlayer.joinTrimmed(b.samples, head: true, tail: false)
+        XCTAssertLessThan(ta.count, a.samples.count, "the pad at the join is cut")
+        XCTAssertGreaterThanOrEqual(ta.count, a.samples.count - Int(SaryClipPlayer.padS * 44100), "never more than the pad")
+        XCTAssertEqual(Array(ta.prefix(1000)), Array(a.samples.prefix(1000)), "the outer edge of the line keeps its pad")
+        let gap = line.samples.count - ta.count - tb.count
         XCTAssertEqual(Double(gap) / 44100, SaryClipPlayer.gapS, accuracy: 0.001)
         XCTAssertTrue((0.03...0.06).contains(SaryClipPlayer.gapS), "30–60 ms of silence, no crossfade")
-        XCTAssertEqual(Array(line.samples[a.samples.count..<(a.samples.count + gap)]), [Float](repeating: 0, count: gap))
+        XCTAssertEqual(Array(line.samples[ta.count..<(ta.count + gap)]), [Float](repeating: 0, count: gap))
         XCTAssertThrowsError(try SaryClipPlayer.compose(["dist_05", "nope_99"]), "a missing clip: nothing, not half a line") { e in
             XCTAssertEqual(e as? SaryClipPlayer.ComposeError, .missing("nope_99"), "named Missing, never another clip")
+        }
+    }
+
+    /// The silence heard at each join (below -50 dBFS, 2 ms windows) stays short: one flowing line.
+    func testJoinsInsideALineAreShortAndSmooth() throws {
+        let combos: [[String]] = [["dist_05", "turns_01"], ["dist_15", "turns_02"], ["turns_01", "turns_14", "turns_02"]]
+        let thr = Float(pow(10.0, -50.0 / 20)), w = 88
+        for keys in combos {
+            let x = try SaryClipPlayer.compose(keys).samples
+            let n = x.count / w
+            let silent = (0..<n).map { i -> Bool in
+                var e: Float = 0
+                for j in (i * w)..<((i + 1) * w) { e += x[j] * x[j] }
+                return (e / Float(w)).squareRoot() <= thr
+            }
+            /* Interior only: the outer pads of the line are kept on purpose. */
+            guard let first = silent.firstIndex(of: false), let last = silent.lastIndex(of: false) else { return XCTFail("\(keys) silent") }
+            var longest = 0, run = 0
+            for s in silent[first...last] { run = s ? run + 1 : 0; longest = max(longest, run) }
+            let ms = Double(longest * w) / 44.1
+            XCTAssertLessThanOrEqual(ms, 120, "\(keys): \(ms) ms of silence at a join")
+            XCTAssertGreaterThanOrEqual(ms, SaryClipPlayer.gapS * 1000 - 2, "\(keys): a real gap, no overlap")
+            let pad = Double(silent.prefix(while: { $0 }).count * w) / 44.1
+            XCTAssertGreaterThanOrEqual(pad, 70, "\(keys): the line's own leading pad stays")
         }
     }
 
