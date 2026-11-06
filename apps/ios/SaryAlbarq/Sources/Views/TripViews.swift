@@ -272,9 +272,9 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الجميع. أنهِ الرحلة ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الجميع. إذا خلصت الطلعة، أنهِها ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
-            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الرحلة", systemImage: "flag.checkered") }
+            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
                 .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
                 .accessibilityIdentifier("trip.end")
         } else {

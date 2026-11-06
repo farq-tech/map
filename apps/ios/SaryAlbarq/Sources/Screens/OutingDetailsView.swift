@@ -178,6 +178,7 @@ struct TripSummaryView: View {
                     TripSummarySection(facts: facts, snapshot: s, destination: model.plans.model(outingId).plan.destination,
                                        trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
                 }
+                TripLegsSection(outingId: outingId)
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
                 SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {

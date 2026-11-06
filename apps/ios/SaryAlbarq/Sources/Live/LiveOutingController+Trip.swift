@@ -6,7 +6,8 @@ import UIKit
 /// and its actions. The rules themselves are pure (`TripRecord`, `TripPresenter`).
 extension LiveOutingController {
     /// The trip's destination: the outing's (the plan's), never a guess.
-    var tripDestination: OutingDestination? { planModel?.plan.destination }
+    /// The current «مشوار» first (mine, else the group's), then the plan's.
+    var tripDestination: OutingDestination? { legs.current?.destination ?? planModel?.plan.destination }
 
     /// The outing this one is «طريق العودة» from (this phone only).
     var returnOrigin: String? { ReturnTripStore.origin(of: session.id) }
@@ -20,6 +21,7 @@ extension LiveOutingController {
             guard let self, self.tripDestination != nil else { return nil }
             return self.tripPanel
         }
+        registerLegs()
         trip.startClock { [weak self] in
             guard let self else { return }
             self.updateTrip()
@@ -117,6 +119,7 @@ extension LiveOutingController {
         case .started:
             break
         case .arrived:
+            legArrivedHere()
             UINotificationFeedback.success()
             toast("وصلت \(tripDestination?.name ?? "الوجهة") 🎉")
             /* The trip's own guidance ends on «وصلتوا»; a person's own navigation just ends. */

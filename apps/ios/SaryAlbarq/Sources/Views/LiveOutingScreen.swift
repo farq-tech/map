@@ -153,7 +153,7 @@ struct LiveOutingScreen: View {
 
     /// What our chrome covers, for the map's keep-group framing and ornaments.
     private func chromeInsets(full: CGSize) -> UIEdgeInsets {
-        let dockTop = ["dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
+        let dockTop = ["flow", "dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
         let side = ["cluster", "speed"].compactMap { frames[$0] }
@@ -250,6 +250,21 @@ struct LiveOutingScreen: View {
                        let line = LiveCalmRules.convoyLine(ui.participantsTab.participants) {
                         ConvoyLinePill(text: line) { controller.selectedTab = .group; controller.sheetDetent = .half }
                             .chromeFrame("convoy")
+                            .transition(.opacity)
+                    }
+                    /* The one big button: «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا» / «أنهِ الطلعة». */
+                    if controller.sheetDetent != .full {
+                        OutingPrimaryCTA(ui: controller.flowUI, tapped: controller.flowTapped)
+                            .chromeFrame("flow")
+                            .padding(.horizontal, 16)
+                            .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
+                                                titleVisibility: .visible) {
+                                Button("أنهِ الطلعة", role: .destructive) { controller.endOutingFlow() }
+                                    .accessibilityIdentifier("flow.endConfirm")
+                                Button("لا، نكمل", role: .cancel) {}
+                            } message: {
+                                Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
+                            }
                             .transition(.opacity)
                     }
                     /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock. */
@@ -533,7 +548,9 @@ private struct LiveTopStack: View {
             let trip = controller.showsTripStrip ? controller.tripPanel : nil
             let follow = plan.following && plan.plan.hasRoute ? TripHeaderPresenter.follow(plan.followStatus(fix: location.lastFix, now: ctx.date)) : nil
             let h = TripHeaderUI(title: TripHeaderPresenter.title(outingName: ui.outingName, trip: trip, ended: controller.tripEnded),
-                                 line: TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars),
+                                 /* «الطلعة» و«المشوار»: the state, unmistakable (ux/الطلعة-والمشوار.md). */
+                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI.line
+                                     : TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars)),
                                  level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
                                  bell: bell)
             /* «تخفيف الزحمة» ٤–٥: the weather while stopped only (dangerous weather comes as an alert);

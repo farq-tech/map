@@ -205,6 +205,8 @@ struct LiveSheet: View {
                                 later: { controller.modal = nil })
         case .navSteps:
             NavStepsSheet(nav: controller.nav, close: { controller.modal = nil })
+        case .whereTo:
+            WhereToSheet(controller: controller)
         case .pttChannels:
             PTTChannelSheet(walkie: controller.session.walkie,
                             members: (controller.session.displayView?.orderedMembers ?? []).map { PTTChannelSheet.Person(id: $0.user_id, name: $0.display_name) },
@@ -258,6 +260,10 @@ private struct TripTab: View {
             ShareCallout(controller: controller, ui: ui)
             if controller.showsTripStrip, ui.status != .notStarted {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            }
+            if ui.status != .notStarted {
+                OutingLegTimeline(legs: controller.legs.timeline, now: ui.now)
+                    .sarySurface(radius: SaryRadius.m)
             }
             TripPlanCard(controller: controller)
             TripRouteActions(controller: controller)
@@ -401,24 +407,14 @@ private struct ShareCallout: View {
         } else {
             switch ui.status {
             case .notStarted:
+                /* An outing needs no destination (a leg does): «وين رايحين؟» comes after the start. */
                 VStack(spacing: theme.space(.s)) {
-                    if controller.tripDestination == nil {
-                        /* «لا يوجد رحلة من غير نهاية»: no start without a destination. */
-                        SaryBanner(text: v?.iLead == true ? "حدّد الوجهة أولًا، وبعدها ابدأ الطلعة." : "بانتظار الوجهة من أمير الرحلة.",
-                                   tone: .warning, systemImage: "flag.slash")
-                            .accessibilityIdentifier("live.waitingDestination")
-                        if v?.iLead == true {
-                            Button { controller.chooseTripDestination() } label: { SaryButtonLabel(title: "حدّد الوجهة", systemImage: "flag.checkered") }
-                                .buttonStyle(.saryPrimary)
-                                .accessibilityIdentifier("live.setDestination")
-                        }
-                    } else {
-                        SaryBanner(text: v?.iLead == true ? "الطلعة لم تبدأ. ابدأها ليشارك الجميع مواقعهم." : "تبدأ المشاركة عندما يبدأ أمير الرحلة.", tone: .info)
-                        if v?.iLead == true {
-                            Button { controller.startOuting() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-                                .buttonStyle(.saryPrimary)
-                                .accessibilityIdentifier("live.start")
-                        }
+                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "بانتظار أمير الرحلة يبدأ الطلعة.", tone: .info)
+                        .accessibilityIdentifier("live.notStarted")
+                    if v?.iLead == true {
+                        Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
+                            .buttonStyle(.saryPrimary)
+                            .accessibilityIdentifier("live.start")
                     }
                 }
             case .paused:

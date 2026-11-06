@@ -13,7 +13,8 @@
  */
 
 const createOutingsRouter = require('../../routes/outings');
-const { createOutingsService, OutingError } = require('./service');
+const { createOutingsService, OutingError, canLead } = require('./service');
+const { createLegs } = require('./legs');
 const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
 const { createPttRelay } = require('./ptt');
@@ -86,7 +87,32 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
         ...(now ? { now } : {}),
       })
     : null;
-  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, voiceNotes, limits, routing });
+  /* «المشاوير»: legs inside an outing (lib/outings/legs.js, migration 016). */
+  const legs = service
+    ? createLegs({
+        q: (text, params) => pool.query(text, params).then((r) => r.rows),
+        tx: async (fn) => {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const out = await fn((text, params) => client.query(text, params).then((r) => r.rows));
+            await client.query('COMMIT');
+            return out;
+          } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw e;
+          } finally {
+            client.release();
+          }
+        },
+        hub: () => hub,
+        requireMember: (...a) => service.requireMember(...a),
+        canLead,
+        err: (code, status) => new OutingError(code, status),
+        ...(now ? { now } : {}),
+      })
+    : null;
+  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, voiceNotes, legs, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;
@@ -104,6 +130,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     apns,
     ptt,
     voiceNotes,
+    legs,
     router,
     ready,
     /** Live-socket lifetimes and close codes, plus the walkie-talkie relay's counters (numbers only). */
