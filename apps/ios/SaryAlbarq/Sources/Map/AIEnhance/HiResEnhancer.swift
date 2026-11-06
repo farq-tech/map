@@ -13,6 +13,8 @@ import UIKit
 final class HiResEnhancer {
     static let inputSize = 256
     static let outputSize = 512
+    /// The custom raster source's tile size (`HiResImagery`): what Mapbox draws.
+    static let tileSize = 512
     static let modelName = "SatelliteEnhancer"
 
     private let model: MLModel
@@ -78,7 +80,12 @@ final class HiResEnhancer {
             rejected += 1
             return nil
         }
-        return UIImage(cgImage: merged.image)
+        /* Handed to Mapbox at the source's tile size: a `CustomRasterSource` tile bigger than its
+           `tileSize` was delivered but not drawn (round 3 shots: the original stayed on screen
+           under the badge). The model still works at `outputSize`; this is only the hand-off. */
+        let t = Self.tileSize
+        guard merged.image.width != t else { return UIImage(cgImage: merged.image) }
+        return Self.draw(t) { $0.draw(merged.image, in: CGRect(x: 0, y: 0, width: t, height: t)); return true }.map(UIImage.init(cgImage:))
     }
 
     /// One model run: a crop (doubled to 256 px when smaller) → its 1024 px ×4 image.

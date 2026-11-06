@@ -102,7 +102,8 @@ enum HiResLevel: String, CaseIterable, Identifiable, Equatable {
 /// Everything that differs between the levels (and in a city), in one place.
 struct HiResProfile: Equatable {
     var level: HiResLevel
-    /// The display tile's side in px: 1024 keeps the model's full ×4 output (crisper on @3x screens).
+    /// The side (px) the model's result is merged and checked at; handed to Mapbox at 512
+    /// (`HiResEnhancer.tileSize`).
     var outputSize: Int
     /// How much of the model's fine detail is kept.
     var gain: Float

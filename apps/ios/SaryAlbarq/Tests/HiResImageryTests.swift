@@ -331,7 +331,7 @@ final class HiResImageryTests: XCTestCase {
             let p = try XCTUnwrap(HiResZoom.plan(HiResTileID.containing(lat: 28.30, lng: 41.40, z: z), level: .strong))
             let t = CFAbsoluteTimeGetCurrent()
             let img = try XCTUnwrap(e.enhance(parent: parent, plan: p, profile: .strong))
-            XCTAssertEqual(img.cgImage?.width, 1024)
+            XCTAssertEqual(img.cgImage?.width, HiResEnhancer.tileSize, "handed to Mapbox at the tile size")
             print("HIRES-BENCH strong z\(z) x\(p.factor) runs \(p.inferences): \(Int((CFAbsoluteTimeGetCurrent() - t) * 1000)) ms (simulator, CPU)")
         }
     }

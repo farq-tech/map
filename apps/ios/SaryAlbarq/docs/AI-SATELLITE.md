@@ -274,7 +274,7 @@ the satellite look the same at every zoom, no vector fallback.
   |---|---|---|---|
   | Enhanced from | **z14** (`sarySand` > 0.5) | z17 tiles (map z16) | z19 tiles (map z18) |
   | z ≤ real detail (z17) | the tile itself, four 256 px quarters, ×2 | from z16 (×2) at z17 | — |
-  | Display tile | 1024 px (the model's full ×4) | 512 px | 1024 / 512 |
+  | Merge / check size | 1024 px (handed to Mapbox at 512) | 512 px | 1024 / 512 |
   | Merge | **full SR** + local colour transfer (8 source px) | frequency split, gain 0.85, 1 px | split, gain 0.7, 1 px |
   | Unsharp / local contrast | 0.3 / 0 | 0.15 / 0.04 | 0.12 / **0** |
   | Prefetch | ring 1 + next zoom under the centre | ring 1 | ring 1 («قوي») |
@@ -291,7 +291,7 @@ the satellite look the same at every zoom, no vector fallback.
   > 15 km/h → original imagery (unchanged safety rule). Hard per-minute run budget.
 - **Badge**: «مُحسّنة» now stays for as long as an enhanced tile is on screen (red line; replaces
   the 3 s badge of «تخفيف الزحمة» ٧).
-- **RAM**: enhanced tiles kept as JPEG q0.9 (48 MB ≈ 100+ tiles of 1024 px), decoded off the main
+- **RAM**: enhanced tiles kept as JPEG q0.9 (48 MB ≈ 150+ tiles of 512 px), decoded off the main
   thread. Still nothing on disk. Crossfade 450 ms.
 - **Full SR (owner, after the single-tile test «نتائج مبهرة جدًا»)**: in the open desert at «قوي» the
   model's whole picture is kept (no frequency split); only colour and shading broader than 8
@@ -305,3 +305,7 @@ the satellite look the same at every zoom, no vector fallback.
 
 Simulator timings (CPU only, Debug): one ×2 tile 2.1–2.4 s; «قوي» z18 (one run, 1024 px) 3.2 s;
 «قوي» z15 (four runs) 8.4 s. Device estimate (ANE ≈ 150 ms a run): ≈ 0.2 s and ≈ 0.7 s.
+
+**Open (round 3 shots, 2026-11-06):** with 1024 px tiles the in-app "after" shots looked like the
+original while the badge showed. Likely cause: `CustomRasterSource` does not draw a tile bigger than
+its `tileSize`. Tiles are now handed over at 512 px; to be confirmed with a fresh build and shots.
