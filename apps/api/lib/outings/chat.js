@@ -125,6 +125,9 @@ function messageOut(r) {
   };
 }
 
+/** «بلّغ عن الرسالة» reasons (the app shows them in Arabic). */
+const REPORT_REASONS = ['abuse', 'harassment', 'spam', 'sexual', 'violence', 'other'];
+
 const MESSAGE_COLS = `c.id, c.outing_id, c.seq, c.conv, c.sender_id, c.recipient_id, c.client_id, c.kind, c.body,
   c.lat, c.lng, c.label, c.created_at, c.deleted_at, c.deleted_by_role,
   COALESCE(sm.invited_name, su.display_name) AS sender_name`;
@@ -136,6 +139,8 @@ function createChat(ctx) {
   const hub = () => events();
   const retentionDays = cfg.chatRetentionDays ?? RETENTION_DAYS;
   const sendLimit = createRateLimiter({ limit: cfg.chatPerMinute ?? 30, windowMs: 60_000, now });
+  /* «بلّغ عن الرسالة»: a handful an hour is a real complaint; more is a flood. */
+  const reportLimit = createRateLimiter({ limit: cfg.reportsPerHour ?? 10, windowMs: 60 * 60_000, now });
   const typingAt = new Map(); // `${outingId}:${userId}:${conv}` → ms
 
   /* ---------- who may do what ---------- */
@@ -187,14 +192,16 @@ function createChat(ctx) {
   /* ---------- delivery ---------- */
 
   /** Group → everyone in the room. Direct → the two people only, every device of each. */
-  function deliver(outingId, recipientId, senderId, event, { exceptUser } = {}) {
+  function deliver(outingId, recipientId, senderId, event, { exceptUser, exceptUsers } = {}) {
     const h = hub();
-    if (!recipientId) return h.emit(outingId, event, exceptUser ? { exceptUser } : undefined);
+    const blockers = exceptUsers && exceptUsers.size ? exceptUsers : null;
+    if (!recipientId) return h.emit(outingId, event, exceptUser || blockers ? { exceptUser, exceptUsers: blockers || undefined } : undefined);
     if (!h.connectionsOf || !h.send) return 0;
     const payload = JSON.stringify(event);
     let n = 0;
     for (const uid of new Set([senderId, recipientId])) {
       if (exceptUser && uid === exceptUser) continue;
+      if (blockers && blockers.has(uid)) continue;
       for (const c of h.connectionsOf(outingId, uid)) {
         h.send(c, payload);
         n += 1;
@@ -203,7 +210,7 @@ function createChat(ctx) {
     return n;
   }
 
-  async function pushMessage(message, a) {
+  async function pushMessage(message, a, blockers = new Set()) {
     if (!push?.enabled) return null;
     try {
       const outingId = message.outing_id;
@@ -212,7 +219,8 @@ function createChat(ctx) {
          WHERE m.outing_id = $1 AND m.status = 'active' AND u.chat_push = false`,
         [outingId],
       );
-      const skip = optedOut.map((r) => r.user_id);
+      /* Opted out of chat pushes, or blocked the sender («احظر»). */
+      const skip = [...new Set([...optedOut.map((r) => r.user_id), ...blockers])];
       if (message.recipient_id && skip.includes(message.recipient_id)) return null;
       const payload = chatPushPayload(message, { senderName: message.sender_name, outingName: a.m.outing_name });
       if (message.recipient_id) payload.to_user = message.recipient_id;
@@ -246,6 +254,8 @@ function createChat(ctx) {
       return { message: messageOut(prior), duplicate: true };
     }
     if (!a.writable) throw err(a.why, 409);
+    /* «احظر»: no direct messages between a blocker and the person they blocked, either way. */
+    if (a.peer && (await blockedEitherWay(user.id, a.peer))) throw err('blocked', 403);
     const parsed = parseMessage(raw);
     if (parsed.error) throw err(parsed.error, 400);
     if (!sendLimit(`${outingId}:${user.id}`)) throw err('too_frequent', 429);
@@ -276,8 +286,9 @@ function createChat(ctx) {
     }
     const [full] = await q(`SELECT ${MESSAGE_COLS} FROM sary.chat_messages c ${MESSAGE_JOINS} WHERE c.id = $1`, [row.id]);
     const message = messageOut(full);
-    deliver(outingId, message.recipient_id, user.id, { type: 'chat_message', message });
-    void pushMessage(message, a);
+    const blockers = await blockersOf(user.id);
+    deliver(outingId, message.recipient_id, user.id, { type: 'chat_message', message }, { exceptUsers: blockers });
+    void pushMessage(message, a, blockers);
     return { message, duplicate: false };
   }
 
@@ -308,8 +319,10 @@ function createChat(ctx) {
     const af = seqParam(after);
     if (b === undefined || af === undefined) throw err('invalid_cursor', 400);
     const n = Math.min(PAGE_MAX, Math.max(1, Number.parseInt(limit, 10) || PAGE_DEFAULT));
-    const params = [outingId, a.conv, a.until, n + 1];
-    let where = `c.outing_id = $1 AND c.conv = $2 AND ($3::timestamptz IS NULL OR c.created_at <= $3)`;
+    const params = [outingId, a.conv, a.until, n + 1, user.id];
+    /* «احظر»: what the people I blocked said is not in my history. */
+    let where = `c.outing_id = $1 AND c.conv = $2 AND ($3::timestamptz IS NULL OR c.created_at <= $3)
+      AND NOT EXISTS (SELECT 1 FROM sary.user_blocks ub WHERE ub.blocker_id = $5 AND ub.blocked_id = c.sender_id)`;
     let order = 'DESC';
     if (af !== null) {
       params.push(af);
@@ -388,7 +401,7 @@ function createChat(ctx) {
     if (on !== false) typingAt.set(key, t);
     else typingAt.delete(key);
     if (typingAt.size > 5000) for (const [k, at] of typingAt) if (t - at > 60_000) typingAt.delete(k);
-    deliver(outingId, a.peer, user.id, { type: 'chat_typing', conv: a.peer ? 'direct' : 'group', user_id: user.id, peer_id: a.peer, on: on !== false }, { exceptUser: user.id });
+    deliver(outingId, a.peer, user.id, { type: 'chat_typing', conv: a.peer ? 'direct' : 'group', user_id: user.id, peer_id: a.peer, on: on !== false }, { exceptUser: user.id, exceptUsers: await blockersOf(user.id) });
     return { sent: true };
   }
 
@@ -396,7 +409,8 @@ function createChat(ctx) {
 
   const MINE = `SELECT c.* FROM sary.chat_messages c
     WHERE c.outing_id = $1 AND (c.conv = 'group' OR c.sender_id = $2 OR c.recipient_id = $2)
-      AND ($3::timestamptz IS NULL OR c.created_at <= $3)`;
+      AND ($3::timestamptz IS NULL OR c.created_at <= $3)
+      AND NOT EXISTS (SELECT 1 FROM sary.user_blocks ub WHERE ub.blocker_id = $2 AND ub.blocked_id = c.sender_id)`;
 
   async function unreadRows(outingId, userId, until) {
     return q(
@@ -511,6 +525,81 @@ function createChat(ctx) {
     return null;
   }
 
+  /* ---------- «احظر» و«بلّغ» (App Store 1.2) ---------- */
+
+  /** Everyone who blocked `userId`: they do not get that person's chat or voice notes. */
+  async function blockersOf(userId) {
+    if (!v.isUuid(userId)) return new Set();
+    const rows = await q(`SELECT blocker_id FROM sary.user_blocks WHERE blocked_id = $1`, [userId]);
+    return new Set(rows.map((r) => r.blocker_id));
+  }
+
+  async function blockedEitherWay(a, b) {
+    const [r] = await q(
+      `SELECT 1 FROM sary.user_blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`,
+      [a, b],
+    );
+    return Boolean(r);
+  }
+
+  /** «المحظورين» in the settings: the people I blocked, newest first. */
+  async function listBlocks(user) {
+    const rows = await q(
+      `SELECT b.blocked_id, b.created_at, u.display_name FROM sary.user_blocks b
+       JOIN sary.users u ON u.id = b.blocked_id
+       WHERE b.blocker_id = $1 ORDER BY b.created_at DESC LIMIT 500`,
+      [user.id],
+    );
+    return { blocks: rows.map((r) => ({ user_id: r.blocked_id, display_name: r.display_name || null, created_at: iso(r.created_at) })) };
+  }
+
+  async function block(user, targetId) {
+    if (!v.isUuid(targetId)) throw err('user_not_found', 404);
+    if (targetId === user.id) throw err('cannot_block_self', 400);
+    try {
+      await q(`INSERT INTO sary.user_blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [user.id, targetId]);
+    } catch (e) {
+      if (e.code === '23503') throw err('user_not_found', 404);
+      throw e;
+    }
+    return { blocked: true, user_id: targetId };
+  }
+
+  async function unblock(user, targetId) {
+    if (!v.isUuid(targetId)) throw err('user_not_found', 404);
+    await q(`DELETE FROM sary.user_blocks WHERE blocker_id = $1 AND blocked_id = $2`, [user.id, targetId]);
+    return { blocked: false, user_id: targetId };
+  }
+
+  /**
+   * «بلّغ عن الرسالة»: stored for review (docs/sary-moderation.md). Only someone who can read the
+   * message can report it. One report per person per message (a repeat answers `duplicate`).
+   * `block: true` also blocks the sender in the same step.
+   */
+  async function report(user, outingId, messageId, raw = {}) {
+    if (!v.isUuid(messageId)) throw err('message_not_found', 404);
+    const reason = typeof raw.reason === 'string' ? raw.reason : '';
+    if (!REPORT_REASONS.includes(reason)) throw err('invalid_reason', 400);
+    const note = raw.note == null ? null : chatText(raw.note, 500);
+    if (note === undefined) throw err('invalid_note', 400);
+    const [msg] = await q(`SELECT id, conv, sender_id, recipient_id, body FROM sary.chat_messages WHERE id = $1 AND outing_id = $2`, [messageId, outingId]);
+    if (!msg) throw err('message_not_found', 404);
+    const peerOf = msg.conv === 'group' ? 'group' : msg.sender_id === user.id ? msg.recipient_id : msg.recipient_id === user.id ? msg.sender_id : null;
+    if (!peerOf) throw err('message_not_found', 404);
+    await access(user, outingId, peerOf);
+    if (msg.sender_id === user.id) throw err('cannot_report_self', 400);
+    if (!reportLimit(user.id)) throw err('too_frequent', 429);
+    const ins = await q(
+      `INSERT INTO sary.chat_reports (reporter_id, message_id, outing_id, sender_id, reason, note, body_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (reporter_id, message_id) WHERE message_id IS NOT NULL DO NOTHING
+       RETURNING id`,
+      [user.id, messageId, outingId, msg.sender_id, reason, note, msg.body],
+    );
+    if (raw.block === true) await block(user, msg.sender_id);
+    return { reported: true, duplicate: ins.length === 0, blocked: raw.block === true };
+  }
+
   /* ---------- notification preference ---------- */
 
   async function prefs(user) {
@@ -557,8 +646,13 @@ function createChat(ctx) {
       chatPrefs: prefs,
       setChatPrefs: setPrefs,
       chatPurge: purge,
+      chatReport: report,
+      listBlocks,
+      blockUser: block,
+      unblockUser: unblock,
+      blockersOf,
     },
   };
 }
 
-module.exports = { createChat, chatText, parseWith, parseMessage, directKey, messageOut, QUICK_PRESETS, TEXT_MAX, RETENTION_DAYS };
+module.exports = { createChat, chatText, parseWith, parseMessage, directKey, messageOut, QUICK_PRESETS, TEXT_MAX, RETENTION_DAYS, REPORT_REASONS };

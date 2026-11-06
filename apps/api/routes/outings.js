@@ -112,6 +112,22 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
     res.json({ ok: true, user });
   }));
 
+  /* «المحظورين» (App Store 1.2): block / unblock a member, and the list in the settings.
+   * A blocked person's chat messages and voice notes are hidden for the blocker and they
+   * cannot DM each other. SOS is never filtered. See chat.js. */
+  router.get('/me/blocks', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.listBlocks(req.user)) });
+  }));
+
+  router.post('/me/blocks/:userId', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    res.status(201).json({ ok: true, ...(await service.blockUser(req.user, req.params.userId)) });
+  }));
+
+  router.delete('/me/blocks/:userId', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.unblockUser(req.user, req.params.userId)) });
+  }));
+
   /* «احذف حسابي» (App Store 5.1.1(v)): leaves every outing with the normal leave rules
    * (owner hand-over / end), then hard-deletes the identity and everything only it owns.
    * The token answers 401 from then on — so does a repeat. See service.deleteAccount. */
@@ -551,6 +567,12 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
 
   router.post('/:id/chat/:with/read', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.chatRead(req.user, req.params.id, req.params.with, req.body?.seq)) });
+  }));
+
+  /* «بلّغ عن الرسالة»: { reason, note?, block? } — stored for review (docs/sary-moderation.md). */
+  router.post('/:id/chat/:msgId/report', auth, asyncHandler(async (req, res) => {
+    const r = await service.chatReport(req.user, req.params.id, req.params.msgId, req.body || {});
+    res.status(r.duplicate ? 200 : 201).json({ ok: true, ...r });
   }));
 
   router.delete('/:id/chat/messages/:messageId', auth, asyncHandler(async (req, res) => {

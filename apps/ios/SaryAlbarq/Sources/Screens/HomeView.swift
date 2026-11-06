@@ -16,6 +16,7 @@ enum HomeRoute: Hashable {
     case about
     case advanced
     case convoyAlerts
+    case blocked
 }
 
 /// «طلعاتي»: my outings by state (جارية / متوقفة / لم تبدأ), the latest ended
@@ -69,6 +70,7 @@ struct HomeView: View {
         case .about: AboutView(back: pop)
         case .advanced: AdvancedSettingsView(back: pop)
         case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
+        case .blocked: BlockedUsersView(back: pop)
         }
     }
 

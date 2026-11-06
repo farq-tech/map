@@ -225,6 +225,10 @@ struct ChatThreadView: View {
     @State private var draft = ""
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
+    /// «بلّغ عن الرسالة»: the message whose reason is being chosen.
+    @State private var reportTarget: ChatMessage?
+    /// «احظر فلان»: the message whose sender is about to be blocked.
+    @State private var blockTarget: ChatMessage?
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
@@ -234,8 +238,34 @@ struct ChatThreadView: View {
     private var title: String { with.isGroup ? "دردشة الطلعة" : context.name(with.peer ?? "", fallback: thread.latest?.sender_name) }
 
     var body: some View {
+        threadBody
+            .confirmationDialog("ليش تبلّغ عن الرسالة؟", isPresented: Binding(get: { reportTarget != nil }, set: { if !$0 { reportTarget = nil } }),
+                                titleVisibility: .visible, presenting: reportTarget) { m in
+                ForEach(ChatReportReason.allCases) { r in
+                    Button(r.label) { Task { await chat.report(m, reason: r) } }
+                        .accessibilityIdentifier("chat.report.\(r.rawValue)")
+                }
+                Button("بلّغ واحظر \(senderName(m))", role: .destructive) { Task { await chat.report(m, reason: .abuse, block: true) } }
+                    .accessibilityIdentifier("chat.report.block")
+                Button("إلغاء", role: .cancel) {}
+            } message: { _ in
+                Text("يوصل البلاغ لفريق سَرى البارق ونراجعه خلال ٢٤ ساعة. ما يدري المرسل مين بلّغ.")
+            }
+            .alert(blockTarget.map { "تحظر \(senderName($0))؟" } ?? "", isPresented: Binding(get: { blockTarget != nil }, set: { if !$0 { blockTarget = nil } }),
+                   presenting: blockTarget) { m in
+                Button("احظر", role: .destructive) { Task { await chat.block(m.sender_id, name: senderName(m)) } }
+                    .accessibilityIdentifier("chat.block.confirm")
+                Button("إلغاء", role: .cancel) {}
+            } message: { _ in
+                Text("تختفي رسائله ورسائله الصوتية عندك، وما يقدر يراسلك على الخاص. الطوارئ منه توصلك دايم. تقدر تلغي الحظر من الإعدادات ← المحظورين.")
+            }
+    }
+
+    private func senderName(_ m: ChatMessage) -> String { context.name(m.sender_id, fallback: m.sender_name) }
+
+    private var threadBody: some View {
         let p = theme.palette
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             header
             ScrollViewReader { proxy in
                 ScrollView {
@@ -403,6 +433,12 @@ struct ChatThreadView: View {
         if m.text != nil && !m.deleted {
             Button { UIPasteboard.general.string = m.text } label: { Label("نسخ", systemImage: "doc.on.doc") }
         }
+        if chat.canReport(m) {
+            Button { reportTarget = m } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
+                .accessibilityIdentifier("chat.menu.report")
+            Button(role: .destructive) { blockTarget = m } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
+                .accessibilityIdentifier("chat.menu.block")
+        }
         if chat.canDelete(m) {
             Button(role: .destructive) { Task { await chat.delete(m) } } label: {
                 Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الرحلة)", systemImage: "trash")
@@ -431,6 +467,9 @@ struct ChatThreadView: View {
         VStack(spacing: theme.space(.s)) {
             if let e = chat.lastError {
                 SaryInlineMessage(text: e, tone: .warning).accessibilityIdentifier("chat.error")
+            }
+            if let n = chat.notice {
+                SaryInlineMessage(text: n, tone: .info).accessibilityIdentifier("chat.notice")
             }
             if !writable {
                 SaryInlineMessage(text: ChatRules.errorText(thread.readOnlyReason ?? chat.readOnlyReason ?? "outing_ended"), tone: .info)

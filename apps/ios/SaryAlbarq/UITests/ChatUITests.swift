@@ -70,6 +70,43 @@ final class ChatUITests: XCTestCase {
         shot(app, "chat-04-conversations-after")
     }
 
+    /// App Store 1.2: long-press a friend's message → «بلّغ عن الرسالة» (a reason) and «احظر فلان»
+    /// (his messages go). «المحظورين» in Settings is covered by unit tests.
+    func testReportAndBlockFromAMessageThenUnblockInSettings() {
+        let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
+        let entry = any(app, "chat.entry")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+        XCTAssertTrue(any(app, "chat.row.group").waitForExistence(timeout: 5))
+        any(app, "chat.row.group").tap()
+        let bubble = app.descendants(matching: .any).matching(identifier: "chat.bubble").firstMatch
+        XCTAssertTrue(bubble.waitForExistence(timeout: 5), "a friend's message")
+        let before = app.descendants(matching: .any).matching(identifier: "chat.bubble").count
+
+        bubble.press(forDuration: 1.0)
+        let report = app.buttons["chat.menu.report"].exists ? app.buttons["chat.menu.report"] : app.buttons["بلّغ عن الرسالة"]
+        XCTAssertTrue(report.waitForExistence(timeout: 4), "«بلّغ عن الرسالة» in the menu")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch.exists, "«احظر فلان» in the menu")
+        shot(app, "chat-10-message-menu")
+        report.tap()
+        let reason = app.buttons["كلام مسيء أو سب"]
+        XCTAssertTrue(reason.waitForExistence(timeout: 4), "the reasons")
+        shot(app, "chat-11-report-reasons")
+        reason.tap()
+        XCTAssertTrue(any(app, "chat.notice").waitForExistence(timeout: 5), "«وصل بلاغك…»")
+
+        bubble.press(forDuration: 1.0)
+        let block = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch
+        XCTAssertTrue(block.waitForExistence(timeout: 4))
+        block.tap()
+        let confirm = app.alerts.buttons["احظر"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 4), "asks before blocking")
+        confirm.tap()
+        let fewer = NSPredicate { _, _ in app.descendants(matching: .any).matching(identifier: "chat.bubble").count < before }
+        XCTAssertEqual(XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: fewer, object: nil)], timeout: 5), .completed, "his messages are gone")
+        shot(app, "chat-12-after-block")
+    }
+
     func testPlusOpensChatsInTwoTaps() {
         let app = launch()
         app.buttons["outing-actions"].tap()

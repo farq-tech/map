@@ -276,6 +276,8 @@ final class VoiceNoteCenter: ObservableObject {
     /// A note from the socket (or a sync, or a push).
     func receive(_ n: VoiceNote) {
         guard !closed else { return }
+        /* «احظر»: a blocked sender's notes never play by themselves nor wait in the list. */
+        if BlockedUsers.storedIds(defaults).contains(n.user_id) { return }
         let auto = autoplay
         let known = list.contains { $0.id == n.id } || inbox.heard.contains(n.id)
         let queued = inbox.receive(n, nowMs: Self.monoMs(), me: me, channel: channel, muted: muted || !auto)
@@ -317,7 +319,8 @@ final class VoiceNoteCenter: ObservableObject {
         let ch = channel
         guard let notes = try? await backend.listVoiceNotes(outingId, channel: ch), ch == channel else { return }
         inbox.prune(channel: ch, keep: Set(notes.map(\.id)))
-        for n in notes.sorted(by: { $0.recorded_at < $1.recorded_at }) { _ = inbox.receive(n, nowMs: Self.monoMs(), me: me, channel: ch, muted: muted) }
+        let blocked = BlockedUsers.storedIds(defaults)
+        for n in notes.sorted(by: { $0.recorded_at < $1.recorded_at }) where !blocked.contains(n.user_id) { _ = inbox.receive(n, nowMs: Self.monoMs(), me: me, channel: ch, muted: muted) }
         refreshList()
         pump()
     }
