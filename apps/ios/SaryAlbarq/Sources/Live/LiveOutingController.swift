@@ -246,6 +246,8 @@ final class LiveOutingController: ObservableObject {
     @Published var tripConfirmEnd = false
     /// The first seconds after an invite join (`LiveOutingController+Arrival.swift`).
     @Published var arrival = InviteeArrivalState()
+    /// Guidance asked for without a fresh fix: «ننتظر موقعك…» until one comes (`+FixWait.swift`).
+    @Published var fixWait: NavFixWait?
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
     /// A line for a participant's card («روح له» refused: their position is old).
@@ -551,6 +553,7 @@ final class LiveOutingController: ObservableObject {
         arrivalTick()
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
+        fixWaitTick()
         updateBackTrack()
         updateFollow()
         updateTrip()

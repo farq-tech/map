@@ -103,10 +103,20 @@ final class NavSession: ObservableObject {
 
     /// Bumped on every new route (start, reroute): lines built for an older one are dropped.
     private(set) var routeRevision = 0 {
-        didSet { voice.routeRevision = routeRevision; saidStages = [:] }
+        didSet { voice.routeRevision = routeRevision; saidAtM = [:] }
     }
-    /// Per maneuver («<revision>:<step>»), the cues already said (early / confirm / immediate).
-    private var saidStages: [String: Set<Int>] = [:]
+    /// Per maneuver («<revision>:<step>»), how far before it the last line was said.
+    private var saidAtM: [String: Double] = [:]
+
+    /// A cue for a maneuver already announced is a duplicate (the same moment twice: a repeated
+    /// event, the start line and Mapbox's first cue) unless I am clearly closer than when it was
+    /// last said. Build 21: the cue was keyed by distance *band* instead — two of Mapbox's cues in
+    /// one band (150 m and ~70 m are both "confirm" at 50 km/h) silenced the second, so the
+    /// «now» of a turn was never said at city speed. Every closer cue is said now.
+    static func isRepeat(distanceM d: Double, lastSaidM last: Double?) -> Bool {
+        guard let last else { return false }
+        return d > last - max(20, last * 0.25)
+    }
 
     /// The guidance line for step `index`, `d` metres ahead — nil when that cue was already said.
     /// «صوت سرى»: no name, «ثم …» when the next maneuver follows closely and there is time.
@@ -114,10 +124,12 @@ final class NavSession: ObservableObject {
         guard let r = active, r.steps.indices.contains(index) else { return nil }
         let step = r.steps[index]
         let speed = myFix()?.speed
-        let stage = NavCueBands.stage(distanceM: d, bands: NavCueBands.distances(speedMps: speed, unpaved: r.hasUnpaved))
         let key = "\(routeRevision):\(index)"
-        if !force, saidStages[key, default: []].contains(stage.rawValue) { return nil }
-        saidStages[key, default: []].insert(stage.rawValue)
+        if !force, Self.isRepeat(distanceM: d, lastSaidM: saidAtM[key]) {
+            voice.stats.dropped(.dedupe)
+            return nil
+        }
+        saidAtM[key] = d
         var clips = SaryVoiceScript.step(step, distanceM: d, auto: auto, stop: isStopTarget)
         let next = r.steps.indices.contains(index + 1) ? r.steps[index + 1] : nil
         clips = SaryVoiceScript.withThen(clips, next: next, gapM: step.distanceM, distanceToManeuverM: d, speedMps: speed, stop: isStopTarget)
@@ -462,6 +474,9 @@ final class NavSession: ObservableObject {
             routeRevision += 1
             if let t = target { offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position) }
             toast("مسار جديد")
+            /* The new route's first maneuver at once: Mapbox's own first cue for it came just
+             * BEFORE this event (still on the old route) and was lost — up to a minute of silence. */
+            if r.steps.count > 1, let line = guidanceLine(stepIndex: 1, distanceM: r.steps[0].distanceM, force: true) { voice.say(line) }
         case let .rerouteFailed(m):
             rerouting = false
             toast(m)
@@ -486,12 +501,17 @@ final class NavSession: ObservableObject {
                 voice.say(t)
             }
         case let .cue(routerText):
+            /* Mid-reroute the cue belongs to the route being fetched: `.rerouted` says it. */
+            if rerouting { return }
             if let p = progress, active?.steps.indices.contains(p.stepIndex) == true {
                 if let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM) { voice.say(line) }
+            } else if let r = active, r.steps.count > 1, let line = guidanceLine(stepIndex: 1, distanceM: r.steps[0].distanceM, force: true) {
+                /* No progress yet (the first seconds, just after a reroute): the first maneuver of the route. */
+                voice.say(line)
             } else if NavText.isArabic(routerText) {
                 /* Router narration only as a last resort, and never in another language
-                 * (Valhalla narrates in English around Arabic street names). No clips: free
-                 * text has no structure to map, so «صوت سرى» waits for the next cue. */
+                 * (Valhalla narrates in English around Arabic street names). No clips: the
+                 * device voice says it (`NavVoice.speak`), never silence. */
                 voice.say(routerText, clips: [])
             }
         }

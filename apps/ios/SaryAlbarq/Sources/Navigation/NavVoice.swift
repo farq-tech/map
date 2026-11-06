@@ -8,6 +8,25 @@ import Foundation
 ///
 /// One line at a time, plus at most one waiting: a waiting line from an older route
 /// (`routeRevision`) or past `expiresAt` is dropped, never said late.
+/// What happened to the guidance lines asked for (diagnostics: «جودة GPS / تشخيص»).
+struct NavVoiceStats: Equatable {
+    enum Drop: String, CaseIterable { case missing, stale, dedupe, session, interrupted }
+    var requested = 0
+    var spoken = 0
+    var drops: [Drop: Int] = [:]
+    /// Lines said with the device voice because «صوت سرى» had no clip for them (never silence).
+    var deviceFallback = 0
+
+    mutating func dropped(_ d: Drop) { drops[d, default: 0] += 1 }
+
+    var line: String {
+        "صوت: طُلب \(requested) · قيل \(spoken) · بديل \(deviceFallback) · " + Drop.allCases.map { "\($0.rawValue) \(drops[$0] ?? 0)" }.joined(separator: " · ")
+    }
+
+    /// The running navigation's counters, for the diagnostics row.
+    @MainActor static var current = NavVoiceStats()
+}
+
 @MainActor
 final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
     static let muteKey = "sary.nav.muted.v1"
@@ -20,6 +39,7 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
     private var next: (line: NavLine, at: Date)?
     private var pendingTimer: Timer?
     private var speaking = false
+    var stats = NavVoiceStats() { didSet { NavVoiceStats.current = stats } }
     /// A waiting line older than this is stale guidance: dropped.
     static let pendingMaxS: TimeInterval = 12
     /// The route lines are for now (`NavSession` bumps it on every new route).
@@ -93,15 +113,20 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
         let t = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty || !line.clips.isEmpty else { return }
         onSpoken(t)
+        if !muted { stats.requested += 1 }
         #if DEBUG
         NavLog.log("say%@: %@ [%@]", muted ? " (muted)" : "", t, line.clips.joined(separator: " "))
         #endif
         /* The same line twice within a few seconds (reroute, duplicate events): once. */
         let id = t + "|" + line.clips.joined(separator: "+")
-        if id == lastText, Date().timeIntervalSince(lastAt) < 8 { return }
+        if id == lastText, Date().timeIntervalSince(lastAt) < 8 {
+            if !muted { stats.dropped(.dedupe) }
+            return
+        }
         lastText = id
         lastAt = Date()
-        guard !muted, !isStale(line) else { return }
+        guard !muted else { return }
+        guard !isStale(line) else { return stats.dropped(.stale) }
         if !canSpeak(), isSending(), line.safety {
             /* I am talking: never over my own voice, but safety is never skipped. */
             return onSafetyWhileTalking(t)
@@ -118,6 +143,7 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
 
     /// The one waiting line (a newer one replaces it).
     private func enqueue(_ line: NavLine) {
+        if next != nil { stats.dropped(.stale) }
         next = (line, Date())
         guard pendingTimer == nil else { return }
         pendingTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
@@ -127,7 +153,10 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
 
     private func pump() {
         guard let n = next else { return dropPending() }
-        guard !muted, !isStale(n.line), Date().timeIntervalSince(n.at) < Self.pendingMaxS else { return dropPending() }
+        guard !muted, !isStale(n.line), Date().timeIntervalSince(n.at) < Self.pendingMaxS else {
+            if !muted { stats.dropped(.stale) }
+            return dropPending()
+        }
         guard !isSpeaking, canSpeak() else { return }
         dropPending()
         speak(n.line)
@@ -140,40 +169,73 @@ final class NavVoice: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func speak(_ line: NavLine) {
-        let c = choice()
-        /* «صوت سرى» and nothing in his voice for this line: never the device voice in the middle. */
-        if c == .sary, line.clips.isEmpty { return }
+        var c = choice()
+        /* «صوت سرى» with no clip for this line: the device voice says it — a guidance line is never silent. */
+        if c == .sary, line.clips.isEmpty {
+            /* Arabic only: router narration in another language is never read out. */
+            guard NavText.isArabic(line.text) else { return stats.dropped(.missing) }
+            c = .device
+            stats.deviceFallback += 1
+        }
         /* Only while a line plays. «إذاعة الطلعة» playing: keep its `.playback` session and let it
          * duck itself; the walkie-talkie / a voice note owns `.playAndRecord`: play on it as is. */
         GroupAudioDuck.began(.nav)
         if !GroupAudioDuck.musicOwnsSession, !GroupAudioDuck.pttActive {
-            let s = AVAudioSession.sharedInstance()
-            try? s.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
-            try? s.setActive(true)
+            activateSession()
         }
         speaking = true
         lastPlayed = (c, line.clips, line.text)
         switch c {
         case .sary:
-            clips.play(line.clips) { ok in
-                #if DEBUG
-                if !ok { NavLog.log("sary voice: could not play [%@]", line.clips.joined(separator: " ")) }
-                #endif
+            clips.play(line.clips) { [weak self] ok in
+                guard let self else { return }
+                if ok { self.stats.spoken += 1; return }
+                NSLog("[NAV] sary voice: could not play [%@] → device voice", line.clips.joined(separator: " "))
+                /* A clip missing or broken: the device voice says the line rather than nothing. */
+                self.stats.dropped(.missing)
+                guard NavText.isArabic(line.text) else { return }
+                self.stats.deviceFallback += 1
+                self.speaking = true
+                self.speakWithDevice(line.text)
             }
         case .device:
-            if let f = speakDevice {
-                f(line.text)
-                DispatchQueue.main.async { [weak self] in self?.finished() }
-            } else {
-                let u = AVSpeechUtterance(string: line.text)
-                u.voice = Self.voice
-                u.rate = AVSpeechUtteranceDefaultSpeechRate * 1.02
-                synth.speak(u)
+            speakWithDevice(line.text)
+        }
+    }
+
+    private func speakWithDevice(_ text: String) {
+        stats.spoken += 1
+        if let f = speakDevice {
+            f(text)
+            DispatchQueue.main.async { [weak self] in self?.finished() }
+        } else {
+            let u = AVSpeechUtterance(string: text)
+            u.voice = Self.voice
+            u.rate = AVSpeechUtteranceDefaultSpeechRate * 1.02
+            synth.speak(u)
+        }
+    }
+
+    /// The playback session for a line. Another app or a call may still hold it: logged, tried
+    /// once more 300 ms later; the line is played either way (ducking may just not apply).
+    private func activateSession() {
+        let s = AVAudioSession.sharedInstance()
+        do {
+            try s.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
+            try s.setActive(true)
+        } catch {
+            NSLog("[NAV] audio session: %@ — retrying in 300 ms", String(describing: error))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                do { try s.setActive(true) } catch {
+                    NSLog("[NAV] audio session failed again: %@", String(describing: error))
+                    self?.stats.dropped(.session)
+                }
             }
         }
     }
 
     private func interrupt() {
+        if speaking || next != nil { stats.dropped(.interrupted) }
         dropPending()
         synth.stopSpeaking(at: .immediate)
         clips.interrupted()
