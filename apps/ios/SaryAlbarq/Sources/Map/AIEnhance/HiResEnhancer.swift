@@ -1,3 +1,4 @@
+import Accelerate
 import CoreImage
 import CoreML
 import CoreVideo
@@ -125,45 +126,18 @@ final class HiResEnhancer {
                        shouldInterpolate: true, intent: .defaultIntent)
     }
 
-    /// Two box passes per axis (≈ Gaussian, σ ≈ radius), edges clamped. RGB only.
+    /// Tent blur (≈ two box passes, σ ≈ radius) with Accelerate, edges extended.
     static func blur(_ src: [UInt8], _ n: Int, radius r: Int) -> [UInt8] {
-        var a = src.map { Float($0) }
-        var b = a
-        let w = Float(2 * r + 1)
-        for _ in 0..<2 {
-            for y in 0..<n {             // horizontal: a → b
-                for c in 0..<3 {
-                    var acc: Float = 0
-                    for k in -r...r { acc += a[(y * n + min(n - 1, max(0, k))) * 4 + c] }
-                    for x in 0..<n {
-                        b[(y * n + x) * 4 + c] = acc / w
-                        acc += a[(y * n + min(n - 1, x + r + 1)) * 4 + c] - a[(y * n + max(0, x - r)) * 4 + c]
-                    }
-                }
-            }
-            for x in 0..<n {             // vertical: b → a
-                for c in 0..<3 {
-                    var acc: Float = 0
-                    for k in -r...r { acc += b[(min(n - 1, max(0, k)) * n + x) * 4 + c] }
-                    for y in 0..<n {
-                        a[(y * n + x) * 4 + c] = acc / w
-                        acc += b[(min(n - 1, y + r + 1) * n + x) * 4 + c] - b[(max(0, y - r) * n + x) * 4 + c]
-                    }
-                }
+        var input = src, out = [UInt8](repeating: 0, count: src.count)
+        let k = UInt32(4 * r + 1)
+        input.withUnsafeMutableBytes { ip in
+            out.withUnsafeMutableBytes { op in
+                var a = vImage_Buffer(data: ip.baseAddress, height: vImagePixelCount(n), width: vImagePixelCount(n), rowBytes: n * 4)
+                var b = vImage_Buffer(data: op.baseAddress, height: vImagePixelCount(n), width: vImagePixelCount(n), rowBytes: n * 4)
+                _ = vImageTentConvolve_ARGB8888(&a, &b, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
             }
         }
-        return a.map { UInt8(max(0, min(255, $0.rounded()))) }
-    }
-
-    private func record(_ ms: Double) {
-        recentMs.append(ms)
-        if recentMs.count > 64 { recentMs.removeFirst(recentMs.count - 64) }
-    }
-
-    /// Median of the recent inference times (ms), nil before the first.
-    var medianMs: Double? {
-        guard !recentMs.isEmpty else { return nil }
-        return recentMs.sorted()[recentMs.count / 2]
+        return out
     }
 
     /// `image` drawn into a size × size BGRA buffer (a 128 crop is doubled, high-quality).
