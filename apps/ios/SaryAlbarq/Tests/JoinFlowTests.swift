@@ -26,7 +26,7 @@ final class JoinMachineTests: XCTestCase {
         s = JoinMachine.next(s, .identityReady)
         XCTAssertEqual(s, .askingLocation, "the location prompt comes right after, no other screen")
         s = JoinMachine.next(s, .permission(.granted))
-        XCTAssertEqual(s, .joining)
+        XCTAssertEqual(s, .joining(viewOnly: false))
         XCTAssertEqual(JoinMachine.next(s, .joined), .entered)
     }
 
@@ -43,14 +43,36 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertEqual(JoinMachine.next(s, .joined), s, "a stray join result is ignored")
     }
 
-    func testPreciseOffIsTheSameCalmScreen() {
-        XCTAssertEqual(run([.tapJoin(hasIdentity: true), .permission(.reduced)]), .needsLocation(.reduced))
+    func testPreciseOffAsksForPreciseThenJoins() {
+        let asking = run([.tapJoin(hasIdentity: true), .permission(.reduced)])
+        XCTAssertEqual(asking, .askingPrecise, "approximate: iOS's temporary «الموقع الدقيق» prompt next, not a dead end")
+        XCTAssertTrue(asking.busy)
+        XCTAssertEqual(JoinMachine.next(asking, .precise(.granted)), .joining(viewOnly: false))
+        XCTAssertEqual(JoinMachine.next(asking, .sceneActive(.reduced)), .askingPrecise, "the prompt's own inactive → active is not an answer")
+        XCTAssertEqual(JoinMachine.next(asking, .sceneActive(.granted)), .joining(viewOnly: false))
+        XCTAssertEqual(JoinMachine.next(asking, .precise(.notAsked)), .askingPrecise)
+    }
+
+    func testStillApproximateGoesToRecoveryWithAWayIn() {
+        let s = run([.tapJoin(hasIdentity: true), .permission(.reduced), .precise(.reduced)])
+        XCTAssertEqual(s, .needsLocation(.reduced))
+        XCTAssertEqual(JoinMachine.next(s, .enterWithoutLocation), .joining(viewOnly: true))
+        XCTAssertEqual(JoinMachine.next(s, .sceneActive(.granted)), .joining(viewOnly: false), "precise turned on in Settings: in, sharing")
+    }
+
+    func testDeniedRecoveryOpensTheTripInViewMode() {
+        let s = run([.tapJoin(hasIdentity: false), .identityReady, .permission(.denied)])
+        XCTAssertEqual(s, .needsLocation(.denied))
+        let v = JoinMachine.next(s, .enterWithoutLocation)
+        XCTAssertEqual(v, .joining(viewOnly: true), "no dead end: the trip opens without my location")
+        XCTAssertEqual(JoinMachine.next(v, .joined), .entered)
+        XCTAssertEqual(run([.enterWithoutLocation]), .ready, "only from the recovery screen")
     }
 
     func testGrantedInSettingsJoinsByItself() {
         let waiting = run([.tapJoin(hasIdentity: true), .permission(.denied)])
-        XCTAssertEqual(JoinMachine.next(waiting, .sceneActive(.granted)), .joining, "back from Settings with permission: join at once")
-        XCTAssertEqual(JoinMachine.next(waiting, .permission(.granted)), .joining, "the delegate's answer works too")
+        XCTAssertEqual(JoinMachine.next(waiting, .sceneActive(.granted)), .joining(viewOnly: false), "back from Settings with permission: join at once")
+        XCTAssertEqual(JoinMachine.next(waiting, .permission(.granted)), .joining(viewOnly: false), "the delegate's answer works too")
         XCTAssertEqual(run([.sceneActive(.reduced)], from: waiting), .needsLocation(.reduced), "allowed but imprecise: still waiting")
         XCTAssertEqual(run([.sceneActive(.reduced), .sceneActive(.granted), .joined], from: waiting), .entered)
     }
@@ -58,7 +80,8 @@ final class JoinMachineTests: XCTestCase {
     func testCancelKeepsNothing() {
         XCTAssertEqual(run([.cancel]), .cancelled)
         XCTAssertEqual(run([.tapJoin(hasIdentity: true), .permission(.denied), .cancel]), .cancelled)
-        XCTAssertEqual(run([.tapJoin(hasIdentity: true), .permission(.granted), .cancel]), .joining, "the join in flight is not cancelled half-way")
+        XCTAssertEqual(run([.tapJoin(hasIdentity: true), .permission(.reduced), .cancel]), .cancelled)
+        XCTAssertEqual(run([.tapJoin(hasIdentity: true), .permission(.granted), .cancel]), .joining(viewOnly: false), "the join in flight is not cancelled half-way")
     }
 
     func testUnansweredPromptKeepsWaiting() {
@@ -77,7 +100,7 @@ final class JoinMachineTests: XCTestCase {
     }
 
     func testDuplicateTapsDoNothingWhileBusy() {
-        for s in [JoinStep.preparing, .askingLocation, .joining] {
+        for s in [JoinStep.preparing, .askingLocation, .askingPrecise, .joining(viewOnly: false), .joining(viewOnly: true)] {
             XCTAssertEqual(JoinMachine.next(s, .tapJoin(hasIdentity: true)), s)
         }
     }
@@ -86,9 +109,13 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertEqual(ShareMemory.joinStatement, JoinCopy.statement, "same line on the creator's last step and «انضم برابط»")
         XCTAssertEqual(JoinCopy.button, "انضم للطلعة")
-        XCTAssertEqual(JoinCopy.needsTitle, "الطلعة تحتاج موقعك عشان العيال يشوفونك")
+        XCTAssertEqual(JoinCopy.prePromptTitle, "عشان العيال يشوفونك وتوصلك الفزعة", "the Najdi pre-prompt, before the system alert")
+        XCTAssertTrue(JoinCopy.prePromptDetail.contains("السماح أثناء استخدام التطبيق"))
+        XCTAssertNotEqual(JoinCopy.needsTitle(.denied), JoinCopy.needsTitle(.reduced))
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))
-        for t in [JoinCopy.statement, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced)] {
+        XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للعيال")
+        XCTAssertEqual(JoinCopy.enterWithout, "ادخل الطلعة بدون موقعي")
+        for t in [JoinCopy.statement, JoinCopy.prePromptDetail, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced), JoinCopy.enterWithoutNote] {
             XCTAssertFalse(t.contains("أوقف"), "no stop switch is promised: \(t)")
             XCTAssertFalse(t.contains("شارك موقعي"), t)
         }

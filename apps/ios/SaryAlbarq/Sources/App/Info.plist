@@ -65,6 +65,8 @@
 	     audio: the walkie-talkie («قناة الطلعة») and the spoken Arabic turn instructions. -->
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
+		<key>JoinTrip</key>
+		<string>«الموقع الدقيق» مقفل، فيظهر مكانك للعيال تقريبيًا بالكيلومترات. اسمح بالموقع الدقيق عشان العيال يشوفونك وتوصلك الفزعة.</string>
 		<key>TrailRecording</key>
 		<string>«الموقع الدقيق» مقفل، فيصير «مساري» تقريبيًا بالكيلومترات. اسمح بالموقع الدقيق لهذه الطلعة ليُرسم طريقك على الشوارع اللي مشيت فيها بالضبط، ويرجّعك «طريق الرجعة» من نفس الطريق.</string>
 	</dict>

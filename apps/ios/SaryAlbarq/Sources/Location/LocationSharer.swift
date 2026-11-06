@@ -256,6 +256,25 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     var preciseOff: Bool { accuracyAuthorization == .reducedAccuracy }
 
+    /// Info.plist `NSLocationTemporaryUsageDescriptionDictionary` key for joining a trip (build 21).
+    static let joinAccuracyPurposeKey = "JoinTrip"
+
+    /// THIN PERMISSION WRAPPER (invitee onboarding, build 21): iOS's one-time «الموقع الدقيق»
+    /// prompt with `purposeKey`, answered with the accuracy iOS reports afterwards. Touches no
+    /// GPS settings; already precise (or no permission) → answers at once without a prompt.
+    func requestTemporaryFullAccuracy(purposeKey: String) async -> CLAccuracyAuthorization {
+        guard canLocate, accuracyAuthorization == .reducedAccuracy else { return accuracyAuthorization }
+        return await withCheckedContinuation { c in
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return c.resume(returning: .reducedAccuracy) }
+                    self.accuracyAuthorization = self.manager.accuracyAuthorization
+                    c.resume(returning: self.accuracyAuthorization)
+                }
+            }
+        }
+    }
+
     private func applyTrailSettings() {
         let s = LocationTuning.trailSettings(onRoad: onRoad)
         if manager.desiredAccuracy != s.desiredAccuracy { manager.desiredAccuracy = s.desiredAccuracy }

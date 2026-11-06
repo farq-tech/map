@@ -148,11 +148,18 @@ struct OnboardingFlow: View {
 private struct IntroStep: View {
     var start: () -> Void
     var restore: () -> Void
+    @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
+    @State private var pasteMiss = false
 
     var body: some View {
         let p = theme.palette
         VStack(spacing: 0) {
+            if model.deferredInviteHint {
+                deferredInvite
+                    .padding(.horizontal, theme.space(.l))
+                    .padding(.top, theme.space(.l))
+            }
             Spacer(minLength: theme.space(.xl))
             SaryMark(size: 120)
             Text("سَرى البارق")
@@ -187,6 +194,29 @@ private struct IntroStep: View {
             .padding(.horizontal, theme.space(.l))
             .padding(.bottom, theme.space(.l))
         }
+    }
+
+    /// Installed from an invite page (it copied the link): one tap on the system «لصق» and the
+    /// invite opens — no name, no pages (build 21). The link is read only on that tap.
+    private var deferredInvite: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: theme.space(.s)) {
+            Text("جاي من دعوة؟").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                .accessibilityIdentifier("deferred.title")
+            Text(pasteMiss ? "ما لقينا رابط دعوة في النسخ. افتح رابط الدعوة من جديد، أو اطلبه من أمير الرحلة."
+                           : "اضغط «لصق» ونكمّل دعوتك على طول.")
+                .saryText(.callout).foregroundStyle(p.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            PasteButton(payloadType: String.self) { strings in
+                Task { @MainActor in pasteMiss = !model.acceptPastedInvite(strings) }
+            }
+            .buttonBorderShape(.capsule)
+            .tint(p.accent)
+            .accessibilityIdentifier("deferred.paste")
+        }
+        .padding(theme.space(.l))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sarySurface(radius: SaryRadius.l)
     }
 
     private func point(_ icon: String, _ text: String) -> some View {
