@@ -182,7 +182,7 @@ struct SettingsView: View {
             SarySection(title: "الخرائط والبيانات") {
                 SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
                 SaryDivider()
-                SaryNavRow(title: "متقدم", detail: "سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
+                SaryNavRow(title: "متقدم", detail: "مساعد سرى، سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
             }
             VisualEffectsSection()
             SarySection {
@@ -563,6 +563,7 @@ struct AdvancedSettingsView: View {
                     .accessibilityIdentifier("about.gpx.\(n)")
                 }
             }
+            AssistantSettingsSection(store: AssistantModelStore.shared)
             SarySection(title: "مزوّد المسارات", footer: "Mapbox هو الافتراضي. «فرق» يجرّب خادم الشركة (Valhalla) أولًا، و«تلقائي» يستخدمه فقط إذا كان مفعّلًا على الخادم؛ وإذا ما قدر يرد نرجع لـ Mapbox تلقائيًا.") {
                 SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
                     get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },

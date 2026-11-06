@@ -80,6 +80,7 @@ extension LiveOutingController {
         let a = actions
         switch id {
         case "navigate": openNavPicker()
+        case "assistant": openAssistant()
         case "guideAll": startGuidanceForAll()
         case "search": modal = .plan(.search)
         case "backtrack": backTrack == nil ? startBackTrack() : stopBackTrack()

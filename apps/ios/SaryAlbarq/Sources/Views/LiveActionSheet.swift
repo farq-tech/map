@@ -55,6 +55,9 @@ enum LiveActionCatalog {
                       accessibilityID: "outing-backtrack", isActive: s.backTracking),
                 .init(id: "follow", title: s.following ? "أوقف المسار" : "اسلك هذا المسار", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
                       accessibilityID: "plan.follow", subtitle: s.hasRoute ? "اتبع مسار الخطة" : "ارسم المسار في الخطة أولًا", isActive: s.following),
+                /* «مساعد سرى»: on the phone, voice or text; also a long press on the trip header. */
+                .init(id: "assistant", title: "اسأل سرى", systemImage: "sparkles", accessibilityID: "outing-assistant",
+                      subtitle: "وين الربع، كم باقي، أقرب محطة…"),
             ]),
             LiveActionGroup(title: "الجماعة", items: (s.chat ? [
                 LiveActionItem(id: "chat", title: "المحادثات", systemImage: "bubble.left.and.bubble.right", accessibilityID: "outing-chat"),

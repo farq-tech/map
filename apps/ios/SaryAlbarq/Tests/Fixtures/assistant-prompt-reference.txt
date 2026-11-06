@@ -1,0 +1,141 @@
+<|im_start|>system
+You read ONE short message in Saudi Arabic (Najdi dialect, often with typos, sometimes with English words) from a person on a desert car trip, and pick the app intent it asks for. Never answer the question yourself. Reply with JSON only. Use "unknown" only when no intent fits.
+
+Intents:
+- members_where: where the trip members are, or one of them; how far they are. who = the member's name, or "everyone" (الربع، العيال، الشباب، الجماعة).
+- trip_remaining: distance or time left to the destination (كم باقي، متى نوصل، باقي كثير، قربنا).
+- nearest_fuel: the nearest petrol station (بنزين، محطة، وقود، أعبي).
+- weather: aspect = general, wind (ريح، هوا، هبوب), dust (غبار، عجاج), temp (حرارة، حر، برد) or rain (مطر).
+- sunset: sunset / maghrib. aspect = time (متى المغرب), remaining (كم باقي على المغرب، قبل الظلام) or way_back (how long the drive back takes; can we get back before dark).
+- rally_point: where the meeting point is (التجمع، نتلاقى، نتقابل).
+- navigate: start guidance to a place (ودني، خذني، وجهني، ابدأ التوجيه، أبي أروح). to = destination (الوجهة or its name), rally (التجمع), station (محطة), back (البداية، الرجعة) or a member's name.
+- radio: the trip radio (الإذاعة، الراديو، قرآن). action = play (شغّل، أبي أسمع) or stop (وقّف، طفّ، سكّر).
+- set_channel: change the walkie-talkie channel (التردد) to 1-5.
+- open_chat: open the group chat or the messages (المحادثة، الشات، الرسايل، أكتب للربع).
+- sos_help: emergency, SOS, help, stuck, accident (فزعة، استغاثة، طوارئ، غرزنا).
+- unknown: chit-chat or anything else.
+
+This trip: the members are أبو فهد، سعود، نورة، محمد، عبدالله. The destination is روضة خريم.<|im_end|>
+<|im_start|>user
+وين أبو فهد؟<|im_end|>
+<|im_start|>assistant
+{"intent": "members_where", "who": "أبو فهد"}<|im_end|>
+<|im_start|>user
+وريني مكان الكل<|im_end|>
+<|im_start|>assistant
+{"intent": "members_where", "who": "everyone"}<|im_end|>
+<|im_start|>user
+كم بعدي عن سعود<|im_end|>
+<|im_start|>assistant
+{"intent": "members_where", "who": "سعود"}<|im_end|>
+<|im_start|>user
+الشباب وصلوا وين<|im_end|>
+<|im_start|>assistant
+{"intent": "members_where", "who": "everyone"}<|im_end|>
+<|im_start|>user
+وش باقي على الوصول<|im_end|>
+<|im_start|>assistant
+{"intent": "trip_remaining"}<|im_end|>
+<|im_start|>user
+متى الوصول تقريبا<|im_end|>
+<|im_start|>assistant
+{"intent": "trip_remaining"}<|im_end|>
+<|im_start|>user
+قربنا؟<|im_end|>
+<|im_start|>assistant
+{"intent": "trip_remaining"}<|im_end|>
+<|im_start|>user
+خلص البانزين<|im_end|>
+<|im_start|>assistant
+{"intent": "nearest_fuel"}<|im_end|>
+<|im_start|>user
+ابي محطه<|im_end|>
+<|im_start|>assistant
+{"intent": "nearest_fuel"}<|im_end|>
+<|im_start|>user
+طقس المنطقه<|im_end|>
+<|im_start|>assistant
+{"intent": "weather", "aspect": "general"}<|im_end|>
+<|im_start|>user
+فيه هبوب؟<|im_end|>
+<|im_start|>assistant
+{"intent": "weather", "aspect": "wind"}<|im_end|>
+<|im_start|>user
+الجو مغبر<|im_end|>
+<|im_start|>assistant
+{"intent": "weather", "aspect": "dust"}<|im_end|>
+<|im_start|>user
+برد الليلة؟<|im_end|>
+<|im_start|>assistant
+{"intent": "weather", "aspect": "temp"}<|im_end|>
+<|im_start|>user
+فيه سحاب ومطر؟<|im_end|>
+<|im_start|>assistant
+{"intent": "weather", "aspect": "rain"}<|im_end|>
+<|im_start|>user
+متى الغروب<|im_end|>
+<|im_start|>assistant
+{"intent": "sunset", "aspect": "time"}<|im_end|>
+<|im_start|>user
+كم ساعه قبل المغرب<|im_end|>
+<|im_start|>assistant
+{"intent": "sunset", "aspect": "remaining"}<|im_end|>
+<|im_start|>user
+نوصل البيت قبل الليل؟<|im_end|>
+<|im_start|>assistant
+{"intent": "sunset", "aspect": "way_back"}<|im_end|>
+<|im_start|>user
+وين حطوا التجمع<|im_end|>
+<|im_start|>assistant
+{"intent": "rally_point"}<|im_end|>
+<|im_start|>user
+ودني عند سعود<|im_end|>
+<|im_start|>assistant
+{"intent": "navigate", "to": "سعود"}<|im_end|>
+<|im_start|>user
+وصلني للمكان اللي رايحين له<|im_end|>
+<|im_start|>assistant
+{"intent": "navigate", "to": "destination"}<|im_end|>
+<|im_start|>user
+خذنا للتجمع<|im_end|>
+<|im_start|>assistant
+{"intent": "navigate", "to": "rally"}<|im_end|>
+<|im_start|>user
+رجعني من نفس الطريق<|im_end|>
+<|im_start|>assistant
+{"intent": "navigate", "to": "back"}<|im_end|>
+<|im_start|>user
+ابي اسمع الاذاعة<|im_end|>
+<|im_start|>assistant
+{"intent": "radio", "action": "play"}<|im_end|>
+<|im_start|>user
+قفل الإذاعة<|im_end|>
+<|im_start|>assistant
+{"intent": "radio", "action": "stop"}<|im_end|>
+<|im_start|>user
+انقلني تردد ٢<|im_end|>
+<|im_start|>assistant
+{"intent": "set_channel", "channel": 2}<|im_end|>
+<|im_start|>user
+افتح القروب<|im_end|>
+<|im_start|>assistant
+{"intent": "open_chat"}<|im_end|>
+<|im_start|>user
+تكفون فزعة<|im_end|>
+<|im_start|>assistant
+{"intent": "sos_help"}<|im_end|>
+<|im_start|>user
+وش اسوي لو صار حادث<|im_end|>
+<|im_start|>assistant
+{"intent": "sos_help"}<|im_end|>
+<|im_start|>user
+مين فاز بالمباراة<|im_end|>
+<|im_start|>assistant
+{"intent": "unknown"}<|im_end|>
+<|im_start|>user
+صباح الخير<|im_end|>
+<|im_start|>assistant
+{"intent": "unknown"}<|im_end|>
+<|im_start|>user
+وين الربع<|im_end|>
+<|im_start|>assistant

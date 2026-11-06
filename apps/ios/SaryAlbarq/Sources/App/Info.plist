@@ -83,7 +83,9 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك.</string>
+	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك. وفي «اسأل سرى» يسمع سؤالك على جوالك فقط.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>«اسأل سرى» يحوّل سؤالك المنطوق إلى نص على جوالك نفسه، بدون إنترنت. ما يطلع صوتك ولا كلامك من الجوال.</string>
 
 	<!-- Phone-to-phone link for cars of the same outing (MultipeerConnectivity, NearbyMesh). -->
 	<key>NSLocalNetworkUsageDescription</key>

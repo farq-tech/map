@@ -20,6 +20,9 @@ packages:
   MapboxNavigation:
     url: https://github.com/mapbox/mapbox-navigation-ios.git
     exactVersion: 3.27.3
+  # «مساعد سرى»: llama.cpp's official XCFramework (MIT), pinned by sha256 (Packages/LlamaCpp).
+  LlamaCpp:
+    path: Packages/LlamaCpp
 # Explicit base settings: these are what XcodeGen's presets would add, spelled
 # out so the project generates the same with any XcodeGen install.
 settings:
@@ -75,6 +78,8 @@ targets:
         product: MapboxNavigationCore
       - package: MapboxNavigation
         product: MapboxDirections
+      - package: LlamaCpp
+        product: LlamaCpp
       # The outing's Live Activity (Lock Screen + Dynamic Island).
       - target: SaryAlbarqWidgets
       # «شارك إلى سَرى البارق» for YouTube links (Sources/Media).
