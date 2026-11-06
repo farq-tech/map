@@ -92,7 +92,7 @@ final class DesertRouterTests: XCTestCase {
         var h = MinHeap()
         for v in [5, 1, 4, 2, 3] { h.push(Double(v), v) }
         var out: [Int] = []
-        while let (_, v) = h.pop() { out.append(v) }
+        while let top = h.pop() { out.append(top.1) }
         XCTAssertEqual(out, [1, 2, 3, 4, 5])
     }
 }
