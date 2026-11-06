@@ -195,14 +195,7 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(locating.exists, "a good fix arrives (simulator location set) and «نحدد موقعك…» goes")
         shot("2c-arrival-located", app)
         XCTAssertFalse(app.buttons["notify.allow"].exists, "notifications are not asked at join")
-        /* Field 2026-11-06: «دائمًا» is now explained right after joining (after the welcome card),
-         * so the share keeps going with the phone locked until the trip ends. */
-        let later = app.buttons["share.always.later"]
-        XCTAssertTrue(later.waitForExistence(timeout: 20), "«دائمًا» explained right after joining")
-        XCTAssertTrue(app.staticTexts["خلّ الربع يشوفونك طول الطلعة"].exists, "the after-join explainer")
-        shot("2d-always-after-join", app)
-        later.tap()
-        XCTAssertTrue(later.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["share.always.allow"].exists, "«دائمًا» is not asked at join")
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
         XCTAssertTrue(sharing.waitForExistence(timeout: 10))

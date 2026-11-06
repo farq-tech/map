@@ -90,6 +90,8 @@ enum NavText {
         case .useLane: return side(m.direction).map { "التزم بمسار \($0)" } ?? "التزم بمسارك"
         case .roundabout:
             if let e = m.exit { return "في الدوّار خذ المخرج \(ordinal(e))" }
+            /* No exit number from the router: the direction, never a guessed number. */
+            if let d = m.direction, d != .uTurn { return "في الدوّار \(turn(d))" }
             return "ادخل الدوّار"
         case .exitRoundabout: return "اخرج من الدوّار"
         case .depart: return "انطلق"

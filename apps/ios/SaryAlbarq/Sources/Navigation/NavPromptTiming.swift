@@ -107,3 +107,120 @@ enum NavPromptTiming {
         }
     }
 }
+
+// MARK: - How many lines per maneuver (build 22)
+
+/// The owner on a long straight road (build 21): «بعد كيلو ونص عند التفرّع امسك اليسار», then «بعد كيلو…
+/// امسك اليسار», then «امسك اليسار امسك اليسار» — for a fork he simply drove through. Mapbox asks for
+/// a cue at each of its voice instructions (often three or four per maneuver); each was said.
+///
+/// Now every maneuver has a budget of two lines: ONE early (whatever distance it comes at) and
+/// ONE final (within `finalS` / `finalM`). Never the same line twice for a maneuver. The budget
+/// is kept per maneuver (kind, direction, place within `sameManeuverM`), so a reroute or Mapbox's
+/// traffic refresh of the same road does not start it again; only a changed maneuver does.
+/// A «soft» maneuver — a fork / lane / continue that stays on the same road or bends under
+/// `softAngleDeg` — gets no early line, and one short «خلّك على اليسار» near it (or nothing if straight).
+struct NavPromptBudget: Equatable {
+    enum Stage: Int, Equatable { case early, final }
+
+    struct Said: Equatable {
+        var kind: NavManeuverKind
+        var direction: NavTurnDirection?
+        var at: LngLat
+        var stages: Set<Int>
+        var lines: [[String]]
+    }
+
+    static let finalS = 15.0
+    static let finalM = 200.0
+    static let sameManeuverM = 50.0
+    static let softAngleDeg = 20.0
+
+    private(set) var said: [Said] = []
+
+    mutating func reset() { said = [] }
+
+    static func stage(distanceM d: Double, speedMps v: Double?) -> Stage {
+        d <= finalM || d / max(5, v ?? 0) <= finalS ? .final : .early
+    }
+
+    private func index(_ s: NavStep) -> Int? {
+        said.firstIndex { $0.kind == s.maneuver.kind && $0.direction == s.maneuver.direction && Vehicle.distanceMeters($0.at, s.location) <= Self.sameManeuverM }
+    }
+
+    /// At most this many lines for one maneuver (the owner heard a fork four times): a soft one once.
+    static func maxLines(_ s: NavStep, soft: Bool) -> Int { soft ? 1 : 2 }
+
+    /// This stage of this maneuver has not been said, the per-maneuver cap is not reached, and no
+    /// early line after a final one.
+    func allows(_ s: NavStep, _ stage: Stage, soft: Bool = false) -> Bool {
+        guard let i = index(s) else { return true }
+        if said[i].lines.count >= Self.maxLines(s, soft: soft) { return false }
+        if said[i].stages.contains(stage.rawValue) { return false }
+        return !(stage == .early && said[i].stages.contains(Stage.final.rawValue))
+    }
+
+    /// Exactly this line was already said for this maneuver.
+    func repeats(_ s: NavStep, clips: [String]) -> Bool {
+        index(s).map { said[$0].lines.contains(clips) } ?? false
+    }
+
+    mutating func note(_ s: NavStep, _ stage: Stage, clips: [String]) {
+        if let i = index(s) {
+            said[i].stages.insert(stage.rawValue)
+            said[i].lines.append(clips)
+        } else {
+            said.append(Said(kind: s.maneuver.kind, direction: s.maneuver.direction, at: s.location, stages: [stage.rawValue], lines: [clips]))
+            if said.count > 60 { said.removeFirst(said.count - 60) }
+        }
+    }
+
+    // MARK: soft maneuvers
+
+    /// The route's bend at `at`: bearing ~40 m after minus ~40 m before (degrees, −180…180). nil off the line.
+    static func bendDeg(_ c: [LngLat], at p: LngLat) -> Double? {
+        guard c.count >= 3 else { return nil }
+        guard let i = c.indices.min(by: { Vehicle.distanceMeters(c[$0], p) < Vehicle.distanceMeters(c[$1], p) }),
+              Vehicle.distanceMeters(c[i], p) < 30 else { return nil }
+        var a = i, b = i
+        while a > 0, Vehicle.distanceMeters(c[a], c[i]) < 40 { a -= 1 }
+        while b < c.count - 1, Vehicle.distanceMeters(c[b], c[i]) < 40 { b += 1 }
+        guard a < i, b > i else { return nil }
+        let d = Vehicle.bearing(c[i], c[b]) - Vehicle.bearing(c[a], c[i])
+        return (d + 540).truncatingRemainder(dividingBy: 360) - 180
+    }
+
+    private static func sameRoad(_ a: String?, _ b: String?) -> Bool {
+        guard let a = a?.trimmingCharacters(in: .whitespaces), let b = b?.trimmingCharacters(in: .whitespaces), !a.isEmpty else { return false }
+        return a == b
+    }
+
+    /// A fork / lane / continue that keeps to the same road, or bends less than `softAngleDeg`.
+    static func isSoft(_ step: NavStep, previous: NavStep?, bendDeg: Double?) -> Bool {
+        switch step.maneuver.kind {
+        case .fork, .useLane, .continue, .newName: break
+        default: return false
+        }
+        if sameRoad(previous?.roadName, step.roadName) { return true }
+        return bendDeg.map { abs($0) < softAngleDeg } ?? false
+    }
+
+    /// The short line for a soft maneuver: «خلّك على اليمين/اليسار», or nothing when it goes straight on.
+    static func softLine(_ step: NavStep) -> (text: String, clips: [String])? {
+        switch step.maneuver.direction {
+        case .right, .slightRight, .sharpRight: return ("خلّك على اليمين", ["turns_09"])
+        case .left, .slightLeft, .sharpLeft: return ("خلّك على اليسار", ["turns_10"])
+        default: return nil
+        }
+    }
+
+    /// No clip twice in a row in one line («امسك اليسار امسك اليسار»), and no «وبعدها، <the same action>».
+    static func tidy(_ clips: [String]) -> [String] {
+        var out: [String] = []
+        for c in clips where out.last != c { out.append(c) }
+        if let t = out.firstIndex(of: "turns_14"), t > 0, t + 1 < out.count, Array(out[(t + 1)...]) == [out[t - 1]] {
+            out.removeSubrange(t...)
+        }
+        return out
+    }
+}

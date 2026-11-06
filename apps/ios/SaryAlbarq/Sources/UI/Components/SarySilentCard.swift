@@ -121,33 +121,13 @@ struct SarySilentBadge: View {
     var since: Date
     var now: Date
     var compact = false
-    /// Known reason: «ما فيه شبكة — آخر موقع قبل ٥ د» (compact: the reason only, the map stays calm).
-    var reason: PresenceReason? = nil
-
-    private var line: String {
-        guard let reason else { return SilenceText.badge(since: since, now: now) }
-        return compact ? reason.text : SilenceText.badge(since: since, now: now, reason: reason)
-    }
-
-    private var icon: String {
-        switch reason {
-        case .hidden: return "eye.slash.fill"
-        case .locationOff: return "location.slash.fill"
-        case .appClosed: return "xmark.app.fill"
-        case .whenInUse: return "lock.fill"
-        case .web: return "safari.fill"
-        case .noGps: return "location.magnifyingglass"
-        case .lowPower: return "battery.25percent"
-        case .noNetwork, .none: return "antenna.radiowaves.left.and.right.slash"
-        }
-    }
     @Environment(\.sary) private var theme
 
     var body: some View {
         let p = theme.palette
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: compact ? 8 : 10, weight: .bold))
-            Text(line)
+            Image(systemName: "antenna.radiowaves.left.and.right.slash").font(.system(size: compact ? 8 : 10, weight: .bold))
+            Text(SilenceText.badge(since: since, now: now))
                 .saryText(compact ? .micro : .caption, weight: .bold)
                 .lineLimit(1)
         }
@@ -157,7 +137,7 @@ struct SarySilentBadge: View {
         .background(Capsule().fill(LinearGradient(colors: [p.emergency.opacity(0.16), p.warning.opacity(0.22)], startPoint: .leading, endPoint: .trailing)))
         .overlay(Capsule().strokeBorder(p.warning.opacity(0.6), lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(reason.map { SilenceText.badge(since: since, now: now, reason: $0) } ?? SilenceText.badge(since: since, now: now)))
+        .accessibilityLabel(Text(SilenceText.badge(since: since, now: now)))
         .accessibilityIdentifier("silent-badge")
     }
 }

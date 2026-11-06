@@ -130,9 +130,9 @@ extension LiveOutingController {
     }
 
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
-    func navLongPressed(_ p: LngLat) {
+    func navLongPressed(_ p: LngLat, name: String? = nil) {
         guard !nav.isActive else { return }
-        navigate(NavTargets.point(p))
+        navigate(NavTargets.point(p, name: name))
     }
 
     func startNav() {

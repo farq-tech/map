@@ -14,6 +14,8 @@ struct SaryAlbarqApp: App {
         WindowGroup {
             RootView()
                 .onAppear { AppDelegate.model = model }
+                /* Farq's streets and places (apps/tiles): once the server answers, maps switch to them. */
+                .task { await FarqTiles.check() }
                 .environmentObject(model)
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)
@@ -91,18 +93,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
         return true
-    }
-
-    /// Swiped away / terminated while running: tell the trip why we go quiet (presence hint).
-    func applicationWillTerminate(_ application: UIApplication) {
-        MainActor.assumeIsolated { Self.model?.session?.appWillTerminate() }
-    }
-
-    /// The offline backfill finished uploading while the app was suspended / not running.
-    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
-        guard identifier == BackfillUploader.sessionId else { return completionHandler() }
-        BackfillUploader.shared.backgroundCompletion = completionHandler
-        BackfillUploader.shared.resume()
     }
 
     /// While the app is open, notes and SOS go to the in-app alert lane / SOS screen, not a banner.
