@@ -28,6 +28,11 @@ enum SandDetail {
     /// Strongest light / shade the overlay ever adds (alpha of the warm white / burnt umber).
     static let maxAlpha: Float = 0.24
 
+    /// «قوي»: up to 30 % more light / shade from z16 to z18 (the close-up desert reads crisper).
+    static func closeBoost(z: Int, strong: Bool) -> Float {
+        strong ? Float(1 + 0.3 * Smooth.step(16, 18, Double(z))) : 1
+    }
+
     /// The layer's opacity by map zoom: none at z14.2, full from z17 (×`scale`, e.g. driving).
     static func opacityExpression(scale: Double) -> [Any] {
         ["interpolate", ["linear"], ["zoom"], 14.2, 0.0, 15.5, 0.45 * scale, 17, 1 * scale]
@@ -40,6 +45,8 @@ enum SandDetail {
         /// 0…1: a low sun throws long, strong relief; noon a faint one; night a faint, neutral one.
         var strength: Double
         var night: Bool
+        /// «صور عالية الوضوح» at «قوي»: the micro-relief is a little stronger up close (`closeBoost`).
+        var strong = false
 
         static let step = 20.0
 
@@ -143,6 +150,7 @@ enum SandDetail {
         let hiR: Float = light.night ? 206 : 255, hiG: Float = light.night ? 204 : 242, hiB: Float = light.night ? 214 : 216
         let loR: Float = light.night ? 14 : 66, loG: Float = light.night ? 12 : 30, loB: Float = light.night ? 18 : 10
         let fs = Float(size)
+        let maxAlpha = Self.maxAlpha * Self.closeBoost(z: z, strong: light.strong)
         h.withUnsafeBufferPointer { hp in
             g.withUnsafeBufferPointer { gp in
                 rgba.withUnsafeMutableBufferPointer { rp in

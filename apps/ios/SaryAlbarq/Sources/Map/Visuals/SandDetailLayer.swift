@@ -1,4 +1,5 @@
 @_spi(Experimental) import MapboxMaps
+import Combine
 import os
 import UIKit
 
@@ -38,7 +39,14 @@ final class SandDetailLayer {
     static var recentMs: [Double] = []
     #endif
 
+    private var levelSub: AnyCancellable?
+
     init() {
+        levelSub = HiResSettings.shared.$level.removeDuplicates().dropFirst().receive(on: DispatchQueue.main).sink { [weak self] lv in
+            guard let self, self.installed else { return }
+            self.light.strong = lv == .strong
+            self.relight()
+        }
         NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { [weak self] _ in
             self?.cache.removeAll()
         }
@@ -47,8 +55,10 @@ final class SandDetailLayer {
     var installed: Bool { map?.mapboxMap.layerExists(withId: Self.layerId) ?? false }
 
     /// Turns the layer on or off and sets its light and strength (call on every visuals refresh; cheap).
-    func apply(_ on: Bool, map: MapView, light newLight: SandDetail.Light, scale newScale: Double) {
+    func apply(_ on: Bool, map: MapView, light lit: SandDetail.Light, scale newScale: Double) {
         self.map = map
+        var newLight = lit
+        newLight.strong = HiResSettings.shared.level == .strong
         let m: MapboxMap = map.mapboxMap
         guard on else { remove(m); return }
         if !m.sourceExists(withId: Self.sourceId) || !m.layerExists(withId: Self.layerId) {

@@ -125,6 +125,56 @@ final class SandDetailTests: XCTestCase {
         XCTAssertLessThan(worst, LineGuard.lineScore)
     }
 
+    /// «قوي» makes the close-up relief up to 30 % stronger: still never a line.
+    func testStrongDetailNeverDrawsALine() throws {
+        XCTAssertEqual(SandDetail.closeBoost(z: 15, strong: true), 1)
+        XCTAssertEqual(SandDetail.closeBoost(z: 18, strong: true), 1.3, accuracy: 0.001)
+        XCTAssertEqual(SandDetail.closeBoost(z: 20, strong: false), 1)
+        let base = flatScore()
+        var worst: Float = 0
+        for (lat, lng) in [(28.30, 41.40), (24.20, 47.60), (19.00, 51.00)] {
+            for az in stride(from: 0.0, to: 360, by: 90) {
+                for z in [16, 17, 18, 19, 20] {
+                    var l = SandDetail.Light(azimuthDeg: az, strength: 1, night: false)
+                    l.strong = true
+                    guard let t = tile(lat, lng, z: z, light: l).1 else { continue }
+                    XCTAssertLessThanOrEqual(t.delta.map(abs).max() ?? 0, SandDetail.maxAlpha * 1.3 + 0.001)
+                    let s = LineGuard.score(LineGuard.gray(rgba: overSand(t), width: 512, height: 512, to: 256), width: 256, height: 256)
+                    worst = max(worst, s)
+                    XCTAssertFalse(LineGuard.addsLine(enhanced: s, source: base), "\(lat),\(lng) z\(z) az\(az): \(s)")
+                }
+            }
+        }
+        XCTAssertLessThan(worst, LineGuard.lineScore)
+        print("SAND-STRONG worst line score \(worst)")
+    }
+
+    func testStrongMergeKeepsShapesAndRefusesATrack() throws {
+        /* 1024 px «قوي» merge (looser split, sharpening, clarity): colour and edge still the photo's. */
+        let src = image(128) { x, _ in x < 64 ? (200, 140, 90) : (170, 110, 70) }
+        let ai = image(1024) { x, y in
+            let g = UInt8((x * 7 + y * 13) % 9)
+            return x < 600 ? (150 + g, 150 + g, 150 + g) : (90 + g, 90 + g, 90 + g)
+        }
+        let m = try XCTUnwrap(HiResEnhancer.mergeDetail(ai: ai, source: src, ratio: 8, profile: .strong))
+        XCTAssertEqual(m.image.width, 1024)
+        let out = try XCTUnwrap(HiResEnhancer.rgba(m.image, 1024))
+        let left = (200 * 1024 + 200) * 4, right = (200 * 1024 + 840) * 4
+        XCTAssertEqual(Int(out[left]), 200, accuracy: 14)
+        XCTAssertEqual(Int(out[left + 2]), 90, accuracy: 14)
+        XCTAssertEqual(Int(out[right]), 170, accuracy: 14)
+        XCTAssertLessThan(Int(out[(200 * 1024 + 560) * 4]), 190, "the edge stays at the photo's x = 512, not the model's 600")
+        XCTAssertFalse(m.addsLine)
+
+        let plain = image(128) { x, y in let g = UInt8((x * 5 + y * 3) % 7); return (205 + g, 145 + g, 92 + g) }
+        let ruts = image(1024) { x, y in
+            let rut = abs(x - (240 + y / 3)) < 5 || abs(x - (300 + y / 3)) < 5
+            return rut ? (120, 80, 50) : (205, 145, 92)
+        }
+        let t = try XCTUnwrap(HiResEnhancer.mergeDetail(ai: ruts, source: plain, ratio: 8, profile: .strong))
+        XCTAssertTrue(t.addsLine, "LineGuard stays on at «قوي»: \(t.scores)")
+    }
+
     func testLineGuardFindsATrackAndIgnoresTexture() {
         let n = 256
         var track = [Float](repeating: 0, count: n * n)

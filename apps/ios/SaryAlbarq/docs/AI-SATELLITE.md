@@ -261,3 +261,41 @@ Thermal state stayed `nominal` in every run (`thermal` in the DEBUG stats JSON).
 Not used: SwinIR / HAT (transformers, too slow on the ANE at 256 px and not trained on aerial
 imagery), diffusion SR (hallucinates structures), and a second model (app size). See the PR
 for the "next round" list.
+
+## 11. Round 3: «قوي» / «خفيف» (feat/ai-strong-imagery)
+
+Owner: the close-up desert should read like a camera photo (grain, gravel, shrubs, ripples),
+the satellite look the same at every zoom, no vector fallback.
+
+- **Levels** (layers sheet → «صور عالية الوضوح», segmented, id `explore-hires-level`; default
+  «قوي»). All values in `HiResProfile`:
+
+  | | «قوي» (desert) | «خفيف» (desert) | City (any level) |
+  |---|---|---|---|
+  | Enhanced from | **z14** (`sarySand` > 0.5) | z17 tiles (map z16) | z19 tiles (map z18) |
+  | z ≤ real detail (z17) | the tile itself, four 256 px quarters, ×2 | from z16 (×2) at z17 | — |
+  | Display tile | 1024 px (the model's full ×4) | 512 px | 1024 / 512 |
+  | Detail gain / split radius | 1.15 / 1.5 source px | 0.85 / 1 px | 0.7 / 1 px |
+  | Unsharp / local contrast | 0.45 / 0.16 | 0.15 / 0.04 | 0.12 / **0** |
+  | Prefetch | ring 1 + next zoom under the centre | ring 1 | ring 1 («قوي») |
+  | Model runs per minute (cap) | 90 | 36 | 60 / 36 |
+
+- **Desert vs city** (`HiResZoom.isCity`): a city box, or `SandGrade.sand(UrbanAreas)` ≤ 0.5.
+  Cities never get ripples (`SandDetail` is 0 there) and only the light, building-preserving merge.
+- **Zoom cap** (`HiResZoomCap`, owned by `HiResImagery.setBaseZoomCap`): while enhancement runs
+  (`.on`), real detail + 2 (desert z19, cities z21), per camera centre; otherwise the plain z18.
+  The camera bound is the cap + 0.4 and the camera eases back to the cap 0.25 s after the pinch
+  ends (rubber band). Paused (heat, driving) → back to z18: never a blurry over-zoom.
+- **Heat**: thermal `.fair` → «خفيف»; `.serious`/`.critical` or Low Power → no new runs
+  (drawn tiles stay). Speed > 8 km/h → no new runs (RAM tiles, `SandDetail`, `SandGrade` only);
+  > 15 km/h → original imagery (unchanged safety rule). Hard per-minute run budget.
+- **Badge**: «مُحسّنة» now stays for as long as an enhanced tile is on screen (red line; replaces
+  the 3 s badge of «تخفيف الزحمة» ٧).
+- **RAM**: enhanced tiles kept as JPEG q0.9 (48 MB ≈ 100+ tiles of 1024 px), decoded off the main
+  thread. Still nothing on disk. Crossfade 450 ms.
+- **`SandDetail`**: «قوي» adds up to 30 % light/shade from z16 to z18 (`closeBoost`); the worst
+  `LineGuard` score over plain sand is 0.40 (threshold 0.42).
+- **`LineGuard`** stays on for every tile, at every level (runs on the final, sharpened tile).
+
+Simulator timings (CPU only, Debug): one ×2 tile 2.1–2.4 s; «قوي» z18 (one run, 1024 px) 3.2 s;
+«قوي» z15 (four runs) 8.4 s. Device estimate (ANE ≈ 150 ms a run): ≈ 0.2 s and ≈ 0.7 s.

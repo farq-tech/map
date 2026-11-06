@@ -38,29 +38,41 @@ final class HiResEnhancer {
         return CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: false] as CFDictionary)
     }
 
-    /// The enhanced 512 px tile for `plan`, made from the decoded 512 px parent.
-    func enhance(parent: CGImage, plan: HiResTilePlan) -> UIImage? {
+    /// A JPEG decoded right away (off the main thread), for handing to Mapbox.
+    static func decodeNow(_ data: Data) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    /// The enhanced display tile for `plan` (`profile.outputSize` px), made from the decoded
+    /// 512 px parent; nil when the model fails or `LineGuard` refuses the result.
+    func enhance(parent: CGImage, plan: HiResTilePlan, profile: HiResProfile = .light) -> UIImage? {
         let scale = CGFloat(parent.width) / 512
         let rect = CGRect(x: CGFloat(plan.cropX) * scale, y: CGFloat(plan.cropY) * scale,
                           width: CGFloat(plan.cropSize) * scale, height: CGFloat(plan.cropSize) * scale)
-        guard let crop = parent.cropping(to: rect), let input = Self.pixelBuffer(crop, size: Self.inputSize) else { return nil }
-        let t0 = CFAbsoluteTimeGetCurrent()
-        guard let provider = try? MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: input)]),
-              let out = try? model.prediction(from: provider, options: MLPredictionOptions()),
-              let buf = out.featureValue(for: "enhanced")?.imageBufferValue else { return nil }
-        record((CFAbsoluteTimeGetCurrent() - t0) * 1000)
-        /* 1024 → 512 (Lanczos): the display tile; ×2 effective for a 256 crop, ×4 for a 128 crop. */
-        let big = CIImage(cvPixelBuffer: buf)
-        let s = CGFloat(Self.outputSize) / big.extent.width
-        guard let f = CIFilter(name: "CILanczosScaleTransform") else { return nil }
-        f.setValue(big, forKey: kCIInputImageKey)
-        f.setValue(s, forKey: kCIInputScaleKey)
-        f.setValue(1.0, forKey: kCIInputAspectRatioKey)
-        guard let small = f.outputImage,
-              let cg = ci.createCGImage(small, from: CGRect(x: 0, y: 0, width: Self.outputSize, height: Self.outputSize)) else { return nil }
+        guard let crop = parent.cropping(to: rect) else { return nil }
+        let n = profile.outputSize
+        let ai: CGImage?
+        if plan.factor == 1 {
+            /* The tile itself: four 256 px quarters, each ×4, put together at n px (×2 over the photo). */
+            let half = crop.width / 2
+            ai = Self.draw(n) { ctx in
+                for (qx, qy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    guard let q = crop.cropping(to: CGRect(x: qx * half, y: qy * half, width: half, height: half)),
+                          let out = self.infer(q) else { return false }
+                    /* CG's origin is bottom-left: quarter row 0 (north) goes on top. */
+                    ctx.draw(out, in: CGRect(x: qx * n / 2, y: (1 - qy) * n / 2, width: n / 2, height: n / 2))
+                }
+                return true
+            }
+        } else {
+            ai = infer(crop).flatMap { out in out.width == n ? out : Self.draw(n) { $0.draw(out, in: CGRect(x: 0, y: 0, width: n, height: n)); return true } }
+        }
+        guard let ai else { return nil }
         /* Geometry and colour stay the photo's: only the model's fine detail is kept, and a tile
            that would gain a straight line (a "track") is not shown at all. */
-        guard let merged = Self.mergeDetail(ai: cg, source: crop, factor: plan.factor) else { return nil }
+        guard let merged = Self.mergeDetail(ai: ai, source: crop, ratio: n / plan.cropSize, profile: profile) else { return nil }
         guard !merged.addsLine else {
             rejected += 1
             return nil
@@ -68,10 +80,31 @@ final class HiResEnhancer {
         return UIImage(cgImage: merged.image)
     }
 
+    /// One model run: a crop (doubled to 256 px when smaller) → its 1024 px ×4 image.
+    private func infer(_ crop: CGImage) -> CGImage? {
+        guard let input = Self.pixelBuffer(crop, size: Self.inputSize) else { return nil }
+        let t0 = CFAbsoluteTimeGetCurrent()
+        guard let provider = try? MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: input)]),
+              let out = try? model.prediction(from: provider, options: MLPredictionOptions()),
+              let buf = out.featureValue(for: "enhanced")?.imageBufferValue else { return nil }
+        record((CFAbsoluteTimeGetCurrent() - t0) * 1000)
+        let big = CIImage(cvPixelBuffer: buf)
+        return ci.createCGImage(big, from: big.extent)
+    }
+
+    /// An n×n opaque sRGB canvas, high-quality interpolation.
+    static func draw(_ n: Int, _ body: (CGContext) -> Bool) -> CGImage? {
+        guard let ctx = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        guard body(ctx) else { return nil }
+        return ctx.makeImage()
+    }
+
     /// Tiles refused by the line check (for the debug stats).
     private(set) var rejected = 0
 
-    /// How much of the model's high-frequency detail is kept (it tends to over-sharpen).
+    /// How much of the model's high-frequency detail is kept by «خفيف» (it tends to over-sharpen).
     static let detailGain: Float = 0.85
 
     struct Merged {
@@ -80,23 +113,52 @@ final class HiResEnhancer {
         var scores: (source: Float, enhanced: Float)
     }
 
-    /// Frequency split: `blur(source) + gain × (ai − blur(ai))` at 512 px. The low frequencies —
-    /// every shape, dune, road, colour and shadow — come from the real photo; the model only
-    /// contributes texture finer than the blur (≈ the parent's own pixel), so it can neither
-    /// move nor invent a landform, and cannot shift the `SandGrade` colours. Then `LineGuard`
-    /// compares the result with the plain up-sampled photo.
+    /// The round-2 merge (512 px, no post-sharpening): kept for the tests' reference cases.
     static func mergeDetail(ai: CGImage, source: CGImage, factor: Int, gain: Float = detailGain) -> Merged? {
-        let n = outputSize
+        var p = HiResProfile.light
+        p.outputSize = outputSize
+        p.gain = gain
+        p.sharpen = 0
+        p.localContrast = 0
+        return mergeDetail(ai: ai, source: source, ratio: factor, profile: p)
+    }
+
+    /// Frequency split at `profile.outputSize`: `blur(source) + gain × (ai − blur(ai))`, blur
+    /// radius = `splitScale` source pixels (`ratio` output px each). The low frequencies — every
+    /// shape, dune, road, colour and shadow — come from the real photo; the model only shapes
+    /// texture finer than the blur, so it can neither move nor invent a landform, and cannot
+    /// shift the `SandGrade` colours. Then a moderate unsharp mask (½ source pixel) and local
+    /// contrast (6 source pixels), and `LineGuard` compares the result with the plain
+    /// up-sampled photo.
+    static func mergeDetail(ai: CGImage, source: CGImage, ratio: Int, profile: HiResProfile) -> Merged? {
+        let n = profile.outputSize
         guard let a = rgba(ai, n), let s = rgba(source, n) else { return nil }
-        let r = max(1, factor)
+        let r = max(1, Int((Float(max(1, ratio)) * profile.splitScale).rounded()))
         let ba = blur(a, n, radius: r), bs = blur(s, n, radius: r)
-        var out = [UInt8](repeating: 255, count: n * n * 4)
+        let gain = profile.gain
+        var base = [Float](repeating: 0, count: n * n * 3)
         for i in 0..<(n * n) {
             let o = i * 4
-            for c in 0..<3 {
-                let v = Float(bs[o + c]) + gain * (Float(a[o + c]) - Float(ba[o + c]))
-                out[o + c] = UInt8(max(0, min(255, v.rounded())))
+            for c in 0..<3 { base[i * 3 + c] = Float(bs[o + c]) + gain * (Float(a[o + c]) - Float(ba[o + c])) }
+        }
+        var out = [UInt8](repeating: 255, count: n * n * 4)
+        let sh = profile.sharpen, lc = profile.localContrast
+        if sh > 0 || lc > 0 {
+            /* The unsharp and clarity blurs run on the 8-bit merge (clamped), the result on the floats. */
+            var b8 = [UInt8](repeating: 255, count: n * n * 4)
+            for i in 0..<(n * n) { for c in 0..<3 { b8[i * 4 + c] = UInt8(max(0, min(255, base[i * 3 + c].rounded()))) } }
+            let fine = sh > 0 ? blur(b8, n, radius: max(1, ratio / 2)) : b8
+            let wide = lc > 0 ? blur(b8, n, radius: max(2, ratio * 6)) : b8
+            for i in 0..<(n * n) {
+                let o = i * 4
+                for c in 0..<3 {
+                    let v = base[i * 3 + c]
+                    let f = v + sh * (Float(b8[o + c]) - Float(fine[o + c])) + lc * (Float(b8[o + c]) - Float(wide[o + c]))
+                    out[o + c] = UInt8(max(0, min(255, f.rounded())))
+                }
             }
+        } else {
+            for i in 0..<(n * n) { for c in 0..<3 { out[i * 4 + c] = UInt8(max(0, min(255, base[i * 3 + c].rounded()))) } }
         }
         let side = 256
         let src = LineGuard.score(LineGuard.gray(rgba: s, width: n, height: n, to: side), width: side, height: side)

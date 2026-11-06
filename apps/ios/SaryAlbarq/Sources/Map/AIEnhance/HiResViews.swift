@@ -11,6 +11,14 @@ struct HiResLayerSection: View {
             SaryToggleRow(title: "صور عالية الوضوح", subtitle: "قد تتضمن الصورة تفاصيل تقديرية عند التقريب",
                           systemImage: "photo.fill", isOn: $settings.userOn, id: "explore-hires")
                 .padding(.horizontal, theme.space(.m))
+            if settings.userOn {
+                Picker("قوة التحسين", selection: $settings.level) {
+                    ForEach(HiResLevel.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("explore-hires-level")
+                .padding(.horizontal, theme.space(.m))
+            }
         }
     }
 }

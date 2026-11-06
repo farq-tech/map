@@ -35,8 +35,9 @@ final class HiResImageryTests: XCTestCase {
     func testOffAbove15KmH() {
         let at = { (kmh: Double) in self.decide(HiResRequest(surface: .exploration, speedMps: kmh / 3.6)) }
         XCTAssertEqual(at(0), .on)
-        XCTAssertEqual(at(14.9), .on)
-        XCTAssertEqual(at(15), .on, "15 km/h itself is allowed (> 15 is the rule)")
+        XCTAssertEqual(at(8), .on)
+        XCTAssertEqual(at(14.9), .paused, "driving: only the tiles already in RAM")
+        XCTAssertEqual(at(15), .paused, "15 km/h itself keeps the layer (> 15 is the rule)")
         XCTAssertEqual(at(15.5), .off(.moving))
         XCTAssertEqual(at(90), .off(.moving))
         XCTAssertEqual(decide(HiResRequest(surface: .exploration, speedMps: nil)), .on, "unknown speed = stopped")
@@ -50,6 +51,111 @@ final class HiResImageryTests: XCTestCase {
         XCTAssertEqual(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(thermal: .serious)), .paused)
         XCTAssertEqual(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(thermal: .critical)), .paused)
         XCTAssertEqual(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(thermal: .fair)), .on)
+    }
+
+    // MARK: round 3: «قوي» / «خفيف», heat, coverage, zoom cap
+
+    func testDrivingPausesNewWorkAbove8KmH() {
+        let at = { (kmh: Double) in self.decide(HiResRequest(surface: .exploration, speedMps: kmh / 3.6)) }
+        XCTAssertEqual(at(7.9), .on)
+        XCTAssertEqual(at(8.5), .paused)
+        XCTAssertTrue(at(8.5).drawsLayer, "the enhanced tiles in RAM stay")
+        XCTAssertFalse(at(8.5).enhancesNew, "no new model run while driving")
+        XCTAssertEqual(at(40), .off(.moving))
+    }
+
+    func testHeatFallsBackToLightThenStops() {
+        XCTAssertEqual(HiResPolicy.level(.strong, device: HiResDeviceState()), .strong)
+        XCTAssertEqual(HiResPolicy.level(.light, device: HiResDeviceState()), .light)
+        XCTAssertEqual(HiResPolicy.level(.strong, device: HiResDeviceState(thermal: .fair)), .light, "warm: «خفيف»")
+        XCTAssertEqual(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(thermal: .fair)), .on)
+        XCTAssertFalse(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(thermal: .serious)).enhancesNew, "stops from .serious")
+        XCTAssertFalse(decide(HiResRequest(surface: .exploration), device: HiResDeviceState(lowPower: true)).enhancesNew)
+    }
+
+    func testStrongCoversTheDesertFromZ14() {
+        let nafud = (lat: 28.30, lng: 41.40), riyadh = (lat: 24.6900, lng: 46.6850)
+        XCTAssertTrue(HiResZoom.wantsLayer(zoom: 14, lat: nafud.lat, lng: nafud.lng, level: .strong))
+        XCTAssertFalse(HiResZoom.wantsLayer(zoom: 15, lat: nafud.lat, lng: nafud.lng, level: .light))
+        XCTAssertNil(HiResZoom.plan(.containing(lat: nafud.lat, lng: nafud.lng, z: 13), level: .strong))
+        for z in 14...17 {
+            let p = try! XCTUnwrap(HiResZoom.plan(.containing(lat: nafud.lat, lng: nafud.lng, z: z), level: .strong))
+            XCTAssertEqual(p.factor, 1, "z\(z): the tile itself, made sharper")
+            XCTAssertEqual(p.parent, p.tile)
+            XCTAssertEqual(p.inferences, 4)
+        }
+        let z18 = try! XCTUnwrap(HiResZoom.plan(.containing(lat: nafud.lat, lng: nafud.lng, z: 18), level: .strong))
+        XCTAssertEqual(z18.factor, 2)
+        XCTAssertEqual(z18.inferences, 1)
+        /* Cities keep their own, later start whatever the level. */
+        for z in 14...18 { XCTAssertNil(HiResZoom.plan(.containing(lat: riyadh.lat, lng: riyadh.lng, z: z), level: .strong), "Olaya z\(z)") }
+        XCTAssertEqual(HiResZoom.plan(.containing(lat: riyadh.lat, lng: riyadh.lng, z: 19), level: .strong)?.factor, 2)
+    }
+
+    func testDesertMeansSarySandOverHalf() {
+        /* Just outside Riyadh's box (≈1 km): `sarySand` ≈ 0.3, so city rules. */
+        let edge = (lat: 24.70, lng: 47.06)
+        XCTAssertLessThanOrEqual(SandGrade.sand(urban: UrbanAreas.weight(lat: edge.lat, lng: edge.lng)), 0.5)
+        XCTAssertTrue(HiResZoom.isCity(lat: edge.lat, lng: edge.lng))
+        /* ≈ 5 km out: open desert. */
+        XCTAssertFalse(HiResZoom.isCity(lat: 24.70, lng: 47.10))
+        XCTAssertFalse(HiResZoom.isCity(lat: 24.20, lng: 47.60), "Dahna")
+    }
+
+    func testProfiles() {
+        let strong = HiResProfile.of(.strong, city: false), light = HiResProfile.of(.light, city: false), city = HiResProfile.of(.strong, city: true)
+        XCTAssertGreaterThan(strong.gain, light.gain)
+        XCTAssertGreaterThan(strong.splitScale, light.splitScale)
+        XCTAssertGreaterThan(strong.sharpen, light.sharpen)
+        XCTAssertEqual(strong.outputSize, 1024)
+        XCTAssertEqual(light.outputSize, 512)
+        XCTAssertEqual(city.localContrast, 0, "cities: no clarity")
+        XCTAssertLessThan(city.gain, light.gain, "cities: lighter than «خفيف»")
+        XCTAssertEqual(city.splitScale, 1)
+        XCTAssertLessThan(light.inferencesPerMinute, strong.inferencesPerMinute)
+    }
+
+    func testRateLimitPerMinute() {
+        var r = HiResRateLimit(perMinute: 5)
+        XCTAssertTrue(r.take(now: 0, count: 4))
+        XCTAssertTrue(r.take(now: 1))
+        XCTAssertFalse(r.take(now: 2), "budget used")
+        XCTAssertEqual(r.wait(now: 2), 58, accuracy: 0.001)
+        XCTAssertTrue(r.take(now: 60.5), "a minute later")
+    }
+
+    func testZoomCapIsNativePlusTwoPerRegion() {
+        let base = SatelliteLabels.imageryMaxZoom
+        XCTAssertEqual(base, 18)
+        XCTAssertEqual(HiResZoomCap.cap(lat: 28.30, lng: 41.40, base: base, enhancing: true), 19, "desert z17 + 2")
+        XCTAssertEqual(HiResZoomCap.cap(lat: 24.69, lng: 46.685, base: base, enhancing: true), 21, "city z19 + 2")
+        XCTAssertEqual(HiResZoomCap.cap(lat: 28.30, lng: 41.40, base: base, enhancing: false), 18, "paused / off: never a blurry over-zoom")
+        XCTAssertEqual(HiResZoomCap.cap(lat: 28.30, lng: 41.40, base: 20, enhancing: false), 20, "vector layers keep theirs")
+        XCTAssertEqual(HiResZoomCap.bound(cap: 19, base: 18), 19 + HiResZoomCap.overshoot, accuracy: 0.001, "soft: a little stretch")
+        XCTAssertEqual(HiResZoomCap.bound(cap: 18, base: 18), 18, "no stretch past the plain cap")
+        XCTAssertEqual(HiResZoomCap.settle(zoom: 19.3, cap: 19), 19)
+        XCTAssertNil(HiResZoomCap.settle(zoom: 18.99, cap: 19))
+        /* Every zoom the cap allows has an enhanced, never-blurry tile: the parent is real detail, ≤ 2 up. */
+        for (lat, lng) in [(28.30, 41.40), (24.69, 46.685)] {
+            let cap = Int(HiResZoomCap.cap(lat: lat, lng: lng, base: base, enhancing: true))
+            for z in (HiResZoom.nativeMax(lat: lat, lng: lng) + 1)...cap {
+                let p = try! XCTUnwrap(HiResZoom.plan(.containing(lat: lat, lng: lng, z: z), level: .light))
+                XCTAssertLessThanOrEqual(Int(p.parent.z), HiResZoom.nativeMax(lat: lat, lng: lng))
+                XCTAssertLessThanOrEqual(p.factor, 4)
+            }
+        }
+    }
+
+    func testPrefetchRingCentreFirst() {
+        let c = HiResTileID.containing(lat: 28.30, lng: 41.40, z: 16)
+        let ctr = c.center
+        let tiles = HiResZoom.prefetch(west: ctr.lng - 0.001, south: ctr.lat - 0.001, east: ctr.lng + 0.001, north: ctr.lat + 0.001,
+                                       z: 16, ring: 1, deeper: true)
+        XCTAssertEqual(tiles.first, c, "the centre first")
+        XCTAssertEqual(tiles.filter { $0.z == 16 }.count, 9, "the tile and its ring")
+        XCTAssertEqual(tiles.filter { $0.z == 17 }.count, 4, "the next zoom under the centre")
+        XCTAssertLessThanOrEqual(HiResZoom.prefetch(west: 40, south: 27, east: 42, north: 29, z: 16, ring: 1, deeper: false).count, 0,
+                                 "a huge view (far, pitched) is not prefetched")
     }
 
     func testMissingModelIsOff() {
@@ -124,7 +230,7 @@ final class HiResImageryTests: XCTestCase {
     }
 
     func testProductionCacheBudgetsAreRAMSized() {
-        XCTAssertEqual(HiResImagery.enhanced.limit, 40 << 20)
+        XCTAssertEqual(HiResImagery.enhanced.limit, 48 << 20)
         XCTAssertEqual(HiResImagery.raw.limit, 8 << 20)
     }
 
@@ -220,5 +326,13 @@ final class HiResImageryTests: XCTestCase {
             times.append((CFAbsoluteTimeGetCurrent() - t) * 1000)
         }
         print("HIRES-BENCH steady \(times.map { Int($0) }) ms (simulator, CPU)")
+        /* «قوي»: a z15 desert tile made from itself (four runs) and a z18 one (one run), 1024 px out. */
+        for z in [15, 18] {
+            let p = try XCTUnwrap(HiResZoom.plan(HiResTileID.containing(lat: 28.30, lng: 41.40, z: z), level: .strong))
+            let t = CFAbsoluteTimeGetCurrent()
+            let img = try XCTUnwrap(e.enhance(parent: parent, plan: p, profile: .strong))
+            XCTAssertEqual(img.cgImage?.width, 1024)
+            print("HIRES-BENCH strong z\(z) x\(p.factor) runs \(p.inferences): \(Int((CFAbsoluteTimeGetCurrent() - t) * 1000)) ms (simulator, CPU)")
+        }
     }
 }

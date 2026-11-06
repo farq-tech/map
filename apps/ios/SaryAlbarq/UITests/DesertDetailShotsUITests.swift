@@ -22,6 +22,8 @@ final class DesertDetailShotsUITests: XCTestCase {
         let env = ProcessInfo.processInfo.environment
         var a: [String] = []
         if env["SARY_DETAIL"] == "off" { a += ["-SarySandDetail", "off", "-SaryHiRes", "off"] } else { a += ["-SaryHiRes", "on", "-SaryHiResRemote", "on"] }
+        /* SARY_LEVEL=strong|light: «قوي» / «خفيف» (round 3). */
+        if let l = env["SARY_LEVEL"] { a += ["-SaryHiResLevel", l] }
         return a
     }
 
@@ -93,6 +95,35 @@ final class DesertDetailShotsUITests: XCTestCase {
         let app = launch(at: 28.30, 41.40, clock: day, ["-SaryContext", "stopped", "-SaryVisualsCamera", "28.30,41.40,16.2,55,250", "-SaryVisualsDrone", "6"])
         sleep(45)
         shot("nafud-drone")
+        app.terminate()
+    }
+
+    // MARK: round 3 («قوي»): exploration, the same camera before / after
+
+    /// Exploration at "lat,lng,zoom,pitch,bearing", stopped; waits SARY_FILL seconds for the tiles.
+    private func explore(_ name: String, _ lat: Double, _ lng: Double, zoom: Double, pitch: Double = 0, bearing: Double = 0) {
+        let app = launch(at: lat, lng, clock: day, ["-SaryExplore", "-SaryHiResCam", "\(lat),\(lng),\(zoom),\(pitch),\(bearing)"])
+        sleep(3)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        sleep(UInt32(ProcessInfo.processInfo.environment["SARY_FILL"].flatMap(UInt32.init) ?? 90))
+        shot(name)
+        app.terminate()
+    }
+
+    func testS1NafudZ15() { explore("s-nafud-z15", 28.30, 41.40, zoom: 15) }
+    func testS2NafudZ16() { explore("s-nafud-z16", 28.30, 41.40, zoom: 16) }
+    func testS3NafudZ17() { explore("s-nafud-z17", 28.30, 41.40, zoom: 17) }
+    func testS4NafudZ18() { explore("s-nafud-z18", 28.30, 41.40, zoom: 18) }
+    /// A driver's-eye view: low and pitched (stopped, so enhancement runs).
+    func testS5NafudPitched() { explore("s-nafud-pitch", 28.30, 41.40, zoom: 17, pitch: 68, bearing: 250) }
+    func testS6DahnaZ16() { explore("s-dahna-z16", 24.20, 47.60, zoom: 16) }
+    func testS7DahnaZ17() { explore("s-dahna-z17", 24.20, 47.60, zoom: 17) }
+    func testS8OlayaZ17() { explore("s-olaya-z17", 24.6900, 46.6850, zoom: 17) }
+    /// Frame pacing of a drone orbit in exploration over freshly enhanced tiles.
+    func testS9NafudDroneExplore() {
+        let app = launch(at: 28.30, 41.40, clock: day, ["-SaryExplore", "-SaryVisualsCamera", "28.30,41.40,16.2,55,250", "-SaryVisualsDrone", "20"])
+        sleep(60)
+        shot("s-nafud-drone")
         app.terminate()
     }
 
