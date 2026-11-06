@@ -274,25 +274,6 @@ struct SaryPTTButton: View {
                     .contentTransition(.numericText())
                     .accessibilityIdentifier("outing-ptt-caption")
             }
-            /* The round walkie-talkie beside the outing's primary button (ux/الطلعة-والمشوار.md): the
-             * «تردد ١ ▾» chip still needs a home, so it sits under the disc as its own 44 pt target. */
-            if let c = channelLabel, let open = openChannels {
-                Button(action: open) {
-                    Text("\(c) ▾")
-                        .font(.sary(13, .bold))
-                        .foregroundStyle(theme.palette.textPrimary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 32)
-                        .saryGlass(Capsule(), role: .control, interactive: true)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("التردد: \(c)"))
-                .accessibilityHint(Text("اضغط لتغيّر التردد"))
-                .accessibilityIdentifier("ptt-channel-chip")
-            }
         }
         .onChange(of: isOnAir) { _, on in
             guard on, !theme.reduceMotion else { pulse = false; return }
