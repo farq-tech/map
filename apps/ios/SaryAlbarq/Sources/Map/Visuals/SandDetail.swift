@@ -30,7 +30,7 @@ enum SandDetail {
 
     /// The layer's opacity by map zoom: none at z14.2, full from z17 (×`scale`, e.g. driving).
     static func opacityExpression(scale: Double) -> [Any] {
-        ["interpolate", ["linear"], ["zoom"], 14.2, 0, 15.5, 0.45 * scale, 17, 1 * scale]
+        ["interpolate", ["linear"], ["zoom"], 14.2, 0.0, 15.5, 0.45 * scale, 17, 1 * scale]
     }
 
     /// How the micro-relief is lit. Quantised so the tiles are re-made at most every ~20° of sun.
