@@ -125,6 +125,11 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// Tests that drive fixes by hand: ignore the simulator's own GPS (its location leaks
     /// in whenever the host app holds the permission, and races the scripted fixes).
     var ignoresSystemFixes = false
+    /// UI tests: my last fix as given (no gate), e.g. one 5 minutes old.
+    func debugSetLastFix(_ f: DeviceFix) {
+        lastFix = f
+        displayFix = f
+    }
     private var effectiveAuthorization: CLAuthorizationStatus { testAuthorization ?? authorization }
     #else
     private var effectiveAuthorization: CLAuthorizationStatus { authorization }
@@ -284,7 +289,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     var need: LocationTuning.Need {
         LocationTuning.Need(watching: watching, sharing: isSharing, trail: trailActive || backgroundTrail,
                             offScreen: offScreen, backgroundShare: backgroundShare, mode: effectiveMode,
-                            motion: motion, speedMps: lastFix?.speed, onRoad: onRoad)
+                            motion: motion, speedMps: lastFix?.speed, onRoad: onRoad, urgent: wantsFreshFix)
     }
 
     /// The one place the manager's accuracy, distance filter and activity type are set.
@@ -309,6 +314,24 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         applyBackgroundMode()
         applySettings()
         if plan == nil { manager.stopUpdatingLocation() }
+    }
+
+    /// Guidance waits for a fix («ننتظر موقعك…»): the GPS at its best, no filter, until a fresh one
+    /// comes (`ingest` lowers it again). Starts the updates if nothing else had.
+    private(set) var wantsFreshFix = false
+
+    func requestFreshFix() {
+        guard canLocate else { return }
+        wantsFreshFix = true
+        if !watching { watching = true }
+        applySettings()
+        manager.startUpdatingLocation()
+    }
+
+    func endFreshFixRequest() {
+        guard wantsFreshFix else { return }
+        wantsFreshFix = false
+        applySettings()
     }
 
     func watchForeground() {
@@ -479,6 +502,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         guard case let .accept(ok) = gate.judge(f, nowMs: nowMs) else { return publishStats(f, source: source, nowMs: nowMs) }
         lastFix = ok
         displayFix = smoother.update(ok)
+        if wantsFreshFix, nowMs - ok.atMs < GpsQuality.staleMs { wantsFreshFix = false; applySettings() }
         publishStats(ok, source: source, nowMs: nowMs)
         /* Every believable fix goes to the trail (raw log + its own smoother); no accuracy downgrade
          * when parked: a coarse chip at a red light used to cost the next minutes of the drive. */
