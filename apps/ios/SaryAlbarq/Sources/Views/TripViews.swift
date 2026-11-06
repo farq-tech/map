@@ -219,7 +219,7 @@ struct TripCard: View {
         } else {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))],
                       spacing: theme.space(.s)) {
-                stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters), id: "trip.driven")
+                stat("قطعنا", ui.drivenMeters >= 50 ? SaryFormat.distance(meters: ui.drivenMeters) : "—", id: "trip.driven")
                 stat("باقي", ui.myFixStaleSince == nil ? ui.remainingMeters.map { SaryFormat.distance(meters: $0) } ?? "—" : "—",
                      note: ui.myFixStaleSince != nil ? "آخر موقع قديم" : (ui.remainingApprox ? "تقريبي" : sourceNote), id: "trip.remaining")
                 stat("نوصل", ui.myFixStaleSince == nil ? ui.eta.map { NavText.clock($0) } ?? "—" : "—", note: ui.etaEstimated ? "تقديري" : "الملاحة", id: "trip.eta")
@@ -261,9 +261,12 @@ struct TripCard: View {
     private var arrived: some View {
         let p = theme.palette
         TripProgressBar(fraction: 1, height: 8, done: true)
-        HStack(spacing: theme.space(.s)) {
-            stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters))
-            stat("المدة", ui.elapsedSeconds.map { SaryFormat.duration(seconds: $0) } ?? "—")
+        /* Only real numbers (the owner's review: «قطعنا ٠ م» next to «المدة ١٨ د» says nothing). */
+        if ui.drivenMeters >= 50 || (ui.elapsedSeconds ?? 0) >= 60 {
+            HStack(spacing: theme.space(.s)) {
+                if ui.drivenMeters >= 50 { stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters)) }
+                if let e = ui.elapsedSeconds, e >= 60 { stat("المدة", SaryFormat.duration(seconds: e)) }
+            }
         }
         if let a = ui.arrivalLine {
             Label(a, systemImage: "flag.2.crossed").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
@@ -272,9 +275,9 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الجميع. أنهِ الطلعة ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الجميع. إذا خلصت الطلعة، أنهِها ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
-            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "flag.checkered") }
+            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
                 .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
                 .accessibilityIdentifier("trip.end")
         } else {

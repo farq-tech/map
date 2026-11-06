@@ -65,6 +65,13 @@ final class TripTracker {
         commit(before, events: ev)
     }
 
+    /// A new «مشوار» (leg): arrival starts over, the outing's start points stay.
+    func beginLeg() {
+        let before = record
+        record.beginLeg()
+        commit(before, events: [])
+    }
+
     /// The group's start: the leader's. On the leader's phone it is my own start; elsewhere
     /// the leader's first LIVE position after the outing started, as it reached this phone.
     private func updateGroupStart(_ v: OutingView, started: Double?, now: Date) {

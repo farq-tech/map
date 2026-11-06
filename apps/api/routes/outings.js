@@ -28,7 +28,7 @@ function clientKey(req) {
   return fwd || req.socket.remoteAddress || 'unknown';
 }
 
-function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voiceNotes = null, limits = {}, routing = {} }) {
+function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voiceNotes = null, legs = null, limits = {}, routing = {} }) {
   const router = express.Router();
   /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
   const smallJson = express.json({ limit: '48kb' });
@@ -493,6 +493,26 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
     if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     res.json({ ok: true, ...(await service.putPlan(req.user, req.params.id, req.body || {})) });
   }));
+
+  /* ---- «المشاوير»: legs inside the outing — see lib/outings/legs.js ---- */
+  if (legs) {
+    router.get('/:id/legs', auth, asyncHandler(async (req, res) => {
+      res.json({ ok: true, ...(await legs.list(req.user, req.params.id)) });
+    }));
+    router.post('/:id/legs', auth, asyncHandler(async (req, res) => {
+      if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      const r = await legs.start(req.user, req.params.id, req.body || {});
+      res.status(r.duplicate ? 200 : 201).json({ ok: true, ...r });
+    }));
+    router.post('/:id/legs/:legId/arrive', auth, asyncHandler(async (req, res) => {
+      if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      res.json({ ok: true, ...(await legs.arrive(req.user, req.params.id, req.params.legId, req.body || {})) });
+    }));
+    router.post('/:id/legs/:legId/cancel', auth, asyncHandler(async (req, res) => {
+      if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      res.json({ ok: true, ...(await legs.cancel(req.user, req.params.id, req.params.legId)) });
+    }));
+  }
 
   router.get('/:id/checklist', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.listChecklist(req.user, req.params.id)) });

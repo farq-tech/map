@@ -54,6 +54,8 @@ enum LiveModal: Identifiable, Equatable {
     case chat(ChatWith?)
     /// «ترددات»: the walkie-talkie's channels (five public + private ones).
     case pttChannels
+    /// «وين رايحين؟»: the next leg's destination (ux/الطلعة-والمشوار.md).
+    case whereTo
 
     var id: String {
         switch self {
@@ -81,6 +83,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navSteps: return "navSteps"
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
+        case .whereTo: return "whereTo"
         }
     }
 
