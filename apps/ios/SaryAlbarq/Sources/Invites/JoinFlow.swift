@@ -10,18 +10,18 @@ import Foundation
 ///   2. iOS location (When In Use) is asked right away — the system prompt follows the pre-prompt;
 ///   3. «الموقع الدقيق» off → iOS's one-time «دقيق مؤقتًا» request with our purpose key (`JoinTrip`);
 ///   4. granted + precise → POST /invites/join → the live trip, sharing ON (no toggle, no consent sheet);
-///   5. refused / still approximate → the recovery screen: «افتح الإعدادات» (joins and enters by itself
-///      the moment iOS says yes) or «ادخل الطلعة بدون موقعي» — joined in view mode: the map, the convoy,
-///      the walkie-talkie, with «موقعك مو ظاهر للعيال» on the map until the location is on. No dead end.
+///   5. refused / still approximate → NOT joined (owner decision, build 21: never in a trip without
+///      the location): the recovery screen «افتح الإعدادات» / «إلغاء»; back from Settings with the
+///      location allowed, it joins and enters by itself.
 ///
 /// «دائمًا» is never asked here (Apple: it cannot be forced); it comes later, in the trip.
 /// Notifications and the microphone are not asked at join either.
 /// Owner switches for the invitee's way in.
 enum JoinFlags {
-    /// «ادخل الطلعة بدون موقعي» (build 21, awaiting the owner's decision): refused / approximate
-    /// location can still open the trip in view mode. `false` = back to build 14 (not joined
-    /// until iOS allows the location; the recovery screen offers only «افتح الإعدادات» / «إلغاء»).
-    static let viewOnlyJoin = true
+    /// Owner decision (build 21): never in a trip without the location. `false`: refused /
+    /// approximate stays on the recovery screen («افتح الإعدادات» / «إلغاء») and joins by itself
+    /// once iOS allows; there is no view-only entry (the machine ignores `.enterWithoutLocation`).
+    static let viewOnlyJoin = false
 }
 
 enum JoinPermission: Equatable {
@@ -52,9 +52,9 @@ enum JoinStep: Equatable {
     case askingLocation
     /// Allowed but «الموقع الدقيق» off: iOS's temporary full-accuracy prompt is up.
     case askingPrecise
-    /// Not joined yet: the recovery screen («افتح الإعدادات» / «ادخل الطلعة بدون موقعي»).
+    /// Not joined: the recovery screen («افتح الإعدادات» / «إلغاء»), until iOS allows.
     case needsLocation(JoinPermission)
-    /// POST /invites/join. `viewOnly`: chosen from the recovery screen — in the trip, location hidden.
+    /// POST /invites/join. `viewOnly` only if `JoinFlags.viewOnlyJoin` (off: always false).
     case joining(viewOnly: Bool)
     /// In the live trip (sharing on, or waiting for the location in view mode).
     case entered
@@ -82,7 +82,7 @@ enum JoinEvent: Equatable {
     case precise(JoinPermission)
     /// The app is on screen again (e.g. back from Settings) with this permission.
     case sceneActive(JoinPermission)
-    /// «ادخل الطلعة بدون موقعي» on the recovery screen.
+    /// A view-only entry (only with `JoinFlags.viewOnlyJoin`; no UI sends it while that is off).
     case enterWithoutLocation
     case joined
     case joinFailed(String)
@@ -166,9 +166,6 @@ enum JoinCopy {
     }
 
     static let openSettings = "افتح الإعدادات"
-    /// View mode: in the trip, nothing of mine is sent until the location is on.
-    static let enterWithout = "ادخل الطلعة بدون موقعي"
-    static let enterWithoutNote = "تشوف العيال والوجهة واللاسلكي، بس موقعك مو ظاهر لهم لين تشغّله."
     static let cancel = "إلغاء"
 
     /// On the map while my position is not reaching the group (refused, or approximate only).

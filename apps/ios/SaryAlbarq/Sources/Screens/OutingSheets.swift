@@ -64,8 +64,8 @@ struct JoinByLinkSheet: View {
 /// you, the trip, the destination, the Najdi pre-prompt (iOS has not asked yet) and «انضم للطلعة».
 /// One tap makes the identity silently (the name the inviter gave), asks iOS for the location
 /// (then for «الموقع الدقيق» if it is off) and — granted — joins and enters the live trip with
-/// sharing on. Refused / still approximate: the recovery screen — «افتح الإعدادات» (joins by itself
-/// the moment iOS says yes) or «ادخل الطلعة بدون موقعي» (view mode). Expired / taken / invalid as before.
+/// sharing on. Refused / still approximate: not joined — the recovery screen «افتح الإعدادات» /
+/// «إلغاء», which joins by itself the moment iOS says yes. Expired / taken / invalid as before.
 struct InviteJoinSheet: View {
     let token: String
     @EnvironmentObject private var model: AppModel
@@ -83,8 +83,7 @@ struct InviteJoinSheet: View {
     var body: some View {
         Group {
             if case let .needsLocation(p) = step {
-                JoinNeedsLocationView(permission: p, openSettings: openSettings,
-                                      enterWithout: { send(.enterWithoutLocation) }, cancel: { send(.cancel) })
+                JoinNeedsLocationView(permission: p, openSettings: openSettings, cancel: { send(.cancel) })
                     .transition(.opacity)
             } else {
                 page
@@ -332,12 +331,11 @@ struct InviteJoinSheet: View {
     }
 }
 
-/// Refused, or «الموقع الدقيق» still off: not joined yet. «افتح الإعدادات» (joins by itself once iOS
-/// says yes) or «ادخل الطلعة بدون موقعي» (view mode: in the trip, my location hidden until it is on).
+/// Refused, or «الموقع الدقيق» still off: not joined (owner decision: never in a trip without the
+/// location). «افتح الإعدادات» / «إلغاء»; it joins by itself once iOS says yes.
 struct JoinNeedsLocationView: View {
     var permission: JoinPermission
     var openSettings: () -> Void
-    var enterWithout: () -> Void
     var cancel: () -> Void
     @Environment(\.sary) private var theme
 
@@ -364,16 +362,6 @@ struct JoinNeedsLocationView: View {
             Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("join.openSettings")
-            if JoinFlags.viewOnlyJoin {
-                Button(action: enterWithout) { SaryButtonLabel(title: JoinCopy.enterWithout, systemImage: "map") }
-                    .buttonStyle(.sary(.secondary))
-                    .accessibilityIdentifier("join.enterWithout")
-                Text(JoinCopy.enterWithoutNote)
-                    .saryText(.footnote)
-                    .foregroundStyle(p.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             Button(JoinCopy.cancel, action: cancel)
                 .buttonStyle(.sary(.plain))
                 .accessibilityIdentifier("join.cancel")

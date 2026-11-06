@@ -53,21 +53,24 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertEqual(JoinMachine.next(asking, .precise(.notAsked)), .askingPrecise)
     }
 
-    func testStillApproximateGoesToRecoveryWithAWayIn() {
+    func testStillApproximateGoesToRecovery() {
         let s = run([.tapJoin(hasIdentity: true), .permission(.reduced), .precise(.reduced)])
         XCTAssertEqual(s, .needsLocation(.reduced))
-        XCTAssertEqual(JoinMachine.next(s, .enterWithoutLocation), JoinFlags.viewOnlyJoin ? .joining(viewOnly: true) : s)
         XCTAssertEqual(JoinMachine.next(s, .sceneActive(.granted)), .joining(viewOnly: false), "precise turned on in Settings: in, sharing")
     }
 
-    func testDeniedRecoveryOpensTheTripInViewMode() throws {
-        try XCTSkipUnless(JoinFlags.viewOnlyJoin, "view mode switched off by the owner")
-        let s = run([.tapJoin(hasIdentity: false), .identityReady, .permission(.denied)])
-        XCTAssertEqual(s, .needsLocation(.denied))
-        let v = JoinMachine.next(s, .enterWithoutLocation)
-        XCTAssertEqual(v, .joining(viewOnly: true), "no dead end: the trip opens without my location")
-        XCTAssertEqual(JoinMachine.next(v, .joined), .entered)
-        XCTAssertEqual(run([.enterWithoutLocation]), .ready, "only from the recovery screen")
+    func testNeverInATripWithoutTheLocation() {
+        /* Owner decision (build 21): refused / approximate never joins; only iOS allowing does. */
+        XCTAssertFalse(JoinFlags.viewOnlyJoin)
+        for p in [JoinPermission.denied, .reduced] {
+            let s: JoinStep = p == .denied ? run([.tapJoin(hasIdentity: false), .identityReady, .permission(.denied)])
+                                           : run([.tapJoin(hasIdentity: true), .permission(.reduced), .precise(.reduced)])
+            XCTAssertEqual(s, .needsLocation(p))
+            XCTAssertEqual(JoinMachine.next(s, .enterWithoutLocation), s, "no view-only entry")
+            XCTAssertEqual(JoinMachine.next(s, .sceneActive(p)), s, "still not allowed: same screen, not joined")
+            XCTAssertEqual(JoinMachine.next(s, .sceneActive(.granted)), .joining(viewOnly: false), "allowed in Settings: joins by itself")
+            XCTAssertEqual(JoinMachine.next(s, .cancel), .cancelled)
+        }
     }
 
     func testGrantedInSettingsJoinsByItself() {
@@ -115,8 +118,7 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertNotEqual(JoinCopy.needsTitle(.denied), JoinCopy.needsTitle(.reduced))
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))
         XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للعيال")
-        XCTAssertEqual(JoinCopy.enterWithout, "ادخل الطلعة بدون موقعي")
-        for t in [JoinCopy.statement, JoinCopy.prePromptDetail, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced), JoinCopy.enterWithoutNote] {
+        for t in [JoinCopy.statement, JoinCopy.prePromptDetail, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced)] {
             XCTAssertFalse(t.contains("أوقف"), "no stop switch is promised: \(t)")
             XCTAssertFalse(t.contains("شارك موقعي"), t)
         }

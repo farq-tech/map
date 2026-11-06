@@ -249,8 +249,8 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
         XCTAssertEqual(needs.label, "موقعك مقفل، والعيال ما راح يشوفونك")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
-        XCTAssertTrue(app.buttons["join.enterWithout"].exists, "no dead end: the trip can open without my location")
         XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists, "owner: never in a trip without the location")
         XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined: no live map")
         sleep(1)
         shot("6-denied-needs-location", app)
@@ -280,40 +280,47 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("9-auto-joined-sharing", app)
     }
 
-    /// Build 21: refused → the recovery screen → «ادخل الطلعة بدون موقعي» → the live trip in view mode,
-    /// with «موقعك مو ظاهر للعيال» and «افتح الإعدادات» on the map. SOS and the walkie-talkie stay.
-    func testDeniedRecoveryThenViewMode() {
-        let app = launchInvite("group", noIdentity: true, extra: [])
+    /// Owner decision (build 21): never in a trip without the location. A new invitee refuses → the
+    /// recovery screen has only «افتح الإعدادات» and «إلغاء», nothing is joined; allowed in Settings →
+    /// back in the app it joins and enters by itself, sharing.
+    func testDeniedRecoveryOnlySettingsThenJoinsByItself() {
+        let app = launchInvite("personal", noIdentity: true)
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
-        if app.textFields["invite.myName"].exists {
-            app.textFields["invite.myName"].tap()
-            app.textFields["invite.myName"].typeText("سعد")
-        }
         join.tap()
         answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"])
-        let enter = app.buttons["join.enterWithout"]
-        XCTAssertTrue(enter.waitForExistence(timeout: 10), "the recovery screen")
+        let needs = app.staticTexts["join.needsLocation"]
+        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
-        shot("6-denied-recovery", app)
-        enter.tap()
-
-        let summary = any(app, "outing-sheet-summary")
-        XCTAssertTrue(summary.waitForExistence(timeout: 20), "in the trip anyway")
-        let hidden = any(app, "arrival.hidden")
-        XCTAssertTrue(hidden.waitForExistence(timeout: 10), "the visible state")
-        XCTAssertEqual(hidden.label, "موقعك مو ظاهر للعيال")
-        XCTAssertTrue(app.buttons["arrival.openSettings"].exists, "the fix is one tap away")
-        XCTAssertFalse(any(app, "arrival.locating").exists, "no «نحدد موقعك…» without permission")
-        XCTAssertTrue(any(app, "outing-sos").exists, "SOS is never hidden")
+        XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "بدون موقعي")).count, 0, "no view-only words anywhere")
+        XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined: no live map")
         sleep(1)
-        shot("6b-view-mode-hidden", app)
+        shot("6-denied-recovery", app)
+
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        settings.terminate()
+        app.buttons["join.openSettings"].tap()
+        XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 15))
+        openAppLocationPage(settings)
+        let whileUsing = settings.staticTexts.matching(NSPredicate(format: "label IN %@", ["While Using the App", "أثناء استخدام التطبيق"])).firstMatch
+        XCTAssertTrue(whileUsing.waitForExistence(timeout: 10))
+        whileUsing.tap()
+        let precise = settings.switches.matching(NSPredicate(format: "label IN %@", ["Precise Location", "الموقع الدقيق"])).firstMatch
+        if precise.waitForExistence(timeout: 3), (precise.value as? String) == "0" { precise.tap() }
+
+        app.activate()
+        let summary = any(app, "outing-sheet-summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 20), "allowed: joined and in the trip by itself")
+        XCTAssertFalse(any(app, "arrival.hidden").exists, "allowed: nothing says my location is hidden")
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
-        if sharing.waitForExistence(timeout: 5) {
-            XCTAssertFalse(sharing.label.contains("مُشارَك"), "nothing of mine is sent: \(sharing.label)")
-        }
-        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "موقعك مُشارَك")).firstMatch.exists, "never «مُشارَك» in view mode")
+        XCTAssertTrue(sharing.waitForExistence(timeout: 10))
+        let deadline = Date().addingTimeInterval(10)
+        while !sharing.label.contains("مُشارَك") && Date() < deadline { usleep(300_000) }
+        XCTAssertTrue(sharing.label.contains("مُشارَك"), sharing.label)
+        shot("6b-denied-then-allowed-joined", app)
     }
 
     /// Build 21: «الموقع الدقيق» off → iOS's temporary precise prompt (purpose key JoinTrip) → precise → live.
@@ -332,7 +339,7 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["join.needsLocation"].exists)
     }
 
-    /// Still approximate after the precise prompt: the recovery screen says so, with a way in.
+    /// Still approximate after the precise prompt: the recovery screen says so; not joined.
     func testApproximateRefusedShowsPreciseRecovery() {
         let app = launchInvite("group", noIdentity: false, extra: ["-SaryJoinReduced", "deny"])
         let join = app.buttons["invite.join"]
@@ -343,9 +350,10 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(needs.waitForExistence(timeout: 10))
         XCTAssertEqual(needs.label, "موقعك تقريبي بالكيلومترات")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
-        XCTAssertTrue(app.buttons["join.enterWithout"].exists)
+        XCTAssertTrue(app.buttons["join.cancel"].exists)
+        XCTAssertFalse(app.buttons["join.enterWithout"].exists, "never in a trip without the (precise) location")
         shot("11-invite-needs-precise", app)
-        app.buttons["join.enterWithout"].tap()
-        XCTAssertTrue(any(app, "outing-sheet-summary").waitForExistence(timeout: 20), "view mode: in the trip")
+        sleep(2)
+        XCTAssertFalse(any(app, "outing-sheet-summary").exists, "not joined")
     }
 }
