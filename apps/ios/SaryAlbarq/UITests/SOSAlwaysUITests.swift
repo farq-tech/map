@@ -85,13 +85,14 @@ final class SOSAlwaysUITests: XCTestCase {
         XCTAssertTrue(ok.waitForNonExistence(timeout: 5), "stopped after the confirmation")
     }
 
-    /// Big enough and fully on screen, on the left under the header where the map's SOS sits (Lovable).
+    /// Big enough and fully on screen, bottom left: over a full sheet it must not cover the sheet's
+    /// search field or first rows (QA #111 screenshot).
     /// (Not `isHittable`: XCUITest's hit test does not look into the app's extra overlay window.)
     private func assertOnScreen(_ app: XCUIApplication, _ e: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         let f = e.frame, screen = app.frame
         XCTAssertGreaterThanOrEqual(f.width, 60, "a big target", file: file, line: line)
         XCTAssertTrue(screen.contains(f), "fully on screen: \(f)", file: file, line: line)
         XCTAssertLessThan(f.midX, screen.midX, "on the left, like the map's SOS", file: file, line: line)
-        XCTAssertLessThan(f.midY, screen.midY, "in the upper half, under the header (Lovable)", file: file, line: line)
+        XCTAssertGreaterThan(f.midY, screen.height * 0.75, "in the bottom corner, clear of the sheet's search field", file: file, line: line)
     }
 }

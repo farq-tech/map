@@ -61,6 +61,11 @@ final class SOSAnchorView: UIView {
 /// alike — belongs to the sheets beneath.
 final class SOSOverlayWindow: UIWindow {
     private let host = UIHostingController(rootView: AnyView(EmptyView()))
+    /// Whether the floating copy is wanted (a full sheet or a sheet on top covers the map's SOS).
+    private var wanted = false
+    /// The keyboard is up: the person is typing in that sheet, and a disc there would cover keys.
+    private var keyboardUp = false
+    private var observers: [NSObjectProtocol] = []
 
     override init(windowScene: UIWindowScene) {
         super.init(windowScene: windowScene)
@@ -70,7 +75,18 @@ final class SOSOverlayWindow: UIWindow {
         host.safeAreaRegions = []
         rootViewController = host
         isHidden = true
+        let nc = NotificationCenter.default
+        observers.append(nc.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keyboardUp = true; self?.applyVisibility() }
+        })
+        observers.append(nc.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keyboardUp = false; self?.applyVisibility() }
+        })
     }
+
+    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+
+    private func applyVisibility() { isHidden = !wanted || keyboardUp }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -82,9 +98,11 @@ final class SOSOverlayWindow: UIWindow {
         let side = disc + 16
         let screen = windowScene?.coordinateSpace.bounds ?? UIScreen.main.bounds
         let safeBottom = windowScene?.windows.first(where: { $0 !== self && $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
-        /* The calm screen measures its SOS (top left, under the header): the copy goes exactly there. */
-        let f = m.frame.map { CGRect(x: $0.midX - side / 2, y: $0.midY - side / 2, width: side, height: side) }
-            ?? CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.l) - 56 - side, width: side, height: side)
+        /* Over a full sheet the map's spot (top left, under the header) is where sheets put their
+         * search field and first row (QA: it covered «ابحث أو أدخل إحداثية»): the copy sits in the
+         * bottom-left corner instead, the least used part of a sheet. On the map itself the real
+         * SOS never moves. */
+        let f = CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.s) - side, width: side, height: side)
         if frame != f { frame = f }
         host.rootView = AnyView(
             SarySOSButton(state: m.state, trigger: m.trigger, size: m.size, compactLabel: m.size != nil)
@@ -93,6 +111,7 @@ final class SOSOverlayWindow: UIWindow {
                 .environment(\.sary, m.theme)
                 .environment(\.layoutDirection, .leftToRight)
         )
-        isHidden = !m.visible
+        wanted = m.visible
+        applyVisibility()
     }
 }
