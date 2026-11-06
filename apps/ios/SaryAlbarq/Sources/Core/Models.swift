@@ -60,6 +60,9 @@ struct Member: Codable, Equatable, Identifiable {
     var phone_last4: String? = nil
     /// «مباشر / متأخر / منقطع» + why (server-decided, active outings only). See MemberPresence.swift.
     var presence: MemberPresence? = nil
+    /// «أخفِ موقعي»: still in the trip, position not sent (`hidden_at`: since when).
+    var hidden: Bool? = nil
+    var hidden_at: String? = nil
 
     var id: String { user_id }
 }

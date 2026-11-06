@@ -450,3 +450,65 @@ final class MapVisualsTests: XCTestCase {
         XCTAssertEqual(FramePacing.summary([0, 1]), "")
     }
 }
+
+/// Farq's own streets / places / buildings (`FarqTiles`, served by apps/tiles).
+final class FarqTilesTests: XCTestCase {
+    override func tearDown() { FarqTiles.setStatusForTests(nil) }
+
+    static let tileJSON = Data("""
+    {"tilejson":"3.0.0","tiles":["https://t.example.sa/tiles/{z}/{x}/{y}.mvt"],"minzoom":5,"maxzoom":15,
+     "vector_layers":[{"id":"roads"},{"id":"places"},{"id":"buildings"}],"version":"2026-11-06T18:12:34Z"}
+    """.utf8)
+
+    func testParse() {
+        let p = FarqTiles.parse(Self.tileJSON)
+        XCTAssertEqual(p?.layers, ["roads", "places", "buildings"])
+        XCTAssertEqual(p?.builtAt, "2026-11-06T18:12:34Z")
+        XCTAssertNil(FarqTiles.parse(Data(#"{"tiles":["x"],"vector_layers":[{"id":"places"}]}"#.utf8)), "no roads: not ours")
+        XCTAssertNil(FarqTiles.parse(Data(#"{"vector_layers":[{"id":"roads"}]}"#.utf8)), "no tile URL")
+        XCTAssertNil(FarqTiles.parse(Data("<html>".utf8)))
+    }
+
+    func testCheckOnlyTurnsOnWhenTheServerAnswers() async {
+        let url = "https://t.example.sa/farq.json"
+        let down = await FarqTiles.check(url: url) { _ in throw URLError(.cannotConnectToHost) }
+        XCTAssertNil(down)
+        XCTAssertFalse(FarqTiles.available, "server down: Mapbox's roads stay")
+        let notBuilt = await FarqTiles.check(url: url) { _ in (Data(#"{"error":"NOT_BUILT"}"#.utf8), 503) }
+        XCTAssertNil(notBuilt)
+        let unset = await FarqTiles.check(url: nil) { _ in (Self.tileJSON, 200) }
+        XCTAssertNil(unset, "not configured")
+        let up = await FarqTiles.check(url: url) { _ in (Self.tileJSON, 200) }
+        XCTAssertEqual(up?.tileJSON, url)
+        XCTAssertTrue(FarqTiles.available)
+        XCTAssertTrue(FarqTiles.hasBuildings)
+        XCTAssertTrue(FarqTiles.hasPlaces)
+    }
+
+    func testRoadSnappingFollowsFarqStreetsOnlyWhenAvailable() {
+        XCTAssertEqual(FarqTiles.probe.source, RoadSnap.source)
+        XCTAssertEqual(FarqTiles.probe.sourceLayer, "road")
+        FarqTiles.setStatusForTests(.init(tileJSON: "https://t.example.sa/farq.json", layers: ["roads"], builtAt: nil))
+        XCTAssertEqual(FarqTiles.probe.source, FarqTiles.source)
+        XCTAssertEqual(FarqTiles.probe.sourceLayer, "roads")
+        XCTAssertFalse(FarqTiles.drivable.contains("track"), "a car in the desert is never pulled onto a track")
+        XCTAssertFalse(FarqTiles.buildingSource.atlas, "no buildings layer in this archive: Mapbox Streets' buildings")
+    }
+
+    func testAtlasBuildingsLayer() {
+        FarqTiles.setStatusForTests(.init(tileJSON: "https://t.example.sa/farq.json", layers: ["roads", "buildings"], builtAt: nil))
+        let src = FarqTiles.buildingSource
+        XCTAssertTrue(src.atlas)
+        let layer = CityBuildings.layer(id: "b", source: src.source, opacity: 1, sourceLayer: src.sourceLayer, atlas: true)
+        XCTAssertEqual(layer["source-layer"] as? String, "buildings")
+        let filter = layer["filter"] as? [Any]
+        XCTAssertEqual(filter?.first as? String, ">=", "Atlas footprints carry no extrude/underground flags")
+    }
+
+    func testRoadLayersDrawMajorRoadsLast() {
+        let ids = FarqTiles.roadLayers().compactMap { $0["id"] as? String }
+        XCTAssertEqual(ids.first, "farq-road-path")
+        XCTAssertEqual(ids.last, "farq-road-motorway")
+        XCTAssertTrue(FarqTiles.roadLayers().allSatisfy { ($0["slot"] as? String) == "middle" })
+    }
+}

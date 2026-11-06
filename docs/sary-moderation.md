@@ -1,7 +1,7 @@
 # «بلّغ عن الرسالة» و«احظر» — المراجعة (App Store 1.2)
 
 ما فيه واجهة إدارة للحين. البلاغات تنحفظ في `sary.chat_reports` والحظر في `sary.user_blocks`
-(migration `016_sary_chat_moderation.sql`). هذي الاستعلامات لقراءتها ومراجعتها من قاعدة البيانات
+(migration `018_sary_chat_moderation.sql`). هذي الاستعلامات لقراءتها ومراجعتها من قاعدة البيانات
 (Supabase SQL editor أو `psql "$DATABASE_URL"`).
 
 ## الواجهات (API)

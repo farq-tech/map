@@ -454,6 +454,15 @@ final class OutingsAPI {
         let r: SosBox = try await call("POST", "/\(id)/sos", body: B(fix: fix))
         return r.sos
     }
+    struct HiddenBox: Decodable { var hidden: Bool; var since: String? }
+    /// «أخفِ موقعي / أظهر موقعي».
+    func setHidden(_ id: String, hidden: Bool) async throws -> HiddenBox {
+        try await call("PUT", "/\(id)/hidden", body: ["hidden": hidden])
+    }
+    /// «نبّهه» (leader): one push to that member only. Errors: member_hidden, too_frequent, leader_only.
+    func nudge(_ id: String, member: String) async throws {
+        let _: OkBox = try await call("POST", "/\(id)/members/\(member)/nudge")
+    }
     func cancelSos(_ id: String) async throws {
         let _: SosBox = try await call("DELETE", "/\(id)/sos")
     }

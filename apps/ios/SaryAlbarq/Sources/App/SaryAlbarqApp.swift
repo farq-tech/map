@@ -14,6 +14,8 @@ struct SaryAlbarqApp: App {
         WindowGroup {
             RootView()
                 .onAppear { AppDelegate.model = model }
+                /* Farq's streets and places (apps/tiles): once the server answers, maps switch to them. */
+                .task { await FarqTiles.check() }
                 .environmentObject(model)
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)
@@ -108,7 +110,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// While the app is open, notes and SOS go to the in-app alert lane / SOS screen, not a banner.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         /* On screen, the live map's alert lane already shows notes and SOS; a banner would say it twice. */
-        notification.request.identifier.hasPrefix("sos-") ? [.sound, .list] : [.list]
+        let id = notification.request.identifier
+        /* «موقعك مخفي من ٣٠ د، تبي تظهره؟» is for this person now, even on screen. */
+        if id.hasPrefix("sary-hidden-") { return [.banner, .list] }
+        return id.hasPrefix("sos-") ? [.sound, .list] : [.list]
     }
 }
 

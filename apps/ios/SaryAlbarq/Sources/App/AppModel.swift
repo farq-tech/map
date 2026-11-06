@@ -78,6 +78,7 @@ final class AppModel: ObservableObject {
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
+            OutingLegStore.forgetAll()
             RecentPlaces.forget()
             /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
             LocalAccountData.wipe()

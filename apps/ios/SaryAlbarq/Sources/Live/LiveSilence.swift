@@ -6,11 +6,16 @@ import Foundation
 // the «انقطع منذ ١٠ د» badge and the quiet «رجع إرسال فهد» toast.
 
 extension LiveOutingPresenter {
+    /// «نبّهه»: a leader, an active trip, someone else who is not live — never one who hid on purpose.
+    static func canNudge(_ p: ParticipantUI, leader: Bool, active: Bool) -> Bool {
+        leader && active && !p.isMe && !p.presence.isLive && p.presenceReason != .hidden
+    }
+
     /// Why a friend is not live, as the server judged it (presence.js); nil while live here or
     /// there (the phone may hold a fresher fix than the server's last sweep), or not sharing.
     static func presenceReason(_ m: Member, in v: OutingView, now: Date = Date()) -> PresenceReason? {
         guard m.user_id != v.myId, v.status == .active, m.sharing else { return nil }
-        if m.presence?.state == .hidden { return .hidden }
+        if m.hidden == true || m.presence?.state == .hidden { return .hidden }
         if v.positions[m.user_id] != nil, v.freshness(of: m.user_id, deviceNow: now) == .live { return nil }
         if let p = m.presence, p.state != .live, let r = p.reasonKind { return r }
         return v.silent[m.user_id]?.reasonKind
@@ -88,6 +93,11 @@ extension LiveOutingController {
         for (uid, withFix) in change.cleared {
             dismissAlert(Self.silentAlertId(uid))
             if withFix, let name = next.members[uid]?.display_name { toast(SilenceText.resumed(name: name)) }
+        }
+        /* «سجل الطلعة»: «فهد أخفى موقعه» / «فهد أظهر موقعه» (others only; mine has its own line). */
+        for (uid, m) in next.members.sorted(by: { $0.key < $1.key }) where uid != next.myId {
+            let was = prev.members[uid]?.hidden == true, now = m.hidden == true
+            if was != now, prev.members[uid] != nil { toast(HideText.changed(name: m.display_name, hidden: now)) }
         }
     }
 

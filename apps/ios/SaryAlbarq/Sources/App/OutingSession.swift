@@ -223,7 +223,8 @@ final class OutingSession: ObservableObject, Identifiable {
             outingActive: view?.status == .active,
             foreground: visible && env.isForeground(),
             closed: closedReason != nil,
-            alwaysAuthorized: sharesInBackground
+            alwaysAuthorized: sharesInBackground,
+            hidden: view?.me?.hidden == true
         )
     }
 
@@ -1082,9 +1083,67 @@ final class OutingSession: ObservableObject, Identifiable {
         return ok
     }
 
-    /// SOS after the 1 s hold. Carries my fix only when the send gate is open.
-    func raiseSOS() async {
-        guard let me = view?.myId else { return }
+    // MARK: «أخفِ موقعي»
+
+    /// When I hid my location in this trip (nil: shown).
+    var hiddenSince: Date? {
+        guard view?.me?.hidden == true else { return nil }
+        return view?.me?.hidden_at.flatMap(ISODate.parse) ?? Date()
+    }
+
+    /// Hide / show my location. Hidden: still in the trip (voice notes, radio, chat); nothing is
+    /// sent (SendGate.hidden), whatever waited offline is dropped, a reminder comes at 30 min.
+    @discardableResult
+    func setHidden(_ on: Bool) async -> Bool {
+        guard let me = view?.myId, view?.status != .ended else { return false }
+        let ok: Bool
+        if isDemo {
+            view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
+            ok = true
+        } else {
+            ok = await run("hidden") {
+                let r = try await api.setHidden(id, hidden: on)
+                view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
+            }
+        }
+        if ok && on {
+            channel?.dropPendingFix()
+            offlineQueue.clear()
+            saveOfflineQueue()
+        }
+        HideReminder.sync(outingId: id, since: hiddenSince)
+        objectWillChange.send()
+        return ok
+    }
+
+    /// «نبّهه» (leader): nil when sent, else the line to show.
+    func nudge(_ uid: String) async -> String? {
+        if isDemo { return nil }
+        do {
+            try await api.nudge(id, member: uid)
+            return nil
+        } catch let e as OutingAPIError {
+            switch e.code {
+            case "member_hidden": return "مخفي موقعه بإرادته — ما نرسل له تنبيه"
+            case "too_frequent", "rate_limited": return "نبّهته قبل شوي — انتظر دقايق"
+            case "leader_only": return "التنبيه للأمير ونائبه بس"
+            default: return "ما قدرنا نرسل التنبيه — حاول مرة ثانية"
+            }
+        } catch { return "ما قدرنا نرسل التنبيه — حاول مرة ثانية" }
+    }
+
+    /// SOS after the 1 s hold. Carries my real fix whenever iOS allows — even with «أخفِ موقعي»
+    /// on (SendGate.allowsSosFix), and then my location is shown again (true is returned).
+    @discardableResult
+    func raiseSOS() async -> Bool {
+        guard let me = view?.myId else { return false }
+        let wasHidden = view?.me?.hidden == true
+        defer {
+            if wasHidden {
+                view?.apply(.memberHidden(userId: me, hidden: false, since: nil, reason: "sos"))
+                HideReminder.sync(outingId: id, since: nil)
+            }
+        }
         sosSending = true
         defer { sosSending = false }
         var wire: WireFix?
@@ -1095,13 +1154,18 @@ final class OutingSession: ObservableObject, Identifiable {
         mesh.announce(.sos, sosFix: wire == nil ? nil : location.lastFix)
         if isDemo {
             view?.apply(.sos(userId: me, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
-            return
+            return wasHidden
         }
         let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
             view?.apply(.sos(userId: me, sos: s, refresh: false))
         }
-        if !ok { deliveredNearby() }
+        if !ok {
+            deliveredNearby()
+            /* The server did not hear the SOS: still show my location again, as promised. */
+            if wasHidden { Task { [api, id] in _ = try? await api.setHidden(id, hidden: false) } }
+        }
+        return wasHidden
     }
 
     func cancelSOS() async {

@@ -126,6 +126,15 @@ struct TripRecord: Codable, Equatable {
         case memberArrived(String, atMs: Double)
     }
 
+    /// «ابدأ المشوار»: a new leg inside the same outing. The start points stay (they are the
+    /// outing's); my arrival and what this phone saw of the others' start over for the new destination.
+    mutating func beginLeg() {
+        me = ArrivalDetector()
+        arrivedManually = false
+        arrivals = [:]
+        friends = [:]
+    }
+
     func phase(hasDestination: Bool, status: OutingStatus?) -> TripPhase {
         if status == .ended || endedAtMs != nil { return .ended }
         if let a = me.arrivedAtMs { return .arrived(at: Date(timeIntervalSince1970: a / 1000)) }

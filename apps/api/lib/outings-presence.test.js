@@ -102,7 +102,7 @@ function recordingHub(now) {
 
 const quietPush = { enabled: false, async notifyMembers() { return { sent: 0 }; }, async notifyWatchers() { return { sent: 0 }; } };
 
-async function setup(t) {
+async function setup(t, push = quietPush) {
   const { createPool, migrate } = require('./outings/db');
   const { createOutingsService } = require('./outings/service');
   const createOutingsRouter = require('../routes/outings');
@@ -113,7 +113,7 @@ async function setup(t) {
   const now = () => Date.now() + offset;
   const advance = (ms) => { offset += ms; };
   const hub = recordingHub(now);
-  const svc = createOutingsService({ pool, events: hub, push: quietPush, config: { minFixIntervalMs: 0, persistEveryMs: 0 }, now });
+  const svc = createOutingsService({ pool, events: hub, push, config: { minFixIntervalMs: 0, persistEveryMs: 0 }, now });
   const app = express();
   app.use('/api/outings', createOutingsRouter({ service: svc, hub, limits: { identityPerHour: 100 } }));
   const server = http.createServer(app);
@@ -230,4 +230,111 @@ test('backfill: offline positions uploaded in one batch, never shown as live', {
   /* Refusals: not a member, not an array. */
   assert.equal((await api('POST', `/${O}/positions/batch`, X.token, { fixes })).status, 404);
   assert.equal((await api('POST', `/${O}/positions/batch`, B.token, { fixes: 'x' })).status, 400);
+});
+
+function recordingPush() {
+  const sent = [];
+  return {
+    sent,
+    enabled: true,
+    async notifyMembers(outingId, exceptUserId, payload) {
+      sent.push({ outingId, exceptUserId, payload });
+      return { sent: 1, removed: 0, failed: 0, skipped: 0 };
+    },
+    async notifyWatchers() { return { sent: 0 }; },
+  };
+}
+
+test('«أخفِ موقعي»: stays a member, no position accepted or shown, SOS overrides, no «نبّهه»', { skip, timeout: 60_000 }, async (t) => {
+  const push = recordingPush();
+  const { svc, hub, api, mk, advance } = await setup(t, push);
+  const A = await mk('احمد');
+  const B = await mk('فهد');
+  const C = await mk('سعد');
+  const { outing_id: O, invite } = await svc.createOuting(A, { name: 'طلعة' });
+  await svc.joinByInvite(B, invite.token);
+  await svc.joinByInvite(C, invite.token);
+  await svc.setStatus(A, O, 'start');
+  assert.equal((await api('POST', `/${O}/positions`, B.token, { fix: fixAt(1) })).status, 200);
+
+  /* B hides. */
+  const h = await api('PUT', `/${O}/hidden`, B.token, { hidden: true });
+  assert.equal(h.status, 200);
+  assert.equal(h.body.hidden, true);
+  assert.ok(h.body.since);
+  const ev = hub.events.filter((e) => e.event.type === 'member_hidden').at(-1).event;
+  assert.deepEqual([ev.user_id, ev.hidden, ev.reason], [B.id, true, 'self']);
+
+  let snap = await svc.getOuting(A, O);
+  const mb = snap.members.find((m) => m.user_id === B.id);
+  assert.equal(mb.hidden, true, 'still a member, marked hidden');
+  assert.deepEqual([mb.presence.state, mb.presence.reason], ['hidden', 'hidden'], '«فهد مخفي موقعه», not «انقطع»');
+  assert.equal(snap.positions.find((p) => p.user_id === B.id), undefined, 'the last position is not shown as if live');
+
+  /* The server refuses positions while hidden (socket or HTTP or backfill). */
+  const r = await api('POST', `/${O}/positions`, B.token, { fix: fixAt(2) });
+  assert.deepEqual([r.status, r.body.error], [409, 'hidden']);
+  assert.equal((await api('POST', `/${O}/positions/batch`, B.token, { fixes: [fixAt(3, 60_000)] })).body.error, 'hidden');
+
+  /* Chat and the rest keep working: still a member. */
+  assert.equal((await api('GET', `/${O}`, B.token)).status, 200);
+
+  /* No silence alert, no «نبّهه». */
+  advance(31 * MIN);
+  await svc.sweepSilence();
+  assert.equal(hub.events.filter((e) => e.event.type === 'member_silent' && e.event.user_id === B.id).length, 0);
+  const n = await api('POST', `/${O}/members/${B.id}/nudge`, A.token);
+  assert.deepEqual([n.status, n.body.error], [409, 'member_hidden']);
+
+  /* SOS overrides it: the real position goes out and the location is shown again. */
+  const sos = await api('POST', `/${O}/sos`, B.token, { fix: fixAt(4) });
+  assert.equal(sos.status, 200);
+  assert.equal(sos.body.unhidden, true);
+  assert.ok(sos.body.sos.fix, 'the SOS carries the real position');
+  const shown = hub.events.filter((e) => e.event.type === 'member_hidden').at(-1).event;
+  assert.deepEqual([shown.hidden, shown.reason], [false, 'sos']);
+  assert.equal((await svc.getOuting(A, O)).members.find((m) => m.user_id === B.id).hidden, false);
+  assert.equal((await api('POST', `/${O}/positions`, B.token, { fix: fixAt(5) })).status, 200, 'sharing again');
+
+  /* Hide → show by choice. */
+  await api('PUT', `/${O}/hidden`, B.token, { hidden: true });
+  const s2 = await api('PUT', `/${O}/hidden`, B.token, { hidden: false });
+  assert.equal(s2.body.hidden, false);
+  assert.equal(hub.events.filter((e) => e.event.type === 'member_hidden').at(-1).event.reason, 'self');
+});
+
+test('«نبّهه»: leader only, to that member only, rate-limited; the server nudges a silent member itself', { skip, timeout: 60_000 }, async (t) => {
+  const push = recordingPush();
+  const { svc, api, mk, advance } = await setup(t, push);
+  const A = await mk('احمد');
+  const B = await mk('عبيص');
+  const C = await mk('سعد');
+  const { outing_id: O, invite } = await svc.createOuting(A, { name: 'طلعة' });
+  await svc.joinByInvite(B, invite.token);
+  await svc.joinByInvite(C, invite.token);
+  await svc.setStatus(A, O, 'start');
+  await api('POST', `/${O}/positions`, B.token, { fix: fixAt(1) });
+  await api('POST', `/${O}/positions`, C.token, { fix: fixAt(2) });
+
+  assert.equal((await api('POST', `/${O}/members/${B.id}/nudge`, C.token)).status, 403, 'leader only');
+  const ok = await api('POST', `/${O}/members/${B.id}/nudge`, A.token);
+  assert.equal(ok.status, 200);
+  const p = push.sent.filter((x) => x.payload.type === 'nudge').at(-1).payload;
+  assert.equal(p.to_user, B.id, 'only to the member');
+  assert.equal(p.body, 'افتح سرى عشان يرجع موقعك يوصل للربع');
+  assert.equal((await api('POST', `/${O}/members/${B.id}/nudge`, A.token)).status, 429, 'not twice in 3 min');
+  assert.equal((await api('POST', `/${O}/members/${A.id}/nudge`, A.token)).status, 400, 'not myself');
+
+  /* B goes silent 10 min: the group is told, and B gets the nudge too. */
+  push.sent.length = 0;
+  for (let i = 0; i < 10; i += 1) {
+    advance(MIN);
+    await api('POST', `/${O}/positions`, C.token, { fix: fixAt(10 + i) });
+    await svc.sweepSilence();
+  }
+  await new Promise((r) => setTimeout(r, 50));
+  const self = push.sent.filter((x) => x.payload.type === 'nudge' && x.payload.to_user === B.id);
+  assert.equal(self.length, 1);
+  assert.match(self[0].payload.title, /موقعك ما يوصل للربع/);
+  assert.equal(push.sent.filter((x) => x.payload.type === 'member_silent').length, 1);
 });

@@ -187,7 +187,7 @@ private struct DestinationStep: View {
                 SarySection(title: "أماكن") {
                     ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        row(icon: "mappin", title: r.name, detail: r.detail, trailing: near.map { SaryFormat.distance(meters: PlanGeo.meters($0, r.point)) },
+                        row(icon: r.icon, title: r.name, detail: r.subtitle, trailing: near.map { SaryFormat.distance(meters: PlanGeo.meters($0, r.point)) },
                             id: "create.dest.result") {
                             choose(OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: r.point.lat, lng: r.point.lng))
                         }
