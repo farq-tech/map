@@ -1,4 +1,5 @@
 import XCTest
+import MapKit
 @testable import SaryAlbarq
 
 // MARK: - GPX / KML import
@@ -540,6 +541,32 @@ final class CoordinateShareTests: XCTestCase {
 // MARK: - place search
 
 final class PlaceSearchTests: XCTestCase {
+    func testCategoryWordsAreAskedAsAppleCategories() {
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "محطة بنزين"), .gasStation)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: " محطه وقود "), .gasStation)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "صيدلية"), .pharmacy)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "مستشفى"), .hospital)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "Gas Station"), .gasStation)
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "ماكدونالدز"), "a name stays a name")
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة بنزين الدريس"), "a named station stays a name search")
+        XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة"), "«محطة» alone may be a metro or bus station")
+    }
+
+    func testMapboxDetailWithoutALeadingSeparator() {
+        let json = #"{"features":[{"id":"x","geometry":{"coordinates":[46.67,24.72]},"properties":{"name":"الغريراء","place_formatted":"، الرياض، السعودية","feature_type":"street"}}]}"#
+        XCTAssertEqual(PlaceSearch.parse(Data(json.utf8)).first?.detail, "الرياض، السعودية")
+    }
+
+    func testApplePlacesPiledOnACityCentreAreLeftOut() {
+        let centre = LngLat(lng: 46.6753, lat: 24.7136)
+        func apple(_ n: String, _ p: LngLat) -> PlaceSearch.Place { .init(id: "apple:\(n)", name: n, detail: nil, point: p, country: "SA") }
+        let pile = ["جدة", "Banderseed", "Fuelco"].map { apple($0, LngLat(lng: centre.lng, lat: centre.lat - 0.00005)) }
+        let real = apple("Asia", LngLat(lng: 46.67793, lat: 24.71438))
+        let twin = [apple("الدريس", LngLat(lng: 46.70, lat: 24.70)), apple("الدريس", LngLat(lng: 46.70, lat: 24.70))]
+        let out = PlaceSearch.rank(query: "محطة بنزين", around: pile + [real] + twin, saudi: [], mapbox: [], near: centre)
+        XCTAssertEqual(out.map(\.name), ["Asia", "الدريس"], "the pile goes; one real place and one of the twins stay")
+    }
+
     static let fixture = Data("""
     {"type":"FeatureCollection","features":[
       {"type":"Feature","id":"dXJuOm1ieHBsYzpBUU","geometry":{"type":"Point","coordinates":[46.83,24.92]},
@@ -570,35 +597,122 @@ final class PlaceSearchTests: XCTestCase {
     func testParsing() {
         let r = PlaceSearch.parse(Self.fixture)
         XCTAssertEqual(r.count, 2)
-        XCTAssertEqual(r[0], PlaceSearch.Place(id: "dXJuOm1ieHBsYzpBUU", name: "الثمامة", detail: "الرياض، السعودية", point: LngLat(lng: 46.8312, lat: 24.9201)))
+        XCTAssertEqual(r[0], PlaceSearch.Place(id: "dXJuOm1ieHBsYzpBUU", name: "الثمامة", detail: "الرياض، السعودية", point: LngLat(lng: 46.8312, lat: 24.9201),
+                                               icon: "building.columns"))
         XCTAssertEqual(r[1].name, "روضة خريم")
         XCTAssertEqual(r[1].point, LngLat(lng: 46.70, lat: 24.65))
         XCTAssertEqual(PlaceSearch.parse(Data("not json".utf8)), [])
     }
 
+    /// Mapbox alone (no Apple search): Saudi first, then the world; its errors surface.
     func testSaudiFirstThenWorldAndErrors() async throws {
         var urls: [URL] = []
         let empty = Data(#"{"type":"FeatureCollection","features":[]}"#.utf8)
-        let found = try await PlaceSearch.search("x", near: nil, token: "T") { req in
+        let found = try await PlaceSearch.search("x", near: nil, token: "T", fetch: { req in
             urls.append(req.url!)
             return (urls.count == 1 ? empty : Self.fixture, 200)
-        }
+        }, local: nil)
         XCTAssertEqual(found.count, 2)
         XCTAssertEqual(urls.count, 2)
         XCTAssertTrue(urls[0].absoluteString.contains("country=sa"))
         XCTAssertFalse(urls[1].absoluteString.contains("country=sa"))
 
         do {
-            _ = try await PlaceSearch.search("x", near: nil, token: nil) { _ in (Data(), 200) }
+            _ = try await PlaceSearch.search("x", near: nil, token: nil, fetch: { _ in (Data(), 200) }, local: nil)
             XCTFail()
         } catch { XCTAssertEqual(error as? PlaceSearch.SearchError, .noToken) }
         do {
-            _ = try await PlaceSearch.search("x", near: nil, token: "T") { _ in (Data(), 401) }
+            _ = try await PlaceSearch.search("x", near: nil, token: "T", fetch: { _ in (Data(), 401) }, local: nil)
             XCTFail()
         } catch { XCTAssertEqual(error as? PlaceSearch.SearchError, .http(401)) }
         do {
-            _ = try await PlaceSearch.search("x", near: nil, token: "T") { _ in throw URLError(.notConnectedToInternet) }
+            _ = try await PlaceSearch.search("x", near: nil, token: "T", fetch: { _ in throw URLError(.notConnectedToInternet) }, local: nil)
             XCTFail()
         } catch { XCTAssertEqual(error as? PlaceSearch.SearchError, .network) }
+    }
+
+    /// Apple is asked from concurrent child tasks: record its scopes under a lock.
+    final class Scopes: @unchecked Sendable {
+        private let lock = NSLock()
+        private var list: [PlaceSearch.AppleScope] = []
+        func add(_ s: PlaceSearch.AppleScope) { lock.lock(); list.append(s); lock.unlock() }
+        var all: [PlaceSearch.AppleScope] { lock.lock(); defer { lock.unlock() }; return list }
+    }
+
+    static let me = LngLat(lng: 46.6753, lat: 24.7136) // Riyadh
+    static func poi(_ name: String, _ lat: Double, _ lng: Double, country: String? = "SA") -> PlaceSearch.Place {
+        PlaceSearch.Place(id: "apple:\(lat),\(lng):\(name)", name: name, detail: nil, point: LngLat(lng: lng, lat: lat),
+                          category: "مطعم", icon: "fork.knife", country: country)
+    }
+
+    /// «ماكدونالدز»: Apple is asked around me and across the Kingdom; the nearest branch comes first.
+    func testChainAnswersNearestBranchFirst() async throws {
+        let scopes = Scopes()
+        let far = Self.poi("ماكدونالدز", 21.5433, 39.1728)      // Jeddah
+        let mid = Self.poi("ماكدونالدز", 24.7743, 46.7386)      // ~9 km
+        let close = Self.poi("ماكدونالدز", 24.7200, 46.6800)    // ~0.8 km
+        let found = try await PlaceSearch.search("ماكدونالدز", near: Self.me, token: nil, fetch: { _ in (Data(), 200) }, local: { _, scope in
+            scopes.add(scope)
+            if case .around = scope { return [mid, close] }
+            return [far, mid]
+        })
+        XCTAssertEqual(scopes.all.count, 2, "around me and the Kingdom")
+        XCTAssertTrue(scopes.all.contains(.saudi))
+        XCTAssertTrue(scopes.all.contains(.around(Self.me)))
+        XCTAssertEqual(found.map(\.point), [close.point, mid.point, far.point], "nearest first; the duplicate branch kept once")
+    }
+
+    /// Without my position Apple is asked once, Kingdom-wide.
+    func testNoPositionAsksTheKingdomOnly() async throws {
+        let scopes = Scopes()
+        let found = try await PlaceSearch.search("شاليهات", near: nil, token: nil, fetch: { _ in (Data(), 200) }, local: { _, scope in
+            scopes.add(scope)
+            return [Self.poi("شاليه الوردة", 24.9, 46.5)]
+        })
+        XCTAssertEqual(scopes.all, [.saudi])
+        XCTAssertEqual(found.map(\.name), ["شاليه الوردة"])
+    }
+
+    /// One source failing is not an error; Apple's places and Mapbox's areas are merged.
+    func testOneSourceFailingStillAnswers() async throws {
+        let apple = try await PlaceSearch.search("x", near: Self.me, token: "T", fetch: { _ in throw URLError(.notConnectedToInternet) }, local: { _, _ in
+            [Self.poi("مطعم", 24.72, 46.68)]
+        })
+        XCTAssertEqual(apple.count, 1)
+        let mapbox = try await PlaceSearch.search("x", near: Self.me, token: "T", fetch: { _ in (Self.fixture, 200) }, local: { _, _ in
+            throw PlaceSearch.SearchError.network
+        })
+        XCTAssertEqual(mapbox.map(\.name), ["روضة خريم", "الثمامة"], "both within 50 km: nearest first")
+        do {
+            _ = try await PlaceSearch.search("x", near: Self.me, token: "T", fetch: { _ in (Data(), 500) }, local: { _, _ in throw PlaceSearch.SearchError.network })
+            XCTFail()
+        } catch { XCTAssertEqual(error as? PlaceSearch.SearchError, .http(500)) }
+    }
+
+    func testRanking() {
+        let exactFar = Self.poi("نفود الثويرات", 25.77, 45.10)
+        let near1 = Self.poi("استراحة نفود", 24.72, 46.68)
+        let kingdomA = Self.poi("نفود السر", 25.9, 44.5)
+        let abroad = Self.poi("Nafud", 29.0, 35.0, country: "JO")
+        let r = PlaceSearch.rank(query: "نُفود الثُويرات", around: [near1], saudi: [abroad, kingdomA, exactFar], mapbox: [], near: Self.me)
+        XCTAssertEqual(r.map(\.name), ["نفود الثويرات", "استراحة نفود", "نفود السر", "Nafud"],
+                       "exact name, then nearby by distance, then the Kingdom in source order, abroad last")
+        let many = (0..<30).map { Self.poi("p\($0)", 24.7 + Double($0) * 0.001, 46.67) }
+        XCTAssertEqual(PlaceSearch.rank(query: "p", around: many, saudi: [], mapbox: [], near: Self.me).count, PlaceSearch.maxResults)
+    }
+
+    func testNormalizeAndDuplicates() {
+        XCTAssertEqual(PlaceSearch.normalize("مَطْعَم  الأمـيرة"), PlaceSearch.normalize("مطعم الاميره"))
+        XCTAssertEqual(PlaceSearch.normalize("McDonald's"), PlaceSearch.normalize("mcdonald s"))
+        let a = Self.poi("البيك", 24.7200, 46.6800)
+        var b = a; b.id = "mapbox:1"; b.point = LngLat(lng: 46.6805, lat: 24.7203)
+        var c = b; c.point = LngLat(lng: 46.70, lat: 24.75)
+        XCTAssertTrue(PlaceSearch.duplicate(a, b))
+        XCTAssertFalse(PlaceSearch.duplicate(a, c), "another branch")
+    }
+
+    func testSubtitle() {
+        XCTAssertEqual(PlaceSearch.Place(id: "1", name: "x", detail: "العليا، الرياض", point: Self.me, category: "مطعم").subtitle, "مطعم · العليا، الرياض")
+        XCTAssertNil(PlaceSearch.Place(id: "1", name: "x", detail: nil, point: Self.me).subtitle)
     }
 }

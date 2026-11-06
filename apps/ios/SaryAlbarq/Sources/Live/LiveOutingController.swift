@@ -54,6 +54,8 @@ enum LiveModal: Identifiable, Equatable {
     case chat(ChatWith?)
     /// «ترددات»: the walkie-talkie's channels (five public + private ones).
     case pttChannels
+    /// «وين رايحين؟»: the next leg's destination (ux/الطلعة-والمشوار.md).
+    case whereTo
 
     var id: String {
         switch self {
@@ -81,6 +83,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navSteps: return "navSteps"
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
+        case .whereTo: return "whereTo"
         }
     }
 
@@ -1087,15 +1090,13 @@ final class LiveOutingController: ObservableObject {
                                       canNudge: LiveOutingPresenter.canNudge(p, leader: v.iLead, active: v.status == .active))
     }
 
-    /// «أخفِ موقعي» next to «موقعي» (active trip, I am sharing): small, never while driving.
-    var hideItem: SaryMapControlItem? {
-        guard let v = session.view, v.status == .active, v.me != nil, session.closedReason == nil else { return nil }
-        let hidden = session.hiddenSince != nil
-        return SaryMapControlItem(id: "hide", systemImage: hidden ? "eye.slash.fill" : "eye",
-                                  label: hidden ? HideText.hiddenCaption : HideText.hideButton,
-                                  accessibilityID: "outing-hide", isActive: hidden,
-                                  hint: hidden ? "اضغط عشان يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل")
+    /// «أخفِ موقعي» lives in the thin sharing strip of the trip sheet (two map buttons at most).
+    var canHideLocation: Bool {
+        guard let v = session.view, v.status == .active, v.me != nil, session.closedReason == nil else { return false }
+        return true
     }
+
+    var isLocationHidden: Bool { session.hiddenSince != nil }
 
     func toggleHidden() {
         let hide = session.hiddenSince == nil

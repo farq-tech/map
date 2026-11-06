@@ -102,6 +102,7 @@ enum HideText {
     static let hideButton = "أخفِ موقعي"
     static let shownButton = "أظهر موقعي"
     static let hiddenCaption = "موقعك مخفي"
+    static let hiddenStrip = "موقعك مخفي عن الربع"
     static let confirmTitle = "تخفي موقعك عن الربع؟"
     static let confirmBody = "تبقى في الطلعة وتوصلك الرسائل الصوتية والمحادثة والإذاعة، بس موقعك ما يوصل لأحد لين تظهره. الطوارئ (SOS) ترسل موقعك الحقيقي دايم."
     static let hiddenToast = "موقعك مخفي — الربع يشوفون «مخفي موقعه»"

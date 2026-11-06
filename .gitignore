@@ -10,3 +10,6 @@ dist
 .env*
 !.env.example
 apps/web/tsconfig.tsbuildinfo
+__pycache__/
+*.pmtiles
+*.pmtiles.partial

@@ -66,12 +66,10 @@ final class HideLocationTests: XCTestCase {
         XCTAssertEqual(HideText.changed(name: "فهد", hidden: true), "فهد أخفى موقعه")
     }
 
-    func testHideButtonIsSmallAndUnderTheCameraNeverWhileDriving() {
-        let camera = SaryMapControlItem(id: "locate", systemImage: "scope", label: "تتبعني", accessibilityID: "outing-locate")
-        let hide = SaryMapControlItem(id: "hide", systemImage: "eye", label: HideText.hideButton, accessibilityID: "outing-hide")
-        XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: false, ended: false, hide: hide).map(\.id),
-                       ["locate", "hide", "actions"])
-        XCTAssertTrue(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: true, ended: false, hide: hide).isEmpty)
-        XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: false, ended: true, hide: hide).map(\.id), ["locate"])
+    func testHideLivesInTheSharingStripNotOnTheMap() {
+        /* Two map buttons at most (the owner's «زحمة» review): «أخفِ موقعي» is in the sheet's strip. */
+        XCTAssertEqual(HideText.hideButton, "أخفِ موقعي")
+        XCTAssertEqual(HideText.shownButton, "أظهر موقعي")
+        XCTAssertEqual(HideText.hiddenStrip, "موقعك مخفي عن الربع")
     }
 }

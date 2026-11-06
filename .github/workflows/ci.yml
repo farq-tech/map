@@ -38,3 +38,11 @@ jobs:
           VITE_MAPBOX_ACCESS_TOKEN: ci-placeholder
       - name: Bundle budget (gzip)
         run: npm run budget
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Map tiles tests (apps/tiles)
+        working-directory: apps/tiles
+        run: |
+          pip install -r requirements-test.txt
+          python3 -m unittest test_build_tiles
