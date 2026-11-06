@@ -353,11 +353,14 @@ final class LocalGuidanceTests: XCTestCase {
         e.onEvent = { events.append($0) }
         let r = route()
         try await e.start(route: r, plan: .init(routes: [r]), target: NavTarget(source: .point, name: "هنا", position: r.end!))
+        /* 10 m/s in town: the first cue at ~300 m (`NavCueBands`), not 800 m ahead. */
         e.ingest(fix(24.705, 46.68))
         guard case let .progress(p) = events.first else { return XCTFail("progress") }
         XCTAssertEqual(p.stepIndex, 1)
         XCTAssertEqual(p.distanceToManeuverM, 556, accuracy: 15)
-        XCTAssertTrue(events.contains { if case let .speak(t) = $0 { return t.contains("انعطف يمينًا") } else { return false } })
+        XCTAssertFalse(events.contains { if case .speak = $0 { return true } else { return false } }, "556 m at city speed: too early to speak")
+        e.ingest(fix(24.7075, 46.68))
+        XCTAssertTrue(events.contains { if case let .speak(t) = $0 { return t.text.contains("انعطف يمينًا") && t.clips.last == "turns_01" } else { return false } })
         e.ingest(fix(24.71, 46.6949))
         XCTAssertTrue(events.contains(.arrivedAtRouteEnd))
     }

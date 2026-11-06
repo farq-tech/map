@@ -128,7 +128,7 @@ extension LiveOutingController {
             guard let name = v?.members[id]?.display_name else { break }
             toast("وصل \(name) \(tripDestination?.name ?? "الوجهة")")
             /* Driving with guidance: the screen is not for reading, so it is said too. */
-            if nav.isActive, nav.phase != .arrived { nav.voice.say("وصل \(name)") }
+            if nav.isActive, nav.phase != .arrived { nav.voice.say("وصل \(name)", clips: ["grp_14"]) }
         }
         if let v, v.iOwn, ArrivalOrder.everyoneArrived(arrivals: trip.record.arrivals, memberIds: v.orderedMembers.map(\.user_id)) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الجميع · تقدر تنهي الرحلة") }
