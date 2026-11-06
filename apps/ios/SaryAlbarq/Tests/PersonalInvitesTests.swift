@@ -95,7 +95,8 @@ final class PersonalInvitesTests: XCTestCase {
         /* A personal-only trip comes back without an open link. */
         let created = try JSONDecoder().decode(OutingsAPI.CreatedBox.self, from: Data(#"{"ok":true,"outing_id":"o","invite":null,"open_links":false}"#.utf8))
         XCTAssertNil(created.invite)
-        XCTAssertEqual(OutingAPIError(code: "invite_taken", status: 409).arabic, "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.")
+        XCTAssertTrue(OutingAPIError(code: "invite_taken", status: 409).arabic.hasPrefix("هذه الدعوة لشخص آخر."))
+        XCTAssertEqual(OutingAPIError(code: "invite_invalid", status: 404).arabic, "الرابط ناقص أو فيه خطأ.")
     }
 
     func testInvitePreviewDestinationIsOptional() throws {
@@ -243,4 +244,52 @@ final class OldServerProtocol: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
+}
+
+/// Who a personal invite belongs to, as the sheet shows it, and the pasted-link hygiene.
+final class InviteClaimMatrixTests: XCTestCase {
+    private func preview(kind: String = "personal", claim: String?, reclaim: Bool? = nil) throws -> InvitePreview {
+        var o: [String: Any] = ["outing_id": "o", "name": "طلعة", "status": "active", "owner_name": "أبو فهد", "member_count": 3,
+                                "expires_at": "2026-11-07T10:00:00Z", "kind": kind, "invitee_name": "فهد أخوي"]
+        if let claim { o["claim"] = claim }
+        if let reclaim { o["reclaim"] = reclaim }
+        return try JSONDecoder().decode(InvitePreview.self, from: JSONSerialization.data(withJSONObject: o))
+    }
+
+    func testClaimMatrix() throws {
+        /* Not used yet → join. */
+        XCTAssertEqual(InviteClaim.outcome(try preview(claim: "open")), .join)
+        /* Same account (rejoin) → join. */
+        XCTAssertEqual(InviteClaim.outcome(try preview(claim: "yours")), .join)
+        /* The same person, signed in again with a new account whose phone matches → the server says open + reclaim. */
+        let back = try preview(claim: "open", reclaim: true)
+        XCTAssertEqual(back.reclaim, true)
+        XCTAssertEqual(InviteClaim.outcome(back), .join)
+        /* Someone else → «هذه الدعوة لشخص آخر». */
+        XCTAssertEqual(InviteClaim.outcome(try preview(claim: "taken")), .taken)
+        /* Anonymous preview of a used invite: joining decides. */
+        XCTAssertEqual(InviteClaim.outcome(try preview(claim: "claimed")), .join)
+        /* An open group link is never «taken». */
+        XCTAssertEqual(InviteClaim.outcome(try preview(kind: "group", claim: "taken")), .join)
+        /* A broken link is «الرابط ناقص أو فيه خطأ», never «لشخص آخر». */
+        XCTAssertEqual(InviteClaim.outcome(errorCode: "invite_invalid"), .invalid)
+        XCTAssertEqual(InviteClaim.outcome(errorCode: "http_404"), .invalid)
+        XCTAssertEqual(InviteClaim.outcome(errorCode: "invite_taken"), .taken)
+        XCTAssertEqual(InviteClaim.outcome(errorCode: "invite_expired"), .expired)
+        XCTAssertEqual(InviteClaim.outcome(errorCode: "network"), .other)
+    }
+
+    func testSanitisedPastedTokens() {
+        let tok = "ausZSm0nMZSeUyFs4ZNbHV27qdY91tBprcAXBS9687Y"
+        let link = "https://farq-map-investor.vercel.app/outings/join#\(tok)"
+        XCTAssertEqual(InviteLink.token(fromPasted: link + "\u{064B}"), tok, "the owner's paste: a trailing «ً»")
+        XCTAssertEqual(InviteLink.token(fromPasted: "\u{200F}" + link + " \u{200E}"), tok, "RTL / LRM marks")
+        XCTAssertEqual(InviteLink.token(fromPasted: "تعال معنا: " + link + "\u{064B} 👍"), tok)
+        XCTAssertEqual(InviteLink.token(fromPasted: tok + "\u{0651}"), tok, "a bare token with a shadda")
+        XCTAssertEqual(InviteLink.token(fromPasted: "\u{FEFF}" + tok), tok, "a BOM")
+        XCTAssertEqual(InviteLink.token(from: URL(string: link + "%D9%8B")!), tok, "opened with the mark percent-encoded")
+        XCTAssertNil(InviteLink.token(fromPasted: String(link.dropLast())), "one character short stays broken")
+        XCTAssertNil(InviteLink.token(fromPasted: link + "A"), "a longer run is not trimmed into a token")
+        XCTAssertNil(InviteLink.token(fromPasted: "https://example.com/x"))
+    }
 }

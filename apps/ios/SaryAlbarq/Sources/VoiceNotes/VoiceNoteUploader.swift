@@ -23,12 +23,13 @@ extension OutingsAPI: VoiceNoteBackend {
         req.setValue(channel, forHTTPHeaderField: "X-Ptt-Channel")
         req.setValue(clientId, forHTTPHeaderField: "X-Client-Id")
         req.setValue(String(max(0, ageMs)), forHTTPHeaderField: "X-Clip-Age-Ms")
-        if let t = tokenProvider() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let sent = tokenProvider()
+        if let t = sent { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpBody = audio
         let (data, resp) = try await raw(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            if status == 401 { onUnauthorized() }
+            if status == 401, let sent { onUnauthorized(sent) }
             let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             throw OutingAPIError(code: obj?["error"] as? String ?? "http_\(status)", status: status)
         }

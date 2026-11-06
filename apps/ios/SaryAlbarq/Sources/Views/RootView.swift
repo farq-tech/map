@@ -14,6 +14,9 @@ struct RootView: View {
             } else if let session = model.session {
                 LiveOutingHost(session: session, model: model, appearance: appearance)
                     .id(session.id)
+            } else if model.identityPending {
+                /* Signed in, but the Keychain has not answered yet: never onboarding (it would make a second account). */
+                SplashView().transition(.opacity)
             } else if let screen = model.debugScreen {
                 DebugScreen(name: screen)
             } else if model.pendingInvite != nil && (model.identity == nil || needsOnboarding) {

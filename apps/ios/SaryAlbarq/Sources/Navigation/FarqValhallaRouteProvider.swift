@@ -62,7 +62,7 @@ final class FarqValhallaRouteProvider: NavRoutingProvider {
     let session: URLSession
     private var statusCache: (enabled: Bool, at: Date)?
 
-    init(base: URL = Endpoints.apiBase, token: @escaping () -> String? = { IdentityStore.load()?.token }, session: URLSession = .shared) {
+    init(base: URL = Endpoints.apiBase, token: @escaping () -> String? = { IdentityStore.currentToken() }, session: URLSession = .shared) {
         self.base = base
         self.token = token
         self.session = session

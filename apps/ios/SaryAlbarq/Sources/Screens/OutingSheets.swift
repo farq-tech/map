@@ -17,7 +17,7 @@ struct JoinByLinkSheet: View {
     var body: some View {
         SaryPage(title: "انضم برابط", subtitle: "الصق رابط الدعوة أو امسح رمز QR", close: { dismiss() }) {
             SaryTextField(title: "رابط الدعوة", placeholder: "https://…/outings/join#…", text: $text, id: "paste.field",
-                          state: invalid ? .error("هذا ليس رابط دعوة صحيحًا.") : .normal)
+                          state: invalid ? .error("الرابط ناقص أو فيه خطأ.") : .normal)
                 .environment(\.layoutDirection, .leftToRight)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -188,11 +188,11 @@ struct InviteJoinSheet: View {
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.expired")
             case .taken:
-                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. اطلب من أمير الرحلة يرسل لك دعوة باسمك."),
+                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «حسابي» وافتح الرابط مرة ثانية، أو اطلب من أمير الرحلة دعوة جديدة باسمك."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.taken")
             case .invalid:
-                SaryStateView(kind: .error(title: "رابط غير صحيح", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الرحلة."),
+                SaryStateView(kind: .error(title: "الرابط ناقص أو فيه خطأ", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الرحلة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.invalid")
             case .error(let m):
@@ -235,16 +235,16 @@ struct InviteJoinSheet: View {
                 case .ended: return .ended
                 }
             }()
-            if p.isPersonal, p.claim == "taken" { phase = .taken; return }
+            if InviteClaim.outcome(p) == .taken { phase = .taken; return }
             phase = .ready(InvitePreviewUI(outingName: p.name, inviterName: p.owner_name, participantCount: p.member_count, status: st,
                                            inviteeName: p.isPersonal ? p.invitee_name : nil,
                                            destinationName: InvitePreviewUI.destination(p.destination_name)))
         } catch let e as OutingAPIError {
-            switch e.code {
-            case "invite_expired", "invite_revoked", "open_links_disabled": phase = .expired
-            case "invite_taken": phase = .taken
-            case "invite_invalid", "not_found", "http_404", "http_400": phase = .invalid
-            default: phase = .error(e.arabic)
+            switch InviteClaim.outcome(errorCode: e.code) {
+            case .expired: phase = .expired
+            case .taken: phase = .taken
+            case .invalid: phase = .invalid
+            case .join, .other: phase = .error(e.arabic)
             }
         } catch {
             phase = .error("حدث خطأ. أعد المحاولة.")
