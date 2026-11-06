@@ -18,6 +18,23 @@ enum NavTargets {
         return .success(NavTarget(source: .point, name: name?.isEmpty == false ? name! : "النقطة المحددة", position: p))
     }
 
+    /// «اتجه» on a silent member's card: their LAST KNOWN fix, allowed only from that card and
+    /// always labelled as old (`NavTarget.staleNote`). «روح له» (`member`) still refuses it.
+    static func lastKnown(name: String, lat: Double?, lng: Double?, at: Date?) -> Result<NavTarget, NavRefusal> {
+        guard let lat, let lng else { return .failure(.missing) }
+        return .success(NavTarget(source: .lastKnown, name: "آخر موقع \(name)", position: LngLat(lng: lng, lat: lat), lastKnownAt: at))
+    }
+
+    /// «اتجه» on a fuel station.
+    static func station(name: String?, lat: Double, lng: Double) -> Result<NavTarget, NavRefusal> {
+        point(LngLat(lng: lng, lat: lat), name: name?.isEmpty == false ? name : "محطة بنزين")
+    }
+
+    /// «اتجه» on a waypoint («نقاط الطلعة»).
+    static func waypoint(title: String, lat: Double, lng: Double) -> Result<NavTarget, NavRefusal> {
+        point(LngLat(lng: lng, lat: lat), name: title.isEmpty ? "النقطة" : title)
+    }
+
     /// The last point of the plan's drawn route.
     static func planRouteEnd(_ route: [LngLat]) -> Result<NavTarget, NavRefusal> {
         guard route.count >= 2, let end = route.last else { return .failure(.missing) }

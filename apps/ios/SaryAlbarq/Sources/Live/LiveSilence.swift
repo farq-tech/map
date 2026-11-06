@@ -27,6 +27,11 @@ extension LiveOutingPresenter {
         )
     }
 
+    /// «اتجه» on the silent card: «آخر موقع فهد», with when that fix was taken.
+    static func silentTarget(_ a: SilentAlertUI) -> Result<NavTarget, NavRefusal> {
+        NavTargets.lastKnown(name: a.name, lat: a.lastLat, lng: a.lastLng, at: a.lastAt ?? a.since)
+    }
+
     struct SilenceChange: Equatable {
         /// New silences, or a silence that escalated (10 → 30): (re)show the card.
         var raised: [String] = []
@@ -81,13 +86,14 @@ extension LiveOutingController {
         show(member: uid)
     }
 
-    /// «اتجه»: directions to their last known position.
+    /// «اتجه»: our own guidance to their LAST KNOWN position (labelled as old, never as live).
     func goToSilent(_ uid: String) {
-        guard let v = session.view, let a = LiveOutingPresenter.silentAlert(uid, in: v), let lat = a.lastLat, let lng = a.lastLng else {
+        guard let v = session.view, let a = LiveOutingPresenter.silentAlert(uid, in: v),
+              case let .success(t) = LiveOutingPresenter.silentTarget(a) else {
             toast("لا يوجد موقع معروف")
             return
         }
-        Directions.open(lat: lat, lng: lng, name: "آخر موقع \(a.name)")
+        directions(.success(t))
     }
 }
 

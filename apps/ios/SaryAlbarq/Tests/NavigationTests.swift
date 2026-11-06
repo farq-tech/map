@@ -381,3 +381,73 @@ final class LocalGuidanceTests: XCTestCase {
         await fulfillment(of: [exp], timeout: 2)
     }
 }
+
+/// Every «اتجه» (silent member, fuel station, waypoint) is OUR guidance: a nav target for
+/// `directions(_:)`, never Apple Maps. Apple Maps only where the person picks it by name.
+@MainActor final class InAppDirectionsTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testSilentMemberLastKnownIsAnInAppTargetLabelledOld() throws {
+        let t = try NavTargets.lastKnown(name: "Alwald", lat: 24.71, lng: 46.67, at: t0.addingTimeInterval(-14 * 60)).get()
+        XCTAssertEqual(t.source, .lastKnown)
+        XCTAssertEqual(t.name, "آخر موقع Alwald")
+        XCTAssertEqual(t.position, LngLat(lng: 46.67, lat: 24.71))
+        XCTAssertNil(t.memberId, "not a live member: no «تحرّك» follow-up")
+        XCTAssertEqual(t.staleNote(now: t0), "آخر موقع معروف · قبل ١٤ د", "never presented as live")
+        XCTAssertEqual(NavTargets.lastKnown(name: "Alwald", lat: nil, lng: 46.6, at: t0), .failure(.missing))
+        /* «روح له» still refuses the same stale member: the last-known path is the silent card's only. */
+        XCTAssertEqual(NavTargets.member(id: "u", name: "Alwald", isMe: false, position: riyadh, presence: .stale(since: t0)),
+                       .failure(.memberStale(name: "Alwald", since: t0)))
+        XCTAssertNil(try NavTargets.point(riyadh).get().staleNote(), "only last-known targets carry the label")
+    }
+
+    func testStationAndWaypointAreInAppTargets() throws {
+        let s = try NavTargets.station(name: "ساسكو", lat: 24.7, lng: 46.6).get()
+        XCTAssertEqual(s.source, .point)
+        XCTAssertEqual(s.name, "ساسكو")
+        XCTAssertEqual(s.position, LngLat(lng: 46.6, lat: 24.7))
+        XCTAssertEqual(try NavTargets.station(name: nil, lat: 24.7, lng: 46.6).get().name, "محطة بنزين")
+        let w = try NavTargets.waypoint(title: "مخيّم", lat: 24.8, lng: 46.5).get()
+        XCTAssertEqual(w.name, "مخيّم")
+        XCTAssertEqual(w.position, LngLat(lng: 46.5, lat: 24.8))
+        XCTAssertEqual(try NavTargets.waypoint(title: "", lat: 24.8, lng: 46.5).get().name, "النقطة")
+    }
+
+    func testConfirmOnlyWhileGuidanceIsOn() {
+        XCTAssertTrue(LiveOutingController.directionsNeedsConfirm(.guiding))
+        XCTAssertTrue(LiveOutingController.directionsNeedsConfirm(.offRoad))
+        XCTAssertTrue(LiveOutingController.directionsNeedsConfirm(.planning))
+        XCTAssertFalse(LiveOutingController.directionsNeedsConfirm(.idle))
+        XCTAssertFalse(LiveOutingController.directionsNeedsConfirm(.arrived))
+        XCTAssertEqual(LiveOutingController.retargetHint(wasAuto: false), "ترجع للوجهة من أدوات ← الطريق")
+        let t = NavTarget(source: .lastKnown, name: "آخر موقع Alwald", position: riyadh)
+        XCTAssertEqual(LiveConfirm.retarget(t).retargetTarget, t)
+        XCTAssertNil(LiveConfirm.leave.retargetTarget)
+        XCTAssertNotEqual(LiveConfirm.retarget(t).id, LiveConfirm.leave.id)
+    }
+
+    /// The call sites themselves (read from the repo when reachable): no «اتجه» opens Apple Maps.
+    func testNoDirectionsButtonOpensAnotherApp() throws {
+        let src = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
+        func read(_ p: String) throws -> String {
+            guard let s = try? String(contentsOf: src.appendingPathComponent(p), encoding: .utf8) else { throw XCTSkip("sources not reachable") }
+            return s
+        }
+        let silence = try read("Live/LiveSilence.swift")
+        XCTAssertFalse(silence.contains("Directions.open("), "silent card «اتجه»")
+        XCTAssertTrue(silence.contains("directions(.success(t))"))
+        let live = try read("Live/LiveOutingController.swift")
+        XCTAssertFalse(live.contains("Directions.open("), "fuel station «اتجه»")
+        XCTAssertTrue(live.contains("directions(NavTargets.station("))
+        let features = try read("Views/FeatureViews.swift")
+        let opens = features.components(separatedBy: "\n").enumerated().filter { $0.element.contains("Directions.open(") }
+        XCTAssertEqual(opens.count, 1, "only the trip summary's explicit «افتح في خرائط Apple»")
+        let lines = features.components(separatedBy: "\n")
+        for (i, _) in opens {
+            XCTAssertTrue(lines[i...min(i + 2, lines.count - 1)].joined().contains("افتح في خرائط Apple"), "labelled as another app, not «اتجه»")
+        }
+        XCTAssertEqual(features.components(separatedBy: "controller.directions(NavTargets.waypoint(").count - 1, 2, "waypoint card + past waypoints")
+        let nav = try read("Navigation/LiveOutingController+Nav.swift")
+        XCTAssertEqual(nav.components(separatedBy: "Directions.open(").count - 1, 1, "only «افتح في خرائط Apple» in the route options")
+    }
+}

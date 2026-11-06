@@ -329,6 +329,10 @@ struct NavBottomBar: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                     Text(nav.target?.name ?? "").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
+                    if let note = nav.target?.staleNote() {
+                        Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warning).lineLimit(1)
+                            .accessibilityIdentifier("nav.target.stale")
+                    }
                 }
             }
             Spacer(minLength: 0)

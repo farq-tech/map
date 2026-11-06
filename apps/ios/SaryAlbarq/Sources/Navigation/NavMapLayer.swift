@@ -31,6 +31,8 @@ struct MapNavDrawing: Equatable {
     var offRoad: [LngLat]? = nil
     var target: LngLat? = nil
     var targetName = ""
+    /// «آخر موقع معروف · قبل ١٤ د» under the name for a last-known target (never shown as live).
+    var targetNote: String? = nil
     var labels: [Label] = []
     var camera: Camera? = nil
     /// Bumps to re-run a one-shot `fit`.
@@ -132,11 +134,12 @@ final class NavMapDrawer {
 
     private func placeTarget() {
         guard let map else { return }
-        if drawing.target == targetPin?.point, targetPin?.host.rootView.name == drawing.targetName { return }
+        if drawing.target == targetPin?.point, targetPin?.host.rootView.name == drawing.targetName,
+           targetPin?.host.rootView.note == drawing.targetNote { return }
         targetPin?.annotation.remove()
         targetPin = nil
         guard let p = drawing.target else { return }
-        let host = UIHostingController(rootView: NavTargetPin(name: drawing.targetName, theme: theme))
+        let host = UIHostingController(rootView: NavTargetPin(name: drawing.targetName, note: drawing.targetNote, theme: theme))
         host.view.backgroundColor = .clear
         host.safeAreaRegions = []
         host.view.frame = CGRect(origin: .zero, size: host.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)))
@@ -193,15 +196,22 @@ final class NavMapDrawer {
 /// The target flag at the end of the route.
 struct NavTargetPin: View {
     var name: String
+    var note: String? = nil
     var theme: SaryTheme
 
     var body: some View {
         let p = theme.palette
         VStack(spacing: 2) {
-            Text(name.isEmpty ? "الوجهة" : name)
-                .saryText(.caption, weight: .bold)
-                .foregroundStyle(p.textPrimary)
-                .lineLimit(1)
+            VStack(spacing: 0) {
+                Text(name.isEmpty ? "الوجهة" : name)
+                    .saryText(.caption, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .lineLimit(1)
+                if let note {
+                    Text(note).saryText(.micro, weight: .bold).foregroundStyle(p.warning).lineLimit(1)
+                        .accessibilityIdentifier("map.navTarget.stale")
+                }
+            }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Capsule().fill(p.chromeOpaque))

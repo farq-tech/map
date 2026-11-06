@@ -18,6 +18,8 @@ enum NavTargetSource: String, Equatable, CaseIterable {
     case planRouteEnd
     /// A planned stop on the way to the destination (`TripPlan.stops`, automatic guidance).
     case tripStop
+    /// «اتجه» on a silent member's card: where they were LAST SEEN (stale by definition, labelled so).
+    case lastKnown
 }
 
 /// A place to drive to.
@@ -27,6 +29,15 @@ struct NavTarget: Equatable {
     var position: LngLat
     /// The member's id for `.member` (to tell them apart, and to say «تحرّك» later).
     var memberId: String? = nil
+    /// `.lastKnown`: when that fix was taken. Shown as «آخر موقع معروف · قبل ١٤ د», never as live.
+    var lastKnownAt: Date? = nil
+
+    /// «آخر موقع معروف · قبل ١٤ د» for a last-known target, else nil.
+    func staleNote(now: Date = Date()) -> String? {
+        guard source == .lastKnown else { return nil }
+        guard let at = lastKnownAt else { return "آخر موقع معروف" }
+        return "آخر موقع معروف · \(SilenceText.ago(at, now: now))"
+    }
 }
 
 /// Why a target cannot be used.

@@ -106,6 +106,15 @@ struct LiveSheet: View {
         } message: {
             Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
         }
+        .confirmationDialog("نغيّر الوجهة إلى \(controller.confirm?.retargetTarget?.name ?? "النقطة")؟",
+                            isPresented: Binding(get: { controller.confirm?.retargetTarget != nil },
+                                                 set: { if !$0, controller.confirm?.retargetTarget != nil { controller.confirm = nil } }),
+                            titleVisibility: .visible, presenting: controller.confirm?.retargetTarget) { t in
+            Button("غيّر") { controller.retarget(to: t) }
+            Button("لا", role: .cancel) {}
+        } message: { t in
+            Text(t.staleNote().map { "\($0). التوجيه الحالي يتوقف." } ?? "التوجيه الحالي يتوقف.")
+        }
         .alert("تنبيه", isPresented: Binding(get: { controller.session.errorText != nil }, set: { if !$0 { controller.session.errorText = nil } })) {
             Button("حسنًا", role: .cancel) {}
         } message: { Text(controller.session.errorText ?? "") }
