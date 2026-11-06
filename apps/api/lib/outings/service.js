@@ -21,6 +21,7 @@ const { pushPayloadFor } = require('./push');
 const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
+const { createPresence } = require('./presence');
 const { createMedia } = require('./media');
 const { createGroupAudio } = require('./group-audio');
 const { createPersonalInvites, phoneDigest } = require('./invites');
@@ -73,6 +74,8 @@ function defaultConfig() {
     idleEndHours: envNumber('OUTING_IDLE_END_HOURS', 24, { min: 1, max: 24 * 30 }),
     /* «المحادثات»: messages of an ended trip are deleted this many days after it ended. */
     chatRetentionDays: envNumber('OUTING_CHAT_RETENTION_DAYS', 30, { min: 1, max: 90 }),
+    /* Backfill (positions queued while offline): accepted up to this old, never shown as live. */
+    backfillMaxAgeMs: envNumber('OUTING_BACKFILL_MAX_AGE_MS', 6 * 3600_000, { min: 60_000, max: 24 * 3600_000 }),
     membershipCacheMs: 15_000,
     authCacheMs: 60_000,
   };
@@ -133,12 +136,20 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   });
 
   /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → one alert each. See silence.js. */
+  /* «مباشر / متأخر / منقطع» + why, from the last fix's timestamp. See presence.js. */
+  const presence = createPresence({ now, events: () => hub });
+
   const silence = createSilenceWatch({
     q,
     now,
     events: () => hub,
     latest: (outingId) => latest.get(outingId),
-    notify: (outingId, userId, info) => features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
+    reasonOf: (outingId, userId, lastAt) => presenceNow(outingId, { user_id: userId }, lastAt ? { recorded_at: lastAt } : null).reason,
+    notify: (outingId, userId, info) => Promise.all([
+      features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
+      /* And the silent member themself: «افتح سرى عشان يرجع موقعك يوصل للربع» (a tap relaunches the app). */
+      features.pushFeature('self_silent', outingId, userId, { toUser: userId, exceptUserId: null, reason: info.reason }),
+    ]),
   });
 
   /* «قناة الطلعة»: shared YouTube channel state, memory only — see media.js. */
@@ -347,7 +358,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!fresh && hit && now() - hit.at < cfg.membershipCacheMs) return hit.row;
     const [row] = await q(
       `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id, o.join_locked, o.open_links,
-              m.role, m.status, m.sharing, m.co_leader, m.invited_name
+              m.role, m.status, m.sharing, m.co_leader, m.invited_name, m.hidden_at
        FROM sary.outings o
        LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = $2
        WHERE o.id = $1`,
@@ -685,16 +696,19 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   async function members(outingId) {
     const rows = await q(
-      `SELECT m.user_id, u.display_name, m.invited_name, m.invited_phone_last4, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
+      `SELECT m.user_id, u.display_name, m.invited_name, m.invited_phone_last4, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at, m.hidden_at
        FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
        WHERE m.outing_id = $1 AND m.status = 'active'
        ORDER BY m.role = 'owner' DESC, m.joined_at`,
       [outingId],
     );
-    return rows.map(({ invited_name, invited_phone_last4, display_name, ...r }) => ({
+    return rows.map(({ invited_name, invited_phone_last4, display_name, hidden_at, ...r }) => ({
       ...r,
       ...memberNames(invited_name, display_name),
       phone_last4: invited_phone_last4 || null,
+      /* «أخفِ موقعي»: still in the trip, position not sent. */
+      hidden: hidden_at != null,
+      hidden_at: hidden_at ? new Date(hidden_at).toISOString() : null,
     }));
   }
 
@@ -763,6 +777,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
+    const posBy = new Map(pos.map((p) => [p.user_id, p]));
     return {
       outing,
       me: { user_id: user.id, role: m.role, co_leader: m.co_leader === true, can_lead: leads, sharing: m.sharing },
@@ -775,6 +790,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         note: outing.status === 'ended' ? null : noteOf(outingId, x.user_id),
         battery: hub.batteryOut ? hub.batteryOut(link.get(x.user_id)?.battery || null) : null,
         sos: outing.status === 'ended' ? null : sosOf(outingId, x.user_id),
+        /* Only while active: { state: live|stale|offline|hidden, reason, last_fix_at, since }. */
+        presence: outing.status === 'active' && x.sharing ? presence.compute(outingId, x, posBy.get(x.user_id) || null, link.get(x.user_id) || null) : null,
       })),
       positions: pos,
       stuck: outing.status === 'ended' ? [] : features.stuckList(outingId),
@@ -1173,6 +1190,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   async function raiseSos(user, outingId, rawFix) {
     const m = await requireMember(user, outingId, { fresh: true });
     if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    /* An SOS always overrides «أخفِ موقعي»: the real position goes out, and the location stays shown. */
+    const unhidden = m.hidden_at ? await showAgain(user, outingId, 'sos') : false;
     let fix = null;
     if (rawFix != null) {
       const t = now();
@@ -1193,7 +1212,78 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     /* `{type:'sos', user_id}` is what index.js auto-pushes (high urgency, even to viewers);
      * a refresh with a newer fix is flagged so it updates maps without a second alarm. */
     hub.emit(outingId, { type: 'sos', user_id: user.id, sos, ...(refresh ? { refresh: true } : {}) });
-    return { sos };
+    return unhidden ? { sos, unhidden: true } : { sos };
+  }
+
+  /* ---------- «أخفِ موقعي» ---------- */
+
+  /**
+   * Hide / show my location in this trip. Hidden: I stay a member (voice notes, radio, chat),
+   * the server refuses my positions (`hidden`), my last position is deleted (never shown as if
+   * live), silence alerts and «نبّهه» skip me, and the others see «فلان مخفي موقعه».
+   *   ← { type: 'member_hidden', user_id, hidden, since, reason: 'self' | 'sos' }
+   */
+  async function setHidden(user, outingId, hidden) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (hidden !== true) {
+      await showAgain(user, outingId, 'self');
+      return { hidden: false, since: null };
+    }
+    const [row] = await tx(async (run) => {
+      const r = await run(
+        `UPDATE sary.outing_members SET hidden_at = COALESCE(hidden_at, now()), hidden_reason = 'self'
+         WHERE outing_id = $1 AND user_id = $2 AND status = 'active' RETURNING hidden_at`,
+        [outingId, user.id],
+      );
+      await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
+      return r;
+    });
+    forgetOuting(outingId);
+    dropLatest(outingId, user.id);
+    silence.drop(outingId, user.id, 'hidden');
+    const since = new Date(row.hidden_at).toISOString();
+    hub.emit(outingId, { type: 'member_hidden', user_id: user.id, hidden: true, since, reason: 'self' });
+    presence.publish(outingId, [{ user_id: user.id, presence: { state: 'hidden', reason: 'hidden', last_fix_at: null, since } }]);
+    return { hidden: true, since };
+  }
+
+  /** Visible again (by choice or by an SOS). True when they were hidden. */
+  async function showAgain(user, outingId, reason) {
+    const rows = await q(
+      `UPDATE sary.outing_members SET hidden_at = NULL, hidden_reason = NULL
+       WHERE outing_id = $1 AND user_id = $2 AND hidden_at IS NOT NULL RETURNING user_id`,
+      [outingId, user.id],
+    );
+    forgetOuting(outingId);
+    if (!rows.length) return false;
+    hub.emit(outingId, { type: 'member_hidden', user_id: user.id, hidden: false, since: null, reason });
+    return true;
+  }
+
+  /* ---------- «نبّهه» ---------- */
+
+  const nudgedAt = new Map(); // `${o}:${target}` → ms
+  const NUDGE_GAP_MS = 3 * 60_000;
+
+  /**
+   * The leader taps «نبّهه» on a member who is not live: one push to that member only
+   * («افتح سرى عشان يرجع موقعك يوصل للربع») and a live frame if a socket is still open.
+   * Never for a member who hid their location on purpose; at most once per 3 min per member.
+   */
+  async function nudge(user, outingId, targetId) {
+    const m = await requireLeader(user, outingId);
+    if (m.outing_status !== 'active') throw err(`outing_${m.outing_status}`, 409);
+    if (!v.isUuid(targetId) || targetId === user.id) throw err('invalid_member', 400);
+    const t = await membership(outingId, targetId, { fresh: true });
+    if (!t || t.status !== 'active') throw err('not_a_member', 404);
+    if (t.hidden_at) throw err('member_hidden', 409);
+    const k = `${outingId}:${targetId}`;
+    if (now() - (nudgedAt.get(k) || 0) < NUDGE_GAP_MS) throw err('too_frequent', 429);
+    nudgedAt.set(k, now());
+    hub.emit(outingId, { type: 'nudge', user_id: targetId, from_user_id: user.id }, {});
+    const pushed = await features.pushFeature('nudge', outingId, user.id, { toUser: targetId, exceptUserId: null });
+    return { nudged: true, pushed: pushed?.sent || 0 };
   }
 
   async function cancelSos(user, outingId) {
@@ -1392,6 +1482,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
     if (m.outing_status !== 'active') return { ok: false, reason: `outing_${m.outing_status}` };
     if (!m.sharing) return { ok: false, reason: 'sharing_off' };
+    if (m.hidden_at) return { ok: false, reason: 'hidden' };
     const t = now();
     const parsed = v.fix(raw, t);
     if (!parsed.ok) return { ok: false, reason: parsed.reason };
@@ -1431,7 +1522,106 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const position = shapePosition(user.id, pos);
     hub.emit(outingId, { type: 'position', position });
     silence.onFix(outingId, user.id);
+    presence.publish(outingId, [{ user_id: user.id, presence: presenceNow(outingId, { user_id: user.id }, pos) }]);
     return { ok: true, position };
+  }
+
+  /** Presence for one member from what is in memory (the fresher fix and the link). */
+  function presenceNow(outingId, member, position) {
+    const pos = position || latest.get(outingId)?.get(member.user_id) || null;
+    const link = hub.linkState ? hub.linkState(outingId).get(member.user_id) || null : null;
+    return presence.compute(outingId, member, pos, link);
+  }
+
+  /**
+   * The app tells us why it may go quiet: `hint` (fg | bg_always | bg_when_in_use | low_power |
+   * terminated | location_off), `lowPower`, and which client it is (User-Agent). Never throws.
+   */
+  function notePresence(outingId, userId, { hint, lowPower, ua } = {}) {
+    if (!outingId || !userId) return null;
+    presence.noteClient(outingId, userId, ua);
+    const h = presence.noteHint(outingId, userId, hint, { lowPower: typeof lowPower === 'boolean' ? lowPower : undefined });
+    if (!h && typeof lowPower !== 'boolean') return null;
+    const p = presenceNow(outingId, { user_id: userId }, null);
+    if (latest.get(outingId)?.has(userId)) presence.publish(outingId, [{ user_id: userId, presence: p }]);
+    return p;
+  }
+
+  /**
+   * Backfill: positions taken while the phone had no network, uploaded in one batch when it is
+   * back (oldest first, at most 300). They are never shown as live: the newest one becomes the
+   * last known position only if it is newer than what we have, with its true time, so others see
+   * «آخر موقع قبل ٥ د» and the trail fills in. Returns counts; refusals are not errors.
+   */
+  async function recordBackfill(user, outingId, raw) {
+    const m = await membership(outingId, user.id);
+    if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
+    if (m.outing_status !== 'active') return { ok: false, reason: `outing_${m.outing_status}` };
+    if (!m.sharing) return { ok: false, reason: 'sharing_off' };
+    if (m.hidden_at) return { ok: false, reason: 'hidden' };
+    if (!Array.isArray(raw)) return { ok: false, reason: 'invalid' };
+    const t = now();
+    const good = [];
+    for (const f of raw.slice(0, 300)) {
+      const parsed = v.fix(f, t, { maxAgeMs: cfg.backfillMaxAgeMs });
+      if (parsed.ok) good.push(parsed.value);
+    }
+    good.sort((a, b) => a.recorded_at - b.recorded_at);
+    const room = latest.get(outingId) || new Map();
+    const prev = room.get(user.id);
+    const newest = good[good.length - 1];
+    let applied = false;
+    if (newest && (!prev || newest.recorded_at > new Date(prev.recorded_at))) {
+      const pos = { ...newest, received_at: new Date(t) };
+      const written = await q(
+        `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+         WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+                       WHERE m.outing_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.sharing AND o.status = 'active')
+         ON CONFLICT (outing_id, user_id) DO UPDATE SET
+           lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
+           speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
+         WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
+         RETURNING user_id`,
+        [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at, pos.mode],
+      );
+      if (written.length) {
+        if (!latest.has(outingId)) latest.set(outingId, room);
+        room.set(user.id, pos);
+        applied = true;
+        const position = { ...shapePosition(user.id, pos), backfill: true };
+        hub.emit(outingId, { type: 'position', position });
+        silence.onFix(outingId, user.id);
+        presence.publish(outingId, [{ user_id: user.id, presence: presenceNow(outingId, { user_id: user.id }, pos) }]);
+      }
+    }
+    /* The whole stretch (oldest → newest, no live flag) for clients that draw the trail. */
+    if (good.length > 1) {
+      hub.emit(outingId, {
+        type: 'backfill', user_id: user.id,
+        fixes: good.map((f) => ({ lat: f.lat, lng: f.lng, accuracy: f.accuracy, recorded_at: f.recorded_at.toISOString() })),
+      }, { exceptUser: user.id });
+    }
+    return { ok: true, accepted: good.length, rejected: Math.min(raw.length, 300) - good.length, applied };
+  }
+
+  /** Every 30 s (index.js): re-judge presence in every outing someone is watching; emit the changes. */
+  async function sweepPresence() {
+    const ids = hub.roomIds ? hub.roomIds() : [];
+    let n = 0;
+    for (const outingId of ids) {
+      const m = await membership(outingId, '00000000-0000-0000-0000-000000000000').catch(() => null);
+      if (!m || m.outing_status !== 'active') continue;
+      const [mem, pos] = await Promise.all([members(outingId), positions(outingId, 'active')]);
+      const posBy = new Map(pos.map((p) => [p.user_id, p]));
+      const link = hub.linkState ? hub.linkState(outingId) : new Map();
+      const list = mem.filter((x) => x.sharing).map((x) => ({
+        user_id: x.user_id,
+        presence: presence.compute(outingId, x, posBy.get(x.user_id) || null, link.get(x.user_id) || null),
+      }));
+      n += presence.publish(outingId, list);
+    }
+    return { emitted: n };
   }
 
   /** Housekeeping: forget old fixes, end abandoned outings, drop dead invites. */
@@ -1554,6 +1744,11 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     shareSummary,
     withdrawSummary,
     recordPosition,
+    recordBackfill,
+    setHidden,
+    nudge,
+    notePresence,
+    sweepPresence,
     recordDiagnostics,
     goingOffline,
     sweepSilence,

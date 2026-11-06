@@ -95,10 +95,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    /// Swiped away / terminated while running: tell the trip why we go quiet (presence hint).
+    func applicationWillTerminate(_ application: UIApplication) {
+        MainActor.assumeIsolated { Self.model?.session?.appWillTerminate() }
+    }
+
+    /// The offline backfill finished uploading while the app was suspended / not running.
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        guard identifier == BackfillUploader.sessionId else { return completionHandler() }
+        BackfillUploader.shared.backgroundCompletion = completionHandler
+        BackfillUploader.shared.resume()
+    }
+
     /// While the app is open, notes and SOS go to the in-app alert lane / SOS screen, not a banner.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         /* On screen, the live map's alert lane already shows notes and SOS; a banner would say it twice. */
-        notification.request.identifier.hasPrefix("sos-") ? [.sound, .list] : [.list]
+        let id = notification.request.identifier
+        /* «موقعك مخفي من ٣٠ د، تبي تظهره؟» is for this person now, even on screen. */
+        if id.hasPrefix("sary-hidden-") { return [.banner, .list] }
+        return id.hasPrefix("sos-") ? [.sound, .list] : [.list]
     }
 }
 

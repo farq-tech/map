@@ -21,7 +21,7 @@ final class BackgroundCadenceTests: XCTestCase {
         let last = BackgroundCadence.Last(fix: fix(24.7, speed: 0, at: 0), sentAtMs: 0)
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 20, at: 1), last: last, lowPower: false), 10_000)
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: false), 40_000, "parked: inside the 45 s live window")
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 80_000, "Low Power doubles it")
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 40_000, "Low Power never sends slower than the «مباشر» window (was 80 s: flicker)")
         /* ~111 m away: due after the 5 s floor. */
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.701, speed: 20, at: 1), last: last, lowPower: false), 5_000)
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: nil, lowPower: false), -.infinity, "first fix goes now")
@@ -249,6 +249,7 @@ final class BackgroundSessionTests: XCTestCase {
         clockOffset = 0
         foreground = true
         sched = FakeScheduler()
+        hints = []; backfills = []; backfillAccepts = true
         defaults = UserDefaults(suiteName: "bg-share-\(UUID().uuidString)")
         location = LocationSharer()
         location.ignoresSystemFixes = true
@@ -271,7 +272,11 @@ final class BackgroundSessionTests: XCTestCase {
         return OutingsAPI(base: URL(string: "http://stub.test")!, session: URLSession(configuration: cfg), tokenProvider: { "t" })
     }
 
-    private func session(always: Bool = true) -> OutingSession {
+    private var hints: [PresenceHint] = []
+    private var backfills: [[WireFix]] = []
+    private var backfillAccepts = true
+
+    private func session(always: Bool = true, bgSession: Bool = false) -> OutingSession {
         location.testAuthorization = always ? .authorizedAlways : .authorizedWhenInUse
         var env = SessionEnv()
         env.makeSocket = { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s }
@@ -281,6 +286,9 @@ final class BackgroundSessionTests: XCTestCase {
         env.timers = false
         env.authorizationOverride = true
         env.alwaysOverride = always
+        env.backgroundSessionOverride = bgSession
+        env.postHint = { [unowned self] _, h, _ in self.hints.append(h) }
+        env.postBackfill = { [unowned self] _, fixes, _ in self.backfills.append(fixes); return self.backfillAccepts }
         env.trailDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("bg-\(UUID().uuidString)")
         env.lowPower = { false }
         env.now = { [unowned self] in self.clock }
@@ -310,10 +318,10 @@ final class BackgroundSessionTests: XCTestCase {
     }
 
     /// Consent + «شارك موقعي» on screen, then the screen locks.
-    private func sharingInBackground(always: Bool = true) async -> OutingSession {
+    private func sharingInBackground(always: Bool = true, bgSession: Bool = false) async -> OutingSession {
         ShareMemory.recordConsent(user: "u1", outing: "o1", defaults: defaults)
         ShareMemory.setActiveShare(user: "u1", outing: "o1", defaults: defaults)
-        let s = session(always: always)
+        let s = session(always: always, bgSession: bgSession)
         ready(sockets[0])
         s.resumeIfPreviouslySharing()
         XCTAssertTrue(s.isSharingNow, "sharing on screen")
@@ -361,6 +369,65 @@ final class BackgroundSessionTests: XCTestCase {
         await settle()
         XCTAssertTrue(posted.isEmpty)
         XCTAssertTrue(s.wantsToShare, "the intent stays; it resumes on screen")
+    }
+
+    /// Field 2026-11-06: members on «أثناء الاستخدام» went dark the moment the phone locked. With
+    /// the iOS 17+ background activity session (taken on screen) the share keeps going.
+    func testWhenInUseWithActivitySessionKeepsSendingOffScreen() async {
+        let s = await sharingInBackground(always: false, bgSession: true)
+        XCTAssertTrue(s.gate.allowsBackgroundPosition)
+        s.handleFix(fix(0))
+        await settle()
+        XCTAssertEqual(posted.count, 1, "POST /:id/positions with the screen locked")
+        XCTAssertEqual(hints.last, .backgroundAlways, "the others are told it keeps going")
+    }
+
+    /// Leaving the screen with «أثناء الاستخدام» and no session: the others learn why at once.
+    func testLeavingTheScreenTellsTheReason() async {
+        _ = await sharingInBackground(always: false)
+        await settle()
+        XCTAssertEqual(hints.last, .backgroundWhenInUse, "«الموقع «أثناء الاستخدام» بس» instead of a vague «انقطع»")
+    }
+
+    /// No network off screen: every fix that cannot go out is queued (thinned) and uploaded in
+    /// ONE batch as soon as a send goes through; acked, the queue is empty and persisted so.
+    func testOfflineFixesAreQueuedAndBackfilledInOneBatch() async {
+        let s = await sharingInBackground()
+        postError = OutingAPIError(code: "network", status: 0)
+        for i in 0..<6 {
+            s.handleFix(fix(i))
+            clockOffset += 30_000
+            sched.advance(30_000)
+            await settle()
+        }
+        XCTAssertTrue(posted.isEmpty)
+        XCTAssertGreaterThanOrEqual(s.offlineQueue.count, 4, "kept on the phone, not dropped")
+        XCTAssertFalse(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty, "survives the app being killed")
+        postError = nil
+        /* The pending retry wakes (its fix is too old by now: dropped, it is already queued)… */
+        clockOffset += 120_000
+        sched.advance(120_000)
+        await settle()
+        /* …and the next fresh fix goes out live, then the queue follows in one batch. */
+        s.handleFix(fix(11))
+        await settle()
+        XCTAssertFalse(posted.isEmpty, "live again")
+        XCTAssertEqual(backfills.count, 1, "one batch")
+        XCTAssertGreaterThanOrEqual(backfills[0].count, 4)
+        XCTAssertTrue(zip(backfills[0], backfills[0].dropFirst()).allSatisfy { $0.age_ms >= $1.age_ms }, "oldest first, true ages")
+        XCTAssertTrue(s.offlineQueue.isEmpty)
+        XCTAssertTrue(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty)
+    }
+
+    /// Leaving the trip forgets whatever was queued: nothing goes out after the trip.
+    func testLeavingForgetsTheQueue() async {
+        let s = await sharingInBackground()
+        postError = OutingAPIError(code: "network", status: 0)
+        s.handleFix(fix(0))
+        await settle()
+        _ = await s.leave()
+        XCTAssertTrue(s.offlineQueue.isEmpty)
+        XCTAssertTrue(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty)
     }
 
     private func assertStopped(_ s: OutingSession, _ why: String, file: StaticString = #filePath, line: UInt = #line) async {

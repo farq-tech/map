@@ -278,7 +278,11 @@ struct SaryParticipantRow: View {
                                 .accessibilityIdentifier("participant.nickname")
                         }
                         line {
-                            if let s = participant.silentSince { SarySilentBadge(since: s, now: now) }
+                            if let s = participant.silentSince { SarySilentBadge(since: s, now: now, reason: participant.presenceReason) }
+                            else if let r = participant.presenceReason, let s = participant.presence.staleSince ?? (participant.neverShared ? now : nil) {
+                                /* Not live yet not «silent» (under 10 min, or never sent): say why, calmly. */
+                                SarySilentBadge(since: s, now: now, reason: r).accessibilityIdentifier("participant.presenceReason")
+                            }
                             else if participant.neverShared {
                                 Text(SaryParticipantRow.neverSharedText).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary)
                                     .accessibilityIdentifier("participant.neverShared")
@@ -332,7 +336,8 @@ struct SaryParticipantRow: View {
         if let n = participant.nickname { parts.append(n) }
         if let r = participant.roleLabel { parts.append(r) }
         if let n = SaryCarColors.name(for: participant.color) { parts.append("السيارة \(n)") }
-        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now) }
+        parts.append(participant.silentSince.map { SilenceText.badge(since: $0, now: now, reason: participant.presenceReason) }
+                     ?? participant.presenceReason.map { $0.text }
                      ?? (participant.neverShared ? Self.neverSharedText : SaryPresenceStyle(presence: participant.presence).accessibilityLabel(now: now)))
         if participant.viaNearby { parts.append(SaryNearbyMark.text) }
         if let d = participant.distanceMeters, !participant.isMe { parts.append("على بعد \(SaryFormat.distance(meters: d))") }
@@ -424,8 +429,17 @@ struct SaryParticipantCard: View {
                 }
             }
 
-            if case .stale(let since) = p.presence {
+            if let r = p.presenceReason {
+                /* Why they are not live, and what fixes it — never a vague «انقطع». */
+                SaryInlineMessage(text: [r.text, r.fix].compactMap { $0 }.joined(separator: " · "), tone: r == .hidden ? .info : .warning)
+                    .accessibilityIdentifier("participant.reason")
+            } else if case .stale(let since) = p.presence {
                 SaryInlineMessage(text: "\(SaryFormat.lastUpdate(since: since, now: state.now)) · قد يكون مكانه تغيّر", tone: .warning)
+            }
+            if state.canNudge {
+                Button(action: actions.nudge) { SaryButtonLabel(title: "نبّهه", systemImage: "bell.badge.fill") }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("participant.nudge")
             }
 
             HStack(spacing: theme.space(.s)) {

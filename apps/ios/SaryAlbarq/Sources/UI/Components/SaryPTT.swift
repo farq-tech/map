@@ -249,7 +249,27 @@ struct SaryPTTButton: View {
             .accessibilityAction(named: Text("ابدأ التكلم")) { actions.pressBegan() }
             .accessibilityAction(named: Text("أوقف التكلم")) { actions.pressEnded() }
 
-            if showsCaption {
+            /* Round beside the big primary (one-button rule): the channel «تردد ١» stays reachable
+             * as a small chip under the disc — the pill's chip in disc form, same target and
+             * accessibilityIdentifier, so «قناة الطلعة» and its UI test keep working. */
+            if let c = channelLabel, openChannels != nil {
+                Button { openChannels?() } label: {
+                    Text(c)
+                        .font(.sary(10, .medium))
+                        .foregroundStyle(captionColor)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .saryGlass(Capsule(), role: .control)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .accessibilityLabel(Text("التردد: \(c)"))
+                .accessibilityHint(Text("اضغط لتغيّر التردد"))
+                .accessibilityIdentifier("ptt-channel-chip")
+            } else if showsCaption {
                 Text(stateLabel)
                     .saryNumber(.caption)
                     .foregroundStyle(captionColor)
