@@ -64,7 +64,9 @@ extension LiveOutingController {
         case let .failure(e):
             toast(e.message)
         case let .success(t):
-            guard location.lastFix != nil else { return toast(NavRefusal.noFix.message) }
+            /* No fresh fix: never silent — «ننتظر موقعك…», and the plan starts by itself once one comes. */
+            guard hasFreshFix else { return beginFixWait(.navigate(t)) }
+            if case .navigate = fixWait?.pending { fixWait = nil }
             backTrackOffForNav()
             following = false
             sheetDetent = .peek
@@ -81,7 +83,11 @@ extension LiveOutingController {
     func directions(_ r: Result<NavTarget, NavRefusal>) {
         if case let .failure(e) = r { return toast(e.message) }
         guard case let .success(t) = r else { return }
-        guard location.lastFix != nil else { return toast(NavRefusal.noFix.message) }
+        guard hasFreshFix else {
+            modal = nil
+            return beginFixWait(.directions(t))
+        }
+        if case .directions = fixWait?.pending { fixWait = nil }
         modal = nil
         let ask = Self.directionsNeedsConfirm(nav.phase)
         /* After the card's sheet has gone (a dialog or sheet over a closing one is dropped). */
