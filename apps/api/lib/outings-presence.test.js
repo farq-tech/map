@@ -41,6 +41,7 @@ test('presence: the most specific reason wins', () => {
   assert.equal(r({ hint: { hint: 'terminated', at: T - MIN } }), 'app_closed');
   assert.equal(r({ hint: { hint: 'bg_when_in_use', at: T - 2 * MIN } }), 'when_in_use');
   assert.equal(r({ client: 'web' }), 'web');
+  assert.equal(r({ hint: { hint: 'web_hidden', at: T - MIN } }), 'web', 'the web page went to the background');
   assert.equal(r({ heardAtMs: T - 10_000, gps: 'weak' }), 'no_gps', 'we hear the phone but it has no fix');
   assert.equal(r({ heardAtMs: T - 10_000, lowPower: true }), 'low_power');
   assert.equal(r({ lowPower: true }), 'low_power');
