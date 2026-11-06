@@ -385,6 +385,7 @@ final class BackgroundSessionTests: XCTestCase {
     /// Leaving the screen with «أثناء الاستخدام» and no session: the others learn why at once.
     func testLeavingTheScreenTellsTheReason() async {
         _ = await sharingInBackground(always: false)
+        await settle()
         XCTAssertEqual(hints.last, .backgroundWhenInUse, "«الموقع «أثناء الاستخدام» بس» instead of a vague «انقطع»")
     }
 
@@ -403,9 +404,12 @@ final class BackgroundSessionTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(s.offlineQueue.count, 4, "kept on the phone, not dropped")
         XCTAssertFalse(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty, "survives the app being killed")
         postError = nil
-        s.handleFix(fix(10))
-        clockOffset += 60_000
-        sched.advance(60_000)
+        /* The pending retry wakes (its fix is too old by now: dropped, it is already queued)… */
+        clockOffset += 120_000
+        sched.advance(120_000)
+        await settle()
+        /* …and the next fresh fix goes out live, then the queue follows in one batch. */
+        s.handleFix(fix(11))
         await settle()
         XCTAssertFalse(posted.isEmpty, "live again")
         XCTAssertEqual(backfills.count, 1, "one batch")
