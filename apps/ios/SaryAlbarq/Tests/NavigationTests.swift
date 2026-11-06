@@ -325,9 +325,24 @@ final class NavRoutingProviderTests: XCTestCase {
         XCTAssertEqual(mb.calls, 1)
     }
 
-    func testDefaultChoiceIsAuto() {
+    /// «صوت سرى» is built from our NavStep, not from the router's text: a Valhalla route must give every
+    /// maneuver its clips (and a spoken cue) just as a Mapbox one does, or the default «تلقائي» goes quiet.
+    func testValhallaManeuversMapToSaryVoiceClips() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        let p = try await farq().routes(req())
+        for r in p.routes {
+            for (i, s) in r.steps.enumerated() where s.maneuver.kind != .depart {
+                let near = SaryVoiceScript.step(s, distanceM: 300)
+                XCTAssertFalse(near.isEmpty, "\(r.id) step \(i) \(s.maneuver.kind)")
+                XCTAssertNotEqual(near.last, "mv_02", "\(r.id) step \(i): an action, not «كمّل سيده»")
+                XCTAssertFalse(s.spoken.isEmpty, "\(r.id) step \(i): the router announces it")
+            }
+        }
+    }
+
+    func testDefaultChoiceIsMapboxUntilValhallaVoiceIsVerified() {
         UserDefaults.standard.removeObject(forKey: NavProviderChoice.key)
-        XCTAssertEqual(NavProviderChoice.current, .auto, "Farq's router when its server is on, Mapbox otherwise")
+        XCTAssertEqual(NavProviderChoice.current, .mapbox, "«تلقائي» becomes the default once «صوت سرى» is verified on real Valhalla routes")
     }
 }
 

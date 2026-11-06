@@ -151,6 +151,8 @@ enum FarqTiles {
                 "line-width": width(cls),
                 /* Over imagery a road must read without hiding it: strong in town, softer far out. */
                 "line-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.75, 14, 0.9],
+                /* Unlit: in the Standard style's middle slot the scene light darkens lines (they read brown/olive). */
+                "line-emissive-strength": 1,
             ]
             if cls == "track" { paint["line-dasharray"] = [2, 1.5] }
             return [
@@ -173,7 +175,8 @@ enum FarqTiles {
                 "text-max-angle": 30,
                 "symbol-sort-key": ["-", 10, ["coalesce", ["get", "rank"], 0]],
             ] as [String: Any],
-            "paint": ["text-color": "hsl(0, 0%, 100%)", "text-halo-color": "hsla(0, 0%, 0%, 0.85)", "text-halo-width": 1.4],
+            "paint": ["text-color": "hsl(0, 0%, 100%)", "text-halo-color": "hsla(0, 0%, 0%, 0.85)", "text-halo-width": 1.4,
+                      "text-emissive-strength": 1] as [String: Any],
         ]
     }
 
@@ -183,7 +186,7 @@ enum FarqTiles {
             "paint": [
                 "circle-radius": ["interpolate", ["linear"], ["zoom"], 15, 3, 18, 6],
                 "circle-color": ["case", ["boolean", ["get", "temp_closed"], false], "hsl(0, 0%, 60%)", "hsl(203, 90%, 58%)"],
-                "circle-stroke-color": "hsl(0, 0%, 100%)", "circle-stroke-width": 1,
+                "circle-stroke-color": "hsl(0, 0%, 100%)", "circle-stroke-width": 1, "circle-emissive-strength": 1,
             ] as [String: Any],
         ]
     }
@@ -196,7 +199,8 @@ enum FarqTiles {
                 "text-size": 11, "text-offset": [0, 1.0], "text-anchor": "top", "text-max-width": 8,
                 "text-optional": true,
             ] as [String: Any],
-            "paint": ["text-color": "hsl(203, 100%, 90%)", "text-halo-color": "hsla(0, 0%, 0%, 0.85)", "text-halo-width": 1.2],
+            "paint": ["text-color": "hsl(203, 100%, 90%)", "text-halo-color": "hsla(0, 0%, 0%, 0.85)", "text-halo-width": 1.2,
+                      "text-emissive-strength": 1] as [String: Any],
         ]
     }
 
