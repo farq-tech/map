@@ -3,10 +3,12 @@ import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
 import MapboxNavigationNative
 
-/// «مزوّد المسارات»: who computes routes. Mapbox stays the default until «صوت سرى» has been verified on
-/// real Valhalla routes (PR #111); «تلقائي» then becomes the default.
+/// «مزوّد المسارات»: who computes routes. Default «تلقائي»: Mapbox Directions with live traffic
+/// (`driving-traffic`, an exact arrival time in town) for every road it covers, and the company's Valhalla
+/// for the desert and the roads Mapbox does not reach, or when Mapbox fails.
 enum NavProviderChoice: String, CaseIterable, Identifiable {
-    /// The company's Valhalla when its server says it is enabled, else Mapbox.
+    /// Mapbox with traffic first; the company's Valhalla (when its server says it is enabled) where
+    /// Mapbox's route stops short of the target (desert, tracks) or Mapbox has no route.
     case auto
     case mapbox
     /// Try the company's Valhalla first (falls back to Mapbox when it cannot answer).
@@ -16,7 +18,7 @@ enum NavProviderChoice: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static var current: NavProviderChoice {
-        get { NavProviderChoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .mapbox }
+        get { NavProviderChoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .auto }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
     }
 
@@ -188,10 +190,14 @@ final class SwitchingRouteProvider: NavRoutingProvider {
         self.choice = choice
     }
 
+    /// «تلقائي»: a Mapbox route that ends farther than this from the target has left the roads Mapbox
+    /// knows (desert, tracks, new districts); Valhalla is asked then and wins if it gets closer.
+    static let uncoveredGapM = 300.0
+
     func routes(_ r: NavRouteRequest) async throws -> NavRoutePlan {
         let c = choice()
         if c == .mapbox { return try await viaMapbox(r, reason: nil) }
-        if c == .auto, await !farq.enabled() { return try await viaMapbox(r, reason: .disabled) }
+        if c == .auto { return try await automatic(r) }
         do {
             let p = try await farq.routes(r)
             lastUsed = farq.name
@@ -200,6 +206,31 @@ final class SwitchingRouteProvider: NavRoutingProvider {
         } catch let e as FarqRoutingError {
             return try await viaMapbox(r, reason: e)
         }
+    }
+
+    /// Mapbox with traffic first (live ETA in town); Valhalla only off Mapbox's roads or when Mapbox fails.
+    private func automatic(_ r: NavRouteRequest) async throws -> NavRoutePlan {
+        let mb: NavRoutePlan
+        do {
+            mb = try await mapbox.routes(r)
+        } catch {
+            /* Offline: Valhalla is a server too. */
+            if (error as? NavRoutingError) == .offline { throw error }
+            guard await farq.enabled(), let p = try? await farq.routes(r), !p.routes.isEmpty else { throw error }
+            lastUsed = farq.name
+            lastFallbackReason = nil
+            return p
+        }
+        lastUsed = mapbox.name
+        lastFallbackReason = nil
+        let target = r.target.position
+        guard let end = mb.routes.first?.end else { return mb }
+        let gap = PlanGeo.meters(end, target)
+        guard gap > Self.uncoveredGapM, await farq.enabled(),
+              let p = try? await farq.routes(r), let fe = p.routes.first?.end,
+              PlanGeo.meters(fe, target) + Self.uncoveredGapM / 2 < gap else { return mb }
+        lastUsed = farq.name
+        return p
     }
 
     private func viaMapbox(_ r: NavRouteRequest, reason: FarqRoutingError?) async throws -> NavRoutePlan {

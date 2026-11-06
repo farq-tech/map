@@ -233,9 +233,14 @@ final class StubURLProtocol: URLProtocol {
 final class FakeMapbox: NavRoutingProvider {
     let name = "Mapbox"
     var calls = 0
+    /// Throw this instead of answering.
+    var fail: NavRoutingError?
+    /// Where the route ends (default: at the target, i.e. Mapbox covers it).
+    var end: LngLat?
     func routes(_ r: NavRouteRequest) async throws -> NavRoutePlan {
         calls += 1
-        return NavRoutePlan(routes: [NavRoute(id: "mapbox-0", coordinates: [r.origin, r.target.position], distanceM: 1000, durationS: 100, steps: [])])
+        if let fail { throw fail }
+        return NavRoutePlan(routes: [NavRoute(id: "mapbox-0", coordinates: [r.origin, end ?? r.target.position], distanceM: 1000, durationS: 100, steps: [])])
     }
 }
 
@@ -307,15 +312,52 @@ final class NavRoutingProviderTests: XCTestCase {
         }
     }
 
-    func testAutoUsesValhallaOnlyWhenTheServerSaysEnabled() async throws {
+    /// «تلقائي»: Mapbox with traffic wherever it reaches the target (live ETA in town), even with Valhalla on.
+    func testAutoKeepsMapboxWithTrafficOnRoadsItCovers() async throws {
         StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
-        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":false}".utf8))
-        let mb = FakeMapbox()
-        var p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
-        XCTAssertEqual(p.routes.first?.id, "mapbox-0", "disabled → Mapbox")
         StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
-        p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
-        XCTAssertEqual(p.routes.first?.id, "farq-0", "enabled → Valhalla")
+        let mb = FakeMapbox()
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto })
+        let p = try await sw.routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0")
+        XCTAssertEqual(sw.name, "Mapbox")
+        XCTAssertFalse(StubURLProtocol.seen.contains { $0.url?.path == "/api/outings/routing/route" }, "Valhalla not asked in town")
+        XCTAssertEqual(NavRouteSpec.from(req().options).profile, .drivingTraffic, "default options: driving-traffic")
+    }
+
+    /// «تلقائي»: Mapbox stops 2 km short (desert / a road it does not know) → Valhalla, which reaches it.
+    func testAutoUsesValhallaWhereMapboxStopsShort() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
+        let mb = FakeMapbox()
+        mb.end = LngLat(lng: 46.695, lat: 24.69)
+        let p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "farq-0")
+    }
+
+    /// «تلقائي»: Mapbox has no route → Valhalla; Valhalla disabled → Mapbox's own error; offline → no second server.
+    func testAutoFallsToValhallaOnlyWhenEnabledAndMapboxFails() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
+        let mb = FakeMapbox()
+        mb.fail = .noRoute
+        let p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "farq-0")
+
+        mb.fail = .offline
+        StubURLProtocol.seen = []
+        do { _ = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req()); XCTFail("offline") }
+        catch { XCTAssertEqual(error as? NavRoutingError, .offline) }
+        XCTAssertTrue(StubURLProtocol.seen.isEmpty)
+
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":false}".utf8))
+        mb.fail = .noRoute
+        mb.end = LngLat(lng: 46.695, lat: 24.69)
+        do { _ = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req()); XCTFail("disabled") }
+        catch { XCTAssertEqual(error as? NavRoutingError, .noRoute) }
+        mb.fail = nil
+        let short = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(short.routes.first?.id, "mapbox-0", "disabled → Mapbox even when it stops short")
     }
 
     func testMapboxChoiceNeverCallsTheCompanyServer() async throws {
@@ -340,9 +382,9 @@ final class NavRoutingProviderTests: XCTestCase {
         }
     }
 
-    func testDefaultChoiceIsMapboxUntilValhallaVoiceIsVerified() {
+    func testDefaultChoiceIsAuto() {
         UserDefaults.standard.removeObject(forKey: NavProviderChoice.key)
-        XCTAssertEqual(NavProviderChoice.current, .mapbox, "«تلقائي» becomes the default once «صوت سرى» is verified on real Valhalla routes")
+        XCTAssertEqual(NavProviderChoice.current, .auto, "Mapbox with traffic in town, Farq's Valhalla off Mapbox's roads")
     }
 }
 
