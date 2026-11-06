@@ -114,13 +114,13 @@ struct PlanDetailsSections: View {
     }
 }
 
-/// «الوجهة»: distance, direction and a rough time from me, with «اتجه» (in-app arrow, Apple / Google Maps).
+/// «الوجهة»: distance, direction and a rough time from me. Before the start there is no live map to
+/// guide on, so it says plainly «افتح في تطبيق ثاني» (Google Maps / Waze), never «اتجه».
 struct DestinationRow: View {
     var destination: OutingDestination
     var myFix: DeviceFix?
     var compact = false
     @Environment(\.sary) private var theme
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         let p = theme.palette
@@ -154,9 +154,10 @@ struct DestinationRow: View {
             }
             Spacer(minLength: 0)
             Menu {
-                Button("افتح في Apple Maps") { openURL(CoordinateShare.directionsLink(dest, .apple)) }
-                Button("افتح في Google Maps") { openURL(CoordinateShare.directionsLink(dest, .google)) }
-            } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
+                ForEach(ExternalNav.App.allCases) { app in
+                    Button(app.openTitle) { ExternalNav.open(app, dest) }
+                }
+            } label: { SaryButtonLabel(title: "افتح في تطبيق ثاني", systemImage: SaryIcon.directions) }
                 .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                 .accessibilityIdentifier("destination.go")
         }

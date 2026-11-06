@@ -383,7 +383,7 @@ final class LocalGuidanceTests: XCTestCase {
 }
 
 /// Every «اتجه» (silent member, fuel station, waypoint) is OUR guidance: a nav target for
-/// `directions(_:)`, never Apple Maps. Apple Maps only where the person picks it by name.
+/// `directions(_:)`, never another app. Google Maps / Waze only where the person picks them by name.
 @MainActor final class InAppDirectionsTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -434,20 +434,92 @@ final class LocalGuidanceTests: XCTestCase {
             return s
         }
         let silence = try read("Live/LiveSilence.swift")
-        XCTAssertFalse(silence.contains("Directions.open("), "silent card «اتجه»")
+        XCTAssertFalse(silence.contains("ExternalNav.open("), "silent card «اتجه»")
         XCTAssertTrue(silence.contains("directions(.success(t))"))
         let live = try read("Live/LiveOutingController.swift")
-        XCTAssertFalse(live.contains("Directions.open("), "fuel station «اتجه»")
+        XCTAssertFalse(live.contains("ExternalNav.open("), "fuel station «اتجه»")
+        XCTAssertFalse(live.contains("enum Directions"), "the Apple Maps helper is gone")
         XCTAssertTrue(live.contains("directions(NavTargets.station("))
         let features = try read("Views/FeatureViews.swift")
-        let opens = features.components(separatedBy: "\n").enumerated().filter { $0.element.contains("Directions.open(") }
-        XCTAssertEqual(opens.count, 1, "only the trip summary's explicit «افتح في خرائط Apple»")
+        let opens = features.components(separatedBy: "\n").enumerated().filter { $0.element.contains("ExternalNav.open(") }
+        XCTAssertEqual(opens.count, 1, "only the trip summary's explicit «افتح في Google Maps» / «افتح في Waze»")
         let lines = features.components(separatedBy: "\n")
         for (i, _) in opens {
-            XCTAssertTrue(lines[i...min(i + 2, lines.count - 1)].joined().contains("افتح في خرائط Apple"), "labelled as another app, not «اتجه»")
+            XCTAssertTrue(lines[i...min(i + 2, lines.count - 1)].joined().contains("app.openTitle"), "labelled as another app, not «اتجه»")
         }
         XCTAssertEqual(features.components(separatedBy: "controller.directions(NavTargets.waypoint(").count - 1, 2, "waypoint card + past waypoints")
         let nav = try read("Navigation/LiveOutingController+Nav.swift")
-        XCTAssertEqual(nav.components(separatedBy: "Directions.open(").count - 1, 1, "only «افتح في خرائط Apple» in the route options")
+        XCTAssertEqual(nav.components(separatedBy: "ExternalNav.open(").count - 1, 1, "only the named apps in the route options")
+        let livePlan = try read("Plan/LivePlan.swift")
+        XCTAssertTrue(livePlan.contains("controller.directions(NavTargets.destination(d))"), "the destination's «اتجه» is our own guidance")
+        let planRow = try read("Plan/PlanSections.swift")
+        XCTAssertFalse(planRow.contains("title: \"اتجه\""), "before the start there is no in-app map: no «اتجه» that leaves the app")
+    }
+
+    /// Owner (build 21): «خرائط ابل لا تعمل بالسعودية اصلا». Nothing in Sources opens Apple Maps;
+    /// CarPlay keeps MKMapItem only to describe its CPTrip (it never calls `openInMaps`).
+    func testNoAppleMapsAnywhereInSources() throws {
+        let src = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
+        guard let e = FileManager.default.enumerator(at: src, includingPropertiesForKeys: nil) else { throw XCTSkip("sources not reachable") }
+        var scanned = 0
+        for case let u as URL in e where u.pathExtension == "swift" {
+            guard let s = try? String(contentsOf: u, encoding: .utf8) else { continue }
+            scanned += 1
+            let name = u.lastPathComponent
+            XCTAssertFalse(s.contains("maps.apple.com"), name)
+            XCTAssertFalse(s.contains("openInMaps"), name)
+            XCTAssertFalse(s.contains("خرائط Apple"), name)
+            XCTAssertFalse(s.contains("Apple Maps\""), name)
+            let code = s.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+            if code.contains("MKMapItem(") { XCTAssertTrue(u.path.contains("/CarPlay/"), "MKMapItem only for CarPlay's CPTrip: \(name)") }
+        }
+        if scanned == 0 { throw XCTSkip("sources not reachable") }
+    }
+}
+
+final class ExternalNavTests: XCTestCase {
+    let lat = 24.7113, lng = 46.6744
+
+    func testGoogleApp() {
+        XCTAssertEqual(ExternalNav.appURL(.google, lat: lat, lng: lng).absoluteString, "comgooglemaps://?daddr=24.71130,46.67440&directionsmode=driving")
+        XCTAssertEqual(ExternalNav.url(.google, lat: lat, lng: lng, canOpen: { $0.scheme == "comgooglemaps" }).scheme, "comgooglemaps")
+    }
+
+    func testGoogleWeb() {
+        let web = "https://www.google.com/maps/dir/?api=1&destination=24.71130,46.67440&travelmode=driving"
+        XCTAssertEqual(ExternalNav.webURL(.google, lat: lat, lng: lng).absoluteString, web)
+        XCTAssertEqual(ExternalNav.url(.google, lat: lat, lng: lng, canOpen: { _ in false }).absoluteString, web, "not installed: the universal link")
+    }
+
+    func testWazeApp() {
+        XCTAssertEqual(ExternalNav.appURL(.waze, lat: lat, lng: lng).absoluteString, "waze://?ll=24.71130,46.67440&navigate=yes")
+        XCTAssertEqual(ExternalNav.url(.waze, lat: lat, lng: lng, canOpen: { $0.scheme == "waze" }).scheme, "waze")
+    }
+
+    func testWazeWeb() {
+        let web = "https://waze.com/ul?ll=24.71130,46.67440&navigate=yes"
+        XCTAssertEqual(ExternalNav.webURL(.waze, lat: lat, lng: lng).absoluteString, web)
+        XCTAssertEqual(ExternalNav.url(.waze, lat: lat, lng: lng, canOpen: { $0.scheme == "comgooglemaps" }).absoluteString, web, "only Google installed")
+    }
+
+    func testOnlyGoogleAndWazeWesternDigits() {
+        XCTAssertEqual(ExternalNav.App.allCases, [.google, .waze])
+        XCTAssertEqual(ExternalNav.App.google.openTitle, "افتح في Google Maps")
+        XCTAssertEqual(ExternalNav.App.waze.openTitle, "افتح في Waze")
+        for a in ExternalNav.App.allCases {
+            for u in [ExternalNav.appURL(a, lat: lat, lng: lng), ExternalNav.webURL(a, lat: lat, lng: lng)] {
+                XCTAssertFalse(u.absoluteString.contains("apple"))
+                XCTAssertNil(u.absoluteString.rangeOfCharacter(from: CharacterSet(charactersIn: "٠١٢٣٤٥٦٧٨٩")))
+            }
+        }
+    }
+
+    func testQueriesSchemesListed() throws {
+        let plist = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/App/Info.plist")
+        guard let d = try? Data(contentsOf: plist),
+              let o = try PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any] else { throw XCTSkip("plist not reachable") }
+        let schemes = o["LSApplicationQueriesSchemes"] as? [String] ?? []
+        XCTAssertTrue(schemes.contains("comgooglemaps"))
+        XCTAssertTrue(schemes.contains("waze"))
     }
 }

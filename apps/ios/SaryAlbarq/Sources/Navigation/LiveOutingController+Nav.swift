@@ -153,10 +153,10 @@ extension LiveOutingController {
         if nav.isActive, nav.camera != .free { nav.camera = .free }
     }
 
-    /// «افتح في خرائط Apple» in the route options: the person explicitly picks another app.
-    func openInAppleMaps() {
+    /// «افتح في Google Maps» / «افتح في Waze» in the route options: the person explicitly picks another app.
+    func openExternally(_ app: ExternalNav.App) {
         guard let t = nav.target else { return }
-        Directions.open(lat: t.position.lat, lng: t.position.lng, name: t.name)
+        ExternalNav.open(app, t.position)
     }
 
     private func backTrackOffForNav() {

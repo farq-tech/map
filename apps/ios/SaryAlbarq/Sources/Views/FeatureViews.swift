@@ -629,7 +629,7 @@ struct PastWaypointsView: View {
 struct PastWaypointDetail: View {
     var waypoint: Waypoint
     var show: (() -> Void)?
-    /// «اتجه» in our own guidance (the live screen). Nil (the trip summary): «افتح في خرائط Apple».
+    /// «اتجه» in our own guidance (the live screen). Nil (the trip summary): «افتح في Google Maps» / «افتح في Waze».
     var go: (() -> Void)? = nil
     @Environment(\.sary) private var theme
 
@@ -662,13 +662,18 @@ struct PastWaypointDetail: View {
                         Button(action: go) { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
                             .buttonStyle(.saryPrimary)
                             .accessibilityIdentifier("waypoint.go")
-                    } else {
-                        /* The trip summary has no live map to guide on: the person picks another app, said plainly. */
-                        Button { Directions.open(lat: w.lat, lng: w.lng, name: w.title) } label: {
-                            SaryButtonLabel(title: "افتح في خرائط Apple", systemImage: SaryIcon.directions)
+                    }
+                }
+                if go == nil {
+                    /* The trip summary has no live map to guide on: the person picks another app, said plainly. */
+                    VStack(spacing: theme.space(.s)) {
+                        ForEach(ExternalNav.App.allCases) { app in
+                            Button { ExternalNav.open(app, lat: w.lat, lng: w.lng) } label: {
+                                SaryButtonLabel(title: app.openTitle, systemImage: SaryIcon.directions)
+                            }
+                            .buttonStyle(.sarySecondary)
+                            .accessibilityIdentifier("waypoint.open.\(app.rawValue)")
                         }
-                        .buttonStyle(.sarySecondary)
-                        .accessibilityIdentifier("waypoint.openAppleMaps")
                     }
                 }
             }

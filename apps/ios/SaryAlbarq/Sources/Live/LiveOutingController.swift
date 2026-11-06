@@ -1309,13 +1309,3 @@ enum LiveConfirm: Identifiable, Equatable {
         return nil
     }
 }
-
-/// Apple Maps, ONLY where the person explicitly picks another app («افتح في خرائط Apple»,
-/// a coordinate's share sheet). Every «اتجه» is our own guidance (`directions(_:)`).
-enum Directions {
-    static func open(lat: Double, lng: Double, name: String) {
-        var c = URLComponents(string: "https://maps.apple.com/")!
-        c.queryItems = [.init(name: "daddr", value: "\(lat),\(lng)"), .init(name: "q", value: name)]
-        if let u = c.url { UIApplication.shared.open(u) }
-    }
-}

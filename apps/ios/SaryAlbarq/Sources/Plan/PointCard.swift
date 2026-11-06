@@ -154,7 +154,7 @@ struct PointCard: View {
                     .accessibilityValue(copied.isEmpty ? "" : "نُسخ: \(copied)")
                 Menu {
                     Button("رابط Google Maps") { share = ShareItem(text: message(.google, now: now)) }
-                    Button("رابط Apple Maps") { share = ShareItem(text: message(.apple, now: now)) }
+                    Button("رابط Waze") { share = ShareItem(text: message(.waze, now: now)) }
                 } label: { SaryButtonLabel(title: "شارك", systemImage: SaryIcon.share) }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("point.share")

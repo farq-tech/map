@@ -114,10 +114,11 @@ enum CoordinateParser {
 
     // MARK: links
 
-    /// Google Maps (`@lat,lng`, `q=`, `ll=`, `query=`, `destination=`, `!3d…!4d…`) and Apple Maps (`ll=`, `q=`, `daddr=`, `coordinate=`).
+    /// Google Maps (`@lat,lng`, `q=`, `ll=`, `query=`, `destination=`, `!3d…!4d…`), Waze (`ll=`) and,
+    /// for links people paste from elsewhere, Apple Maps (`ll=`, `q=`, `daddr=`, `coordinate=`).
     static func fromLink(_ s: String) -> (LngLat, Bool)? {
         guard let url = URL(string: s.trimmingCharacters(in: .whitespaces)), let host = url.host?.lowercased(),
-              host.contains("google") || host.contains("apple.com") || host.contains("goo.gl") || host == "maps.app.goo.gl" else { return nil }
+              host.contains("google") || host.contains("waze.com") || host.contains("apple.com") || host.contains("goo.gl") || host == "maps.app.goo.gl" else { return nil }
         let full = s.removingPercentEncoding ?? s
         if let m = match(#"!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)"#, full), let la = Double(m[1]), let lo = Double(m[2]) {
             return (LngLat(lng: lo, lat: la), false)
