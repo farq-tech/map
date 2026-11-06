@@ -138,12 +138,11 @@ final class HiResImagery: NSObject {
             layer.rasterFadeDuration = .constant(250)
             layer.rasterResampling = .constant(.linear)
             layer.rasterOpacity = .constant(1)
-            /* Mild grade on the enhanced tiles only (owner, build 12): a touch of contrast and
-               colour, shadows lifted slightly. The original imagery underneath is untouched. */
-            layer.rasterContrast = .constant(0.1)
-            layer.rasterSaturation = .constant(0.1)
-            layer.rasterBrightnessMin = .constant(0.02)
             try m.addLayer(layer)
+            /* The same colour grade as the imagery it covers (`SandGrade`: warm sand in the open,
+               neutral in a city), so an enhanced tile never changes colour as it fades in. */
+            let c = m.cameraState.center
+            try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))))
             installed = true
             #if DEBUG
             HiResStats.note("installed gen \(gen)")

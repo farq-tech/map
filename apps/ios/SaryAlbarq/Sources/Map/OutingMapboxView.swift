@@ -1851,8 +1851,8 @@ enum ArabicBasemap {
         if let c = cache[layer] { return c }
         guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
         var s = tune(raw)
-        /* A copy saved before build 12 has the untuned imagery: tune it (idempotent; #67's grading kept). */
-        if layer == .satellite { s = SatelliteImagery.tune(s, keepExisting: true) }
+        /* A copy saved by an older build has another grade: grade it as this build does (idempotent). */
+        if layer == .satellite { s = gradeSatellite(s) }
         cache[layer] = s
         return s
     }
@@ -1869,14 +1869,17 @@ enum ArabicBasemap {
     }
 
     /// Standard Satellite, tuned for the desert (idempotent, also applied to a cached copy): a tile
-    /// still loading shows warm sand instead of Standard's near-white land; the imagery gets a touch of
-    /// contrast, a little less of the source's cyan-leaning saturation, and answers the scene light more
-    /// (emissive 0.3, so «المؤثرات البصرية»'s real-sun light grades it). Mapbox's own raster paint, no new data.
+    /// still loading shows warm sand instead of Standard's near-white land. The imagery's colour
+    /// grade (warm sand, normal cities) is `SandGrade`, applied with `SatelliteImagery.tune` below.
     static func tune(_ style: String) -> String {
         style.replacingOccurrences(of: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(20, 20%, 95%)\"",
                                    with: "\"id\":\"land\",\"type\":\"background\",\"layout\":{},\"paint\":{\"background-color\":\"hsl(28, 40%, 60%)\"")
-            .replacingOccurrences(of: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.5}",
-                                  with: "\"source\":\"mapbox://mapbox.satellite\",\"layout\":{},\"paint\":{\"raster-emissive-strength\":0.3,\"raster-contrast\":0.18,\"raster-saturation\":-0.26}")
+    }
+
+    /// The satellite style's imagery paint: build 12's resampling / fade / lifted shadows, then
+    /// `SandGrade` (which replaces whatever grade an older cached copy carried).
+    static func gradeSatellite(_ style: String) -> String {
+        SandGrade.apply(SatelliteImagery.tune(style, keepExisting: true))
     }
 
     static func wrap(_ style: String) -> String {
@@ -1899,7 +1902,7 @@ enum ArabicBasemap {
             var out: String?
             if let data, (resp as? HTTPURLResponse)?.statusCode == 200, let s = String(data: data, encoding: .utf8), s.contains("name_en") {
                 let t = transform(s)
-                out = layer.isImport ? wrap(layer == .satellite ? SatelliteImagery.tune(t, keepExisting: true) : t) : t
+                out = layer.isImport ? wrap(layer == .satellite ? gradeSatellite(t) : t) : t
             }
             DispatchQueue.main.async { finish(layer, out) }
         }.resume()

@@ -210,21 +210,45 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(SatelliteImagery.tune("not json"), "not json")
     }
 
-    /// Build 13: the live map's satellite keeps «المؤثرات البصرية»'s grading (ArabicBasemap.tune)
-    /// and gets build 12's resampling / fade / lifted shadows on top.
-    func testSatelliteTuningComposesWithVisualsGrading() throws {
-        let raw = #"{"version":8,"sources":{},"layers":[{"id":"satellite","type":"raster","source":"mapbox://mapbox.satellite","layout":{},"paint":{"raster-emissive-strength":0.5}}]}"#
-        let graded = ArabicBasemap.tune(raw)
-        XCTAssertTrue(graded.contains("\"raster-contrast\":0.18"))
-        let out = SatelliteImagery.tune(graded, keepExisting: true)
-        XCTAssertEqual(SatelliteImagery.tune(out, keepExisting: true), out, "idempotent")
+    /// Build 13 + the sand grade: the live map's satellite gets build 12's resampling / fade /
+    /// lifted shadows and `SandGrade` (warm in the open, neutral in a city), replacing the grade
+    /// an older cached copy carried; the imported style declares `sarySand`.
+    func testSatelliteTuningComposesWithSandGrade() throws {
+        let old = #"{"version":8,"schema":{"lightPreset":{"default":"day","type":"string"}},"sources":{},"layers":[{"id":"satellite","type":"raster","source":"mapbox://mapbox.satellite","layout":{},"paint":{"raster-emissive-strength":0.3,"raster-contrast":0.18,"raster-saturation":-0.26}}]}"#
+        let out = ArabicBasemap.gradeSatellite(ArabicBasemap.wrap(ArabicBasemap.tune(old)))
+        XCTAssertEqual(ArabicBasemap.gradeSatellite(out), out, "idempotent")
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String: Any])
-        let paint = try XCTUnwrap((root["layers"] as? [[String: Any]])?.first?["paint"] as? [String: Any])
-        XCTAssertEqual(paint["raster-contrast"] as? Double, 0.18)
-        XCTAssertEqual(paint["raster-saturation"] as? Double, -0.26)
+        let imp = try XCTUnwrap((root["imports"] as? [[String: Any]])?.first?["data"] as? [String: Any])
+        let schema = try XCTUnwrap(imp["schema"] as? [String: Any])
+        XCTAssertNotNil(schema["lightPreset"], "the style's own options kept")
+        XCTAssertEqual((schema[SandGrade.configKey] as? [String: Any])?["default"] as? Double, 1)
+        let paint = try XCTUnwrap((imp["layers"] as? [[String: Any]])?.first?["paint"] as? [String: Any])
+        XCTAssertNotNil(paint["raster-saturation"] as? [Any], "the old desaturation is gone: a zoom / config expression")
+        XCTAssertNotNil(paint["raster-hue-rotate"])
         XCTAssertEqual(paint["raster-emissive-strength"] as? Double, 0.3)
         XCTAssertEqual(paint["raster-resampling"] as? String, "linear")
-        XCTAssertEqual(paint["raster-brightness-min"] as? Double, 0.03)
+        XCTAssertEqual(paint["raster-brightness-min"] as? Double, 0.02, "shadows lifted a little")
+        XCTAssertNil(root["schema"], "the wrapper itself has no satellite layer")
+    }
+
+    /// Warm in the open desert, close to the photo in a city; never neon.
+    func testSandGradeIsWarmInTheOpenAndMildInCities() {
+        for look in [SandGrade.mild, SandGrade.strong] {
+            for s in look.saturation {
+                XCTAssertGreaterThan(s.desert, 0.1, "the desert is never desaturated")
+                XCTAssertLessThanOrEqual(s.desert, 0.4, "not neon")
+                XCTAssertLessThanOrEqual(s.city, 0.08, "cities stay close to the photo")
+            }
+            XCTAssertLessThan(look.saturation.first!.desert, look.saturation.last!.desert, "stronger close in, where the imagery is paler")
+            XCTAssertEqual(look.hueRotate.first!.city, 0)
+        }
+        XCTAssertEqual(SandGrade.sand(urban: 0), 1)
+        XCTAssertEqual(SandGrade.sand(urban: 1), 0)
+        XCTAssertEqual(SandGrade.sand(urban: 0.52), 0.5, "steps of 0.05")
+        let fixed = SandGrade.paint(SandGrade.strong, sand: 1)
+        let e = fixed["raster-saturation"] as? [Any]
+        XCTAssertEqual(e?.last as? Double, SandGrade.strong.saturation.last!.desert)
+        XCTAssertEqual(SandGrade.apply("not json"), "not json")
     }
 
     func testRouterNarrationIsSpokenOnlyInArabic() {

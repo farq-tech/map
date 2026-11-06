@@ -117,9 +117,9 @@ struct SceneLight: Equatable {
         let twilight = 1 - Smooth.step(-6, 0, a)
         let night = 1 - Smooth.step(-12, -5, a)
         /* A warm grade even at noon (desert light, and it pulls the imagery's cyan cast back to sand). */
-        var amb = RGBA(255, 240, 218).mix(RGBA(255, 212, 162), golden).mix(RGBA(226, 172, 152), twilight).mix(RGBA(120, 132, 172), night)
+        var amb = RGBA(255, 240, 218).mix(RGBA(255, 212, 162), golden).mix(RGBA(226, 172, 152), twilight).mix(RGBA(128, 130, 158), night)
         amb.a = 1
-        var dir = RGBA(255, 242, 218).mix(RGBA(255, 186, 112), golden).mix(RGBA(255, 156, 116), twilight).mix(RGBA(160, 172, 206), night)
+        var dir = RGBA(255, 242, 218).mix(RGBA(255, 186, 112), golden).mix(RGBA(255, 156, 116), twilight).mix(RGBA(170, 172, 196), night)
         dir.a = 1
         let ambI = Smooth.lerp(Smooth.lerp(Smooth.lerp(0.82, 0.76, golden), 0.62, twilight), 0.26, night)
         let dirI = Smooth.lerp(Smooth.lerp(Smooth.lerp(0.32, 0.52, golden), 0.2, twilight), 0.1, night)
