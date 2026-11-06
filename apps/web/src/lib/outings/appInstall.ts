@@ -15,7 +15,7 @@
 /** The public App Store page, once the app is listed. null until then. */
 export const IOS_APP_STORE_URL: string | null = null;
 /** A public TestFlight link (App Store Connect → TestFlight → external group → public link). null until one exists. */
-export const IOS_TESTFLIGHT_PUBLIC_URL: string | null = null;
+export const IOS_TESTFLIGHT_PUBLIC_URL: string | null = "https://testflight.apple.com/join/8K62z9Vj";
 /** Apple's TestFlight app (needed for any TestFlight build). */
 export const TESTFLIGHT_APP_URL = "https://apps.apple.com/app/testflight/id899247664";
 
