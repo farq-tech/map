@@ -171,6 +171,25 @@ final class SOSCountdown: ObservableObject {
         }
     }
 
+    /// «أنا بخير» → «نوقف الطوارئ؟» with «إيه، أنا بخير» / «لا، خلها».
+    @Published private(set) var askingStop = false
+    private var stop: (() -> Void)?
+
+    func confirmStop(theme: SaryTheme, stop: @escaping () -> Void) {
+        guard window == nil else { return }
+        self.stop = stop
+        askingStop = true
+        show(theme)
+    }
+
+    func answerStop(_ yes: Bool) {
+        let s = stop
+        stop = nil
+        askingStop = false
+        hide()
+        if yes { s?() }
+    }
+
     func cancel() {
         tick?.cancel()
         send = nil
@@ -217,6 +236,39 @@ struct SOSCountdownView: View {
         let p = theme.palette
         ZStack {
             Color.black.opacity(0.55).ignoresSafeArea()
+            if center.askingStop { stopCard } else { countdownCard(p) }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+    }
+
+    private var stopCard: some View {
+        let p = theme.palette
+        return VStack(spacing: theme.space(.l)) {
+            Text("نوقف الطوارئ؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary)
+            Text("يوصل للربع إنك بخير ويختفي تنبيهك عندهم.").saryText(.callout).foregroundStyle(p.textSecondary).multilineTextAlignment(.center)
+            Button { center.answerStop(true) } label: {
+                Text("إيه، أنا بخير").font(.sary(18, .heavy)).foregroundStyle(p.onEmergency)
+                    .frame(maxWidth: .infinity, minHeight: 56).background(Capsule().fill(p.emergency))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("sos-stop-yes")
+            Button { center.answerStop(false) } label: {
+                Text("لا، خلها").font(.sary(17, .bold)).foregroundStyle(p.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 56).background(Capsule().fill(p.sunken))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("sos-stop-no")
+        }
+        .padding(theme.space(.xl))
+        .frame(maxWidth: 360)
+        .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(p.background))
+        .padding(theme.space(.l))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sos-stop-confirm")
+    }
+
+    private func countdownCard(_ p: SaryPalette) -> some View {
+        Group {
             VStack(spacing: theme.space(.l)) {
                 Text("نرسل طوارئ بعد")
                     .saryText(.title2, weight: .bold)
@@ -255,7 +307,6 @@ struct SOSCountdownView: View {
             .padding(theme.space(.l))
             .animation(theme.animation(.snappy), value: center.remaining)
         }
-        .environment(\.layoutDirection, .rightToLeft)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sos-countdown")
     }
@@ -273,8 +324,6 @@ struct SaryMySOSStrip: View {
     /// «اطلب إنجاد» (nil: not offered).
     var enjad: (() -> Void)? = nil
     @Environment(\.sary) private var theme
-    /// UX ٢١: stopping a sent SOS asks first (one slip must not call it off).
-    @State private var confirmOK = false
 
     var body: some View {
         let p = theme.palette
@@ -288,7 +337,9 @@ struct SaryMySOSStrip: View {
                     .saryText(.footnote, weight: .medium).opacity(0.9)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button { confirmOK = true } label: {
+            /* UX ٢١: stopping a sent SOS asks first (one slip must not call it off). The question lives
+             * in its own top window: this strip is rebuilt every second and would drop a local alert. */
+            Button { SOSCountdown.shared.confirmStop(theme: theme, stop: imOK) } label: {
                 Text("أنا بخير").saryText(.callout, weight: .heavy)
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
@@ -298,13 +349,6 @@ struct SaryMySOSStrip: View {
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("outing-sos-ok")
             .accessibilityHint(Text("يسألك قبل ما يوقف الطوارئ"))
-            .confirmationDialog("نوقف الطوارئ؟", isPresented: $confirmOK, titleVisibility: .visible) {
-                Button("إيه، أنا بخير", role: .destructive, action: imOK)
-                    .accessibilityIdentifier("outing-sos-ok-confirm")
-                Button("لا، خلها", role: .cancel) {}
-            } message: {
-                Text("يوصل للربع إنك بخير ويختفي تنبيهك عندهم.")
-            }
             if let enjad {
                 Button(action: enjad) {
                     Text("إنجاد").saryText(.callout, weight: .heavy)

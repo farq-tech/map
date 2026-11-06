@@ -123,10 +123,11 @@ struct SaryPTTButton: View {
             .lineLimit(1)
         if placeholder {
             Button { openChannels?() } label: {
-                t.padding(.vertical, 12).padding(.horizontal, 10).contentShape(Rectangle())
+                /* Taller would reach the capsule's centre and steal the talk tap. */
+                t.padding(.vertical, 6).padding(.horizontal, 10).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.vertical, -12).padding(.horizontal, -10)
+            .padding(.vertical, -6).padding(.horizontal, -10)
             .accessibilityLabel(Text("التردد: \(c)"))
             .accessibilityHint(Text("اضغط لتغيّر التردد"))
             .accessibilityIdentifier("ptt-channel-chip")

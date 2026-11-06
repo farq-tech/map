@@ -76,12 +76,12 @@ final class SOSAlwaysUITests: XCTestCase {
 
         /* «أنا بخير» asks first; «لا، خلها» keeps it. */
         ok.tap()
-        let keep = app.buttons["لا، خلها"]
+        let keep = any(app, "sos-stop-no")
         XCTAssertTrue(keep.waitForExistence(timeout: 3), "a confirmation before stopping the SOS")
         keep.tap()
         XCTAssertTrue(ok.waitForExistence(timeout: 2), "still active")
         ok.tap()
-        app.buttons["إيه، أنا بخير"].tap()
+        any(app, "sos-stop-yes").tap()
         XCTAssertTrue(ok.waitForNonExistence(timeout: 5), "stopped after the confirmation")
     }
 
