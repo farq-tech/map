@@ -188,7 +188,7 @@ struct LiveSheet: View {
         case let .plan(m):
             LivePlanModalView(controller: controller, modal: m)
         case .shareAlways:
-            ShareAlwaysExplainer(allow: controller.allowShareAlways, later: controller.laterShareAlways)
+            ShareAlwaysExplainer(allow: controller.allowShareAlways, later: controller.laterShareAlways, afterJoin: controller.shareAlwaysAfterJoin)
                 .presentationDetents([.large])
                 .interactiveDismissDisabled()
         case .navPicker:
@@ -672,15 +672,20 @@ struct ShareBackgroundHintRow: View {
 struct ShareAlwaysExplainer: View {
     var allow: () -> Void
     var later: () -> Void
+    /// Shown right after «انضم» (before anything stopped), not on the way back.
+    var afterJoin = false
     @Environment(\.sary) private var theme
+
+    static let afterJoinTitle = "خلّ الربع يشوفونك طول الطلعة"
+    static let afterJoinBody = "عشان يوصل موقعك للربع من الحين لين تخلص الطلعة — حتى لو قفلت الجوال أو فتحت تطبيق ثاني أو كنت على CarPlay — اسمح بالموقع «دائمًا». ما نرسل موقعك إلا وأنت في طلعة، ويوقف أول ما تخلص أو تطلع منها."
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.space(.l)) {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
-                    Text("المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text("لما طلعت من التطبيق توقف إرسال موقعك للعيال. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text(afterJoin ? Self.afterJoinTitle : "المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
+                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للعيال. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")

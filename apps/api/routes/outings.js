@@ -33,7 +33,7 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
   /* Small bodies everywhere, except a waypoint (≤150 KB photo) and a plan (≤5000-point route). */
   const smallJson = express.json({ limit: '48kb' });
   const bigJson = express.json({ limit: '400kb' });
-  const BIG_BODY = /^\/[^/]+\/(waypoints|plan)$/;
+  const BIG_BODY = /^\/[^/]+\/(waypoints|plan|positions\/batch)$/;
   router.use((req, res, next) => ((req.method === 'POST' || req.method === 'PUT') && BIG_BODY.test(req.path) ? bigJson : smallJson)(req, res, next));
   router.use((_req, res, next) => {
     /* Positions and member lists are personal: never cache them anywhere. */
@@ -238,6 +238,7 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
   /* HTTP fallback heartbeat: "still here", no coordinates. */
   router.post('/:id/heartbeat', auth, asyncHandler(async (req, res) => {
     await service.requireMember(req.user, req.params.id);
+    service.notePresence?.(req.params.id, req.user.id, { hint: req.body?.hint, lowPower: req.body?.low_power, ua: req.get('user-agent') });
     hub?.heartbeat(req.params.id, req.user.id, req.body?.gps, battery(req.body?.battery));
     res.json({ ok: true });
   }));
@@ -245,8 +246,19 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
   router.post('/:id/positions', auth, asyncHandler(async (req, res) => {
     if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     const r = await service.recordPosition(req.user, req.params.id, req.body?.fix);
-    if (r.ok) hub?.touchPoll(req.params.id, req.user.id);
+    if (r.ok) {
+      hub?.touchPoll(req.params.id, req.user.id);
+      service.notePresence?.(req.params.id, req.user.id, { ua: req.get('user-agent') });
+    }
     res.status(r.ok ? 200 : r.reason === 'not_a_member' ? 404 : 409).json(r.ok ? { ok: true } : { ok: false, error: r.reason });
+  }));
+
+  /* Backfill: positions queued while offline, one batch on reconnect (never shown as live). */
+  router.post('/:id/positions/batch', auth, asyncHandler(async (req, res) => {
+    if (!writeLimit(req.user.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const r = await service.recordBackfill(req.user, req.params.id, req.body?.fixes);
+    if (r.ok) hub?.touchPoll(req.params.id, req.user.id);
+    res.status(r.ok ? 200 : r.reason === 'not_a_member' ? 404 : r.reason === 'invalid' ? 400 : 409).json(r.ok ? r : { ok: false, error: r.reason });
   }));
 
   /* Opt-in field-test aggregates. Numbers only — see lib/outings/diagnostics.js. */

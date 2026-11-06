@@ -21,6 +21,7 @@ const { pushPayloadFor } = require('./push');
 const clipsLib = require('./clips');
 const { createFeatures } = require('./features');
 const { createSilenceWatch } = require('./silence');
+const { createPresence } = require('./presence');
 const { createMedia } = require('./media');
 const { createGroupAudio } = require('./group-audio');
 const { createPersonalInvites, phoneDigest } = require('./invites');
@@ -73,6 +74,8 @@ function defaultConfig() {
     idleEndHours: envNumber('OUTING_IDLE_END_HOURS', 24, { min: 1, max: 24 * 30 }),
     /* «المحادثات»: messages of an ended trip are deleted this many days after it ended. */
     chatRetentionDays: envNumber('OUTING_CHAT_RETENTION_DAYS', 30, { min: 1, max: 90 }),
+    /* Backfill (positions queued while offline): accepted up to this old, never shown as live. */
+    backfillMaxAgeMs: envNumber('OUTING_BACKFILL_MAX_AGE_MS', 6 * 3600_000, { min: 60_000, max: 24 * 3600_000 }),
     membershipCacheMs: 15_000,
     authCacheMs: 60_000,
   };
@@ -133,11 +136,15 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   });
 
   /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → one alert each. See silence.js. */
+  /* «مباشر / متأخر / منقطع» + why, from the last fix's timestamp. See presence.js. */
+  const presence = createPresence({ now, events: () => hub });
+
   const silence = createSilenceWatch({
     q,
     now,
     events: () => hub,
     latest: (outingId) => latest.get(outingId),
+    reasonOf: (outingId, userId, lastAt) => presenceNow(outingId, { user_id: userId }, lastAt ? { recorded_at: lastAt } : null).reason,
     notify: (outingId, userId, info) => features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
   });
 
@@ -763,6 +770,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const online = hub.onlineUsers(outingId);
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     const link = hub.linkState ? hub.linkState(outingId) : new Map();
+    const posBy = new Map(pos.map((p) => [p.user_id, p]));
     return {
       outing,
       me: { user_id: user.id, role: m.role, co_leader: m.co_leader === true, can_lead: leads, sharing: m.sharing },
@@ -775,6 +783,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
         note: outing.status === 'ended' ? null : noteOf(outingId, x.user_id),
         battery: hub.batteryOut ? hub.batteryOut(link.get(x.user_id)?.battery || null) : null,
         sos: outing.status === 'ended' ? null : sosOf(outingId, x.user_id),
+        /* Only while active: { state: live|stale|offline|hidden, reason, last_fix_at, since }. */
+        presence: outing.status === 'active' && x.sharing ? presence.compute(outingId, x, posBy.get(x.user_id) || null, link.get(x.user_id) || null) : null,
       })),
       positions: pos,
       stuck: outing.status === 'ended' ? [] : features.stuckList(outingId),
@@ -1431,7 +1441,105 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     const position = shapePosition(user.id, pos);
     hub.emit(outingId, { type: 'position', position });
     silence.onFix(outingId, user.id);
+    presence.publish(outingId, [{ user_id: user.id, presence: presenceNow(outingId, { user_id: user.id }, pos) }]);
     return { ok: true, position };
+  }
+
+  /** Presence for one member from what is in memory (the fresher fix and the link). */
+  function presenceNow(outingId, member, position) {
+    const pos = position || latest.get(outingId)?.get(member.user_id) || null;
+    const link = hub.linkState ? hub.linkState(outingId).get(member.user_id) || null : null;
+    return presence.compute(outingId, member, pos, link);
+  }
+
+  /**
+   * The app tells us why it may go quiet: `hint` (fg | bg_always | bg_when_in_use | low_power |
+   * terminated | location_off), `lowPower`, and which client it is (User-Agent). Never throws.
+   */
+  function notePresence(outingId, userId, { hint, lowPower, ua } = {}) {
+    if (!outingId || !userId) return null;
+    presence.noteClient(outingId, userId, ua);
+    const h = presence.noteHint(outingId, userId, hint, { lowPower: typeof lowPower === 'boolean' ? lowPower : undefined });
+    if (!h && typeof lowPower !== 'boolean') return null;
+    const p = presenceNow(outingId, { user_id: userId }, null);
+    if (latest.get(outingId)?.has(userId)) presence.publish(outingId, [{ user_id: userId, presence: p }]);
+    return p;
+  }
+
+  /**
+   * Backfill: positions taken while the phone had no network, uploaded in one batch when it is
+   * back (oldest first, at most 300). They are never shown as live: the newest one becomes the
+   * last known position only if it is newer than what we have, with its true time, so others see
+   * «آخر موقع قبل ٥ د» and the trail fills in. Returns counts; refusals are not errors.
+   */
+  async function recordBackfill(user, outingId, raw) {
+    const m = await membership(outingId, user.id);
+    if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
+    if (m.outing_status !== 'active') return { ok: false, reason: `outing_${m.outing_status}` };
+    if (!m.sharing) return { ok: false, reason: 'sharing_off' };
+    if (!Array.isArray(raw)) return { ok: false, reason: 'invalid' };
+    const t = now();
+    const good = [];
+    for (const f of raw.slice(0, 300)) {
+      const parsed = v.fix(f, t, { maxAgeMs: cfg.backfillMaxAgeMs });
+      if (parsed.ok) good.push(parsed.value);
+    }
+    good.sort((a, b) => a.recorded_at - b.recorded_at);
+    const room = latest.get(outingId) || new Map();
+    const prev = room.get(user.id);
+    const newest = good[good.length - 1];
+    let applied = false;
+    if (newest && (!prev || newest.recorded_at > new Date(prev.recorded_at))) {
+      const pos = { ...newest, received_at: new Date(t) };
+      const written = await q(
+        `INSERT INTO sary.member_positions (outing_id, user_id, lat, lng, accuracy, heading, speed, recorded_at, received_at, mode)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+         WHERE EXISTS (SELECT 1 FROM sary.outing_members m JOIN sary.outings o ON o.id = m.outing_id
+                       WHERE m.outing_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.sharing AND o.status = 'active')
+         ON CONFLICT (outing_id, user_id) DO UPDATE SET
+           lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy = EXCLUDED.accuracy, heading = EXCLUDED.heading,
+           speed = EXCLUDED.speed, mode = EXCLUDED.mode, recorded_at = EXCLUDED.recorded_at, received_at = EXCLUDED.received_at
+         WHERE sary.member_positions.recorded_at < EXCLUDED.recorded_at
+         RETURNING user_id`,
+        [outingId, user.id, pos.lat, pos.lng, pos.accuracy, pos.heading, pos.speed, pos.recorded_at, pos.received_at, pos.mode],
+      );
+      if (written.length) {
+        if (!latest.has(outingId)) latest.set(outingId, room);
+        room.set(user.id, pos);
+        applied = true;
+        const position = { ...shapePosition(user.id, pos), backfill: true };
+        hub.emit(outingId, { type: 'position', position });
+        silence.onFix(outingId, user.id);
+        presence.publish(outingId, [{ user_id: user.id, presence: presenceNow(outingId, { user_id: user.id }, pos) }]);
+      }
+    }
+    /* The whole stretch (oldest → newest, no live flag) for clients that draw the trail. */
+    if (good.length > 1) {
+      hub.emit(outingId, {
+        type: 'backfill', user_id: user.id,
+        fixes: good.map((f) => ({ lat: f.lat, lng: f.lng, accuracy: f.accuracy, recorded_at: f.recorded_at.toISOString() })),
+      }, { exceptUser: user.id });
+    }
+    return { ok: true, accepted: good.length, rejected: Math.min(raw.length, 300) - good.length, applied };
+  }
+
+  /** Every 30 s (index.js): re-judge presence in every outing someone is watching; emit the changes. */
+  async function sweepPresence() {
+    const ids = hub.roomIds ? hub.roomIds() : [];
+    let n = 0;
+    for (const outingId of ids) {
+      const m = await membership(outingId, '00000000-0000-0000-0000-000000000000').catch(() => null);
+      if (!m || m.outing_status !== 'active') continue;
+      const [mem, pos] = await Promise.all([members(outingId), positions(outingId, 'active')]);
+      const posBy = new Map(pos.map((p) => [p.user_id, p]));
+      const link = hub.linkState ? hub.linkState(outingId) : new Map();
+      const list = mem.filter((x) => x.sharing).map((x) => ({
+        user_id: x.user_id,
+        presence: presence.compute(outingId, x, posBy.get(x.user_id) || null, link.get(x.user_id) || null),
+      }));
+      n += presence.publish(outingId, list);
+    }
+    return { emitted: n };
   }
 
   /** Housekeeping: forget old fixes, end abandoned outings, drop dead invites. */
@@ -1554,6 +1662,9 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     shareSummary,
     withdrawSummary,
     recordPosition,
+    recordBackfill,
+    notePresence,
+    sweepPresence,
     recordDiagnostics,
     goingOffline,
     sweepSilence,

@@ -126,6 +126,8 @@ struct NameChipUI: Equatable {
     var speaking: Bool = false
     /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
     var silentSince: Date? = nil
+    /// Why (server presence): «ما فيه شبكة» / «جواله مقفل الموقع»… replaces «انقطع».
+    var silentReason: PresenceReason? = nil
 }
 
 struct NoteBubbleUI: Equatable {

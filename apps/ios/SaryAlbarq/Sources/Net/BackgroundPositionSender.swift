@@ -43,6 +43,12 @@ final class BackgroundPositionSender {
     }
 
     var onResult: (Outcome) -> Void = { _ in }
+    /// A fix that could not go out live (network down, 5xx, 429): the session keeps it in the
+    /// offline queue (`OfflineFixQueue`) and uploads it in one batch when the network is back.
+    var onUndelivered: (DeviceFix, ShareMode) -> Void = { _, _ in }
+
+    /// Retrying after a network failure: the phone is (probably) offline.
+    var isOffline: Bool { retrying }
 
     private let deps: Deps
     private var slot = LatestFixSlot()
@@ -76,6 +82,8 @@ final class BackgroundPositionSender {
     /// A new fix while in the background. Only the latest is kept.
     func offer(_ fix: DeviceFix, mode: ShareMode) {
         guard running, deps.canSend() else { return slot.clear() }
+        /* Offline: the slot keeps only the newest, so every fix that would be replaced is queued. */
+        if retrying { onUndelivered(fix, mode) }
         slot.put(fix, mode: mode)
         pump()
     }
@@ -150,6 +158,7 @@ final class BackgroundPositionSender {
             pump()
         default:
             /* network, timeout, 5xx, 429: keep the fix (unless a newer one came) and back off. */
+            onUndelivered(sent.fix, sent.mode)
             slot.restore(sent.fix, mode: sent.mode)
             retrying = true
             let wait = BackgroundCadence.retryDelayMs(attempt: attempt, rateLimited: e.code == "rate_limited" || e.status == 429, rand: deps.random())

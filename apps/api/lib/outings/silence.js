@@ -58,13 +58,22 @@ function minutesOf(ms) {
  * @param {(outingId:string, userId:string, info:object) => any} o.notify  push, best effort
  * @param {number} [o.bootAt]
  */
-function createSilenceWatch({ q, now, events, latest = () => undefined, notify = () => null, bootAt = now() }) {
+function createSilenceWatch({ q, now, events, latest = () => undefined, notify = () => null, reasonOf = () => null, bootAt = now() }) {
   const state = new Map(); // `${o}:${u}` → { outingId, userId, since, level, last }
   const notices = new Map(); // `${o}:${u}` → until (ms)
   const key = (o, u) => `${o}:${u}`;
 
+  function reason(s) {
+    try {
+      return reasonOf(s.outingId, s.userId, s.last?.at || null) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /* `reason` (presence.js): why we think it went quiet — never a vague «انقطع». */
   function out(s) {
-    return { user_id: s.userId, since: iso(s.since), level: s.level, last: s.last };
+    return { user_id: s.userId, since: iso(s.since), level: s.level, last: s.last, reason: reason(s) };
   }
 
   function list(outingId) {
@@ -179,13 +188,14 @@ function createSilenceWatch({ q, now, events, latest = () => undefined, notify =
       s.last = last;
       if (level > s.level) {
         s.level = level;
-        const event = { type: 'member_silent', user_id: r.user_id, since: iso(lastRecv), last, level };
+        const event = { type: 'member_silent', user_id: r.user_id, since: iso(lastRecv), last, level, reason: reason(s) };
         events().emit(r.outing_id, event);
         fired.push(event);
         void notify(r.outing_id, r.user_id, {
           level,
           silentMinutes: minutesOf(silentMs),
           lastMinutes: minutesOf(t - Date.parse(last.at)),
+          reason: event.reason,
         });
       }
     }
