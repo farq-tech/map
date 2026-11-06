@@ -163,7 +163,7 @@ enum DesertRouter {
         }
     }
 
-    static let effort: [DesertGrid.Ground: Double] = [.firm: 1.0, .sand: 1.7, .crest: 4.5, .sabkha: 9.0, .wadi: 2.5, .rock: 6.0]
+    static let groundEffort: [DesertGrid.Ground: Double] = [.firm: 1.0, .sand: 1.7, .crest: 4.5, .sabkha: 9.0, .wadi: 2.5, .rock: 6.0]
     static let speedKmh: [DesertGrid.Ground: Double] = [.firm: 35, .sand: 18, .crest: 7, .sabkha: 10, .wadi: 20, .rock: 6]
     static let trackEffort = 0.45, trackKmh = 40.0
     static let roadEffort = 0.35, roadKmh = 70.0
@@ -182,7 +182,7 @@ enum DesertRouter {
         } else if flags & DesertGrid.track != 0 {
             base = trackEffort
         } else {
-            base = (effort[g] ?? 1) * (rain && g == .wadi ? 3 : 1)
+            base = (groundEffort[g] ?? 1) * (rain && g == .wadi ? 3 : 1)
             switch g {
             case .crest: why = .crest
             case .sabkha: why = .sabkha
@@ -239,7 +239,8 @@ enum DesertRouter {
             let bearing = (atan2(Double(dc) * g.dx, Double(-dr) * g.dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
             return (dr, dc, d, bearing)
         }
-        while let (f, i) = heap.pop() {
+        while let top = heap.pop() {
+            let (f, i) = top
             if i == b {
                 var path = [b]
                 var k = b

@@ -56,7 +56,7 @@ final class CampSitesMapLayer {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshRoutes() }.store(in: &bag)
         map.gestures.onLayerTap(Self.circleLayer) { feature, _ in
-            if case let .string(id)? = feature.feature.properties?["id"] { CampSitesHub.shared.tapped = id }
+            if let v = feature.feature.properties?["id"], case let .string(id)? = v { CampSitesHub.shared.tapped = id }
             return true
         }.store(in: &cancelables)
     }

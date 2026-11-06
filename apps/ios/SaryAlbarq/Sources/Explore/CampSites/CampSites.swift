@@ -54,7 +54,7 @@ struct CampSite: Identifiable, Equatable, Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: K.self)
         let coords = try c.nestedContainer(keyedBy: G.self, forKey: .geometry).decode([Double].self, forKey: .coordinates)
-        guard coords.count >= 2 else { throw DecodingError.dataCorruptedError(forKey: .coordinates, in: try c.nestedContainer(keyedBy: G.self, forKey: .geometry), debugDescription: "point") }
+        guard coords.count >= 2 else { throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "point")) }
         lng = coords[0]
         lat = coords[1]
         let p = try c.nestedContainer(keyedBy: P.self, forKey: .properties)
