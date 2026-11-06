@@ -18,9 +18,11 @@ enum LiveCalmRules {
     /// The round buttons on the map's side (stopped): «تتبعني» and «أدوات» only, plus «طريق العودة»
     /// when it fits the moment; after the end, the camera alone. Driving: none.
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,
-                          driving: Bool, ended: Bool) -> [SaryMapControlItem] {
+                          driving: Bool, ended: Bool, hide: SaryMapControlItem? = nil) -> [SaryMapControlItem] {
         guard !driving else { return [] }
         var items = [camera]
+        /* «أخفِ موقعي»: small, right under «موقعي». */
+        if let hide, !ended { items.append(hide) }
         if let backTrack { items.append(backTrack) }
         if !ended {
             var plus = SaryMapControlItem.actions
@@ -63,16 +65,17 @@ struct LiveSideButtons: View {
         let p = theme.palette
         VStack(spacing: 10) {
             ForEach(items) { item in
-                let filled = item.id == "actions" || item.isActive
+                let filled = item.id == "actions" || (item.isActive && item.id != "hide")
+                let small = item.id == "hide"
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
                         let turned = item.id == "locate" && !item.isActive && abs(Self.wrap(bearing)) > 3
                         Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : "scope") : item.systemImage))
                             .rotationEffect(.degrees(turned ? -bearing : 0))
-                            .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
-                            .foregroundStyle(filled ? p.onAccent : p.textPrimary)
+                            .font(.system(size: small ? 15 : (item.id == "actions" ? 22 : 20), weight: .semibold))
+                            .foregroundStyle(small && item.isActive ? p.warning : (filled ? p.onAccent : p.textPrimary))
                             .contentTransition(.symbolEffect(.replace))
-                            .frame(width: theme.drive ? 60 : 48, height: theme.drive ? 60 : 48)
+                            .frame(width: small ? 36 : (theme.drive ? 60 : 48), height: small ? 36 : (theme.drive ? 60 : 48))
                             .background { if filled { Circle().fill(p.accent) } }
                             .saryGlass(Circle(), role: .chrome, interactive: true)
                             .overlay(alignment: .topTrailing) {

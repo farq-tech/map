@@ -871,7 +871,13 @@ final class LiveOutingController: ObservableObject {
         a.openNoteComposer = { [weak self] in self?.modal = .note }
         a.openNearestStations = { [weak self] in self?.openStations() }
         a.sos = SOSActions(
-            trigger: { [weak self] in Task { await self?.session.raiseSOS() } },
+            trigger: { [weak self] in
+                Task {
+                    guard let self else { return }
+                    /* An SOS overrides «أخفِ موقعي»: the real position went out; say it is shown again. */
+                    if await self.session.raiseSOS() { self.toast(HideText.sosShown) }
+                }
+            },
             imOK: { [weak self] in Task { await self?.session.cancelSOS() } },
             show: { [weak self] alertId in self?.showSOS(alertId) },
             call: { [weak self] alertId in
@@ -1072,7 +1078,26 @@ final class LiveOutingController: ObservableObject {
     func participantCard(_ id: String) -> ParticipantCardUIState? {
         guard let p = LiveOutingPresenter.participants(input).first(where: { $0.id == id }), let v = session.view else { return nil }
         return ParticipantCardUIState(participant: p, now: Date(), canManage: v.iOwn && !p.isMe && p.role != .leader,
-                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id])
+                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id],
+                                      canNudge: LiveOutingPresenter.canNudge(p, leader: v.iLead, active: v.status == .active))
+    }
+
+    /// «أخفِ موقعي» next to «موقعي» (active trip, I am sharing): small, never while driving.
+    var hideItem: SaryMapControlItem? {
+        guard let v = session.view, v.status == .active, v.me != nil, session.closedReason == nil else { return nil }
+        let hidden = session.hiddenSince != nil
+        return SaryMapControlItem(id: "hide", systemImage: hidden ? "eye.slash.fill" : "eye",
+                                  label: hidden ? HideText.hiddenCaption : HideText.hideButton,
+                                  accessibilityID: "outing-hide", isActive: hidden,
+                                  hint: hidden ? "اضغط عشان يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل")
+    }
+
+    func toggleHidden() {
+        let hide = session.hiddenSince == nil
+        Task {
+            if await session.setHidden(hide) { toast(hide ? HideText.hiddenToast : HideText.shownToast) }
+            else { toast("ما قدرنا نغيّر — حاول مرة ثانية") }
+        }
     }
 
     func participantActions(_ id: String) -> ParticipantCardActions {
@@ -1096,7 +1121,14 @@ final class LiveOutingController: ObservableObject {
                     if self.session.view?.members[id] == nil { self.modal = nil }
                 }
             },
-            close: { [weak self] in self?.modal = nil }
+            close: { [weak self] in self?.modal = nil },
+            nudge: { [weak self] in
+                guard let self else { return }
+                Task {
+                    let name = self.session.view?.members[id]?.display_name ?? ""
+                    if let e = await self.session.nudge(id) { self.toast(e) } else { self.toast("وصل \(name) تنبيه يفتح سرى") }
+                }
+            }
         )
     }
 

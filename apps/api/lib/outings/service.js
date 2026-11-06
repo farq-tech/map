@@ -145,7 +145,11 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     events: () => hub,
     latest: (outingId) => latest.get(outingId),
     reasonOf: (outingId, userId, lastAt) => presenceNow(outingId, { user_id: userId }, lastAt ? { recorded_at: lastAt } : null).reason,
-    notify: (outingId, userId, info) => features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
+    notify: (outingId, userId, info) => Promise.all([
+      features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
+      /* And the silent member themself: «افتح سرى عشان يرجع موقعك يوصل للربع» (a tap relaunches the app). */
+      features.pushFeature('self_silent', outingId, userId, { toUser: userId, exceptUserId: null, reason: info.reason }),
+    ]),
   });
 
   /* «قناة الطلعة»: shared YouTube channel state, memory only — see media.js. */
@@ -354,7 +358,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!fresh && hit && now() - hit.at < cfg.membershipCacheMs) return hit.row;
     const [row] = await q(
       `SELECT o.id AS outing_id, o.status AS outing_status, o.owner_id, o.join_locked, o.open_links,
-              m.role, m.status, m.sharing, m.co_leader, m.invited_name
+              m.role, m.status, m.sharing, m.co_leader, m.invited_name, m.hidden_at
        FROM sary.outings o
        LEFT JOIN sary.outing_members m ON m.outing_id = o.id AND m.user_id = $2
        WHERE o.id = $1`,
@@ -692,16 +696,19 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   async function members(outingId) {
     const rows = await q(
-      `SELECT m.user_id, u.display_name, m.invited_name, m.invited_phone_last4, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at
+      `SELECT m.user_id, u.display_name, m.invited_name, m.invited_phone_last4, u.avatar, u.phone, m.role, m.co_leader, m.sharing, m.joined_at, m.hidden_at
        FROM sary.outing_members m JOIN sary.users u ON u.id = m.user_id
        WHERE m.outing_id = $1 AND m.status = 'active'
        ORDER BY m.role = 'owner' DESC, m.joined_at`,
       [outingId],
     );
-    return rows.map(({ invited_name, invited_phone_last4, display_name, ...r }) => ({
+    return rows.map(({ invited_name, invited_phone_last4, display_name, hidden_at, ...r }) => ({
       ...r,
       ...memberNames(invited_name, display_name),
       phone_last4: invited_phone_last4 || null,
+      /* «أخفِ موقعي»: still in the trip, position not sent. */
+      hidden: hidden_at != null,
+      hidden_at: hidden_at ? new Date(hidden_at).toISOString() : null,
     }));
   }
 
@@ -1183,6 +1190,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
   async function raiseSos(user, outingId, rawFix) {
     const m = await requireMember(user, outingId, { fresh: true });
     if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    /* An SOS always overrides «أخفِ موقعي»: the real position goes out, and the location stays shown. */
+    const unhidden = m.hidden_at ? await showAgain(user, outingId, 'sos') : false;
     let fix = null;
     if (rawFix != null) {
       const t = now();
@@ -1203,7 +1212,78 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     /* `{type:'sos', user_id}` is what index.js auto-pushes (high urgency, even to viewers);
      * a refresh with a newer fix is flagged so it updates maps without a second alarm. */
     hub.emit(outingId, { type: 'sos', user_id: user.id, sos, ...(refresh ? { refresh: true } : {}) });
-    return { sos };
+    return unhidden ? { sos, unhidden: true } : { sos };
+  }
+
+  /* ---------- «أخفِ موقعي» ---------- */
+
+  /**
+   * Hide / show my location in this trip. Hidden: I stay a member (voice notes, radio, chat),
+   * the server refuses my positions (`hidden`), my last position is deleted (never shown as if
+   * live), silence alerts and «نبّهه» skip me, and the others see «فلان مخفي موقعه».
+   *   ← { type: 'member_hidden', user_id, hidden, since, reason: 'self' | 'sos' }
+   */
+  async function setHidden(user, outingId, hidden) {
+    const m = await requireMember(user, outingId, { fresh: true });
+    if (m.outing_status === 'ended') throw err('outing_ended', 409);
+    if (hidden !== true) {
+      await showAgain(user, outingId, 'self');
+      return { hidden: false, since: null };
+    }
+    const [row] = await tx(async (run) => {
+      const r = await run(
+        `UPDATE sary.outing_members SET hidden_at = COALESCE(hidden_at, now()), hidden_reason = 'self'
+         WHERE outing_id = $1 AND user_id = $2 AND status = 'active' RETURNING hidden_at`,
+        [outingId, user.id],
+      );
+      await run(`DELETE FROM sary.member_positions WHERE outing_id = $1 AND user_id = $2`, [outingId, user.id]);
+      return r;
+    });
+    forgetOuting(outingId);
+    dropLatest(outingId, user.id);
+    silence.drop(outingId, user.id, 'hidden');
+    const since = new Date(row.hidden_at).toISOString();
+    hub.emit(outingId, { type: 'member_hidden', user_id: user.id, hidden: true, since, reason: 'self' });
+    presence.publish(outingId, [{ user_id: user.id, presence: { state: 'hidden', reason: 'hidden', last_fix_at: null, since } }]);
+    return { hidden: true, since };
+  }
+
+  /** Visible again (by choice or by an SOS). True when they were hidden. */
+  async function showAgain(user, outingId, reason) {
+    const rows = await q(
+      `UPDATE sary.outing_members SET hidden_at = NULL, hidden_reason = NULL
+       WHERE outing_id = $1 AND user_id = $2 AND hidden_at IS NOT NULL RETURNING user_id`,
+      [outingId, user.id],
+    );
+    forgetOuting(outingId);
+    if (!rows.length) return false;
+    hub.emit(outingId, { type: 'member_hidden', user_id: user.id, hidden: false, since: null, reason });
+    return true;
+  }
+
+  /* ---------- «نبّهه» ---------- */
+
+  const nudgedAt = new Map(); // `${o}:${target}` → ms
+  const NUDGE_GAP_MS = 3 * 60_000;
+
+  /**
+   * The leader taps «نبّهه» on a member who is not live: one push to that member only
+   * («افتح سرى عشان يرجع موقعك يوصل للربع») and a live frame if a socket is still open.
+   * Never for a member who hid their location on purpose; at most once per 3 min per member.
+   */
+  async function nudge(user, outingId, targetId) {
+    const m = await requireLeader(user, outingId);
+    if (m.outing_status !== 'active') throw err(`outing_${m.outing_status}`, 409);
+    if (!v.isUuid(targetId) || targetId === user.id) throw err('invalid_member', 400);
+    const t = await membership(outingId, targetId, { fresh: true });
+    if (!t || t.status !== 'active') throw err('not_a_member', 404);
+    if (t.hidden_at) throw err('member_hidden', 409);
+    const k = `${outingId}:${targetId}`;
+    if (now() - (nudgedAt.get(k) || 0) < NUDGE_GAP_MS) throw err('too_frequent', 429);
+    nudgedAt.set(k, now());
+    hub.emit(outingId, { type: 'nudge', user_id: targetId, from_user_id: user.id }, {});
+    const pushed = await features.pushFeature('nudge', outingId, user.id, { toUser: targetId, exceptUserId: null });
+    return { nudged: true, pushed: pushed?.sent || 0 };
   }
 
   async function cancelSos(user, outingId) {
@@ -1402,6 +1482,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
     if (m.outing_status !== 'active') return { ok: false, reason: `outing_${m.outing_status}` };
     if (!m.sharing) return { ok: false, reason: 'sharing_off' };
+    if (m.hidden_at) return { ok: false, reason: 'hidden' };
     const t = now();
     const parsed = v.fix(raw, t);
     if (!parsed.ok) return { ok: false, reason: parsed.reason };
@@ -1477,6 +1558,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     if (!m || m.status !== 'active') return { ok: false, reason: 'not_a_member' };
     if (m.outing_status !== 'active') return { ok: false, reason: `outing_${m.outing_status}` };
     if (!m.sharing) return { ok: false, reason: 'sharing_off' };
+    if (m.hidden_at) return { ok: false, reason: 'hidden' };
     if (!Array.isArray(raw)) return { ok: false, reason: 'invalid' };
     const t = now();
     const good = [];
@@ -1663,6 +1745,8 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     withdrawSummary,
     recordPosition,
     recordBackfill,
+    setHidden,
+    nudge,
     notePresence,
     sweepPresence,
     recordDiagnostics,

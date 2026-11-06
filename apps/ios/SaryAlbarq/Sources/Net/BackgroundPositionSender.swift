@@ -153,6 +153,9 @@ final class BackgroundPositionSender {
         case "sharing_off", "outing_paused", "outing_ended", "outing_created", "not_allowed":
             slot.clear()
             onResult(.refused(e.code))
+        case "hidden":
+            /* «أخفِ موقعي» on another device / not yet seen here: nothing goes out, nothing retried. */
+            slot.clear()
         case "out_of_order", "too_frequent", "stale", "inaccurate", "invalid", "invalid_coordinates", "invalid_accuracy", "invalid_age", "implausible_speed":
             /* This fix will never be accepted; the next one will. */
             pump()

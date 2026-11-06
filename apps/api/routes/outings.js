@@ -303,6 +303,16 @@ function createOutingsRouter({ service, hub, push, apns, pttChannels = null, voi
     res.json({ ok: true, ...(await service.raiseSos(req.user, req.params.id, req.body?.fix ?? null)) });
   }));
 
+  /* «أخفِ موقعي / أظهر موقعي»: stay in the trip, position not sent. */
+  router.put('/:id/hidden', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.setHidden(req.user, req.params.id, req.body?.hidden === true)) });
+  }));
+
+  /* «نبّهه»: the leader asks a member who is not live to open the app (one push, to them only). */
+  router.post('/:id/members/:userId/nudge', auth, asyncHandler(async (req, res) => {
+    res.json({ ok: true, ...(await service.nudge(req.user, req.params.id, req.params.userId)) });
+  }));
+
   router.delete('/:id/sos', auth, asyncHandler(async (req, res) => {
     res.json({ ok: true, ...(await service.cancelSos(req.user, req.params.id)) });
   }));

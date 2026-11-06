@@ -96,3 +96,21 @@ extension ParticipantPresence {
         return nil
     }
 }
+
+/// «أخفِ موقعي» — the Arabic lines in one place.
+enum HideText {
+    static let hideButton = "أخفِ موقعي"
+    static let shownButton = "أظهر موقعي"
+    static let hiddenCaption = "موقعك مخفي"
+    static let confirmTitle = "تخفي موقعك عن الربع؟"
+    static let confirmBody = "تبقى في الطلعة وتوصلك الرسائل الصوتية والمحادثة والإذاعة، بس موقعك ما يوصل لأحد لين تظهره. الطوارئ (SOS) ترسل موقعك الحقيقي دايم."
+    static let hiddenToast = "موقعك مخفي — الربع يشوفون «مخفي موقعه»"
+    static let shownToast = "رجع موقعك يوصل للربع"
+    static let sosShown = "الطوارئ أرسلت موقعك الحقيقي، ورجع موقعك ظاهر للربع"
+    static let reminderTitle = "موقعك مخفي من ٣٠ د"
+    static let reminderBody = "موقعك مخفي من ٣٠ د، تبي تظهره؟"
+    static let reminderAfterS: TimeInterval = 30 * 60
+
+    /// «فهد أخفى موقعه» / «فهد أظهر موقعه» (the trip's log line for the others).
+    static func changed(name: String, hidden: Bool) -> String { hidden ? "\(name) أخفى موقعه" : "\(name) أظهر موقعه" }
+}

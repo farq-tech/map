@@ -150,6 +150,7 @@
 		4BEC4DC91165F7709C5E5FF3 /* ContactPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B3FC4E224A2B94DEC5CE61 /* ContactPicker.swift */; };
 		4D3335E7514A604561411A0D /* CarIcon-f2b630.png in Resources */ = {isa = PBXBuildFile; fileRef = B0B5BF7DAA2399EEA639295E /* CarIcon-f2b630.png */; };
 		4DFBB64521E50C91BF259E1C /* SaryVoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8305E4E8351FA6F8723B885 /* SaryVoiceTests.swift */; };
+		4E82C131A91F499D045F0A83 /* HideReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA51732B57030AFD444A5B1 /* HideReminder.swift */; };
 		4EDBA8D58F4A895E3B2FED43 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77DDD7B1B233FC67DBCE9DD9 /* PrivacyInfo.xcprivacy */; };
 		4F848E32D0BD48569D8D5DBB /* PTTChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4E7B325A85D3ECE01843CC /* PTTChannels.swift */; };
 		501366BCD787DDCFA022FA50 /* PersonalInvitesUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1567BA6CA7032196D1BC0AB /* PersonalInvitesUITests.swift */; };
@@ -220,6 +221,7 @@
 		714847F579044B37B2D8450F /* NavigationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584F81AEBCD1C6DF12B82F0A /* NavigationUITests.swift */; };
 		7150DA88C188F02803392152 /* PlanUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED874D0173AB2F00E5EC9768 /* PlanUITests.swift */; };
 		720F65915109D36462C6D095 /* OutingActivityDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52B900CEE34C1B3BC575ADC1 /* OutingActivityDisplay.swift */; };
+		727AAF9FA91A513907C47137 /* HideLocationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A901129423D2E1B5EDB67C24 /* HideLocationTests.swift */; };
 		735A33AC3B44DBA0FDCE015E /* TripLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4343F12A82B70322558AC0D /* TripLog.swift */; };
 		73A75CCABECCE3E63B17E334 /* NavTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09CC2A7D1B405A7068A2C693 /* NavTargets.swift */; };
 		743E98AA6FFAF26E97C77C42 /* PTTJitterBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08E2519FFC2EC9250B408870 /* PTTJitterBuffer.swift */; };
@@ -656,6 +658,7 @@
 		4BFF515221CDEB85BF4C9F35 /* TripAutoNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripAutoNavTests.swift; sourceTree = "<group>"; };
 		4C3C6ADB78B865A680C5A2DC /* radio-squelch.caf */ = {isa = PBXFileReference; path = "radio-squelch.caf"; sourceTree = "<group>"; };
 		4C94D0F796D422CE3AD337B7 /* LiveOutingController+Follow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveOutingController+Follow.swift"; sourceTree = "<group>"; };
+		4CA51732B57030AFD444A5B1 /* HideReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HideReminder.swift; sourceTree = "<group>"; };
 		4D5DE21DF8A6B652B7B423C3 /* CommonContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonContract.swift; sourceTree = "<group>"; };
 		4E4D555A985AA7A7EDD47AE1 /* SatelliteEnhancer.mlpackage */ = {isa = PBXFileReference; path = SatelliteEnhancer.mlpackage; sourceTree = "<group>"; };
 		4E4DA569491A9F892B75F507 /* NavRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavRouting.swift; sourceTree = "<group>"; };
@@ -823,6 +826,7 @@
 		A8182A276F271D81E93BEDA5 /* CarPlayWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayWiringTests.swift; sourceTree = "<group>"; };
 		A8305E4E8351FA6F8723B885 /* SaryVoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryVoiceTests.swift; sourceTree = "<group>"; };
 		A8F640B58EDA28393CB2237E /* LiveOutingContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOutingContract.swift; sourceTree = "<group>"; };
+		A901129423D2E1B5EDB67C24 /* HideLocationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HideLocationTests.swift; sourceTree = "<group>"; };
 		A91C5206E44AC6362C16CB76 /* VoiceNoteDenoiseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceNoteDenoiseTests.swift; sourceTree = "<group>"; };
 		AA1C5098C72208D681996BC6 /* TrackFollow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFollow.swift; sourceTree = "<group>"; };
 		AA3B058669BC8FE7468EF3AA /* MemberPresence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberPresence.swift; sourceTree = "<group>"; };
@@ -1260,6 +1264,7 @@
 				318D0930455B81369FEEE9E0 /* AppModel.swift */,
 				A70A3546B6D33A2BD0ABDB4F /* AppModel+Speed.swift */,
 				5DA9790B4909EF8BADFBD902 /* AppModel+Track.swift */,
+				4CA51732B57030AFD444A5B1 /* HideReminder.swift */,
 				A44C2A050B84465EA50A992A /* Info.plist */,
 				42DF67DE81239EDAD62E2723 /* OutingActivityCoordinator.swift */,
 				E5B0F073EA8D89C69BEF66A3 /* OutingSession.swift */,
@@ -1353,6 +1358,7 @@
 				092715A1A8B404DE61FFB43B /* FollowCameraTests.swift */,
 				35CF24611C2342C90DFCFEAA /* GpsQualityTests.swift */,
 				6AD20F0B17D2F48318175D2C /* GroupAudioTests.swift */,
+				A901129423D2E1B5EDB67C24 /* HideLocationTests.swift */,
 				C347C7656CA76BEA0F9F22B6 /* HiResImageryTests.swift */,
 				947B5CE5884768A4F5647DF3 /* IntroPolicyTests.swift */,
 				E13088CF35C895F05E83FD95 /* InviteeArrivalTests.swift */,
@@ -2190,6 +2196,7 @@
 				B5BCF28590556D4F51A6FC46 /* GpsQualityTests.swift in Sources */,
 				98E8B367F23FE491A422BF50 /* GroupAudioTests.swift in Sources */,
 				4A2F0CA38711696A90802E92 /* HiResImageryTests.swift in Sources */,
+				727AAF9FA91A513907C47137 /* HideLocationTests.swift in Sources */,
 				31FF1360A4929F73EA33DF1B /* IntroPolicyTests.swift in Sources */,
 				DEC66099729F242776FABAB2 /* InviteeArrivalTests.swift in Sources */,
 				87E1BC4BBA578A594BBE7D18 /* JoinFlowTests.swift in Sources */,
@@ -2321,6 +2328,7 @@
 				B2877977C80C610B31A0A697 /* HiResSettings.swift in Sources */,
 				25207B6F4CF655DCA96CD048 /* HiResTileCache.swift in Sources */,
 				358740295A433F0E354E4852 /* HiResViews.swift in Sources */,
+				4E82C131A91F499D045F0A83 /* HideReminder.swift in Sources */,
 				2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */,
 				65F96AEB99ED4F90606E8F5C /* IntroAudio.swift in Sources */,
 				DA66187CA3FE4D475A1A83C4 /* IntroController.swift in Sources */,

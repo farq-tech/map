@@ -351,7 +351,8 @@ struct LiveOutingScreen: View {
         let back = controller.showsBackTrackShortcut && !ended ? all.first { $0.id == "backtrack" } : nil
         /* I am stuck: «غرّزت» is in there. */
         return LiveCalmRules.sideItems(camera: controller.cameraModeItem, backTrack: back,
-                                       plusBadge: controller.safety.myStuck != nil ? 1 : nil, driving: driving, ended: ended)
+                                       plusBadge: controller.safety.myStuck != nil ? 1 : nil, driving: driving, ended: ended,
+                                       hide: controller.hideItem)
     }
 
     /// The same buttons in one row when the sheet is at half height.
@@ -364,6 +365,7 @@ struct LiveOutingScreen: View {
         let a = controller.actions
         switch id {
         case "locate": a.locateMe()
+        case "hide": controller.toggleHidden()
         case "fit": a.fitGroup()
         case "backtrack": controller.backTrack == nil ? controller.startBackTrack() : controller.stopBackTrack()
         case "actions": controller.modal = .actions
