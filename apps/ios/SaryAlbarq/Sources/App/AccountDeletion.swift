@@ -111,6 +111,7 @@ enum LocalAccountData {
         WaypointCache.wipeAll()
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)
+        OutingLegStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
         VoiceNoteHeardStore.forgetAll(defaults: defaults)
         for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(VoiceNoteUploader.keyPrefix) { defaults.removeObject(forKey: k) }
