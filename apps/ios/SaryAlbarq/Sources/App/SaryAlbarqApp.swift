@@ -29,6 +29,7 @@ struct SaryAlbarqApp: App {
                 .saryAppearance(appearance)
                 .saryShowcaseIfRequested() // DESIGN-SHOWCASE HOOK: DEBUG + `-SaryShowcase` only (Sources/UI/Showcase)
                 .saryCarPlayPreviewIfRequested() // CARPLAY PREVIEW HOOK: DEBUG + `-SaryCarPlayPreview` only (Sources/CarPlay)
+                .saryCamerasDemoIfRequested() // CAMERAS DEMO HOOK: DEBUG + `-SaryCamerasDemo` only (Sources/Cameras) — additive, off by default
         }
         /* Only .background is "left the screen". `.inactive` (Control Center, notification shade,
          * an incoming-call banner, a system prompt) used to stop the GPS and cut «مساري» into gaps. */
