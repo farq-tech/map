@@ -125,46 +125,33 @@ final class SandDetailTests: XCTestCase {
         XCTAssertLessThan(worst, LineGuard.lineScore)
     }
 
-    /// «قوي» makes the close-up relief up to 30 % stronger: still never a line.
-    func testStrongDetailNeverDrawsALine() throws {
-        XCTAssertEqual(SandDetail.closeBoost(z: 15, strong: true), 1)
-        XCTAssertEqual(SandDetail.closeBoost(z: 18, strong: true), 1.3, accuracy: 0.001)
-        XCTAssertEqual(SandDetail.closeBoost(z: 20, strong: false), 1)
-        let base = flatScore()
-        var worst: Float = 0
-        for (lat, lng) in [(28.30, 41.40), (24.20, 47.60), (19.00, 51.00)] {
-            for az in stride(from: 0.0, to: 360, by: 90) {
-                for z in [16, 17, 18, 19, 20] {
-                    var l = SandDetail.Light(azimuthDeg: az, strength: 1, night: false)
-                    l.strong = true
-                    guard let t = tile(lat, lng, z: z, light: l).1 else { continue }
-                    XCTAssertLessThanOrEqual(t.delta.map(abs).max() ?? 0, SandDetail.maxAlpha * 1.3 + 0.001)
-                    let s = LineGuard.score(LineGuard.gray(rgba: overSand(t), width: 512, height: 512, to: 256), width: 256, height: 256)
-                    worst = max(worst, s)
-                    XCTAssertFalse(LineGuard.addsLine(enhanced: s, source: base), "\(lat),\(lng) z\(z) az\(az): \(s)")
-                }
-            }
-        }
-        XCTAssertLessThan(worst, LineGuard.lineScore)
-        print("SAND-STRONG worst line score \(worst)")
+    /// Under full SR («قوي») the procedural detail is very faint: the model draws the sand.
+    func testDetailIsFaintUnderFullSR() throws {
+        XCTAssertEqual(SandDetail.strength(underSR: false), 1)
+        XCTAssertEqual(SandDetail.strength(underSR: true), SandDetail.srDim)
+        var l = SandDetail.Light(azimuthDeg: 120, strength: 1, night: false)
+        l.underSR = true
+        let t = try XCTUnwrap(tile(28.30, 41.40, z: 18, light: l).1)
+        XCTAssertLessThanOrEqual(t.delta.map(abs).max() ?? 1, SandDetail.maxAlpha * SandDetail.srDim + 0.001)
     }
 
-    func testStrongMergeKeepsShapesAndRefusesATrack() throws {
-        /* 1024 px «قوي» merge (looser split, sharpening, clarity): colour and edge still the photo's. */
+    func testStrongMergeKeepsColourAndRefusesATrack() throws {
+        /* «قوي» desert, full SR + colour transfer: the model's grey sand comes out in the photo's colour. */
         let src = image(128) { x, _ in x < 64 ? (200, 140, 90) : (170, 110, 70) }
         let ai = image(1024) { x, y in
             let g = UInt8((x * 7 + y * 13) % 9)
-            return x < 600 ? (150 + g, 150 + g, 150 + g) : (90 + g, 90 + g, 90 + g)
+            return x < 512 ? (150 + g, 150 + g, 150 + g) : (90 + g, 90 + g, 90 + g)
         }
+        XCTAssertTrue(HiResProfile.strong.fullSR)
+        XCTAssertFalse(HiResProfile.city(.strong).fullSR, "cities: never full SR")
         let m = try XCTUnwrap(HiResEnhancer.mergeDetail(ai: ai, source: src, ratio: 8, profile: .strong))
         XCTAssertEqual(m.image.width, 1024)
         let out = try XCTUnwrap(HiResEnhancer.rgba(m.image, 1024))
-        let left = (200 * 1024 + 200) * 4, right = (200 * 1024 + 840) * 4
+        let left = (200 * 1024 + 150) * 4, right = (200 * 1024 + 880) * 4
         XCTAssertEqual(Int(out[left]), 200, accuracy: 14)
         XCTAssertEqual(Int(out[left + 2]), 90, accuracy: 14)
         XCTAssertEqual(Int(out[right]), 170, accuracy: 14)
-        XCTAssertLessThan(Int(out[(200 * 1024 + 560) * 4]), 190, "the edge stays at the photo's x = 512, not the model's 600")
-        XCTAssertFalse(m.addsLine)
+        XCTAssertFalse(m.refused)
 
         let plain = image(128) { x, y in let g = UInt8((x * 5 + y * 3) % 7); return (205 + g, 145 + g, 92 + g) }
         let ruts = image(1024) { x, y in
@@ -173,6 +160,28 @@ final class SandDetailTests: XCTestCase {
         }
         let t = try XCTUnwrap(HiResEnhancer.mergeDetail(ai: ruts, source: plain, ratio: 8, profile: .strong))
         XCTAssertTrue(t.addsLine, "LineGuard stays on at «قوي»: \(t.scores)")
+        XCTAssertFalse(t.softened, "a track is refused, never softened")
+    }
+
+    /// A sharp dark pole the photo does not have is caught; round shrubs that are there are not.
+    func testObjectGuardCatchesANewPole() {
+        let n = 256
+        var src = [Float](repeating: 0.7, count: n * n), shrubs = src, pole = src, blurPole = src
+        func disc(_ a: inout [Float], _ cx: Int, _ cy: Int, _ r: Int, _ v: Float) {
+            for y in (cy - r)...(cy + r) { for x in (cx - r)...(cx + r) where (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r { a[y * n + x] = v } }
+        }
+        for (cx, cy) in [(60, 60), (150, 90), (200, 200)] { disc(&src, cx, cy, 5, 0.45); disc(&shrubs, cx, cy, 5, 0.3) }
+        pole = shrubs
+        for y in 100..<130 { for x in 120..<123 { pole[y * n + x] = 0.25 } }
+        /* The photo had only a faint smudge there. */
+        blurPole = src
+        for y in 108..<122 { for x in 117..<126 { blurPole[y * n + x] = 0.66 } }
+        XCTAssertFalse(ObjectGuard.addsObject(enhanced: shrubs, source: src, width: n, height: n), "sharper shrubs are fine")
+        XCTAssertTrue(ObjectGuard.addsObject(enhanced: pole, source: src, width: n, height: n), "a new pole")
+        XCTAssertTrue(ObjectGuard.addsObject(enhanced: pole, source: blurPole, width: n, height: n), "a pole from a smudge")
+        var real = src
+        for y in 100..<130 { for x in 120..<123 { real[y * n + x] = 0.3 } }
+        XCTAssertFalse(ObjectGuard.addsObject(enhanced: pole, source: real, width: n, height: n), "a pole that is really there")
     }
 
     func testLineGuardFindsATrackAndIgnoresTexture() {

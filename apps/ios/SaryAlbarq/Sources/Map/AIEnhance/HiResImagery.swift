@@ -61,6 +61,15 @@ final class HiResImagery: NSObject {
 
     private let badge = HiResBadgeView()
 
+    /// Posted (object: the `MapView`) when this map starts or stops running full SR.
+    static let fullSRChanged = Notification.Name("sary.hires.fullSR")
+
+    /// Is full SR («قوي», enhancing) running on this map? Never creates a controller.
+    static func fullSR(on map: MapView) -> Bool {
+        guard let c = objc_getAssociatedObject(map, &key) as? HiResImagery else { return false }
+        return c.decision == .on && c.lock.withLock { c.level } == .strong
+    }
+
     private static var key: UInt8 = 0
     /// The controller for this map (created on first use).
     static func of(_ map: MapView, settings: HiResSettings = .shared) -> HiResImagery {
@@ -123,6 +132,8 @@ final class HiResImagery: NSObject {
         guard let map else { return }
         let d = HiResPolicy.decide(request, userOn: settings.userOn, remoteOn: settings.remoteOn,
                                    device: .current, modelAvailable: !Self.modelFailed)
+        let srBefore = Self.fullSR(on: map)
+        defer { if Self.fullSR(on: map) != srBefore { NotificationCenter.default.post(name: Self.fullSRChanged, object: map) } }
         let changed = d != decision
         decision = d
         let lv = HiResPolicy.level(settings.level, device: .current)
@@ -544,11 +555,19 @@ final class HiResBadgeView: UIView {
         }
     }
 
-    /// Top centre, under the host's top chrome (the compass margin carries it) and the safe area.
+    /// Bottom left, level with the Mapbox logo (round 3: top centre sat on the map's centre
+    /// marks — «نقطة البداية», the crosshair — because the host's top chrome reaches down
+    /// the right-hand buttons). Clear of the logo, the «i» and the sheet.
     func place(in map: MapView) {
         let w: CGFloat = 76, h: CGFloat = 26
-        let top = max(map.safeAreaInsets.top + 8, map.ornaments.options.compass.margins.y)
-        frame = CGRect(x: (map.bounds.width - w) / 2, y: top, width: w, height: h)
+        let logo = map.ornaments.logoView
+        let y: CGFloat
+        if !logo.isHidden, logo.frame.height > 0, logo.superview != nil {
+            y = logo.convert(logo.bounds, to: map).midY - h / 2
+        } else {
+            y = map.bounds.height - map.safeAreaInsets.bottom - 140
+        }
+        frame = CGRect(x: 12, y: y, width: w, height: h)
         label.frame = bounds
         map.bringSubviewToFront(self)
     }

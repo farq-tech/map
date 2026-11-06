@@ -119,3 +119,86 @@ enum LineGuard {
         return out
     }
 }
+
+/// Finds a *new* dark, narrow, elongated object in an enhanced tile: what a model "paints" from
+/// a smudge — a pole, a post, a stake, a short wall (the round-3 single-tile test showed one).
+/// Round shrubs and dark spots are fine; a long, sharp, dark sliver the photo only had as a
+/// faint blur (or not at all) is not. Pure, unit-tested.
+enum ObjectGuard {
+    /// Darker than its surroundings by this much (0…1 grey) to count.
+    static let minDepth: Float = 0.07
+    static let minPixels = 8
+    /// Long axis over short axis.
+    static let minElongation: Float = 3.5
+    /// Long axis, px of the 256 px grey image.
+    static let minLength: Float = 10
+    /// The photo had less than this share of the object's darkness: the model made it.
+    static let newShare: Float = 0.45
+
+    /// Local darkness (box mean radius 6 minus value, ≥ 0).
+    static func depth(_ g: [Float], _ w: Int, _ h: Int, radius r: Int = 6) -> [Float] {
+        var integ = [Double](repeating: 0, count: (w + 1) * (h + 1))
+        for y in 0..<h {
+            var row = 0.0
+            for x in 0..<w {
+                row += Double(g[y * w + x])
+                integ[(y + 1) * (w + 1) + x + 1] = integ[y * (w + 1) + x + 1] + row
+            }
+        }
+        var d = [Float](repeating: 0, count: w * h)
+        for y in 0..<h {
+            let y0 = max(0, y - r), y1 = min(h, y + r + 1)
+            for x in 0..<w {
+                let x0 = max(0, x - r), x1 = min(w, x + r + 1)
+                let s = integ[y1 * (w + 1) + x1] - integ[y0 * (w + 1) + x1] - integ[y1 * (w + 1) + x0] + integ[y0 * (w + 1) + x0]
+                let mean = Float(s / Double((x1 - x0) * (y1 - y0)))
+                d[y * w + x] = max(0, mean - g[y * w + x])
+            }
+        }
+        return d
+    }
+
+    /// Does `enhanced` (grey, w×h) have a dark elongated object that `source` (the same ground,
+    /// plainly up-sampled) does not?
+    static func addsObject(enhanced: [Float], source: [Float], width w: Int, height h: Int) -> Bool {
+        guard enhanced.count == w * h, source.count == w * h else { return false }
+        let de = depth(enhanced, w, h), ds = depth(source, w, h)
+        var seen = [Bool](repeating: false, count: w * h)
+        var stack: [Int] = []
+        for start in 0..<(w * h) where !seen[start] && de[start] > minDepth {
+            seen[start] = true
+            stack.append(start)
+            var px: [Int] = []
+            while let i = stack.popLast() {
+                px.append(i)
+                let x = i % w, y = i / w
+                for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] where nx >= 0 && ny >= 0 && nx < w && ny < h {
+                    let j = ny * w + nx
+                    if !seen[j] && de[j] > minDepth { seen[j] = true; stack.append(j) }
+                }
+            }
+            guard px.count >= minPixels, px.count < w * h / 8 else { continue }
+            /* Shape: second moments → the long and short axes. */
+            var mx: Float = 0, my: Float = 0
+            for i in px { mx += Float(i % w); my += Float(i / w) }
+            let n = Float(px.count)
+            mx /= n; my /= n
+            var sxx: Float = 0, syy: Float = 0, sxy: Float = 0
+            for i in px {
+                let dx = Float(i % w) - mx, dy = Float(i / w) - my
+                sxx += dx * dx; syy += dy * dy; sxy += dx * dy
+            }
+            sxx /= n; syy /= n; sxy /= n
+            let tr = sxx + syy, det = sxx * syy - sxy * sxy
+            let disc = max(0, tr * tr / 4 - det).squareRoot()
+            let l1 = tr / 2 + disc, l2 = max(0.25, tr / 2 - disc)
+            let elongation = (l1 / l2).squareRoot()
+            let length = 4 * l1.squareRoot()
+            guard elongation >= minElongation, length >= minLength else { continue }
+            var e: Float = 0, s: Float = 0
+            for i in px { e += de[i]; s += ds[i] }
+            if s < newShare * e { return true }
+        }
+        return false
+    }
+}

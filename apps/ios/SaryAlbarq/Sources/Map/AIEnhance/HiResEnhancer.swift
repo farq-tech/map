@@ -73,7 +73,8 @@ final class HiResEnhancer {
         /* Geometry and colour stay the photo's: only the model's fine detail is kept, and a tile
            that would gain a straight line (a "track") is not shown at all. */
         guard let merged = Self.mergeDetail(ai: ai, source: crop, ratio: n / plan.cropSize, profile: profile) else { return nil }
-        guard !merged.addsLine else {
+        if merged.softened { softened += 1 }
+        guard !merged.refused else {
             rejected += 1
             return nil
         }
@@ -101,8 +102,9 @@ final class HiResEnhancer {
         return ctx.makeImage()
     }
 
-    /// Tiles refused by the line check (for the debug stats).
+    /// Tiles refused by the line / object checks, and tiles shown at half strength (debug stats).
     private(set) var rejected = 0
+    private(set) var softened = 0
 
     /// How much of the model's high-frequency detail is kept by «خفيف» (it tends to over-sharpen).
     static let detailGain: Float = 0.85
@@ -111,6 +113,11 @@ final class HiResEnhancer {
         var image: CGImage
         var addsLine: Bool
         var scores: (source: Float, enhanced: Float)
+        /// A new dark elongated object (`ObjectGuard`) is still there after softening.
+        var addsObject = false
+        /// The first try failed a guard; this is the half-strength one.
+        var softened = false
+        var refused: Bool { addsLine || addsObject }
     }
 
     /// The round-2 merge (512 px, no post-sharpening): kept for the tests' reference cases.
@@ -123,13 +130,12 @@ final class HiResEnhancer {
         return mergeDetail(ai: ai, source: source, ratio: factor, profile: p)
     }
 
-    /// Frequency split at `profile.outputSize`: `blur(source) + gain × (ai − blur(ai))`, blur
-    /// radius = `splitScale` source pixels (`ratio` output px each). The low frequencies — every
-    /// shape, dune, road, colour and shadow — come from the real photo; the model only shapes
-    /// texture finer than the blur, so it can neither move nor invent a landform, and cannot
-    /// shift the `SandGrade` colours. Then a moderate unsharp mask (½ source pixel) and local
-    /// contrast (6 source pixels), and `LineGuard` compares the result with the plain
-    /// up-sampled photo.
+    /// At `profile.outputSize`: `blur(source) + gain × (ai − blur(ai))`, blur radius = `splitScale`
+    /// source pixels (`ratio` output px each). «خفيف» / cities (1 px): a frequency split, the model
+    /// only adds texture finer than a source pixel. «قوي» desert (8 px): full SR with a local
+    /// colour transfer — the photo's colour and broad shading, the model's picture. Then an
+    /// unsharp mask (½ source pixel) and local contrast (6 source pixels), and the guards
+    /// (`LineGuard`, `ObjectGuard`) against the plain up-sampled photo.
     static func mergeDetail(ai: CGImage, source: CGImage, ratio: Int, profile: HiResProfile) -> Merged? {
         let n = profile.outputSize
         guard let a = rgba(ai, n), let s = rgba(source, n) else { return nil }
@@ -160,11 +166,29 @@ final class HiResEnhancer {
         } else {
             for i in 0..<(n * n) { for c in 0..<3 { out[i * 4 + c] = UInt8(max(0, min(255, base[i * 3 + c].rounded()))) } }
         }
+        /* The guards: no new straight line (a track: refused outright), no new dark sliver (a
+           pole: tried once at half strength towards the plain photo, then refused). */
         let side = 256
-        let src = LineGuard.score(LineGuard.gray(rgba: s, width: n, height: n, to: side), width: side, height: side)
-        let enh = LineGuard.score(LineGuard.gray(rgba: out, width: n, height: n, to: side), width: side, height: side)
+        let gs = LineGuard.gray(rgba: s, width: n, height: n, to: side)
+        let src = LineGuard.score(gs, width: side, height: side)
+        func check(_ o: [UInt8]) -> (line: Bool, object: Bool, score: Float) {
+            let ge = LineGuard.gray(rgba: o, width: n, height: n, to: side)
+            let enh = LineGuard.score(ge, width: side, height: side)
+            return (LineGuard.addsLine(enhanced: enh, source: src),
+                    ObjectGuard.addsObject(enhanced: ge, source: gs, width: side, height: side), enh)
+        }
+        var c = check(out)
+        var softened = false
+        if !c.line && c.object {
+            for i in 0..<(n * n) {
+                let o = i * 4
+                for k in 0..<3 { out[o + k] = UInt8((Float(s[o + k]) + 0.5 * (Float(out[o + k]) - Float(s[o + k]))).rounded()) }
+            }
+            softened = true
+            c = check(out)
+        }
         guard let img = cgImage(out, n) else { return nil }
-        return Merged(image: img, addsLine: LineGuard.addsLine(enhanced: enh, source: src), scores: (src, enh))
+        return Merged(image: img, addsLine: c.line, scores: (src, c.score), addsObject: c.object, softened: softened)
     }
 
     /// `image` drawn at n×n, RGBA8 (opaque), high-quality interpolation.

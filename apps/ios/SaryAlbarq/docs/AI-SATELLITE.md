@@ -275,8 +275,8 @@ the satellite look the same at every zoom, no vector fallback.
   | Enhanced from | **z14** (`sarySand` > 0.5) | z17 tiles (map z16) | z19 tiles (map z18) |
   | z ≤ real detail (z17) | the tile itself, four 256 px quarters, ×2 | from z16 (×2) at z17 | — |
   | Display tile | 1024 px (the model's full ×4) | 512 px | 1024 / 512 |
-  | Detail gain / split radius | 1.15 / 1.5 source px | 0.85 / 1 px | 0.7 / 1 px |
-  | Unsharp / local contrast | 0.45 / 0.16 | 0.15 / 0.04 | 0.12 / **0** |
+  | Merge | **full SR** + local colour transfer (8 source px) | frequency split, gain 0.85, 1 px | split, gain 0.7, 1 px |
+  | Unsharp / local contrast | 0.3 / 0 | 0.15 / 0.04 | 0.12 / **0** |
   | Prefetch | ring 1 + next zoom under the centre | ring 1 | ring 1 («قوي») |
   | Model runs per minute (cap) | 90 | 36 | 60 / 36 |
 
@@ -293,9 +293,15 @@ the satellite look the same at every zoom, no vector fallback.
   the 3 s badge of «تخفيف الزحمة» ٧).
 - **RAM**: enhanced tiles kept as JPEG q0.9 (48 MB ≈ 100+ tiles of 1024 px), decoded off the main
   thread. Still nothing on disk. Crossfade 450 ms.
-- **`SandDetail`**: «قوي» adds up to 30 % light/shade from z16 to z18 (`closeBoost`); the worst
-  `LineGuard` score over plain sand is 0.40 (threshold 0.42).
-- **`LineGuard`** stays on for every tile, at every level (runs on the final, sharpened tile).
+- **Full SR (owner, after the single-tile test «نتائج مبهرة جدًا»)**: in the open desert at «قوي» the
+  model's whole picture is kept (no frequency split); only colour and shading broader than 8
+  source pixels come from the photo, so the sand stays `SandGrade` orange and tiles meet cleanly.
+- **`SandDetail`** drops to 25 % (`srDim`) on a map running full SR (`HiResImagery.fullSRChanged`).
+- **Guards** on the final tile: `LineGuard` (a new straight line → refused) and `ObjectGuard` (a
+  new dark, narrow, elongated object such as a "pole" → tried once at half strength, then
+  refused). In the single-tile test the "pole" was a real dark sliver of the photo (≈ 70 % of
+  its darkness already there), so it is kept; a sliver the photo lacks is caught (unit test).
+- **Badge** sits bottom left, level with the Mapbox logo, clear of the centre marks.
 
 Simulator timings (CPU only, Debug): one ×2 tile 2.1–2.4 s; «قوي» z18 (one run, 1024 px) 3.2 s;
 «قوي» z15 (four runs) 8.4 s. Device estimate (ANE ≈ 150 ms a run): ≈ 0.2 s and ≈ 0.7 s.

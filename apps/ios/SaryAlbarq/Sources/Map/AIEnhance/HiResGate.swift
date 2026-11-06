@@ -107,7 +107,7 @@ struct HiResProfile: Equatable {
     /// How much of the model's fine detail is kept.
     var gain: Float
     /// Frequency-split radius as a multiple of one source pixel (bigger = the model shapes a
-    /// wider band of fine texture; landforms, roads and colours still come from the photo).
+    /// wider band; ≥ 4 is full SR with a local colour transfer from the photo).
     var splitScale: Float
     /// Unsharp-mask amount (radius ≈ half a source pixel) after the merge.
     var sharpen: Float
@@ -120,8 +120,14 @@ struct HiResProfile: Equatable {
     /// Hard budget of model runs per minute (heat).
     var inferencesPerMinute: Int
 
-    static let strong = HiResProfile(level: .strong, outputSize: 1024, gain: 1.15, splitScale: 1.5, sharpen: 0.45,
-                                     localContrast: 0.16, prefetchRing: 1, prefetchDeeper: true, inferencesPerMinute: 90)
+    /// «قوي» in the open desert: the model's full super-resolution (owner, round 3: the single-tile
+    /// test), its picture kept down to 8 source px; above that (colour, tone, the dunes' broad
+    /// shading) comes from the photo — a local colour transfer, so the sand stays `SandGrade`
+    /// orange and tiles meet without seams. A light unsharp mask, no clarity.
+    static let strong = HiResProfile(level: .strong, outputSize: 1024, gain: 1, splitScale: 8, sharpen: 0.3,
+                                     localContrast: 0, prefetchRing: 1, prefetchDeeper: true, inferencesPerMinute: 90)
+    /// Full SR (the model shapes everything finer than the colour transfer's scale).
+    var fullSR: Bool { splitScale >= 4 }
     static let light = HiResProfile(level: .light, outputSize: 512, gain: 0.85, splitScale: 1, sharpen: 0.15,
                                     localContrast: 0.04, prefetchRing: 1, prefetchDeeper: false, inferencesPerMinute: 36)
     /// Cities, whatever the level: light and building-preserving (no clarity, the photo's

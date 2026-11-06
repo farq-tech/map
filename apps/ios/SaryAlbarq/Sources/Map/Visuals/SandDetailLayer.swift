@@ -39,12 +39,15 @@ final class SandDetailLayer {
     static var recentMs: [Double] = []
     #endif
 
-    private var levelSub: AnyCancellable?
+    private var srSub: AnyCancellable?
 
     init() {
-        levelSub = HiResSettings.shared.$level.removeDuplicates().dropFirst().receive(on: DispatchQueue.main).sink { [weak self] lv in
-            guard let self, self.installed else { return }
-            self.light.strong = lv == .strong
+        /* «صور عالية الوضوح» started / stopped full SR on this map: dim / restore the detail. */
+        srSub = NotificationCenter.default.publisher(for: HiResImagery.fullSRChanged).receive(on: DispatchQueue.main).sink { [weak self] n in
+            guard let self, let map = self.map, (n.object as? MapView) === map, self.installed else { return }
+            let sr = HiResImagery.fullSR(on: map)
+            guard sr != self.light.underSR else { return }
+            self.light.underSR = sr
             self.relight()
         }
         NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { [weak self] _ in
@@ -58,7 +61,7 @@ final class SandDetailLayer {
     func apply(_ on: Bool, map: MapView, light lit: SandDetail.Light, scale newScale: Double) {
         self.map = map
         var newLight = lit
-        newLight.strong = HiResSettings.shared.level == .strong
+        newLight.underSR = HiResImagery.fullSR(on: map)
         let m: MapboxMap = map.mapboxMap
         guard on else { remove(m); return }
         if !m.sourceExists(withId: Self.sourceId) || !m.layerExists(withId: Self.layerId) {

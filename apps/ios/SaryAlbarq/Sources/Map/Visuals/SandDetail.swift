@@ -28,10 +28,9 @@ enum SandDetail {
     /// Strongest light / shade the overlay ever adds (alpha of the warm white / burnt umber).
     static let maxAlpha: Float = 0.24
 
-    /// «قوي»: up to 30 % more light / shade from z16 to z18 (the close-up desert reads crisper).
-    static func closeBoost(z: Int, strong: Bool) -> Float {
-        strong ? Float(1 + 0.3 * Smooth.step(16, 18, Double(z))) : 1
-    }
+    /// Under full SR the detail drops to a quarter (texture is the model's; ripples would double it).
+    static let srDim: Float = 0.25
+    static func strength(underSR: Bool) -> Float { underSR ? srDim : 1 }
 
     /// The layer's opacity by map zoom: none at z14.2, full from z17 (×`scale`, e.g. driving).
     static func opacityExpression(scale: Double) -> [Any] {
@@ -45,8 +44,9 @@ enum SandDetail {
         /// 0…1: a low sun throws long, strong relief; noon a faint one; night a faint, neutral one.
         var strength: Double
         var night: Bool
-        /// «صور عالية الوضوح» at «قوي»: the micro-relief is a little stronger up close (`closeBoost`).
-        var strong = false
+        /// «صور عالية الوضوح» runs full SR («قوي») on this map: the model draws the real sand
+        /// texture, so the procedural one is kept very faint (`srDim`).
+        var underSR = false
 
         static let step = 20.0
 
@@ -150,7 +150,7 @@ enum SandDetail {
         let hiR: Float = light.night ? 206 : 255, hiG: Float = light.night ? 204 : 242, hiB: Float = light.night ? 214 : 216
         let loR: Float = light.night ? 14 : 66, loG: Float = light.night ? 12 : 30, loB: Float = light.night ? 18 : 10
         let fs = Float(size)
-        let maxAlpha = Self.maxAlpha * Self.closeBoost(z: z, strong: light.strong)
+        let maxAlpha = Self.maxAlpha * Self.strength(underSR: light.underSR)
         h.withUnsafeBufferPointer { hp in
             g.withUnsafeBufferPointer { gp in
                 rgba.withUnsafeMutableBufferPointer { rp in
