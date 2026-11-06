@@ -80,6 +80,10 @@ enum LiveActionCatalog {
                 .init(id: "weather", title: "طقس", systemImage: "sun.max", accessibilityID: "outing-weather"),
                 .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
+                .init(id: "camp", title: "اقترح لي مكان كشتة", systemImage: "tent", accessibilityID: "outing-camp-suggest",
+                      subtitle: "أحلى ٥ جلسات حولك مع ريح الليلة"),
+                .init(id: "desertRoute", title: "دروب البر", systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath",
+                      accessibilityID: "outing-desert-route", subtitle: "الأسهل والأقصر للوجهة من صور الأقمار"),
             ]),
             LiveActionGroup(title: "الترفيه", items: [
                 .init(id: "radio", title: "إذاعة الطلعة", systemImage: "radio", accessibilityID: "outing-radio"),

@@ -1,0 +1,80 @@
+{
+ "region": "dahna",
+ "bbox": [
+  24.85,
+  47.45,
+  25.25,
+  47.95
+ ],
+ "arcsec": 2,
+ "sources": [
+  {
+   "dataset": "Copernicus DEM GLO-30",
+   "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N24_00_E047_00_DEM/Copernicus_DSM_COG_10_N24_00_E047_00_DEM.tif",
+   "etag": "1af59435b7059150cea0ec4f2bbbfd08",
+   "bytes": 38968984
+  },
+  {
+   "dataset": "Copernicus DEM GLO-30",
+   "url": "https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N25_00_E047_00_DEM/Copernicus_DSM_COG_10_N25_00_E047_00_DEM.tif",
+   "etag": "957373d7500b4583970d3a81443f1417",
+   "bytes": 39029752
+  },
+  {
+   "dataset": "ESA WorldCover 10m 2021 v200",
+   "url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N24E045_Map.tif",
+   "etag": "0155f70444210d96d3cddbc4604c45e4-2",
+   "bytes": 13249205
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_38RQN_20250302_0_L2A",
+   "date": "2025-03-02",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_38RQP_20250302_1_L2A",
+   "date": "2025-03-02",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RQN_20250317_0_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RQP_20250317_0_L2A",
+   "date": "2025-03-17",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RQN_20250416_0_L2A",
+   "date": "2025-04-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2B_38RQP_20250416_0_L2A",
+   "date": "2025-04-16",
+   "use": "spring NDVI"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_38RQN_20261023_0_L2A",
+   "date": "2026-10-23",
+   "use": "ground type"
+  },
+  {
+   "dataset": "Sentinel-2 L2A",
+   "item": "S2C_38RQP_20261023_0_L2A",
+   "date": "2026-10-23",
+   "use": "ground type"
+  }
+ ],
+ "output": "rasters_2.npz",
+ "sha256": "6995bd095416b7c1f168d1920aabfafee1b23ea465d8f8b708bad5e34a92228e"
+}

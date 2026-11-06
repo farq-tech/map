@@ -212,6 +212,18 @@ struct LiveSheet: View {
                             close: { controller.modal = nil })
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        case .campSuggest:
+            CampSuggestSheet(controller: controller)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case let .campSite(id):
+            CampSiteTappedSheet(controller: controller, siteId: id)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case let .desertRoute(target, name, rain):
+            DesertRouteSheet(controller: controller, target: target, name: name, rain: rain)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .layers:
             ExploreLayersSheet(controller: controller)
                 .presentationDetents([.medium, .large])
