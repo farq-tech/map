@@ -296,4 +296,18 @@ describe("co-leader and join lock", () => {
 		const v = applyEvent(fromSnapshot(snap()), { type: "outing_lock", join_locked: true });
 		expect(v.snapshot.outing.join_locked).toBe(true);
 	});
+
+	it("sends the web_hidden hint with the heartbeat (WS frame, or HTTP while polling)", () => {
+		const beat = vi.fn(async () => ({}));
+		const { ch } = channel({ beat });
+		ch.start();
+		const ws = FakeSocket.all[FakeSocket.all.length - 1];
+		ws.open();
+		ws.push({ type: "ready", snapshot: snap() });
+		ch.heartbeat("ok", null, "web_hidden");
+		expect(ws.sent).toContainEqual({ type: "heartbeat", gps: "ok", hint: "web_hidden" });
+		ch.heartbeat("ok");
+		expect(ws.sent).toContainEqual({ type: "heartbeat", gps: "ok" });
+		ch.stop();
+	});
 });

@@ -121,6 +121,8 @@ export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: Fie
 		const onVis = () => {
 			const v = document.visibilityState !== "hidden";
 			setVisible(v);
+			/* Tell the server why we are about to go quiet, so the leader sees «يتابع من المتصفح», not «انقطع». */
+			if (!v) channelRef.current?.heartbeat(gpsRef.current, batteryRef.current, "web_hidden");
 			channelRef.current?.setAway(!v);
 			if (v) {
 				requestLocation();

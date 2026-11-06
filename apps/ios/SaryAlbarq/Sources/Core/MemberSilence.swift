@@ -21,6 +21,10 @@ struct SilentInfo: Codable, Equatable {
     /// 10 or 30 (minutes).
     var level: Int
     var last: LastFix?
+    /// Why (server `presence.js` reason): shown instead of a vague «انقطع».
+    var reason: String? = nil
+
+    var reasonKind: PresenceReason? { reason.flatMap(PresenceReason.init(rawValue:)) }
 }
 
 extension LiveEvent {
@@ -36,7 +40,7 @@ extension LiveEvent {
                let lng = (l["lng"] as? NSNumber)?.doubleValue, let at = l["at"] as? String {
                 last = SilentInfo.LastFix(lat: lat, lng: lng, at: at)
             }
-            return .memberSilent(SilentInfo(user_id: uid, since: since, level: level >= 30 ? 30 : 10, last: last))
+            return .memberSilent(SilentInfo(user_id: uid, since: since, level: level >= 30 ? 30 : 10, last: last, reason: obj["reason"] as? String))
         case "member_resumed":
             return .memberResumed(userId: uid, reason: obj["reason"] as? String)
         default:

@@ -90,6 +90,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;
+  let presenceSweep = null;
   let socket = null;
   const ready = service && autoMigrate
     ? migrate(pool, { log: console.log }).catch((e) => {
@@ -128,12 +129,18 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
         service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message));
       }, 60_000);
       silenceSweep.unref?.();
+      /* «مباشر / متأخر / منقطع» + reason: re-judged every 30 s for outings someone watches. */
+      presenceSweep = setInterval(() => {
+        service.sweepPresence().catch((e) => console.warn('[outings] presence sweep:', e.code || e.message));
+      }, 30_000);
+      presenceSweep.unref?.();
     },
     close() {
       ptt?.close(); // release any held floor while sockets can still hear it
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
       clearInterval(silenceSweep);
+      clearInterval(presenceSweep);
       socket?.close();
       apns.close();
     },
