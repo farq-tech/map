@@ -84,6 +84,8 @@ struct NavManeuver: Equatable {
     var direction: NavTurnDirection?
     /// Roundabout exit (1-based).
     var exit: Int? = nil
+    /// The exit taken is the roundabout's last one before coming back round («خذ المخرج الأخير»).
+    var lastExit = false
 }
 
 /// One lane at the next maneuver (`approachLanes` in Directions / Valhalla `lanes`).

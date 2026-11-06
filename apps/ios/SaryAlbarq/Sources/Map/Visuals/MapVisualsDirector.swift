@@ -58,6 +58,8 @@ final class MapVisualsDirector: NSObject {
     private var slopeSegments: [SlopeProfile.Segment] = []
     /// The buildings' opacity we set last (nil: no buildings layer).
     private var appliedBuildingsOpacity: Double?
+    /// `SandGrade`'s `sarySand` last set on the imported satellite basemap.
+    private var appliedSand: Double?
     private let overlay = VisualsSourceView()
 
     private var flight: DroneOrbit?
@@ -193,6 +195,7 @@ final class MapVisualsDirector: NSObject {
             layoutOverlay()
         }
         applyBuildings(pitch: st.pitch)
+        applySand(st)
         publishCityTilt(st)
     }
 
@@ -207,6 +210,7 @@ final class MapVisualsDirector: NSObject {
         slopeKey = nil
         appliedExaggeration = nil
         appliedBuildingsOpacity = nil
+        appliedSand = nil
         let m: MapboxMap = map.mapboxMap
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
@@ -228,7 +232,21 @@ final class MapVisualsDirector: NSObject {
         let b = VisualBudget.buildings(settings, c)
         if b != effective.buildings { effective.buildings = b }
         applyBuildings(pitch: st.pitch)
+        applySand(st)
         publishCityTilt(st)
+    }
+
+    // MARK: sand grade
+
+    /// The imagery's warm sand grade (`SandGrade`) at full strength in the open desert, faded out
+    /// over a city (`UrbanAreas`, smooth at its edge). Independent of «المؤثرات البصرية»: it is the
+    /// satellite picture's own colour correction.
+    private func applySand(_ st: CameraState) {
+        guard styleReady, lastInputs.layer == .satellite, let m = map?.mapboxMap else { return }
+        let v = SandGrade.sand(urban: UrbanAreas.weight(lat: st.center.latitude, lng: st.center.longitude))
+        guard v != appliedSand else { return }
+        appliedSand = v
+        try? m.setStyleImportConfigProperty(for: "basemap", config: SandGrade.configKey, value: v)
     }
 
     // MARK: city buildings

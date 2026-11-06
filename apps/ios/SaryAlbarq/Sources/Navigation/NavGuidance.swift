@@ -10,8 +10,8 @@ enum NavGuidanceEvent: Equatable {
     case rerouteFailed(String)
     /// Reached the route's last point (the target, or where the road ends).
     case arrivedAtRouteEnd
-    /// Say this now.
-    case speak(String)
+    /// Say this now (the text for «صوت الجهاز», the clips for «صوت سرى»).
+    case speak(NavLine)
     /// The router says now is the time for a voice cue (its own text as a fallback):
     /// we say our own Arabic line for the current maneuver, same wording as the banner.
     case cue(String)
@@ -45,6 +45,7 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
     private var rerouting = false
     private var spokenKeys = Set<String>()
     private var arrived = false
+    private var lastSpeed: Double?
 
     /// Off the line by more than this, three fixes in a row (accuracy permitting): reroute.
     static let offRouteM = 50.0
@@ -110,6 +111,7 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
 
     func ingest(_ fix: DeviceFix) {
         guard let r = route, r.coordinates.count >= 2, !arrived else { return }
+        lastSpeed = fix.speed
         let me = LngLat(lng: fix.lng, lat: fix.lat)
         let loc = Self.locate(me, in: r.coordinates, cum: cum, from: lastIndex)
         let total = cum.last ?? 0
@@ -134,8 +136,9 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
     private func speakIfDue(_ r: NavRoute, _ p: NavProgress) {
         guard p.stepIndex < r.steps.count else { return }
         let step = r.steps[p.stepIndex]
+        /* No router voice timing: ours from my speed (time ahead, not only distance). */
         let cues: [NavSpoken] = step.spoken.isEmpty
-            ? [800.0, 250, 40].map { NavSpoken(distanceBeforeManeuver: $0, text: "") }
+            ? NavCueBands.distances(speedMps: lastSpeed, unpaved: r.hasUnpaved).map { NavSpoken(distanceBeforeManeuver: $0, text: "") }
             : step.spoken
         for (k, cue) in cues.enumerated() where p.distanceToManeuverM <= cue.distanceBeforeManeuver {
             let key = "\(p.stepIndex):\(k)"
@@ -144,7 +147,8 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
             for j in 0...k { spokenKeys.insert("\(p.stepIndex):\(j)") }
             let next = cues.indices.contains(k + 1) && p.distanceToManeuverM <= cues[k + 1].distanceBeforeManeuver
             if next { continue }
-            onEvent(.speak(NavText.spoken(step, distanceM: p.distanceToManeuverM)))
+            onEvent(.speak(NavLine(NavText.spoken(step, distanceM: p.distanceToManeuverM), clips: SaryVoiceScript.step(step, distanceM: p.distanceToManeuverM),
+                                   maneuverID: String(p.stepIndex))))
         }
     }
 

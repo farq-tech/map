@@ -138,4 +138,23 @@ enum SunsetWarning {
     }
 
     static func roundUp5(_ minutes: Double) -> Int { max(5, Int((minutes / 5).rounded(.up)) * 5) }
+
+    /// The same warning said in «صوت سرى» (nearest recorded meaning, no clock time):
+    /// time left to sunset (ساعة / نص ساعة / ربع ساعة, else «المغرب قرّب، فكّروا ترجعون…»),
+    /// then the way back (نص ساعة / ساعة / ساعتين), and after sunset «ارجعوا على مساركم بهدوء…».
+    static func saryClips(toSunsetS: TimeInterval, wayBackS: TimeInterval) -> [String] {
+        var out: [String] = []
+        let left = toSunsetS / 60
+        let lead: String?
+        if toSunsetS <= 0 { lead = "sun_05" }
+        else if abs(left - 60) <= 7.5 { lead = "sun_02" }
+        else if abs(left - 30) <= 7.5 { lead = "sun_03" }
+        else if left <= 22.5 { lead = "sun_04" }
+        else { lead = nil }
+        if let lead { out.append(lead) }
+        let way = Double(roundUp5(wayBackS / 60))
+        out.append(way < 45 ? "sun_07" : way < 90 ? "sun_08" : "sun_09")
+        out.append(toSunsetS <= 0 ? "sun_06" : "sun_01")
+        return out
+    }
 }

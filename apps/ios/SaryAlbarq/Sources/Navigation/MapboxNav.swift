@@ -175,7 +175,9 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         case .heedWarning: kind = .notification
         case .arrive: kind = .arrive
         }
-        return NavManeuver(kind: kind, direction: s.maneuverDirection.flatMap(direction), exit: s.exitIndex)
+        /* Directions has no exit count; its own instruction says «last exit» when it is. */
+        let last = kind == .roundabout && s.instructions.range(of: "last exit", options: .caseInsensitive) != nil
+        return NavManeuver(kind: kind, direction: s.maneuverDirection.flatMap(direction), exit: s.exitIndex, lastExit: last)
     }
 
     nonisolated static func direction(_ d: ManeuverDirection) -> NavTurnDirection? {

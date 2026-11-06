@@ -333,8 +333,24 @@ final class LiveOutingController: ObservableObject {
         wireChatToasts()
         nav.myFix = { [weak location] in location?.lastFix }
         nav.toast = { [weak self] t in self?.toast(t) }
-        /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»). */
-        nav.voice.canSpeak = { [weak session] in session?.walkie.floor.state == .idle }
+        /* No spoken turn while the walkie-talkie is talking or playing a friend («قناة الطلعة»),
+         * nor over a voice note being recorded or played: NavVoice holds the line until it ends. */
+        nav.voice.canSpeak = { [weak session] in
+            guard let session else { return true }
+            return session.walkie.floor.state == .idle && session.voiceNotes.playing == nil && !session.voiceNotes.isRecording
+        }
+        /* I am the one talking: guidance waits; a safety line vibrates and shows instead. */
+        nav.voice.isSending = { [weak session] in
+            guard let session else { return false }
+            switch session.walkie.floor.state {
+            case .requesting, .talking: return true
+            default: return session.voiceNotes.isRecording
+            }
+        }
+        nav.voice.onSafetyWhileTalking = { [weak self] t in
+            UINotificationFeedback.warning()
+            self?.toast(t)
+        }
         nav.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.followCamGuidanceCheck(); self?.objectWillChange.send() }
         }.store(in: &bag)

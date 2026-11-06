@@ -56,6 +56,8 @@ final class SafetyController: ObservableObject {
     var upsertAlert: (LiveAlertUI, TimeInterval) -> Void = { _, _ in }
     var removeAlert: (String) -> Void = { _ in }
     var toast: (String) -> Void = { _ in }
+    /// Said aloud (the nav voice: «صوت سرى» clips or the device voice), for warnings that matter while driving.
+    var speak: (NavLine) -> Void = { _ in }
     /// «اطلب إنجاد» (wired by the live screen).
     var openEnjad: (Enjad.Situation) -> Void = { _ in }
 
@@ -471,6 +473,9 @@ final class SafetyController: ObservableObject {
             warnedSteps.insert(w.step)
             saveWarned()
             upsertAlert(LiveAlertUI(id: "safety:sunset", kind: .safety(.sunset(title: w.title, detail: w.detail))), 120)
+            if let way = wayBackS {
+                speak(NavLine("\(w.title). \(w.detail)", clips: SunsetWarning.saryClips(toSunsetS: s.timeIntervalSince(n), wayBackS: way), safety: true))
+            }
         }
     }
 

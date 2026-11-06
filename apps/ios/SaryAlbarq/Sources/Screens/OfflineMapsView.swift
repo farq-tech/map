@@ -265,6 +265,7 @@ struct AreaPickerMap: UIViewRepresentable {
         let map = MapView(frame: .zero, mapInitOptions: MapInitOptions(cameraOptions: cam, styleURI: ArabicBasemap.cachedJSON == nil ? OutingMapboxView.styleURI : nil))
         if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
         ArabicBasemap.load { json in if let json { map.mapboxMap.loadStyle(json) } }
+        SandGrade.follow(map)
         map.ornaments.options.scaleBar.visibility = .visible
         map.ornaments.options.compass.visibility = .hidden
         map.ornaments.options.logo.position = .bottomLeft
