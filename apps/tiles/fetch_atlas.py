@@ -3,7 +3,8 @@
 Uses the same bucket variables as the Atlas service (BUCKET, ENDPOINT, REGION, ACCESS_KEY_ID, SECRET_ACCESS_KEY);
 on Railway they are reference variables to the farq-targeting service, so no key is copied anywhere.
 
-    BUILDINGS_OBJECT   the normalized building layer (the Atlas's FARQ_BUILDINGS_OBJECT)
+    BUILDINGS_OBJECT   the normalized building layer (the Atlas's FARQ_BUILDINGS_OBJECT); when it cannot be read,
+                       the newest object named buildings.parquet
     PLACES_OBJECT      the golden directory; when unset, the newest object named targets.parquet in the bucket
 
 Usage: python3 fetch_atlas.py <dest-dir>   → writes places.parquet / buildings.parquet there and prints what it got.
@@ -61,12 +62,18 @@ def main(dest: str, c=None) -> dict:
     }
     os.makedirs(dest, exist_ok=True)
     for name, key in wanted.items():
-        if not key:
-            print(f'tiles: no Atlas {name} object found; building without it')
-            continue
-        if download(c, bucket, key, os.path.join(dest, f'{name}.parquet')):
+        target = os.path.join(dest, f'{name}.parquet')
+        if key and download(c, bucket, key, target):
             got[name] = key
-            print(f'tiles: Atlas {name} ← {key}')
+        else:
+            # the named object is missing or unreadable: the newest object with the layer's own file name
+            fallback = newest(c, bucket, f'{name}.parquet' if name == 'buildings' else 'targets.parquet')
+            if fallback and fallback != key and download(c, bucket, fallback, target):
+                got[name] = fallback
+        if name in got:
+            print(f'tiles: Atlas {name} ← {got[name]}')
+        else:
+            print(f'tiles: no Atlas {name} object found; building without it')
     return got
 
 

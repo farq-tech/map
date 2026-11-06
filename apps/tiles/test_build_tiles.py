@@ -185,6 +185,28 @@ class FetchAtlasTests(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(dest, 'places.parquet')))
         self.assertFalse(any(f.endswith('.download') for f in os.listdir(dest)))
 
+    def test_unreadable_buildings_key_falls_back_to_the_newest_buildings_file(self):
+        from datetime import datetime
+        import fetch_atlas
+        s3 = self.FakeS3([
+            {'Key': 'releases/r/targets.parquet', 'LastModified': datetime(2026, 11, 2), 'Size': 10},
+            {'Key': 'buildings_ingest/normalized/buildings.parquet', 'LastModified': datetime(2026, 10, 20), 'Size': 10},
+        ])
+        real = s3.download_file
+        def download_file(bucket, key, path):
+            if key == 'inputs/buildings.parquet':
+                raise RuntimeError('404')
+            real(bucket, key, path)
+        s3.download_file = download_file
+        old = {k: os.environ.get(k) for k in ('BUCKET', 'BUILDINGS_OBJECT', 'PLACES_OBJECT')}
+        os.environ.update({'BUCKET': 'b', 'BUILDINGS_OBJECT': 'inputs/buildings.parquet'}); os.environ.pop('PLACES_OBJECT', None)
+        try:
+            got = fetch_atlas.main(tempfile.mkdtemp(), s3)
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.assertEqual(got['buildings'], 'buildings_ingest/normalized/buildings.parquet')
+
     def test_no_bucket_means_roads_only(self):
         import fetch_atlas
         old = os.environ.pop('BUCKET', None)
