@@ -195,6 +195,7 @@
 		66672651B5767A5368BC50AC /* AppModel+Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DA9790B4909EF8BADFBD902 /* AppModel+Track.swift */; };
 		67FF0CF1B0D3EF48690636BD /* SuvExpedition.glb in Resources */ = {isa = PBXBuildFile; fileRef = D1D3DF15F79ACEB372C40B53 /* SuvExpedition.glb */; };
 		684D7791FEA2712123A0A9A1 /* SaryParticipant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BAC2BBEC0C1EE7D67D511B6 /* SaryParticipant.swift */; };
+		69109575453AC49CFD200211 /* SandGrade.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5773419818C7E07E41853ADC /* SandGrade.swift */; };
 		69118051628BDACB89F99869 /* TrailMatchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C83ADF7C9A34186A5C79EF8 /* TrailMatchCoordinator.swift */; };
 		6926772C5B8062B6EC32C62F /* VoiceNoteRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C68B24A52A45C11A5F7F025A /* VoiceNoteRecorder.swift */; };
 		693C61DAE332565D0BB660FD /* SpeedUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29029D8E01752FD2B307DDB3 /* SpeedUITests.swift */; };
@@ -400,6 +401,7 @@
 		E06B690ADB34C21AA47D89AC /* MemberSilence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC0B3A7948BE2867645CB90 /* MemberSilence.swift */; };
 		E1C436FD5C40B6EDEBB8A836 /* VisualsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F492FD277E01CE0861B17D /* VisualsUITests.swift */; };
 		E24ACCEA24FF614C8EC20617 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28C90C2692FC05D3D4BC90C /* ShareViewController.swift */; };
+		E28EA34D469F603992F32E18 /* DesertGradeShotsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 899DB2AD2670590E8C4875AE /* DesertGradeShotsUITests.swift */; };
 		E2A494CC3A3E8F9F79BF2488 /* RealisticTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD4589DCA30EE2F8ECC0CCCF /* RealisticTests.swift */; };
 		E2E6CBE3D8E5E641ABC39159 /* PTTChannelViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1EB5A63D0A8DAA5F932FD3A /* PTTChannelViews.swift */; };
 		E3483FA2ABF7702A1A8DA520 /* NavVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD648519581F42E46FE7A945 /* NavVoice.swift */; };
@@ -655,6 +657,7 @@
 		56A6DD3BA79D59CFC045E663 /* SaryFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryFormat.swift; sourceTree = "<group>"; };
 		56F87CBEC9527276CE06BC75 /* StoryLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryLayout.swift; sourceTree = "<group>"; };
 		572A9E77F7C076F989CDFCD3 /* OutingMapboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutingMapboxView.swift; sourceTree = "<group>"; };
+		5773419818C7E07E41853ADC /* SandGrade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandGrade.swift; sourceTree = "<group>"; };
 		57C02638C83064170E5B1B98 /* VisualEffectsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectsSettings.swift; sourceTree = "<group>"; };
 		57E2979F6264CD833C45F152 /* ReachabilityUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReachabilityUITests.swift; sourceTree = "<group>"; };
 		58250556213761F8F38682DD /* SavedPlaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedPlaces.swift; sourceTree = "<group>"; };
@@ -740,6 +743,7 @@
 		872B1A9B5A4C5E680453C2E0 /* LiveOutingController+AutoNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveOutingController+AutoNav.swift"; sourceTree = "<group>"; };
 		87B1D05E8AD776516441C6DF /* AlertQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertQueue.swift; sourceTree = "<group>"; };
 		87E0F385478722AABEBF4E11 /* ConvoyIntelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvoyIntelTests.swift; sourceTree = "<group>"; };
+		899DB2AD2670590E8C4875AE /* DesertGradeShotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesertGradeShotsUITests.swift; sourceTree = "<group>"; };
 		8A38AC62F2DABDC03BCBC69B /* UITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSupport.swift; sourceTree = "<group>"; };
 		8A8A1A61FE8E2FEBBA4FACA4 /* TripProgressTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripProgressTests.swift; sourceTree = "<group>"; };
 		8B2B0A0909BDD5E63CA7FC11 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -1454,6 +1458,7 @@
 				B74934F9D7B3DA32A9886D23 /* CityBuildings.swift */,
 				B922307F5A082E97260D1CEB /* DroneOrbit.swift */,
 				DC3451CD3313E1D17877378F /* MapVisualsDirector.swift */,
+				5773419818C7E07E41853ADC /* SandGrade.swift */,
 				58ECEA491A4CF6FE67BAB7D7 /* SkyAtmosphere.swift */,
 				51957F46F877B7987C394117 /* SlopeProfile.swift */,
 				06228EED7F4332FE3814E788 /* SunPosition.swift */,
@@ -1582,6 +1587,7 @@
 				AF0B91A3644AA5117E588A56 /* ConvoyIntelUITests.swift */,
 				BE100E5962388F4D3E30A69F /* CreateFlowUITests.swift */,
 				1F06B3290E213A7B0DAAA501 /* DeclutterShotsUITests.swift */,
+				899DB2AD2670590E8C4875AE /* DesertGradeShotsUITests.swift */,
 				2CCC91C98DF0E4D15B63D3EC /* EnjadUITests.swift */,
 				2C20F3D96CC034D11B618E01 /* ExploreUITests.swift */,
 				377E7121059C982DAAABD4CF /* FollowCameraUITests.swift */,
@@ -2057,6 +2063,7 @@
 				CFFD2C6973DA826E03887019 /* ConvoyIntelUITests.swift in Sources */,
 				39C4D38F91670C59274D52FC /* CreateFlowUITests.swift in Sources */,
 				81E90F56E4C2BE70DD256285 /* DeclutterShotsUITests.swift in Sources */,
+				E28EA34D469F603992F32E18 /* DesertGradeShotsUITests.swift in Sources */,
 				F48816F0B0F704770F052455 /* EnjadUITests.swift in Sources */,
 				B0F63AD4963228B6CE716916 /* ExploreUITests.swift in Sources */,
 				838A4B2A305EBA4D66C0ADE1 /* FollowCameraUITests.swift in Sources */,
@@ -2367,6 +2374,7 @@
 				493B53CB5FA52E7BE4AFCCF5 /* SafetyController.swift in Sources */,
 				BA9EC12A242516686214DC1D /* SafetyModels.swift in Sources */,
 				96E1EE0558E57803F6C58FF6 /* SafetyViews.swift in Sources */,
+				69109575453AC49CFD200211 /* SandGrade.swift in Sources */,
 				6B71C341051934FE32A56BE3 /* SaryAlbarqApp.swift in Sources */,
 				87D75AF0A3843FF65D761B03 /* SaryAlertLane.swift in Sources */,
 				50676ABA167F396BA6E7C174 /* SaryAppearancePanel.swift in Sources */,

@@ -45,6 +45,7 @@ final class CarPlayMapViewController: UIViewController {
         let camera = CameraOptions(center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), zoom: zoom, bearing: 0, pitch: 0)
         let map = MapView(frame: view.bounds, mapInitOptions: MapInitOptions(cameraOptions: camera, styleURI: ArabicBasemap.cachedJSON == nil ? OutingMapboxView.styleURI : nil))
         if let json = ArabicBasemap.cachedJSON { map.mapboxMap.loadStyle(json) }
+        SandGrade.follow(map)
         map.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .hidden

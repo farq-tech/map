@@ -34,6 +34,7 @@ struct PlanMapView: UIViewRepresentable {
             ArabicBasemap.load { json in if let json { map.mapboxMap.loadStyle(json) } }
         }
         map.accessibilityIdentifier = "plan.map"
+        SandGrade.follow(map)
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
         if !interactive { map.isUserInteractionEnabled = false }
