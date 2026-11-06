@@ -13,7 +13,8 @@ import Foundation
 ///   3. `HeadingChooser` — the course only while really moving with a trustworthy courseAccuracy;
 ///      otherwise none (the map's compass takes over, see `FollowHeadingSource`).
 enum GpsQuality {
-    /// Older than this when it reaches us: not "now" any more (cached fix at start, resumed app).
+    /// Older than this when it reaches us: not "now" any more (a resumed app's backlog). The first
+    /// fix of all is kept even so (better an honestly old position than none).
     static let staleMs = 10_000.0
     /// Worse than this is thrown away when a better fix is recent…
     static let coarseM = 65.0
@@ -34,6 +35,9 @@ enum FixRejection: String, CaseIterable, Codable {
 }
 
 struct FixQualityGate: Equatable {
+    /// Keep the very first fix even when stale (the map dot: an honestly old position beats none).
+    /// Guidance sets this false: it never steers from a fix that is not "now".
+    var keepsFirstStale = true
     private(set) var reference: DeviceFix?
     /// The last refused teleport: if the next fix agrees with it, the jump was real.
     private(set) var suspect: DeviceFix?
@@ -53,7 +57,9 @@ struct FixQualityGate: Equatable {
         guard let acc = fix.accuracy, acc >= 0, fix.lat.isFinite, fix.lng.isFinite,
               abs(fix.lat) <= 90, abs(fix.lng) <= 180, !(fix.lat == 0 && fix.lng == 0) else { return refuse(.invalid) }
         if let r = reference, fix.atMs <= r.atMs { return refuse(.stale) }
-        if nowMs - fix.atMs > GpsQuality.staleMs { return refuse(.stale) }
+        /* Stale only matters once something fresher is known: the very first fix (iOS's cached one
+         * at start, a parked phone's last reading) is kept — its age stays honest everywhere. */
+        if nowMs - fix.atMs > GpsQuality.staleMs, reference != nil || !keepsFirstStale { return refuse(.stale) }
         if acc > GpsQuality.coarseM, let g = lastGoodAtMs, fix.atMs - g <= GpsQuality.betterRecentMs { return refuse(.coarse) }
         guard let r = reference, fix.atMs - r.atMs <= GpsQuality.gapMs else { return take(fix) }
         if Self.speed(r, fix) <= GpsQuality.teleportMps { return take(fix) }

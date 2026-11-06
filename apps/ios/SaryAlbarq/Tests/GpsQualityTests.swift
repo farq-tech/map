@@ -73,6 +73,9 @@ final class GpsQualityTests: XCTestCase {
         var gate = FixQualityGate()
         let now = 100_000.0
         XCTAssertEqual(gate.judge(fix(Self.origin, acc: -1, at: now), nowMs: now), .reject(.invalid))
+        var nav = FixQualityGate(keepsFirstStale: false)
+        XCTAssertEqual(nav.judge(fix(Self.origin, at: now - 30_000), nowMs: now), .reject(.stale), "guidance never steers from an old fix")
+        guard case .accept = gate.judge(fix(Self.origin, at: now - 30_000), nowMs: now) else { return XCTFail("the first fix is kept, however old") }
         XCTAssertEqual(gate.judge(fix(Self.origin, at: now - 11_000), nowMs: now), .reject(.stale), "older than 10 s")
         guard case .accept = gate.judge(fix(Self.origin, acc: 5, at: now), nowMs: now) else { return XCTFail() }
         XCTAssertEqual(gate.judge(fix(Self.origin, acc: 120, at: now + 1000), nowMs: now + 1000), .reject(.coarse), "a better fix is recent")

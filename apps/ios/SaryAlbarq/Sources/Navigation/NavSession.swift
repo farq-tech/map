@@ -624,7 +624,7 @@ final class NavLocator: NSObject, CLLocationManagerDelegate {
     var onFix: (DeviceFix) -> Void = { _ in }
     private(set) var running = false
     /// Stale, coarse and teleporting fixes never steer the last leg (`FixQualityGate`).
-    private var gate = FixQualityGate()
+    private var gate = FixQualityGate(keepsFirstStale: false)
 
     override init() {
         super.init()
