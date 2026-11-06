@@ -186,7 +186,8 @@ test('sharing went silent: 10 / 30 min alerts, resume, no alert when paused / le
   await walk(1, [A, C, D]);
   assert.equal(silentEvents(B.id).length, 1, 'fires at 10 min');
   const ev10 = silentEvents(B.id)[0];
-  assert.deepEqual(Object.keys(ev10).sort(), ['last', 'level', 'since', 'type', 'user_id']);
+  assert.deepEqual(Object.keys(ev10).sort(), ['last', 'level', 'reason', 'since', 'type', 'user_id']);
+  assert.equal(ev10.reason, 'no_network', 'nothing at all reaches us from B: the reason says so');
   assert.equal(ev10.level, 10);
   assert.equal(ev10.since, bLast.received_at);
   assert.deepEqual(ev10.last, { lat: bLast.lat, lng: bLast.lng, at: bLast.recorded_at });
@@ -194,7 +195,7 @@ test('sharing went silent: 10 / 30 min alerts, resume, no alert when paused / le
   await until(() => silentPushes(B.id).length);
   const p10 = silentPushes(B.id);
   assert.equal(p10.length, 1, 'one push, to everyone but B');
-  assert.equal(p10[0].payload.body, 'انقطع إرسال فهد منذ ١٠ د — آخر موقع قبل ١٠ د');
+  assert.equal(p10[0].payload.body, 'فهد: ما فيه شبكة — آخر موقع قبل ١٠ د', 'the push says why, not a vague «انقطع»');
   assert.equal(p10[0].payload.urgency, 'high');
 
   /* Live snapshot (HTTP fallback) carries it. */
@@ -212,7 +213,7 @@ test('sharing went silent: 10 / 30 min alerts, resume, no alert when paused / le
   assert.deepEqual(silentEvents(B.id).map((e) => e.level), [10, 30], 'and never again');
   await until(() => silentPushes(B.id).length >= 2);
   assert.equal(silentPushes(B.id).length, 2);
-  assert.match(silentPushes(B.id)[1].payload.body, /^انقطع إرسال فهد منذ ٣٠ د/);
+  assert.match(silentPushes(B.id)[1].payload.body, /^فهد: ما فيه شبكة — آخر موقع قبل ٣٠ د/);
   assert.equal((await silentList())[0].level, 30);
 
   /* ---- B comes back: quiet member_resumed, reset. ---- */

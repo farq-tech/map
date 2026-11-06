@@ -106,6 +106,8 @@ struct ParticipantUI: Equatable, Identifiable {
     var speedKmh: Double? = nil
     /// Their sharing went silent (server-decided): when their last fix arrived. Shows «انقطع منذ ١٠ د».
     var silentSince: Date? = nil
+    /// Not live, and the server knows why («ما فيه شبكة — آخر موقع قبل ٥ د»). Nil while live.
+    var presenceReason: PresenceReason? = nil
     /// «الرحلة»: metres left to the destination, only from a LIVE position (nil hides it:
     /// an old position shows its age, never an old distance).
     var tripRemainingMeters: Double? = nil
