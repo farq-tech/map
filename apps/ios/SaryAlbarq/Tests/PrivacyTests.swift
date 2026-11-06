@@ -115,6 +115,9 @@ final class SessionPrivacyTests: XCTestCase {
         env.authorizationOverride = authorized
         /* «أثناء الاستخدام» here, whatever the simulator granted the test host; «دائمًا» is in BackgroundShareTests. */
         env.alwaysOverride = false
+        /* Without the iOS 17 background activity session (with it, sharing keeps going off screen:
+         * BackgroundShareTests.testWhenInUseWithActivitySessionKeepsSendingOffScreen). */
+        env.backgroundSessionOverride = false
         location.testAuthorization = authorized ? .authorizedWhenInUse : .denied
         let s = OutingSession(id: "o1", myUserId: user, api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43), location: location, env: env)
         s.open()

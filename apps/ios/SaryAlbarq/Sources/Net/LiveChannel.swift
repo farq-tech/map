@@ -155,11 +155,14 @@ final class LiveChannel {
 
     /// "Still here", with no coordinates — so others can tell no-GPS from no-network.
     /// `battery` only when the person chose to share it.
-    func heartbeat(gps: GpsState, battery: BatteryInfo? = nil) {
+    func heartbeat(gps: GpsState, battery: BatteryInfo? = nil, hint: PresenceHint? = nil, lowPower: Bool? = nil) {
         guard !stopped else { return }
         if state == .live {
             var f: [String: Any] = ["type": "heartbeat", "gps": gps.rawValue]
             if let battery { f["battery"] = ["level": battery.level, "charging": battery.charging] }
+            /* Why I may go quiet (server presence.js): «أثناء الاستخدام» in the background, Low Power… */
+            if let hint { f["hint"] = hint.rawValue }
+            if let lowPower { f["low_power"] = lowPower }
             sendFrame(f)
         } else if state == .polling {
             let id = outingId, beat = deps.beat
