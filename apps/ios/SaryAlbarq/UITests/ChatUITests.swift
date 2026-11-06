@@ -99,7 +99,7 @@ final class ChatUITests: XCTestCase {
         let block = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch
         XCTAssertTrue(block.waitForExistence(timeout: 4))
         block.tap()
-        let confirm = app.alerts.buttons["احظر"]
+        let confirm = app.buttons["chat.block.confirm"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 4), "asks before blocking")
         confirm.tap()
         let fewer = NSPredicate { _, _ in app.descendants(matching: .any).matching(identifier: "chat.bubble").count < before }
