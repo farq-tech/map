@@ -1,8 +1,8 @@
 import AVFoundation
 import Foundation
 
-// «صوت سرى»: the owner's own recorded Najdi phrases speak the guidance. Each spoken
-// line is a short sequence of his clips («بعد ثلاث مية متر» · «انعطف يمين»), built
+// «صوت سرى»: the owner's Najdi phrases (his own voice, ElevenLabs v4 set) speak the guidance.
+// Each spoken line is a short sequence of his clips («بعد ثلاث مية متر.» · «لف يمين.»), built
 // from the maneuver itself (kind, direction, exit, distance), never by parsing text.
 // Street and place names are never said in his voice: they stay on the banner.
 // «صوت الجهاز» (AVSpeechSynthesizer, ar-SA) stays a full option for those who want
@@ -129,8 +129,8 @@ enum SaryVoiceScript {
         }
     }
 
-    /// Roundabout exits 1–9 («في الدوّار خذ المخرج …»); the last exit: «خذ المخرج الأخير»;
-    /// all the way round: «لف بالدوّار وارجع»; past nine (not the last): «ادخل الدوّار» (the number is on the banner).
+    /// Roundabout exits 1–9 («في الدوّار، خذ المخرج …»); the last exit: «خذ آخر مخرج»;
+    /// all the way round: «ديور بالدوّار وارجع»; past nine (not the last): «ادخل الدوّار» (the number is on the banner).
     static func roundabout(exit: Int?, direction: NavTurnDirection? = nil, last: Bool = false) -> String {
         if direction == .uTurn { return "x_02" }
         if last { return "x_01" }
@@ -162,7 +162,7 @@ enum SaryVoiceScript {
     }
 
     /// One guidance line: [«بعد …»] [the action]. No road name, ever (it is on the banner).
-    /// Farther than we recorded: «استمر للأمام» (never an action that sounds like «now»).
+    /// Farther than we recorded: «كمّل سيده» (never an action that sounds like «now»).
     /// `stop`: a stop / rally point on the way (not the destination): «على يمينك» rather than «وجهتك على يمينك».
     static func step(_ step: NavStep, distanceM: Double, auto: Bool = false, stop: Bool = false, miles: Bool = DistanceUnits.miles) -> [String] {
         let far = isFar(distanceM, miles: miles)
@@ -184,10 +184,10 @@ enum SaryVoiceScript {
         return d + action(step.maneuver)
     }
 
-    /// The next maneuver comes right after this one: «… ثم انعطف يسار».
+    /// The next maneuver comes right after this one: «… وبعدها، لف يسار» (`turns_14` is the connector).
     static let thenWithinM = 150.0
 
-    /// [this line] «ثم» [next action] — only when the next maneuver is close after this one AND
+    /// [this line] «وبعدها،» [next action] — only when the next maneuver is close after this one AND
     /// the longer line still ends before I reach this maneuver (time = distance ÷ speed).
     static func withThen(_ line: [String], next: NavStep?, gapM: Double, distanceToManeuverM: Double, speedMps: Double?, stop: Bool = false) -> [String] {
         guard let next, gapM > 0, gapM <= thenWithinM, line.last != "mv_02" else { return line }
@@ -198,21 +198,21 @@ enum SaryVoiceScript {
         return full
     }
 
-    /// «اتجه شمال» … «اتجه جنوب غرب» (eight directions, like `NavText.compassDefinite`).
+    /// «توجّه شمال» … «توجّه جنوب غرب» (eight directions, like `NavText.compassDefinite`).
     static func compass(_ deg: Double) -> String {
         let keys = ["bar_02", "dir_01", "bar_04", "dir_03", "bar_03", "dir_04", "bar_05", "dir_02"]
         let d = (deg.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
         return keys[Int((d + 22.5) / 45) % 8]
     }
 
-    /// The arrow: [lead] [«اتجه …»] [«بعد …» «وجهتك قدامك»].
+    /// The arrow: [lead] [«توجّه …»] [«بعد …» «وجهتك قدّامك»].
     static func arrow(lead: String, bearing: Double, distanceM: Double, miles: Bool = DistanceUnits.miles) -> [String] {
         var out = [lead, compass(bearing)]
         if let d = distance(distanceM, miles: miles) { out += [d, "start_06"] }
         return out
     }
 
-    /// Automatic guidance starts («نبدأ التوجيه إلى …» / «نكمل إلى …»): no name.
+    /// Automatic guidance starts: «بسم الله نبدأ.» / resumed «بدأ التوجيه.» — no name.
     static func intro(resumed: Bool) -> [String] { [resumed ? "start_02" : "start_01"] }
 }
 
@@ -254,7 +254,7 @@ enum SaryVoiceCatalog {
 
     private static var durations: [String: Double] = [:]
 
-    /// Seconds of one clip (file header only), for «is there time for «ثم» …».
+    /// Seconds of one clip (file header only), for «is there time for «وبعدها،» …».
     static func duration(_ key: String) -> Double {
         if let d = durations[key] { return d }
         guard let u = url(key), let f = try? AVAudioFile(forReading: u) else { return 0 }
@@ -313,6 +313,8 @@ final class SaryClipPlayer: NSObject {
     /// Bumped on every play/stop: callbacks of an older line are ignored (stopping the node fires them).
     private var token = 0
     private(set) var isPlaying = false
+    /// The last line that could not be composed (`.missing(key)` names the key).
+    private(set) var lastError: ComposeError?
     var onFinish: () -> Void = {}
     private var configObserver: NSObjectProtocol?
 
@@ -405,10 +407,15 @@ final class SaryClipPlayer: NSObject {
         let t = token
         isPlaying = true
         Task.detached(priority: .userInitiated) {
-            let line = try? Self.compose(keys)
+            let result = Result { try Self.compose(keys) }
             await MainActor.run {
                 guard t == self.token else { return }
-                guard let line, let buf = self.buffer(line.samples) else {
+                if case let .failure(e) = result {
+                    /* A missing or broken clip is an error, never a silent substitute. */
+                    self.lastError = e as? ComposeError
+                    NSLog("[SaryVoice] line not played: %@ [%@]", String(describing: e), keys.joined(separator: " "))
+                }
+                guard let line = try? result.get(), let buf = self.buffer(line.samples) else {
                     self.isPlaying = false
                     started(false)
                     return self.onFinish()

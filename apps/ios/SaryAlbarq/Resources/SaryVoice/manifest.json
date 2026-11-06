@@ -2,1357 +2,1357 @@
  {
   "key": "start_01",
   "section": "start",
-  "text": "يلا نمشي، الله يحفظك",
+  "text": "بسم الله نبدأ.",
   "file": "start_01.m4a"
  },
  {
   "key": "start_02",
   "section": "start",
-  "text": "بدأ التوجيه",
+  "text": "بدأ التوجيه.",
   "file": "start_02.m4a"
  },
  {
   "key": "start_03",
   "section": "start",
-  "text": "وصلت، الله يحييك",
+  "text": "وصلت، الله يحيّيك.",
   "file": "start_03.m4a"
  },
  {
   "key": "start_04",
   "section": "start",
-  "text": "وجهتك على يمينك",
+  "text": "وجهتك على يمينك.",
   "file": "start_04.m4a"
  },
  {
   "key": "start_05",
   "section": "start",
-  "text": "وجهتك على يسارك",
+  "text": "وجهتك على يسارك.",
   "file": "start_05.m4a"
  },
  {
   "key": "start_06",
   "section": "start",
-  "text": "وجهتك قدامك",
+  "text": "وجهتك قدّامك.",
   "file": "start_06.m4a"
  },
  {
   "key": "start_07",
   "section": "start",
-  "text": "وصلت نقطة التجمع",
+  "text": "وصلتوا مكان التجمّع.",
   "file": "start_07.m4a"
  },
  {
   "key": "start_08",
   "section": "start",
-  "text": "طلعت عن المسار، أعيد لك الطريق",
+  "text": "طلعت عن الدرب. نضبط لك الطريق.",
   "file": "start_08.m4a"
  },
  {
   "key": "start_09",
   "section": "start",
-  "text": "وقف التوجيه",
+  "text": "وقفنا التوجيه.",
   "file": "start_09.m4a"
  },
  {
   "key": "dist_01",
   "section": "dist",
-  "text": "بعد خمسين متر",
+  "text": "بعد خمسين متر.",
   "file": "dist_01.m4a"
  },
  {
   "key": "dist_02",
   "section": "dist",
-  "text": "بعد مية متر",
+  "text": "بعد مية متر.",
   "file": "dist_02.m4a"
  },
  {
   "key": "dist_03",
   "section": "dist",
-  "text": "بعد مية وخمسين متر",
+  "text": "بعد مية وخمسين متر.",
   "file": "dist_03.m4a"
  },
  {
   "key": "dist_04",
   "section": "dist",
-  "text": "بعد مئتين متر",
+  "text": "بعد مئتين متر.",
   "file": "dist_04.m4a"
  },
  {
   "key": "dist_05",
   "section": "dist",
-  "text": "بعد ثلاث مية متر",
+  "text": "بعد ثلاث مية متر.",
   "file": "dist_05.m4a"
  },
  {
   "key": "dist_06",
   "section": "dist",
-  "text": "بعد أربع مية متر",
+  "text": "بعد أربع مية متر.",
   "file": "dist_06.m4a"
  },
  {
   "key": "dist_07",
   "section": "dist",
-  "text": "بعد خمس مية متر",
+  "text": "بعد خمس مية متر.",
   "file": "dist_07.m4a"
  },
  {
   "key": "dist_08",
   "section": "dist",
-  "text": "بعد سبع مية متر",
+  "text": "بعد سبع مية متر.",
   "file": "dist_08.m4a"
  },
  {
   "key": "dist_09",
   "section": "dist",
-  "text": "بعد كيلو",
+  "text": "بعد كيلو.",
   "file": "dist_09.m4a"
  },
  {
   "key": "dist_10",
   "section": "dist",
-  "text": "بعد كيلو ونص",
+  "text": "بعد كيلو ونص.",
   "file": "dist_10.m4a"
  },
  {
   "key": "dist_11",
   "section": "dist",
-  "text": "بعد كيلوين",
+  "text": "بعد كيلوين.",
   "file": "dist_11.m4a"
  },
  {
   "key": "dist_12",
   "section": "dist",
-  "text": "بعد ثلاث كيلو",
+  "text": "بعد ثلاث كيلو.",
   "file": "dist_12.m4a"
  },
  {
   "key": "dist_13",
   "section": "dist",
-  "text": "بعد خمس كيلو",
+  "text": "بعد خمس كيلو.",
   "file": "dist_13.m4a"
  },
  {
   "key": "dist_14",
   "section": "dist",
-  "text": "بعد عشر كيلو",
+  "text": "بعد عشر كيلو.",
   "file": "dist_14.m4a"
  },
  {
   "key": "dist_15",
   "section": "dist",
-  "text": "الحين",
+  "text": "الحين،",
   "file": "dist_15.m4a"
  },
  {
   "key": "turns_01",
   "section": "turns",
-  "text": "انعطف يمين",
+  "text": "لف يمين.",
   "file": "turns_01.m4a"
  },
  {
   "key": "turns_02",
   "section": "turns",
-  "text": "انعطف يسار",
+  "text": "لف يسار.",
   "file": "turns_02.m4a"
  },
  {
   "key": "turns_03",
   "section": "turns",
-  "text": "لف يمين شوي",
+  "text": "خذ اللفة الخفيفة يمين.",
   "file": "turns_03.m4a"
  },
  {
   "key": "turns_04",
   "section": "turns",
-  "text": "لف يسار شوي",
+  "text": "خذ اللفة الخفيفة يسار.",
   "file": "turns_04.m4a"
  },
  {
   "key": "turns_05",
   "section": "turns",
-  "text": "خذ يمينك بقوة",
+  "text": "لف يمين بقوّة.",
   "file": "turns_05.m4a"
  },
  {
   "key": "turns_06",
   "section": "turns",
-  "text": "خذ يسارك بقوة",
+  "text": "لف يسار بقوّة.",
   "file": "turns_06.m4a"
  },
  {
   "key": "turns_07",
   "section": "turns",
-  "text": "لف وارجع",
+  "text": "ديور وارجع من نفس الدرب.",
   "file": "turns_07.m4a"
  },
  {
   "key": "turns_08",
   "section": "turns",
-  "text": "خلك على طول",
+  "text": "كمّل سيده.",
   "file": "turns_08.m4a"
  },
  {
   "key": "turns_09",
   "section": "turns",
-  "text": "خلك يمين",
+  "text": "خلّك على اليمين.",
   "file": "turns_09.m4a"
  },
  {
   "key": "turns_10",
   "section": "turns",
-  "text": "خلك يسار",
+  "text": "خلّك على اليسار.",
   "file": "turns_10.m4a"
  },
  {
   "key": "turns_11",
   "section": "turns",
-  "text": "ادخل الطريق",
+  "text": "ادخل هالطريق.",
   "file": "turns_11.m4a"
  },
  {
   "key": "turns_12",
   "section": "turns",
-  "text": "اطلع من المخرج يمين",
+  "text": "خذ المخرج اللي على اليمين.",
   "file": "turns_12.m4a"
  },
  {
   "key": "turns_13",
   "section": "turns",
-  "text": "اطلع من المخرج يسار",
+  "text": "خذ المخرج اللي على اليسار.",
   "file": "turns_13.m4a"
  },
  {
   "key": "turns_14",
   "section": "turns",
-  "text": "ثم",
+  "text": "وبعدها،",
   "file": "turns_14.m4a"
  },
  {
   "key": "round_01",
   "section": "round",
-  "text": "ادخل الدوّار",
+  "text": "ادخل الدوّار.",
   "file": "round_01.m4a"
  },
  {
   "key": "round_02",
   "section": "round",
-  "text": "اطلع من المخرج الأول",
+  "text": "خذ المخرج الأول.",
   "file": "round_02.m4a"
  },
  {
   "key": "round_03",
   "section": "round",
-  "text": "اطلع من المخرج الثاني",
+  "text": "خذ المخرج الثاني.",
   "file": "round_03.m4a"
  },
  {
   "key": "round_04",
   "section": "round",
-  "text": "اطلع من المخرج الثالث",
+  "text": "خذ المخرج الثالث.",
   "file": "round_04.m4a"
  },
  {
   "key": "round_05",
   "section": "round",
-  "text": "اطلع من المخرج الرابع",
+  "text": "خذ المخرج الرابع.",
   "file": "round_05.m4a"
  },
  {
   "key": "bar_01",
   "section": "bar",
-  "text": "ما فيه طريق معبّد، اتجه مع السهم",
+  "text": "انتهى الطريق المزفلت. كمّل مع السهم.",
   "file": "bar_01.m4a"
  },
  {
   "key": "bar_02",
   "section": "bar",
-  "text": "اتجه شمال",
+  "text": "توجّه شمال.",
   "file": "bar_02.m4a"
  },
  {
   "key": "bar_03",
   "section": "bar",
-  "text": "اتجه جنوب",
+  "text": "توجّه جنوب.",
   "file": "bar_03.m4a"
  },
  {
   "key": "bar_04",
   "section": "bar",
-  "text": "اتجه شرق",
+  "text": "توجّه شرق.",
   "file": "bar_04.m4a"
  },
  {
   "key": "bar_05",
   "section": "bar",
-  "text": "اتجه غرب",
+  "text": "توجّه غرب.",
   "file": "bar_05.m4a"
  },
  {
   "key": "bar_06",
   "section": "bar",
-  "text": "ارجع للطريق المعبّد",
+  "text": "ارجع للطريق المزفلت.",
   "file": "bar_06.m4a"
  },
  {
   "key": "bar_07",
   "section": "bar",
-  "text": "خلك على المسار",
+  "text": "خلّك على الدرب.",
   "file": "bar_07.m4a"
  },
  {
   "key": "bar_08",
   "section": "bar",
-  "text": "الطعس قدامك",
+  "text": "انتبه، قدّامك طعس.",
   "file": "bar_08.m4a"
  },
  {
   "key": "bar_09",
   "section": "bar",
-  "text": "طريق الرجعة جاهز",
+  "text": "درب الرجعة جاهز.",
   "file": "bar_09.m4a"
  },
  {
   "key": "safe_01",
   "section": "safe",
-  "text": "انتبه، مطب",
+  "text": "انتبه، فيه مطب قدّامك.",
   "file": "safe_01.m4a"
  },
  {
   "key": "safe_02",
   "section": "safe",
-  "text": "انتبه، رمل ناعم",
+  "text": "انتبه، قدّامك رمل ناعم.",
   "file": "safe_02.m4a"
  },
  {
   "key": "safe_03",
   "section": "safe",
-  "text": "انتبه، نزلة قوية",
+  "text": "انتبه، قدّامك نزلة قوية.",
   "file": "safe_03.m4a"
  },
  {
   "key": "safe_04",
   "section": "safe",
-  "text": "انتبه، طلعة قوية",
+  "text": "انتبه، قدّامك طلعة قوية.",
   "file": "safe_04.m4a"
  },
  {
   "key": "safe_05",
   "section": "safe",
-  "text": "انتبه، السرعة زايدة",
+  "text": "انتبه، سرعتك أعلى من المسموح.",
   "file": "safe_05.m4a"
  },
  {
   "key": "safe_06",
   "section": "safe",
-  "text": "هدّي السرعة",
+  "text": "هدّ السرعة.",
   "file": "safe_06.m4a"
  },
  {
   "key": "safe_07",
   "section": "safe",
-  "text": "فيه سيل قدام، لا تقطع",
+  "text": "انتبه، فيه سيل قدّامك. لا تعبر.",
   "file": "safe_07.m4a"
  },
  {
   "key": "safe_08",
   "section": "safe",
-  "text": "الشمس بتغيب بعد نص ساعة",
+  "text": "الشمس بتغيب بعد نص ساعة.",
   "file": "safe_08.m4a"
  },
  {
   "key": "group_01",
   "section": "group",
-  "text": "واحد من العيال تأخر",
+  "text": "واحد من الربع تأخّر.",
   "file": "group_01.m4a"
  },
  {
   "key": "group_02",
   "section": "group",
-  "text": "أمير الرحلة وقف",
+  "text": "قائد الرحلة وقف.",
   "file": "group_02.m4a"
  },
  {
   "key": "group_03",
   "section": "group",
-  "text": "العيال وقفوا، اصبر عليهم",
+  "text": "الربع وقفوا، اصبر عليهم.",
   "file": "group_03.m4a"
  },
  {
   "key": "group_04",
   "section": "group",
-  "text": "تجمّعوا هنا",
+  "text": "تجمّعوا هنا.",
   "file": "group_04.m4a"
  },
  {
   "key": "group_05",
   "section": "group",
-  "text": "واحد من العيال غرّز",
+  "text": "واحد من الربع غرز.",
   "file": "group_05.m4a"
  },
  {
   "key": "group_06",
   "section": "group",
-  "text": "وصلت فزعة",
+  "text": "وصلتكم الفزعة.",
   "file": "group_06.m4a"
  },
  {
   "key": "m_01",
   "section": "m",
-  "text": "بعد مية وخمسين متر",
+  "text": "بعد مية وخمسين متر.",
   "file": "m_01.m4a"
  },
  {
   "key": "m_02",
   "section": "m",
-  "text": "بعد مئتين وخمسين متر",
+  "text": "بعد ميتين وخمسين متر.",
   "file": "m_02.m4a"
  },
  {
   "key": "m_03",
   "section": "m",
-  "text": "بعد ست مية متر",
+  "text": "بعد ست مية متر.",
   "file": "m_03.m4a"
  },
  {
   "key": "m_04",
   "section": "m",
-  "text": "بعد ثمان مية متر",
+  "text": "بعد ثمان مية متر.",
   "file": "m_04.m4a"
  },
  {
   "key": "m_05",
   "section": "m",
-  "text": "بعد تسع مية متر",
+  "text": "بعد تسع مية متر.",
   "file": "m_05.m4a"
  },
  {
   "key": "m_06",
   "section": "m",
-  "text": "بعد عشرين متر",
+  "text": "بعد عشرين متر.",
   "file": "m_06.m4a"
  },
  {
   "key": "m_07",
   "section": "m",
-  "text": "بعد ثلاثين متر",
+  "text": "بعد ثلاثين متر.",
   "file": "m_07.m4a"
  },
  {
   "key": "km_01",
   "section": "km",
-  "text": "بعد أربع كيلو",
+  "text": "بعد أربع كيلو.",
   "file": "km_01.m4a"
  },
  {
   "key": "km_02",
   "section": "km",
-  "text": "بعد ست كيلو",
+  "text": "بعد ست كيلو.",
   "file": "km_02.m4a"
  },
  {
   "key": "km_03",
   "section": "km",
-  "text": "بعد سبع كيلو",
+  "text": "بعد سبع كيلو.",
   "file": "km_03.m4a"
  },
  {
   "key": "km_04",
   "section": "km",
-  "text": "بعد ثمان كيلو",
+  "text": "بعد ثمان كيلو.",
   "file": "km_04.m4a"
  },
  {
   "key": "km_05",
   "section": "km",
-  "text": "بعد تسع كيلو",
+  "text": "بعد تسع كيلو.",
   "file": "km_05.m4a"
  },
  {
   "key": "km_06",
   "section": "km",
-  "text": "بعد خمسطعش كيلو",
+  "text": "بعد خمسطعش كيلو.",
   "file": "km_06.m4a"
  },
  {
   "key": "km_07",
   "section": "km",
-  "text": "بعد عشرين كيلو",
+  "text": "بعد عشرين كيلو.",
   "file": "km_07.m4a"
  },
  {
   "key": "km_08",
   "section": "km",
-  "text": "بعد خمس وعشرين كيلو",
+  "text": "بعد خمس وعشرين كيلو.",
   "file": "km_08.m4a"
  },
  {
   "key": "km_09",
   "section": "km",
-  "text": "بعد ثلاثين كيلو",
+  "text": "بعد ثلاثين كيلو.",
   "file": "km_09.m4a"
  },
  {
   "key": "km_10",
   "section": "km",
-  "text": "بعد أربعين كيلو",
+  "text": "بعد أربعين كيلو.",
   "file": "km_10.m4a"
  },
  {
   "key": "km_11",
   "section": "km",
-  "text": "بعد خمسين كيلو",
+  "text": "بعد خمسين كيلو.",
   "file": "km_11.m4a"
  },
  {
   "key": "km_12",
   "section": "km",
-  "text": "بعد ستين كيلو",
+  "text": "بعد ستين كيلو.",
   "file": "km_12.m4a"
  },
  {
   "key": "km_13",
   "section": "km",
-  "text": "بعد سبعين كيلو",
+  "text": "بعد سبعين كيلو.",
   "file": "km_13.m4a"
  },
  {
   "key": "km_14",
   "section": "km",
-  "text": "بعد ثمانين كيلو",
+  "text": "بعد ثمانين كيلو.",
   "file": "km_14.m4a"
  },
  {
   "key": "km_15",
   "section": "km",
-  "text": "بعد مية كيلو",
+  "text": "بعد مية كيلو.",
   "file": "km_15.m4a"
  },
  {
   "key": "km_16",
   "section": "km",
-  "text": "بعد مية وخمسين كيلو",
+  "text": "بعد مية وخمسين كيلو.",
   "file": "km_16.m4a"
  },
  {
   "key": "km_17",
   "section": "km",
-  "text": "بعد مئتين كيلو",
+  "text": "بعد مئتين كيلو.",
   "file": "km_17.m4a"
  },
  {
   "key": "km_18",
   "section": "km",
-  "text": "بعد كيلوين ونص",
+  "text": "بعد كيلوين ونص.",
   "file": "km_18.m4a"
  },
  {
   "key": "km_19",
   "section": "km",
-  "text": "بعد ثلاث كيلو ونص",
+  "text": "بعد ثلاث كيلو ونص.",
   "file": "km_19.m4a"
  },
  {
   "key": "mv_01",
   "section": "mv",
-  "text": "انطلق",
+  "text": "انطلق.",
   "file": "mv_01.m4a"
  },
  {
   "key": "mv_02",
   "section": "mv",
-  "text": "استمر للأمام",
+  "text": "كمّل سيده.",
   "file": "mv_02.m4a"
  },
  {
   "key": "mv_03",
   "section": "mv",
-  "text": "انعطف بحدّة يمين",
+  "text": "لف يمين بقوّة.",
   "file": "mv_03.m4a"
  },
  {
   "key": "mv_04",
   "section": "mv",
-  "text": "انعطف بحدّة يسار",
+  "text": "لف يسار بقوّة.",
   "file": "mv_04.m4a"
  },
  {
   "key": "mv_05",
   "section": "mv",
-  "text": "خلك على طول عند التفرّع",
+  "text": "خذ الطريق اللي بالنص عند التفرّع.",
   "file": "mv_05.m4a"
  },
  {
   "key": "mv_06",
   "section": "mv",
-  "text": "خلك يمين عند التفرّع",
+  "text": "خذ الطريق اللي على اليمين عند التفرّع.",
   "file": "mv_06.m4a"
  },
  {
   "key": "mv_07",
   "section": "mv",
-  "text": "خلك يسار عند التفرّع",
+  "text": "خذ الطريق اللي على اليسار عند التفرّع.",
   "file": "mv_07.m4a"
  },
  {
   "key": "mv_08",
   "section": "mv",
-  "text": "اسلك المنحدر",
+  "text": "انزل مع الطريق.",
   "file": "mv_08.m4a"
  },
  {
   "key": "mv_09",
   "section": "mv",
-  "text": "اسلك المنحدر يمين",
+  "text": "خذ النزلة اللي على اليمين.",
   "file": "mv_09.m4a"
  },
  {
   "key": "mv_10",
   "section": "mv",
-  "text": "اسلك المنحدر يسار",
+  "text": "خذ النزلة اللي على اليسار.",
   "file": "mv_10.m4a"
  },
  {
   "key": "mv_11",
   "section": "mv",
-  "text": "اخرج",
+  "text": "اطلع من هالطريق.",
   "file": "mv_11.m4a"
  },
  {
   "key": "mv_12",
   "section": "mv",
-  "text": "اندمج",
+  "text": "ادخل مع الطريق.",
   "file": "mv_12.m4a"
  },
  {
   "key": "mv_13",
   "section": "mv",
-  "text": "اندمج يمين",
+  "text": "ادخل مع الطريق من اليمين.",
   "file": "mv_13.m4a"
  },
  {
   "key": "mv_14",
   "section": "mv",
-  "text": "اندمج يسار",
+  "text": "ادخل مع الطريق من اليسار.",
   "file": "mv_14.m4a"
  },
  {
   "key": "mv_15",
   "section": "mv",
-  "text": "في نهاية الطريق انعطف يمين",
+  "text": "إذا وصلت نهاية الطريق، لف يمين.",
   "file": "mv_15.m4a"
  },
  {
   "key": "mv_16",
   "section": "mv",
-  "text": "في نهاية الطريق انعطف يسار",
+  "text": "إذا وصلت نهاية الطريق، لف يسار.",
   "file": "mv_16.m4a"
  },
  {
   "key": "mv_17",
   "section": "mv",
-  "text": "التزم بمسارك",
+  "text": "خلّك في مسارك.",
   "file": "mv_17.m4a"
  },
  {
   "key": "mv_18",
   "section": "mv",
-  "text": "خذ المسار اليمين",
+  "text": "خذ المسار اليمين.",
   "file": "mv_18.m4a"
  },
  {
   "key": "mv_19",
   "section": "mv",
-  "text": "خذ المسار اليسار",
+  "text": "خذ المسار اليسار.",
   "file": "mv_19.m4a"
  },
  {
   "key": "mv_20",
   "section": "mv",
-  "text": "خذ المسار اللي بالنص",
+  "text": "خذ المسار اللي بالنص.",
   "file": "mv_20.m4a"
  },
  {
   "key": "rb_01",
   "section": "rb",
-  "text": "اخرج من الدوّار",
+  "text": "اطلع من الدوّار.",
   "file": "rb_01.m4a"
  },
  {
   "key": "rb_02",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الأول",
+  "text": "في الدوّار، خذ المخرج الأول.",
   "file": "rb_02.m4a"
  },
  {
   "key": "rb_03",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الثاني",
+  "text": "في الدوّار، خذ المخرج الثاني.",
   "file": "rb_03.m4a"
  },
  {
   "key": "rb_04",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الثالث",
+  "text": "في الدوّار، خذ المخرج الثالث.",
   "file": "rb_04.m4a"
  },
  {
   "key": "rb_05",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الرابع",
+  "text": "في الدوّار، خذ المخرج الرابع.",
   "file": "rb_05.m4a"
  },
  {
   "key": "rb_06",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الخامس",
+  "text": "في الدوّار، خذ المخرج الخامس.",
   "file": "rb_06.m4a"
  },
  {
   "key": "rb_07",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج السادس",
+  "text": "في الدوّار، خذ المخرج السادس.",
   "file": "rb_07.m4a"
  },
  {
   "key": "rb_08",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج السابع",
+  "text": "في الدوّار، خذ المخرج السابع.",
   "file": "rb_08.m4a"
  },
  {
   "key": "rb_09",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج الثامن",
+  "text": "في الدوّار، خذ المخرج الثامن.",
   "file": "rb_09.m4a"
  },
  {
   "key": "rb_10",
   "section": "rb",
-  "text": "في الدوّار خذ المخرج التاسع",
+  "text": "في الدوّار، خذ المخرج التاسع.",
   "file": "rb_10.m4a"
  },
  {
   "key": "dir_01",
   "section": "dir",
-  "text": "اتجه شمال شرق",
+  "text": "توجّه شمال شرق.",
   "file": "dir_01.m4a"
  },
  {
   "key": "dir_02",
   "section": "dir",
-  "text": "اتجه شمال غرب",
+  "text": "توجّه شمال غرب.",
   "file": "dir_02.m4a"
  },
  {
   "key": "dir_03",
   "section": "dir",
-  "text": "اتجه جنوب شرق",
+  "text": "توجّه جنوب شرق.",
   "file": "dir_03.m4a"
  },
  {
   "key": "dir_04",
   "section": "dir",
-  "text": "اتجه جنوب غرب",
+  "text": "توجّه جنوب غرب.",
   "file": "dir_04.m4a"
  },
  {
   "key": "dir_05",
   "section": "dir",
-  "text": "انتهى الطريق المعبّد، اتجه مع السهم",
+  "text": "انتهى الطريق المزفلت. كمّل مع السهم.",
   "file": "dir_05.m4a"
  },
  {
   "key": "dir_06",
   "section": "dir",
-  "text": "ما فيه طريق معبّد للوجهة، كمّل مع السهم",
+  "text": "ما فيه طريق مزفلت يوصّلك للوجهة. كمّل مع السهم.",
   "file": "dir_06.m4a"
  },
  {
   "key": "dir_07",
   "section": "dir",
-  "text": "ما فيه طريق معروف، اتجه مع السهم",
+  "text": "ما فيه درب واضح قدّامك. خلك مع السهم.",
   "file": "dir_07.m4a"
  },
  {
   "key": "eta_01",
   "section": "eta",
-  "text": "تصل بعد أقل من دقيقة",
+  "text": "باقي أقل من دقيقة وتوصل.",
   "file": "eta_01.m4a"
  },
  {
   "key": "eta_02",
   "section": "eta",
-  "text": "تصل بعد دقيقة",
+  "text": "باقي دقيقة وتوصل.",
   "file": "eta_02.m4a"
  },
  {
   "key": "eta_03",
   "section": "eta",
-  "text": "تصل بعد دقيقتين",
+  "text": "باقي دقيقتين وتوصل.",
   "file": "eta_03.m4a"
  },
  {
   "key": "eta_04",
   "section": "eta",
-  "text": "تصل بعد ثلاث دقايق",
+  "text": "باقي ثلاث دقايق وتوصل.",
   "file": "eta_04.m4a"
  },
  {
   "key": "eta_05",
   "section": "eta",
-  "text": "تصل بعد خمس دقايق",
+  "text": "باقي خمس دقايق وتوصل.",
   "file": "eta_05.m4a"
  },
  {
   "key": "eta_06",
   "section": "eta",
-  "text": "تصل بعد عشر دقايق",
+  "text": "باقي عشر دقايق وتوصل.",
   "file": "eta_06.m4a"
  },
  {
   "key": "eta_07",
   "section": "eta",
-  "text": "تصل بعد ربع ساعة",
+  "text": "باقي ربع ساعة وتوصل.",
   "file": "eta_07.m4a"
  },
  {
   "key": "eta_08",
   "section": "eta",
-  "text": "تصل بعد عشرين دقيقة",
+  "text": "باقي عشرين دقيقة وتوصل.",
   "file": "eta_08.m4a"
  },
  {
   "key": "eta_09",
   "section": "eta",
-  "text": "تصل بعد نص ساعة",
+  "text": "باقي نص ساعة وتوصل.",
   "file": "eta_09.m4a"
  },
  {
   "key": "eta_10",
   "section": "eta",
-  "text": "تصل بعد خمس وأربعين دقيقة",
+  "text": "باقي خمس وأربعين دقيقة وتوصل.",
   "file": "eta_10.m4a"
  },
  {
   "key": "eta_11",
   "section": "eta",
-  "text": "تصل بعد ساعة",
+  "text": "باقي ساعة وتوصل.",
   "file": "eta_11.m4a"
  },
  {
   "key": "eta_12",
   "section": "eta",
-  "text": "تصل بعد ساعة ونص",
+  "text": "باقي ساعة ونص وتوصل.",
   "file": "eta_12.m4a"
  },
  {
   "key": "eta_13",
   "section": "eta",
-  "text": "تصل بعد ساعتين",
+  "text": "باقي ساعتين وتوصل.",
   "file": "eta_13.m4a"
  },
  {
   "key": "eta_14",
   "section": "eta",
-  "text": "تصل بعد ثلاث ساعات",
+  "text": "باقي ثلاث ساعات وتوصل.",
   "file": "eta_14.m4a"
  },
  {
   "key": "eta_15",
   "section": "eta",
-  "text": "تصل بعد أربع ساعات",
+  "text": "باقي أربع ساعات وتوصل.",
   "file": "eta_15.m4a"
  },
  {
   "key": "arr_01",
   "section": "arr",
-  "text": "وصلتوا، الله يحييكم",
+  "text": "وصلتوا، الله يحيّيكم.",
   "file": "arr_01.m4a"
  },
  {
   "key": "arr_02",
   "section": "arr",
-  "text": "وصلت إلى وجهتك",
+  "text": "وصلت وجهتك.",
   "file": "arr_02.m4a"
  },
  {
   "key": "arr_03",
   "section": "arr",
-  "text": "وصلت نقطة البداية",
+  "text": "وصلت مكان البداية.",
   "file": "arr_03.m4a"
  },
  {
   "key": "arr_04",
   "section": "arr",
-  "text": "باقي شوي وتوصل",
+  "text": "باقي شوي وتوصل.",
   "file": "arr_04.m4a"
  },
  {
   "key": "arr_05",
   "section": "arr",
-  "text": "الوجهة بعد الطعس",
+  "text": "وجهتك عقب الطعس.",
   "file": "arr_05.m4a"
  },
  {
   "key": "arr_06",
   "section": "arr",
-  "text": "وقّف هنا",
+  "text": "وقف هنا.",
   "file": "arr_06.m4a"
  },
  {
   "key": "rr_01",
   "section": "rr",
-  "text": "خرجت عن الطريق، نحسب طريق جديد",
+  "text": "طلعت عن الطريق. نحسب لك درب جديد.",
   "file": "rr_01.m4a"
  },
  {
   "key": "rr_02",
   "section": "rr",
-  "text": "نعيد حساب الطريق",
+  "text": "نحسب لك درب جديد.",
   "file": "rr_02.m4a"
  },
  {
   "key": "rr_03",
   "section": "rr",
-  "text": "مسار جديد",
+  "text": "ضبطنا لك الطريق من جديد.",
   "file": "rr_03.m4a"
  },
  {
   "key": "rr_04",
   "section": "rr",
-  "text": "ما قدرنا نحسب طريق جديد",
+  "text": "ما قدرنا نضبط لك درب جديد. جرّب بعد شوي.",
   "file": "rr_04.m4a"
  },
  {
   "key": "rr_05",
   "section": "rr",
-  "text": "رجع الاتصال، نوجّهك على الطريق",
+  "text": "رجع الاتصال. نكمل معك.",
   "file": "rr_05.m4a"
  },
  {
   "key": "rr_06",
   "section": "rr",
-  "text": "ما فيه إنترنت، اتجه مع السهم، ونعيد المحاولة لما يرجع الاتصال",
+  "text": "ما فيه إنترنت. امش مع السهم، وبنحاول مرة ثانية إذا رجع الاتصال.",
   "file": "rr_06.m4a"
  },
  {
   "key": "rr_07",
   "section": "rr",
-  "text": "ضعفت إشارة الموقع",
+  "text": "تحديد موقعك ضعيف.",
   "file": "rr_07.m4a"
  },
  {
   "key": "rr_08",
   "section": "rr",
-  "text": "رجعت إشارة الموقع",
+  "text": "رجع تحديد موقعك.",
   "file": "rr_08.m4a"
  },
  {
   "key": "rr_09",
   "section": "rr",
-  "text": "تحميل الخريطة بدون إنترنت خلص",
+  "text": "جهّزنا الخريطة، وتقدر تستخدمها بدون إنترنت.",
   "file": "rr_09.m4a"
  },
  {
   "key": "sun_01",
   "section": "sun",
-  "text": "المغرب قرّب، فكّروا ترجعون قبل الظلام",
+  "text": "المغرب قرّب. الأفضل تبدون الرجعة قبل يظلم.",
   "file": "sun_01.m4a"
  },
  {
   "key": "sun_02",
   "section": "sun",
-  "text": "باقي ساعة على المغرب",
+  "text": "باقي ساعة على غروب الشمس.",
   "file": "sun_02.m4a"
  },
  {
   "key": "sun_03",
   "section": "sun",
-  "text": "باقي نص ساعة على المغرب",
+  "text": "باقي نص ساعة على غروب الشمس.",
   "file": "sun_03.m4a"
  },
  {
   "key": "sun_04",
   "section": "sun",
-  "text": "باقي ربع ساعة على المغرب",
+  "text": "باقي ربع ساعة على الغروب.",
   "file": "sun_04.m4a"
  },
  {
   "key": "sun_05",
   "section": "sun",
-  "text": "غابت الشمس",
+  "text": "غربت الشمس.",
   "file": "sun_05.m4a"
  },
  {
   "key": "sun_06",
   "section": "sun",
-  "text": "ارجعوا على مساركم بهدوء، والأنوار شغالة",
+  "text": "ارجعوا على مهلكم، وشغّلوا الأنوار.",
   "file": "sun_06.m4a"
  },
  {
   "key": "sun_07",
   "section": "sun",
-  "text": "طريق الرجعة تقريبًا نص ساعة",
+  "text": "وقت الرجعة تقريبًا نص ساعة.",
   "file": "sun_07.m4a"
  },
  {
   "key": "sun_08",
   "section": "sun",
-  "text": "طريق الرجعة تقريبًا ساعة",
+  "text": "وقت الرجعة تقريبًا ساعة.",
   "file": "sun_08.m4a"
  },
  {
   "key": "sun_09",
   "section": "sun",
-  "text": "طريق الرجعة تقريبًا ساعتين",
+  "text": "وقت الرجعة تقريبًا ساعتين.",
   "file": "sun_09.m4a"
  },
  {
   "key": "sun_10",
   "section": "sun",
-  "text": "نبدأ طريق الرجعة",
+  "text": "بدأنا درب الرجعة.",
   "file": "sun_10.m4a"
  },
  {
   "key": "spd_01",
   "section": "spd",
-  "text": "السرعة القصوى هنا ثمانين",
+  "text": "السرعة المحددة هنا ثمانين.",
   "file": "spd_01.m4a"
  },
  {
   "key": "spd_02",
   "section": "spd",
-  "text": "السرعة القصوى هنا مية",
+  "text": "السرعة المحددة هنا مية.",
   "file": "spd_02.m4a"
  },
  {
   "key": "spd_03",
   "section": "spd",
-  "text": "السرعة القصوى هنا مية وعشرين",
+  "text": "السرعة المحددة هنا مية وعشرين.",
   "file": "spd_03.m4a"
  },
  {
   "key": "spd_04",
   "section": "spd",
-  "text": "السرعة القصوى هنا مية وأربعين",
+  "text": "السرعة المحددة هنا مية وأربعين.",
   "file": "spd_04.m4a"
  },
  {
   "key": "spd_05",
   "section": "spd",
-  "text": "تجاوزت السرعة",
+  "text": "انتبه، تعدّيت السرعة المحددة.",
   "file": "spd_05.m4a"
  },
  {
   "key": "spd_06",
   "section": "spd",
-  "text": "فيه ساهر قدام",
+  "text": "انتبه، قدّامك كاميرا سرعة.",
   "file": "spd_06.m4a"
  },
  {
   "key": "haz_01",
   "section": "haz",
-  "text": "انتبه، حجارة",
+  "text": "انتبه، فيه حصى وصخور بالطريق.",
   "file": "haz_01.m4a"
  },
  {
   "key": "haz_02",
   "section": "haz",
-  "text": "انتبه، شعيب",
+  "text": "انتبه، قدّامك شعيب.",
   "file": "haz_02.m4a"
  },
  {
   "key": "haz_03",
   "section": "haz",
-  "text": "انتبه، سبخة",
+  "text": "انتبه، قدّامك أرض سبخة.",
   "file": "haz_03.m4a"
  },
  {
   "key": "haz_04",
   "section": "haz",
-  "text": "انتبه، حفرة",
+  "text": "انتبه، فيه حفرة قدّامك.",
   "file": "haz_04.m4a"
  },
  {
   "key": "haz_05",
   "section": "haz",
-  "text": "انتبه، جمال على الطريق",
+  "text": "انتبه، فيه إبل بالطريق.",
   "file": "haz_05.m4a"
  },
  {
   "key": "haz_06",
   "section": "haz",
-  "text": "انتبه، غبار والرؤية ضعيفة",
+  "text": "انتبه، الغبار كثيف والرؤية ضعيفة.",
   "file": "haz_06.m4a"
  },
  {
   "key": "haz_07",
   "section": "haz",
-  "text": "انتبه، ضباب",
+  "text": "انتبه، فيه ضباب والرؤية ضعيفة.",
   "file": "haz_07.m4a"
  },
  {
   "key": "haz_08",
   "section": "haz",
-  "text": "انتبه، منحدر حاد قدامك",
+  "text": "انتبه، قدّامك نزلة حادّة.",
   "file": "haz_08.m4a"
  },
  {
   "key": "haz_09",
   "section": "haz",
-  "text": "انتبه، الطريق ضيق",
+  "text": "انتبه، الطريق يضيق قدّامك.",
   "file": "haz_09.m4a"
  },
  {
   "key": "haz_10",
   "section": "haz",
-  "text": "انتبه، منطقة ممنوع دخولها",
+  "text": "انتبه، قدّامك منطقة ممنوع تدخلها.",
   "file": "haz_10.m4a"
  },
  {
   "key": "haz_11",
   "section": "haz",
-  "text": "انتبه، أرض موحلة",
+  "text": "انتبه، الأرض طينية وزلقة.",
   "file": "haz_11.m4a"
  },
  {
   "key": "grp_01",
   "section": "grp",
-  "text": "نداء استغاثة من واحد من العيال",
+  "text": "أحد من الربع يطلب الفزعة.",
   "file": "grp_01.m4a"
  },
  {
   "key": "grp_02",
   "section": "grp",
-  "text": "انرسل نداء الاستغاثة",
+  "text": "أرسلنا نداء الفزعة.",
   "file": "grp_02.m4a"
  },
  {
   "key": "grp_03",
   "section": "grp",
-  "text": "انلغى نداء الاستغاثة",
+  "text": "لغينا نداء الفزعة.",
   "file": "grp_03.m4a"
  },
  {
   "key": "grp_04",
   "section": "grp",
-  "text": "تم تحديد نقطة التجمع",
+  "text": "حددنا مكان التجمّع.",
   "file": "grp_04.m4a"
  },
  {
   "key": "grp_05",
   "section": "grp",
-  "text": "أمير الرحلة يوجهكم لنقطة",
+  "text": "قائد الرحلة يوجّهكم لمكان التجمّع.",
   "file": "grp_05.m4a"
  },
  {
   "key": "grp_06",
   "section": "grp",
-  "text": "واحد من العيال انقطع",
+  "text": "أحد من الربع انفصل عن القافلة.",
   "file": "grp_06.m4a"
  },
  {
   "key": "grp_07",
   "section": "grp",
-  "text": "واحد من العيال رجع",
+  "text": "رجع واحد من الربع للقافلة.",
   "file": "grp_07.m4a"
  },
  {
   "key": "grp_08",
   "section": "grp",
-  "text": "واحد من العيال بعيد عن القافلة",
+  "text": "واحد من الربع بعيد عن القافلة.",
   "file": "grp_08.m4a"
  },
  {
   "key": "grp_09",
   "section": "grp",
-  "text": "القافلة كاملة",
+  "text": "القافلة كاملة.",
   "file": "grp_09.m4a"
  },
  {
   "key": "grp_10",
   "section": "grp",
-  "text": "القناة جاهزة",
+  "text": "اللاسلكي جاهز.",
   "file": "grp_10.m4a"
  },
  {
   "key": "grp_11",
   "section": "grp",
-  "text": "القناة مو متاحة",
+  "text": "اللاسلكي مو متاح.",
   "file": "grp_11.m4a"
  },
  {
   "key": "grp_12",
   "section": "grp",
-  "text": "القناة مكتومة",
+  "text": "صوت اللاسلكي مكتوم.",
   "file": "grp_12.m4a"
  },
  {
   "key": "grp_13",
   "section": "grp",
-  "text": "رسالة صوتية جديدة",
+  "text": "عندك رسالة صوتية جديدة.",
   "file": "grp_13.m4a"
  },
  {
   "key": "grp_14",
   "section": "grp",
-  "text": "واحد من العيال وصل",
+  "text": "وصل واحد من الربع.",
   "file": "grp_14.m4a"
  },
  {
   "key": "grp_15",
   "section": "grp",
-  "text": "كل العيال وصلوا",
+  "text": "وصلوا كل الربع.",
   "file": "grp_15.m4a"
  },
  {
   "key": "grp_16",
   "section": "grp",
-  "text": "بدأت الطلعة",
+  "text": "بدأنا الرحلة.",
   "file": "grp_16.m4a"
  },
  {
   "key": "grp_17",
   "section": "grp",
-  "text": "انتهت الطلعة",
+  "text": "خلصت الرحلة.",
   "file": "grp_17.m4a"
  },
  {
   "key": "misc_01",
   "section": "misc",
-  "text": "حفظت المكان",
+  "text": "حفظنا الموقع.",
   "file": "misc_01.m4a"
  },
  {
   "key": "misc_02",
   "section": "misc",
-  "text": "انحفظ مسارك",
+  "text": "حفظنا دربك.",
   "file": "misc_02.m4a"
  },
  {
   "key": "misc_03",
   "section": "misc",
-  "text": "البطارية ضعيفة، شغّل الشاحن",
+  "text": "البطارية ضعيفة. شبّك الشاحن.",
   "file": "misc_03.m4a"
  },
  {
   "key": "misc_04",
   "section": "misc",
-  "text": "أقرب محطة بنزين قريبة",
+  "text": "محطة البنزين قريبة.",
   "file": "misc_04.m4a"
  },
  {
   "key": "misc_05",
   "section": "misc",
-  "text": "أقرب محطة بنزين بعيدة، عبّ الحين",
+  "text": "محطة البنزين بعيدة. الأفضل تعبي من الحين.",
   "file": "misc_05.m4a"
  },
  {
   "key": "misc_06",
   "section": "misc",
-  "text": "تم",
+  "text": "تم.",
   "file": "misc_06.m4a"
  },
  {
   "key": "x_01",
   "section": "x",
-  "text": "خذ المخرج الأخير",
+  "text": "خذ آخر مخرج.",
   "file": "x_01.m4a"
  },
  {
   "key": "x_02",
   "section": "x",
-  "text": "لف بالدوّار وارجع",
+  "text": "ديور بالدوّار وارجع.",
   "file": "x_02.m4a"
  },
  {
   "key": "x_03",
   "section": "x",
-  "text": "على يمينك",
+  "text": "على يمينك.",
   "file": "x_03.m4a"
  },
  {
   "key": "x_04",
   "section": "x",
-  "text": "على يسارك",
+  "text": "على يسارك.",
   "file": "x_04.m4a"
  },
  {
   "key": "x_05",
   "section": "x",
-  "text": "بعد ميل",
+  "text": "بعد ميل.",
   "file": "x_05.m4a"
  },
  {
   "key": "x_06",
   "section": "x",
-  "text": "بعد نص ميل",
+  "text": "بعد نص ميل.",
   "file": "x_06.m4a"
  },
  {
   "key": "x_07",
   "section": "x",
-  "text": "بعد ربع ميل",
+  "text": "بعد ربع ميل.",
   "file": "x_07.m4a"
  },
  {
   "key": "x_08",
   "section": "x",
-  "text": "بعد ميلين",
+  "text": "بعد ميلين.",
   "file": "x_08.m4a"
  },
  {
   "key": "x_09",
   "section": "x",
-  "text": "بعد خمس أميال",
+  "text": "بعد خمس أميال.",
   "file": "x_09.m4a"
  },
  {
   "key": "x_10",
   "section": "x",
-  "text": "بعد عشر أميال",
+  "text": "بعد عشر أميال.",
   "file": "x_10.m4a"
  },
  {
   "key": "x_11",
   "section": "x",
-  "text": "بعد خمس مية قدم",
+  "text": "بعد خمس مية قدم.",
   "file": "x_11.m4a"
  },
  {
   "key": "x_12",
   "section": "x",
-  "text": "بعد ألف قدم",
+  "text": "بعد ألف قدم.",
   "file": "x_12.m4a"
  },
  {
   "key": "x_13",
   "section": "x",
-  "text": "بعد اثنعش كيلو",
+  "text": "بعد اثنعش كيلو.",
   "file": "x_13.m4a"
  },
  {
   "key": "x_14",
   "section": "x",
-  "text": "بعد خمس وثلاثين كيلو",
+  "text": "بعد خمس وثلاثين كيلو.",
   "file": "x_14.m4a"
  },
  {
   "key": "x_15",
   "section": "x",
-  "text": "بعد خمس وأربعين كيلو",
+  "text": "بعد خمس وأربعين كيلو.",
   "file": "x_15.m4a"
  },
  {
   "key": "x_16",
   "section": "x",
-  "text": "تمام",
+  "text": "تمام.",
   "file": "x_16.m4a"
  },
  {
   "key": "x_17",
   "section": "x",
-  "text": "إن شاء الله",
+  "text": "إن شاء الله.",
   "file": "x_17.m4a"
  }
 ]

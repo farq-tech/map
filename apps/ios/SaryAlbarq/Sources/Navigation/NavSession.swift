@@ -371,7 +371,8 @@ final class NavSession: ObservableObject {
                 if auto, fallback == .offline {
                     voice.say(intro + NavLine("ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال", clips: arrow("rr_06")))
                 } else if auto {
-                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("bar_01")))
+                    /* «ما فيه طريق مزفلت يوصّلك للوجهة» (dir_06), not bar_01: in the v4 set bar_01 says «انتهى الطريق المزفلت», wrong before any road. */
+                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("dir_06")))
                 } else {
                     voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")", clips: arrow("dir_07"))
                 }
