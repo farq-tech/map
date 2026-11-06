@@ -40,58 +40,55 @@ struct SarySilentCard: View {
     var body: some View {
         let p = theme.palette
         let shape = RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous)
+        /* UX ٢١: one compact row (~56 pt) — it must not cover the map while driving. The actions
+         * are round 44 pt buttons beside the text, not a second row of pills. */
         TimelineView(.periodic(from: .now, by: 30)) { ctx in
-            VStack(alignment: .leading, spacing: theme.space(.s)) {
-                HStack(spacing: theme.space(.m)) {
-                    Button(action: tapped) {
-                        HStack(spacing: theme.space(.m)) {
-                            ZStack(alignment: .bottomTrailing) {
-                                Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(p.emergencyText)
-                                    .frame(width: 36, height: 36)
-                                    .background(Circle().fill(LinearGradient(colors: [p.emergency.opacity(0.22), p.warning.opacity(0.26)],
-                                                                             startPoint: .topLeading, endPoint: .bottomTrailing)))
-                                Circle().fill(Color(rgb: alert.color)).frame(width: 12, height: 12)
-                                    .overlay(Circle().stroke(p.background, lineWidth: 2))
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(SilenceText.title(name: alert.name, since: alert.since, now: ctx.date))
-                                    .saryText(.callout, weight: .bold)
-                                    .foregroundStyle(p.textPrimary)
-                                    .lineLimit(2)
-                                Text(SilenceText.lastFix(alert.hasLast ? (alert.lastAt ?? alert.since) : nil, now: ctx.date))
-                                    .saryNumber(.footnote, weight: .medium)
-                                    .foregroundStyle(p.warningText)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(Text("\(SilenceText.title(name: alert.name, since: alert.since, now: ctx.date))، \(SilenceText.lastFix(alert.hasLast ? (alert.lastAt ?? alert.since) : nil, now: ctx.date))"))
-                    .accessibilityHint(Text("اضغط لعرض آخر موقع على الخريطة"))
-                    SaryDismissButton(action: dismiss)
-                }
-                if alert.hasLast || alert.hasPhone {
+            HStack(spacing: theme.space(.s)) {
+                Button(action: tapped) {
                     HStack(spacing: theme.space(.s)) {
-                        if alert.hasLast {
-                            pill("اتجه", icon: SaryIcon.directions, fill: p.warning, ink: p.warningText) { actions.go(alert.participantId) }
-                                .accessibilityIdentifier("silent-go")
+                        ZStack(alignment: .bottomTrailing) {
+                            Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(p.emergencyText)
+                                .frame(width: 30, height: 30)
+                                .background(Circle().fill(LinearGradient(colors: [p.emergency.opacity(0.22), p.warning.opacity(0.26)],
+                                                                         startPoint: .topLeading, endPoint: .bottomTrailing)))
+                            Circle().fill(Color(rgb: alert.color)).frame(width: 10, height: 10)
+                                .overlay(Circle().stroke(p.background, lineWidth: 2))
                         }
-                        if alert.hasPhone {
-                            pill("اتصال", icon: SaryIcon.phone, fill: p.emergency, ink: p.emergencyText) { actions.call(alert.participantId) }
-                                .accessibilityIdentifier("silent-call")
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(SilenceText.title(name: alert.name, since: alert.since, now: ctx.date))
+                                .saryText(.footnote, weight: .bold)
+                                .foregroundStyle(p.textPrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            Text(SilenceText.lastFix(alert.hasLast ? (alert.lastAt ?? alert.since) : nil, now: ctx.date))
+                                .saryNumber(.caption, weight: .medium)
+                                .foregroundStyle(p.warningText)
+                                .lineLimit(1)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(.leading, 36 + theme.space(.m))
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text("\(SilenceText.title(name: alert.name, since: alert.since, now: ctx.date))، \(SilenceText.lastFix(alert.hasLast ? (alert.lastAt ?? alert.since) : nil, now: ctx.date))"))
+                .accessibilityHint(Text("اضغط لعرض آخر موقع على الخريطة"))
+                if alert.hasLast {
+                    roundAction("اتجه", icon: SaryIcon.directions, fill: p.warning, ink: p.warningText) { actions.go(alert.participantId) }
+                        .accessibilityIdentifier("silent-go")
+                }
+                if alert.hasPhone {
+                    roundAction("اتصال", icon: SaryIcon.phone, fill: p.emergency, ink: p.emergencyText) { actions.call(alert.participantId) }
+                        .accessibilityIdentifier("silent-call")
+                }
+                SaryDismissButton(action: dismiss)
             }
-            .padding(.leading, theme.space(.m))
+            .padding(.leading, theme.space(.s))
             .padding(.trailing, theme.space(.xs))
-            .padding(.vertical, theme.space(.s))
-            .frame(minHeight: theme.minTarget + 12)
+            .padding(.vertical, theme.space(.xs))
             .saryGlass(shape, role: .panel)
             .overlay {
                 shape.strokeBorder(LinearGradient(colors: [p.emergency.opacity(0.85), p.warning.opacity(0.85)], startPoint: .leading, endPoint: .trailing),
@@ -101,18 +98,18 @@ struct SarySilentCard: View {
         .accessibilityIdentifier("silent-card")
     }
 
-    private func pill(_ title: String, icon: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
+    private func roundAction(_ title: String, icon: String, fill: Color, ink: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: icon)
-                .saryText(.footnote, weight: .bold)
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(ink)
-                .padding(.horizontal, theme.space(.m))
-                .frame(minHeight: max(36, theme.minTarget - 8))
-                .background(Capsule().fill(fill.opacity(0.16)))
-                .overlay(Capsule().strokeBorder(fill.opacity(0.45), lineWidth: 1))
-                .contentShape(Capsule())
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(fill.opacity(0.16)))
+                .overlay(Circle().strokeBorder(fill.opacity(0.45), lineWidth: 1))
+                .contentShape(Circle())
         }
         .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(title))
     }
 }
 

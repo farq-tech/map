@@ -29,7 +29,7 @@ final class VoiceNotesTests: XCTestCase {
         XCTAssertEqual(PTTTalkMode.current(d), .live)
         d.set("nonsense", forKey: PTTTalkMode.key)
         XCTAssertEqual(PTTTalkMode.current(d), .notes)
-        XCTAssertEqual(PTTTalkMode.live.label, "مباشر (تجريبي)")
+        XCTAssertEqual(PTTTalkMode.live.label, "بث مباشر")
         XCTAssertEqual(PTTTalkMode.notes.label, "رسالة صوتية")
     }
 

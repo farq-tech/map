@@ -149,7 +149,7 @@ enum JoinCopy {
     static let statement = "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
 
     /// The Najdi pre-prompt, right above «انضم للطلعة» while iOS has not asked yet.
-    static let prePromptTitle = "عشان العيال يشوفونك وتوصلك الفزعة"
+    static let prePromptTitle = "عشان الربع يشوفونك وتوصلهم الطوارئ"
     static let prePromptDetail = "بعد «انضم» يسألك الآيفون عن موقعك: اختر «السماح أثناء استخدام التطبيق» وخلّ «الموقع الدقيق» شغّال."
 
     static func needsTitle(_ p: JoinPermission) -> String {
@@ -159,7 +159,7 @@ enum JoinCopy {
     static func needsMessage(_ p: JoinPermission) -> String {
         switch p {
         case .reduced:
-            return "«الموقع الدقيق» مقفل، فما يقدر العيال يلقونك ولا توصلك الفزعة. افتح الإعدادات ← الموقع وشغّل «الموقع الدقيق»، وترجع للطلعة على طول."
+            return "«الموقع الدقيق» مقفل، فما يقدر الربع يلقونك ولا توصلهم الطوارئ. افتح الإعدادات ← الموقع وشغّل «الموقع الدقيق»، وترجع للطلعة على طول."
         default:
             return "افتح الإعدادات ← الموقع واختر «أثناء استخدام التطبيق» مع «الموقع الدقيق»، وترجع للطلعة على طول."
         }

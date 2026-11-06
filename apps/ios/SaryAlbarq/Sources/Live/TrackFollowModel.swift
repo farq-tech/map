@@ -24,7 +24,7 @@ struct FollowSubject: Equatable, Identifiable {
     var origin: String {
         switch kind {
         case .outingTrail: return "مسارك المسجّل"
-        case .gpx: return "مسار GPX"
+        case .gpx: return "مسار مستورد"
         case .friend: return "مسار من الطلعة"
         case .plan: return "مسار الخطة"
         }

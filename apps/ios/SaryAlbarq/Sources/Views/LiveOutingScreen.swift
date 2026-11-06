@@ -79,6 +79,7 @@ struct LiveOutingScreen: View {
                      * (the layer offline areas always cover). */
                     layer: exploring ? controller.mapLayer : .satellite,
                     terrain3D: exploring && controller.terrain3D,
+                    tripEnded: controller.tripEnded,
                     explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
@@ -271,7 +272,8 @@ struct LiveOutingScreen: View {
                     }()
                     let pttBig = driving && (ctaCompact || !hasCTA)
                     HStack(alignment: .center, spacing: theme.space(.s)) {
-                        if driving && controller.speed.everRead {
+                        /* UX ٢١: no empty «—» bubble — only while there is a real speed reading. */
+                        if driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil {
                             LovableSpeedBubble(ui: controller.speedometerUI)
                                 .chromeFrame("speed")
                                 .transition(.opacity)

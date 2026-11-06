@@ -219,7 +219,7 @@ final class CarPlayManeuverTests: XCTestCase {
         i.talking = CarPlayTalking(noteId: "n1", userId: "b", name: "سلطان")
         let a = CarPlayAlerts.current(i, guidance: nil)
         XCTAssertEqual(a.first?.kind, .friendSOS)
-        XCTAssertEqual(a.first?.title, "أبو فهد يطلب فزعة")
+        XCTAssertEqual(a.first?.title, "أبو فهد يحتاج مساعدة")
         XCTAssertEqual(a.first?.memberId, "a")
         XCTAssertNotNil(a.first?.position, "«اتجه له» needs a position")
         XCTAssertEqual(a.first?.phone, "+966500000001")

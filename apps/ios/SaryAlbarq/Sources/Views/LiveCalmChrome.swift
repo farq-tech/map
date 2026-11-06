@@ -8,6 +8,8 @@ enum LiveCalmRules {
         let others = participants.filter { !$0.isMe }
         guard !others.isEmpty else { return nil }
         let live = others.filter { $0.presence.isLive }
+        /* UX ٢١: «٠ مباشر» is noise — nothing to say until somebody is live. */
+        guard !live.isEmpty else { return nil }
         var parts = ["\(SaryFormat.number(live.count)) مباشر"]
         if let far = live.compactMap(\.distanceMeters).max() {
             parts.append("الأبعد \(SaryFormat.distance(meters: far))")
@@ -100,8 +102,8 @@ struct LiveSideButtons: View {
     static func wrap(_ d: Double) -> Double { var x = d.truncatingRemainder(dividingBy: 360); if x > 180 { x -= 360 }; if x < -180 { x += 360 }; return x }
 }
 
-/// SOS (Lovable): a red disc with «SOS» under the header on the left, «اضغط ثانية» under it.
-/// Fires after a 1 s hold (unchanged). Never hidden while the trip runs.
+/// SOS (Lovable): a red disc with «SOS · طوارئ» under the header on the left, «اضغط مطوّل» under it.
+/// A 1 s hold, then a 3 s «تراجع» countdown (`SOSCountdown`). Never hidden while the trip runs.
 struct LovableSOS: View {
     var state: MySOSUI
     var size: CGFloat
@@ -112,7 +114,7 @@ struct LovableSOS: View {
             SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true)
                 .padding(4)
                 .chromeFrame("sos")
-            LovableCaption(text: "اضغط ثانية")
+            LovableCaption(text: "اضغط مطوّل")
         }
     }
 }
@@ -155,12 +157,12 @@ struct ConvoyLinePill: View {
             HStack(spacing: 6) {
                 Circle().fill(theme.palette.live).frame(width: 8, height: 8)
                 Text(text)
-                    .font(.sary(12, .medium))
+                    .font(.sary(13, .medium))
                     .foregroundStyle(theme.palette.textPrimary)
                     .lineLimit(1)
             }
             .padding(.horizontal, 14)
-            .frame(height: 32)
+            .frame(height: 44)
             .saryGlass(Capsule(), role: .chrome, interactive: true)
         }
         .buttonStyle(SaryPressStyle())
@@ -182,7 +184,7 @@ struct AlertHistoryButton: View {
             Image(systemName: open ? "xmark" : "clock.arrow.circlepath")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.palette.textPrimary)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .saryGlass(Circle(), role: .chrome, interactive: true)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())

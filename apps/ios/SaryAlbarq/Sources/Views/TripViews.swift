@@ -145,10 +145,10 @@ struct TripCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("trip.card")
         .confirmationDialog("تنهي الرحلة للجميع؟", isPresented: $confirmEnd, titleVisibility: .visible) {
-            Button("أنهِ الرحلة للجميع", role: .destructive, action: actions.endTrip)
+            Button("أنهِ الطلعة للجميع", role: .destructive, action: actions.endTrip)
             Button("ليس الآن", role: .cancel) {}
         } message: {
-            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الرحلة."
+            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الطلعة."
                                     : "ما وصل الجميع بعد. تنتهي الطلعة للجميع ويتوقف إرسال المواقع.")
         }
     }
@@ -289,7 +289,7 @@ struct TripCard: View {
 
     @ViewBuilder
     private var ended: some View {
-        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الرحلة", systemImage: "chart.bar.doc.horizontal") }
+        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الطلعة", systemImage: "chart.bar.doc.horizontal") }
             .buttonStyle(.saryPrimary)
             .accessibilityIdentifier("trip.summary")
         Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }
