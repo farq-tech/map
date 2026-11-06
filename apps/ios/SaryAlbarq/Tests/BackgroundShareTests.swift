@@ -19,9 +19,9 @@ final class BackgroundCadenceTests: XCTestCase {
 
     func testIntervalsAndDistance() {
         let last = BackgroundCadence.Last(fix: fix(24.7, speed: 0, at: 0), sentAtMs: 0)
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 20, at: 1), last: last, lowPower: false), 15_000)
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: false), 60_000, "parked: once a minute")
-        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 120_000, "Low Power doubles it")
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 20, at: 1), last: last, lowPower: false), 10_000)
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: false), 40_000, "parked: inside the 45 s live window")
+        XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: last, lowPower: true), 80_000, "Low Power doubles it")
         /* ~111 m away: due after the 5 s floor. */
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.701, speed: 20, at: 1), last: last, lowPower: false), 5_000)
         XCTAssertEqual(BackgroundCadence.dueAtMs(fix(24.7, speed: 0, at: 1), last: nil, lowPower: false), -.infinity, "first fix goes now")

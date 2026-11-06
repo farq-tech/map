@@ -14,7 +14,7 @@ import UIKit
 ///   * no stale backlog: a fix older than `Policy.maxSendAgeMs` is dropped,
 ///     never sent late as if it were live; `age_ms` is measured at send time,
 ///     so the time others see stays the real time of the fix;
-///   * cadence: `BackgroundCadence` (≥15 s moving, 60 s parked, or after 50 m;
+///   * cadence: `BackgroundCadence` (10–12 s moving, 40 s parked, or after 50 m;
 ///     doubled in Low Power Mode) — far under the server's limits;
 ///   * retry with capped exponential backoff + jitter on network errors,
 ///     5xx and 429; a refusal (sharing off, paused, ended) is not retried —

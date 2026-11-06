@@ -128,7 +128,12 @@ enum LiveOutingPresenter {
     }
 
     static func sharing(_ i: LivePresenterInput) -> MySharingUI {
-        if i.isSharingNow { return .sharing }
+        /* «موقعك مُشارَك الآن» only with a fix fresh enough to be live; a lost GPS (canyon, under a
+         * roof, a gap in the dunes) says «جارٍ تحديد موقعك…» instead of claiming it is shared. */
+        if i.isSharingNow {
+            guard let f = i.myFix, i.now.timeIntervalSince1970 * 1000 - f.atMs <= myLiveMaxAgeMs else { return .starting }
+            return .sharing
+        }
         if i.wantsToShare { return .starting }
         return .paused
     }
@@ -330,7 +335,7 @@ enum LiveOutingPresenter {
         for m in v.orderedMembers {
             let isMe = m.user_id == v.myId
             let live: Bool
-            if isMe { live = i.isSharingNow } else { live = v.freshness(of: m.user_id, deviceNow: i.now) == .live }
+            if isMe { live = sharing(i) == .sharing } else { live = v.freshness(of: m.user_id, deviceNow: i.now) == .live }
             guard live, let at = position(of: m.user_id, in: v, myFix: i.myFix) else { continue }
             if Geo.haversineMeters(at, p) <= arrivedRadiusM {
                 arrived += 1

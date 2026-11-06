@@ -709,13 +709,19 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     /// My fix as the map draws «أنت»: the Kalman-smoothed position (and speed) for this very fix
-    /// when «مساري» is recording, else the fix itself. Display only — never what is sent.
+    /// when «مساري» is recording, else `LocationSharer.displayFix` (anchored at a camp, lightly
+    /// smoothed on the move) for this fix. Display only — never what is sent, never SOS.
     func smoothedFix(_ f: DeviceFix?) -> DeviceFix? {
-        guard var f, let k = trail.filter, k.started, abs(k.tMs - f.atMs) < 1500 else { return f }
+        guard var f, let k = trail.filter, k.started, abs(k.tMs - f.atMs) < 1500 else {
+            if let f, let d = location.displayFix, d.atMs == f.atMs { return d }
+            return f
+        }
         let p = k.position
         f.lat = p.lat
         f.lng = p.lng
         if f.speed == nil { f.speed = k.speedMps }
+        /* A crawling car's course points anywhere: no arrow rather than a wrong one. */
+        f.heading = HeadingChooser.course(f)
         return f
     }
 

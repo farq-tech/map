@@ -578,12 +578,17 @@ final class NavLocator: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     var onFix: (DeviceFix) -> Void = { _ in }
     private(set) var running = false
+    /// Stale, coarse and teleporting fixes never steer the last leg (`FixQualityGate`).
+    private var gate = FixQualityGate()
 
     override init() {
         super.init()
         manager.delegate = self
+        /* Guidance: the best the chip can do (Apple: BestForNavigation while navigating), the
+         * generic navigation model (no road snapping off-road), no distance filter, never paused. */
         manager.activityType = .otherNavigation
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = kCLDistanceFilterNone
         manager.pausesLocationUpdatesAutomatically = false
     }
 
@@ -602,14 +607,16 @@ final class NavLocator: NSObject, CLLocationManagerDelegate {
         running = false
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
+        manager.showsBackgroundLocationIndicator = false
+        gate.reset()
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let l = locations.last, l.horizontalAccuracy >= 0 else { return }
-        let f = DeviceFix(lat: l.coordinate.latitude, lng: l.coordinate.longitude, accuracy: l.horizontalAccuracy,
-                          heading: l.course >= 0 ? l.course : nil, speed: l.speed >= 0 ? l.speed : nil,
-                          atMs: l.timestamp.timeIntervalSince1970 * 1000)
-        Task { @MainActor in self.onFix(f) }
+        let fixes = locations.compactMap(LocationTuning.deviceFix)
+        Task { @MainActor in
+            let now = Date().timeIntervalSince1970 * 1000
+            for f in fixes { if case let .accept(ok) = self.gate.judge(f, nowMs: now) { self.onFix(ok) } }
+        }
     }
 }
 
