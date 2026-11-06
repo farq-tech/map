@@ -93,15 +93,15 @@ final class BackgroundPositionSenderTests: XCTestCase {
         s.offer(fix(0), mode: .balanced)
         await settle()
         XCTAssertEqual(posted.count, 1)
-        /* Ten more fixes within 10 s (a metre apart): coalesced into one pending slot. */
-        for i in 1...10 {
+        /* Nine more fixes within 9 s (a metre apart): coalesced into one pending slot. */
+        for i in 1...9 {
             await advance(1_000)
             s.offer(fix(i), mode: .balanced)
         }
-        XCTAssertEqual(posted.count, 1, "not yet: 15 s while driving")
-        await advance(5_000)
+        XCTAssertEqual(posted.count, 1, "not yet: 10 s while driving")
+        await advance(1_500)
         XCTAssertEqual(posted.count, 2)
-        XCTAssertEqual(posted.last?.lat ?? 0, fix(10).lat, accuracy: 1e-9, "only the latest fix is sent")
+        XCTAssertEqual(posted.last?.lat ?? 0, fix(9).lat, accuracy: 1e-9, "only the latest fix is sent")
     }
 
     func testStaleFixIsDroppedNeverSentLate() async {
