@@ -57,7 +57,102 @@ final class HiResEnhancer {
         f.setValue(1.0, forKey: kCIInputAspectRatioKey)
         guard let small = f.outputImage,
               let cg = ci.createCGImage(small, from: CGRect(x: 0, y: 0, width: Self.outputSize, height: Self.outputSize)) else { return nil }
-        return UIImage(cgImage: cg)
+        /* Geometry and colour stay the photo's: only the model's fine detail is kept, and a tile
+           that would gain a straight line (a "track") is not shown at all. */
+        guard let merged = Self.mergeDetail(ai: cg, source: crop, factor: plan.factor) else { return nil }
+        guard !merged.addsLine else {
+            rejected += 1
+            return nil
+        }
+        return UIImage(cgImage: merged.image)
+    }
+
+    /// Tiles refused by the line check (for the debug stats).
+    private(set) var rejected = 0
+
+    /// How much of the model's high-frequency detail is kept (it tends to over-sharpen).
+    static let detailGain: Float = 0.85
+
+    struct Merged {
+        var image: CGImage
+        var addsLine: Bool
+        var scores: (source: Float, enhanced: Float)
+    }
+
+    /// Frequency split: `blur(source) + gain × (ai − blur(ai))` at 512 px. The low frequencies —
+    /// every shape, dune, road, colour and shadow — come from the real photo; the model only
+    /// contributes texture finer than the blur (≈ the parent's own pixel), so it can neither
+    /// move nor invent a landform, and cannot shift the `SandGrade` colours. Then `LineGuard`
+    /// compares the result with the plain up-sampled photo.
+    static func mergeDetail(ai: CGImage, source: CGImage, factor: Int, gain: Float = detailGain) -> Merged? {
+        let n = outputSize
+        guard let a = rgba(ai, n), let s = rgba(source, n) else { return nil }
+        let r = max(1, factor)
+        let ba = blur(a, n, radius: r), bs = blur(s, n, radius: r)
+        var out = [UInt8](repeating: 255, count: n * n * 4)
+        for i in 0..<(n * n) {
+            let o = i * 4
+            for c in 0..<3 {
+                let v = Float(bs[o + c]) + gain * (Float(a[o + c]) - Float(ba[o + c]))
+                out[o + c] = UInt8(max(0, min(255, v.rounded())))
+            }
+        }
+        let side = 256
+        let src = LineGuard.score(LineGuard.gray(rgba: s, width: n, height: n, to: side), width: side, height: side)
+        let enh = LineGuard.score(LineGuard.gray(rgba: out, width: n, height: n, to: side), width: side, height: side)
+        guard let img = cgImage(out, n) else { return nil }
+        return Merged(image: img, addsLine: LineGuard.addsLine(enhanced: enh, source: src), scores: (src, enh))
+    }
+
+    /// `image` drawn at n×n, RGBA8 (opaque), high-quality interpolation.
+    static func rgba(_ image: CGImage, _ n: Int) -> [UInt8]? {
+        var d = [UInt8](repeating: 0, count: n * n * 4)
+        let ok: Bool = d.withUnsafeMutableBytes { p in
+            guard let ctx = CGContext(data: p.baseAddress, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return false }
+            ctx.interpolationQuality = .high
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: n, height: n))
+            return true
+        }
+        return ok ? d : nil
+    }
+
+    static func cgImage(_ d: [UInt8], _ n: Int) -> CGImage? {
+        guard let provider = CGDataProvider(data: Data(d) as CFData) else { return nil }
+        return CGImage(width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue), provider: provider, decode: nil,
+                       shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    /// Two box passes per axis (≈ Gaussian, σ ≈ radius), edges clamped. RGB only.
+    static func blur(_ src: [UInt8], _ n: Int, radius r: Int) -> [UInt8] {
+        var a = src.map { Float($0) }
+        var b = a
+        let w = Float(2 * r + 1)
+        for _ in 0..<2 {
+            for y in 0..<n {             // horizontal: a → b
+                for c in 0..<3 {
+                    var acc: Float = 0
+                    for k in -r...r { acc += a[(y * n + min(n - 1, max(0, k))) * 4 + c] }
+                    for x in 0..<n {
+                        b[(y * n + x) * 4 + c] = acc / w
+                        acc += a[(y * n + min(n - 1, x + r + 1)) * 4 + c] - a[(y * n + max(0, x - r)) * 4 + c]
+                    }
+                }
+            }
+            for x in 0..<n {             // vertical: b → a
+                for c in 0..<3 {
+                    var acc: Float = 0
+                    for k in -r...r { acc += b[(min(n - 1, max(0, k)) * n + x) * 4 + c] }
+                    for y in 0..<n {
+                        a[(y * n + x) * 4 + c] = acc / w
+                        acc += b[(min(n - 1, y + r + 1) * n + x) * 4 + c] - b[(max(0, y - r) * n + x) * 4 + c]
+                    }
+                }
+            }
+        }
+        return a.map { UInt8(max(0, min(255, $0.rounded()))) }
     }
 
     private func record(_ ms: Double) {
