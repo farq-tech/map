@@ -167,7 +167,7 @@ final class SaryVoiceClipsTests: XCTestCase {
         keys.formUnion(SaryVoiceScript.distances.map(\.key))
         keys.formUnion(SaryVoiceScript.imperial.map(\.key))
         for b in stride(from: 0.0, to: 360, by: 15) { keys.insert(SaryVoiceScript.compass(b)) }
-        keys.formUnion(["rr_01", "rr_05", "rr_06", "bar_01", "dir_05", "dir_06", "dir_07", "grp_14", "start_01", "start_02"])
+        keys.formUnion(["start_08", "rr_05", "rr_06", "bar_01", "dir_05", "dir_06", "dir_07", "grp_14", "start_01", "start_02"])
         for t in [-600.0, 600, 1800, 3600, 7200] as [Double] { for w in [1200.0, 3600, 9000] as [Double] {
             keys.formUnion(SunsetWarning.saryClips(toSunsetS: t, wayBackS: w))
         } }
@@ -412,7 +412,7 @@ final class SaryVoicePlaybackTests: XCTestCase {
         let v = NavVoice()
         v.muted = true
         v.choice = { .sary }
-        v.say("خرجت عن الطريق، نحسب طريقًا جديدًا", clips: ["rr_01"])
+        v.say("طلعت عن الدرب، نضبط لك الطريق", clips: ["start_08"])
         XCTAssertNil(v.lastPlayed)
     }
 
@@ -604,5 +604,19 @@ enum Loudness {
         let rel = lk(abs.reduce(0, +) / Double(abs.count)) - 10
         let gated = abs.filter { lk($0) > rel }
         return lk(gated.reduce(0, +) / Double(gated.count))
+    }
+
+    /// Build 22: the clips that say «جديد» came out as «يديد» (Emirati) — never asked for anywhere.
+    /// The files stay in the bundle; no code path requests them.
+    func testNoCodePathAsksForTheYadeedClips() throws {
+        let banned = ["rr_01", "rr_02", "rr_03", "rr_04", "grp_13"]
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)).compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        XCTAssertGreaterThan(files.count, 50, "the app's sources are readable from the test")
+        for f in files {
+            let text = try String(contentsOf: f, encoding: .utf8)
+            for k in banned { XCTAssertFalse(text.contains("\"\(k)\""), "\(f.lastPathComponent) asks for «\(k)»") }
+        }
+        XCTAssertNotNil(SaryVoiceCatalog.byKey["start_08"], "«طلعت عن الدرب. نضبط لك الطريق.»")
     }
 }

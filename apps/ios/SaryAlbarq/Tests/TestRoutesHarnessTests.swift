@@ -84,10 +84,10 @@ enum ScenarioDrive {
 
 @MainActor
 final class TestRoutesHarnessTests: XCTestCase {
-    struct Said { var step: Int; var spokenM: Double?; var endTrueM: Double; var speed: Double }
+    struct Said { var step: Int; var spokenM: Double?; var endTrueM: Double; var speed: Double; var soft = false }
 
     /// One scenario on the virtual clock. Returns the lines played and the arrival miss (nil: never arrived).
-    private func run(_ f: ScenarioFile) async throws -> (said: [Said], announced: Set<Int>, arrivalMissM: Double?) {
+    private func run(_ f: ScenarioFile) async throws -> (said: [Said], announced: Set<Int>, silent: Set<Int>, arrivalMissM: Double?) {
         let pts = try ScenarioDrive.track(f.gpx)
         let r = ScenarioDrive.route(f, coords: pts.map(\.p))
         let cum = LocalGuidanceEngine.cumulative(r.coordinates)
@@ -129,6 +129,8 @@ final class TestRoutesHarnessTests: XCTestCase {
         let deadline = Date().addingTimeInterval(3)
         while n.phase != .guiding, Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
         XCTAssertEqual(n.phase, .guiding, f.name)
+        /* Soft maneuvers that go straight on are not announced at all (`NavPromptBudget`). */
+        let silent = Set(r.steps.indices.filter { n.isSoft($0) && NavPromptBudget.softLine(r.steps[$0]) == nil })
 
         /* The voice queue, on the virtual clock: one line playing, one waiting (as `NavVoice`). */
         var waiting: NavLine?
@@ -182,12 +184,12 @@ final class TestRoutesHarnessTests: XCTestCase {
             for k in plays.indices.reversed() where plays[k].end <= t && plays[k].end > t - 0.1 {
                 let p = plays[k]
                 let trueM = (p.step < stepAlong.count ? stepAlong[p.step] : (cum.last ?? 0)) - now.along
-                said.append(Said(step: p.step, spokenM: p.spokenM, endTrueM: trueM, speed: now.v))
+                said.append(Said(step: p.step, spokenM: p.spokenM, endTrueM: trueM, speed: now.v, soft: n.isSoft(p.step)))
             }
             t += 0.1
         }
         n.end()
-        return (said, announced, arrivalMiss)
+        return (said, announced, silent, arrivalMiss)
     }
 
     func testEveryScenarioInTestRoutes() async throws {
@@ -210,11 +212,11 @@ final class TestRoutesHarnessTests: XCTestCase {
             if let m = e.prompts.maxErrorM {
                 XCTAssertLessThanOrEqual(maxErr, m, "\(f.name): a line ended more than \(Int(m)) m before the distance it said")
             }
-            for s in res.said where s.spokenM == nil {
+            for s in res.said where s.spokenM == nil && !s.soft {
                 XCTAssertLessThan(s.endTrueM, 2 * e.prompts.immediateBelowM + 1.5 * s.speed, "\(f.name): the action alone, far from step \(s.step)")
             }
             /* Every maneuver with a real approach got at least one line. */
-            for i in 1..<f.maneuvers.count where f.maneuvers[i - 1].distanceM >= e.prompts.announceIfApproachM && f.maneuvers[i].kind != "arrive" {
+            for i in 1..<f.maneuvers.count where f.maneuvers[i - 1].distanceM >= e.prompts.announceIfApproachM && f.maneuvers[i].kind != "arrive" && !res.silent.contains(i) {
                 XCTAssertTrue(res.announced.contains(i), "\(f.name): maneuver \(i) (\(f.maneuvers[i].kind) \(f.maneuvers[i].direction ?? "")) never announced")
             }
             let miss = try XCTUnwrap(res.arrivalMissM, "\(f.name): never arrived")

@@ -50,6 +50,12 @@ struct NavLine: Equatable {
     /// Held until then so it ends at a recorded distance; `heldS`: held so far (at most `NavPromptTiming.maxHoldS`).
     var notBefore: Date? = nil
     var heldS = 0.0
+    /// The first line of a route (start / reroute): a soft maneuver far ahead may say «كمّل سيده».
+    var opening = false
+    /// Said again after a call cut it: outside the per-maneuver budget (`NavPromptBudget`).
+    var restate = false
+    /// Already charged against the per-maneuver budget: a held line, re-queued, is not counted twice.
+    var charged = false
 
     func isHeld(_ now: Date = Date()) -> Bool { notBefore.map { $0 > now } ?? false }
 
@@ -170,7 +176,12 @@ enum SaryVoiceScript {
             if m.direction == .uTurn { return ["turns_07"] }
             return [s == .right ? "mv_15" : s == .left ? "mv_16" : "mv_02"]
         case .useLane: return [s == .right ? "mv_18" : s == .left ? "mv_19" : "mv_17"]
-        case .roundabout: return [roundabout(exit: m.exit, direction: m.direction, last: m.lastExit)]
+        case .roundabout:
+            /* The exit number is the router's own (Mapbox `maneuver.exit`, Valhalla's
+             * roundabout_exit_count through OSRM JSON), never counted by us. Without one:
+             * «ادخل الدوّار.» + the direction — never a guessed number. */
+            if m.exit == nil, !m.lastExit, let d = m.direction, d != .uTurn { return ["round_01", turn(d)] }
+            return [roundabout(exit: m.exit, direction: m.direction, last: m.lastExit)]
         case .exitRoundabout: return ["rb_01"]
         case .depart: return ["mv_01"]
         case .arrive: return ["arr_02"]
