@@ -164,3 +164,127 @@ final class AccountDeletionTests: XCTestCase {
         XCTAssertFalse(OnboardingProgress.done)
     }
 }
+
+/// Build 20: signed in, closed the app, opened it → not signed in. The session lives in the
+/// Keychain and must survive a relaunch, an offline start and a Keychain that cannot answer yet;
+/// only an explicit sign-out deletes it.
+@MainActor
+final class SessionPersistenceTests: XCTestCase {
+    final class FakeKeychain: IdentityKeychain {
+        var data: Data?
+        var status: OSStatus = errSecSuccess
+        var deletes = 0
+        func read() -> (status: OSStatus, data: Data?) {
+            if status != errSecSuccess { return (status, nil) }
+            return data == nil ? (errSecItemNotFound, nil) : (errSecSuccess, data)
+        }
+        func write(_ d: Data) -> OSStatus {
+            if status != errSecSuccess { return status }
+            data = d
+            return errSecSuccess
+        }
+        func delete() -> OSStatus { deletes += 1; data = nil; return errSecSuccess }
+    }
+
+    private var saved: IdentityKeychain!
+    private let me = Identity(token: String(repeating: "A", count: 43), user: PublicUser(id: "u-1", display_name: "أبو فهد", avatar: nil, phone: "+966501234567"))
+
+    override func setUp() {
+        saved = IdentityStore.keychain
+        IdentityStore.forgetCache()
+    }
+
+    override func tearDown() {
+        IdentityStore.keychain = saved
+        IdentityStore.forgetCache()
+    }
+
+    func testIdentitySurvivesARelaunch() {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        XCTAssertEqual(IdentityStore.read(), .none)
+        IdentityStore.save(me)
+        IdentityStore.forgetCache() // the process is gone
+        XCTAssertEqual(IdentityStore.read(), .found(me))
+        var renamed = me
+        renamed.user.display_name = "فهد"
+        IdentityStore.save(renamed)
+        XCTAssertEqual(k.deletes, 0, "a save updates in place: never delete-then-add")
+        IdentityStore.forgetCache()
+        XCTAssertEqual(IdentityStore.load(), renamed)
+    }
+
+    func testAKeychainThatCannotAnswerIsNotSignedOut() {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        k.status = errSecInteractionNotAllowed // started by iOS before protected data is available
+        XCTAssertEqual(IdentityStore.read(), .unavailable(errSecInteractionNotAllowed))
+        XCTAssertNil(IdentityStore.load())
+        XCTAssertNotNil(k.data, "nothing was deleted")
+        k.status = errSecSuccess
+        XCTAssertEqual(IdentityStore.read(), .found(me))
+        XCTAssertEqual(IdentityStore.currentToken(), me.token)
+        k.status = errSecInteractionNotAllowed
+        XCTAssertEqual(IdentityStore.currentToken(), me.token, "requests keep the token this process already read")
+    }
+
+    func testRelaunchWithTheKeychainLockedWaitsInsteadOfOnboarding() async {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        k.status = errSecInteractionNotAllowed
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertNil(m.identity)
+        XCTAssertTrue(m.identityPending, "the splash stays; onboarding (a second account) never shows")
+        /* Onboarding cannot make a new identity over the unreadable one. */
+        let made = await m.createIdentity(name: "حساب جديد", phone: "")
+        XCTAssertFalse(made)
+        XCTAssertEqual(k.data.flatMap { try? JSONDecoder().decode(Identity.self, from: $0) }, me, "the real account is untouched")
+        m.errorText = nil
+        /* Protected data comes back: the same account, signed in. */
+        k.status = errSecSuccess
+        m.applyIdentityRead(IdentityStore.read())
+        XCTAssertFalse(m.identityPending)
+        XCTAssertEqual(m.identity, me)
+    }
+
+    func testOfflineRelaunchKeepsTheSession() {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertEqual(m.identity, me)
+        XCTAssertTrue(m.signedIn)
+        XCTAssertFalse(m.identityPending)
+    }
+
+    func testOnboardingAdoptsTheAccountAlreadyOnThisPhone() async {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertNil(m.identity)
+        /* The account appears (e.g. it was unreadable when the app started). */
+        IdentityStore.save(me)
+        let ok = await m.createIdentity(name: "اسم ثاني", phone: "")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(m.identity, me, "no second identity over the real one")
+    }
+
+    func testOnlyAnExplicitSignOutDeletes() async {
+        let k = FakeKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertEqual(m.identity, me)
+        await m.signOut()
+        XCTAssertNil(m.identity)
+        XCTAssertNil(k.data)
+        IdentityStore.forgetCache()
+        XCTAssertEqual(IdentityStore.read(), .none)
+    }
+}
