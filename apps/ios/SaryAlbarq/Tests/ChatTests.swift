@@ -227,7 +227,7 @@ final class ChatTests: XCTestCase {
     }
 
     func testReadReceiptsAndTypingFromTheSocket() {
-        let s = ChatStore(outingId: "o1", me: Self.me, backend: ChatTests.FakeBackend(), defaults: defaults)
+        let s = store(FakeBackend())
         s.receive(["type": "chat_message", "message": Self.wire(Self.message(9, from: Self.me, to: Self.fahd))])
         s.receive(["type": "chat_read", "conv": "direct", "user_id": Self.fahd, "peer_id": Self.me, "seq": 9])
         XCTAssertEqual(s.threads[.direct(Self.fahd)]?.reads[Self.fahd], 9)

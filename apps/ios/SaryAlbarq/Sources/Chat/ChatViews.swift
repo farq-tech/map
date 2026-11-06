@@ -263,6 +263,12 @@ struct ChatThreadView: View {
 
     private func senderName(_ m: ChatMessage) -> String { context.name(m.sender_id, fallback: m.sender_name) }
 
+    /// A context-menu action and a dialog cannot present in the same runloop turn (the menu is still
+    /// dismissing): set the state on the next turn so «بلّغ» / «احظر» reliably open.
+    private func present(_ set: @escaping () -> Void) {
+        DispatchQueue.main.async(execute: set)
+    }
+
     private var threadBody: some View {
         let p = theme.palette
         return VStack(spacing: 0) {
@@ -434,9 +440,9 @@ struct ChatThreadView: View {
             Button { UIPasteboard.general.string = m.text } label: { Label("نسخ", systemImage: "doc.on.doc") }
         }
         if chat.canReport(m) {
-            Button { reportTarget = m } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
+            Button { present { reportTarget = m } } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
                 .accessibilityIdentifier("chat.menu.report")
-            Button(role: .destructive) { blockTarget = m } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
+            Button(role: .destructive) { present { blockTarget = m } } label: { Label("احظر \(senderName(m))", systemImage: "hand.raised.fill") }
                 .accessibilityIdentifier("chat.menu.block")
         }
         if chat.canDelete(m) {
