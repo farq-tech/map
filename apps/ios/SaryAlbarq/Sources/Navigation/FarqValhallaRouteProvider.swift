@@ -3,7 +3,8 @@ import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
 import MapboxNavigationNative
 
-/// «مزوّد المسارات»: who computes routes. Mapbox stays the default until the owner switches.
+/// «مزوّد المسارات»: who computes routes. Default «تلقائي»: the company's Valhalla (OSM rebuilt with the
+/// map's own streets) whenever the server says it is enabled, Mapbox Directions otherwise.
 enum NavProviderChoice: String, CaseIterable, Identifiable {
     /// The company's Valhalla when its server says it is enabled, else Mapbox.
     case auto
@@ -15,7 +16,7 @@ enum NavProviderChoice: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static var current: NavProviderChoice {
-        get { NavProviderChoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .mapbox }
+        get { NavProviderChoice(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .auto }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
     }
 

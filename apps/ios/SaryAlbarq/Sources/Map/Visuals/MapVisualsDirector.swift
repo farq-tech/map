@@ -267,10 +267,13 @@ final class MapVisualsDirector: NSObject {
         /* Steps of 0.05: a gesture does not restyle the layer every frame. */
         let opacity = (VisualBudget.buildingsOpacity(pitch: pitch) * 20).rounded() / 20
         if !m.layerExists(withId: Self.buildingsLayer) {
-            if !m.sourceExists(withId: Self.buildingsSource) {
-                try? m.addSource(withId: Self.buildingsSource, properties: ["type": "vector", "url": "mapbox://mapbox.mapbox-streets-v8"])
+            /* Farq Atlas footprints when the Farq archive carries them (FarqTiles), else Mapbox Streets'. */
+            let src = FarqTiles.buildingSource
+            if !m.sourceExists(withId: src.source) {
+                try? m.addSource(withId: src.source, properties: ["type": "vector", "url": src.url])
             }
-            var layer = CityBuildings.layer(id: Self.buildingsLayer, source: Self.buildingsSource, opacity: opacity)
+            var layer = CityBuildings.layer(id: Self.buildingsLayer, source: src.source, opacity: opacity,
+                                            sourceLayer: src.sourceLayer, atlas: src.atlas)
             if lastInputs.layer.isImport { layer["slot"] = "middle" }
             try? m.addLayer(with: layer, layerPosition: nil)
             appliedBuildingsOpacity = opacity

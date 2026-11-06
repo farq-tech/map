@@ -325,9 +325,9 @@ final class NavRoutingProviderTests: XCTestCase {
         XCTAssertEqual(mb.calls, 1)
     }
 
-    func testDefaultChoiceIsMapbox() {
+    func testDefaultChoiceIsAuto() {
         UserDefaults.standard.removeObject(forKey: NavProviderChoice.key)
-        XCTAssertEqual(NavProviderChoice.current, .mapbox)
+        XCTAssertEqual(NavProviderChoice.current, .auto, "Farq's router when its server is on, Mapbox otherwise")
     }
 }
 

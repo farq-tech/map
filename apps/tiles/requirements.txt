@@ -1,0 +1,2 @@
+duckdb==2.0.0
+pmtiles==3.8.1
