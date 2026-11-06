@@ -140,6 +140,17 @@ final class HiResEnhancer {
         return out
     }
 
+    private func record(_ ms: Double) {
+        recentMs.append(ms)
+        if recentMs.count > 64 { recentMs.removeFirst(recentMs.count - 64) }
+    }
+
+    /// Median of the recent inference times (ms), nil before the first.
+    var medianMs: Double? {
+        guard !recentMs.isEmpty else { return nil }
+        return recentMs.sorted()[recentMs.count / 2]
+    }
+
     /// `image` drawn into a size × size BGRA buffer (a 128 crop is doubled, high-quality).
     static func pixelBuffer(_ image: CGImage, size: Int) -> CVPixelBuffer? {
         var pb: CVPixelBuffer?
