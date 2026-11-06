@@ -88,8 +88,8 @@ extension LiveOutingController {
         guard let p = locationHiddenFromGroup else { return }
         if p == .reduced {
             Task {
-                let acc = await location.requestTemporaryFullAccuracy(purposeKey: LocationSharer.joinAccuracyPurposeKey)
-                if acc == .reducedAccuracy { openAppSettings() }
+                /* GPS's own request (asked at most once per launch); still approximate → Settings. */
+                if !(await location.requestPreciseForTrip()) { openAppSettings() }
                 objectWillChange.send()
             }
         } else {

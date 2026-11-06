@@ -28,12 +28,16 @@ enum BackgroundCadence {
 
     /// The longest gap between two sends: faster when moving, slower when parked.
     /// Low Power Mode doubles it (the person is told).
+    ///
+    /// Each base stays under the «مباشر» window others judge me by (`Policy.liveMovingMs` 15 s
+    /// moving, `Policy.liveParkedMs` 45 s parked), with room for a slow desert uplink: at the
+    /// old 20 s / 60 s a locked phone flickered to «آخر موقع معروف» between every two sends.
     static func intervalMs(_ m: Motion, lowPower: Bool) -> Double {
         let base: Double
         switch m {
-        case .fast: base = 15_000
-        case .moving: base = 20_000
-        case .parked: base = 60_000
+        case .fast: base = 10_000
+        case .moving: base = 12_000
+        case .parked: base = 40_000
         }
         return lowPower ? base * 2 : base
     }
@@ -54,11 +58,16 @@ enum BackgroundCadence {
     }
 
     /// GPS settings in the background: best when moving, reduced when parked (battery).
+    ///
+    /// No distance filter in any tier. With one (it was 20 / 10 / 25 m) a car that stopped got
+    /// no further fix at all: it stayed in the tier it stopped in, its heartbeat had nothing
+    /// fresh to send, and it went stale on everyone's map at the camp. The GPS's power is set
+    /// by `desiredAccuracy`; the filter only saved callbacks, which `BackgroundCadence` already
+    /// coalesces into one POST per 10–40 s.
     static func accuracy(_ m: Motion) -> (desiredAccuracy: CLLocationAccuracy, distanceFilter: CLLocationDistance) {
         switch m {
-        case .fast: return (kCLLocationAccuracyBest, 20)
-        case .moving: return (kCLLocationAccuracyBest, 10)
-        case .parked: return (kCLLocationAccuracyHundredMeters, 25)
+        case .fast, .moving: return (kCLLocationAccuracyBest, kCLDistanceFilterNone)
+        case .parked: return (kCLLocationAccuracyHundredMeters, kCLDistanceFilterNone)
         }
     }
 

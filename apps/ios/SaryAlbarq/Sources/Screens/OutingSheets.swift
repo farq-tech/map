@@ -290,7 +290,7 @@ struct InviteJoinSheet: View {
             }
         case .askingPrecise:
             Task {
-                /* «الموقع الدقيق» off: iOS's temporary full accuracy, with our purpose key (JoinTrip). */
+                /* «الموقع الدقيق» off: iOS's temporary full accuracy (GPS's `requestPreciseForTrip`, purpose key ConvoyTrip). */
                 #if DEBUG
                 if let allow = JoinDebug.reduced {
                     try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -299,7 +299,7 @@ struct InviteJoinSheet: View {
                     return
                 }
                 #endif
-                _ = await location.requestTemporaryFullAccuracy(purposeKey: LocationSharer.joinAccuracyPurposeKey)
+                _ = await location.requestPreciseForTrip()
                 send(.precise(currentPermission))
             }
         case .joining:

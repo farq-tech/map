@@ -8,7 +8,7 @@ import Foundation
 ///
 ///   1. no identity yet → made silently with the name the inviter gave (personal invite);
 ///   2. iOS location (When In Use) is asked right away — the system prompt follows the pre-prompt;
-///   3. «الموقع الدقيق» off → iOS's one-time «دقيق مؤقتًا» request with our purpose key (`JoinTrip`);
+///   3. «الموقع الدقيق» off → iOS's one-time «دقيق مؤقتًا» request (`LocationSharer.requestPreciseForTrip`);
 ///   4. granted + precise → POST /invites/join → the live trip, sharing ON (no toggle, no consent sheet);
 ///   5. refused / still approximate → NOT joined (owner decision, build 21: never in a trip without
 ///      the location): the recovery screen «افتح الإعدادات» / «إلغاء»; back from Settings with the

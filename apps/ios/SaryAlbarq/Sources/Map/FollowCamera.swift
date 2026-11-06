@@ -171,8 +171,11 @@ struct FollowHeadingSource: Equatable {
     /// One sample: ground speed (km/h), the car's course (the smoothed pose's heading), the
     /// compass (true heading) and its error. Returns the bearing to aim at (nil: never known).
     @discardableResult
-    mutating func update(speedKmh: Double?, course: Double?, compass: Double?, compassError: Double?) -> Double? {
+    mutating func update(speedKmh: Double?, course: Double?, compass: Double?, compassError: Double?, courseAccuracy: Double? = nil) -> Double? {
         let v = max(0, speedKmh ?? 0)
+        /* CoreLocation rates its course: a wide error (crawling in sand, a bad sky) is not a direction. */
+        let courseTrusted = courseAccuracy.map { $0 >= 0 && $0 <= HeadingChooser.courseMaxErrorDeg } ?? true
+        let course = courseTrusted ? course : nil
         if usingCourse {
             if v < Self.courseOffKmh || course == nil { usingCourse = false }
         } else if v >= Self.courseOnKmh, course != nil {
