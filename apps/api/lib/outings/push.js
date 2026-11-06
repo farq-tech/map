@@ -309,7 +309,7 @@ function arDigits(n) {
   return String(n).replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + Number(d)));
 }
 
-function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId, silentMinutes, lastMinutes, level, reason } = {}) {
+function featurePayload(kind, { senderName, outingName, note, title, replyKind, userId, outingId, silentMinutes, lastMinutes, level, reason, toUser } = {}) {
   const who = senderName || 'أحد أعضاء الطلعة';
   const where = outingName ? ` · ${outingName}` : '';
   switch (kind) {
@@ -351,6 +351,30 @@ function featurePayload(kind, { senderName, outingName, note, title, replyKind, 
         urgency: 'high',
       };
     }
+    case 'nudge':
+      /* «نبّهه»: the leader asks one member to open the app — to that member only. */
+      return {
+        type: 'nudge',
+        title: `📍 ${who} يبي يشوفك على الخريطة${where}`,
+        body: 'افتح سرى عشان يرجع موقعك يوصل للربع',
+        tag: `sary-nudge-${outingId || 'x'}`,
+        ttl: 1800,
+        urgency: 'high',
+        always: true,
+        to_user: toUser || null,
+      };
+    case 'self_silent':
+      /* The server noticed my own position stopped reaching the group (10 / 30 min). */
+      return {
+        type: 'nudge',
+        title: `📍 موقعك ما يوصل للربع${where}`,
+        body: reason === 'location_off' ? 'رجّع إذن الموقع لسرى عشان يرجع موقعك يوصل للربع' : 'افتح سرى عشان يرجع موقعك يوصل للربع',
+        tag: `sary-nudge-${outingId || 'x'}`,
+        ttl: 1800,
+        urgency: 'high',
+        always: true,
+        to_user: toUser || null,
+      };
     case 'waypoint_added':
       return { type: 'waypoint_added', title: `${who}${where}`, body: `📍 أضاف نقطة: ${trimText(title || '', 60)}`, tag: `sary-waypoint-${outingId || 'x'}`, ttl: 3600, urgency: 'normal' };
     default:

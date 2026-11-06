@@ -429,8 +429,17 @@ struct SaryParticipantCard: View {
                 }
             }
 
-            if case .stale(let since) = p.presence {
+            if let r = p.presenceReason {
+                /* Why they are not live, and what fixes it — never a vague «انقطع». */
+                SaryInlineMessage(text: [r.text, r.fix].compactMap { $0 }.joined(separator: " · "), tone: r == .hidden ? .info : .warning)
+                    .accessibilityIdentifier("participant.reason")
+            } else if case .stale(let since) = p.presence {
                 SaryInlineMessage(text: "\(SaryFormat.lastUpdate(since: since, now: state.now)) · قد يكون مكانه تغيّر", tone: .warning)
+            }
+            if state.canNudge {
+                Button(action: actions.nudge) { SaryButtonLabel(title: "نبّهه", systemImage: "bell.badge.fill") }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("participant.nudge")
             }
 
             HStack(spacing: theme.space(.s)) {

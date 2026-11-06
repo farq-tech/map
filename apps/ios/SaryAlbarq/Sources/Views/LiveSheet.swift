@@ -443,13 +443,27 @@ private struct ShareCallout: View {
                     ShareBackgroundHintRow(hint: .denied, openSettings: controller.openAppSettings)
                 } else {
                     /* A thin strip (the owner's «زحمة» review): sharing state + the quiet way out. */
+                    let hidden = controller.isLocationHidden
                     HStack(spacing: theme.space(.s)) {
-                        Circle().fill(ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
-                        Text(ui.sharing == .sharing ? "موقعك مُشارَك مع الطلعة" : "جارٍ تحديد موقعك…")
+                        Circle().fill(hidden ? theme.palette.textTertiary : ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
+                        Text(hidden ? HideText.hiddenStrip : ui.sharing == .sharing ? "موقعك مُشارَك مع الطلعة" : "جارٍ تحديد موقعك…")
                             .saryText(.footnote, weight: .bold)
                             .foregroundStyle(theme.palette.textPrimary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityIdentifier("live.sharing")
+                        if controller.canHideLocation {
+                            /* «أخفِ موقعي / أظهر موقعي»: in the strip, not one more map button. */
+                            Button { controller.toggleHidden() } label: {
+                                Label(hidden ? HideText.shownButton : HideText.hideButton, systemImage: hidden ? "eye" : "eye.slash")
+                                    .labelStyle(.titleAndIcon)
+                                    .saryText(.footnote, weight: .bold)
+                                    .foregroundStyle(hidden ? theme.palette.accent : theme.palette.textSecondary)
+                                    .frame(minHeight: 32).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("live.hideLocation")
+                            .accessibilityHint(Text(hidden ? "يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل"))
+                        }
                         Button { controller.confirm = .leave } label: {
                             Text("غادر الطلعة").saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
                                 .frame(minHeight: 32).contentShape(Rectangle())
