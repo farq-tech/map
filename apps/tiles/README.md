@@ -43,7 +43,11 @@ It rebuilds every `REBUILD_HOURS` (default 168) with `build.sh`, which downloads
 1. New service from this repo, `railway.json` in `apps/tiles`, a volume mounted at `/data`, ≥ 8 GB RAM.
 2. Variables:
    - `PUBLIC_URL`: the service's public https URL.
-   - The Atlas inputs, either by path or by URL:
+   - The Atlas inputs. Simplest, with the service in the `farq-targeting` project: reference the Atlas bucket and nothing is copied (read only):
+     - `BUCKET=${{farq-targeting.BUCKET}}`, and the same for `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`;
+     - `BUILDINGS_OBJECT=${{farq-targeting.FARQ_BUILDINGS_OBJECT}}`;
+     - `fetch_atlas.py` then takes the buildings and the newest `targets.parquet` in the bucket (or `PLACES_OBJECT`).
+   - Or by path or by URL:
      - by path: `PLACES_PATH` / `BUILDINGS_PATH`, files on the volume;
      - by URL: `PLACES_URL` / `BUILDINGS_URL`, plus `ATLAS_TOKEN` if the URL needs a bearer token.
 3. First boot builds before `/healthz` turns 200 (about a minute for roads).

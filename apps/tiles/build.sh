@@ -7,6 +7,8 @@
 #   PLACES_PATH / PLACES_URL         Farq Atlas targets.parquet (optional; a path on a mounted volume, or a URL)
 #   BUILDINGS_PATH / BUILDINGS_URL   Farq Atlas buildings.parquet (optional)
 #   ATLAS_TOKEN     sent as «Authorization: Bearer …» to PLACES_URL / BUILDINGS_URL when set
+#   BUCKET (+ ENDPOINT, REGION, ACCESS_KEY_ID, SECRET_ACCESS_KEY, PLACES_OBJECT, BUILDINGS_OBJECT)
+#                   read the Atlas files from the Atlas bucket instead (fetch_atlas.py)
 set -eu
 
 DATA="${TILES_DATA_DIR:-/data}"
@@ -31,6 +33,12 @@ fetch "$OSM_PBF_URL" "$DATA/inputs/osm.pbf" 10000000
 
 set -- --osm "$DATA/inputs/osm.pbf" --out "$DATA/farq.pmtiles"
 
+# Atlas files straight from the Atlas bucket (fetch_atlas.py), when the bucket variables are set
+if [ -n "${BUCKET:-}" ]; then
+  python3 "$HERE/fetch_atlas.py" "$DATA/inputs" || true
+  if [ -z "${PLACES_PATH:-}" ] && [ -f "$DATA/inputs/places.parquet" ]; then PLACES_PATH="$DATA/inputs/places.parquet"; fi
+  if [ -z "${BUILDINGS_PATH:-}" ] && [ -f "$DATA/inputs/buildings.parquet" ]; then BUILDINGS_PATH="$DATA/inputs/buildings.parquet"; fi
+fi
 if [ -n "${PLACES_URL:-}" ]; then fetch "$PLACES_URL" "$DATA/inputs/places.parquet" 1000 || true; PLACES_PATH="$DATA/inputs/places.parquet"; fi
 if [ -n "${PLACES_PATH:-}" ] && [ -f "$PLACES_PATH" ]; then set -- "$@" --places "$PLACES_PATH"; fi
 if [ -n "${BUILDINGS_URL:-}" ]; then fetch "$BUILDINGS_URL" "$DATA/inputs/buildings.parquet" 1000 || true; BUILDINGS_PATH="$DATA/inputs/buildings.parquet"; fi

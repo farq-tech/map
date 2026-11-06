@@ -144,5 +144,56 @@ class RoadTests(Fixture):
         self.assertEqual(self.db.execute('select tile_x(180, 3), tile_y(-89, 3)').fetchone(), (7, 7), 'clamped to the grid')
 
 
+
+class FetchAtlasTests(unittest.TestCase):
+    class FakeS3:
+        def __init__(self, objects):
+            self.objects, self.downloaded = objects, []
+
+        def get_paginator(self, _):
+            objs = self.objects
+            class P:
+                def paginate(self, Bucket):
+                    return [{'Contents': objs[:2]}, {'Contents': objs[2:]}]
+            return P()
+
+        def download_file(self, bucket, key, path):
+            self.downloaded.append(key)
+            with open(path, 'w') as fh:
+                fh.write(key)
+
+    def test_newest_targets_and_named_buildings(self):
+        from datetime import datetime
+        import fetch_atlas
+        s3 = self.FakeS3([
+            {'Key': 'releases/a/targets.parquet', 'LastModified': datetime(2026, 10, 1), 'Size': 10},
+            {'Key': 'releases/b/targets.parquet.bak', 'LastModified': datetime(2026, 11, 5), 'Size': 10},
+            {'Key': 'releases/c/targets.parquet', 'LastModified': datetime(2026, 11, 2), 'Size': 10},
+            {'Key': 'releases/d/targets.parquet', 'LastModified': datetime(2026, 11, 4), 'Size': 0},
+        ])
+        self.assertEqual(fetch_atlas.newest(s3, 'b', 'targets.parquet'), 'releases/c/targets.parquet', 'newest non-empty exact name')
+        dest = tempfile.mkdtemp()
+        env = {'BUCKET': 'b', 'BUILDINGS_OBJECT': 'buildings/normalized.parquet'}
+        old = {k: os.environ.get(k) for k in ('BUCKET', 'BUILDINGS_OBJECT', 'PLACES_OBJECT')}
+        os.environ.update(env); os.environ.pop('PLACES_OBJECT', None)
+        try:
+            got = fetch_atlas.main(dest, s3)
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.assertEqual(got, {'places': 'releases/c/targets.parquet', 'buildings': 'buildings/normalized.parquet'})
+        self.assertTrue(os.path.exists(os.path.join(dest, 'places.parquet')))
+        self.assertFalse(any(f.endswith('.download') for f in os.listdir(dest)))
+
+    def test_no_bucket_means_roads_only(self):
+        import fetch_atlas
+        old = os.environ.pop('BUCKET', None)
+        try:
+            self.assertEqual(fetch_atlas.main(tempfile.mkdtemp(), object()), {})
+        finally:
+            if old is not None:
+                os.environ['BUCKET'] = old
+
+
 if __name__ == '__main__':
     unittest.main()
