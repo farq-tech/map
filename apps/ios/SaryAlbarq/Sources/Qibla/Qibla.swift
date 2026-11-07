@@ -240,6 +240,8 @@ struct QiblaView: View {
 /// A compass rose (N/E/S/W in Arabic, ticks every 10°) with the Kaaba marked at `qibla`.
 struct QiblaRose: View {
     var qibla: Double
+    struct Cardinal { var angle: Double; var label: String }
+    static let cardinals = [Cardinal(angle: 0, label: "ش"), Cardinal(angle: 90, label: "ق"), Cardinal(angle: 180, label: "ج"), Cardinal(angle: 270, label: "غ")]
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -254,8 +256,9 @@ struct QiblaRose: View {
                     .offset(y: -128)
                     .rotationEffect(.degrees(Double(i) * 10))
             }
-            ForEach([(0.0, "ش"), (90.0, "شر"), (180.0, "ج"), (270.0, "غ")], id: \.0) { a, t in
-                Text(t)
+            ForEach(Self.cardinals, id: \.angle) { c in
+                let a = c.angle
+                Text(c.label)
                     .font(.sary(16, .bold))
                     .foregroundStyle(a == 0 ? p.emergencyText : p.textSecondary)
                     .rotationEffect(.degrees(-a))

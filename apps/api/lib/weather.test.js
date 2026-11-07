@@ -46,6 +46,12 @@ test('mercator: tile bbox and lon/lat round-trip', () => {
   assert.deepEqual(mercator.parseBbox('46,24,47,25'), { west: 46, south: 24, east: 47, north: 25 });
   assert.equal(mercator.parseNear('24.7,46.7').lng, 46.7);
   assert.equal(mercator.parseNear('0,0'), null);
+  for (const [lng, lat] of [[46.68, 24.71], [39.17, 21.54], [50.1, 26.42], [36.57, 28.38], [44.2, 17.6], [43.97, 26.33]]) {
+    assert.ok(mercator.inKsa(lng, lat), `inside ${lng},${lat}`);
+  }
+  for (const [lng, lat] of [[47.98, 29.37], [47.8, 30.5], [51.53, 25.29], [54.37, 24.45], [44.2, 15.35], [35.93, 31.95], [58.4, 23.6]]) {
+    assert.ok(!mercator.inKsa(lng, lat), `outside ${lng},${lat}`);
+  }
 });
 
 test('clouds: hourly frames are free live, 10-minute frames only once ≥ 1 h old', () => {
