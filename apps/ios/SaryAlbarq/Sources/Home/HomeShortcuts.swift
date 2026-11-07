@@ -60,6 +60,7 @@ struct HomeCategory: Identifiable, Equatable {
         .init(id: "cafes", label: "مقاهي", systemImage: "cup.and.saucer.fill", query: "مقهى"),
         .init(id: "mosques", label: "مساجد", systemImage: "building.columns.fill", query: "مسجد"),
         .init(id: "fuel", label: "محطات وقود", systemImage: "fuelpump.fill", query: "محطة وقود"),
+        .init(id: "airports", label: "المطارات", systemImage: "airplane", query: "مطار"),
     ]
 
     static let desertOnes: [HomeCategory] = [

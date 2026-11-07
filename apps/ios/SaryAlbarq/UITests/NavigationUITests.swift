@@ -79,6 +79,7 @@ final class NavigationUITests: XCTestCase {
         for m in ["light", "dark", "drive"] {
             let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode(m))
             XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15))
+            XCTAssertTrue(el(app, "nav.pip").exists, "live guidance can be opened as a floating PiP window")
             XCTAssertTrue(el(app, "nav.lanes").exists, "lanes")
             /* v2: «ثم …» only when the next turn is within 400 m (the demo's next turn is ~1 km away). */
             XCTAssertFalse(el(app, "nav.next").exists, "no «ثم» for a far next turn")

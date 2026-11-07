@@ -92,6 +92,13 @@ extension LiveOutingController {
     /// The map's centre moved (the crosshair): store it; after a real pan that settled far from
     /// everyone while stopped, open exploration.
     func mapCenterChanged(_ r: MapCenterReading) {
+        /* Mapbox can report camera changes during SwiftUI's update pass. Publish the crosshair on
+           the next main-loop turn; synchronous @Published writes here cause update-loop warnings
+           and make continuous pans janky. */
+        DispatchQueue.main.async { [weak self] in self?.applyMapCenter(r) }
+    }
+
+    private func applyMapCenter(_ r: MapCenterReading) {
         if exploreActive || exploreReading.reading == nil || r.settled {
             if exploreReading.reading != r { exploreReading.reading = r }
         }

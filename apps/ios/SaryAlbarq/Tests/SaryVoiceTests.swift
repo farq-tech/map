@@ -68,8 +68,8 @@ final class SaryVoiceClipsTests: XCTestCase {
         XCTAssertEqual(t("start_09"), "وقفنا التوجيه.")
         XCTAssertEqual(t("turns_01"), "لف يمين.")
         XCTAssertEqual(t("turns_02"), "لف يسار.")
-        XCTAssertTrue(t("turns_07").hasPrefix("ديور وارجع"), "u-turn")
-        XCTAssertTrue(t("x_02").hasPrefix("ديور بالدوّار"), "all the way round")
+        XCTAssertTrue(t("turns_07").hasPrefix("داوِر وارجع"), "u-turn")
+        XCTAssertTrue(t("x_02").hasPrefix("داوِر بالدوّار"), "all the way round")
         XCTAssertTrue(t("turns_03").contains("الخفيفة يمين") && t("turns_04").contains("الخفيفة يسار"), "slight")
         XCTAssertTrue(t("mv_03").contains("يمين بقوّة") && t("mv_04").contains("يسار بقوّة"), "sharp")
         XCTAssertEqual(t("mv_02"), "كمّل سيده.", "straight / farther than recorded")
@@ -225,7 +225,7 @@ final class SaryVoiceScriptTests: XCTestCase {
         XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: nil, exit: nil)), ["round_01"])
         XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: nil, exit: 11)), ["round_01"], "past nine: «ادخل الدوّار»")
         XCTAssertEqual(SaryVoiceScript.action(.init(kind: .exitRoundabout, direction: nil)), ["rb_01"])
-        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: .uTurn, exit: 4)), ["x_02"], "«ديور بالدوّار وارجع.»")
+        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: .uTurn, exit: 4)), ["x_02"], "«داوِر بالدوّار وارجع.»")
         XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 3), distanceM: 200), ["dist_04", "rb_04"])
     }
 
@@ -307,7 +307,7 @@ final class SaryVoiceScriptTests: XCTestCase {
         var lastTwelve = step(.roundabout, exit: 12)
         lastTwelve.maneuver.lastExit = true
         XCTAssertEqual(SaryVoiceScript.action(lastTwelve.maneuver), ["x_01"], "the last one even past nine")
-        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: .uTurn, exit: 6, lastExit: true)), ["x_02"], "«ديور بالدوّار وارجع.»")
+        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: .uTurn, exit: 6, lastExit: true)), ["x_02"], "«داوِر بالدوّار وارجع.»")
     }
 
     func testFartherThanRecordedSaysKeepGoingNotTheTurn() {

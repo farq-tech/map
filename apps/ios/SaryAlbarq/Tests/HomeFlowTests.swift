@@ -29,7 +29,7 @@ final class HomeFlowTests: XCTestCase {
 
     func testCategoriesHoldTheCityAndTheDesert() {
         let labels = HomeCategory.all.map(\.label)
-        for l in ["مطاعم", "مقاهي", "مساجد", "محطات وقود", "نفود", "روضة", "فيضة", "مخيمات", "أمطار وربيع"] {
+        for l in ["مطاعم", "مقاهي", "مساجد", "محطات وقود", "المطارات", "نفود", "روضة", "فيضة", "مخيمات", "أمطار وربيع"] {
             XCTAssertTrue(labels.contains(l), l)
         }
         XCTAssertEqual(Set(HomeCategory.all.map(\.id)).count, HomeCategory.all.count, "unique ids")

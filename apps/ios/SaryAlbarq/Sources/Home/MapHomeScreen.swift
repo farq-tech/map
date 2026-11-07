@@ -6,6 +6,10 @@ import SwiftUI
 /// The flow (after Hudhud's, not its look): search → pick → «ابدأ» → «مين معك؟» → the trip.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
+    /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking
+    /// a place sends it to the current outing instead of opening the new-outing flow.
+    var destinationPicker: ((OutingDestination) -> Void)? = nil
+    var autoFocusSearch = false
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
@@ -77,6 +81,10 @@ struct MapHomeScreen: View {
             shortcuts = HomeShortcutStore.load()
             locator.request()
             if camera == nil { recenter(zoom: 12) }
+            if autoFocusSearch {
+                setExpanded(true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
+            }
         }
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
@@ -571,6 +579,12 @@ struct MapHomeScreen: View {
     }
 
     private func pick(_ s: SelectedPlace) {
+        if let destinationPicker {
+            RecentPlaces.add(s.destination)
+            recent = RecentPlaces.load()
+            destinationPicker(s.destination)
+            return
+        }
         searchFocused = false
         selected = s
         expanded = false

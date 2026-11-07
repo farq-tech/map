@@ -1,7 +1,7 @@
 import XCTest
 
 /// «طلعة جديدة» end to end with demo data (no server) and a synthetic calm forecast:
-/// a typed coordinate → «الجو هناك» → «ادعُ ربعك» → «ابدأ الطلعة» → the live map's weather chip.
+/// a typed coordinate → an automatic trip name → «الجو هناك» → «ادعُ ربعك» → the live map.
 /// With `SARY_FLOW_SHOTS=1` it saves docs/app-shots/flow-*-<scheme>.jpg (`SARY_FLOW_SCHEME` light|dark).
 final class CreateFlowUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -56,22 +56,16 @@ final class CreateFlowUITests: XCTestCase {
         /* ٢ الجو هناك */
         let name = app.textFields["create.name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertEqual(name.value as? String, "طلعة جديدة", "a map coordinate gets a default title")
         XCTAssertTrue(app.staticTexts["الجو هناك"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["create.weather.now"].waitForExistence(timeout: 8), "the destination's weather now")
         XCTAssertTrue(app.descendants(matching: .any)["create.weather.arrival"].exists, "and at arrival")
-        let approve = app.buttons["create.approve"]
-        approve.tap()
-        XCTAssertTrue(app.staticTexts["اكتب اسم الطلعة."].waitForExistence(timeout: 3), "a name is required")
-        name.tap()
-        name.typeText("كشتة الثمامة\n")
-        app.swipeDown()
-        shot("2-weather")
-        app.swipeUp()
         XCTAssertTrue(app.buttons["create.changeTime"].exists)
         XCTAssertTrue(app.buttons["create.changePlace"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["create.weather.wadi"].exists, "the wadi / flood caveat")
-        shot("2-approve")
-        app.buttons["create.approve"].tap()
+        shot("2-weather")
+        let approve = app.buttons["create.approve"]
+        approve.tap()
 
         /* ٣ ادعُ ربعك */
         let whatsapp = app.buttons["create.whatsapp"]
