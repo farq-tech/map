@@ -101,6 +101,7 @@ extension LiveOutingController {
         case "copyme": modal = .plan(.me)
         case "nearest": a.openNearestStations()
         case "weather": modal = .weather
+        case "qibla": modal = .qibla
         case "youtube": MediaCenters.of(self).open()
         case "radio": GroupAudioCenters.of(self).open()
         case "explore": enterExplore()

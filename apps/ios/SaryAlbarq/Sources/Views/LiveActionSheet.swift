@@ -103,6 +103,7 @@ enum LiveActionCatalog {
                 .init(id: "brief", title: "بريف المكان", systemImage: "info.circle", accessibilityID: "outing-brief"),
                 .init(id: "savePlace", title: "احفظ مكان", systemImage: "bookmark", accessibilityID: "outing-save-place"),
                 .init(id: "weather", title: "طقس", systemImage: "sun.max", accessibilityID: "outing-weather"),
+                .init(id: "qibla", title: "القبلة", systemImage: "location.north.circle", accessibilityID: "outing-qibla"),
                 .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
             ]),
