@@ -153,8 +153,8 @@ final class WeatherOverlay {
             layer.rasterResampling = .constant(.linear)
             do {
                 try m.addSource(src)
-                if m.allSlotIdentifiers.contains(.middle) {
-                    layer.slot = .middle
+                if let middle = Slot.middle, m.allSlotIdentifiers.contains(middle) {
+                    layer.slot = middle
                     try m.addLayer(layer)
                 } else if let below {
                     try m.addLayer(layer, layerPosition: .below(below))
