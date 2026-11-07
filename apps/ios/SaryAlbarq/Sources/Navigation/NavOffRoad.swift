@@ -41,6 +41,7 @@ enum NavOffRoad {
     /// The off-road panel's title: why it is a straight line.
     static func title(direct: Bool, fallback: NavFallback?) -> String {
         if fallback == .offline { return "بلا إنترنت · اتجاه مباشر" }
+        if fallback == .routeFailed { return "تعذّر حساب الطريق · اتجاه مباشر" }
         return direct ? "لا يوجد طريق معروف" : "آخر جزء بدون طريق"
     }
 
@@ -48,6 +49,9 @@ enum NavOffRoad {
     static func note(fallback: NavFallback?, bearing: Double) -> String {
         if fallback == .offline {
             return "ما نقدر نحسب الطريق الآن، نعيد المحاولة لما يرجع الاتصال · اتجه مع السهم \(NavText.compassDefinite(bearing)) · خط مستقيم، ليس طريقًا"
+        }
+        if fallback == .routeFailed {
+            return "خادم الطرق ما ردّ، نعيد المحاولة تلقائيًا · اتجه مع السهم \(NavText.compassDefinite(bearing)) · خط مستقيم، ليس طريقًا"
         }
         return "\(honestNote) · باتجاه \(NavText.compassDefinite(bearing)) · خط مستقيم، ليس طريقًا. انتبه للتضاريس"
     }
@@ -57,6 +61,7 @@ enum NavOffRoad {
         let d = SaryFormat.distance(meters: remainingM ?? leg.distanceM)
         let dir = NavText.compassDefinite(bearing ?? leg.bearing)
         if fallback == .offline { return "بلا إنترنت: اتجه مع السهم · \(d) باتجاه \(dir)" }
+        if fallback == .routeFailed { return "تعذّر حساب الطريق: اتجه مع السهم · \(d) باتجاه \(dir)" }
         return "\(honestNote) · \(d) باتجاه \(dir)"
     }
 

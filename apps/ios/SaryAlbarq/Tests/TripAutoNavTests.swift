@@ -475,6 +475,31 @@ final class NavSessionAutoTests: XCTestCase {
         n.end()
     }
 
+    /// Field report (build 23): STC 5G at 480 Mbps, yet the HUD said «بلا إنترنت». A router
+    /// failure while online must never blame the user's connection.
+    func testRouterFailureWhileOnlineIsNotCalledOffline() async {
+        let router = ScriptedRouter([.failure(.failed("")), .success(NavRoutePlan(routes: [road(to: campPos, id: "back")]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.retryInterval = 60
+        n.myFix = { fix(olaya) }
+        n.autoStart(to: campTarget)
+        await wait("bearing guidance") { n.phase == .offRoad }
+        XCTAssertEqual(n.fallback, .routeFailed)
+        XCTAssertNil(n.active, "never a made-up route")
+        let title = NavOffRoad.title(direct: n.direct, fallback: n.fallback)
+        XCTAssertEqual(title, "تعذّر حساب الطريق · اتجاه مباشر")
+        XCTAssertFalse(title.contains("إنترنت"))
+        XCTAssertFalse(NavOffRoad.note(fallback: n.fallback, bearing: 90).contains("إنترنت"))
+        XCTAssertFalse(n.activityLine?.text.contains("إنترنت") ?? true)
+        /* It keeps retrying, and switches to the road when the router answers. */
+        let done = await n.retryRoute()
+        XCTAssertTrue(done)
+        XCTAssertEqual(n.phase, .guiding)
+        XCTAssertNil(n.fallback)
+        n.end()
+    }
+
     func testOfflineRetriesAndSwitchesToTheRoadWhenOnline() async {
         let router = ScriptedRouter([.failure(.offline), .failure(.offline), .success(NavRoutePlan(routes: [road(to: campPos, id: "back")]))])
         let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })

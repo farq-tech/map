@@ -163,7 +163,7 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
     nonisolated static func map(_ e: DirectionsError) -> NavRoutingError {
         switch e {
         case .unableToRoute, .noMatches, .unableToLocate: return .noRoute
-        case let .network(u): return u.code == .notConnectedToInternet || u.code == .networkConnectionLost || u.code == .timedOut ? .offline : .failed("")
+        case let .network(u): return u.code == .notConnectedToInternet || u.code == .networkConnectionLost ? .offline : .failed("")
         default: return .failed("")
         }
     }
