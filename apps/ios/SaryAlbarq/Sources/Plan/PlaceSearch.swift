@@ -421,8 +421,16 @@ enum PlaceSearch {
             let all = [p.name, p.altName].compactMap { $0 }
             names = Set(all.map(PlaceSearch.normalize))
             brands = Set(all.compactMap(SearchLexicon.brandId))
-            /* A chain's name is the same words at every branch: branches merge only within 60 m (brands). */
-            concepts = Set(all.compactMap(SearchLexicon.conceptKey)).subtracting(brands)
+            /* A chain's name is the same words at every branch: branches merge only within 60 m (brands).
+               Don't let a type word turn a brand query ("Nahdi pharmacy") into a 150 m concept match. */
+            concepts = Set(all.compactMap { name in
+                let segments = SearchLexicon.segments(name)
+                let containsBrand = segments.contains { segment in
+                    if case let .known(entry) = segment { return entry.role == .brand }
+                    return false
+                }
+                return containsBrand ? nil : SearchLexicon.conceptKey(name)
+            })
             skeletons = Set(all.map(SearchLexicon.skeleton).filter { $0.count >= 4 })
         }
     }
