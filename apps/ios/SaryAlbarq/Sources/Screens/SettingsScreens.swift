@@ -531,6 +531,7 @@ struct AboutView: View {
                     HiResLicenseNotice()
                     VoiceDenoiseLicenseNotice()
                     CampSitesAttributionNotice()
+                    DesertGazetteerAttributionNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

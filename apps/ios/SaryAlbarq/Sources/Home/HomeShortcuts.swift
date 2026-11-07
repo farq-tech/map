@@ -54,6 +54,9 @@ struct HomeCategory: Identifiable, Equatable {
     var query: String
     /// A desert category (drawn with the sand tint).
     var desert = false
+    /// Where a desert chip's places come from («دليل البر» or the rain/green search); nil for
+    /// the everyday ones, which ask the place search with `query`.
+    var desertSource: DesertCategorySource? = nil
 
     static let city: [HomeCategory] = [
         .init(id: "restaurants", label: "مطاعم", systemImage: "fork.knife", query: "مطعم"),
@@ -63,11 +66,11 @@ struct HomeCategory: Identifiable, Equatable {
     ]
 
     static let desertOnes: [HomeCategory] = [
-        .init(id: "nufud", label: "نفود", systemImage: "mountain.2.fill", query: "نفود", desert: true),
-        .init(id: "rawda", label: "روضة", systemImage: "leaf.fill", query: "روضة", desert: true),
-        .init(id: "faydah", label: "فيضة", systemImage: "drop.fill", query: "فيضة", desert: true),
-        .init(id: "camps", label: "مخيمات", systemImage: "tent.fill", query: "مخيم", desert: true),
-        .init(id: "rain", label: "أمطار وربيع", systemImage: "cloud.rain.fill", query: "روضة ربيع", desert: true),
+        .init(id: "nufud", label: "نفود", systemImage: "mountain.2.fill", query: "نفود", desert: true, desertSource: .gazetteer(.nafud)),
+        .init(id: "rawda", label: "روضة", systemImage: "leaf.fill", query: "روضة", desert: true, desertSource: .gazetteer(.rawda)),
+        .init(id: "faydah", label: "فيضة", systemImage: "drop.fill", query: "فيضة", desert: true, desertSource: .gazetteer(.fayda)),
+        .init(id: "camps", label: "مخيمات", systemImage: "tent.fill", query: "مخيمات", desert: true, desertSource: .gazetteer(.camp)),
+        .init(id: "rain", label: "أمطار وربيع", systemImage: "cloud.rain.fill", query: "أمطار وربيع", desert: true, desertSource: .rainGreen("مطر|ربيع")),
     ]
 
     /// The order on the map: two everyday, then the desert, then the rest (one row that scrolls).

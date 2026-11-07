@@ -1,0 +1,45 @@
+{
+  "provenance": {
+    "osm": {
+      "source": "geofabrik",
+      "file": "gcc-states-latest.osm.pbf",
+      "osm_base": "2026-11-06T21:21:21Z",
+      "pbf_sha256": "c6e471bbc3b021f88b920cf89c475607f9d52d0c67c28769e1f62e3d6ff71c0d",
+      "elements": 4646,
+      "outside_saudi_dropped": 188
+    },
+    "fetched_at": "2026-11-07T15:29:41Z",
+    "geonames": {
+      "geonames/SA.zip": {
+        "url": "https://download.geonames.org/export/dump/SA.zip",
+        "sha256": "5f39b1c0561c53b8d49e51a46ad9b4a7de25ea5f81b79fec75871a5245ca2c31"
+      },
+      "geonames/alt/SA.zip": {
+        "url": "https://download.geonames.org/export/dump/alternatenames/SA.zip",
+        "sha256": "2ffb69977a1ebc137fd7dfc9a1e9c6601f3e2621dc441e84bf6b496d15a453ce"
+      }
+    }
+  },
+  "counts": {
+    "total": 3847,
+    "by_kind": {
+      "nafud": 2397,
+      "rawda": 296,
+      "fayda": 974,
+      "camp": 180
+    },
+    "by_source": {
+      "geonames": 2759,
+      "osm": 3148,
+      "camp-sites": 180
+    },
+    "with_polygon": 1225,
+    "with_arabic": 3588,
+    "raw": {
+      "osm": 3670,
+      "geonames": 2820,
+      "camp": 180
+    },
+    "bytes": 1378582
+  }
+}
