@@ -1,0 +1,69 @@
+{
+  "_about": "Stubbed provider answers for the bilingual parity test (BilingualSearchTests). Not recorded from Apple or Mapbox: hand-written to look like what each source returns for one form of a query. Apple answers in the language it was asked (an Arabic-named branch for «ستاربكس», an English-named one a few metres off for \"Starbucks\"), so merging and ranking are exercised across languages. Keys are '<form>|around', '<form>|saudi' (Apple) and '<form>' (Mapbox, Saudi pass).",
+  "me": { "lat": 24.7136, "lng": 46.6753 },
+  "pairs": [
+    ["ستاربكس", "Starbucks"],
+    ["صيدلية النهدي", "Nahdi pharmacy"],
+    ["محطة بنزين", "gas station"],
+    ["مستشفى الملك فيصل", "King Faisal hospital"],
+    ["روضة خريم", "Rawdat Khuraim"],
+    ["ماكدونالدز", "McDonald's"],
+    ["حي العليا", "Olaya district"],
+    ["البيك", "Al Baik"],
+    ["مطار الملك خالد", "King Khalid airport"],
+    ["جامعة الملك سعود", "King Saud University"]
+  ],
+  "apple": {
+    "ستاربكس|around": [
+      { "name": "ستاربكس", "lat": 24.7180, "lng": 46.6800, "category": "مقهى" },
+      { "name": "ستاربكس", "lat": 24.6900, "lng": 46.7000, "category": "مقهى" }
+    ],
+    "Starbucks|around": [
+      { "name": "Starbucks", "lat": 24.71802, "lng": 46.68003, "category": "مقهى" },
+      { "name": "Starbucks Olaya", "lat": 24.6950, "lng": 46.6850, "category": "مقهى" },
+      { "name": "Starbucks", "lat": 24.6900, "lng": 46.7000, "category": "مقهى" }
+    ],
+    "ستاربكس|saudi": [ { "name": "ستاربكس", "lat": 21.5400, "lng": 39.1700, "category": "مقهى" } ],
+    "Starbucks|saudi": [ { "name": "Starbucks", "lat": 21.54012, "lng": 39.17008, "category": "مقهى" } ],
+
+    "صيدلية النهدي|around": [ { "name": "صيدلية النهدي", "lat": 24.7150, "lng": 46.6770, "category": "صيدلية" } ],
+    "Nahdi Pharmacy|around": [
+      { "name": "Nahdi Pharmacy", "lat": 24.71503, "lng": 46.67702, "category": "صيدلية" },
+      { "name": "Al Nahdi Pharmacy", "lat": 24.7300, "lng": 46.6600, "category": "صيدلية" }
+    ],
+
+    "محطة بنزين|around": [
+      { "name": "الدريس", "lat": 24.7200, "lng": 46.6800, "category": "محطة وقود" },
+      { "name": "ساسكو", "lat": 24.7000, "lng": 46.6600, "category": "محطة وقود" }
+    ],
+    "Gas station|saudi": [ { "name": "Aldrees", "lat": 24.72002, "lng": 46.68001, "category": "محطة وقود" } ],
+
+    "مستشفى الملك فيصل|around": [ { "name": "مستشفى الملك فيصل التخصصي", "lat": 24.6705, "lng": 46.6760, "category": "مستشفى" } ],
+    "King Faisal Hospital|around": [ { "name": "King Faisal Specialist Hospital", "lat": 24.67052, "lng": 46.67603, "category": "مستشفى" } ],
+
+    "Rawdat Khuraim|saudi": [ { "name": "Rawdat Khuraim", "lat": 25.3805, "lng": 47.2804, "category": "حديقة" } ],
+
+    "ماكدونالدز|around": [ { "name": "ماكدونالدز", "lat": 24.7250, "lng": 46.6900, "category": "مطعم" } ],
+    "McDonald's|around": [
+      { "name": "McDonald's", "lat": 24.72502, "lng": 46.69004, "category": "مطعم" },
+      { "name": "McDonald's", "lat": 24.7400, "lng": 46.6400, "category": "مطعم" }
+    ],
+
+    "Olaya District|saudi": [ { "name": "Olaya", "lat": 24.6902, "lng": 46.6851 } ],
+
+    "البيك|around": [ { "name": "البيك", "lat": 24.7300, "lng": 46.7000, "category": "مطعم" } ],
+    "Al Baik|around": [ { "name": "ALBAIK", "lat": 24.73003, "lng": 46.70002, "category": "مطعم" } ],
+
+    "مطار الملك خالد|saudi": [ { "name": "مطار الملك خالد الدولي", "lat": 24.9576, "lng": 46.6988, "category": "مطار" } ],
+    "King Khalid International Airport|saudi": [ { "name": "King Khalid International Airport", "lat": 24.95762, "lng": 46.69881, "category": "مطار" } ],
+
+    "جامعة الملك سعود|around": [ { "name": "جامعة الملك سعود", "lat": 24.7163, "lng": 46.6190, "category": "جامعة" } ],
+    "King Saud University|around": [ { "name": "King Saud University", "lat": 24.71632, "lng": 46.61902, "category": "جامعة" } ]
+  },
+  "mapbox": {
+    "روضة خريم": [ { "id": "mb-rawdat-khuraim", "name": "روضة خريم", "lat": 25.3800, "lng": 47.2800, "type": "place" } ],
+    "حي العليا": [ { "id": "mb-olaya", "name": "العليا", "lat": 24.6900, "lng": 46.6850, "type": "locality" } ],
+    "Olaya District": [ { "id": "mb-olaya", "name": "العليا", "lat": 24.6900, "lng": 46.6850, "type": "locality" } ],
+    "King Faisal Hospital": [ { "id": "mb-king-faisal-st", "name": "King Faisal", "lat": 24.7400, "lng": 46.5700, "type": "street" } ]
+  }
+}
