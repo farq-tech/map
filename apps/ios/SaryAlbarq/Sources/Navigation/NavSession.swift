@@ -19,9 +19,15 @@ enum NavPhase: Equatable {
 enum NavFallback: Equatable {
     /// The router knows no road to the target (a desert camp off the network).
     case noRoad
-    /// Routing failed (no network, router unreachable): bearing guidance while we retry.
+    /// The phone has no internet (the request never left): bearing guidance while we retry.
     /// Never a made-up route.
     case offline
+    /// The internet works but the router failed or timed out: bearing guidance while we retry.
+    /// Never «بلا إنترنت» — that would blame the user's connection for our server.
+    case routeFailed
+
+    /// Bearing guidance that keeps asking for a road route.
+    var retrying: Bool { self == .offline || self == .routeFailed }
 }
 
 enum NavCameraMode: Equatable {
@@ -444,11 +450,15 @@ final class NavSession: ObservableObject {
             retryable = false
         case .failure(.notConfigured):
             goDirect(origin, t)
-            fallback = .offline
+            fallback = .routeFailed
             retryable = false
-        case .failure:
+        case .failure(.offline):
             goDirect(origin, t)
             fallback = .offline
+            retryable = true
+        case .failure:
+            goDirect(origin, t)
+            fallback = .routeFailed
             retryable = true
         }
         #if DEBUG
@@ -473,13 +483,13 @@ final class NavSession: ObservableObject {
     /// when the network comes back). True when there is nothing left to retry.
     @discardableResult
     func retryRoute() async -> Bool {
-        guard auto, phase == .offRoad, fallback == .offline, retryable else { return true }
+        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return true }
         guard !retrying, let t = target, let f = myFix() else { return false }
         retrying = true
         defer { retrying = false }
         let origin = LngLat(lng: f.lng, lat: f.lat)
         let r = await requestRoutes(origin: origin, heading: Policy.trustedHeading(f.heading, speed: f.speed), target: t)
-        guard auto, phase == .offRoad, fallback == .offline, target == t else { return true }
+        guard auto, phase == .offRoad, fallback?.retrying == true, target == t else { return true }
         switch r {
         case let .success(p) where !p.routes.isEmpty:
             #if DEBUG
@@ -502,7 +512,7 @@ final class NavSession: ObservableObject {
 
     /// The network is back: try the road route now instead of waiting for the timer.
     func retryNow() {
-        guard auto, phase == .offRoad, fallback == .offline, retryable else { return }
+        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return }
         Task { await retryRoute() }
     }
 
@@ -532,6 +542,8 @@ final class NavSession: ObservableObject {
                 let arrow = { (lead: String) in SaryVoiceScript.arrow(lead: lead, bearing: leg.bearing, distanceM: leg.distanceM) }
                 if auto, fallback == .offline {
                     voice.say(intro + NavLine("ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال", clips: arrow("rr_06")))
+                } else if auto, fallback == .routeFailed {
+                    voice.say(intro + NavLine("ما قدرنا نحسب الطريق الحين. اتجه مع السهم \(way). نعيد المحاولة", clips: arrow("dir_07")))
                 } else if auto {
                     /* «ما فيه طريق مزفلت يوصّلك للوجهة» (dir_06), not bar_01: in the v4 set bar_01 says «انتهى الطريق المزفلت», wrong before any road. */
                     voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("dir_06")))
