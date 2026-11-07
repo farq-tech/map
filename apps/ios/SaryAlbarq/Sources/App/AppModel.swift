@@ -230,9 +230,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func retryIdentityRead() {
-        guard identityPending, !isDemo else { return }
-        applyIdentityRead(IdentityStore.read())
+    /// Protected data back / app in the foreground: read again while pending, and also while
+    /// signed out — a quick relaunch could have read "nothing" before the Keychain was ready,
+    /// and the account must come back instead of the welcome screen staying (only an explicit
+    /// sign-out deletes it, so a found identity is always the real one).
+    func retryIdentityRead() {
+        guard !isDemo, identityPending || identity == nil, !loading else { return }
+        let r = IdentityStore.read()
+        if case .none = r, !identityPending { return }
+        applyIdentityRead(r)
     }
 
     private var verifyingAuth = false

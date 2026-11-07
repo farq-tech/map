@@ -356,3 +356,66 @@ private extension ChatMessage {
         return c
     }
 }
+
+/// «بلّغ عن الرسالة» و«احظر» (App Store 1.2): the store reports, blocks and hides.
+@MainActor
+final class ChatModerationTests: XCTestCase {
+    private var defaults: UserDefaults!
+    override func setUp() { defaults = UserDefaults(suiteName: "chat-mod-\(UUID().uuidString)") }
+
+    // MARK: «بلّغ» و«احظر» (App Store 1.2)
+
+    final class ModBackend: ChatBackend, ChatModerationBackend {
+        let inner = ChatTests.FakeBackend()
+        var reports: [(String, ChatReportReason, Bool)] = []
+        var blocked: [String] = []
+        func chatOverview(_ o: String) async throws -> ChatOverview { try await inner.chatOverview(o) }
+        func chatPage(_ o: String, with: ChatWith, before: Int?, after: Int?, limit: Int) async throws -> ChatPage { try await inner.chatPage(o, with: with, before: before, after: after, limit: limit) }
+        func chatSend(_ o: String, draft: ChatDraft) async throws -> ChatMessage { try await inner.chatSend(o, draft: draft) }
+        func chatRead(_ o: String, with: ChatWith, seq: Int) async throws {}
+        func chatDelete(_ o: String, messageId: String) async throws -> ChatMessage { try await inner.chatDelete(o, messageId: messageId) }
+        func chatReport(_ o: String, messageId: String, reason: ChatReportReason, block: Bool) async throws { reports.append((messageId, reason, block)) }
+        func blockUser(_ userId: String) async throws { blocked.append(userId) }
+        func unblockUser(_ userId: String) async throws { blocked.removeAll { $0 == userId } }
+        func listBlocks() async throws -> [BlockedUser] { blocked.map { BlockedUser(user_id: $0) } }
+    }
+
+    func testReportAndBlockHideTheSendersMessagesAndLaterOnes() async {
+        let b = ModBackend()
+        let s = ChatStore(outingId: "o1", me: ChatTests.me, backend: b, defaults: defaults)
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(4, from: ChatTests.fahd))])
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(5, from: ChatTests.saad))])
+        let m = s.threads[.group]!.messages.first { $0.sender_id == ChatTests.fahd }!
+        XCTAssertTrue(s.canReport(m))
+        XCTAssertFalse(s.canReport(ChatTests.message(9, from: ChatTests.me)), "not my own")
+        let ok = await s.report(m, reason: .harassment)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(b.reports.first?.1, .harassment)
+        XCTAssertNotNil(s.notice)
+
+        let blocked = await s.block(ChatTests.fahd, name: "فهد")
+        XCTAssertTrue(blocked)
+        XCTAssertEqual(b.blocked, [ChatTests.fahd])
+        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd }, "gone at once")
+        XCTAssertTrue(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.saad }, "the others stay")
+        XCTAssertTrue(BlockedUsers.storedIds(defaults).contains(ChatTests.fahd))
+        /* a late frame from him (old server) is still hidden */
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(6, from: ChatTests.fahd))])
+        XCTAssertFalse(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd })
+        /* «إلغاء الحظر» (الإعدادات ← المحظورين): his messages are no longer filtered — a reload shows them. */
+        await s.unblock(ChatTests.fahd)
+        XCTAssertEqual(b.blocked, [], "the server is told too")
+        XCTAssertTrue(BlockedUsers.load(defaults).isEmpty)
+        s.receive(["type": "chat_message", "message": ChatTests.wire(ChatTests.message(7, from: ChatTests.fahd))])
+        XCTAssertTrue(s.threads[.group]!.messages.contains { $0.sender_id == ChatTests.fahd }, "restored after unblock")
+    }
+
+    func testABackendWithoutModerationOffersNoReport() {
+        let s = ChatStore(outingId: "o1", me: ChatTests.me, backend: ChatTests.FakeBackend(), defaults: defaults)
+        XCTAssertFalse(s.canReport(ChatTests.message(4, from: ChatTests.fahd)))
+    }
+
+    func testReportReasonsMatchTheServer() {
+        XCTAssertEqual(ChatReportReason.allCases.map(\.rawValue), ["abuse", "harassment", "spam", "sexual", "violence", "other"])
+    }
+}

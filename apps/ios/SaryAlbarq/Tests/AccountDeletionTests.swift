@@ -189,14 +189,87 @@ final class SessionPersistenceTests: XCTestCase {
     private var saved: IdentityKeychain!
     private let me = Identity(token: String(repeating: "A", count: 43), user: PublicUser(id: "u-1", display_name: "أبو فهد", avatar: nil, phone: "+966501234567"))
 
+    private var savedProtected: (() -> Bool)!
+
     override func setUp() {
         saved = IdentityStore.keychain
+        savedProtected = IdentityStore.protectedDataAvailable
+        IdentityStore.protectedDataAvailable = { true }
         IdentityStore.forgetCache()
     }
 
     override func tearDown() {
         IdentityStore.keychain = saved
+        IdentityStore.protectedDataAvailable = savedProtected
         IdentityStore.forgetCache()
+    }
+
+    /// A «when unlocked» item (saved by an older build) is invisible while the phone is locked:
+    /// the Keychain answers "not found". A quick relaunch then showed the welcome screen to a
+    /// signed-in person. Now: not found + no protected data = wait (splash), never onboarding.
+    final class HidingKeychain: IdentityKeychain {
+        var data: Data?
+        var hidden = false
+        var writes = 0
+        func read() -> (status: OSStatus, data: Data?) {
+            if hidden || data == nil { return (errSecItemNotFound, nil) }
+            return (errSecSuccess, data)
+        }
+        func write(_ d: Data) -> OSStatus { writes += 1; data = d; return errSecSuccess }
+        func delete() -> OSStatus { data = nil; return errSecSuccess }
+    }
+
+    func testQuickRelaunchWithAHiddenItemWaitsThenSignsInNeverWelcome() {
+        let k = HidingKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        k.hidden = true
+        IdentityStore.protectedDataAvailable = { false }
+        XCTAssertEqual(IdentityStore.read(), .unavailable(errSecItemNotFound), "not found while locked is not an answer")
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertNil(m.identity)
+        XCTAssertTrue(m.identityPending, "splash, not the welcome screen")
+        /* Unlocked / foreground: the same account comes back. */
+        k.hidden = false
+        IdentityStore.protectedDataAvailable = { true }
+        m.retryIdentityRead()
+        XCTAssertFalse(m.identityPending)
+        XCTAssertEqual(m.identity, me)
+    }
+
+    func testAnEarlyNotFoundIsCorrectedWhenTheAppComesForward() {
+        /* The race the protected-data check cannot see: "not found" with data reported available. */
+        let k = HidingKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        k.hidden = true
+        let m = AppModel(arguments: ["-SaryOffline"])
+        XCTAssertNil(m.identity)
+        k.hidden = false
+        m.retryIdentityRead()
+        XCTAssertEqual(m.identity, me, "the welcome screen does not stay over a real account")
+    }
+
+    func testAFoundItemIsRewrittenOnceToMoveItToAfterFirstUnlock() {
+        let k = HidingKeychain()
+        IdentityStore.keychain = k
+        IdentityStore.save(me)
+        IdentityStore.forgetCache()
+        let before = k.writes
+        _ = IdentityStore.read()
+        _ = IdentityStore.read()
+        XCTAssertEqual(k.writes, before + 1, "updated in place once per launch")
+    }
+
+    func testSignedOutStaysSignedOutOnForeground() {
+        let k = HidingKeychain()
+        IdentityStore.keychain = k
+        let m = AppModel(arguments: ["-SaryOffline"])
+        m.retryIdentityRead()
+        XCTAssertNil(m.identity)
+        XCTAssertFalse(m.identityPending, "nothing saved: onboarding, as before")
     }
 
     func testIdentitySurvivesARelaunch() {

@@ -65,7 +65,7 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     return set;
   }
 
-  function emit(outingId, event, { exceptUser } = {}) {
+  function emit(outingId, event, { exceptUser, exceptUsers } = {}) {
     const room = rooms.get(outingId);
     if (!room || !room.size) return 0;
     const payload = JSON.stringify(event);
@@ -74,6 +74,8 @@ function createHub({ pollPresenceMs = 25_000, now = () => Date.now() } = {}) {
     let n = 0;
     for (const c of room) {
       if (skip && c.userId === skip) continue;
+      /* «احظر»: people who blocked the sender (chat only — never used for SOS). */
+      if (exceptUsers && exceptUsers.has(c.userId)) continue;
       send(c, payload);
       n += 1;
     }

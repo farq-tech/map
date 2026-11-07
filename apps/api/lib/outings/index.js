@@ -84,6 +84,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
         relay: ptt,
         apns,
         push: fanout,
+        blockersOf: (uid) => service.blockersOf(uid),
         ...(now ? { now } : {}),
       })
     : null;

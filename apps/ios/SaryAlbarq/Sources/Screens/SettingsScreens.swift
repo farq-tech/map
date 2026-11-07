@@ -175,6 +175,8 @@ struct SettingsView: View {
             IntroSettingsSection()
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
+                SaryDivider()
+                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من الدردشة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
             }
             SarySection(title: "المظهر والقيادة") {
                 SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
@@ -579,4 +581,72 @@ struct AdvancedSettingsView: View {
 enum MapboxTelemetry {
     static let key = "MGLMapboxMetricsEnabled"
     static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+}
+
+/// Settings → «المحظورين» (App Store 1.2): the people I blocked, each with «إلغاء الحظر».
+/// Loads the server's list (`GET /me/blocks`); the phone's copy shows at once and offline.
+struct BlockedUsersView: View {
+    var back: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.sary) private var theme
+    @State private var list: [BlockedUser] = BlockedUsers.load()
+    @State private var busy: String?
+    @State private var error: String?
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "المحظورين", subtitle: "ما تشوف رسائلهم ولا رسائلهم الصوتية، وما يقدرون يراسلونك على الخاص", back: back) {
+            if let error { SaryInlineMessage(text: error, tone: .warning).accessibilityIdentifier("blocked.error") }
+            SarySection(footer: "الطوارئ من أي أحد توصلك دايم، حتى لو حاظره. للسلامة.") {
+                if list.isEmpty {
+                    Text("ما حظرت أحد.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .accessibilityIdentifier("blocked.empty")
+                }
+                ForEach(Array(list.enumerated()), id: \.element.user_id) { i, b in
+                    if i > 0 { SaryDivider() }
+                    HStack(spacing: theme.space(.m)) {
+                        SaryAvatar(name: b.display_name ?? "؟", color: 0x9AA5AD, size: 36)
+                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { Task { await unblock(b) } } label: {
+                            Group {
+                                if busy == b.user_id { ProgressView() } else { Text("إلغاء الحظر").saryText(.callout, weight: .bold) }
+                            }
+                            .foregroundStyle(p.accentText)
+                            .padding(.horizontal, theme.space(.m))
+                            .frame(minWidth: 44, minHeight: 44)
+                            .background(Capsule().fill(p.sunken))
+                        }
+                        .buttonStyle(SaryPressStyle())
+                        .disabled(busy != nil)
+                        .accessibilityLabel(Text("إلغاء حظر \(b.display_name ?? "العضو")"))
+                        .accessibilityIdentifier("blocked.unblock")
+                    }
+                    .padding(.vertical, theme.space(.xs))
+                    .accessibilityIdentifier("blocked.row")
+                }
+            }
+        }
+        .task { await refresh() }
+    }
+
+    private func refresh() async {
+        guard !model.isDemo, let l = try? await model.api.listBlocks() else { return }
+        list = l
+        BlockedUsers.save(l)
+    }
+
+    private func unblock(_ b: BlockedUser) async {
+        busy = b.user_id
+        defer { busy = nil }
+        do {
+            if !model.isDemo { try await model.api.unblockUser(b.user_id) }
+            BlockedUsers.remove(b.user_id)
+            list.removeAll { $0.user_id == b.user_id }
+            error = nil
+        } catch {
+            self.error = "ما قدرنا نلغي الحظر الحين. جرّب مرة ثانية."
+        }
+    }
 }

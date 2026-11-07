@@ -84,6 +84,8 @@ final class ChatStore: ObservableObject {
     /// «فهد يكتب…» per conversation (user id), cleared after a few seconds.
     @Published private(set) var typing: [ChatWith: String] = [:]
     @Published var lastError: String?
+    /// «وصل بلاغك…» / «حظرت فلان…»: a short confirmation for the chat screen.
+    @Published var notice: String?
     /// The conversation on screen right now (its messages count as read).
     @Published private(set) var visible: ChatWith?
     /// The badge before the conversation list is loaded (from the outing snapshot).
@@ -92,6 +94,7 @@ final class ChatStore: ObservableObject {
     var onIncoming: (ChatMessage) -> Void = { _ in }
 
     private let backend: ChatBackend
+    private let defaults: UserDefaults
     private let outbox: ChatOutbox
     private var deps: Deps
     private var drafts: [ChatDraft]
@@ -105,6 +108,7 @@ final class ChatStore: ObservableObject {
         self.outingId = outingId
         self.me = me
         self.backend = backend
+        self.defaults = defaults
         self.outbox = ChatOutbox(defaults: defaults, outingId: outingId)
         self.deps = deps
         drafts = outbox.load()
@@ -385,6 +389,71 @@ final class ChatStore: ObservableObject {
         }
     }
 
+    // MARK: «بلّغ» و«احظر» (App Store 1.2)
+
+    /// A friend's message, not deleted, not mine: it can be reported and its sender blocked.
+    func canReport(_ m: ChatMessage) -> Bool { !m.deleted && !m.isPending && m.sender_id != me && backend is ChatModerationBackend }
+
+    /// Sends the report; `block` also blocks the sender. True when the server took it.
+    @discardableResult
+    func report(_ m: ChatMessage, reason: ChatReportReason, block: Bool = false) async -> Bool {
+        guard let mod = backend as? ChatModerationBackend else { return false }
+        do {
+            try await mod.chatReport(outingId, messageId: m.id, reason: reason, block: block)
+            if block { hideSender(m.sender_id, name: m.sender_name) }
+            notice = "وصل بلاغك، نراجعه خلال ٢٤ ساعة. شكرًا."
+            return true
+        } catch let e as OutingAPIError {
+            lastError = ChatRules.errorText(e.code)
+        } catch {
+            lastError = ChatRules.errorText("network")
+        }
+        return false
+    }
+
+    /// «احظر فلان»: his messages and voice notes disappear for me; DMs between us stop.
+    @discardableResult
+    func block(_ userId: String, name: String?) async -> Bool {
+        guard let mod = backend as? ChatModerationBackend else { return false }
+        do {
+            try await mod.blockUser(userId)
+            hideSender(userId, name: name)
+            notice = "حظرت \(name ?? "العضو"). تقدر تلغيه من الإعدادات ← المحظورين."
+            return true
+        } catch let e as OutingAPIError {
+            lastError = ChatRules.errorText(e.code)
+        } catch {
+            lastError = ChatRules.errorText("network")
+        }
+        return false
+    }
+
+    /// «إلغاء الحظر»: the server is told and the local copy cleared. The chat shows his messages
+    /// again on its next load (the `insert` filter no longer drops them).
+    @discardableResult
+    func unblock(_ userId: String) async -> Bool {
+        guard let mod = backend as? ChatModerationBackend else { return false }
+        do {
+            try await mod.unblockUser(userId)
+            BlockedUsers.remove(userId, defaults: defaults)
+            return true
+        } catch let e as OutingAPIError {
+            lastError = ChatRules.errorText(e.code)
+        } catch {
+            lastError = ChatRules.errorText("network")
+        }
+        return false
+    }
+
+    private func hideSender(_ userId: String, name: String?) {
+        BlockedUsers.add(userId, name: name, defaults: defaults)
+        for (w, var t) in threads {
+            t.messages.removeAll { $0.sender_id == userId }
+            t.lastMessage = t.messages.last
+            threads[w] = t
+        }
+    }
+
     func canDelete(_ m: ChatMessage) -> Bool {
         guard !m.deleted, !m.isPending else { return false }
         return m.sender_id == me || (m.conv == "group" && canModerate)
@@ -467,7 +536,9 @@ final class ChatStore: ObservableObject {
 
     private func insert(_ ms: [ChatMessage], into w: ChatWith) {
         var t = threads[w] ?? ChatThreadState()
-        t.messages = ChatRules.merge(t.messages, ms)
+        /* «احظر»: what the people I blocked say is not shown here (the server filters too). */
+        let blocked = BlockedUsers.storedIds(defaults)
+        t.messages = ChatRules.merge(t.messages, ms.filter { !blocked.contains($0.sender_id) })
         if let last = t.messages.last { t.lastMessage = last }
         threads[w] = t
     }
@@ -522,6 +593,18 @@ extension OutingsAPI: ChatBackend {
     func setChatPrefs(_ on: Bool) async throws -> ChatPrefs { try await call("PUT", "/push/chat", body: ChatPrefs(chat_push: on)) }
 }
 
+extension OutingsAPI: ChatModerationBackend {
+    private struct ReportBody: Encodable { var reason: String; var block: Bool }
+    private struct BlocksBox: Decodable { var blocks: [BlockedUser] }
+
+    func chatReport(_ outingId: String, messageId: String, reason: ChatReportReason, block: Bool) async throws {
+        let _: OkBox = try await call("POST", "/\(outingId)/chat/\(messageId)/report", body: ReportBody(reason: reason.rawValue, block: block))
+    }
+    func blockUser(_ userId: String) async throws { let _: OkBox = try await call("POST", "/me/blocks/\(userId)") }
+    func unblockUser(_ userId: String) async throws { let _: OkBox = try await call("DELETE", "/me/blocks/\(userId)") }
+    func listBlocks() async throws -> [BlockedUser] { let b: BlocksBox = try await call("GET", "/me/blocks"); return b.blocks }
+}
+
 private struct ChatSendBody: Encodable {
     var client_id: String
     var kind: String
@@ -539,7 +622,7 @@ private struct ChatSendBody: Encodable {
 
 /// `-demo` (screenshots, UI tests): an in-memory chat with the demo friends. Clearly a demo:
 /// never talks to the server. «أبو فهد» answers in the group, and reads what you send.
-final class DemoChatBackend: ChatBackend, @unchecked Sendable {
+final class DemoChatBackend: ChatBackend, ChatModerationBackend, @unchecked Sendable {
     var emit: ([String: Any]) -> Void = { _ in }
     private let me: String
     private var seq = 0
@@ -633,6 +716,13 @@ final class DemoChatBackend: ChatBackend, @unchecked Sendable {
     }
 
     func chatRead(_ outingId: String, with: ChatWith, seq: Int) async throws { readMarks[with] = max(readMarks[with] ?? 0, seq) }
+
+    /* Demo «بلّغ» / «احظر»: accepted, nothing leaves the phone. */
+    private(set) var reports: [(String, ChatReportReason)] = []
+    func chatReport(_ outingId: String, messageId: String, reason: ChatReportReason, block: Bool) async throws { reports.append((messageId, reason)) }
+    func blockUser(_ userId: String) async throws {}
+    func unblockUser(_ userId: String) async throws {}
+    func listBlocks() async throws -> [BlockedUser] { BlockedUsers.load() }
 
     func chatDelete(_ outingId: String, messageId: String) async throws -> ChatMessage {
         guard let i = messages.firstIndex(where: { $0.id == messageId }) else { throw OutingAPIError(code: "message_not_found", status: 404) }

@@ -70,6 +70,25 @@ final class ChatUITests: XCTestCase {
         shot(app, "chat-04-conversations-after")
     }
 
+    /// App Store 1.2: a chat message's context menu offers «بلّغ عن الرسالة» and «احظر فلان».
+    /// (SwiftUI context-menu items are not reliably tappable by XCUITest — see the reasons submenu —
+    /// so the block/unblock effects and the report reasons are covered in ChatModerationTests.)
+    func testMessageMenuOffersReportAndBlock() {
+        let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
+        let entry = any(app, "chat.entry")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+        XCTAssertTrue(any(app, "chat.row.group").waitForExistence(timeout: 5))
+        any(app, "chat.row.group").tap()
+        let his = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "هلا بالشباب")).firstMatch
+        XCTAssertTrue(his.waitForExistence(timeout: 5), "a friend's message")
+
+        his.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["chat.menu.report"].waitForExistence(timeout: 4) || app.buttons["بلّغ عن الرسالة"].exists, "«بلّغ عن الرسالة» in the menu")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch.waitForExistence(timeout: 4), "«احظر فلان» in the menu")
+        shot(app, "chat-10-message-menu")
+    }
+
     func testPlusOpensChatsInTwoTaps() {
         let app = launch()
         app.buttons["outing-actions"].tap()
