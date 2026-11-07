@@ -222,6 +222,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
         HiResImagery.of(map).update(hiRes)
+        /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
+        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome))
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
