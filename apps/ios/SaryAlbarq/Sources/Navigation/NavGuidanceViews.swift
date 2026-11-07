@@ -22,13 +22,14 @@ struct NavManeuverGlyph: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.43, style: .continuous).fill(tint)
+            /* `tint: .clear` (the v2 banner): a plain, bigger arrow with no tile. */
             Image(systemName: NavGlyph.symbol(maneuver))
-                .font(.system(size: size * 0.56, weight: .heavy))
+                .font(.system(size: size * (tint == .clear ? 0.78 : 0.56), weight: .heavy))
                 .foregroundStyle(ink)
             if maneuver.kind == .roundabout, let e = maneuver.exit {
                 Text(SaryFormat.number(e))
                     .font(.system(size: size * 0.22, weight: .black))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(tint == .clear ? Color.black : tint)
                     .padding(3)
                     .background(Circle().fill(Color.white))
                     .offset(x: size * 0.3, y: size * 0.3)
@@ -40,7 +41,58 @@ struct NavManeuverGlyph: View {
     }
 }
 
-/// Top banner: «بعد ٥٠٠ م» big, «انعطف يمينًا إلى طريق الملك فهد», lanes, then «ثم …».
+/// The guidance HUD's rules (v2, «وضوح Google»: less text, bigger). Pure, unit-tested in `NavigationTests`.
+enum NavHUD {
+    /// «ثم …» shows only when the turn after this one comes this soon after it.
+    static let thenWithinM = 400.0
+
+    static func showsThen(_ step: NavStep, next: NavStep?) -> Bool {
+        guard next != nil, step.maneuver.kind != .arrive else { return false }
+        return step.distanceM < thenWithinM
+    }
+
+    /// «٣٫٣ كم» → («٣٫٣», «كم»): the number big, the unit small.
+    static func distanceParts(_ meters: Double) -> (value: String, unit: String) {
+        let s = SaryFormat.distance(meters: meters)
+        guard let i = s.lastIndex(of: " ") else { return (s, "") }
+        return (String(s[..<i]), String(s[s.index(after: i)...]))
+    }
+
+    /// The banner's one big line: the road («طريق مكة المكرمة»); with no name, the action
+    /// («انعطف يمينًا»); at the end, the destination.
+    static func title(_ step: NavStep, targetName: String?) -> String {
+        if step.maneuver.kind == .arrive {
+            if let n = targetName, !n.isEmpty { return NavText.arabicDigitsOnly(n) }
+            return "وجهتك"
+        }
+        if let n = step.roadName, !n.isEmpty { return NavText.arabicDigitsOnly(n) }
+        if let n = step.signText, !n.isEmpty { return NavText.arabicDigitsOnly(n) }
+        return NavText.action(step.maneuver)
+    }
+
+    /// Over the posted limit (rounded km/h above it).
+    static func overLimit(kmh: Double?, limit: Int?) -> Bool {
+        guard let k = kmh, let l = limit, l > 0 else { return false }
+        return Int(k.rounded()) > l
+    }
+
+    /// «١٩ كم · ١٢:٥٦ ص» under the time left.
+    static func tripLine(meters: Double?, eta: Date?) -> String {
+        [meters.map { SaryFormat.distance(meters: $0) }, eta.map { NavText.clock($0) }].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// «مشاركة الوصول»: plain text the person sends themselves (no link, no tracking).
+    static func shareText(target: String?, eta: Date?, seconds: Double?) -> String {
+        var s = "في الطريق" + (target.map { $0.isEmpty ? "" : " إلى \(NavText.arabicDigitsOnly($0))" } ?? "")
+        if let eta { s += "، أوصل تقريبًا \(NavText.clock(eta))" }
+        if let seconds { s += " (بعد \(NavText.remaining(seconds: seconds)))" }
+        return s + " · سَرى"
+    }
+}
+
+/// Top banner (v2): a big arrow with the distance under it, the road on one big line beside them,
+/// lanes near the turn, and «ثم …» only when the next turn is close. Time and distance left are in the
+/// bottom bar now.
 struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
     @Environment(\.sary) private var theme
@@ -52,51 +104,49 @@ struct NavManeuverBanner: View {
             if nav.rerouting {
                 HStack(spacing: theme.space(.m)) {
                     ProgressView().tint(p.textPrimary).frame(width: glyph, height: glyph)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("نعيد حساب الطريق…").saryText(theme.drive ? .title2 : .headline).foregroundStyle(p.textPrimary)
-                            .accessibilityIdentifier("nav.rerouting")
-                        Text("خرجت عن المسار، لحظات ونعطيك طريقًا جديدًا").saryText(.footnote).foregroundStyle(p.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("نعيد حساب الطريق…").saryText(theme.drive ? .title2 : .headline).foregroundStyle(p.textPrimary)
+                        .accessibilityIdentifier("nav.rerouting")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(theme.space(.m))
             } else if let step = nav.currentStep {
                 let d = nav.progress?.distanceToManeuverM ?? step.distanceM
-                /* Lovable: the manoeuvre in an orange tile at the right, the distance big, the instruction under it. */
+                let parts = NavHUD.distanceParts(d)
                 HStack(alignment: .center, spacing: theme.space(.m)) {
-                    NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: p.accent, ink: p.onAccent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(SaryFormat.distance(meters: d))
-                            .font(.sary(theme.drive ? 34 : 28, .heavy))
-                            .foregroundStyle(p.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .accessibilityIdentifier("nav.distance")
-                        Text(NavText.instruction(step, targetName: nav.target?.name))
-                            .saryText(theme.drive ? .callout : .subhead)
-                            .foregroundStyle(p.textSecondary)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("nav.instruction")
+                    /* The arrow and the distance: the two things read at a glance. */
+                    VStack(spacing: 0) {
+                        NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: .clear, ink: p.accent)
+                        HStack(alignment: .firstTextBaseline, spacing: 3) {
+                            Text(parts.value).font(.sary(theme.drive ? 30 : 26, .heavy)).foregroundStyle(p.textPrimary)
+                            Text(parts.unit).font(.sary(theme.drive ? 16 : 14, .bold)).foregroundStyle(p.textSecondary)
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .fixedSize()
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("nav.distance")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minWidth: glyph + 8)
+                    Text(NavHUD.title(step, targetName: nav.target?.name))
+                        .font(.sary(theme.drive ? 30 : 26, .bold))
+                        .foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        /* VoiceOver hears the whole instruction («بعد ٣٫٣ كم انعطف يسارًا إلى …»). */
+                        .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
+                        .accessibilityIdentifier("nav.instruction")
                 }
-                .padding(.horizontal, 13)
-                .padding(.top, 13)
-                .padding(.bottom, theme.space(.s))
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
                 if !step.lanes.isEmpty, d < 1500 {
                     NavLanesView(lanes: step.lanes)
                         .padding(.horizontal, theme.space(.m))
                         .padding(.bottom, theme.space(.s))
                 }
-                if let next = nav.nextStep, step.maneuver.kind != .arrive {
-                    /* «ثم …»: ours (not in Lovable), one small line — the next turn is safety information. */
+                if let next = nav.nextStep, NavHUD.showsThen(step, next: next) {
                     nextRow(next)
                 }
-                NavETARow(nav: nav)
             }
         }
         .navPanel(theme)
@@ -104,19 +154,23 @@ struct NavManeuverBanner: View {
         .accessibilityIdentifier("nav.banner")
     }
 
+    /// «ثم ↰ طريق العليا»: one small strip, only when that turn comes right after.
     private func nextRow(_ next: NavStep) -> some View {
         let p = theme.palette
         return HStack(spacing: theme.space(.s)) {
-            Text("ثم").saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
-            NavManeuverGlyph(maneuver: next.maneuver, size: theme.drive ? 30 : 24, tint: p.textSecondary)
-            Text(NavText.instruction(next, targetName: nav.target?.name))
-                .saryText(.footnote, weight: .medium)
-                .foregroundStyle(p.textSecondary)
+            Text("ثم").saryText(.callout, weight: .bold).foregroundStyle(p.textSecondary)
+            NavManeuverGlyph(maneuver: next.maneuver, size: theme.drive ? 30 : 26, tint: .clear, ink: p.textPrimary)
+            Text(NavHUD.title(next, targetName: nav.target?.name))
+                .saryText(.callout, weight: .bold)
+                .foregroundStyle(p.textPrimary)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, theme.space(.m))
-        .padding(.bottom, theme.space(.s))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(p.sunken.opacity(0.7))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("ثم \(NavText.instruction(next, targetName: nav.target?.name))"))
         .accessibilityIdentifier("nav.next")
     }
 }
@@ -193,10 +247,11 @@ struct NavLanesView: View {
 /// The posted limit, as a road sign. Sits next to the speedometer («سرعة المركبة»).
 struct NavSpeedLimitSign: View {
     var kmh: Int
+    var size: CGFloat? = nil
     @Environment(\.sary) private var theme
 
     var body: some View {
-        let s: CGFloat = theme.drive ? 62 : 52
+        let s: CGFloat = size ?? (theme.drive ? 62 : 52)
         ZStack {
             Circle().fill(Color.white)
             Circle().stroke(Color(rgb: 0xD7262E), lineWidth: s * 0.11)
@@ -305,17 +360,11 @@ struct NavArrivalCard: View {
     }
 }
 
-/// The bottom bar in the sheet's peek: «الوصول ٤:٣٥ م · ٢٣ د · ١٨ كم» and «إنهاء».
+/// The bottom bar in the sheet's peek (v2): the time left big and coloured, «١٩ كم · ١٢:٥٦ ص» under it,
+/// and a clear red «إنهاء». Drag the sheet up for «المسارات»، «مشاركة الوصول»، «الصوت» (`NavTripOptions`).
 struct NavBottomBar: View {
     @ObservedObject var nav: NavSession
     var end: () -> Void
-    /// «الخطوات» (moved here from the map in build 8, with the voice: the map keeps two buttons).
-    var steps: (() -> Void)? = nil
-    /// «نظرة عامة» (moved here from the map's side in «تخفيف الزحمة» ١: no side column while driving).
-    var overview: (() -> Void)? = nil
-    var overviewOn = false
-    /// The map camera's mode (free / north / heading): VoiceOver value of «نظرة عامة».
-    var cameraMode = ""
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -323,35 +372,44 @@ struct NavBottomBar: View {
         HStack(spacing: theme.space(.m)) {
             if nav.phase == .arrived {
                 Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
+                Spacer(minLength: 0)
             } else {
-                /* Arrival time and what is left are in the header now (Lovable); here: where to. */
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
-                    Text(nav.target?.name ?? "").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
+                    if let s = nav.remainingSeconds {
+                        Text(NavText.remaining(seconds: s))
+                            .font(.sary(theme.drive ? 34 : 30, .heavy))
+                            .foregroundStyle(p.accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .accessibilityIdentifier("nav.remainingTime")
+                    }
+                    Text(NavHUD.tripLine(meters: nav.remainingMeters, eta: nav.etaDate))
+                        .font(.sary(theme.drive ? 18 : 16, .medium))
+                        .foregroundStyle(p.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .accessibilityIdentifier("nav.eta")
                     if let note = nav.target?.staleNote() {
                         Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warning).lineLimit(1)
                             .accessibilityIdentifier("nav.target.stale")
                     }
                 }
-            }
-            Spacer(minLength: 0)
-            if nav.phase != .arrived {
-                barIcon(nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: nav.muted ? "الصوت مكتوم" : "الصوت",
-                        id: "nav.mute", active: nav.muted) { nav.muted.toggle() }
-            }
-            if nav.phase != .arrived, let overview {
-                barIcon("map.fill", label: overviewOn ? "رجّعني لسيارتي" : "نظرة عامة", id: "nav.overview", active: overviewOn, value: cameraMode, action: overview)
-            }
-            if nav.phase == .guiding, let steps {
-                barIcon("list.bullet", label: "الخطوات", id: "nav.stepsButton", action: steps)
-            }
-            /* Arrived: «إنهاء» is on the arrival card; one is enough. */
-            if nav.phase != .arrived {
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(label))
+                .accessibilityIdentifier("nav.banner.eta")
+                Spacer(minLength: 0)
                 Button(action: end) {
                     /* The trip's guidance pauses on this phone only («استأنف» brings it back). */
-                    Text(nav.auto ? "أوقف التوجيه" : "إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold)
+                    Text(nav.auto ? "أوقف التوجيه" : "إنهاء")
+                        .font(.sary(theme.drive ? 20 : 18, .heavy))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, theme.drive ? 30 : 26)
+                        .frame(minHeight: theme.drive ? 60 : 52)
+                        .background(Capsule().fill(p.emergency))
                 }
-                .buttonStyle(.sary(.destructive, width: .hug, compact: !theme.drive))
+                .buttonStyle(SaryPressStyle())
                 .accessibilityIdentifier(nav.auto ? "nav.auto.pause" : "nav.end")
             }
         }
@@ -361,21 +419,110 @@ struct NavBottomBar: View {
         .accessibilityIdentifier("nav.bottomBar")
     }
 
-    private func barIcon(_ symbol: String, label: String, id: String, active: Bool = false, value: String = "", action: @escaping () -> Void) -> some View {
-        let p = theme.palette
-        let d: CGFloat = theme.drive ? 52 : 44
-        return Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: theme.drive ? 20 : 17, weight: .semibold))
-                .foregroundStyle(active ? p.onAccent : p.textPrimary)
-                .frame(width: d, height: d)
-                .background(Circle().fill(active ? p.accent : p.sunken))
+    private var label: String {
+        [nav.target.map { "إلى \($0.name)" }, nav.remainingSeconds.map { "باقي \(NavText.remaining(seconds: $0))" },
+         nav.remainingMeters.map { SaryFormat.distance(meters: $0) }, nav.etaDate.map { "الوصول \(NavText.clock($0))" }]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
+/// The guidance sheet pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، plus «الخطوات» and «نظرة عامة».
+struct NavTripOptions: View {
+    @ObservedObject var nav: NavSession
+    /// «المسارات»: the route options again (nil for the trip's automatic guidance, which follows the plan).
+    var routes: (() -> Void)?
+    var steps: () -> Void
+    var overview: () -> Void
+    var overviewOn: Bool
+    /// The map camera's mode (free / north / heading): VoiceOver value of «نظرة عامة».
+    var cameraMode = ""
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+        LazyVGrid(columns: cols, spacing: 10) {
+            if let routes {
+                tile("arrow.triangle.branch", "المسارات", id: "nav.opt.routes", action: routes)
+            }
+            ShareLink(item: NavHUD.shareText(target: nav.target?.name, eta: nav.etaDate, seconds: nav.remainingSeconds)) {
+                tileLabel("square.and.arrow.up", "مشاركة الوصول", active: false)
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("nav.opt.share")
+            tile(nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", nav.muted ? "الصوت مكتوم" : "الصوت", id: "nav.opt.voice", active: nav.muted) {
+                nav.muted.toggle()
+            }
+            if nav.phase == .guiding {
+                tile("list.bullet", "الخطوات", id: "nav.stepsButton", action: steps)
+            }
+            tile("map.fill", overviewOn ? "رجّعني لسيارتي" : "نظرة عامة", id: "nav.overview", active: overviewOn, value: cameraMode, action: overview)
         }
-        .buttonStyle(SaryPressStyle())
-        .accessibilityLabel(Text(label))
-        .accessibilityValue(Text(value))
-        .accessibilityAddTraits(active ? .isSelected : [])
-        .accessibilityIdentifier(id)
+        .padding(.horizontal, theme.space(.l))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("nav.options.trip")
+    }
+
+    private func tile(_ symbol: String, _ title: String, id: String, active: Bool = false, value: String = "", action: @escaping () -> Void) -> some View {
+        Button(action: action) { tileLabel(symbol, title, active: active) }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text(value))
+            .accessibilityAddTraits(active ? .isSelected : [])
+            .accessibilityIdentifier(id)
+    }
+
+    private func tileLabel(_ symbol: String, _ title: String, active: Bool) -> some View {
+        let p = theme.palette
+        return VStack(spacing: 6) {
+            Image(systemName: symbol).font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(active ? p.onAccent : p.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(active ? p.accent : p.sunken))
+            Text(title).saryText(.footnote, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(p.sunken.opacity(0.5)))
+    }
+}
+
+/// The speed while guiding (v2): my speed in a round bubble at the bottom-left, the posted limit
+/// (Mapbox `maxspeed`) beside it when known; over the limit the bubble turns red.
+struct NavSpeedCluster: View {
+    var ui: SpeedometerUI
+    var limit: Int?
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        let kmh = ui.current.kmh.map { Int($0.rounded()) }
+        let over = NavHUD.overLimit(kmh: ui.current.kmh, limit: limit) || ui.overLimit
+        let d: CGFloat = theme.drive ? 72 : 64
+        /* Physical order (not mirrored): my speed in the corner, the limit sign just right of it. */
+        HStack(spacing: -6) {
+            VStack(spacing: -2) {
+                Text(kmh.map { SaryFormat.number($0) } ?? "—")
+                    .font(.sary(d * 0.36, .heavy))
+                    .foregroundStyle(over ? Color.white : p.textPrimary)
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text("كم/س").font(.sary(11, .bold)).foregroundStyle(over ? Color.white.opacity(0.9) : p.textSecondary)
+            }
+            .frame(width: d, height: d)
+            .background(Circle().fill(over ? p.emergency : p.chromeOpaque.opacity(0.92)))
+            .overlay(Circle().stroke(over ? Color.white : p.separator, lineWidth: over ? 3 : 1))
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(kmh.map { "السرعة \(SaryFormat.number($0)) كم/س" + (over ? "، فوق الحد" : "") } ?? "السرعة غير معروفة"))
+            .accessibilityValue(Text(over ? "over" : "ok"))
+            .accessibilityIdentifier("speedometer")
+            if let limit {
+                NavSpeedLimitSign(kmh: limit, size: d * 0.72)
+            }
+        }
+        .environment(\.layoutDirection, .leftToRight)
+        .animation(theme.animation(.snappy), value: over)
     }
 }
 

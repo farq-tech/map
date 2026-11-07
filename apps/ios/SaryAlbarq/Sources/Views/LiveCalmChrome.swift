@@ -59,6 +59,8 @@ struct LiveSideButtons: View {
     var action: (String) -> Void
     /// The map's bearing: when it is turned, the camera button shows the north (it was a separate compass).
     var bearing: Double = 0
+    /// Captions under the buttons (off while guiding: four bare circles, labels for VoiceOver).
+    var captions = true
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -69,7 +71,7 @@ struct LiveSideButtons: View {
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
                         let turned = item.id == "locate" && !item.isActive && abs(Self.wrap(bearing)) > 3
-                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : "scope") : item.systemImage))
+                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : (captions ? "scope" : item.systemImage)) : item.systemImage))
                             .rotationEffect(.degrees(turned ? -bearing : 0))
                             .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
                             .foregroundStyle(filled ? p.onAccent : p.textPrimary)
@@ -92,7 +94,7 @@ struct LiveSideButtons: View {
                     .accessibilityValue(Text(item.value ?? ""))
                     .accessibilityAddTraits(item.isActive ? .isSelected : [])
                     .accessibilityIdentifier(item.accessibilityID)
-                    LovableCaption(text: item.label)
+                    if captions { LovableCaption(text: item.label) }
                 }
             }
         }

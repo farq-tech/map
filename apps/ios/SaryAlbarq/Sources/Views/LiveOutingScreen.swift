@@ -185,7 +185,9 @@ struct LiveOutingScreen: View {
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
         let ended = controller.tripEnded
-        let side = exploring ? exploreSide : sideItems(driving: driving, ended: ended)
+        /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
+        let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
+        let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && !ended
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
@@ -207,7 +209,7 @@ struct LiveOutingScreen: View {
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger)),
-                             side: showSide ? AnyView(sideView(side, exploring: exploring).chromeFrame("cluster")) : nil)
+                             side: showSide ? AnyView(sideView(side, exploring: exploring, captions: !guidingHUD).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
@@ -272,8 +274,8 @@ struct LiveOutingScreen: View {
                     }()
                     let pttBig = driving && (ctaCompact || !hasCTA)
                     HStack(alignment: .center, spacing: theme.space(.s)) {
-                        /* UX ٢١: no empty «—» bubble — only while there is a real speed reading. */
-                        if driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil {
+                        /* UX ٢١: no empty «—» bubble — only with a real reading. Guiding (v2) uses NavSpeedCluster. */
+                        if driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD {
                             LovableSpeedBubble(ui: controller.speedometerUI)
                                 .chromeFrame("speed")
                                 .transition(.opacity)
@@ -296,6 +298,11 @@ struct LiveOutingScreen: View {
                         } else if driving && !hasCTA {
                             Spacer()
                         }
+                        if guidingHUD && controller.speed.everRead {
+                            NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
+                                .chromeFrame("speed")
+                                .transition(.opacity)
+                        }
                         if rowMode {
                             SaryControlCluster(items: rowItems(exploring: exploring), axis: .horizontal, action: controlTapped)
                                 .chromeFrame("cluster-row")
@@ -310,7 +317,8 @@ struct LiveOutingScreen: View {
                         Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
                     }
                     .overlay(alignment: .topTrailing) {
-                        if driving, controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
+                        /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
+                        if guidingHUD, !controller.speed.everRead, let k = controller.nav.progress?.speedLimitKmh {
                             NavSpeedLimitSign(kmh: k)
                                 .chromeFrame("speedlimit")
                                 .alignmentGuide(.top) { $0[.bottom] + 8 }
@@ -363,9 +371,9 @@ struct LiveOutingScreen: View {
     }
 
     @ViewBuilder
-    private func sideView(_ items: [SaryMapControlItem], exploring: Bool) -> some View {
+    private func sideView(_ items: [SaryMapControlItem], exploring: Bool, captions: Bool = true) -> some View {
         BearingObserving(overlay: controller.overlay) { b in
-            LiveSideButtons(items: items, action: controlTapped, bearing: b)
+            LiveSideButtons(items: items, action: controlTapped, bearing: b, captions: captions)
         }
     }
 

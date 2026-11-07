@@ -18,9 +18,15 @@ struct LiveSheet: View {
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
                 /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav, steps: { controller.modal = .navSteps },
-                             overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
-                             cameraMode: controller.mapFollowMode.rawValue)
+                NavBottomBar(nav: controller.nav, end: controller.endNav)
+                if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
+                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة». */
+                    NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
+                                   steps: { controller.modal = .navSteps },
+                                   overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
+                                   cameraMode: controller.mapFollowMode.rawValue)
+                        .padding(.top, theme.space(.s))
+                }
             } else {
                 /* One line: the people. The trip's numbers are in the header above. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,

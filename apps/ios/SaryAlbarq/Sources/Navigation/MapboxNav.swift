@@ -204,7 +204,30 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         }
         let via = names.sorted { $0.value > $1.value }.prefix(1).map(\.key).first
         return NavRoute(id: id, coordinates: coords, distanceM: route.distance, durationS: route.expectedTravelTime,
-                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via)
+                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via, congestion: congestion(route))
+    }
+
+    /// Per-segment traffic from the `driving-traffic` annotations (numeric, else the named levels).
+    nonisolated static func congestion(_ route: Route) -> [NavCongestion]? {
+        var out: [NavCongestion] = []
+        for leg in route.legs {
+            if let n = leg.segmentNumericCongestionLevels {
+                out += n.map { NavCongestion(numeric: $0) }
+            } else if let l = leg.segmentCongestionLevels {
+                out += l.map { lvl -> NavCongestion in
+                    switch lvl {
+                    case .low: return .low
+                    case .moderate: return .moderate
+                    case .heavy: return .heavy
+                    case .severe: return .severe
+                    default: return .unknown
+                    }
+                }
+            } else {
+                return nil
+            }
+        }
+        return out.isEmpty ? nil : out
     }
 
     nonisolated static func maneuver(_ s: RouteStep) -> NavManeuver {
