@@ -74,7 +74,17 @@ extension XCUIApplication {
         let plus = buttons["outing-actions"]
         guard plus.waitForExistence(timeout: timeout) else { return false }
         plus.tap()
+        let groupedUnder: [String: String] = [
+            "outing-brief": "outing-location-tools", "outing-save-place": "outing-location-tools", "outing-waypoint-add": "outing-location-tools",
+            "outing-camp-suggest": "outing-desert-tools", "outing-desert-route": "outing-desert-tools",
+            "outing-weather": "outing-weather-tools", "outing-qibla": "outing-weather-tools",
+        ]
         let tile = descendants(matching: .any)[id].firstMatch
+        if !tile.exists, let parentID = groupedUnder[id] {
+            let parent = descendants(matching: .any)[parentID].firstMatch
+            guard parent.waitForExistence(timeout: 5) else { return false }
+            parent.tap()
+        }
         guard tile.waitForExistence(timeout: 5) else { return false }
         tile.tap()
         return true

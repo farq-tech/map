@@ -67,14 +67,20 @@ final class ReachabilityUITests: XCTestCase {
         }
         XCTAssertFalse(app.staticTexts["الترفيه"].exists, "radio / YouTube are in the settings")
         for id in ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                   "outing-timer", "outing-brief", "outing-save-place", "outing-weather", "outing-waypoint-add", "outing-nearest-open",
+                   "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-desert-tools", "outing-nearest-open",
                    "outing-explore", "outing-fit", "outing-settings", "settings-leave"] {
             XCTAssertTrue(any(app, id).exists, "\(id) in «المزيد»")
+        }
+        for id in ["outing-brief", "outing-save-place", "outing-weather", "outing-qibla", "outing-waypoint-add", "outing-camp-suggest", "outing-desert-route"] {
+            XCTAssertFalse(any(app, id).exists, "\(id) is revealed when its related tool group is opened")
         }
         for id in ["outing-backtrack", "outing-chat", "outing-rally", "outing-hires", "outing-realistic", "outing-effects", "outing-radio", "outing-youtube"] {
             XCTAssertFalse(any(app, id).exists, "\(id): a duplicate, gone from «المزيد»")
         }
         shot(app, "actions-sheet")
+        any(app, "outing-weather-tools").tap()
+        XCTAssertTrue(any(app, "outing-weather").waitForExistence(timeout: 3))
+        XCTAssertTrue(any(app, "outing-qibla").exists)
         any(app, "outing-weather").tap()
         XCTAssertTrue(any(app, "weather.sheet").waitForExistence(timeout: 5), "«الطقس» opens the weather")
     }

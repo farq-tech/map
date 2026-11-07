@@ -62,14 +62,18 @@ final class LiveCalmTests: XCTestCase {
         let quick: Set<String> = ["navigate", "chat", "rally", "backtrack"]
         XCTAssertTrue(quick.isSubset(of: LiveActionCatalog.inQuickRow))
         XCTAssertTrue(grid.isDisjoint(with: ["hires", "realistic", "effects", "radio", "youtube"]), "duplicates of «الطبقات» / settings are gone")
-        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "convoy", "timer", "brief", "savePlace", "search", "note", "stuck",
-                                           "waypoint", "nearest", "weather", "explore", "route", "invite"]))
+        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "convoy", "timer", "locationTools", "search", "note", "stuck",
+                                           "nearest", "desertTools", "weatherTools", "explore", "route", "invite"]))
+        let nested = Set(groups.flatMap(\.items).flatMap(\.children).map(\.id))
+        XCTAssertEqual(nested, ["brief", "savePlace", "waypoint", "camp", "desertRoute", "weather", "qibla"], "all related actions stay one tap inside their grouped tile")
     }
 
     func testToolsGridAfterTheEnd() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true, channels: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "weather"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "weatherTools"]))
+        let location = LiveActionCatalog.groups(.init(ended: true)).first { $0.title == "المكان" }?.items.first { $0.id == "locationTools" }
+        XCTAssertFalse(location?.children.contains(where: { $0.id == "waypoint" }) ?? true, "adding route points requires a running trip")
         XCTAssertTrue(LiveActionCatalog.tripRouteActions(.init(ended: true, guideAllTarget: "x")).isEmpty)
     }
 
