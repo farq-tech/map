@@ -20,6 +20,13 @@ struct MapHomeScreen: View {
     @State private var searching = false
     @State private var searchError: String?
     @State private var job: Task<Void, Never>?
+    /// A desert chip's places («دليل البر» or the rain/green search), nearest first.
+    @State private var desertItems: [DesertCategoryItem] = []
+    /// «قريبًا» (or a failure) for a desert chip with no places.
+    @State private var desertNote: String?
+    /// The desert result picked (its outline stays drawn under the place card).
+    @State private var desertPicked: DesertCategoryItem?
+    private let desertService: DesertCategoryService = DesertCategoryRouter()
     @State private var selected: SelectedPlace?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
@@ -54,7 +61,9 @@ struct MapHomeScreen: View {
             ZStack(alignment: .bottom) {
                 PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, showsUser: true,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
-                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) })
+                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) },
+                            desert: desertOverlay,
+                            onDesertTap: { id in if let it = desertItems.first(where: { $0.id == id }) { pickDesert(it) } })
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
                 VStack(spacing: theme.space(.s)) {
@@ -415,9 +424,12 @@ struct MapHomeScreen: View {
     private var resultsList: some View {
         let p = theme.palette
         if let c = category {
-            Text("\(c.label) قريبة منك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+            Text(c.desertSource == nil ? "\(c.label) قريبة منك" : HomeDesertRules.heading(c)).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                .accessibilityIdentifier("home.results.heading")
         }
-        if let parsed = CoordinateParser.parse(query) {
+        if let c = category, c.desertSource != nil {
+            desertResults
+        } else if let parsed = CoordinateParser.parse(query) {
             placeRow(icon: "scope", title: CoordinateShare.displayDecimal(parsed.point), detail: CoordinateShare.displayDMS(parsed.point), point: parsed.point,
                      id: "home.result.coordinate") {
                 pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: parsed.point.lat, lng: parsed.point.lng),
@@ -444,7 +456,37 @@ struct MapHomeScreen: View {
         }
     }
 
-    private func placeRow(icon: String, title: String, detail: String?, point: LngLat, id: String, run: @escaping () -> Void) -> some View {
+    /// A desert chip's list: nearest first, the distance to the edge for a sand sea.
+    @ViewBuilder
+    private var desertResults: some View {
+        let p = theme.palette
+        if searching { SaryStateView(kind: .loading("نجهّز الأماكن…")) }
+        if let note = desertNote {
+            SaryBanner(text: note, tone: .info, systemImage: "clock")
+                .accessibilityIdentifier("home.desert.soon")
+        }
+        if !desertItems.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(desertItems.enumerated()), id: \.element.id) { i, it in
+                    if i > 0 { SaryDivider() }
+                    placeRow(icon: it.systemImage, title: "\(SaryFormat.number(i + 1)). \(it.title)", detail: it.detail, point: it.point,
+                             id: "home.desert.result", meters: it.meters) { pickDesert(it) }
+                }
+            }
+            .padding(.horizontal, theme.space(.m))
+            .sarySurface(radius: SaryRadius.m)
+            Text(HomeDesertRules.footnote(category)).saryText(.caption).foregroundStyle(p.textTertiary)
+                .accessibilityIdentifier("home.desert.attribution")
+        }
+    }
+
+    private var desertOverlay: DesertOverlay? {
+        if let s = desertPicked, selected != nil { return DesertOverlay(items: [s], selected: s.id) }
+        guard selected == nil, category?.desertSource != nil, !desertItems.isEmpty else { return nil }
+        return DesertOverlay(items: Array(desertItems.prefix(HomeDesertRules.onMap)))
+    }
+
+    private func placeRow(icon: String, title: String, detail: String?, point: LngLat, id: String, meters: Double? = nil, run: @escaping () -> Void) -> some View {
         let p = theme.palette
         return Button(action: run) {
             HStack(spacing: theme.space(.m)) {
@@ -454,7 +496,9 @@ struct MapHomeScreen: View {
                     if let detail { Text(detail).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
                 Spacer()
-                if let me = myPoint { Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
+                if let m = meters ?? myPoint.map({ PlanGeo.meters($0, point) }) {
+                    Text(m == 0 ? "هنا" : SaryFormat.distance(meters: m)).saryNumber(.footnote).foregroundStyle(p.textTertiary)
+                }
             }
             .frame(minHeight: theme.minTarget + 8)
             .contentShape(Rectangle())
@@ -556,9 +600,42 @@ struct MapHomeScreen: View {
         if category == c { clearSearch(); return }
         category = c
         selected = nil
+        desertPicked = nil
+        desertItems = []
+        desertNote = nil
         query = c.query
         setExpanded(true)
         schedule(c.query, now: true)
+    }
+
+    /// A desert chip: ask its service, list nearest first, fit the map on you and the first ones.
+    private func runDesert(_ c: HomeCategory) {
+        results = []
+        searching = true
+        let near = myPoint
+        job = Task {
+            let r = await desertService.search(c, near: near)
+            guard !Task.isCancelled, category == c else { return }
+            searching = false
+            switch r {
+            case let .places(items):
+                desertItems = items
+                desertNote = items.isEmpty ? "ما لقينا أماكن قريبة في دليل البر." : nil
+                let pts = HomeDesertRules.fitPoints(items, me: near)
+                if pts.count >= 2 { cameraSeq += 1; camera = PlanCamera(kind: .fit(pts), id: cameraSeq) }
+            case let .comingSoon(text), let .failed(text):
+                desertItems = []
+                desertNote = text
+            }
+        }
+    }
+
+    private func pickDesert(_ it: DesertCategoryItem) {
+        desertPicked = it
+        let to = it.approach ?? it.point
+        let sub = [it.detail, to != it.point ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
+        pick(.init(destination: OutingDestination(name: String(it.title.prefix(TripPlan.destinationNameMax)), lat: to.lat, lng: to.lng),
+                   subtitle: sub.isEmpty ? nil : sub, icon: it.systemImage))
     }
 
     private func clearSearch() {
@@ -568,6 +645,9 @@ struct MapHomeScreen: View {
         results = []
         searching = false
         searchError = nil
+        desertItems = []
+        desertNote = nil
+        desertPicked = nil
     }
 
     private func pick(_ s: SelectedPlace) {
@@ -580,6 +660,7 @@ struct MapHomeScreen: View {
 
     private func closePlace() {
         selected = nil
+        desertPicked = nil
     }
 
     /// «ابدأ» → «مين معك؟» (the quick «طلعة»: this place, leaving now).
@@ -593,7 +674,8 @@ struct MapHomeScreen: View {
         job?.cancel()
         searchError = nil
         let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
-        if category != nil, t != category?.query { category = nil }
+        if category != nil, t != category?.query { category = nil; desertItems = []; desertNote = nil }
+        if let c = category, c.desertSource != nil { runDesert(c); return }
         guard t.count >= 2, CoordinateParser.parse(t) == nil else {
             results = []
             searching = false
@@ -604,16 +686,19 @@ struct MapHomeScreen: View {
         job = Task {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
+            /* «دليل البر» first: a known desert name answers offline too. */
+            let desert = HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near)
+            results = desert
             do {
                 let r = try await PlaceSearch.search(t, near: near)
                 guard !Task.isCancelled else { return }
-                results = r
+                results = HomeDesertRules.merge(desert: desert, places: r)
             } catch let e as PlaceSearch.SearchError {
-                results = []
-                searchError = e.arabic
+                results = desert
+                if desert.isEmpty { searchError = e.arabic }
             } catch {
-                results = []
-                searchError = PlaceSearch.SearchError.network.arabic
+                results = desert
+                if desert.isEmpty { searchError = PlaceSearch.SearchError.network.arabic }
             }
             searching = false
         }

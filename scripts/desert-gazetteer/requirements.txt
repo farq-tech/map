@@ -1,0 +1,3 @@
+# Python 3.10+. pytest for the tests; osmium only for extract_pbf.py (Geofabrik fallback).
+pytest
+osmium

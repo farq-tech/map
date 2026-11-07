@@ -22,6 +22,10 @@ struct PlanMapView: UIViewRepresentable {
     var onMove: (Int, LngLat) -> Void = { _, _ in }
     /// The camera's centre as the person moves the map («اختر من الخريطة»).
     var onCenter: ((LngLat) -> Void)? = nil
+    /// A desert chip's results (outlines + numbered markers, «دليل البر»).
+    var desert: DesertOverlay? = nil
+    /// A desert marker tapped (its id).
+    var onDesertTap: (String) -> Void = { _ in }
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -61,6 +65,7 @@ struct PlanMapView: UIViewRepresentable {
         private var drawnRoute: [LngLat]?
         private var drawnHandles: [LngLat]?
         private var drawnEditing = false
+        private var drawnDesert: DesertOverlay??
         private var lastCamera = -1
         /// Asked before the map had a size or a style: done once it has.
         private var pendingCamera: PlanCamera?
@@ -78,6 +83,11 @@ struct PlanMapView: UIViewRepresentable {
                 report(LngLat(lng: c.longitude, lat: c.latitude))
             }.store(in: &bag)
             guard parent.interactive else { return }
+            map.gestures.onLayerTap(DesertGazetteerMapLayer.marker) { [weak self] feature, _ in
+                guard let v = feature.feature.properties?["id"], case let .string(id)? = v else { return false }
+                self?.parent?.onDesertTap(id)
+                return true
+            }.store(in: &bag)
             interactions.append(map.mapboxMap.addInteraction(TapInteraction { [weak self] ctx in
                 guard let self, let p = self.parent, p.editing else { return false }
                 p.onTap(LngLat(lng: ctx.coordinate.longitude, lat: ctx.coordinate.latitude))
@@ -105,6 +115,7 @@ struct PlanMapView: UIViewRepresentable {
             PlanMapStyle.ensureLayers(m, emphasised: true, night: parent?.theme.night ?? false)
             drawnRoute = nil
             drawnHandles = nil
+            drawnDesert = nil
             if let p = parent { update(p) }
             if let c = pendingCamera {
                 pendingCamera = nil
@@ -123,6 +134,10 @@ struct PlanMapView: UIViewRepresentable {
                 drawnRoute = p.route
             }
             if styleReady { drawHandles(p, on: map) }
+            if styleReady, let m = map.mapboxMap, drawnDesert != .some(p.desert), p.desert != nil || drawnDesert != nil {
+                DesertGazetteerMapLayer.apply(m, p.desert)
+                drawnDesert = .some(p.desert)
+            }
             let theme = p.theme
             destination.set(p.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }, key: p.destination?.name ?? "", on: map) {
                 PlanDestinationPin(name: p.destination?.name ?? "الوجهة", theme: theme)
