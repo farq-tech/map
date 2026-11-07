@@ -82,7 +82,9 @@ struct LivePlanModalView: View {
                         .presentationDetents([.medium])
                 }
             case .search:
-                CoordinateSearchSheet(near: location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }, myFix: location.lastFix, actions: actions(plan), close: close)
+                MapHomeScreen(push: { _ in }, destinationPicker: { destination in
+                    controller.pickLegDestination(destination)
+                }, autoFocusSearch: true)
                     .presentationDetents([.large])
             case .editor:
                 PlanEditorView(plan: plan, outingName: controller.ui.outingName, canEdit: controller.session.view?.iLead == true, myFix: location.lastFix, close: close)

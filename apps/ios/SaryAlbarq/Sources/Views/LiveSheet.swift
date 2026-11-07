@@ -31,7 +31,7 @@ struct LiveSheet: View {
                 /* One line: the people (the trip's numbers are in the header above), then the key actions. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
-                if controller.showsQuickRow(drive: theme.drive) {
+                if controller.showsQuickRow(drive: theme.drive) && !controller.exploreActive {
                     LiveQuickRow(controller: controller)
                 }
             }

@@ -95,6 +95,7 @@ enum NavHUD {
 /// bottom bar now.
 struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
+    @StateObject private var pip = NavPictureInPicture()
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -150,6 +151,33 @@ struct NavManeuverBanner: View {
             }
         }
         .navPanel(theme)
+        .overlay(alignment: .topLeading) {
+            Button { pip.start() } label: {
+                Image(systemName: pip.active ? "pip.exit" : "pip.enter")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(p.textPrimary)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(p.sunken.opacity(0.85)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .disabled(!pip.supported)
+            .accessibilityLabel(Text("نافذة الملاحة العائمة"))
+            .accessibilityIdentifier("nav.pip")
+            .padding(8)
+        }
+        .background(alignment: .bottomTrailing) {
+            NavPiPLayerHost(displayLayer: pip.displayLayer)
+                .frame(width: 2, height: 2)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+        }
+        .onAppear { pip.update(NavPiPSnapshot.make(nav: nav), guiding: nav.phase == .guiding) }
+        .onChange(of: NavPiPSnapshot.make(nav: nav)) { _, snapshot in
+            pip.update(snapshot, guiding: nav.phase == .guiding)
+        }
+        .onChange(of: nav.phase) { _, phase in
+            pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.banner")
     }

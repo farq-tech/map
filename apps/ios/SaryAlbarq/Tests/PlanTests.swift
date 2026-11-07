@@ -546,6 +546,10 @@ final class PlaceSearchTests: XCTestCase {
         XCTAssertEqual(PlaceSearch.poiCategory(forQuery: " محطه وقود "), .gasStation)
         XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "صيدلية"), .pharmacy)
         XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "مستشفى"), .hospital)
+        XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "مطار"), .airport)
+        if #available(iOS 18.0, *) {
+            XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "مساج"), .spa)
+        }
         XCTAssertEqual(PlaceSearch.poiCategory(forQuery: "Gas Station"), .gasStation)
         XCTAssertNil(PlaceSearch.poiCategory(forQuery: "ماكدونالدز"), "a name stays a name")
         XCTAssertNil(PlaceSearch.poiCategory(forQuery: "محطة بنزين الدريس"), "a named station stays a name search")
@@ -559,10 +563,15 @@ final class PlaceSearchTests: XCTestCase {
 
     func testApplePlacesPiledOnACityCentreAreLeftOut() {
         let centre = LngLat(lng: 46.6753, lat: 24.7136)
-        func apple(_ n: String, _ p: LngLat) -> PlaceSearch.Place { .init(id: "apple:\(n)", name: n, detail: nil, point: p, country: "SA") }
+        func apple(_ n: String, _ p: LngLat) -> PlaceSearch.Place {
+            .init(id: "apple:\(n)", name: n, detail: nil, point: p, category: "محطة وقود", country: "SA")
+        }
         let pile = ["جدة", "Banderseed", "Fuelco"].map { apple($0, LngLat(lng: centre.lng, lat: centre.lat - 0.00005)) }
-        let real = apple("Asia", LngLat(lng: 46.67793, lat: 24.71438))
-        let twin = [apple("الدريس", LngLat(lng: 46.70, lat: 24.70)), apple("الدريس", LngLat(lng: 46.70, lat: 24.70))]
+        let real = PlaceSearch.Place(id: "apple:Asia", name: "Asia", point: LngLat(lng: 46.67793, lat: 24.71438), category: "محطة وقود", country: "SA")
+        let twin = [
+            PlaceSearch.Place(id: "apple:الدريس:1", name: "الدريس", point: LngLat(lng: 46.70, lat: 24.70), category: "محطة وقود", country: "SA"),
+            PlaceSearch.Place(id: "apple:الدريس:2", name: "الدريس", point: LngLat(lng: 46.70, lat: 24.70), category: "محطة وقود", country: "SA"),
+        ]
         let out = PlaceSearch.rank(query: "محطة بنزين", around: pile + [real] + twin, saudi: [], mapbox: [], near: centre)
         XCTAssertEqual(out.map(\.name), ["Asia", "الدريس"], "the pile goes; one real place and one of the twins stay")
     }
@@ -640,9 +649,10 @@ final class PlaceSearchTests: XCTestCase {
     }
 
     static let me = LngLat(lng: 46.6753, lat: 24.7136) // Riyadh
-    static func poi(_ name: String, _ lat: Double, _ lng: Double, country: String? = "SA") -> PlaceSearch.Place {
+    static func poi(_ name: String, _ lat: Double, _ lng: Double, country: String? = "SA",
+                    category: String? = "مطعم") -> PlaceSearch.Place {
         PlaceSearch.Place(id: "apple:\(lat),\(lng):\(name)", name: name, detail: nil, point: LngLat(lng: lng, lat: lat),
-                          category: "مطعم", icon: "fork.knife", country: country)
+                          category: category, icon: "fork.knife", country: country)
     }
 
     /// «ماكدونالدز»: Apple is asked around me and across the Kingdom; the nearest branch comes first.
@@ -667,7 +677,7 @@ final class PlaceSearchTests: XCTestCase {
         let scopes = Scopes()
         let found = try await PlaceSearch.search("شاليهات", near: nil, token: nil, fetch: { _ in (Data(), 200) }, local: { _, scope in
             scopes.add(scope)
-            return [Self.poi("شاليه الوردة", 24.9, 46.5)]
+            return [Self.poi("شاليه الوردة", 24.9, 46.5, category: "شاليه")]
         })
         XCTAssertFalse(scopes.all.isEmpty)
         XCTAssertTrue(scopes.all.allSatisfy { $0 == .saudi }, "the Kingdom only (in Arabic and English)")
@@ -694,10 +704,11 @@ final class PlaceSearchTests: XCTestCase {
         let exactFar = Self.poi("نفود الثويرات", 25.77, 45.10)
         let near1 = Self.poi("استراحة نفود", 24.72, 46.68)
         let kingdomA = Self.poi("نفود السر", 25.9, 44.5)
+        let kingdomNear = Self.poi("نفود الدحي", 25.0, 46.8)
         let abroad = Self.poi("Nafud", 29.0, 35.0, country: "JO")
-        let r = PlaceSearch.rank(query: "نُفود الثُويرات", around: [near1], saudi: [abroad, kingdomA, exactFar], mapbox: [], near: Self.me)
-        XCTAssertEqual(r.map(\.name), ["نفود الثويرات", "استراحة نفود", "نفود السر", "Nafud"],
-                       "exact name, then nearby by distance, then the Kingdom in source order, abroad last")
+        let r = PlaceSearch.rank(query: "نُفود الثُويرات", around: [near1], saudi: [abroad, kingdomA, exactFar, kingdomNear], mapbox: [], near: Self.me)
+        XCTAssertEqual(r.map(\.name), ["نفود الثويرات", "استراحة نفود", "نفود الدحي", "نفود السر", "Nafud"],
+                       "exact name, then nearby by distance, then the Kingdom nearest first, abroad last")
         let many = (0..<30).map { Self.poi("p\($0)", 24.7 + Double($0) * 0.001, 46.67) }
         XCTAssertEqual(PlaceSearch.rank(query: "p", around: many, saudi: [], mapbox: [], near: Self.me).count, PlaceSearch.maxResults)
     }

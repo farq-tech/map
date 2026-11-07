@@ -423,9 +423,10 @@ private struct WeatherStep: View {
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: theme.space(.l)) {
                 destinationRow
-                SaryTextField(title: "اسم الطلعة", placeholder: "مثل: كشتة الثمامة", text: $flow.name, id: "create.name", maxLength: ServerRules.outingNameMax,
+                SaryTextField(title: "اسم الطلعة · اختياري", placeholder: "اسم مقترح من الوجهة", text: $flow.name, id: "create.name", maxLength: ServerRules.outingNameMax,
                               state: flow.error == CreateFlowState.Issue.nameEmpty.arabic ? .error(CreateFlowState.Issue.nameEmpty.arabic) : .normal,
-                              disabled: flow.creating)
+                              disabled: flow.creating,
+                              help: "نقترح اسمًا من وجهتك تلقائيًا؛ تقدر تعدّله.")
                 departureRow.id("departure")
                 if let d = flow.destination {
                     weatherCards(d)

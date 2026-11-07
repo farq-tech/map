@@ -43,6 +43,7 @@ final class BilingualSearchTests: XCTestCase {
         XCTAssertEqual(SearchLexicon.plan("صيدلية النهدي").forms, ["صيدلية النهدي", "Nahdi Pharmacy"])
         XCTAssertEqual(SearchLexicon.plan("Al Nahdi pharmacy").forms, ["صيدلية النهدي", "Nahdi Pharmacy"])
         XCTAssertEqual(SearchLexicon.plan("محطة بنزين").forms, ["محطة بنزين", "Gas station"])
+        XCTAssertEqual(SearchLexicon.plan("المطارات").forms, ["مطار", "Airport"], "plural airport query resolves to the airport category")
         XCTAssertEqual(SearchLexicon.plan("petrol station").forms, ["محطة بنزين", "Gas station"])
         XCTAssertEqual(SearchLexicon.plan("مستشفى الملك فيصل").forms, ["مستشفى الملك فيصل", "King Faisal Hospital"], "head last in English")
         XCTAssertEqual(SearchLexicon.plan("king faisal hospital").forms, ["مستشفى الملك فيصل", "King Faisal Hospital"], "head first in Arabic")
@@ -56,8 +57,43 @@ final class BilingualSearchTests: XCTestCase {
     func testUnknownWordsAreAskedAsTyped() {
         let p = SearchLexicon.plan("مطعم ابو زيد")
         XCTAssertFalse(p.complete)
-        XCTAssertEqual(p.forms, ["مطعم ابو زيد"], "no guessed translation for the sources to chase")
+        XCTAssertEqual(p.forms, ["مطعم ابو زيد", "ابو زيد"], "keep the full query and also search the named place without its type")
         XCTAssertEqual(SearchLexicon.plan("  ").forms, [])
+    }
+
+    func testMallQueryAddsPlaceOnlyFallback() {
+        let plan = SearchLexicon.plan("الأندلس مول")
+        XCTAssertEqual(plan.forms, ["الأندلس مول", "الأندلس"])
+        XCTAssertFalse(plan.complete, "the proper place name is not in our dictionary")
+    }
+
+    func testCategoryIntentIsPreservedAlongsideAPlaceName() {
+        XCTAssertEqual(SearchLexicon.categoryIntent("مساج")?.id, "spa")
+        XCTAssertEqual(SearchLexicon.categoryIntent("spa")?.id, "spa")
+        XCTAssertEqual(SearchLexicon.categoryIntent("بقالة")?.id, "supermarket")
+        XCTAssertEqual(SearchLexicon.categoryIntent("مطار")?.id, "airport")
+        XCTAssertEqual(SearchLexicon.categoryIntent("مطعم ابو زيد")?.id, "restaurant")
+        XCTAssertNil(SearchLexicon.categoryIntent("مطعم مقهى"), "two categories are ambiguous")
+    }
+
+    func testCategoryIntentFiltersOutUnrelatedResults() {
+        let spa = Self.poi("سبا الورد", 24.72, 46.68, category: "سبا")
+        let massage = Self.poi("مركز مساج", 24.73, 46.69, category: "مساج")
+        let restaurant = Self.poi("مطعم قريب", 24.714, 46.676, category: "مطعم")
+        let spaResults = PlaceSearch.rank(query: "مساج", around: [restaurant, massage], saudi: [], mapbox: [spa], near: Self.me)
+        XCTAssertEqual(Set(spaResults.map(\.name)), Set(["سبا الورد", "مركز مساج"]))
+
+        let grocery = Self.poi("بقالة الحي", 24.72, 46.68, category: "تموينات")
+        let shop = Self.poi("متجر قريب", 24.714, 46.676, category: "متجر")
+        let groceryResults = PlaceSearch.rank(query: "بقالة", around: [shop, grocery], saudi: [], mapbox: [], near: Self.me)
+        XCTAssertEqual(groceryResults.map(\.name), ["بقالة الحي"])
+    }
+
+    func testCategoryResultsAreNearestFirstAcrossSaudiArabia() {
+        let far = PlaceSearch.Place(id: "far", name: "مطار الملك خالد", point: LngLat(lng: 46.6988, lat: 24.9576), category: "مطار", country: "SA")
+        let near = PlaceSearch.Place(id: "near", name: "مطار محلي", point: LngLat(lng: 46.70, lat: 24.72), category: "مطار", country: "SA")
+        let results = PlaceSearch.rank(query: "مطار", around: [], saudi: [far, near], mapbox: [], near: Self.me)
+        XCTAssertEqual(results.map(\.id), ["near", "far"])
     }
 
     func testBrandCounterpartOnlyForAWholeBrandName() {
@@ -198,6 +234,20 @@ final class BilingualSearchTests: XCTestCase {
         })
         XCTAssertEqual(asked.all.filter { if case .around = $0 { return true } else { return false } }.count, 1)
         XCTAssertEqual(asked.all.filter { $0 == .saudi }.count, 2, "Kingdom-wide in both languages")
+    }
+
+    func testMallSearchCanFindAPlaceNamedAsACenter() async throws {
+        let asked = Asked()
+        let results = try await PlaceSearch.search("الأندلس مول", near: Self.me, token: nil,
+                                                   fetch: { _ in (Data(), 200) },
+                                                   local: { query, _ in
+            asked.add("apple:" + query)
+            guard PlaceSearch.normalize(query) == PlaceSearch.normalize("الأندلس") else { return [] }
+            return [Self.poi("مركز الأندلس", 24.75, 46.73), Self.poi("مطعم قريب", 24.714, 46.676)]
+        })
+        XCTAssertTrue(asked.all.contains("apple:الأندلس مول"), "still ask the exact name the person typed")
+        XCTAssertTrue(asked.all.contains("apple:الأندلس"), "also ask for the place without its generic type")
+        XCTAssertEqual(results.first?.name, "مركز الأندلس", "the matching landmark outranks a closer unrelated result")
     }
 
     /// The benchmark list in docs/search-benchmark.md: every pair reads as the same query.

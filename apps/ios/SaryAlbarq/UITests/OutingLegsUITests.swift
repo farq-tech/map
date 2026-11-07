@@ -134,6 +134,17 @@ final class OutingLegsUITests: XCTestCase {
         shot(app, "09-summary")
     }
 
+    func testInTripSearchOpensTheHomeDestinationSearch() {
+        let app = launch([])
+        tap(app, "flow.cta.startOuting")
+        XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
+        tap(app, "outing-actions")
+        tap(app, "outing-search")
+
+        XCTAssertTrue(el(app, "home.search").waitForExistence(timeout: 8), "in-trip search uses the home search bar")
+        XCTAssertFalse(el(app, "search.field").exists, "the old coordinate search screen is no longer used here")
+    }
+
     /// Driving: the walkie-talkie is the big button, «وصلنا» is compact.
     func testOnALegWhileDriving() {
         let app = launch(["-SaryDrive", "1"])
