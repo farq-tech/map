@@ -151,10 +151,10 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
         XCTAssertEqual(Set(ids), ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                                  "outing-timer", "outing-location-tools", "outing-nearest-open", "outing-desert-tools", "outing-weather-tools",
+                                  "outing-timer", "outing-location-tools", "outing-nearest-open", "outing-weather-tools",
                                   "outing-explore", "outing-fit"])
         let nestedIDs = g.flatMap(\.items).flatMap(\.children).map(\.accessibilityID)
-        XCTAssertEqual(Set(nestedIDs), ["outing-brief", "outing-save-place", "outing-waypoint-add", "outing-camp-suggest", "outing-desert-route", "outing-weather", "outing-qibla"])
+        XCTAssertEqual(Set(nestedIDs), ["outing-brief", "outing-save-place", "outing-waypoint-add", "outing-weather", "outing-qibla"])
         XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"])
         let allIDs = ids + nestedIDs
         XCTAssertEqual(allIDs.count, Set(allIDs).count, "no duplicate entry")

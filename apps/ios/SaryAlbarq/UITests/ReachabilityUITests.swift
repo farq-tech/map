@@ -67,11 +67,11 @@ final class ReachabilityUITests: XCTestCase {
         }
         XCTAssertFalse(app.staticTexts["الترفيه"].exists, "radio / YouTube are in the settings")
         for id in ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                   "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-desert-tools", "outing-nearest-open",
+                   "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-nearest-open",
                    "outing-explore", "outing-fit", "outing-settings", "settings-leave"] {
             XCTAssertTrue(any(app, id).exists, "\(id) in «المزيد»")
         }
-        for id in ["outing-brief", "outing-save-place", "outing-weather", "outing-qibla", "outing-waypoint-add", "outing-camp-suggest", "outing-desert-route"] {
+        for id in ["outing-brief", "outing-save-place", "outing-weather", "outing-qibla", "outing-waypoint-add"] {
             XCTAssertFalse(any(app, id).exists, "\(id) is revealed when its related tool group is opened")
         }
         for id in ["outing-backtrack", "outing-chat", "outing-rally", "outing-hires", "outing-realistic", "outing-effects", "outing-radio", "outing-youtube"] {
@@ -129,7 +129,8 @@ final class ReachabilityUITests: XCTestCase {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id): two taps from the trip map")
         }
         app.buttons["explore-layers"].tap()
-        for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-realistic", "explore-offline"] {
+        for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-realistic", "explore-offline",
+                   "explore-desert-route", "explore-camp-suggest"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «الطبقات»")
         }
     }

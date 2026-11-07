@@ -1,6 +1,6 @@
 import XCTest
 
-/// «اقترح لي مكان كشتة» from «أدوات الطلعة», and the «أماكن مقترحة للكشتة» layer toggle.
+/// «اقترح لي مكان كشتة» and the «أماكن مقترحة للكشتة» layer toggle in map layers.
 /// Tonight's wind is injected (`-SaryCampNight`) and the position is Riyadh (`-SaryCampFrom`),
 /// so the test does not depend on the network or the simulator's GPS.
 final class CampSitesUITests: XCTestCase {
@@ -23,8 +23,13 @@ final class CampSitesUITests: XCTestCase {
     }
 
     func testSuggestTopFiveWithWindReasonsAndGo() {
-        let app = launch(["-SaryCampNight", "0,40"])
-        XCTAssertTrue(app.openTool("outing-camp-suggest", timeout: 20), "the tile is in «أدوات»")
+        let app = launch(["-SaryCampNight", "0,40", "-SaryExplore", "-SaryLiveModal", "layers"])
+        let layers = app.descendants(matching: .any)["explore.layers.sheet"]
+        XCTAssertTrue(layers.waitForExistence(timeout: 20))
+        let suggest = app.buttons["explore-camp-suggest"].firstMatch
+        suggest.scrollIntoView(in: app, margin: 120)
+        XCTAssertTrue(suggest.waitForExistence(timeout: 5), "the action is in map layers")
+        suggest.tap()
         let sheet = app.descendants(matching: .any)["camp.sheet"]
         XCTAssertTrue(sheet.waitForExistence(timeout: 10))
         /* 40 km/h gusts: the sheltered places first, with the warning. */
@@ -76,5 +81,12 @@ final class CampSitesUITests: XCTestCase {
         XCTAssertTrue(sw.flipSwitch(), "«أماكن مقترحة للكشتة» flips")
         XCTAssertNotEqual(sw.value as? String, before)
         XCTAssertTrue(sw.flipSwitch(), "and back")
+        XCTAssertTrue(app.buttons["explore-desert-route"].firstMatch.waitForExistence(timeout: 5),
+                      "route planning is accessible from map layers")
+        let suggest = app.buttons["explore-camp-suggest"].firstMatch
+        suggest.scrollIntoView(in: app, margin: 120)
+        XCTAssertTrue(suggest.waitForExistence(timeout: 5))
+        suggest.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["camp.sheet"].waitForExistence(timeout: 10))
     }
 }

@@ -705,9 +705,10 @@ final class PlaceSearchTests: XCTestCase {
         let near1 = Self.poi("استراحة نفود", 24.72, 46.68)
         let kingdomA = Self.poi("نفود السر", 25.9, 44.5)
         let kingdomNear = Self.poi("نفود الدحي", 25.0, 46.8)
+        let kingdomFar = Self.poi("نفود آخر", 20.5, 44.8)
         let abroad = Self.poi("Nafud", 29.0, 35.0, country: "JO")
-        let r = PlaceSearch.rank(query: "نُفود الثُويرات", around: [near1], saudi: [abroad, kingdomA, exactFar, kingdomNear], mapbox: [], near: Self.me)
-        XCTAssertEqual(r.map(\.name), ["نفود الثويرات", "استراحة نفود", "نفود الدحي", "نفود السر", "Nafud"],
+        let r = PlaceSearch.rank(query: "نُفود الثُويرات", around: [near1], saudi: [abroad, kingdomFar, kingdomA, exactFar, kingdomNear], mapbox: [], near: Self.me)
+        XCTAssertEqual(r.map(\.name), ["نفود الثويرات", "استراحة نفود", "نفود الدحي", "نفود السر", "نفود آخر", "Nafud"],
                        "exact name, then nearby by distance, then the Kingdom nearest first, abroad last")
         let many = (0..<30).map { Self.poi("p\($0)", 24.7 + Double($0) * 0.001, 46.67) }
         XCTAssertEqual(PlaceSearch.rank(query: "p", around: many, saudi: [], mapbox: [], near: Self.me).count, PlaceSearch.maxResults)

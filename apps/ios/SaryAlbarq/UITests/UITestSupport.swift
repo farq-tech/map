@@ -76,7 +76,6 @@ extension XCUIApplication {
         plus.tap()
         let groupedUnder: [String: String] = [
             "outing-brief": "outing-location-tools", "outing-save-place": "outing-location-tools", "outing-waypoint-add": "outing-location-tools",
-            "outing-camp-suggest": "outing-desert-tools", "outing-desert-route": "outing-desert-tools",
             "outing-weather": "outing-weather-tools", "outing-qibla": "outing-weather-tools",
         ]
         let tile = descendants(matching: .any)[id].firstMatch

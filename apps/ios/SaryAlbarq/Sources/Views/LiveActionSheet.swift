@@ -109,13 +109,6 @@ enum LiveActionCatalog {
                         .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
                       ]),
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
-                .init(id: "desertTools", title: "دليل البر", systemImage: "tent", accessibilityID: "outing-desert-tools",
-                      subtitle: "أماكن كشتة ودروب للوجهة", children: [
-                        .init(id: "camp", title: "اقترح كشتة", systemImage: "tent", accessibilityID: "outing-camp-suggest",
-                              subtitle: "أحلى ٥ جلسات حولك مع ريح الليلة"),
-                        .init(id: "desertRoute", title: "دروب البر", systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath",
-                              accessibilityID: "outing-desert-route", subtitle: "الأسهل والأقصر للوجهة من صور الأقمار"),
-                      ]),
             ]),
             LiveActionGroup(title: "الخريطة", items: [
                 .init(id: "weatherTools", title: "طقس واتجاه", systemImage: "sun.horizon", accessibilityID: "outing-weather-tools",
