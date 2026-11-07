@@ -94,8 +94,13 @@ final class SaryAlbarqUITests: XCTestCase {
         while Date() < deadline {
             for l in labels where springboard.buttons[l].exists {
                 shot("2-system-location-alert")
-                springboard.buttons[l].tap()
-                return true
+                /* iOS 27: a tap during the alert's entry animation is dropped. Tap until it is gone. */
+                let b = springboard.buttons[l]
+                while b.exists && Date() < deadline {
+                    if b.isHittable { b.tap() }
+                    usleep(500_000)
+                }
+                if !b.exists { return true }
             }
             usleep(250_000)
         }
