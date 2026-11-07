@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 /// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
@@ -183,6 +184,10 @@ struct LiveSheet: View {
             WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
                          changeDestination: controller.session.view?.iLead == true ? { controller.changeDestinationFromWeather() } : nil,
                          destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil)
+                .presentationDetents([.large])
+        case .qibla:
+            QiblaView(fallback: controller.location.lastFix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+                      close: { controller.modal = nil })
                 .presentationDetents([.large])
         case let .weatherAt(point):
             WeatherPointSheet(point: point, close: { controller.modal = nil })

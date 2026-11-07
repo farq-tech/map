@@ -15,6 +15,7 @@ const createMapRouter = require('./routes/map');
 const createCopilotRouter = require('./routes/copilot');
 const createAnalyticsRouter = require('./routes/analytics');
 const createOutdoorRouter = require('./routes/outdoor');
+const createWeatherRouter = require('./routes/weather');
 const { setupOutings } = require('./lib/outings');
 const { routingConfigFromEnv } = require('./lib/outings/routing');
 const { warmCityCache } = require('./lib/city-opportunities');
@@ -137,6 +138,8 @@ app.use('/api/outdoor', createOutdoorRouter());
 app.use('/api/copilot', createCopilotRouter());
 app.use('/api/analytics', createAnalyticsRouter());
 app.use('/api/outings', outings.router);
+/* «السحاب الآن»، «وين نزل مطر»، «وين ربّع» and /api/desert/categories/search (docs/weather-sources.md). */
+app.use('/api', createWeatherRouter());
 
 async function proxyFarqCatalog(id) {
   if (!FARQ_API_ORIGIN) return null;
@@ -217,6 +220,8 @@ if (FARQ_API_ORIGIN) {
     if (
       req.path.startsWith('/intelligence') ||
       req.path.startsWith('/outdoor') ||
+      req.path.startsWith('/weather') ||
+      req.path.startsWith('/desert') ||
       req.path.startsWith('/outings') ||
       req.path.startsWith('/restaurant/') ||
       req.path.startsWith('/comparison/')
@@ -242,6 +247,7 @@ app.use((err, _req, res, _next) => {
 /* The intended scheduler is GitHub Actions; this covers the gap while that is
  * unavailable. Off unless SELF_CHECK_ENABLED=1. See lib/self-check.js. */
 selfCheck.start();
+createWeatherRouter.startWarm();
 
 const server = app.listen(PORT, () => {
   console.log(`[farq-map-api] listening on :${PORT}`);

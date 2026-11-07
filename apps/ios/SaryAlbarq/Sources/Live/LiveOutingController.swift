@@ -56,6 +56,8 @@ enum LiveModal: Identifiable, Equatable {
     case pttChannels
     /// «وين رايحين؟»: the next leg's destination (ux/الطلعة-والمشوار.md).
     case whereTo
+    /// «القبلة»: the compass to the Kaaba.
+    case qibla
 
     var id: String {
         switch self {
@@ -84,6 +86,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
         case .whereTo: return "whereTo"
+        case .qibla: return "qibla"
         }
     }
 
@@ -317,6 +320,7 @@ final class LiveOutingController: ObservableObject {
         }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
+        if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
