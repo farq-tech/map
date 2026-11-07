@@ -81,6 +81,28 @@ final class ExploreUITests: XCTestCase {
         any(app, "page-back").tap()
     }
 
+    func testWeatherRainLayerAndPeriodControls() {
+        let app = launch()
+        app.buttons["outing-actions"].tap()
+        let entry = any(app, "outing-explore")
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        let layersButton = app.buttons["explore-layers"]
+        XCTAssertTrue(layersButton.waitForExistence(timeout: 5))
+        layersButton.tap()
+
+        let rain = any(app, "weather.layer.rain")
+        XCTAssertTrue(rain.waitForExistence(timeout: 5), "rain is a selectable layer")
+        rain.tap()
+        XCTAssertTrue(any(app, "weather.rain.days").waitForExistence(timeout: 3), "rain exposes its period picker")
+        let week = any(app, "weather.rain.days.7")
+        XCTAssertTrue(week.exists)
+        week.tap()
+        XCTAssertTrue(week.isSelected, "seven-day period is selected")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "NASA GPM IMERG")).firstMatch.exists,
+                       "the map-layer sheet credits the rain data source")
+    }
+
     func testSavePlaceAndListIt() {
         let app = launch(["-SaryExplore"])
         let save = app.buttons["explore-save"]
