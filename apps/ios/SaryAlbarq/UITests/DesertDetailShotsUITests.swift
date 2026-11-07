@@ -21,10 +21,19 @@ final class DesertDetailShotsUITests: XCTestCase {
     private var grade: [String] {
         let env = ProcessInfo.processInfo.environment
         var a: [String] = []
-        if env["SARY_DETAIL"] == "off" { a += ["-SarySandDetail", "off", "-SaryHiRes", "off"] } else { a += ["-SaryHiRes", "on", "-SaryHiResRemote", "on"] }
+        /* SARY_MODE=orig|detail|ai|all: each factor on its own (round 3 incident review). */
+        switch env["SARY_MODE"] {
+        case "orig": a += ["-SarySandDetail", "off", "-SaryHiRes", "off"]
+        case "detail": a += ["-SarySandDetail", "on", "-SaryHiRes", "off"]
+        case "ai": a += ["-SarySandDetail", "off", "-SaryHiRes", "on", "-SaryHiResRemote", "on"]
+        case "all": a += ["-SarySandDetail", "on", "-SaryHiRes", "on", "-SaryHiResRemote", "on"]
+        default:
+            if env["SARY_DETAIL"] == "off" { a += ["-SarySandDetail", "off", "-SaryHiRes", "off"] } else { a += ["-SaryHiRes", "on", "-SaryHiResRemote", "on"] }
+        }
         /* SARY_LEVEL=strong|light: «قوي» / «خفيف» (round 3). */
         if let l = env["SARY_LEVEL"] { a += ["-SaryHiResLevel", l] }
         if env["SARY_TINT"] == "1" { a += ["-SaryHiResTint"] }
+        if env["SARY_SOLID"] == "1" { a += ["-SaryHiResSolid"] }
         return a
     }
 

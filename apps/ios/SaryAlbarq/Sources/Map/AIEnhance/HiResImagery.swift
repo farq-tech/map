@@ -465,12 +465,31 @@ final class HiResImagery: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, let m = self.map?.mapboxMap, self.lock.withLock({ gen == self.generation }),
                   m.sourceExists(withId: Self.sourceId) else { return }
-            try? m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
-                                                 tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+            var image = image
             #if DEBUG
-            if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px") }
+            /* `-SaryHiResSolid`: a flat magenta tile made exactly like «تفاصيل الرمال»'s (diagnosis). */
+            if image != nil, ProcessInfo.processInfo.arguments.contains("-SaryHiResSolid") {
+                var px = [UInt8](repeating: 0, count: 512 * 512 * 4)
+                for i in stride(from: 0, to: px.count, by: 4) { px[i] = 255; px[i + 1] = 0; px[i + 2] = 255; px[i + 3] = 255 }
+                image = SandDetailLayer.image(SandDetail.Tile(size: 512, rgba: px, delta: []))
+            }
             #endif
-            if image != nil { self.lock.withLock { self.visible.delivered(t) } }
+            do {
+                try m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
+                                                    tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+                #if DEBUG
+                if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px alpha=\(image.cgImage.map { String(describing: $0.alphaInfo.rawValue) } ?? "-")") }
+                #endif
+            } catch {
+                Self.log.error("setTileData \(t.description, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                #if DEBUG
+                HiResStats.note("setTileData FAILED \(t) \(error)")
+                #endif
+            }
+            /* The badge counts a tile only when Mapbox can draw it: premultiplied RGBA (round 3
+               incident: opaque RGB tiles were accepted but never drawn, under a «مُحسّنة» badge).
+               `testEnhancedTilesAreReallyDrawn` checks the pixels on screen end to end. */
+            if let cg = image?.cgImage, HiResEnhancer.isMapboxDrawable(cg) { self.lock.withLock { self.visible.delivered(t) } }
             self.refreshBadge()
         }
     }
