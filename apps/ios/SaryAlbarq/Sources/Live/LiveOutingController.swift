@@ -56,6 +56,9 @@ enum LiveModal: Identifiable, Equatable {
     case pttChannels
     /// «وين رايحين؟»: the next leg's destination (ux/الطلعة-والمشوار.md).
     case whereTo
+    /// One focused part of the trip (UX simplification): the sheet holds only the essentials,
+    /// «المزيد» and the quick row open these.
+    case panel(LivePanel)
 
     var id: String {
         switch self {
@@ -84,6 +87,7 @@ enum LiveModal: Identifiable, Equatable {
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
         case .whereTo: return "whereTo"
+        case let .panel(p): return "panel:\(p.rawValue)"
         }
     }
 
@@ -904,7 +908,7 @@ final class LiveOutingController: ObservableObject {
         a.selectTab = { [weak self] t in self?.selectedTab = t }
         a.participantsTab = ParticipantsTabActions(
             openParticipant: { [weak self] id in self?.openParticipant(id) },
-            addMyPhone: { [weak self] in self?.selectedTab = .trip; self?.sheetDetent = .full },
+            addMyPhone: { [weak self] in self?.modal = .panel(.phone) },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
                 self.lowerSheetThenAsk(.point(r.position))

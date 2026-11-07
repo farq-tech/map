@@ -17,17 +17,16 @@ enum HomeRoute: Hashable {
     case advanced
     case convoyAlerts
     case blocked
+    /// «مفضلتك»: البيت، الشغل and the saved places.
+    case favorites
 }
 
-/// «طلعاتي»: my outings by state (جارية / متوقفة / لم تبدأ), the latest ended
-/// ones, an empty state that says what to do, and honest offline / error states.
+/// The home: the map with its sheet; every other page is pushed from there.
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @State private var path: [HomeRoute] = []
-    @State private var creating = false
-    @State private var joining = false
 
     init(initial: [HomeRoute] = []) { _path = State(initialValue: initial) }
 
@@ -39,10 +38,8 @@ struct HomeView: View {
                         .navigationBarBackButtonHidden(true)
                 }
         }
-        .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .onAppear(perform: openPendingSummary)
         .onChange(of: model.pendingSummary) { _, _ in openPendingSummary() }
-        .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
     }
 
     /// «ملخص الرحلة» pressed on the live map after the end.
@@ -71,145 +68,16 @@ struct HomeView: View {
         case .advanced: AdvancedSettingsView(back: pop)
         case .convoyAlerts: ConvoyAlertSettingsView(back: pop)
         case .blocked: BlockedUsersView(back: pop)
+        case .favorites: FavoritesView(back: pop)
         }
     }
 
+    /// The map first (UX simplification, after Hudhud's flow): search, categories, shortcuts and
+    /// «طلعاتي» live in the home map's sheet (Sources/Home/MapHomeScreen.swift).
     private var content: some View {
-        let p = theme.palette
-        let me = model.identity?.user
-        return SaryPage(title: "طلعاتي", subtitle: me.map { "أهلًا \($0.display_name)" }) {
-            HStack(spacing: theme.space(.s)) {
-                SaryIconButton(systemImage: SaryIcon.settings, label: "الإعدادات", id: "home.settings") { path.append(.settings) }
-                Button { path.append(.profile) } label: {
-                    SaryAvatar(name: me?.display_name ?? "؟", color: theme.accent.fill, photo: AvatarCodec.image(from: me?.avatar), size: 38)
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text("ملفي"))
-                .accessibilityIdentifier("home.profile")
-            }
-        } content: {
-            if !model.online { SaryOfflineStrip() }
-            /* ONE primary action; joining is a quiet link under it (docs/IA-REDESIGN.md §2.7). */
-            VStack(spacing: 2) {
-                Button { creating = true } label: { SaryButtonLabel(title: "طلعة جديدة", systemImage: "plus") }
-                    .buttonStyle(.sary(.primary))
-                    .accessibilityIdentifier("list.create")
-                Button { joining = true } label: { Label("عندك رابط دعوة؟ انضم", systemImage: "link") }
-                    .buttonStyle(.sary(.plain, compact: true))
-                    .accessibilityIdentifier("list.join")
-            }
-            switch model.listPhase {
-            case .loading where model.current.isEmpty && model.history.isEmpty:
-                VStack(spacing: 0) { ForEach(0..<3, id: \.self) { _ in SarySkeletonRow() } }
-                    .sarySurface(radius: SaryRadius.m)
-            case .failed(let m) where model.current.isEmpty && model.history.isEmpty:
-                SaryStateView(kind: model.online ? .error(title: "تعذّر تحميل طلعاتك", message: m) : .offline(message: "طلعاتك تظهر أول ما يرجع الاتصال."),
-                              actionTitle: "حاول مرة ثانية", actionID: "home.retry") { Task { await model.refresh() } }
-                    .sarySurface(radius: SaryRadius.l)
-            default:
-                if model.current.isEmpty && model.history.isEmpty {
-                    SaryStateView(kind: .empty(title: "ما عندك طلعات بعد", message: "أنشئ طلعة وأرسل رابطها للعيال، أو افتح رابط دعوة وصلك.", systemImage: "car.2.fill"))
-                        .sarySurface(radius: SaryRadius.l)
-                        .accessibilityIdentifier("home.empty")
-                }
-                if let live = activeOuting {
-                    ActiveOutingCard(o: live, open: { model.open(live.id) }, details: { path.append(.details(live.id)) })
-                }
-                let others = sortedCurrent.filter { $0.id != activeOuting?.id }
-                if !others.isEmpty {
-                    section(activeOuting == nil ? "طلعاتك" : "طلعات ثانية", ids: "home.current") {
-                        VStack(spacing: 0) {
-                            ForEach(others) { o in
-                                OutingCard(o: o, open: { model.open(o.id) }, details: { path.append(.details(o.id)) }, compact: true)
-                                if o.id != others.last?.id { SaryDivider().padding(.leading, 56) }
-                            }
-                        }
-                        .sarySurface(radius: SaryRadius.m)
-                    }
-                }
-                if !model.history.isEmpty {
-                    section("انتهت مؤخرًا", ids: "home.history") {
-                        VStack(spacing: 0) {
-                            let recent = Array(model.history.prefix(3))
-                            ForEach(recent) { o in
-                                OutingCard(o: o, open: { path.append(.summary(o.id)) }, details: nil, compact: true)
-                                if o.id != recent.last?.id { SaryDivider().padding(.leading, 56) }
-                            }
-                        }
-                        .sarySurface(radius: SaryRadius.m)
-                        if model.history.count > 3 {
-                            Button("كل الطلعات السابقة (\(SaryFormat.number(model.history.count)))") { path.append(.history) }
-                                .buttonStyle(.sary(.plain))
-                                .accessibilityIdentifier("home.allHistory")
-                        }
-                    }
-                }
-            }
-        }
-        .refreshable { await model.refresh() }
-        .task { await model.refresh() }
-    }
-
-    /// The outing happening now (the big card on top): the first active one.
-    private var activeOuting: OutingSummary? { sortedCurrent.first { $0.status == .active } }
-
-    /// Active first, then paused, then not started.
-    private var sortedCurrent: [OutingSummary] {
-        let rank: [OutingStatus: Int] = [.active: 0, .paused: 1, .created: 2, .ended: 3]
-        return model.current.sorted { (rank[$0.status] ?? 9) < (rank[$1.status] ?? 9) }
-    }
-
-    private func section<C: View>(_ title: String, ids: String, @ViewBuilder _ c: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: theme.space(.s)) {
-            Text(title).saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.textSecondary)
-                .accessibilityAddTraits(.isHeader)
-            VStack(spacing: theme.space(.s)) { c() }
-        }
-        .accessibilityIdentifier(ids)
-    }
-}
-
-/// The outing happening now, on top of «طلعاتي»: big, one clear «افتح الخريطة».
-struct ActiveOutingCard: View {
-    let o: OutingSummary
-    var open: () -> Void
-    var details: () -> Void
-    @Environment(\.sary) private var theme
-
-    var body: some View {
-        let p = theme.palette
-        VStack(alignment: .leading, spacing: theme.space(.m)) {
-            HStack(alignment: .top, spacing: theme.space(.m)) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.live.opacity(0.16))
-                    Image(systemName: "car.2.fill").font(.system(size: 22, weight: .semibold)).foregroundStyle(p.liveText)
-                }
-                .frame(width: 56, height: 56)
-                VStack(alignment: .leading, spacing: 4) {
-                    SaryOutingStatusPill(status: o.status)
-                    Text(o.name).saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2).multilineTextAlignment(.leading)
-                    HStack(spacing: 6) {
-                        Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
-                        if o.role == "owner" {
-                            Image(systemName: SaryIcon.crown).font(.system(size: 10)).foregroundStyle(p.warningText)
-                                .accessibilityLabel(Text("أمير الرحلة"))
-                        }
-                        OutingRowWeather(outingId: o.id)
-                    }
-                }
-                Spacer(minLength: 0)
-                SaryIconButton(systemImage: "info", label: "تفاصيل \(o.name)", id: "outing-details", action: details)
-            }
-            Button(action: open) { SaryButtonLabel(title: "افتح الخريطة", systemImage: "map.fill") }
-                .buttonStyle(.sary(.primary))
-                .accessibilityIdentifier("outing-row")
-                .accessibilityHint(Text("يفتح الخريطة"))
-        }
-        .padding(theme.space(.l))
-        .sarySurface(radius: SaryRadius.l)
-        .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.live.opacity(0.45), lineWidth: 1.5))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home.active")
+        MapHomeScreen(push: { path.append($0) })
+            .toolbar(.hidden, for: .navigationBar)
+            .task { await model.refresh() }
     }
 }
 

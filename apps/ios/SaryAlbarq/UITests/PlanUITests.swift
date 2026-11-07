@@ -107,7 +107,6 @@ final class PlanUITests: XCTestCase {
             let summary = app.descendants(matching: .any)["outing-sheet-summary"]
             XCTAssertTrue(summary.waitForExistence(timeout: 5))
             summary.tap()
-            app.buttons["tab.group"].tap()
             let mine = app.descendants(matching: .any).matching(identifier: "participant-row").matching(NSPredicate(format: "label CONTAINS %@", "أنت")).firstMatch
             XCTAssertTrue(mine.waitForExistence(timeout: 5))
             mine.tap()

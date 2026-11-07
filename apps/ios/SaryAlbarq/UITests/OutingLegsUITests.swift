@@ -104,10 +104,12 @@ final class OutingLegsUITests: XCTestCase {
         tap(app, "flow.cta.arrived")
         XCTAssertTrue(waitLine(app, contains: "واقفين عند مخيم النفود"), line(app))
 
-        /* «أنهِ الطلعة» lives in the «الرحلة» sheet (secondary) → confirm → the summary lists both legs. */
+        /* «أنهِ الطلعة» lives in «المزيد» → «الطلعة» (once) → confirm → the summary lists both legs. */
         shot(app, "07-stopped-second")
-        tap(app, "trip.header")
-        if app.buttons["tab.trip"].waitForExistence(timeout: 4) { app.buttons["tab.trip"].tap() }
+        let more = app.buttons["outing-actions"]
+        if !more.waitForExistence(timeout: 3) { el(app, "outing-sheet-summary").tap() }
+        XCTAssertTrue(more.waitForExistence(timeout: 6))
+        more.tap()
         let end = el(app, "settings-end")
         for _ in 0..<8 where !(end.exists && end.isHittable) { app.swipeUp(); usleep(500_000) }
         XCTAssertTrue(end.waitForExistence(timeout: 6), "«أنهِ الطلعة» in the sheet")

@@ -71,8 +71,7 @@ extension LiveOutingController {
         case "stuck" where parts.count > 2: show(member: parts[2])
         case "overdue" where parts.count > 2 && parts[2] != "me": show(member: parts[2])
         default:
-            selectedTab = .trip
-            sheetDetent = .half
+            modal = .panel(.safety)
         }
         return true
     }
@@ -82,8 +81,7 @@ extension LiveOutingController {
     /// «غرّزت» in the control cluster: ask (confirm), or — already stuck — open my stuck card.
     func stuckControlTapped() {
         if safety.myStuck != nil {
-            selectedTab = .trip
-            sheetDetent = .half
+            modal = .panel(.safety)
         } else {
             safety.askStuck()
         }

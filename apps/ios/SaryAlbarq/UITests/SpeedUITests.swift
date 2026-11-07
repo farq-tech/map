@@ -54,9 +54,6 @@ final class SpeedUITests: XCTestCase {
         /* The demo's «أبو فهد» sent a moving fix moments ago (22 m/s): his speed shows while it is
          * fresh. «نورة»'s last fix is 5 minutes old: no speed, just «آخر موقع». */
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let groupTab = app.buttons["tab.group"]
-        XCTAssertTrue(groupTab.waitForExistence(timeout: 5))
-        groupTab.tap()
         let rows = app.descendants(matching: .any).matching(identifier: "participant-row")
         let fahd = rows.containing(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch
         let fahdRow = fahd.exists ? fahd : rows.matching(NSPredicate(format: "label CONTAINS %@", "أبو فهد")).firstMatch

@@ -80,6 +80,30 @@ extension XCUIApplication {
         return true
     }
 
+    /// «المزيد» → «الطلعة» → «غادر الطلعة»: opens the confirmation (the trip's buttons are there once,
+    /// UX simplification). Returns the confirming button («غادر»).
+    @discardableResult
+    func openLeaveConfirmation(timeout: TimeInterval = 10) -> XCUIElement {
+        let more = buttons["outing-actions"]
+        if !more.waitForExistence(timeout: 3) { descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap() }
+        _ = more.waitForExistence(timeout: timeout)
+        more.tap()
+        let leave = descendants(matching: .any)["settings-leave"].firstMatch
+        _ = leave.waitForExistence(timeout: 5)
+        leave.scrollIntoView(in: self)
+        leave.tap()
+        return buttons["غادر"].firstMatch
+    }
+
+    /// The home map's sheet raised, «طلعاتي» in view («طلعة جديدة», «انضم برابط»).
+    func openHomeOutings(timeout: TimeInterval = 20) {
+        let create = buttons["list.create"]
+        let handle = descendants(matching: .any)["home.sheet.handle"].firstMatch
+        if !create.exists, handle.waitForExistence(timeout: timeout) { handle.tap() }
+        _ = create.waitForExistence(timeout: 5)
+        create.scrollIntoView(in: self)
+    }
+
     /// «الإعدادات» → «متقدم» (screen shape, driving realism) scrolled into view.
     func openAdvancedSettings() {
         descendants(matching: .any)["settings-advanced"].firstMatch.scrollIntoView(in: self)

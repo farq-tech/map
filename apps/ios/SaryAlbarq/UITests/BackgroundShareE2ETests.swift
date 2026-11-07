@@ -49,12 +49,11 @@ final class BackgroundShareE2ETests: XCTestCase {
         print("SARY-E2E: background-end")
         app.activate()
         XCTAssertTrue(app.staticTexts["live.sharing"].waitForExistence(timeout: 15), "still sharing after the background stretch")
-        app.buttons["live.leave"].tap()
-        let confirm = app.sheets.buttons["غادر الطلعة"].firstMatch
+        let confirm = app.openLeaveConfirmation()
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         print("SARY-E2E: stopped")
-        XCTAssertTrue(app.buttons["list.create"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.descendants(matching: .any)["home.search"].waitForExistence(timeout: 15))
         /* Background again after leaving: nothing must arrive now. */
         XCUIDevice.shared.press(.home)
         sleep(40)

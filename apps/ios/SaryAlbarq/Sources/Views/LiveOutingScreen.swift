@@ -123,7 +123,7 @@ struct LiveOutingScreen: View {
                     }
                 }
                 .saryAppearance(appearance)
-                .sarySheetPresentation(detent: $controller.sheetDetent, trip: false)
+                .sarySheetPresentation(detent: $controller.sheetDetent, trip: controller.showsQuickRow(drive: theme.drive))
         }
     }
 
@@ -145,7 +145,7 @@ struct LiveOutingScreen: View {
     private var bottomInset: CGFloat {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
-        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: false))
+        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: controller.showsQuickRow(drive: theme.drive)))
     }
 
     private var topChromeBottom: CGFloat {
@@ -269,6 +269,9 @@ struct LiveOutingScreen: View {
                     /* «وصلنا» while driving a leg is the only compact case; any stopped state («وين رايحين؟»,
                      * «ابدأ المشوار»…) keeps the primary big even if the car is still rolling. */
                     let ctaCompact: Bool = {
+                        /* The sheet raised (reading the people / the quick row): the primary shrinks to a pill
+                         * at the side so it never covers the cars and markers above the sheet. */
+                        if controller.sheetDetent != .peek { return true }
                         if case .onLeg = flow.state { return driving }
                         return false
                     }()

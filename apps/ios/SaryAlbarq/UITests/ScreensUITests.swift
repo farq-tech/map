@@ -13,17 +13,22 @@ final class ScreensUITests: XCTestCase {
 
     func testHomeListsOutingsByStateAndOpensSheets() {
         let app = launch(["-demo", "-SaryScreen", "home"])
-        XCTAssertTrue(app.buttons["list.create"].waitForExistence(timeout: 10))
+        /* The map-first home: «طلعاتي» is in the raised sheet; the running outing is its card on top. */
+        XCTAssertTrue(app.descendants(matching: .any)["home.search"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["home.active"].exists, "the running outing on the collapsed sheet")
+        app.openHomeOutings()
         for name in ["طلعة الثمامة (عرض تجريبي)", "مشوار العارض", "كشتة الخميس", "كشتة نفود الثويرات"] {
             XCTAssertTrue(app.staticTexts[name].exists, name)
         }
-        XCTAssertTrue(app.staticTexts["جارية"].exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "جارية")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["متوقفة مؤقتًا"].exists)
         XCTAssertTrue(app.staticTexts["لم تبدأ"].exists)
         app.buttons["list.create"].tap()
         XCTAssertTrue(app.textFields["create.dest.field"].waitForExistence(timeout: 5), "«طلعة جديدة» starts with «وين رايحين؟»")
         app.buttons["page-close"].tap()
-        app.buttons["list.join"].tap()
+        let join = app.buttons["list.join"]
+        _ = join.waitForExistence(timeout: 5)
+        join.tap()
         XCTAssertTrue(app.textFields["paste.field"].waitForExistence(timeout: 5))
     }
 

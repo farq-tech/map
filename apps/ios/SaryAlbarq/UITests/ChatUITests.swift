@@ -39,9 +39,9 @@ final class ChatUITests: XCTestCase {
 
     func testGroupTabEntryBadgeSendAndReceive() {
         let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
-        let entry = any(app, "chat.entry")
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "«المحادثات» first in the Group tab")
-        XCTAssertTrue(any(app, "tab.badge").waitForExistence(timeout: 5), "unread badge on «المجموعة»")
+        let entry = any(app, "sheet.chat")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "«المحادثة» in the sheet's quick row")
+        XCTAssertTrue(entry.label.contains("،"), "the unread count on it: \(entry.label)")
         shot(app, "chat-01-group-tab-badge")
         entry.tap()
         XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5))
@@ -75,7 +75,7 @@ final class ChatUITests: XCTestCase {
     /// so the block/unblock effects and the report reasons are covered in ChatModerationTests.)
     func testMessageMenuOffersReportAndBlock() {
         let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
-        let entry = any(app, "chat.entry")
+        let entry = any(app, "sheet.chat")
         XCTAssertTrue(entry.waitForExistence(timeout: 10))
         entry.tap()
         XCTAssertTrue(any(app, "chat.row.group").waitForExistence(timeout: 5))
@@ -89,13 +89,12 @@ final class ChatUITests: XCTestCase {
         shot(app, "chat-10-message-menu")
     }
 
-    func testPlusOpensChatsInTwoTaps() {
+    func testQuickRowOpensChatsInOneTap() {
         let app = launch()
-        app.buttons["outing-actions"].tap()
-        let item = any(app, "outing-chat")
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "«+» → المحادثات")
+        let item = any(app, "sheet.chat")
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "«المحادثة» in the quick row")
         item.tap()
-        XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5), "two taps from the map")
+        XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5), "one tap from the map")
     }
 
     func testQuickReplyAndLocationShare() {

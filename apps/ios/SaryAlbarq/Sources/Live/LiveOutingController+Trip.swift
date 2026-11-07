@@ -82,9 +82,7 @@ extension LiveOutingController {
             returnTrip: { [weak self] in self?.startReturnTrip() },
             followOldTrail: { [weak self] in self?.followOldTrail() },
             expand: { [weak self] in
-                guard let self else { return }
-                self.selectedTab = .trip
-                self.sheetDetent = .half
+                self?.modal = .panel(.route)
             })
     }
 

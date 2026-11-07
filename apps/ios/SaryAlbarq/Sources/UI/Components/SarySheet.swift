@@ -4,9 +4,10 @@ import SwiftUI
 
 extension SheetDetentUI {
     /// Height of the minimized sheet: handle + summary line (+ drive size).
-    /// `trip`: the trip strip («قطعنا ٦٢٪ · باقي …») sits under the summary line.
+    /// `trip`: the quick row (ملاحة، المحادثة، التجمع، أخفِ موقعي، طريق الرجعة، المزيد) sits under
+    /// the summary line.
     static func peekHeight(drive: Bool, trip: Bool = false) -> CGFloat {
-        trip ? (drive ? 140 : 104) : (drive ? 88 : 70)
+        trip ? (drive ? 172 : 140) : (drive ? 88 : 70)
     }
 
     func presentationDetent(drive: Bool, trip: Bool = false) -> PresentationDetent {

@@ -86,7 +86,9 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك.</string>
+	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك. ولما تضغط المايك في البحث يسمع اسم المكان اللي تقوله فقط.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>لما تضغط المايك في «وين رايحين؟» نحوّل اسم المكان اللي تقوله إلى نص للبحث، على جوالك متى ما أمكن. ما نحفظ صوتك.</string>
 
 	<!-- Phone-to-phone link for cars of the same outing (MultipeerConnectivity, NearbyMesh). -->
 	<key>NSLocalNetworkUsageDescription</key>

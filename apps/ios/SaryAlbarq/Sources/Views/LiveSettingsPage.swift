@@ -19,15 +19,16 @@ struct LiveSettingsPage: View {
     @AppStorage(OutingSession.modeKey) private var shareMode: String = ShareMode.balanced.rawValue
 
     enum Page: Hashable {
-        case tripType, sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, talkMode, navVoice, volume, media, whoSees, diagnostics
+        case sharing, defaultLayer, mapDirection, units, driving, trail, defaultChannel, talkMode, navVoice, volume, media, diagnostics
     }
 
     var body: some View {
         NavigationStack(path: $path) {
             SettingsList(header: header(title: "الإعدادات", back: close, id: "settings.back")) {
                 group("الطلعة") {
-                    row("نوع الطلعة", id: "settings.tripType") { path.append(.tripType) }
-                    row("مشاركة موقعي", id: "settings.sharing") { path.append(.sharing) }
+                    /* One page for my location (was «مشاركة موقعي» + «من يشوف موقعي», two pages saying the same). */
+                    row("موقعي ومن يشوفه", id: "settings.sharing") { path.append(.sharing) }
+                    row("رقم جوالي", id: "settings.phone") { closeThen { controller.modal = .panel(.phone) } }
                     toggle("تنبيه لما أحد يتأخر", isOn: $convoy.settings.behindTailOn, id: "settings.lateAlert", last: true)
                 }
                 group("الخريطة") {
@@ -46,7 +47,6 @@ struct LiveSettingsPage: View {
                     row("الإذاعة ويوتيوب", id: "settings.media", last: true) { path.append(.media) }
                 }
                 group("الخصوصية") {
-                    row("من يشوف موقعي", id: "settings.whoSees") { path.append(.whoSees) }
                     row("مسح سجل الطلعات", id: "settings.clearHistory", last: true) { confirmClear = true }
                 }
                 group("متقدم") {
@@ -98,16 +98,8 @@ struct LiveSettingsPage: View {
     @ViewBuilder
     private func page(_ p: Page) -> some View {
         switch p {
-        case .tripType:
-            sub("نوع الطلعة", footer: "مشي، كشتة، طلعة أو قافلة، بحث ومسح: يحدد وش يظهر على الشاشة. قريبًا.") {
-                Text("قريبًا").font(.sary(16, .bold)).foregroundStyle(theme.palette.textSecondary)
-                    .frame(maxWidth: .infinity, minHeight: 80)
-                    .accessibilityIdentifier("settings.tripType.soon")
-            }
         case .sharing:
-            sub("مشاركة موقعي", footer: "موقعك يُشارك تلقائيًا مع أعضاء الطلعة ما دمت فيها وهي شغّالة، وتتوقف المشاركة إذا غادرت الطلعة أو انتهت. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع». تطلع من الطلعة من «الرحلة» ← «غادر الطلعة».") {
-                infoRow(controller.session.isSharingNow ? "موقعك مُشارَك الآن" : "موقعك غير مُشارَك الآن", id: "settings.sharing.state")
-            }
+            WhoSeesPage(controller: controller, header: header(title: "موقعي ومن يشوفه", back: { path.removeLast() }, id: "settings.sub.back"))
         case .defaultLayer:
             sub("الطبقة الافتراضية", footer: "الطبقة اللي يبدأ بها «الاستكشاف». خريطة الطلعة نفسها تبقى صور الأقمار الصناعية (هي اللي تنحفظ بلا إنترنت).") {
                 ForEach(Array([MapLayer.satellite, .topo, .standard].enumerated()), id: \.element) { i, l in
@@ -168,8 +160,6 @@ struct LiveSettingsPage: View {
                 row("إذاعة الطلعة", id: "radio.entry") { closeThen { GroupAudioCenters.of(controller).open() } }
                 row("يوتيوب", id: "media.entry", last: true) { closeThen { MediaCenters.of(controller).open() } }
             }
-        case .whoSees:
-            WhoSeesPage(controller: controller, header: header(title: "من يشوف موقعي", back: { path.removeLast() }, id: "settings.sub.back"))
         case .diagnostics:
             sub("تشخيص", footer: "حالة «قناة الطلعة» الآن، و«سجل القناة» تشاركه مع اللي يصلّح المشكلة.") {
                 GpsDevGate(location: controller.location) { PTTLinkRow(line: controller.ui.settingsTab.pttLink) }
@@ -368,7 +358,9 @@ private struct WhoSeesPage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: nil, footer: "موقعك يشوفه أعضاء هذي الطلعة فقط، لا أحد غيرهم، وما دامت الطلعة شغّالة. الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة.") {
+            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع أعضاء هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
+                SettingsRow(title: controller.session.isSharingNow ? "موقعك مُشارَك الآن" : "موقعك غير مُشارَك الآن") { EmptyView() }
+                    .accessibilityIdentifier("settings.sharing.state")
                 SettingsRow(title: "شارك البطارية") {
                     Toggle("", isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) })).labelsHidden()
                 }

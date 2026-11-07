@@ -15,6 +15,8 @@ struct PlanMapView: UIViewRepresentable {
     var interactive = true
     var camera: PlanCamera? = nil
     var theme: SaryTheme = .default
+    /// The blue dot of this phone (the home map).
+    var showsUser = false
     var onTap: (LngLat) -> Void = { _ in }
     var onLongPress: (LngLat) -> Void = { _ in }
     var onMove: (Int, LngLat) -> Void = { _, _ in }
@@ -38,6 +40,7 @@ struct PlanMapView: UIViewRepresentable {
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
         if !interactive { map.isUserInteractionEnabled = false }
+        if showsUser { map.location.options.puckType = .puck2D(.makeDefault(showBearing: true)) }
         context.coordinator.attach(map, parent: self)
         return map
     }

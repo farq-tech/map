@@ -146,28 +146,40 @@ final class DeclutterTests: XCTestCase {
     // MARK: «+»
 
     func testActionCatalogHoldsEveryFeature() {
-        /* «تخفيف الزحمة» ١٣: tiles in sections; «اتبع الخطة» moved to «الرحلة», «انسخ موقعي» to «أنت». */
+        /* UX simplification: «المزيد» holds only what the quick row and other screens do not. */
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الترفيه", "الخريطة"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
-        /* Lovable's tiles, plus ours (never dropped). */
-        XCTAssertEqual(Set(ids), ["outing-navigate", "outing-search", "outing-backtrack", "plan.follow", "outing-chat", "outing-rally", "outing-convoy",
-                                  "outing-note-open", "outing-stuck", "outing-enjad", "outing-timer", "outing-brief", "outing-save-place",
-                                  "outing-weather", "outing-waypoint-add", "outing-nearest-open", "outing-radio", "outing-youtube",
-                                  "outing-explore", "outing-hires", "outing-realistic", "outing-effects", "outing-fit"])
-        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"], "also in «الرحلة»")
-        XCTAssertFalse(LiveActionCatalog.groups(.init(chat: false)).flatMap(\.items).contains { $0.id == "chat" }, "no chat on an older server")
+        XCTAssertEqual(Set(ids), ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
+                                  "outing-timer", "outing-brief", "outing-save-place", "outing-weather", "outing-waypoint-add", "outing-nearest-open",
+                                  "outing-explore", "outing-fit"])
+        XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"])
         XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
+        XCTAssertTrue(Set(g.flatMap(\.items).map(\.id)).isDisjoint(with: LiveActionCatalog.inQuickRow), "nothing the quick row already has")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
-        XCTAssertEqual(active.first { $0.id == "backtrack" }?.title, "أنهِ طريق الرجعة")
+        XCTAssertEqual(active.first { $0.id == "stuck" }?.title, "أنا مغرّز")
+        XCTAssertEqual(active.first { $0.id == "route" }?.isActive, true)
         XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init(following: true)).first { $0.id == "follow" }?.title, "أوقف اتباع الخطة")
+    }
+
+    /// The quick row's primary: «وجّه الكل» for the leader of a running trip, else «ملاحة».
+    func testQuickRowPrimary() {
+        XCTAssertEqual(LiveActionCatalog.primary(.init()).id, "navigate")
+        XCTAssertEqual(LiveActionCatalog.primary(.init()).accessibilityID, "outing-navigate")
+        let lead = LiveActionCatalog.primary(.init(guideAllTarget: "روضة"))
+        XCTAssertEqual(lead.id, "guideAll")
+        XCTAssertEqual(lead.accessibilityID, "outing-guide-all")
+        XCTAssertEqual(LiveActionCatalog.primary(.init(ended: true, guideAllTarget: "روضة")).id, "navigate", "never «وجّه الكل» after the end")
+        /* The leader still reaches «ملاحة» (to a friend): it moves into «المزيد». */
+        XCTAssertTrue(LiveActionCatalog.groups(.init(guideAllTarget: "روضة")).flatMap(\.items).contains { $0.id == "navigate" })
+        XCTAssertFalse(LiveActionCatalog.groups(.init()).flatMap(\.items).contains { $0.id == "navigate" }, "else it is the quick row's primary")
     }
 
     /// Build 11: an ended trip kept offering «رسالة فوق سيارتي», «غرّزت»… to a group that is gone.
     func testActionCatalogOnAnEndedTrip() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "backtrack", "explore", "nearest", "weather"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "nearest", "weather"]))
         XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).contains { $0.items.isEmpty }, "no empty group")
     }
 
