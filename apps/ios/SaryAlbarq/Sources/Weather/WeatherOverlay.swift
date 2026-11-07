@@ -71,6 +71,18 @@ final class WeatherOverlay {
         host.view.accessibilityIdentifier = "weather.legend"
         map.addSubview(host.view)
         legendHost = host
+        #if DEBUG
+        /* Screenshots: `-SaryWeatherCam 24.7,46.7,5` (after exploration's own camera moves). */
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-SaryWeatherCam"), i + 1 < a.count {
+            let n = a[i + 1].split(separator: ",").compactMap { Double($0) }
+            if n.count == 3 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak map] in
+                    map?.camera.ease(to: CameraOptions(center: CLLocationCoordinate2D(latitude: n[0], longitude: n[1]), zoom: n[2]), duration: 0.3)
+                }
+            }
+        }
+        #endif
     }
 
     func update(_ r: WeatherOverlayRequest) {
