@@ -43,6 +43,33 @@ function tilesFor(box, z) {
   return out;
 }
 
+/*
+ * The Kingdom's outline, coarse (≈ 10–30 km): enough to keep the desert search's unnamed
+ * hotspots inside the country (the bbox also covers Kuwait, southern Iraq, Qatar, the UAE…).
+ * [lng, lat], coastline a little offshore.
+ */
+const KSA_OUTLINE = [
+  [34.95, 29.36], [36.07, 29.18], [36.75, 29.87], [37.99, 30.5], [37.0, 31.5], [39.0, 32.0], [39.2, 32.15],
+  [40.4, 31.95], [42.08, 31.11], [44.72, 29.18], [46.55, 29.1], [47.46, 29.0], [47.7, 28.53], [48.6, 28.4],
+  [49.0, 27.9], [49.6, 27.1], [50.2, 26.6], [50.35, 25.8], [50.75, 24.75], [51.4, 24.45], [51.58, 24.25],
+  [52.0, 23.0], [55.0, 22.7], [55.67, 22.0], [55.0, 20.0], [52.0, 19.0], [49.1, 18.6], [48.2, 18.17],
+  [47.0, 16.95], [46.3, 17.2], [45.2, 17.43], [44.1, 17.4], [43.4, 17.53], [43.2, 16.8], [42.79, 16.38],
+  [42.4, 16.4], [41.6, 17.8], [40.6, 19.3], [39.4, 20.6], [38.9, 21.7], [38.3, 23.1], [37.2, 24.4],
+  [36.4, 25.7], [35.4, 27.3], [34.6, 28.1], [34.65, 29.0],
+];
+
+/** Point-in-polygon (ray casting) against the coarse outline. */
+function inKsa(lng, lat) {
+  let inside = false;
+  const P = KSA_OUTLINE;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const [xi, yi] = P[i];
+    const [xj, yj] = P[j];
+    if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 function intersects(a, b) {
   return a.west < b.east && a.east > b.west && a.south < b.north && a.north > b.south;
 }
@@ -91,5 +118,5 @@ function haversineKm(a, b) {
 }
 
 module.exports = {
-  TILE, KSA, lngToX, latToY, xToLng, yToLat, tileBbox3857, tilesFor, tileBox, intersects, parseBbox, parseNear, haversineKm,
+  TILE, KSA, KSA_OUTLINE, inKsa, lngToX, latToY, xToLng, yToLat, tileBbox3857, tilesFor, tileBox, intersects, parseBbox, parseNear, haversineKm,
 };

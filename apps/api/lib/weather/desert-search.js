@@ -10,7 +10,7 @@
 const outdoor = require('../outdoor');
 const rain = require('./rain');
 const green = require('./green');
-const { KSA, haversineKm } = require('./mercator');
+const { KSA, haversineKm, inKsa } = require('./mercator');
 
 const RAIN_RE = /مطر|امطار|أمطار|سيل|سيول|غيث|رعد|rain|flood/i;
 const GREEN_RE = /ربيع|ربّع|ربع|خضر|خضار|عشب|نفل|خزامى|روض|فيض|green|spring|bloom/i;
@@ -148,6 +148,7 @@ async function search({ q, near, radiusKm = 250, limit = 20, nowMs = Date.now(),
     for (let lng = Math.max(KSA.west, box.west); lng <= Math.min(KSA.east, box.east); lng += step) {
       const km = near ? haversineKm(near, { lat, lng }) : null;
       if (km != null && km > radius) continue;
+      if (!inKsa(lng, lat)) continue;
       let score = 0;
       let headline = null;
       const signals = {};
