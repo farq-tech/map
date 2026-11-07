@@ -91,7 +91,7 @@ final class CampSitesMapLayer {
     }
 
     /// Visible when the person turned the layer on, or while «أحلى ٥» is showing.
-    static func visible(layerOn: Bool, highlighted: [String: Int]) -> Bool { layerOn || !highlighted.isEmpty }
+    nonisolated static func visible(layerOn: Bool, highlighted: [String: Int]) -> Bool { layerOn || !highlighted.isEmpty }
 
     private func install() {
         guard let m = map?.mapboxMap else { return }

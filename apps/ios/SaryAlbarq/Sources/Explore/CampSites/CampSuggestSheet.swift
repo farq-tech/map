@@ -21,7 +21,7 @@ final class CampSuggestModel: ObservableObject {
     private let highlights: Bool
     private var me: LngLat?
 
-    init(sites: [CampSite] = CampSiteCatalog.all, provider: FallbackWeatherProvider = .placeBrief, highlights: Bool = true) {
+    init(sites: [CampSite] = CampSiteCatalog.all, provider: FallbackWeatherProvider = WeatherProviders.placeBrief, highlights: Bool = true) {
         self.sites = sites
         self.provider = provider
         self.highlights = highlights
