@@ -57,6 +57,19 @@ final class CampSitesTests: XCTestCase {
         XCTAssertLessThan(CampRanker.score(pretty, night: night(from: 0, gust: 55)), CampRanker.score(snug, night: night(from: 0, gust: 55)))
     }
 
+    func testMissingForecastDoesNotGuessWindOrIgnoreFloodPrecautions() {
+        let exposed = CampSite(id: "exposed", lat: 25.2, lng: 46.7, safety: 0.9, comfort: 0.8, beauty: 0.6, access: 0.7,
+                               shelter: Array(repeating: 0, count: 8), handM: 3, dChannelM: 500)
+        let sheltered = CampSite(id: "sheltered", lat: 25.2, lng: 46.71, safety: 0.9, comfort: 0.8, beauty: 0.6, access: 0.7,
+                                 shelter: Array(repeating: 1, count: 8), handM: 3, dChannelM: 500)
+        XCTAssertEqual(CampRanker.score(exposed, night: nil), CampRanker.score(sheltered, night: nil),
+                       "unknown forecast must not assume a northerly wind")
+
+        let low = CampSite(id: "low", lat: 25.2, lng: 46.72, handM: 1, dChannelM: 150)
+        XCTAssertEqual(CampRanker.top([low, exposed], near: riyadh, radiusKm: 200, night: nil).map(\.id), ["exposed"],
+                       "unknown rainfall keeps low ground near channels out of recommendations")
+    }
+
     func testShelterInterpolatesBetweenDirections() {
         let s = [1.0, 0, 0, 0, 0, 0, 0, 0]
         XCTAssertEqual(CampRanker.shelter(s, fromDeg: 0), 1)

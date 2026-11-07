@@ -21,8 +21,10 @@ struct DesertRouteSheet: View {
     @ObservedObject var controller: LiveOutingController
     var target: LngLat
     var name: String
-    /// Rain tonight: big wadi beds are refused.
+    /// Forecast indicates rain tonight.
     var rain: Bool
+    /// When false, route conservatively treats rainfall as possible and refuses major wadis.
+    var weatherAvailable: Bool
     @ObservedObject private var hub = DesertRoutesHub.shared
     @State private var phase: Phase = .working
     @Environment(\.sary) private var theme
@@ -34,7 +36,10 @@ struct DesertRouteSheet: View {
     var body: some View {
         let p = theme.palette
         SaryPage(title: "دروب البر", subtitle: "إلى \(name)", close: close) {
-            if rain {
+            if !weatherAvailable {
+                Label("ما وصلنا طقس الليلة؛ نتجنب مجاري الأودية الرئيسية احتياطًا", systemImage: "cloud.rain.fill")
+                    .saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
+            } else if rain {
                 Label("فيه تحذير مطر: ما نمشيك في بطون الأودية", systemImage: "cloud.rain.fill")
                     .saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
             }
@@ -75,7 +80,7 @@ struct DesertRouteSheet: View {
         #endif
         guard let me else { phase = .noFix; return }
         guard let region = DesertGrid.covering(me, target) else { phase = .outside; return }
-        let target = self.target, rain = self.rain
+        let target = self.target, rain = self.rain || !weatherAvailable
         let opts = await Task.detached(priority: .userInitiated) { () -> [DesertRouter.Option] in
             guard let g = DesertGrid.bundled(region) else { return [] }
             return DesertRouter.options(g, from: me, to: target, rain: rain)

@@ -53,6 +53,17 @@ final class CampSitesUITests: XCTestCase {
         XCTAssertTrue(sheet.waitForNonExistence(timeout: 6), "the suggestions close for the guidance")
     }
 
+    func testMissingForecastShowsTheSafetyFallback() {
+        let app = launch(["-SaryLiveModal", "camp", "-SaryCampWeatherOff"])
+        let sheet = app.descendants(matching: .any)["camp.sheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 20))
+        let warning = app.descendants(matching: .any)["camp.noWeather"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 8))
+        XCTAssertTrue(warning.label.contains("الأودية"), warning.label)
+        XCTAssertTrue(app.descendants(matching: .any)["camp.card.1"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.descendants(matching: .any)["camp.wind.1"].exists, "no guessed wind direction or speed")
+    }
+
     func testLayerToggleInLayers() {
         let app = launch(["-SaryExplore", "-SaryLiveModal", "layers"])
         let layers = app.descendants(matching: .any)["explore.layers.sheet"]

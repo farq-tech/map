@@ -217,8 +217,8 @@ struct LiveSheet: View {
             CampSiteTappedSheet(controller: controller, siteId: id)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-        case let .desertRoute(target, name, rain):
-            DesertRouteSheet(controller: controller, target: target, name: name, rain: rain)
+        case let .desertRoute(target, name, rain, weatherAvailable):
+            DesertRouteSheet(controller: controller, target: target, name: name, rain: rain, weatherAvailable: weatherAvailable)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .layers:

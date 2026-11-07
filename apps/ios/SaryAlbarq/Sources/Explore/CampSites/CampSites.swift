@@ -184,18 +184,22 @@ enum CampRanker {
     }
 
     static func score(_ s: CampSite, night: CampNight?) -> Double {
-        let gust = night?.gustKmh ?? 20
-        let from = night?.fromDeg ?? 0  /* no forecast: Najd's prevailing winter wind, north */
-        let ww = windWeight(gustKmh: gust)
         let base = weights.comfort + weights.beauty + weights.access
         let rest = (weights.comfort * s.comfort + weights.beauty * s.beauty + weights.access * s.access) / base
+        /* No forecast means no defensible wind direction or gust estimate: do not quietly
+         * assume a 20 km/h northerly and let that guessed shelter decide the order. */
+        guard let night else { return rest * (0.7 + 0.3 * s.safety) }
+        let ww = windWeight(gustKmh: night.gustKmh)
+        let from = night.fromDeg
         let total = (1 - ww) * rest + ww * shelter(s.shelter, fromDeg: from)
         return total * (0.7 + 0.3 * s.safety)
     }
 
     /// Rain tonight («السيل يجي من مطر بعيد»): only the higher ground away from channels.
     static func allowed(_ s: CampSite, night: CampNight?) -> Bool {
-        guard night?.rainy == true else { return true }
+        /* If the forecast failed, we cannot assert that distant rain is absent. Apply the
+         * rain gate as a precaution and tell the person why the list is shorter. */
+        guard night?.rainy == true || night == nil else { return true }
         return s.handM >= rainHandM && s.dChannelM >= rainChannelM
     }
 
@@ -292,6 +296,7 @@ enum CampReason {
     }
 
     static let estimateNote = "تقدير من صور الأقمار، تأكد بعينك"
+    static let weatherUnavailableNote = "ما وصلنا طقس بعض المناطق الليلة؛ ترتيبها بلا حساب الريح، واستبعدنا الأرض المنخفضة والقريبة من مجاري الأودية احتياطًا. تجنّب الأودية وتحقق من الطقس قبل الطلعة."
     static let legalNote = "الاحتطاب ممنوع، ولا تخيّم فوق النبات"
     static func protectedNote(_ name: String) -> String { "\(name): محمية، تأكد من التصريح قبل التخييم" }
 }

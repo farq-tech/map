@@ -44,6 +44,12 @@ final class CampSuggestModel: ObservableObject {
         guard let me else { phase = .noFix; return }
         phase = .loading
         #if DEBUG
+        /* UI test / screenshots: deterministic offline forecast failure, no network request. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryCampWeatherOff") {
+            weatherFailed = true
+            rank(me)
+            return
+        }
         if let n = Self.debugNight() {
             for r in CampSiteCatalog.regions { nights[r] = n }
             rank(me)
@@ -64,7 +70,7 @@ final class CampSuggestModel: ObservableObject {
                 nights[r] = CampNight.from(w.report, now: Date(), lat: lat, lng: lng)
             } catch { failed = true }
         }
-        weatherFailed = failed && nights.isEmpty
+        weatherFailed = failed
         rank(me)
     }
 
@@ -107,10 +113,11 @@ struct CampSuggestSheet: View {
         let p = theme.palette
         SaryPage(title: "اقترح لي مكان كشتة", subtitle: "أحلى ٥ جلسات حولك الليلة", close: close) {
             radiusPicker
-            if let n = model.night { nightCard(n) } else if model.weatherFailed {
-                Text("ما قدرنا نجيب طقس الليلة، الترتيب بدون الريح").saryText(.footnote).foregroundStyle(p.warningText)
+            if model.weatherFailed {
+                Text(CampReason.weatherUnavailableNote).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                     .accessibilityIdentifier("camp.noWeather")
             }
+            if let n = model.night { nightCard(n) }
             switch model.phase {
             case .noFix:
                 SaryStateView(kind: .empty(title: "ننتظر موقعك", message: "نحتاج موقعك عشان نقترح أماكن قريبة منك.", systemImage: "location"))
@@ -195,10 +202,12 @@ struct CampSuggestSheet: View {
     }
 
     private func routes(_ s: CampSite, rank: Int) {
-        let rain = model.nights[s.region]?.rainy ?? false
+        let night = model.nights[s.region]
+        let rain = night?.rainy ?? false
+        let weatherAvailable = night != nil
         controller.modal = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            controller.modal = .desertRoute(s.position, "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? ""), rain)
+            controller.modal = .desertRoute(s.position, "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? ""), rain, weatherAvailable)
         }
     }
 
@@ -303,11 +312,16 @@ struct CampSiteTappedSheet: View {
                     controller.directions(NavTargets.point(site.position, name: site.nearName.map { "جلسة قرب \($0)" } ?? "جلسة كشتة"))
                 }, routes: {
                     let rain = night?.rainy ?? false
+                    let weatherAvailable = night != nil
                     controller.modal = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        controller.modal = .desertRoute(site.position, site.nearName.map { "جلسة قرب \($0)" } ?? "جلسة كشتة", rain)
+                        controller.modal = .desertRoute(site.position, site.nearName.map { "جلسة قرب \($0)" } ?? "جلسة كشتة", rain, weatherAvailable)
                     }
                 })
+            }
+            if let site, model.nights[site.region] == nil {
+                Text(CampReason.weatherUnavailableNote).saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.warningText)
+                    .accessibilityIdentifier("camp.site.noWeather")
             }
             Text("\(CampReason.estimateNote). \(CampReason.legalNote).")
                 .saryText(.footnote, weight: .bold).foregroundStyle(theme.palette.warningText)

@@ -103,7 +103,7 @@ extension LiveOutingController {
         case "weather": modal = .weather
         case "camp": modal = .campSuggest
         case "desertRoute":
-            if let d = tripDestination { modal = .desertRoute(LngLat(lng: d.lng, lat: d.lat), d.name.isEmpty ? "الوجهة" : d.name, false) }
+            if let d = tripDestination { modal = .desertRoute(LngLat(lng: d.lng, lat: d.lat), d.name.isEmpty ? "الوجهة" : d.name, false, false) }
             else { toast("حدّد وجهة الطلعة، أو افتح «اقترح لي مكان كشتة» واختر «دروب البر»") }
         case "youtube": MediaCenters.of(self).open()
         case "radio": GroupAudioCenters.of(self).open()
