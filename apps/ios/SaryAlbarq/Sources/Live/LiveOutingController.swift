@@ -59,6 +59,8 @@ enum LiveModal: Identifiable, Equatable {
     /// One focused part of the trip (UX simplification): the sheet holds only the essentials,
     /// «المزيد» and the quick row open these.
     case panel(LivePanel)
+    /// «القبلة»: the compass to the Kaaba.
+    case qibla
 
     var id: String {
         switch self {
@@ -88,6 +90,7 @@ enum LiveModal: Identifiable, Equatable {
         case .pttChannels: return "pttChannels"
         case .whereTo: return "whereTo"
         case let .panel(p): return "panel:\(p.rawValue)"
+        case .qibla: return "qibla"
         }
     }
 
@@ -321,6 +324,7 @@ final class LiveOutingController: ObservableObject {
         }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
+        if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
