@@ -176,6 +176,7 @@ struct OutingMapboxView: UIViewRepresentable {
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
         context.coordinator.attach(map)
+        CampSitesMapLayer.attach(map)
         let first = layer
         ArabicBasemap.load(layer) { [weak coordinator = context.coordinator] json in
             /* Same style with place names in Arabic; English labels only if it cannot be fetched. */

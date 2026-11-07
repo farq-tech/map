@@ -61,6 +61,12 @@ enum LiveModal: Identifiable, Equatable {
     case panel(LivePanel)
     /// «القبلة»: the compass to the Kaaba.
     case qibla
+    /// «اقترح لي مكان كشتة»: tonight's five best camp sites (Sources/Explore/CampSites).
+    case campSuggest
+    /// A camp site tapped on the map («أماكن مقترحة للكشتة»).
+    case campSite(String)
+    /// «مخطط دروب البر» to a point (name, rain tonight, forecast available).
+    case desertRoute(LngLat, String, Bool, Bool)
 
     var id: String {
         switch self {
@@ -91,6 +97,9 @@ enum LiveModal: Identifiable, Equatable {
         case .whereTo: return "whereTo"
         case let .panel(p): return "panel:\(p.rawValue)"
         case .qibla: return "qibla"
+        case .campSuggest: return "campSuggest"
+        case let .campSite(id): return "campSite:\(id)"
+        case let .desertRoute(p, _, _, _): return "desertRoute:\(p.lat),\(p.lng)"
         }
     }
 
@@ -323,6 +332,13 @@ final class LiveOutingController: ObservableObject {
             if t == "more" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.openSettings() } }
         }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
+        if arg("-SaryLiveModal") == "routes", let t = arg("-SaryRouteTo").map({ $0.split(separator: ",").compactMap { Double($0) } }), t.count == 2 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                let hasForecast = !shotArgs.contains("-SaryRouteNoWeather")
+                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), "جلسة", shotArgs.contains("-SaryRouteRain"), hasForecast)
+            }
+        }
+        if arg("-SaryLiveModal") == "camp" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .campSuggest } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
         if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif

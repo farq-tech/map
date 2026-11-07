@@ -228,6 +228,7 @@ struct ExploreLayersSheet: View {
             }
             HiResLayerSection()
             WeatherLayersSection()
+            CampSitesLayerSection()
             SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
                 SaryToggleRow(title: "مسارات البر (OSM)", subtitle: "طبعات الطرق الترابية مثل OsmAnd",
                               systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", isOn: $osmTracks, id: "explore-osm-tracks")

@@ -12,6 +12,8 @@ struct FollowSubject: Equatable, Identifiable {
         case friend
         /// The outing plan's drawn route (the trip's off-road leg follows it).
         case plan
+        /// «مخطط دروب البر»: a suggested off-road route from satellite data (Sources/Explore/CampSites).
+        case desertRoute
     }
 
     var id: String
@@ -27,6 +29,7 @@ struct FollowSubject: Equatable, Identifiable {
         case .gpx: return "مسار مستورد"
         case .friend: return "مسار من الطلعة"
         case .plan: return "مسار الخطة"
+        case .desertRoute: return "مسار مقترح من صور الأقمار"
         }
     }
 
@@ -56,6 +59,14 @@ struct FollowSubject: Equatable, Identifiable {
         let line = TrackDisplay.line(plain: points)
         guard line.isDrawable, line.lengthM > 0 else { return nil }
         return FollowSubject(id: "plan:\(points.count):\(points.last.map { "\($0.lat),\($0.lng)" } ?? "")", name: name, kind: .plan,
+                             line: line, stats: TrackStats.make(plain: line))
+    }
+
+    /// «مخطط دروب البر»: the option the person picked (no times: one colour).
+    static func desertRoute(points: [LngLat], name: String) -> FollowSubject? {
+        let line = TrackDisplay.line(plain: points)
+        guard line.isDrawable, line.lengthM > 0 else { return nil }
+        return FollowSubject(id: "desert:\(points.count):\(points.last.map { "\($0.lat),\($0.lng)" } ?? "")", name: name, kind: .desertRoute,
                              line: line, stats: TrackStats.make(plain: line))
     }
 
