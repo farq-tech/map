@@ -2,7 +2,7 @@ import SwiftUI
 
 /// «الإعدادات ← المقدمة»: the cinematic intro and its music (both on by default).
 struct IntroSettingsSection: View {
-    @AppStorage(IntroPolicy.enabledKey) private var enabled = true
+    @AppStorage(IntroPolicy.enabledKey) private var enabled = IntroPolicy.enabledByDefault
     @AppStorage(IntroPolicy.soundKey) private var sound = true
 
     var body: some View {

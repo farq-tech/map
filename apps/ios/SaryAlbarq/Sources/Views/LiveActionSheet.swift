@@ -20,9 +20,37 @@ struct LiveActionGroup: Identifiable, Equatable {
     var items: [LiveActionItem]
 }
 
-/// «أدوات الطلعة» («+»): every less frequent action of the live screen, as tiles in sections
-/// («تخفيف الزحمة» ١٣, styled after the owner's Lovable prototype). Nothing was dropped:
-/// «وجّه الكل» and «اتبع الخطة» live in the «الرحلة» tab, «انسخ موقعي» on «أنت».
+/// The focused parts of the trip a tile or the quick row opens (UX simplification: the
+/// sheet keeps only the essentials; these were the «الرحلة» and «العيال» tabs' sections).
+enum LivePanel: String, Identifiable, Equatable {
+    /// «الوجهة والخطة»: the trip's progress, the legs so far, the plan and «اتبع الخطة».
+    case route
+    /// «السلامة»: the return timer, «غرّزت», sunset.
+    case safety
+    /// «نقطة التجمع».
+    case rally
+    /// «ادعُ ربعك»: personal invites / the open link and its QR.
+    case invite
+    /// «رقم جوالي» (moved out of the trip tab).
+    case phone
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .route: return "الوجهة والخطة"
+        case .safety: return "السلامة"
+        case .rally: return "نقطة التجمع"
+        case .invite: return "ادعُ ربعك"
+        case .phone: return "رقم جوالي"
+        }
+    }
+}
+
+/// «المزيد» (was «أدوات الطلعة», ~٢٢ tiles in ٦ sections): only what the sheet's quick row
+/// (ملاحة / وجّه الكل، المحادثة، التجمع، أخفِ موقعي، طريق الرجعة) does not already offer,
+/// and no tile that repeats another screen (high-res / realistic live in «الطبقات», the effects
+/// and radio / YouTube in «الإعدادات»). docs/ux-simplify-inventory.md.
 enum LiveActionCatalog {
     struct State: Equatable {
         var backTracking = false
@@ -31,7 +59,7 @@ enum LiveActionCatalog {
         var stuck = false
         /// The trip ended: only what still makes sense on this phone (map, search, weather…).
         var ended = false
-        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone) — in «الرحلة» now.
+        /// The leader: «وجّه الكل إلى …» (start / re-send guidance for everyone) — the quick row's primary.
         var guideAllTarget: String?
         /// «المحادثات» only when the server has it (an older server: hidden, see ChatStore.availability).
         var chat = true
@@ -41,30 +69,27 @@ enum LiveActionCatalog {
 
     /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
     static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll", "channels", "enjad",
-                                                "rally", "convoy", "timer"]
+                                                "rally", "convoy", "timer", "invite"]
 
-    /// Lovable's «أدوات الطلعة», tile for tile, in its order. Ours on top of it (never dropped):
-    /// «رسالة فوق سيارتي»، «أضف نقطة»، «أقرب محطة»، «شوف الكل».
+    /// What the quick row holds (never repeated as a tile; «ملاحة» is a tile only when «وجّه الكل» takes its place).
+    static let inQuickRow: Set<String> = ["navigate", "guideAll", "chat", "rally", "backtrack", "hide"]
+
     static func groups(_ s: State) -> [LiveActionGroup] {
         let all = [
-            LiveActionGroup(title: "الطريق", items: [
-                .init(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
-                      subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع"),
+            LiveActionGroup(title: "الطريق", items: (s.guideAllTarget == nil && !s.ended ? [] : [
+                /* The leader's quick row leads with «وجّه الكل», and after the end there is no quick row:
+                 * then «ملاحة» (to a friend, the rally point, back) is here. */
+                LiveActionItem(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
+                               subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع"),
+            ]) + [
+                .init(id: "route", title: "الوجهة والخطة", systemImage: "map", accessibilityID: "outing-route",
+                      subtitle: s.following ? "تتبع الخطة الآن" : "سجل الطلعة، الخطة، اتبع المسار", isActive: s.following),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
-                .init(id: "backtrack", title: s.backTracking ? "أنهِ طريق الرجعة" : "طريق الرجعة", systemImage: "arrow.uturn.backward",
-                      accessibilityID: "outing-backtrack", isActive: s.backTracking),
-                .init(id: "follow", title: s.following ? "أوقف المسار" : "اسلك هذا المسار", systemImage: "point.topleft.down.to.point.bottomright.curvepath",
-                      accessibilityID: "plan.follow", subtitle: s.hasRoute ? "اتبع مسار الخطة" : "ارسم المسار في الخطة أولًا", isActive: s.following),
             ]),
-            LiveActionGroup(title: "الجماعة", items: (s.chat ? [
-                LiveActionItem(id: "chat", title: "المحادثات", systemImage: "bubble.left.and.bubble.right", accessibilityID: "outing-chat"),
-            ] : []) + (s.channels ? [
+            LiveActionGroup(title: "الجماعة", items: (s.channels ? [
                 LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
-            ] : []) + (s.guideAllTarget.map { t in
-                [LiveActionItem(id: "guideAll", title: "وجّه العيال لنقطة", systemImage: "scope", accessibilityID: "outing-guide-all",
-                                subtitle: "وجّه الكل إلى \(t) · يبدأ التوجيه على جوال كل عضو")]
-            } ?? []) + [
-                .init(id: "rally", title: "نقطة التجمع", systemImage: "flag", accessibilityID: "outing-rally"),
+            ] : []) + [
+                .init(id: "invite", title: "ادعُ ربعك", systemImage: "person.badge.plus", accessibilityID: "outing-invite"),
                 .init(id: "convoy", title: "القافلة", systemImage: "box.truck", accessibilityID: "outing-convoy", subtitle: "تنبيهات القافلة"),
                 .init(id: "note", title: "رسالة فوق سيارتي", systemImage: SaryIcon.note, accessibilityID: "outing-note-open"),
             ]),
@@ -81,15 +106,9 @@ enum LiveActionCatalog {
                 .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
             ]),
-            LiveActionGroup(title: "الترفيه", items: [
-                .init(id: "radio", title: "إذاعة الطلعة", systemImage: "radio", accessibilityID: "outing-radio"),
-                .init(id: "youtube", title: "يوتيوب", systemImage: "play.rectangle", accessibilityID: "outing-youtube", subtitle: "واقفين فقط"),
-            ]),
             LiveActionGroup(title: "الخريطة", items: [
-                .init(id: "explore", title: "الطبقات", systemImage: "square.3.layers.3d", accessibilityID: "outing-explore"),
-                .init(id: "hires", title: "صور عالية الوضوح", systemImage: "sparkles", accessibilityID: "outing-hires"),
-                .init(id: "realistic", title: "الوضع الواقعي", systemImage: "mountain.2", accessibilityID: "outing-realistic"),
-                .init(id: "effects", title: "المؤثرات", systemImage: "wand.and.stars", accessibilityID: "outing-effects"),
+                .init(id: "explore", title: "الطبقات", systemImage: "square.3.layers.3d", accessibilityID: "outing-explore",
+                      subtitle: "قمر صناعي، طبوغرافي، صور عالية الوضوح، الوضع الواقعي"),
                 .init(id: "fit", title: "شوف الكل", systemImage: SaryIcon.fitGroup, accessibilityID: "outing-fit"),
             ]),
         ]
@@ -101,7 +120,18 @@ enum LiveActionCatalog {
         }
     }
 
-    /// What moved out of «+» into the «الرحلة» tab: «اتبع الخطة» and, for the leader, «وجّه الكل».
+    /// The quick row's first, accent button: «وجّه الكل إلى …» for the leader of a running trip
+    /// with a next stop, else «ملاحة» (to a friend, the destination or the rally point).
+    static func primary(_ s: State) -> LiveActionItem {
+        if !s.ended, let t = s.guideAllTarget {
+            return LiveActionItem(id: "guideAll", title: "وجّه الكل", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
+                                  subtitle: "وجّه الكل إلى \(t) · يبدأ التوجيه على جوال كل عضو")
+        }
+        return LiveActionItem(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
+                              subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع")
+    }
+
+    /// The route actions of «الوجهة والخطة»: «اتبع الخطة» and, for the leader, «وجّه الكل».
     static func tripRouteActions(_ s: State) -> [LiveActionItem] {
         guard !s.ended else { return [] }
         return (s.guideAllTarget.map { t in
@@ -115,11 +145,27 @@ enum LiveActionCatalog {
     }
 }
 
+/// «المزيد» → «الطلعة»: the trip's own buttons, once (they were in the trip tab twice).
+struct LiveTripRows {
+    var canPause = false
+    var paused = false
+    var canEnd = false
+    var canLeave = true
+    var pauseOrResume: () -> Void = {}
+    var end: () -> Void = {}
+    var leave: () -> Void = {}
+    var settings: () -> Void = {}
+}
+
 struct LiveActionSheet: View {
     var groups: [LiveActionGroup]
     var action: (String) -> Void
     var close: () -> Void
+    var trip = LiveTripRows()
     @Environment(\.sary) private var theme
+    @State private var confirm: Confirm?
+
+    enum Confirm: Identifiable { case pause, end, leave; var id: Self { self } }
 
     var body: some View {
         let p = theme.palette
@@ -127,7 +173,7 @@ struct LiveActionSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 HStack {
-                    Text("أدوات الطلعة").font(.sary(18, .bold)).foregroundStyle(p.textPrimary)
+                    Text("المزيد").font(.sary(18, .bold)).foregroundStyle(p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
                     Button(action: close) {
@@ -154,6 +200,7 @@ struct LiveActionSheet: View {
                         }
                     }
                 }
+                tripSection
             }
             .padding(.horizontal, theme.space(.l))
             .padding(.vertical, theme.space(.s))
@@ -161,6 +208,74 @@ struct LiveActionSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("outing-actions-sheet")
+        .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
+                            titleVisibility: .visible, presenting: confirm) { k in
+            switch k {
+            case .pause: Button(trip.paused ? "استأنف" : "أوقف مؤقتًا") { close(); trip.pauseOrResume() }
+            case .end: Button("أنهِ الطلعة للجميع", role: .destructive) { close(); trip.end() }
+            case .leave: Button("غادر", role: .destructive) { close(); trip.leave() }
+            }
+            Button("إلغاء", role: .cancel) {}
+        } message: { k in
+            switch k {
+            case .pause: Text(trip.paused ? "يرجع الأعضاء يشاركون مواقعهم." : "تتوقف مشاركة المواقع عند الجميع وتُحذف المواقع حتى تستأنف.")
+            case .end: Text("بتنتهي الطلعة عند الكل ويتوقف تتبع المواقع. ما تقدر ترجعها.")
+            case .leave: Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
+            }
+        }
+    }
+
+    private var confirmTitle: String {
+        switch confirm {
+        case .pause?: return trip.paused ? "استئناف الطلعة؟" : "إيقاف الطلعة مؤقتًا؟"
+        case .end?: return "أنهِ الطلعة؟"
+        case .leave?: return "تغادر الطلعة؟"
+        case nil: return ""
+        }
+    }
+
+    /// «الطلعة»: settings, pause / resume, end (the leader), leave — each once.
+    private var tripSection: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("الطلعة").font(.sary(12, .bold)).foregroundStyle(p.textSecondary)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.horizontal, theme.space(.xs))
+            VStack(spacing: 0) {
+                tripRow("الإعدادات", icon: SaryIcon.settings, id: "outing-settings") { close(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: trip.settings) }
+                if trip.canPause {
+                    SaryDivider()
+                    tripRow(trip.paused ? "استأنف الطلعة" : "أوقف مؤقتًا", icon: trip.paused ? SaryIcon.play : SaryIcon.pause, id: "settings-pause-outing") { confirm = .pause }
+                }
+                if trip.canEnd {
+                    SaryDivider()
+                    tripRow("أنهِ الطلعة", icon: "flag.checkered", destructive: true, id: "settings-end") { confirm = .end }
+                }
+                if trip.canLeave {
+                    SaryDivider()
+                    tripRow("غادر الطلعة", icon: "rectangle.portrait.and.arrow.right", destructive: true, id: "settings-leave") { confirm = .leave }
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(p.sunken.opacity(0.6)))
+        }
+        .padding(.top, theme.space(.s))
+    }
+
+    private func tripRow(_ title: String, icon: String, destructive: Bool = false, id: String, _ run: @escaping () -> Void) -> some View {
+        let p = theme.palette
+        return Button(action: run) {
+            HStack(spacing: theme.space(.m)) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(destructive ? p.emergencyText : p.accentText).frame(width: 26)
+                Text(title).font(.sary(15, .bold)).foregroundStyle(destructive ? p.emergencyText : p.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, theme.space(.m))
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(id)
     }
 
     /// Lovable tile: 80×78, 24 pt corners, the icon in orange (red for safety), an 11 pt label.

@@ -15,17 +15,36 @@ struct CreateOutingWizard: View {
     /// After creation: the destination reached the server, or stays on this phone for now.
     @State private var destinationLocalOnly = false
     var initialText = ""
+    /// «ابدأ» on a place picked on the home map: no steps ١–٢, just «مين معك؟» (leaving now),
+    /// then the same invite as step ٣ — or «لحالي» straight into the trip.
+    var quick: OutingDestination? = nil
+    /// «لحالي، ابدأ»: once the outing exists, open it and start (no invite step).
+    @State private var solo = false
+
+    private var title: String {
+        if quick != nil, flow.step != .invite { return "مين معك؟" }
+        return flow.step.title
+    }
 
     var body: some View {
-        SaryPage(title: flow.step.title, back: flow.canGoBack ? { withAnimation(theme.animation(.smooth)) { flow.back() } } : nil,
+        SaryPage(title: title, back: flow.canGoBack && quick == nil ? { withAnimation(theme.animation(.smooth)) { flow.back() } } : nil,
                  close: { finish(start: false) }) {
-            progress
+            if quick == nil { progress }
             switch flow.step {
             case .destination:
-                DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
-                                choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
+                if quick != nil {
+                    ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
+                                    choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
+                }
             case .weather:
-                WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
+                if quick != nil {
+                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo,
+                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() })
+                } else {
+                    WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
+                }
             case .invite:
                 InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly,
                            start: { finish(start: true) }, later: { finish(start: false) })
@@ -36,6 +55,11 @@ struct CreateOutingWizard: View {
         .onAppear {
             weather.myFix = location.lastFix.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) }
             weather.locator.request()
+            if let q = quick, flow.step == .destination {
+                _ = flow.choose(q)
+                flow.departure = Date()
+                weather.setDestination(flow.destination)
+            }
         }
         .onChange(of: flow.destination) { _, d in weather.setDestination(d) }
     }
@@ -78,6 +102,7 @@ struct CreateOutingWizard: View {
                 destinationLocalOnly = plan.destinationLocalOnly
             }
             withAnimation(theme.animation(.smooth)) { flow.created(id) }
+            if solo { finish(start: true) }
         }
     }
 
@@ -329,6 +354,55 @@ struct MapPointPicker: View {
             }
             .padding(theme.space(.m))
         }
+    }
+}
+
+// MARK: - Quick start: «مين معك؟»
+
+/// After «ابدأ» on a place: who comes along. Inviting is optional — «لحالي» starts at once.
+private struct CompanionsStep: View {
+    var flow: CreateFlowState
+    @ObservedObject var weather: WizardWeather
+    var online: Bool
+    var withFriends: () -> Void
+    var alone: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        if let d = flow.destination {
+            HStack(spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: "flag.checkered", color: p.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(d.name).saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(2)
+                    let est = weather.estimate(departure: Date())
+                    Text([est.map { SaryFormat.distance(meters: $0.distanceM) }, weather.arrivalLine(departure: Date()).map { "الجو وقت وصولكم \($0)" }]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
+                }
+                Spacer()
+            }
+            .padding(theme.space(.m))
+            .sarySurface(radius: SaryRadius.m)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("start.destination")
+        }
+        Text("تبي أحد معك؟ أرسل لهم الدعوة في واتساب، ويشوفون موقعك وتشوفهم طول الطريق. أو امشِ لحالك.")
+            .saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+        if let e = flow.error { SaryInlineMessage(text: e, tone: .error) }
+        if !online { SaryOfflineStrip(text: "بلا إنترنت — نبدأ أول ما يرجع الاتصال.") }
+        Button(action: withFriends) {
+            SaryButtonLabel(title: "ادعُ ربعك", systemImage: "person.2.fill", busy: flow.creating, busyTitle: "نجهّز الطلعة…")
+        }
+        .buttonStyle(.sary(.primary))
+        .disabled(flow.creating || !online)
+        .accessibilityIdentifier("start.withFriends")
+        Button(action: alone) { SaryButtonLabel(title: "لحالي، ابدأ الآن", systemImage: SaryIcon.play) }
+            .buttonStyle(.sary(.secondary))
+            .disabled(flow.creating || !online)
+            .accessibilityIdentifier("start.solo")
+        Label(ShareMemory.joinStatement, systemImage: "location.fill")
+            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
     }
 }
 

@@ -30,17 +30,16 @@ final class LiveCalmTests: XCTestCase {
         XCTAssertTrue(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: true, ended: false).isEmpty)
     }
 
-    func testStoppedKeepsCameraAndTools() {
+    func testStoppedKeepsTheCameraOnly() {
+        /* «أدوات» left the map: it is «المزيد» in the sheet's quick row (one way in). */
         let items = LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: 1, driving: false, ended: false)
-        XCTAssertEqual(items.map(\.accessibilityID), ["outing-locate", "outing-actions"])
-        XCTAssertEqual(items.last?.label, "أدوات")
-        XCTAssertEqual(items.last?.badge, 1, "«غرّزت» is waiting in there")
+        XCTAssertEqual(items.map(\.accessibilityID), ["outing-locate"])
     }
 
     func testBackTrackShortcutOnlyWhenItFitsAndNoToolsAfterTheEnd() {
         let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق العودة", accessibilityID: "outing-backtrack")
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: back, plusBadge: nil, driving: false, ended: false).map(\.id),
-                       ["locate", "backtrack", "actions"])
+                       ["locate", "backtrack"])
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: false, ended: true).map(\.id), ["locate"],
                        "ended: «المزيد» on the banner replaces «+»")
     }
@@ -55,25 +54,22 @@ final class LiveCalmTests: XCTestCase {
 
     func testToolsGridSectionsAndNothingLost() {
         let groups = LiveActionCatalog.groups(.init(channels: true))
-        XCTAssertEqual(groups.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الترفيه", "الخريطة"])
+        XCTAssertEqual(groups.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
         let grid = Set(groups.flatMap(\.items).map(\.id))
-        let trip = Set(LiveActionCatalog.tripRouteActions(.init(guideAllTarget: "روضة")).map(\.id))
-        XCTAssertEqual(trip, ["follow", "guideAll"], "«اتبع الخطة» and «وجّه الكل» in «الرحلة» too")
-        XCTAssertTrue(Set(LiveActionCatalog.groups(.init(guideAllTarget: "روضة")).flatMap(\.items).map(\.id)).isSuperset(of: trip),
-                      "and in the tools, as in Lovable")
-        /* Lovable's tiles, in its sections. */
+        XCTAssertLessThanOrEqual(grid.count, 16, "«المزيد» stays short (was ~٢٢)")
         XCTAssertEqual(groups.first { $0.title == "السلامة" }?.items.map(\.title), ["غرّزت", "اتصل بإنجاد", "مؤقت الرجوع"])
-        XCTAssertEqual(groups.first { $0.title == "الخريطة" }?.items.prefix(4).map(\.title), ["الطبقات", "صور عالية الوضوح", "الوضع الواقعي", "المؤثرات"])
-        /* Every action the old «+» had is still one or two taps away. */
-        let old: Set<String> = ["navigate", "search", "backtrack", "chat", "note", "stuck", "waypoint", "nearest", "weather", "radio", "youtube", "explore"]
-        XCTAssertTrue(grid.isSuperset(of: old), "\(old.subtracting(grid))")
-        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "rally", "convoy", "timer", "brief", "savePlace", "hires", "realistic", "effects"]))
+        /* What left the grid is still reachable: the quick row, «الطبقات», the settings. */
+        let quick: Set<String> = ["navigate", "chat", "rally", "backtrack"]
+        XCTAssertTrue(quick.isSubset(of: LiveActionCatalog.inQuickRow))
+        XCTAssertTrue(grid.isDisjoint(with: ["hires", "realistic", "effects", "radio", "youtube"]), "duplicates of «الطبقات» / settings are gone")
+        XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "convoy", "timer", "brief", "savePlace", "search", "note", "stuck",
+                                           "waypoint", "nearest", "weather", "explore", "route", "invite"]))
     }
 
     func testToolsGridAfterTheEnd() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true, channels: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "explore", "weather"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "weather"]))
         XCTAssertTrue(LiveActionCatalog.tripRouteActions(.init(ended: true, guideAllTarget: "x")).isEmpty)
     }
 

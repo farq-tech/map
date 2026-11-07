@@ -204,8 +204,7 @@ private struct TripPlanCardContent: View {
                 }
                 SaryNavRow(title: tp.isEmpty ? (lead ? "خطّط الطلعة" : "الخطة") : "الخطة وقائمة التجهيز",
                            detail: planDetail(tp), systemImage: "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
-                SaryDivider()
-                SaryNavRow(title: "ابحث أو إحداثية", systemImage: "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
+                /* «ابحث أو إحداثية» is once, in «المزيد» (it was here and in the tools). */
             }
             .padding(.horizontal, theme.space(.m))
         }

@@ -58,7 +58,6 @@ final class WaypointsUITests: XCTestCase {
 
         /* Listed in the sheet. */
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        if app.buttons["tab.group"].waitForExistence(timeout: 5) { app.buttons["tab.group"].tap() }
         let row = app.buttons.matching(identifier: "waypoint-row").firstMatch
         for _ in 0..<4 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: 5))
@@ -79,7 +78,6 @@ final class WaypointsUITests: XCTestCase {
     func testNotDeployedServerIsSaidHonestly() {
         let app = launch(["-demoFeaturesMissing"])
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        if app.buttons["tab.group"].waitForExistence(timeout: 5) { app.buttons["tab.group"].tap() }
         let banner = app.descendants(matching: .any)["waypoints.unavailable"]
         for _ in 0..<4 where !banner.exists { app.swipeUp() }
         XCTAssertTrue(banner.waitForExistence(timeout: 5))
@@ -107,7 +105,6 @@ final class WaypointsUITests: XCTestCase {
         sleep(3)
         shot(app, "convoy-map-\(name)")
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        if app.buttons["tab.group"].waitForExistence(timeout: 5) { app.buttons["tab.group"].tap() }
         let section = app.descendants(matching: .any)["convoy.section"]
         XCTAssertTrue(section.waitForExistence(timeout: 5))
         sleep(1)

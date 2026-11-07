@@ -30,6 +30,7 @@ final class CreateFlowUITests: XCTestCase {
         app.launch()
         allowLocationIfAsked()
 
+        app.openHomeOutings()
         let create = app.buttons["list.create"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.tap()

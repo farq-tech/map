@@ -18,7 +18,7 @@ enum IntroSkip: Equatable {
 
 /// The facts the decision needs, gathered once on a cold launch.
 struct IntroFacts: Equatable {
-    /// «مقدمة سينمائية عند الفتح» (on by default).
+    /// «مقدمة سينمائية عند الفتح» (off by default).
     var enabled = true
     var lastShown: Date?
     var now = Date()
@@ -71,7 +71,10 @@ enum IntroPolicy {
     static let lastShownKey = "sary.intro.lastShown"
     static var keys: [String] { [enabledKey, soundKey, lastShownKey] }
 
-    static func enabled(_ d: UserDefaults = .standard) -> Bool { d.object(forKey: enabledKey) as? Bool ?? true }
+    /// Off by default (UX simplification): the launch frame fades straight into the app; the
+    /// cinematic plays only for those who turn it on in the settings.
+    static let enabledByDefault = false
+    static func enabled(_ d: UserDefaults = .standard) -> Bool { d.object(forKey: enabledKey) as? Bool ?? enabledByDefault }
     static func soundOn(_ d: UserDefaults = .standard) -> Bool { d.object(forKey: soundKey) as? Bool ?? true }
     static func lastShown(_ d: UserDefaults = .standard) -> Date? { d.object(forKey: lastShownKey) as? Date }
     static func markShown(_ at: Date = Date(), _ d: UserDefaults = .standard) { d.set(at, forKey: lastShownKey) }

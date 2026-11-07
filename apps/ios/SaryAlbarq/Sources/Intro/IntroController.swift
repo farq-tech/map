@@ -42,13 +42,16 @@ final class IntroController: ObservableObject {
         func arg(_ k: String) -> String? { args.firstIndex(of: k).flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } }
         freeze = arg("-SaryIntroFreeze").flatMap(Double.init)
         let automation = IntroPolicy.isAutomation(args, environment: env)
+        /* The cinematic is off by default now (the owner: it looked laggy); UI tests ask for it. */
+        let asked = arg("-SaryIntro") == "1"
         #else
         freeze = nil
         let automation = env["XCTestConfigurationFilePath"] != nil
+        let asked = false
         #endif
         let model = AppBoot.model
         let trip = model.session != nil || (model.identity.map { ShareMemory.activeShare(user: $0.user.id) != nil } ?? false)
-        let facts = IntroFacts(enabled: IntroPolicy.enabled(), lastShown: IntroPolicy.lastShown(), now: Date(),
+        let facts = IntroFacts(enabled: IntroPolicy.enabled() || asked, lastShown: IntroPolicy.lastShown(), now: Date(),
                                foregroundLaunch: UIApplication.shared.applicationState != .background,
                                openedForSomething: Self.earlySignal || model.pendingInvite != nil,
                                activeTrip: trip, carPlay: CarPlayHub.active, automation: automation)

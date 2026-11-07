@@ -64,9 +64,11 @@ final class IntroPolicyTests: XCTestCase {
         XCTAssertFalse(IntroPolicy.playsSound(mode: .none, soundOn: true))
     }
 
-    func testSettingsDefaultOnAndRemembered() {
+    func testSettingsDefaultOffAndRemembered() {
         let d = UserDefaults(suiteName: "intro-tests")!
         d.removePersistentDomain(forName: "intro-tests")
+        XCTAssertFalse(IntroPolicy.enabled(d), "the cinematic is off by default (static launch frame)")
+        d.set(true, forKey: IntroPolicy.enabledKey)
         XCTAssertTrue(IntroPolicy.enabled(d))
         XCTAssertTrue(IntroPolicy.soundOn(d))
         XCTAssertNil(IntroPolicy.lastShown(d))

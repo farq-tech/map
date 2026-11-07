@@ -22,14 +22,10 @@ enum LiveCalmRules {
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,
                           driving: Bool, ended: Bool) -> [SaryMapControlItem] {
         guard !driving else { return [] }
+        /* «أدوات» («+») is no longer on the map: it is «المزيد» at the end of the sheet's quick row
+         * (UX simplification — one way in, not two). `plusBadge` rides on that button now. */
         var items = [camera]
         if let backTrack { items.append(backTrack) }
-        if !ended {
-            var plus = SaryMapControlItem.actions
-            plus.label = "أدوات"
-            plus.badge = plusBadge
-            items.append(plus)
-        }
         return items
     }
 }
