@@ -362,12 +362,16 @@ private struct LiveSheetBody: View {
         return false
     }
 
+    private var shouldShowTripCard: Bool {
+        controller.showsTripStrip && (arrivedOrOver || (controller.session.view?.iOwn == true && ui.status != .notStarted))
+    }
+
     var body: some View {
         let actions = controller.actions
         Group {
             TripStatusCallout(controller: controller, ui: ui)
-            /* Arrived or over: «أنهِ الرحلة» / «ملخص الرحلة» is what matters now, so the trip card comes into the sheet. */
-            if controller.showsTripStrip, arrivedOrOver {
+            /* Keep the owner's trip controls visible throughout the outing, including the end action. */
+            if shouldShowTripCard {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
             }
             VStack(spacing: 0) {

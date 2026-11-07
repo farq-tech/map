@@ -191,7 +191,8 @@ extension LiveOutingController {
     /// «أنهِ الطلعة» confirmed.
     func endOutingFlow() {
         legConfirmEnd = false
-        legs.outingEnded()
+        // Do not mutate the local leg history before the server accepts the end.
+        // The .outingStatus(.ended) observer closes the legs after a successful response.
         endTrip()
     }
 
