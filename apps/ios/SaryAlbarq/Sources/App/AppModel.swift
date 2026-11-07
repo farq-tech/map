@@ -83,6 +83,7 @@ final class AppModel: ObservableObject {
             /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
             LocalAccountData.wipe()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,
+                      ConvoyAlertPrefs.key,
                       "sary.dev.unlocked", LiveContextOverride.key] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }

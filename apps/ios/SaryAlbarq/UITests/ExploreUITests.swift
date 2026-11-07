@@ -93,10 +93,12 @@ final class ExploreUITests: XCTestCase {
 
         let rain = any(app, "weather.layer.rain")
         XCTAssertTrue(rain.waitForExistence(timeout: 5), "rain is a selectable layer")
+        rain.scrollIntoView(in: app)
+        XCTAssertTrue(rain.isHittable, "rain is reachable in the scrollable layer sheet")
         rain.tap()
         XCTAssertTrue(any(app, "weather.rain.days").waitForExistence(timeout: 3), "rain exposes its period picker")
-        let week = any(app, "weather.rain.days.7")
-        XCTAssertTrue(week.exists)
+        let week = app.buttons["weather.rain.days.7"].firstMatch
+        XCTAssertTrue(week.waitForExistence(timeout: 5), app.debugDescription)
         week.tap()
         XCTAssertTrue(week.isSelected, "seven-day period is selected")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "NASA GPM IMERG")).firstMatch.exists,

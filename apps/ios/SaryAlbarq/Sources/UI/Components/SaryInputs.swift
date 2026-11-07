@@ -224,6 +224,7 @@ struct SarySegmented<Value: Hashable>: View {
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .animation(theme.animation(.snappy), value: selection)
         .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityElement(children: .contain)
         .modifier(OptionalIdentifier(id: id))
     }
 }
