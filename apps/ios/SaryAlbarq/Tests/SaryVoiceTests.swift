@@ -345,10 +345,26 @@ final class SaryVoiceScriptTests: XCTestCase {
         XCTAssertEqual(SaryVoiceScript.step(a, distanceM: 5), ["arr_02"])
     }
 
-    func testMilesModeRoundsLikeTheBanner() {
-        XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 2), distanceM: 800, miles: true), ["x_06", "rb_03"], "«بعد نص ميل» exit 2")
-        XCTAssertEqual(SaryVoiceScript.step(step(.arrive, .right), distanceM: 300, miles: true), ["x_12", "start_04"], "«بعد ألف قدم.» «وجهتك على يمينك.»")
+    func testMilesModeRoundsDownNeverPastTheRealDistance() {
+        /* Build 22: the spoken distance is rounded DOWN (never larger than the real one), in miles
+         * as in metric — 800 m is «بعد ربع ميل» (x_07 = ¼ mi = 402 m), not «نص ميل» (804 m > 800). */
+        XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 2), distanceM: 800, miles: true), ["x_07", "rb_03"], "«بعد ربع ميل» exit 2")
+        XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 2), distanceM: 810, miles: true), ["x_06", "rb_03"], "«بعد نص ميل» once past half a mile")
+        XCTAssertEqual(SaryVoiceScript.step(step(.arrive, .right), distanceM: 320, miles: true), ["x_12", "start_04"], "«بعد ألف قدم.» «وجهتك على يمينك.»")
+        XCTAssertEqual(SaryVoiceScript.step(step(.arrive, .right), distanceM: 300, miles: true), ["x_11", "start_04"], "300 m floors to 500 ft, never up to 1000")
         XCTAssertEqual(SaryVoiceScript.step(step(.turn, .right), distanceM: 50, miles: true), ["turns_01"], "too close for feet: just the turn")
+    }
+
+    /// The roundabout exit number is the router's own, with no ±1, in both units (the owner heard
+    /// «المخرج الأول» where the API said the second).
+    func testRoundaboutExitNumberIsTheApisInBothUnits() {
+        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: nil, exit: 1)), ["rb_02"], "exit 1 → «المخرج الأول»")
+        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: nil, exit: 2)), ["rb_03"], "exit 2 → «المخرج الثاني»")
+        XCTAssertEqual(SaryVoiceScript.action(.init(kind: .roundabout, direction: nil, exit: 3)), ["rb_04"], "exit 3 → «المخرج الثالث»")
+        for miles in [false, true] {
+            XCTAssertEqual(SaryVoiceScript.step(step(.roundabout, exit: 2), distanceM: 800, miles: miles).last, "rb_03", "exit 2 clip, miles=\(miles)")
+        }
+        XCTAssertEqual(SaryVoiceCatalog.byKey["rb_03"]?.text, "في الدوّار، خذ المخرج الثاني.")
     }
 
     func testSunsetLines() {
