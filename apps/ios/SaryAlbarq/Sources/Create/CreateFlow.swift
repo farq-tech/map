@@ -78,7 +78,7 @@ struct CreateFlowState: Equatable {
         clean.name = String(d.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(TripPlan.destinationNameMax))
         if clean.name.isEmpty { clean.name = "الوجهة" }
         destination = clean
-        if trimmedName.isEmpty, clean.name != "الوجهة", clean.name != "نقطة على الخريطة" {
+        if trimmedName.isEmpty, !PlaceLabel.isGeneric(clean.name), !PlaceLabel.isRelative(clean.name) {
             name = String("طلعة \(clean.name)".prefix(ServerRules.outingNameMax))
         }
         error = nil

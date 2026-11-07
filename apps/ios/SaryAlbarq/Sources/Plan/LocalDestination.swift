@@ -39,13 +39,33 @@ enum RecentPlaces {
 
     static func load(defaults: UserDefaults = .standard) -> [OutingDestination] {
         guard let d = defaults.data(forKey: key) else { return [] }
-        return (try? JSONDecoder().decode([OutingDestination].self, from: d)) ?? []
+        let all = (try? JSONDecoder().decode([OutingDestination].self, from: d)) ?? []
+        /* Older bare «نقطة على الخريطة» entries are named in the background; the next load shows the names. */
+        if defaults === UserDefaults.standard, all.contains(where: { PlaceLabel.isGeneric($0.name) }) { nameInBackground() }
+        return all
+    }
+
+    /// One background naming pass at a time (`PlaceNamer`).
+    private static var naming = false
+    private static let namingLock = NSLock()
+
+    static func nameInBackground() {
+        namingLock.lock()
+        defer { namingLock.unlock() }
+        guard !naming else { return }
+        naming = true
+        Task.detached(priority: .utility) {
+            await resolveNames()
+            namingLock.lock(); naming = false; namingLock.unlock()
+        }
     }
 
     static func add(_ p: OutingDestination, defaults: UserDefaults = .standard) {
         var all = load(defaults: defaults).filter { Geo.haversineMeters(.init(lat: $0.lat, lng: $0.lng), .init(lat: p.lat, lng: p.lng)) > 50 }
         all.insert(p, at: 0)
         if let d = try? JSONEncoder().encode(Array(all.prefix(max))) { defaults.set(d, forKey: key) }
+        /* A bare «نقطة على الخريطة» gets its real name in the background (`PlaceNamer`). */
+        if defaults === UserDefaults.standard, PlaceLabel.isGeneric(p.name) { nameInBackground() }
     }
 
     static func forget(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
