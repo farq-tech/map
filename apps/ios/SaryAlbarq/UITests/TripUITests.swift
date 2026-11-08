@@ -80,7 +80,7 @@ final class TripUITests: XCTestCase {
         attach(app, "arrived")
 
         /* The demo me leads: «أنهِ الرحلة» → confirm. */
-        let end = app.buttons["trip.end"]
+        let end = app.buttons["outing-end"]
         XCTAssertTrue(end.waitForExistence(timeout: 5))
         end.tap()
         let confirm = app.buttons["أنهِ الطلعة للجميع"]

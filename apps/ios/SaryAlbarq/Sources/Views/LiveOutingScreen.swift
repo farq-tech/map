@@ -306,6 +306,23 @@ struct LiveOutingScreen: View {
                         } else if driving && !hasCTA {
                             Spacer()
                         }
+                        /* Leaders can end the outing from the live map at any stage. Keep this
+                         * separate from the trip CTA and PTT; confirmation prevents an accidental end. */
+                        if controller.tripPanel.canEnd {
+                            Button { controller.legConfirmEnd = true } label: {
+                                Image(systemName: "flag.checkered")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(theme.palette.emergencyText)
+                                    .frame(width: 48, height: 48)
+                                    .background(theme.palette.emergency.opacity(0.14), in: Circle())
+                                    .overlay(Circle().stroke(theme.palette.emergencyText.opacity(0.32), lineWidth: 1))
+                            }
+                            .buttonStyle(SaryPressStyle())
+                            .accessibilityLabel("أنهِ الطلعة")
+                            .accessibilityHint("ينهي الطلعة عند الجميع بعد التأكيد")
+                            .accessibilityIdentifier("outing-end")
+                            .transition(.scale.combined(with: .opacity))
+                        }
                         if guidingHUD && controller.speed.everRead {
                             NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
                                 .chromeFrame("speed")
