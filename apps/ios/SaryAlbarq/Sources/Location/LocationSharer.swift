@@ -86,6 +86,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     private var filter = FixFilter()
     private var watching = false
     private var whenInUseContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+    private var whenInUseActivationObserver: NSObjectProtocol?
     private var alwaysContinuation: CheckedContinuation<Bool, Never>?
     private var alwaysPromptSeen = false
     /// `CLBackgroundActivitySession` (iOS 17+) while sharing is armed for the background.
@@ -149,11 +150,41 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// Step 1: When-In-Use. Returns the resulting status.
     func requestWhenInUse() async -> CLAuthorizationStatus {
+        /* The manager is authoritative. Its delegate update can lag the SwiftUI-published
+         * value after a prompt, a Settings change, or simulator reset. Avoid waiting for a
+         * prompt that iOS will not show when permission is already decided. */
+        refreshAuthorization()
         guard authorization == .notDetermined else { return authorization }
         return await withCheckedContinuation { c in
             whenInUseContinuation = c
+            /* Core Location normally completes through its delegate. Some simulator/iOS
+             * versions reactivate the app after the system prompt before delivering that
+             * callback, so also re-read the authoritative status on return to foreground. */
+            whenInUseActivationObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    MainActor.assumeIsolated { self?.finishWhenInUseIfResolved() }
+                }
+            }
             manager.requestWhenInUseAuthorization()
         }
+    }
+
+    @MainActor
+    private func finishWhenInUseIfResolved() {
+        let status = manager.authorizationStatus
+        guard status != .notDetermined, let continuation = whenInUseContinuation else { return }
+        authorization = status
+        accuracyAuthorization = manager.accuracyAuthorization
+        whenInUseContinuation = nil
+        if let observer = whenInUseActivationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            whenInUseActivationObserver = nil
+        }
+        continuation.resume(returning: status)
     }
 
     /// Step 2 (only for the screen-locked trail, after our explainer): ask iOS for «دائمًا».
@@ -466,10 +497,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         Task { @MainActor in
             self.authorization = st
             self.accuracyAuthorization = acc
-            if st != .notDetermined, let c = self.whenInUseContinuation {
-                self.whenInUseContinuation = nil
-                c.resume(returning: st)
-            }
+            if st != .notDetermined { self.finishWhenInUseIfResolved() }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopSharing() }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopTrail(); self.stopBackgroundTrail() }
             /* «أثناء الاستخدام» keeps the share (activity session) but not the relaunch backstops. */

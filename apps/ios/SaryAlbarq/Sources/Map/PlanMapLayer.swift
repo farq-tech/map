@@ -101,6 +101,19 @@ struct PlanPickedPin: View {
     }
 }
 
+/// The home map's location marker uses LocationSharer's permission and fix, not Mapbox's
+/// implicit location provider. This keeps the app in control of when iOS asks for permission.
+struct PlanUserLocationPin: View {
+    var body: some View {
+        Circle()
+            .fill(Color(red: 0.12, green: 0.52, blue: 0.98))
+            .frame(width: 16, height: 16)
+            .overlay(Circle().stroke(.white, lineWidth: 3))
+            .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+            .accessibilityIdentifier("map.user-location")
+    }
+}
+
 /// Keeps a view annotation for one point (create, move, remove).
 final class PinSlot<V: View> {
     private(set) var annotation: ViewAnnotation?

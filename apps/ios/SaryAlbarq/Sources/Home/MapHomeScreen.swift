@@ -63,7 +63,7 @@ struct MapHomeScreen: View {
             let screen = g.size.height + g.safeAreaInsets.top + g.safeAreaInsets.bottom
             let sheetH = sheetHeight(screen: screen)
             ZStack(alignment: .bottom) {
-                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, showsUser: true,
+                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, userLocation: myPoint,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) },
                             desert: desertOverlay,

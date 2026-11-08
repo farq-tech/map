@@ -84,37 +84,66 @@ final class SaryAlbarqUITests: XCTestCase {
         try? png.pngRepresentation.write(to: dir.appendingPathComponent("\(name).png"))
     }
 
-    private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-
-    /// The iOS location alert, answered through springboard (not an interruption monitor:
-    /// the test must SEE that the system prompt came right after the one tap).
-    @discardableResult
-    private func answerLocationAlert(_ labels: [String], file: StaticString = #filePath, line: UInt = #line) -> Bool {
-        let deadline = Date().addingTimeInterval(15)
-        while Date() < deadline {
-            for l in labels where springboard.buttons[l].exists {
-                shot("2-system-location-alert")
-                /* iOS 27: a tap during the alert's entry animation is dropped. Tap until it is gone. */
-                let b = springboard.buttons[l]
-                while b.exists && Date() < deadline {
-                    if b.isHittable { b.tap() }
-                    usleep(500_000)
-                }
-                if !b.exists { return true }
+    /// Register before the action that triggers Core Location. Otherwise XCTest's
+    /// default interruption handler can dismiss the prompt before the test sees it.
+    private func tapAndHandleLocationPermission(_ app: XCUIApplication, _ action: XCUIElement, using labels: [String]) -> Bool {
+        var handled = false
+        let monitor = addUIInterruptionMonitor(withDescription: "location permission") { alert in
+            for label in labels where alert.buttons[label].exists {
+                handled = true
+                alert.buttons[label].tap()
+                return true
             }
-            usleep(250_000)
+            return false
         }
-        XCTFail("no iOS location alert after «انضم للطلعة»", file: file, line: line)
+        action.tap()
+        /* The join flow creates its identity before asking Core Location, so the system
+         * alert may arrive after the initiating tap returns. Poll SpringBoard directly;
+         * tapping blank app space can dismiss the alert, reach the map, or leave the app. */
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let deadline = Date().addingTimeInterval(15)
+        let live = app.descendants(matching: .any)["outing-sheet-summary"].firstMatch
+        while !handled && Date() < deadline {
+            /* iOS may already have a usable authorization; in that case joining can
+             * complete without presenting a second system prompt. */
+            if live.exists {
+                handled = true
+                break
+            }
+            for label in labels {
+                let button = springboard.buttons[label]
+                if button.exists && button.isHittable {
+                    button.tap()
+                    handled = true
+                    break
+                }
+            }
+            usleep(400_000)
+        }
+        removeUIInterruptionMonitor(monitor)
+        /* A location alert that was already appearing can consume the initiating tap.
+         * If the join action is still enabled after answering it, deliver the intended tap. */
+        if handled {
+            /* Joining can replace the invite view as soon as the permission choice is
+             * delivered. Wait for that success state before querying the old button;
+             * XCTest may fail its accessibility snapshot when a stale element vanishes. */
+            if live.waitForExistence(timeout: 3) { return true }
+            if action.exists && action.isEnabled {
+                action.tap()
+                if live.waitForExistence(timeout: 5) { return true }
+            }
+        }
         return false
     }
 
     private func launchInvite(_ kind: String, noIdentity: Bool, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        /* XCTest may launch the app as part of resetting its permission state. Do that first,
+         * then terminate that setup launch and set the arguments for the invite under test. */
+        app.resetAuthorizationStatus(for: .location)
+        app.terminate()
         app.launchArguments = ["-resetState", "-demo", "-SaryDemoInvite", kind, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
             + (noIdentity ? ["-SaryNoIdentity"] : []) + extra
-        /* Configure the launch before resetting simulator-global permissions; otherwise
-         * XCTest can leave the process on its default onboarding launch instead of the invite. */
-        app.resetAuthorizationStatus(for: .location)
         app.launch()
         if !app.buttons["invite.join"].waitForExistence(timeout: 20) {
             print("LAUNCH-TREE:\n" + app.debugDescription)
@@ -179,8 +208,7 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         shot("1-invite-one-screen", app)
 
-        join.tap()
-        answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"])
+        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
 
         let summary = any(app, "outing-sheet-summary")
         XCTAssertTrue(summary.waitForExistence(timeout: 20), "in the live trip")
@@ -256,8 +284,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
         XCTAssertFalse(app.textFields["invite.myName"].exists, "already has a name on this phone")
-        join.tap()
-        XCTAssertTrue(answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"]))
+        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Don’t Allow", "Don't Allow", "عدم السماح"]))
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
@@ -304,8 +331,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let app = launchInvite("personal", noIdentity: true)
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
-        join.tap()
-        XCTAssertTrue(answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"]))
+        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Don’t Allow", "Don't Allow", "عدم السماح"]))
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
@@ -349,8 +375,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let app = launchInvite("personal", noIdentity: true, extra: ["-SaryJoinReduced", "allow"])
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
-        join.tap()
-        XCTAssertTrue(answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
+        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
         let asking = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "نطلب الموقع الدقيق")).firstMatch
         XCTAssertTrue(asking.waitForExistence(timeout: 5), "the precise request comes right after the location prompt")
         shot("10-invite-asks-precise", app)
@@ -364,8 +389,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let app = launchInvite("group", noIdentity: false, extra: ["-SaryJoinReduced", "deny"])
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
-        join.tap()
-        XCTAssertTrue(answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
+        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10))
         XCTAssertEqual(needs.label, "موقعك تقريبي بالكيلومترات")

@@ -15,8 +15,10 @@ struct PlanMapView: UIViewRepresentable {
     var interactive = true
     var camera: PlanCamera? = nil
     var theme: SaryTheme = .default
-    /// The blue dot of this phone (the home map).
-    var showsUser = false
+    /// The blue dot of this phone, supplied by the app's permission-aware location owner.
+    /// Do not enable Mapbox's built-in provider here: it can request location before the user
+    /// has seen the app's own explanation (notably while a shared-outing invite is open).
+    var userLocation: LngLat? = nil
     var onTap: (LngLat) -> Void = { _ in }
     var onLongPress: (LngLat) -> Void = { _ in }
     var onMove: (Int, LngLat) -> Void = { _, _ in }
@@ -40,11 +42,11 @@ struct PlanMapView: UIViewRepresentable {
             ArabicBasemap.load { json in if let json { map.mapboxMap.loadStyle(json) } }
         }
         map.accessibilityIdentifier = "plan.map"
+        map.location.options.puckType = nil
         SandGrade.follow(map)
         map.ornaments.options.scaleBar.visibility = .hidden
         map.ornaments.options.compass.visibility = .adaptive
         if !interactive { map.isUserInteractionEnabled = false }
-        if showsUser { map.location.options.puckType = .puck2D(.makeDefault(showBearing: true)) }
         context.coordinator.attach(map, parent: self)
         return map
     }
@@ -72,6 +74,7 @@ struct PlanMapView: UIViewRepresentable {
         private var dragging = false
         private let destination = PinSlot<PlanDestinationPin>()
         private let picked = PinSlot<PlanPickedPin>()
+        private let user = PinSlot<PlanUserLocationPin>()
 
         func attach(_ map: MapView, parent: PlanMapView) {
             self.map = map
@@ -143,6 +146,7 @@ struct PlanMapView: UIViewRepresentable {
                 PlanDestinationPin(name: p.destination?.name ?? "الوجهة", theme: theme)
             }
             picked.set(p.picked, key: "picked", on: map, priority: 130) { PlanPickedPin() }
+            user.set(p.userLocation, key: "user", on: map, anchor: .center, priority: 140) { PlanUserLocationPin() }
             if let c = p.camera, c.id != lastCamera {
                 lastCamera = c.id
                 if styleReady && map.bounds.height > 0 { move(c, on: map) } else { pendingCamera = c }
