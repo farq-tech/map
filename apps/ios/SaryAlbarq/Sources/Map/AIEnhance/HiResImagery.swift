@@ -247,11 +247,6 @@ final class HiResImagery: NSObject {
             try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))))
             installed = true
             #if DEBUG
-            /* `-SaryHiResTint`: tint the enhanced layer so the shots show where its tiles are drawn. */
-            if ProcessInfo.processInfo.arguments.contains("-SaryHiResTint") {
-                try? m.setLayerProperty(for: Self.layerId, property: "raster-hue-rotate", value: 150)
-                try? m.setLayerProperty(for: Self.layerId, property: "raster-saturation", value: 0.6)
-            }
             HiResStats.note("installed gen \(gen) layers=\(m.allLayerIdentifiers.map(\.id).filter { $0.hasPrefix("sary-hires") || $0.hasPrefix("wow-sand") || $0.contains("satellite") })")
             #endif
         } catch {
@@ -465,12 +460,43 @@ final class HiResImagery: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, let m = self.map?.mapboxMap, self.lock.withLock({ gen == self.generation }),
                   m.sourceExists(withId: Self.sourceId) else { return }
-            try? m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
-                                                 tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+            var image = image
             #if DEBUG
-            if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px") }
+            /* DEBUG-only diagnostic tiles make it obvious whether Mapbox actually draws the
+               custom raster source. Style hue filters are not a reliable pixel-level assertion. */
+            let args = ProcessInfo.processInfo.arguments
+            if image != nil, (args.contains("-SaryHiResTint") || args.contains("-SaryHiResSolid")) {
+                var px = [UInt8](repeating: 0, count: 512 * 512 * 4)
+                let tint = args.contains("-SaryHiResTint")
+                for i in stride(from: 0, to: px.count, by: 4) {
+                    px[i] = tint ? 0 : 255
+                    px[i + 1] = 255
+                    px[i + 2] = 255
+                    px[i + 3] = 255
+                }
+                image = SandDetailLayer.image(SandDetail.Tile(size: 512, rgba: px, delta: []))
+            }
             #endif
-            if image != nil { self.lock.withLock { self.visible.delivered(t) } }
+            var submitted = false
+            do {
+                try m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
+                                                    tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+                submitted = true
+                #if DEBUG
+                if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px alpha=\(image.cgImage.map { String(describing: $0.alphaInfo.rawValue) } ?? "-")") }
+                #endif
+            } catch {
+                Self.log.error("setTileData \(t.description, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                #if DEBUG
+                HiResStats.note("setTileData FAILED \(t) \(error)")
+                #endif
+            }
+            /* The badge counts a tile only when Mapbox can draw it: premultiplied RGBA (round 3
+               incident: opaque RGB tiles were accepted but never drawn, under a «مُحسّنة» badge).
+               `testEnhancedTilesAreReallyDrawn` checks the pixels on screen end to end. */
+            if submitted, let cg = image?.cgImage, HiResEnhancer.isMapboxDrawable(cg) {
+                self.lock.withLock { self.visible.delivered(t) }
+            }
             self.refreshBadge()
         }
     }

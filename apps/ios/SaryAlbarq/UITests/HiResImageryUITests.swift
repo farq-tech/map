@@ -46,6 +46,40 @@ final class HiResImageryUITests: XCTestCase {
         attach(app, "hires-navigation-original")
     }
 
+    /// Round 3 incident: enhanced tiles were handed to Mapbox (badge on) but never drawn. The
+    /// DEBUG tint substitutes cyan pixels in each delivered tile; count them in the rendered map
+    /// to prove the custom raster source actually draws. This checks delivery/rendering, not quality.
+    func testEnhancedTilesAreReallyDrawn() throws {
+        let app = launch(["-SaryExplore", "-SaryHiResCam", "28.30,41.40,18.0", "-SaryHiResTint", "-SaryHiResLevel", "light", "-SarySandDetail", "off"])
+        sleep(3)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+        XCTAssertTrue(badge(app).waitForExistence(timeout: 150), "enhanced tiles arrive")
+        sleep(10)
+        let shot = XCUIScreen.main.screenshot()
+        attach(app, "hires-tint")
+        let tinted = try XCTUnwrap(Self.blueShare(shot.image))
+        XCTAssertGreaterThan(tinted, 0.15, "the enhanced layer is drawn on screen (tinted share \(tinted))")
+    }
+
+    /// Share of the map's middle band (x 10–90 %, y 55–75 %) where blue > red + 10.
+    static func blueShare(_ image: UIImage) -> Double? {
+        guard let cg = image.cgImage else { return nil }
+        let w = cg.width, h = cg.height
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var n = 0, blue = 0
+        for y in stride(from: Int(Double(h) * 0.55), to: Int(Double(h) * 0.75), by: 4) {
+            for x in stride(from: Int(Double(w) * 0.1), to: Int(Double(w) * 0.9), by: 4) {
+                let o = (y * w + x) * 4
+                n += 1
+                if Int(px[o + 2]) > Int(px[o]) + 10 { blue += 1 }
+            }
+        }
+        return n == 0 ? nil : Double(blue) / Double(n)
+    }
+
     func testNoBadgeWhenTurnedOff() {
         let app = launch(["-SaryExplore", "-SaryHiResCam", "25.12,46.10,18.6", "-SaryHiRes", "off"])
         XCTAssertFalse(badge(app).waitForExistence(timeout: 25), "the toggle off: original imagery, no badge")

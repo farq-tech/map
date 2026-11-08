@@ -123,6 +123,8 @@ final class HiResImageryTests: XCTestCase {
         XCTAssertEqual(img.width, 512)
         XCTAssertEqual(img.alphaInfo, .premultipliedLast)
         XCTAssertEqual(img.bitsPerPixel, 32)
+        XCTAssertTrue(HiResEnhancer.isMapboxDrawable(img))
+        XCTAssertFalse(HiResEnhancer.isMapboxDrawable(opaque), "the round-2 format: accepted, never drawn")
     }
 
     func testRateLimitPerMinute() {

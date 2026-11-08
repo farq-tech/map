@@ -49,6 +49,12 @@ final class HiResEnhancer {
         return mapboxReady(cg).map(UIImage.init(cgImage:))
     }
 
+    /// A format `CustomRasterSource` draws (8-bit RGBA, premultiplied alpha).
+    static func isMapboxDrawable(_ image: CGImage) -> Bool {
+        image.bitsPerComponent == 8 && image.bitsPerPixel == 32
+            && (image.alphaInfo == .premultipliedLast || image.alphaInfo == .premultipliedFirst)
+    }
+
     /// `image` redrawn as 8-bit sRGB RGBA, premultiplied (opaque).
     static func mapboxReady(_ image: CGImage) -> CGImage? {
         let w = image.width, h = image.height
