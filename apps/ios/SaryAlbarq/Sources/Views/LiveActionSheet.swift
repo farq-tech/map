@@ -226,7 +226,10 @@ struct LiveActionSheet: View {
                             }
                             .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(p.sunken.opacity(0.6)))
                             .padding(.top, theme.space(.xs))
-                            .accessibilityIdentifier("outing-tools.\(item.id)")
+                            /* A parent accessibility identifier is inherited by SwiftUI children
+                             * on iOS 27, which overwrites each tripRow's own ID (weather, qibla,
+                             * place details). Keep the container discoverable by its children. */
+                            .accessibilityElement(children: .contain)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
