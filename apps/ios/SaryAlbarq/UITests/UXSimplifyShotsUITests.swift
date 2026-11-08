@@ -88,6 +88,32 @@ final class UXSimplifyShotsUITests: XCTestCase {
         shot("08-trip-started")
     }
 
+    /// A manually selected map coordinate must stay the destination through the quick-start flow.
+    /// This covers the exact «نقطة على الخريطة» card, independently of place-search results.
+    func testMapPointCardSaveAndStartActions() {
+        let app = launch(["-SaryScreen", "home"])
+        let map = any(app, "home.map")
+        XCTAssertTrue(map.waitForExistence(timeout: 20))
+
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).press(forDuration: 1.2)
+        let pointName = any(app, "home.place.name")
+        XCTAssertTrue(pointName.waitForExistence(timeout: 8), "long-pressing the map should open the selected coordinate")
+        XCTAssertEqual(pointName.label, "نقطة على الخريطة")
+
+        let save = any(app, "home.place.save")
+        XCTAssertTrue(save.isHittable, "the point-card save action must be tappable over the map")
+        save.tap()
+        XCTAssertEqual(save.label, "محفوظ", "saving the selected point should persist and update its state")
+
+        let start = any(app, "home.place.start")
+        XCTAssertTrue(start.isHittable, "the point-card start button must be tappable over the map")
+        start.tap()
+
+        let chosenDestination = any(app, "start.destination")
+        XCTAssertTrue(chosenDestination.waitForExistence(timeout: 8), "quick start must carry the selected point into the outing")
+        XCTAssertTrue(chosenDestination.label.contains("نقطة على الخريطة"), chosenDestination.label)
+    }
+
     func test2ProfileAndSettings() {
         let app = launch(["-SaryScreen", "home"])
         XCTAssertTrue(any(app, "home.profile").waitForExistence(timeout: 20))
