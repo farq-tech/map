@@ -549,11 +549,13 @@ final class OutingWalkieTalkie: ObservableObject {
     var isQuiet: Bool { floor.state == .idle }
 
     private func joinSystemChannelIfNeeded() {
-        guard !muted, !route.isSystemChannel else { return }
+        guard !muted else { return }
         #if canImport(PushToTalk) && !targetEnvironment(simulator)
         if let sys = route as? PTTSystemRoute ?? (PTTSystemRoute.shared.available ? PTTSystemRoute.shared : nil) {
             route = sys
             sys.callbacks = callbacks()
+            /* Another outing may have left this singleton's channel joined. `join` is
+               idempotent for this outing and switches cleanly when its UUID is different. */
             sys.join(outingId: outingId, name: systemChannelName)
         }
         #endif
