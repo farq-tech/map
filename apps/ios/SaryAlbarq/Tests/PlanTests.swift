@@ -656,7 +656,7 @@ final class PlaceSearchTests: XCTestCase {
             if case .around = scope { return [mid, close] }
             return [far, mid]
         })
-        XCTAssertEqual(scopes.all.count, 2, "around me and the Kingdom")
+        XCTAssertEqual(scopes.all.count, 4, "around me and the Kingdom, in Arabic and in English («McDonald's»)")
         XCTAssertTrue(scopes.all.contains(.saudi))
         XCTAssertTrue(scopes.all.contains(.around(Self.me)))
         XCTAssertEqual(found.map(\.point), [close.point, mid.point, far.point], "nearest first; the duplicate branch kept once")
@@ -669,7 +669,8 @@ final class PlaceSearchTests: XCTestCase {
             scopes.add(scope)
             return [Self.poi("شاليه الوردة", 24.9, 46.5)]
         })
-        XCTAssertEqual(scopes.all, [.saudi])
+        XCTAssertFalse(scopes.all.isEmpty)
+        XCTAssertTrue(scopes.all.allSatisfy { $0 == .saudi }, "the Kingdom only (in Arabic and English)")
         XCTAssertEqual(found.map(\.name), ["شاليه الوردة"])
     }
 
@@ -703,7 +704,7 @@ final class PlaceSearchTests: XCTestCase {
 
     func testNormalizeAndDuplicates() {
         XCTAssertEqual(PlaceSearch.normalize("مَطْعَم  الأمـيرة"), PlaceSearch.normalize("مطعم الاميره"))
-        XCTAssertEqual(PlaceSearch.normalize("McDonald's"), PlaceSearch.normalize("mcdonald s"))
+        XCTAssertEqual(PlaceSearch.normalize("McDonald's"), PlaceSearch.normalize("mcdonalds"))
         let a = Self.poi("البيك", 24.7200, 46.6800)
         var b = a; b.id = "mapbox:1"; b.point = LngLat(lng: 46.6805, lat: 24.7203)
         var c = b; c.point = LngLat(lng: 46.70, lat: 24.75)

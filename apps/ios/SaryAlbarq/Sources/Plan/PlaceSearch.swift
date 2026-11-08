@@ -10,6 +10,10 @@ import MapKit
 /// - **Mapbox Geocoding v6**: districts, towns, roads, addresses and named areas (the source
 ///   this search always had; it carries no businesses, which is why «ماكدونالدز» found nothing).
 ///
+/// Arabic and English are one search (`SearchLexicon`): «ستاربكس» and "Starbucks" ask the sources the same
+/// two questions (the Arabic and the English form) and get the same list; a place is shown by its Arabic name
+/// with the English one beside it when it differs.
+///
 /// Results near you come first, nearest first; then the rest of the Kingdom; then the world.
 /// The query never carries who you are.
 enum PlaceSearch {
@@ -24,10 +28,12 @@ enum PlaceSearch {
         var icon: String = "mappin"
         /// ISO country code when the source said so ("SA").
         var country: String? = nil
+        /// The name in the other language ("Starbucks" beside «ستاربكس») when known and different.
+        var altName: String? = nil
 
-        /// «مطعم · العليا، الرياض».
+        /// «Starbucks · مقهى · العليا، الرياض».
         var subtitle: String? {
-            let parts = [category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
+            let parts = [altName, category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
             return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
     }
@@ -284,36 +290,65 @@ enum PlaceSearch {
 
     // MARK: - Together
 
-    /// Apple (around you + the Kingdom) and Mapbox, asked at the same time. One source
-    /// failing is fine; only when every source failed is it an error (Mapbox's, which says why).
+    /// Apple (around you + the Kingdom) and Mapbox, asked at the same time, for every form of the query
+    /// (`SearchLexicon.plan`: the Arabic and the English one when every word is known). One source failing
+    /// is fine; only when every source failed is it an error (Mapbox's, which says why).
     static func search(_ query: String, near: LngLat?, token: String? = PlaceSearch.token,
                        fetch: @escaping Fetch = PlaceSearch.liveFetch,
                        local: LocalSearch? = PlaceSearch.appleSearch) async throws -> [Place] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
         let here = near.flatMap { PlanGeo.valid(lat: $0.lat, lng: $0.lng) ? $0 : nil }
+        let forms = SearchLexicon.plan(q).forms
 
-        async let aroundR = apple(local, q, here.map { AppleScope.around($0) })
-        async let saudiR = apple(local, q, .saudi)
-        async let mapboxR = attempt { try await mapbox(q, near: here, token: token, fetch: fetch) }
+        /* Around you a kind of place is one category request whatever the language: ask it once. */
+        var categories: Set<String> = []
+        let aroundForms = forms.filter { f in poiCategory(forQuery: f).map { categories.insert($0.rawValue).inserted } ?? true }
+
+        async let aroundR = gather(here.map { p in aroundForms.map { f in AppleJob(local, f, .around(p)) } } ?? [])
+        async let saudiR = gather(forms.map { AppleJob(local, $0, .saudi) })
+        async let mapboxR = gatherMapbox(forms) { f in try await mapbox(f, near: here, token: token, fetch: fetch) }
         let (aroundRes, saudiRes, mb) = await (aroundR, saudiR, mapboxR)
 
-        let appleAnswered = [aroundRes, saudiRes].contains { r in if case .success(_)? = r { return true } else { return false } }
-        if !appleAnswered, case let .failure(e) = mb {
+        let appleAnswered = (aroundRes + saudiRes).contains { if case .success = $0 { return true } else { return false } }
+        let mapboxAnswered = mb.contains { if case .success = $0 { return true } else { return false } }
+        if !appleAnswered, !mapboxAnswered, case let .failure(e)? = mb.first {
             /* Every source failed. */
             throw (e as? SearchError) ?? SearchError.network
         }
-        return rank(query: q,
-                    around: (try? aroundRes?.get()) ?? [],
-                    saudi: (try? saudiRes?.get()) ?? [],
-                    mapbox: (try? mb.get()) ?? [],
-                    near: here)
+        func ok(_ r: [Result<[Place], Error>]) -> [Place] { r.flatMap { (try? $0.get()) ?? [] } }
+        return rank(query: q, forms: forms, around: ok(aroundRes), saudi: ok(saudiRes), mapbox: ok(mb), near: here)
     }
 
-    /// nil when there is no Apple search or no scope to ask it in.
-    private static func apple(_ local: LocalSearch?, _ q: String, _ scope: AppleScope?) async -> Result<[Place], Error>? {
-        guard let local, let scope else { return nil }
-        return await attempt { try await local(q, scope) }
+    /// One Apple question; nil `local` (tests without Apple) asks nothing.
+    private struct AppleJob {
+        let local: LocalSearch?
+        let query: String
+        let scope: AppleScope
+        init(_ local: LocalSearch?, _ query: String, _ scope: AppleScope) { self.local = local; self.query = query; self.scope = scope }
+    }
+
+    /// Runs the jobs together; answers come back in the jobs' order (so the list never depends on which
+    /// source answered first).
+    private static func gather(_ jobs: [AppleJob]) async -> [Result<[Place], Error>] {
+        let live = jobs.filter { $0.local != nil }
+        return await withTaskGroup(of: (Int, Result<[Place], Error>).self) { g in
+            for (i, j) in live.enumerated() {
+                g.addTask { (i, await attempt { try await j.local!(j.query, j.scope) }) }
+            }
+            var out = [Result<[Place], Error>?](repeating: nil, count: live.count)
+            for await (i, r) in g { out[i] = r }
+            return out.compactMap { $0 }
+        }
+    }
+
+    private static func gatherMapbox(_ forms: [String], _ run: @escaping @Sendable (String) async throws -> [Place]) async -> [Result<[Place], Error>] {
+        await withTaskGroup(of: (Int, Result<[Place], Error>).self) { g in
+            for (i, f) in forms.enumerated() { g.addTask { (i, await attempt { try await run(f) }) } }
+            var out = [Result<[Place], Error>?](repeating: nil, count: forms.count)
+            for await (i, r) in g { out[i] = r }
+            return out.compactMap { $0 }
+        }
     }
 
     private static func attempt(_ run: () async throws -> [Place]) async -> Result<[Place], Error> {
@@ -321,23 +356,37 @@ enum PlaceSearch {
     }
 
     /// One list, Google-Maps-like:
-    /// 1. an exact name match (what you typed is the place's name), nearest first;
+    /// 1. an exact name match (what you typed is the place's name, in either language, or a branch of the chain
+    ///    you typed), nearest first;
     /// 2. everything within `nearbyRadiusM` of you, nearest first;
     /// 3. the rest in Saudi Arabia, in the sources' own relevance order (Apple, then Mapbox);
     /// 4. outside Saudi Arabia last.
-    /// Duplicates (the same name within 150 m) are dropped, keeping the first (Apple's, which has the category).
-    static func rank(query: String, around: [Place], saudi: [Place], mapbox: [Place], near: LngLat?, limit: Int = PlaceSearch.maxResults) -> [Place] {
+    /// Duplicates (`duplicate`: the same place in either language) are merged into the first (Apple's, which
+    /// has the category), which keeps the other's name in the other language.
+    /// `forms`: what the sources were asked (`SearchLexicon.plan`); an exact match is a match on any of them.
+    static func rank(query: String, forms: [String]? = nil, around: [Place], saudi: [Place], mapbox: [Place], near: LngLat?,
+                     limit: Int = PlaceSearch.maxResults) -> [Place] {
         var all: [Place] = []
-        for p in stackedDropped(around + saudi) + mapbox where !all.contains(where: { duplicate($0, p) }) { all.append(p) }
+        var keys: [NameKeys] = []
+        for p in (stackedDropped(around + saudi) + mapbox).map(localized) {
+            let k = NameKeys(p)
+            if let i = all.indices.first(where: { duplicate(all[$0], keys[$0], p, k) }) {
+                all[i] = merged(all[i], p); keys[i] = NameKeys(all[i])
+            } else { all.append(p); keys.append(k) }
+        }
 
-        let nq = normalize(query)
+        let asked = forms ?? SearchLexicon.plan(query).forms
+        let wanted = Set(asked.map(normalize)).subtracting([""])
+        /* A chain's every branch is what you asked for («ستاربكس» finds "Starbucks Olaya" as much as «ستاربكس»). */
+        let wantedBrands = Set(asked.compactMap { SearchLexicon.segments($0).count == 1 ? SearchLexicon.brandId($0) : nil })
+        let exactIds = Set(zip(all, keys).filter { p, k in !wanted.isDisjoint(with: k.names) || !wantedBrands.isDisjoint(with: k.brands) }.map { $0.0.id })
+        func isExact(_ p: Place) -> Bool { exactIds.contains(p.id) }
         func dist(_ p: Place) -> Double { near.map { PlanGeo.meters($0, p.point) } ?? .infinity }
         func abroad(_ p: Place) -> Bool { p.country != nil && p.country != "SA" }
 
         let indexed = Array(all.enumerated())
-        let exact = indexed.filter { !abroad($0.element) && !nq.isEmpty && normalize($0.element.name) == nq }
-        let exactIds = Set(exact.map { $0.element.id })
-        let rest = indexed.filter { !exactIds.contains($0.element.id) }
+        let exact = indexed.filter { !abroad($0.element) && isExact($0.element) }
+        let rest = indexed.filter { !(isExact($0.element) && !abroad($0.element)) }
         let nearby = rest.filter { !abroad($0.element) && dist($0.element) <= nearbyRadiusM }
         let nearbyIds = Set(nearby.map { $0.element.id })
         let kingdom = rest.filter { !nearbyIds.contains($0.element.id) && !abroad($0.element) }
@@ -361,17 +410,82 @@ enum PlaceSearch {
         return places.filter { (names[cell($0)]?.count ?? 0) < 3 }
     }
 
-    static func duplicate(_ a: Place, _ b: Place) -> Bool {
-        if a.id == b.id { return true }
-        let d = PlanGeo.meters(a.point, b.point)
-        return d < 150 && normalize(a.name) == normalize(b.name)
+    /// The same place: the same id; the same name, or the same words in the other language, within 150 m; or, within 60 m, the same
+    /// brand («ستاربكس» / "Starbucks Olaya") or the same transliteration skeleton («ماكدونالدز» / "McDonald's").
+    static func duplicate(_ a: Place, _ b: Place) -> Bool { duplicate(a, NameKeys(a), b, NameKeys(b)) }
+
+    /// What a place's names compare by, worked out once per place.
+    struct NameKeys {
+        let names: Set<String>, concepts: Set<String>, brands: Set<String>, skeletons: Set<String>
+        init(_ p: Place) {
+            let all = [p.name, p.altName].compactMap { $0 }
+            names = Set(all.map(PlaceSearch.normalize))
+            brands = Set(all.compactMap(SearchLexicon.brandId))
+            /* A chain's name is the same words at every branch: branches merge only within 60 m (brands).
+               Don't let a type word turn a brand query ("Nahdi pharmacy") into a 150 m concept match. */
+            concepts = Set(all.compactMap { name in
+                let segments = SearchLexicon.segments(name)
+                let containsBrand = segments.contains { segment in
+                    if case let .known(entry) = segment { return entry.role == .brand }
+                    return false
+                }
+                return containsBrand ? nil : SearchLexicon.conceptKey(name)
+            })
+            skeletons = Set(all.map(SearchLexicon.skeleton).filter { $0.count >= 4 })
+        }
     }
 
-    /// Arabic-aware comparison key: no diacritics or tatweel, one alef, ة→ه, ى→ي, lowercase Latin.
+    static func duplicate(_ a: Place, _ ka: NameKeys, _ b: Place, _ kb: NameKeys) -> Bool {
+        if a.id == b.id { return true }
+        let d = PlanGeo.meters(a.point, b.point)
+        guard d < 150 else { return false }
+        if !ka.names.isDisjoint(with: kb.names) { return true }
+        /* «روضة خريم» and "Rawdat Khuraim": the same words in two languages. */
+        if !ka.concepts.isDisjoint(with: kb.concepts) { return true }
+        guard d < crossLanguageRadiusM else { return false }
+        return !ka.brands.isDisjoint(with: kb.brands) || !ka.skeletons.isDisjoint(with: kb.skeletons)
+    }
+
+    /// Two names for one spot in two languages are one place within this distance.
+    static let crossLanguageRadiusM = 60.0
+
+    /// `keep` with what `other` knows that it does not: the name in the other language, the category.
+    static func merged(_ keep: Place, _ other: Place) -> Place {
+        var p = keep
+        if p.altName == nil {
+            p.altName = [other.name, other.altName].compactMap { $0 }
+                .first { isArabic($0) != isArabic(p.name) && normalize($0) != normalize(p.name) }
+        }
+        if p.category == nil, let c = other.category { p.category = c; p.icon = other.icon }
+        if p.country == nil { p.country = other.country }
+        return localized(p)
+    }
+
+    /// Arabic name first, the English one beside it; a chain named only in English gets its Arabic name
+    /// («Starbucks» → «ستاربكس» · Starbucks).
+    static func localized(_ place: Place) -> Place {
+        var p = place
+        if p.altName == nil, let other = SearchLexicon.brandCounterpart(p.name) { p.altName = other }
+        if !isArabic(p.name), let alt = p.altName, isArabic(alt) { p.altName = p.name; p.name = alt }
+        if let alt = p.altName, normalize(alt) == normalize(p.name) { p.altName = nil }
+        return p
+    }
+
+    static func isArabic(_ s: String) -> Bool { s.unicodeScalars.contains { (0x0600...0x06FF).contains($0.value) || (0xFB50...0xFEFF).contains($0.value) } }
+
+    /// Arabic-aware comparison key: no diacritics or tatweel, one alef, ة→ه, ى→ي, Western digits,
+    /// lowercase Latin without accents or apostrophes ("McDonald's" = "mcdonalds", "Café" = "cafe").
     static func normalize(_ s: String) -> String {
         var out = ""
-        for ch in s.folding(options: [.caseInsensitive, .widthInsensitive], locale: nil).unicodeScalars {
+        let latinFolded = s.unicodeScalars.contains { $0.value < 0x0250 && $0.properties.isAlphabetic && $0.value > 0x7F }
+            ? s.folding(options: [.diacriticInsensitive], locale: nil) : s
+        for ch in latinFolded.folding(options: [.caseInsensitive, .widthInsensitive], locale: nil).unicodeScalars {
             switch ch.value {
+            case 0x0027, 0x2019, 0x02BC, 0x0060: continue // apostrophes: "McDonald's"
+            case 0x0660...0x0669: out.unicodeScalars.append(Unicode.Scalar(ch.value - 0x0660 + 0x30)!) // ٠-٩
+            case 0x06F0...0x06F9: out.unicodeScalars.append(Unicode.Scalar(ch.value - 0x06F0 + 0x30)!) // ۰-۹
+            case 0x06A9: out.unicodeScalars.append("ك") // Persian kaf
+            case 0x06CC: out.unicodeScalars.append("ي") // Persian yeh
             case 0x064B...0x065F, 0x0670, 0x0640: continue // tashkeel, superscript alef, tatweel
             case 0x0622, 0x0623, 0x0625, 0x0671: out.unicodeScalars.append("ا")
             case 0x0629: out.unicodeScalars.append("ه")
