@@ -46,7 +46,9 @@ extension LiveOutingController {
 
     /// The trip's guidance reached the leg's destination: that is the leg's arrival too.
     func legNavArrived(_ t: NavTarget) {
-        guard t.source == .destination, legs.current != nil else { return }
+        guard t.source == .destination, legs.current != nil,
+              let current = tripDestination,
+              Vehicle.distanceMeters(t.position, LngLat(lng: current.lng, lat: current.lat)) <= 50 else { return }
         closeArrivalCardSoon()
         if !trip.record.me.arrived { trip.markArrived(myId: session.displayView?.myId ?? session.myUserId) }
     }

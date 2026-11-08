@@ -115,10 +115,35 @@ struct TripRecord: Codable, Equatable {
     var me = ArrivalDetector()
     var arrivedManually = false
     var endedAtMs: Double?
+    /// The destination this device associated with its persisted arrival detector. Old records
+    /// did not store this, so their arrival state is discarded once a destination is first bound.
+    var arrivalDestinationLat: Double?
+    var arrivalDestinationLng: Double?
     /// Members (me included) and when they arrived, as this phone saw it.
     var arrivals: [String: Double] = [:]
     /// Friends' detectors (fed only from their fresh positions).
     var friends: [String: ArrivalDetector] = [:]
+
+    /// Keep arrival state scoped to one destination. A previous stop must never make a newly
+    /// selected destination look reached after the app restores its per-outing record.
+    mutating func bindArrivalDestination(_ destination: LngLat) {
+        let changed: Bool
+        if let lat = arrivalDestinationLat, let lng = arrivalDestinationLng {
+            changed = Vehicle.distanceMeters(LngLat(lng: lng, lat: lat), destination) > 5
+        } else {
+            // Migration from records written before the target was persisted: don't trust an
+            // unscoped arrival (or an unfinished dwell) against today's destination.
+            changed = true
+        }
+        if changed {
+            me = ArrivalDetector()
+            arrivedManually = false
+            arrivals.removeAll()
+            friends.removeAll()
+        }
+        arrivalDestinationLat = destination.lat
+        arrivalDestinationLng = destination.lng
+    }
 
     enum Event: Equatable {
         case started(TripStartPoint)

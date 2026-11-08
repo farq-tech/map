@@ -1,3 +1,4 @@
+import AVKit
 import XCTest
 
 /// «الملاحة»: the route options, active guidance, reroute, the off-road last leg and
@@ -103,6 +104,28 @@ final class NavigationUITests: XCTestCase {
             }
             app.terminate()
         }
+    }
+
+    func testGuidancePiPStartsAndRemainsOnHomeScreen() throws {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else {
+            throw XCTSkip("The iOS Simulator does not provide system PiP; run this assertion on an iPhone.")
+        }
+        let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode("light"))
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 75), "active route guidance")
+        let pipButton = el(app, "nav.pip")
+        XCTAssertTrue(pipButton.waitForExistence(timeout: 5))
+        pipButton.tap()
+        let opened = NSPredicate(format: "value == %@", "مفتوحة")
+        expectation(for: opened, evaluatedWith: pipButton)
+        waitForExpectations(timeout: 12)
+
+        XCUIDevice.shared.press(.home)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.wait(for: .runningForeground, timeout: 8), "PiP remains while the app is backgrounded")
+        let attachment = XCTAttachment(screenshot: springboard.screenshot())
+        attachment.name = "navigation-pip-on-home-screen"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// Pull the guidance sheet up from its grabber: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة».

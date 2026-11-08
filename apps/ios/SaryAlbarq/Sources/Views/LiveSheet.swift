@@ -50,6 +50,7 @@ struct LiveSheet: View {
             }
         }
         .padding(.top, theme.space(.s))
+        .frame(maxWidth: 720, maxHeight: .infinity, alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SafetyPrompts(safety: controller.safety))
         .modifier(FeatureModals(controller: controller, features: controller.features))

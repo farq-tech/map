@@ -110,10 +110,11 @@ final class SaryAlbarqUITests: XCTestCase {
 
     private func launchInvite(_ kind: String, noIdentity: Bool, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        /* A fresh permission state: the system prompt must come from the join tap itself. */
-        app.resetAuthorizationStatus(for: .location)
         app.launchArguments = ["-resetState", "-demo", "-SaryDemoInvite", kind, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
             + (noIdentity ? ["-SaryNoIdentity"] : []) + extra
+        /* Configure the launch before resetting simulator-global permissions; otherwise
+         * XCTest can leave the process on its default onboarding launch instead of the invite. */
+        app.resetAuthorizationStatus(for: .location)
         app.launch()
         if !app.buttons["invite.join"].waitForExistence(timeout: 20) {
             print("LAUNCH-TREE:\n" + app.debugDescription)
@@ -256,7 +257,7 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(join.waitForExistence(timeout: 20))
         XCTAssertFalse(app.textFields["invite.myName"].exists, "already has a name on this phone")
         join.tap()
-        answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"])
+        XCTAssertTrue(answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"]))
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
@@ -283,6 +284,9 @@ final class SaryAlbarqUITests: XCTestCase {
         app.activate()
         let summary = any(app, "outing-sheet-summary")
         XCTAssertTrue(summary.waitForExistence(timeout: 20), "back with permission: joined and in the trip, no extra tap")
+        let later = app.buttons["share.always.later"]
+        XCTAssertTrue(later.waitForExistence(timeout: 20), "the existing after-join background-sharing explainer")
+        later.tap()
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
         XCTAssertTrue(sharing.waitForExistence(timeout: 10))
@@ -301,7 +305,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
         join.tap()
-        answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"])
+        XCTAssertTrue(answerLocationAlert(["Don’t Allow", "Don't Allow", "عدم السماح"]))
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
@@ -327,6 +331,9 @@ final class SaryAlbarqUITests: XCTestCase {
         let summary = any(app, "outing-sheet-summary")
         XCTAssertTrue(summary.waitForExistence(timeout: 20), "allowed: joined and in the trip by itself")
         XCTAssertFalse(any(app, "arrival.hidden").exists, "allowed: nothing says my location is hidden")
+        let later = app.buttons["share.always.later"]
+        XCTAssertTrue(later.waitForExistence(timeout: 20), "the existing after-join background-sharing explainer")
+        later.tap()
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
         XCTAssertTrue(sharing.waitForExistence(timeout: 10))
@@ -343,7 +350,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
         join.tap()
-        answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"])
+        XCTAssertTrue(answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
         let asking = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "نطلب الموقع الدقيق")).firstMatch
         XCTAssertTrue(asking.waitForExistence(timeout: 5), "the precise request comes right after the location prompt")
         shot("10-invite-asks-precise", app)
@@ -358,7 +365,7 @@ final class SaryAlbarqUITests: XCTestCase {
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
         join.tap()
-        answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"])
+        XCTAssertTrue(answerLocationAlert(["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10))
         XCTAssertEqual(needs.label, "موقعك تقريبي بالكيلومترات")

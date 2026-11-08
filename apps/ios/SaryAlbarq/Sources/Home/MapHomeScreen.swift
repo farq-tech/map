@@ -167,7 +167,7 @@ struct MapHomeScreen: View {
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
         }
-        return min(screen - 60, max(160, base - drag))
+        return min(min(screen - 60, 760), max(160, base - drag))
     }
 
     private func sheet(height: CGFloat) -> some View {
@@ -175,10 +175,21 @@ struct MapHomeScreen: View {
         let shape = UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
         return VStack(spacing: 0) {
             Capsule().fill(p.textTertiary.opacity(0.6)).frame(width: 40, height: 5)
-                .padding(.top, 8).padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
+                .frame(height: 44)
                 .contentShape(Rectangle())
                 .onTapGesture { setExpanded(!expanded) }
+                /* The sheet itself contains a vertical ScrollView. Keep its pan gesture out of
+                 * that scroll view so dragging the categories/recent places cannot collapse the
+                 * sheet or pan the map; only the dedicated handle resizes it. */
+                .gesture(DragGesture(minimumDistance: 12)
+                    .onChanged { v in drag = v.translation.height }
+                    .onEnded { v in
+                        let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
+                                                         velocity: Double(v.predictedEndTranslation.height - v.translation.height))
+                        drag = 0
+                        setExpanded(next)
+                    })
                 .accessibilityElement()
                 .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى للتصنيفات"))
                 .accessibilityAddTraits(.isButton)
@@ -206,20 +217,14 @@ struct MapHomeScreen: View {
                 }
                 .scrollDisabled(!expanded && !showingResults)
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("home.sheet.content")
             }
         }
         .frame(height: height, alignment: .top)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 560)
         .background(shape.fill(p.background).shadow(color: .black.opacity(0.18), radius: 12, y: -2))
         .clipShape(shape)
-        .gesture(DragGesture(minimumDistance: 12)
-            .onChanged { v in drag = v.translation.height }
-            .onEnded { v in
-                let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
-                                                 velocity: Double(v.predictedEndTranslation.height - v.translation.height))
-                drag = 0
-                setExpanded(next)
-            })
+        .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
         .accessibilityElement(children: .contain)
