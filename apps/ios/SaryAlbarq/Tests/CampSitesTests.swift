@@ -152,10 +152,10 @@ final class CampSitesTests: XCTestCase {
         XCTAssertEqual(CampReason.fromSide(315), "الشمال الغربي")
     }
 
-    func testToolsHaveTheSuggestTile() {
-        let place = LiveActionCatalog.groups(.init()).first { $0.title == "المكان" }
-        XCTAssertTrue(place?.items.contains { $0.id == "camp" && $0.title == "اقترح لي مكان كشتة" } == true)
-        XCTAssertTrue(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).contains { $0.id == "camp" }, "still there after the trip")
+    func testCampSuggestIsNotDuplicatedInMore() {
+        /* The single entry lives in map layers (verified by CampSitesUITests), not in «المزيد». */
+        XCTAssertFalse(LiveActionCatalog.groups(.init()).flatMap(\.items).contains { $0.id == "camp" })
+        XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).contains { $0.id == "camp" })
     }
 
     func testMapLayerVisibility() {

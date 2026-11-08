@@ -52,10 +52,12 @@ final class QiblaTests: XCTestCase {
     }
 
     func testQiblaIsOneEntryInTheToolsGrid() {
-        let ids = LiveActionCatalog.groups(.init()).flatMap(\.items).map(\.id)
-        XCTAssertEqual(ids.filter { $0 == "qibla" }.count, 1)
+        let groups = LiveActionCatalog.groups(.init())
+        let children = groups.flatMap(\.items).flatMap(\.children).map(\.id)
+        XCTAssertEqual(children.filter { $0 == "qibla" }.count, 1, "under «طقس واتجاه», not as a duplicate tile")
         XCTAssertEqual(LiveModal.qibla.id, "qibla")
         /* It still makes sense after the trip ends. */
-        XCTAssertTrue(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).contains { $0.id == "qibla" })
+        let endedChildren = LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).flatMap(\.children)
+        XCTAssertTrue(endedChildren.contains { $0.id == "qibla" })
     }
 }
