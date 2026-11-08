@@ -132,7 +132,7 @@ struct CreateFlowState: Equatable {
 
     private static func suggestedName(for destination: OutingDestination) -> String {
         let place = destination.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !place.isEmpty, place != "الوجهة", place != "نقطة على الخريطة" else { return "طلعة جديدة" }
+        guard !PlaceLabel.isGeneric(place), !PlaceLabel.isRelative(place) else { return "طلعة جديدة" }
         return String("طلعة \(place)".prefix(ServerRules.outingNameMax))
     }
 }
