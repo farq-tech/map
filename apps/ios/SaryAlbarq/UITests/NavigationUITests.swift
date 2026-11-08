@@ -78,7 +78,9 @@ final class NavigationUITests: XCTestCase {
     func testActiveGuidance() {
         for m in ["light", "dark", "drive"] {
             let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode(m))
-            XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15))
+            /* The debug route may wait 40 seconds for its first GPS fix and another 20 for
+             * planning; the previous 15-second assertion expired before that supported path. */
+            XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 75), "active guidance after the demo GPS and route setup")
             XCTAssertTrue(el(app, "nav.pip").exists, "live guidance can be opened as a floating PiP window")
             XCTAssertTrue(el(app, "nav.lanes").exists, "lanes")
             /* v2: «ثم …» only when the next turn is within 400 m (the demo's next turn is ~1 km away). */

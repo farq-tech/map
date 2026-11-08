@@ -39,11 +39,13 @@ struct NavPiPSnapshot: Equatable {
 final class NavPictureInPicture: NSObject, ObservableObject {
     @Published private(set) var active = false
     @Published private(set) var supported = AVPictureInPictureController.isPictureInPictureSupported()
+    @Published var startError: String?
 
     let displayLayer = AVSampleBufferDisplayLayer()
     private var controller: AVPictureInPictureController?
     private var snapshot: NavPiPSnapshot?
     private var timer: Timer?
+    private var startTask: Task<Void, Never>?
     private var frame = 0
     private var automatic = false
 
@@ -72,14 +74,33 @@ final class NavPictureInPicture: NSObject, ObservableObject {
 
     func start() {
         guard supported, let snapshot, snapshot.distanceToTurn.isEmpty == false else { return }
+        guard automatic else { return }
+        startTask?.cancel()
+        startError = nil
         enqueueFrame()
         startFrames()
-        if controller?.isPictureInPicturePossible == true {
-            controller?.startPictureInPicture()
+        startTask = Task { @MainActor [weak self] in
+            /* The sample-buffer layer consumes its first frame asynchronously. PiP can report
+             * `isPictureInPicturePossible == false` for a short time after enqueueFrame(); retry
+             * briefly instead of silently dropping the user's tap. */
+            for _ in 0..<20 {
+                guard let self, !Task.isCancelled, self.automatic, self.snapshot != nil else { return }
+                if self.controller?.isPictureInPicturePossible == true {
+                    self.controller?.startPictureInPicture()
+                    self.startTask = nil
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let self, !Task.isCancelled, self.automatic else { return }
+            self.startTask = nil
+            self.startError = "لم تصبح نافذة الملاحة جاهزة. تأكد من ظهور تعليمات الطريق ثم حاول مرة أخرى."
         }
     }
 
     func stop() {
+        startTask?.cancel()
+        startTask = nil
         controller?.canStartPictureInPictureAutomaticallyFromInline = false
         if active { controller?.stopPictureInPicture() }
         automatic = false
@@ -238,7 +259,17 @@ final class NavPictureInPicture: NSObject, ObservableObject {
 }
 
 extension NavPictureInPicture: AVPictureInPictureControllerDelegate {
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
+                                    failedToStartPictureInPictureWithError error: Error) {
+        startTask?.cancel()
+        startTask = nil
+        startError = "تعذر فتح نافذة الملاحة. حاول مرة أخرى."
+    }
+
     func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        startTask?.cancel()
+        startTask = nil
+        startError = nil
         active = true
         startFrames()
     }

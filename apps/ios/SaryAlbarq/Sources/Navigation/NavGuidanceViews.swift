@@ -178,6 +178,14 @@ struct NavManeuverBanner: View {
         .onChange(of: nav.phase) { _, phase in
             pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
         }
+        .alert("تعذر فتح النافذة العائمة", isPresented: Binding(
+            get: { pip.startError != nil },
+            set: { if !$0 { pip.startError = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { pip.startError = nil }
+        } message: {
+            Text(pip.startError ?? "")
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.banner")
     }
