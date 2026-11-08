@@ -359,7 +359,7 @@ enum PlaceSearch {
     /// 1. an exact name match (what you typed is the place's name, in either language, or a branch of the chain
     ///    you typed), nearest first;
     /// 2. everything within `nearbyRadiusM` of you, nearest first;
-    /// 3. the rest in Saudi Arabia, in the sources' own relevance order (Apple, then Mapbox);
+    /// 3. the rest in Saudi Arabia, nearest first (owner 2026-11-07: «الأولوية للأقرب»);
     /// 4. outside Saudi Arabia last.
     /// Duplicates (`duplicate`: the same place in either language) are merged into the first (Apple's, which
     /// has the category), which keeps the other's name in the other language.
@@ -396,7 +396,7 @@ enum PlaceSearch {
             let a = dist($0.element), b = dist($1.element)
             return a == b ? $0.offset < $1.offset : a < b
         }
-        let ordered = exact.sorted(by: byDistance) + nearby.sorted(by: byDistance) + kingdom + world
+        let ordered = exact.sorted(by: byDistance) + nearby.sorted(by: byDistance) + kingdom.sorted(by: byDistance) + world
         return Array(ordered.map { $0.element }.prefix(limit))
     }
 
