@@ -711,10 +711,16 @@ struct MapHomeScreen: View {
             /* «دليل البر» first: a known desert name answers offline too. */
             let desert = HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near)
             results = desert
+            if HomeDesertRules.categoryKind(t) != nil {
+                /* Category intent is entirely answered by the bundled gazetteer. Avoid waiting on
+                 * geocoders or leaking a query that cannot improve these type-filtered results. */
+                searching = false
+                return
+            }
             do {
                 let r = try await PlaceSearch.search(t, near: near)
                 guard !Task.isCancelled else { return }
-                results = HomeDesertRules.merge(desert: desert, places: r, desertOnly: HomeDesertRules.categoryKind(t) != nil)
+                results = HomeDesertRules.merge(desert: desert, places: r)
             } catch let e as PlaceSearch.SearchError {
                 results = desert
                 if desert.isEmpty { searchError = e.arabic }
