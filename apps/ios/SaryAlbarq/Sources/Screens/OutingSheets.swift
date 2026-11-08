@@ -293,7 +293,8 @@ struct InviteJoinSheet: View {
                 /* «الموقع الدقيق» off: iOS's temporary full accuracy (GPS's `requestPreciseForTrip`, purpose key ConvoyTrip). */
                 #if DEBUG
                 if let allow = JoinDebug.reduced {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    /* Keep the simulated request visible long enough for UI automation to observe it. */
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
                     debugPreciseGranted = allow
                     send(.precise(currentPermission))
                     return
