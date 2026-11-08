@@ -80,7 +80,7 @@ final class TripUITests: XCTestCase {
         attach(app, "arrived")
 
         /* The demo me leads: «أنهِ الرحلة» → confirm. */
-        let end = app.buttons["outing-end"]
+        let end = app.buttons["trip.end"]
         XCTAssertTrue(end.waitForExistence(timeout: 5))
         end.tap()
         let confirm = app.buttons["أنهِ الطلعة للجميع"]
@@ -102,7 +102,7 @@ final class TripUITests: XCTestCase {
                                "-SaryScheme", "light", "-SaryDrive", "0", "-SaryLiveSheet", "half"]
         app.launch()
 
-        let end = app.buttons["trip.end"]
+        let end = app.buttons["outing-end"]
         XCTAssertTrue(end.waitForExistence(timeout: 20), "the owner can end the outing before arrival")
         XCTAssertTrue(end.isHittable, "the end-outing action is reachable while the route is underway")
         end.tap()
