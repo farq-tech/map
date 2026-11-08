@@ -44,6 +44,8 @@ final class ScreensUITests: XCTestCase {
 
     func testEndedOutingOpensItsSummary() {
         let app = launch(["-demo", "-SaryScreen", "home"])
+        // Ended outings live in the expanded «طلعاتي» sheet, not the collapsed home map.
+        app.openHomeOutings()
         let ended = app.staticTexts["كشتة نفود الثويرات"]
         XCTAssertTrue(ended.waitForExistence(timeout: 10))
         ended.tap()
