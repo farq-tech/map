@@ -20,6 +20,8 @@ import UIKit
 /// Hosts call `HiResImagery.of(map).update(request)` from `updateUIView`; nothing else.
 final class HiResImagery: NSObject {
     static let sourceId = "sary-hires-source"
+    /// The enhanced tile's crossfade over the original (ms).
+    static let fadeMs = 450.0
     static let layerId = "sary-hires-layer"
 
     private weak var map: MapView?
@@ -41,9 +43,16 @@ final class HiResImagery: NSObject {
     private var working = false
     private var enhancesNew = false
     private var generation = 0
+    /// The level being run (`HiResPolicy.level`: the person's, «خفيف» on a warm device).
+    private var level: HiResLevel = .strong
+    /// Tiles around the view to make ahead of time (after every needed tile), oldest last.
+    private var prefetching: [HiResTileID: UInt64] = [:]
+    private var rate = HiResRateLimit(perMinute: HiResProfile.strong.inferencesPerMinute)
+    private var rateRetry = false
 
-    /// Process-wide: the same tile is never enhanced twice while it is in RAM.
-    static let enhanced = HiResTileCache<UIImage>(limitBytes: 40 << 20)
+    /// Process-wide: the same tile is never enhanced twice while it is in RAM. Kept as JPEG
+    /// (q 0.9, ≈ 0.3–0.5 MB a 1024 px tile instead of 4 MB decoded), RAM only.
+    static let enhanced = HiResTileCache<Data>(limitBytes: 48 << 20)
     static let raw = HiResTileCache<Data>(limitBytes: 8 << 20)
     private static let queue = DispatchQueue(label: "sary.hires.inference", qos: .utility)
     private static var enhancer: HiResEnhancer?
@@ -51,6 +60,15 @@ final class HiResImagery: NSObject {
     static let log = Logger(subsystem: "sa.sary.albarq", category: "hires")
 
     private let badge = HiResBadgeView()
+
+    /// Posted (object: the `MapView`) when this map starts or stops running full SR.
+    static let fullSRChanged = Notification.Name("sary.hires.fullSR")
+
+    /// Is full SR («قوي», enhancing) running on this map? Never creates a controller.
+    static func fullSR(on map: MapView) -> Bool {
+        guard let c = objc_getAssociatedObject(map, &key) as? HiResImagery else { return false }
+        return c.decision == .on && c.lock.withLock { c.level } == .strong
+    }
 
     private static var key: UInt8 = 0
     /// The controller for this map (created on first use).
@@ -76,6 +94,15 @@ final class HiResImagery: NSObject {
         settings.$userOn.combineLatest(settings.$remoteOn).dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &bag)
+        settings.$level.removeDuplicates().dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                /* Another level: tiles are remade at it (the drawn ones stay until then). */
+                Self.enhanced.removeAll()
+                self?.reinstall()
+            }.store(in: &bag)
+        map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.cameraMoved() }.store(in: &cancelables)
+        map.mapboxMap.onMapIdle.observe { [weak self] _ in self?.idle() }.store(in: &cancelables)
         let nc = NotificationCenter.default
         for n in [ProcessInfo.thermalStateDidChangeNotification, Notification.Name.NSProcessInfoPowerStateDidChange] {
             nc.publisher(for: n).receive(on: DispatchQueue.main).sink { [weak self] _ in self?.apply() }.store(in: &bag)
@@ -105,9 +132,17 @@ final class HiResImagery: NSObject {
         guard let map else { return }
         let d = HiResPolicy.decide(request, userOn: settings.userOn, remoteOn: settings.remoteOn,
                                    device: .current, modelAvailable: !Self.modelFailed)
+        let srBefore = Self.fullSR(on: map)
+        defer { if Self.fullSR(on: map) != srBefore { NotificationCenter.default.post(name: Self.fullSRChanged, object: map) } }
         let changed = d != decision
         decision = d
-        lock.withLock { enhancesNew = d.enhancesNew }
+        let lv = HiResPolicy.level(settings.level, device: .current)
+        let levelChanged: Bool = lock.withLock {
+            enhancesNew = d.enhancesNew
+            if !d.enhancesNew { prefetching.removeAll() }
+            defer { level = lv }
+            return level != lv
+        }
         if changed {
             Self.log.debug("decision \(String(describing: d), privacy: .public)")
             #if DEBUG
@@ -115,9 +150,74 @@ final class HiResImagery: NSObject {
             #endif
         }
         guard styleReady else { return }
-        if d.drawsLayer { install(map) } else { uninstall(map) }
+        if d.drawsLayer { if levelChanged { reinstall() } else { install(map) } } else { uninstall(map) }
         if d.enhancesNew { kick() }
+        updateZoomBound()
         refreshBadge()
+    }
+
+    /// New tiles for every visible one (another level): Mapbox asks again.
+    private func reinstall() {
+        guard let map, styleReady, decision.drawsLayer else { return }
+        installed = false
+        uninstall(map)
+        install(map)
+    }
+
+    // MARK: zoom cap (soft, per region)
+
+    /// The host's plain imagery cap (z18 over satellite, the vector layers' own otherwise).
+    /// Once set, this controller owns the map's `CameraBoundsOptions.maxZoom`.
+    private var baseCap: Double?
+    private(set) var zoomCap: Double = SatelliteLabels.imageryMaxZoom
+    private var settleWork: DispatchWorkItem?
+
+    func setBaseZoomCap(_ z: Double) {
+        baseCap = z
+        updateZoomBound()
+    }
+
+    private func updateZoomBound() {
+        guard let map, let base = baseCap else { return }
+        let c = map.mapboxMap.cameraState.center
+        let cap = HiResZoomCap.cap(lat: c.latitude, lng: c.longitude, base: base, enhancing: decision == .on && installed)
+        zoomCap = cap
+        let bound = HiResZoomCap.bound(cap: cap, base: base)
+        if map.mapboxMap.cameraBounds.maxZoom != bound { try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: bound)) }
+    }
+
+    private func cameraMoved() {
+        updateZoomBound()
+        /* Rubber band: once the fingers are off and the camera has been still a moment, ease back. */
+        settleWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.settle() }
+        settleWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: w)
+    }
+
+    private func settle() {
+        guard let map else { return }
+        let pinching = map.gestureRecognizers?.contains { ($0 is UIPinchGestureRecognizer) && ($0.state == .began || $0.state == .changed) } ?? false
+        guard !pinching, let z = HiResZoomCap.settle(zoom: map.mapboxMap.cameraState.zoom, cap: zoomCap) else { return }
+        map.camera.ease(to: CameraOptions(zoom: z), duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.35, curve: .easeOut)
+    }
+
+    // MARK: prefetch
+
+    private func idle() {
+        guard let map, decision == .on, installed else { return }
+        let m: MapboxMap = map.mapboxMap
+        let cam = m.cameraState
+        let profile = HiResProfile.of(lock.withLock { level }, city: HiResZoom.isCity(lat: cam.center.latitude, lng: cam.center.longitude))
+        let b = m.coordinateBounds(for: map.bounds)
+        let tiles = HiResZoom.prefetch(west: b.west, south: b.south, east: b.east, north: b.north,
+                                       z: Int(cam.zoom.rounded()), ring: profile.prefetchRing, deeper: profile.prefetchDeeper)
+        let lv = lock.withLock { level }
+        let gen = lock.withLock { generation }
+        for t in tiles where !Self.enhanced.contains(t) {
+            guard let plan = HiResZoom.plan(t, level: lv) else { continue }
+            enqueue(plan, gen: gen, prefetch: true)
+        }
     }
 
     private func install(_ map: MapView) {
@@ -135,17 +235,19 @@ final class HiResImagery: NSObject {
             try m.addSource(CustomRasterSource(id: Self.sourceId, options: options))
             var layer = RasterLayer(id: Self.layerId, source: Self.sourceId)
             layer.slot = .bottom
-            layer.rasterFadeDuration = .constant(250)
+            /* A slow crossfade from the original: no pop-in. */
+            layer.rasterFadeDuration = .constant(HiResImagery.fadeMs)
             layer.rasterResampling = .constant(.linear)
             layer.rasterOpacity = .constant(1)
-            try m.addLayer(layer)
+            /* Under «تفاصيل الرمال» when that is there: the micro-relief lies over enhanced tiles too. */
+            try m.addLayer(layer, layerPosition: m.layerExists(withId: SandDetailLayer.layerId) ? .below(SandDetailLayer.layerId) : nil)
             /* The same colour grade as the imagery it covers (`SandGrade`: warm sand in the open,
                neutral in a city), so an enhanced tile never changes colour as it fades in. */
             let c = m.cameraState.center
             try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))))
             installed = true
             #if DEBUG
-            HiResStats.note("installed gen \(gen)")
+            HiResStats.note("installed gen \(gen) layers=\(m.allLayerIdentifiers.map(\.id).filter { $0.hasPrefix("sary-hires") || $0.hasPrefix("wow-sand") || $0.contains("satellite") })")
             #endif
         } catch {
             #if DEBUG
@@ -160,6 +262,7 @@ final class HiResImagery: NSObject {
         lock.withLock {
             generation += 1
             pending.removeAll()
+            prefetching.removeAll()
             visible.reset()
         }
         installed = false
@@ -178,9 +281,9 @@ final class HiResImagery: NSObject {
         guard lock.withLock({ gen == generation }) else { return }
         switch status {
         case .required:
-            lock.withLock { visible.required(t) }
+            let lv: HiResLevel = lock.withLock { visible.required(t); prefetching.removeValue(forKey: t); return level }
             if let img = Self.enhanced.get(t) { deliver(t, img, gen: gen); return }
-            guard let plan = HiResZoom.plan(t) else { deliver(t, nil, gen: gen); return }
+            guard let plan = HiResZoom.plan(t, level: lv) else { deliver(t, nil, gen: gen); return }
             enqueue(plan, gen: gen)
         case .optional:
             if let img = Self.enhanced.get(t) {
@@ -205,11 +308,16 @@ final class HiResImagery: NSObject {
         }
     }
 
-    private func enqueue(_ plan: HiResTilePlan, gen: Int) {
+    private func enqueue(_ plan: HiResTilePlan, gen: Int, prefetch: Bool = false) {
         let parent = plan.parent
         let needFetch: Bool = lock.withLock {
             order += 1
-            pending[plan.tile] = order
+            if prefetch {
+                guard enhancesNew, pending[plan.tile] == nil else { return false }
+                prefetching[plan.tile] = order
+            } else {
+                pending[plan.tile] = order
+            }
             guard !Self.raw.contains(parent), !fetching.contains(parent) else { return false }
             fetching.insert(parent)
             return true
@@ -234,8 +342,9 @@ final class HiResImagery: NSObject {
             self.lock.withLock {
                 self.fetching.remove(p)
                 if !ok {
-                    failed = self.pending.keys.filter { HiResZoom.plan($0)?.parent == p }
+                    failed = self.pending.keys.filter { HiResZoom.plan($0, level: self.level)?.parent == p }
                     for t in failed { self.pending.removeValue(forKey: t) }
+                    self.prefetching = self.prefetching.filter { HiResZoom.plan($0.key, level: self.level)?.parent != p }
                 }
             }
             for t in failed { self.deliver(t, nil, gen: gen) }
@@ -254,7 +363,7 @@ final class HiResImagery: NSObject {
     /// Wakes the serial inference loop.
     private func kick() {
         let start: Bool = lock.withLock {
-            guard !working, enhancesNew, !pending.isEmpty else { return false }
+            guard !working, !rateRetry, enhancesNew, !(pending.isEmpty && prefetching.isEmpty) else { return false }
             working = true
             return true
         }
@@ -264,36 +373,71 @@ final class HiResImagery: NSObject {
 
     private func work() {
         while true {
-            /* Newest still-needed tile whose parent is in RAM. */
-            let next: (HiResTilePlan, Int)? = lock.withLock {
+            /* Newest still-needed tile whose parent is in RAM; then the prefetch ring. */
+            let next: (HiResTilePlan, Int, HiResLevel, Bool)? = lock.withLock {
                 guard enhancesNew else { return nil }
-                let ready = pending.filter { Self.raw.contains(HiResZoom.plan($0.key)?.parent ?? $0.key) }
-                guard let t = ready.max(by: { $0.value < $1.value })?.key, let plan = HiResZoom.plan(t) else { return nil }
-                pending.removeValue(forKey: t)
-                return (plan, generation)
+                let lv = level
+                func pick(_ from: [HiResTileID: UInt64]) -> HiResTileID? {
+                    from.filter { Self.raw.contains(HiResZoom.plan($0.key, level: lv)?.parent ?? $0.key) }.max(by: { $0.value < $1.value })?.key
+                }
+                var pre = false
+                var t = pick(pending)
+                if t == nil { t = pick(prefetching); pre = t != nil }
+                guard let t, let plan = HiResZoom.plan(t, level: lv) else { return nil }
+                /* Heat: a hard budget of model runs per minute. */
+                let c = plan.tile.center
+                let profile = HiResProfile.of(lv, city: HiResZoom.isCity(lat: c.lat, lng: c.lng))
+                if rate.perMinute != profile.inferencesPerMinute { rate.perMinute = profile.inferencesPerMinute }
+                if !Self.enhanced.contains(t), !rate.take(now: CFAbsoluteTimeGetCurrent(), count: plan.inferences) {
+                    rateLimited += 1
+                    return nil
+                }
+                if pre { prefetching.removeValue(forKey: t) } else { pending.removeValue(forKey: t) }
+                return (plan, generation, lv, pre)
             }
-            guard let (plan, gen) = next else { break }
-            if let img = Self.enhanced.get(plan.tile) { deliver(plan.tile, img, gen: gen); continue }
+            guard let (plan, gen, lv, pre) = next else { break }
+            if let img = Self.enhanced.get(plan.tile) { if !pre { deliver(plan.tile, img, gen: gen) }; continue }
             guard let data = Self.raw.get(plan.parent), let parent = HiResEnhancer.decode(data), let e = loadModel() else {
-                deliver(plan.tile, nil, gen: gen)
+                if !pre { deliver(plan.tile, nil, gen: gen) }
                 continue
             }
+            let c = plan.tile.center
+            let profile = HiResProfile.of(lv, city: HiResZoom.isCity(lat: c.lat, lng: c.lng))
             let t0 = CFAbsoluteTimeGetCurrent()
-            let img = autoreleasepool { e.enhance(parent: parent, plan: plan) }
+            let jpeg: Data? = autoreleasepool { e.enhance(parent: parent, plan: plan, profile: profile)?.jpegData(compressionQuality: 0.9) }
             let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             Self.log.debug("tile \(plan.tile.description, privacy: .public) x\(plan.factor) \(Int(ms))ms")
             #if DEBUG
-            HiResStats.record(tileMs: ms, inferenceMs: e.recentMs.last ?? ms)
+            HiResStats.record(tileMs: ms, inferenceMs: e.recentMs.last ?? ms, lineRejected: e.rejected,
+                              extra: ["level": lv.rawValue, "outputPx": profile.outputSize, "rateLimited": lock.withLock { rateLimited },
+                                      "prefetched": pre ? 1 : 0, "inferences": plan.inferences])
             #endif
-            guard let img else { deliver(plan.tile, nil, gen: gen); continue }
-            Self.enhanced.set(plan.tile, img, cost: HiResEnhancer.outputSize * HiResEnhancer.outputSize * 4)
+            guard let jpeg else { if !pre { deliver(plan.tile, nil, gen: gen) }; continue }
+            Self.enhanced.set(plan.tile, jpeg, cost: jpeg.count)
             let still = lock.withLock { visible.needed.contains(plan.tile) }
-            if still { deliver(plan.tile, img, gen: gen) }
+            if still { deliver(plan.tile, jpeg, gen: gen) }
         }
-        lock.withLock { working = false }
-        /* Something arrived while we were finishing. */
-        if lock.withLock({ !pending.isEmpty && enhancesNew }) { kick() }
+        let wait: Double = lock.withLock {
+            working = false
+            guard enhancesNew, !(pending.isEmpty && prefetching.isEmpty) else { return -1 }
+            return rate.wait(now: CFAbsoluteTimeGetCurrent())
+        }
+        if wait > 0 {
+            /* Over budget: try again when a run is free. */
+            lock.withLock { rateRetry = true }
+            Self.queue.asyncAfter(deadline: .now() + wait + 0.05) { [weak self] in
+                self?.lock.withLock { self?.rateRetry = false }
+                self?.kick()
+            }
+        } else if wait == 0 {
+            /* Something arrived while we were finishing (a parent still loading kicks again itself). */
+            let ready = lock.withLock { pending.keys.contains { Self.raw.contains(HiResZoom.plan($0, level: level)?.parent ?? $0) } }
+            if ready { kick() }
+        }
     }
+
+    /// Runs refused by the per-minute budget (debug stats).
+    private var rateLimited = 0
 
     private func loadModel() -> HiResEnhancer? {
         if let e = Self.enhancer { return e }
@@ -310,41 +454,60 @@ final class HiResImagery: NSObject {
         return Self.enhancer
     }
 
-    private func deliver(_ t: HiResTileID, _ image: UIImage?, gen: Int) {
+    private func deliver(_ t: HiResTileID, _ jpeg: Data?, gen: Int) {
+        /* Decoded here (a worker thread), never on the main thread. */
+        let image = jpeg.flatMap(HiResEnhancer.decodeNow)
         DispatchQueue.main.async { [weak self] in
             guard let self, let m = self.map?.mapboxMap, self.lock.withLock({ gen == self.generation }),
                   m.sourceExists(withId: Self.sourceId) else { return }
-            try? m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
-                                                 tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
-            if image != nil { self.lock.withLock { self.visible.delivered(t) } }
+            var image = image
+            #if DEBUG
+            /* DEBUG-only diagnostic tiles make it obvious whether Mapbox actually draws the
+               custom raster source. Style hue filters are not a reliable pixel-level assertion. */
+            let args = ProcessInfo.processInfo.arguments
+            if image != nil, (args.contains("-SaryHiResTint") || args.contains("-SaryHiResSolid")) {
+                var px = [UInt8](repeating: 0, count: 512 * 512 * 4)
+                let tint = args.contains("-SaryHiResTint")
+                for i in stride(from: 0, to: px.count, by: 4) {
+                    px[i] = tint ? 0 : 255
+                    px[i + 1] = 255
+                    px[i + 2] = 255
+                    px[i + 3] = 255
+                }
+                image = SandDetailLayer.image(SandDetail.Tile(size: 512, rgba: px, delta: []))
+            }
+            #endif
+            var submitted = false
+            do {
+                try m.setCustomRasterSourceTileData(forSourceId: Self.sourceId,
+                                                    tiles: [CustomRasterSourceTileData(tileId: CanonicalTileID(z: t.z, x: t.x, y: t.y), image: image)])
+                submitted = true
+                #if DEBUG
+                if let image { HiResStats.note("delivered \(t) \(Int(image.size.width * image.scale))px alpha=\(image.cgImage.map { String(describing: $0.alphaInfo.rawValue) } ?? "-")") }
+                #endif
+            } catch {
+                Self.log.error("setTileData \(t.description, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                #if DEBUG
+                HiResStats.note("setTileData FAILED \(t) \(error)")
+                #endif
+            }
+            /* The badge counts a tile only when Mapbox can draw it: premultiplied RGBA (round 3
+               incident: opaque RGB tiles were accepted but never drawn, under a «مُحسّنة» badge).
+               `testEnhancedTilesAreReallyDrawn` checks the pixels on screen end to end. */
+            if submitted, let cg = image?.cgImage, HiResEnhancer.isMapboxDrawable(cg) {
+                self.lock.withLock { self.visible.delivered(t) }
+            }
             self.refreshBadge()
         }
     }
 
     // MARK: badge
 
-    /// «تخفيف الزحمة» ٧: the badge says «مُحسّنة» for 3 s when enhanced tiles arrive, then
-    /// steps aside (the state stays in «الطبقات» → «صور عالية الوضوح»).
-    static let badgeSeconds: TimeInterval = 3
-    private var badgeExpired = false
-    private var badgeTimer: DispatchWorkItem?
-
+    /// The badge says «مُحسّنة» for as long as any enhanced tile is on screen (owner, round 3:
+    /// a red line; it replaces the 3 s badge of «تخفيف الزحمة» ٧).
     private func refreshBadge() {
         guard let map else { return }
-        let wanted = decision.drawsLayer && lock.withLock { visible.badge }
-        if !wanted {
-            badgeExpired = false
-            badgeTimer?.cancel()
-            badgeTimer = nil
-        } else if badgeTimer == nil && !badgeExpired {
-            let w = DispatchWorkItem { [weak self] in
-                self?.badgeExpired = true
-                self?.refreshBadge()
-            }
-            badgeTimer = w
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.badgeSeconds, execute: w)
-        }
-        let show = wanted && !badgeExpired
+        let show = decision.drawsLayer && lock.withLock { visible.badge }
         if badge.isHidden == show {
             UIView.animate(withDuration: 0.2) { self.badge.alpha = show ? 1 : 0 } completion: { _ in self.badge.isHidden = !show }
             if show { badge.isHidden = false }
@@ -360,10 +523,12 @@ final class HiResImagery: NSObject {
     private func debugCamera(_ map: MapView) {
         let a = ProcessInfo.processInfo.arguments
         guard let i = a.firstIndex(of: "-SaryHiResCam"), i + 1 < a.count else { return }
+        /* "lat,lng,zoom[,pitch,bearing]" */
         let n = a[i + 1].split(separator: ",").compactMap { Double($0) }
-        guard n.count == 3 else { return }
+        guard n.count >= 3 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak map] in
-            map?.mapboxMap.setCamera(to: CameraOptions(center: CLLocationCoordinate2D(latitude: n[0], longitude: n[1]), zoom: n[2], bearing: 0, pitch: 0))
+            map?.mapboxMap.setCamera(to: CameraOptions(center: CLLocationCoordinate2D(latitude: n[0], longitude: n[1]), zoom: n[2],
+                                                       bearing: n.count > 4 ? n[4] : 0, pitch: n.count > 3 ? n[3] : 0))
         }
     }
     #endif
@@ -424,11 +589,19 @@ final class HiResBadgeView: UIView {
         }
     }
 
-    /// Top centre, under the host's top chrome (the compass margin carries it) and the safe area.
+    /// Bottom left, level with the Mapbox logo (round 3: top centre sat on the map's centre
+    /// marks — «نقطة البداية», the crosshair — because the host's top chrome reaches down
+    /// the right-hand buttons). Clear of the logo, the «i» and the sheet.
     func place(in map: MapView) {
         let w: CGFloat = 76, h: CGFloat = 26
-        let top = max(map.safeAreaInsets.top + 8, map.ornaments.options.compass.margins.y)
-        frame = CGRect(x: (map.bounds.width - w) / 2, y: top, width: w, height: h)
+        let logo = map.ornaments.logoView
+        let y: CGFloat
+        if !logo.isHidden, logo.frame.height > 0, logo.superview != nil {
+            y = logo.convert(logo.bounds, to: map).midY - h / 2
+        } else {
+            y = map.bounds.height - map.safeAreaInsets.bottom - 140
+        }
+        frame = CGRect(x: 12, y: y, width: w, height: h)
         label.frame = bounds
         map.bringSubviewToFront(self)
     }
@@ -442,7 +615,7 @@ enum HiResStats {
     private static var tiles: [Double] = []
     private static var inference: [Double] = []
 
-    static func record(tileMs: Double, inferenceMs: Double) {
+    static func record(tileMs: Double, inferenceMs: Double, lineRejected: Int = 0, extra: [String: Any] = [:]) {
         lock.withLock {
             tiles.append(tileMs)
             inference.append(inferenceMs)
@@ -450,7 +623,10 @@ enum HiResStats {
             func p90(_ a: [Double]) -> Double { a.sorted()[min(a.count - 1, Int(Double(a.count) * 0.9))] }
             let json: [String: Any] = ["count": tiles.count, "tileMedianMs": med(tiles), "tileP90Ms": p90(tiles),
                                        "inferenceMedianMs": med(inference), "footprintMB": footprintMB(),
-                                       "cacheMB": Double(HiResImagery.enhanced.bytes) / 1_048_576, "cacheTiles": HiResImagery.enhanced.count]
+                                       "cacheMB": Double(HiResImagery.enhanced.bytes) / 1_048_576, "cacheTiles": HiResImagery.enhanced.count,
+                                       "lineRejected": lineRejected, "thermal": ProcessInfo.processInfo.thermalState.rawValue,
+                                       "lowPower": ProcessInfo.processInfo.isLowPowerModeEnabled]
+                .merging(extra) { a, _ in a }
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("hires-stats.json")
             try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]).write(to: url)
         }

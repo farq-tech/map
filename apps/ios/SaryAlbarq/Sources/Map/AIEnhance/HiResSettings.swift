@@ -12,6 +12,7 @@ final class HiResSettings: ObservableObject {
     static let userKey = "sary.hires.user.v1"
     static let remoteKey = "sary.hires.remote.v1"
     static let remoteCheckedKey = "sary.hires.remoteCheckedAt.v1"
+    static let levelKey = "sary.hires.level.v1"
     /// At most one fetch per this many seconds (launch + every foreground).
     static let refreshInterval: TimeInterval = 15 * 60
 
@@ -19,6 +20,8 @@ final class HiResSettings: ObservableObject {
 
     @Published var userOn: Bool { didSet { defaults.set(userOn, forKey: Self.userKey) } }
     @Published private(set) var remoteOn: Bool
+    /// «قوي» (default) or «خفيف».
+    @Published var level: HiResLevel { didSet { defaults.set(level.rawValue, forKey: Self.levelKey) } }
 
     private var bag = Set<AnyCancellable>()
     private var fetching = false
@@ -27,12 +30,14 @@ final class HiResSettings: ObservableObject {
         self.defaults = defaults
         userOn = defaults.object(forKey: Self.userKey) as? Bool ?? true
         remoteOn = defaults.object(forKey: Self.remoteKey) as? Bool ?? true
+        level = defaults.string(forKey: Self.levelKey).flatMap(HiResLevel.init) ?? .strong
         #if DEBUG
         /* Screenshots / UI tests: `-SaryHiRes on|off`, `-SaryHiResRemote on|off`. */
         let a = ProcessInfo.processInfo.arguments
         func arg(_ k: String) -> String? { a.firstIndex(of: k).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil } }
         if let v = arg("-SaryHiRes") { userOn = v != "off" }
         if let v = arg("-SaryHiResRemote") { debugRemote = v != "off"; remoteOn = v != "off" }
+        if let v = arg("-SaryHiResLevel").flatMap(HiResLevel.init) { level = v }
         #endif
     }
 

@@ -34,7 +34,7 @@ struct TrackMapView: UIViewRepresentable {
         map.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: padding.bottom + 4)
         map.ornaments.options.logo.margins = CGPoint(x: 8, y: padding.bottom + 4)
         /* The imagery's sharp maximum: no blurry over-zoom. */
-        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: zoomCap))
+        try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: SatelliteLabels.imageryMaxZoom))
         if !interactive {
             map.gestures.options.panEnabled = false
             map.gestures.options.pinchEnabled = false
@@ -50,14 +50,10 @@ struct TrackMapView: UIViewRepresentable {
 
     func updateUIView(_ map: MapView, context: Context) {
         context.coordinator.update(self)
-        HiResImagery.of(map).update(followMe ? .off : hiRes)
-        if map.mapboxMap.cameraBounds.maxZoom != zoomCap { try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: zoomCap)) }
-    }
-
-    /// z19 when this map shows «صور عالية الوضوح» (person + server on), z18 otherwise.
-    private var zoomCap: Double {
-        let s = HiResSettings.shared
-        return SatelliteLabels.imageryMaxZoom(hiRes: hiRes.surface != .off && !followMe && s.userOn && s.remoteOn)
+        let hr = HiResImagery.of(map)
+        hr.update(followMe ? .off : hiRes)
+        /* The imagery's sharp maximum; «صور عالية الوضوح» lifts it per region while it runs (`HiResZoomCap`). */
+        hr.setBaseZoomCap(SatelliteLabels.imageryMaxZoom)
     }
 
     static func dismantleUIView(_ map: MapView, coordinator: Coordinator) { coordinator.cancelables.removeAll() }

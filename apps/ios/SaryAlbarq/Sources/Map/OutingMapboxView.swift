@@ -578,7 +578,7 @@ struct OutingMapboxView: UIViewRepresentable {
         func setLayer(_ l: MapLayer) {
             guard l != layer, let map else { return }
             layer = l
-            try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: l.maxZoom))
+            HiResImagery.of(map).setBaseZoomCap(l.maxZoom(hiRes: false))
             if let json = ArabicBasemap.cached(l) { map.mapboxMap.loadStyle(json) } else { map.mapboxMap.loadStyle(l.styleURI) }
             ArabicBasemap.load(l) { [weak self] json in
                 guard let self, let json, self.layer == l else { return }
@@ -586,14 +586,11 @@ struct OutingMapboxView: UIViewRepresentable {
             }
         }
 
-        /// Satellite: z19 with «صور عالية الوضوح» on, z18 otherwise (re-checked as the toggle changes).
-        private var zoomCap: Double?
+        /// The layer's plain cap (satellite z18); «صور عالية الوضوح» owns the bound from there and
+        /// lifts it per region while it runs (desert z19, cities z21, soft: `HiResZoomCap`).
         func setZoomCap() {
             guard let map else { return }
-            let z = layer.maxZoom
-            guard z != zoomCap else { return }
-            zoomCap = z
-            try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: z))
+            HiResImagery.of(map).setBaseZoomCap(layer.maxZoom(hiRes: false))
         }
 
         /// `FarqTiles.check()` answered after the style loaded: switch the probe and the satellite roads now.

@@ -11,6 +11,7 @@ enum VisualEffectsKeys {
     static let glow = "sary.visuals.glow.v1"
     static let slope = "sary.visuals.slope.v1"
     static let buildings = "sary.visuals.buildings.v1"
+    static let sandDetail = "sary.visuals.sandDetail.v1"
 }
 
 struct VisualEffectsSettings: Equatable {
@@ -27,13 +28,15 @@ struct VisualEffectsSettings: Equatable {
     var slope = true
     /// Neutral 3D buildings (Mapbox Streets heights) over the satellite imagery in cities, when tilted.
     var buildings = true
+    /// «تفاصيل الرمال»: natural micro-relief (ripples, grain) over the desert imagery up close (`SandDetail`).
+    var sandDetail = true
 
     static var current: VisualEffectsSettings {
         let d = UserDefaults.standard
         func b(_ k: String) -> Bool { d.object(forKey: k) as? Bool ?? true }
         return VisualEffectsSettings(master: b(VisualEffectsKeys.master), terrain: b(VisualEffectsKeys.terrain), atmosphere: b(VisualEffectsKeys.atmosphere),
                                      sky: b(VisualEffectsKeys.sky), glow: b(VisualEffectsKeys.glow), slope: b(VisualEffectsKeys.slope),
-                                     buildings: b(VisualEffectsKeys.buildings))
+                                     buildings: b(VisualEffectsKeys.buildings), sandDetail: b(VisualEffectsKeys.sandDetail))
     }
 }
 
@@ -65,6 +68,8 @@ struct EffectiveVisuals: Equatable {
     var slope: Bool
     /// Neutral 3D buildings over the satellite imagery (cities only, never while driving).
     var buildings: Bool
+    /// «تفاصيل الرمال» over the satellite imagery (it fades itself out in cities and from afar).
+    var sandDetail: Bool = false
     var drone: Bool
     var stars: Bool
     /// Fog / light transitions (0 with Reduce Motion: changes are instant, nothing glides).
@@ -111,6 +116,15 @@ enum VisualBudget {
     /// are in 2D), solid from 40° of tilt, where the draped photo stops reading as a city.
     static func buildingsOpacity(pitch: Double) -> Double { Smooth.step(18, 40, pitch) }
 
+    /// «تفاصيل الرمال»: satellite only, not in Low Power Mode (an extra raster pass and CPU tiles).
+    /// It stays on while driving, softer (`sandDetailScale`): it is texture, never a shape.
+    static func sandDetail(_ s: VisualEffectsSettings, _ c: VisualContext) -> Bool {
+        s.master && s.sandDetail && c.layer == .satellite && !c.lowPower
+    }
+
+    /// The detail's strength: 0.7 while driving (the road ahead is the subject), else full.
+    static func sandDetailScale(driving: Bool) -> Double { driving ? 0.7 : 1 }
+
     static func resolve(_ s: VisualEffectsSettings, _ c: VisualContext) -> EffectiveVisuals {
         guard s.master else {
             return EffectiveVisuals(managed: false, exaggeration: legacyExaggeration(terrain3D: c.terrain3D), hillshade: false, atmosphere: false,
@@ -129,6 +143,7 @@ enum VisualBudget {
             /* Not while driving: the road is the subject, not a colour legend. */
             slope: s.slope && !lean && !c.driving,
             buildings: buildings(s, c),
+            sandDetail: sandDetail(s, c),
             drone: DroneOrbit.allowed(driving: c.driving),
             stars: !lean,
             transitionMs: c.reduceMotion ? 0 : 1_800,
@@ -190,6 +205,7 @@ struct VisualEffectsSection: View {
     @AppStorage(VisualEffectsKeys.glow) private var glow = true
     @AppStorage(VisualEffectsKeys.slope) private var slope = true
     @AppStorage(VisualEffectsKeys.buildings) private var buildings = true
+    @AppStorage(VisualEffectsKeys.sandDetail) private var sandDetail = true
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     var body: some View {
@@ -215,6 +231,9 @@ struct VisualEffectsSection: View {
                 SaryDivider()
                 SaryToggleRow(title: "مبانٍ ثلاثية الأبعاد في المدن", subtitle: "مجسّمات بارتفاعاتها عند إمالة صور القمر الصناعي", systemImage: "building.2.fill",
                               isOn: $buildings, id: "settings.visuals.buildings")
+                SaryDivider()
+                SaryToggleRow(title: "تفاصيل الرمال", subtitle: "تموّجات وحبيبات طبيعية عند التقريب، بلا طرق ولا معالم", systemImage: "wind",
+                              isOn: $sandDetail, id: "settings.visuals.sandDetail")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
