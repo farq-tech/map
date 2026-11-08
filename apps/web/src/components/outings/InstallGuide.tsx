@@ -110,6 +110,22 @@ export function InstallGuide({
 		await leaveFor(2, install.url);
 	};
 
+	/* A recipient may already have Sary installed even when the link was opened
+	 * inside WhatsApp's browser, where Universal Links can stay in the web view.
+	 * Give them an explicit, user-initiated custom-scheme handoff on every step. */
+	const openInstalledApp = async () => {
+		const appUrl = appOpenUrl(token);
+		if (!appUrl) return;
+		const link = inviteLink(window.location.origin, token);
+		if (link) await copyText(link);
+		saveStep(3);
+		openAppOrInstall(appUrl, install.url, {
+			go: (u) => (window.location.href = u),
+			visible: () => document.visibilityState === "visible",
+			setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+		});
+	};
+
 	return (
 		<section className="sary-o-guide" data-testid="outing-install-guide" data-step={step}>
 			<h1 className="sary-o-guide-line" data-testid="outing-guide-line">
@@ -117,6 +133,9 @@ export function InstallGuide({
 			</h1>
 			<button type="button" className="sary-o-guide-main" onClick={() => void main()} data-testid="outing-guide-main">
 				{mainButtonText(step)}
+			</button>
+			<button type="button" className="sary-o-guide-browser" onClick={() => void openInstalledApp()} data-testid="outing-guide-open-app">
+				عندك التطبيق؟ افتح الدعوة فيه
 			</button>
 			<ol className="sary-o-guide-steps" data-testid="outing-guide-steps">
 				{steps.map((s) => {
