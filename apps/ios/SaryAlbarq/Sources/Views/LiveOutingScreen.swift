@@ -334,13 +334,6 @@ struct LiveOutingScreen: View {
                                 .transition(.opacity)
                         }
                     }
-                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
-                                        titleVisibility: .visible) {
-                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
-                        Button("لا، نكمل", role: .cancel) {}
-                    } message: {
-                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
-                    }
                     .overlay(alignment: .topTrailing) {
                         /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
                         if guidingHUD, !controller.speed.everRead, let k = controller.nav.progress?.speedLimitKmh {
@@ -355,6 +348,14 @@ struct LiveOutingScreen: View {
                     .padding(.bottom, lift + theme.space(.s))
                     .opacity(controller.sheetDetent == .full ? 0 : 1)
                     .allowsHitTesting(controller.sheetDetent != .full)
+                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
+                                        titleVisibility: .visible) {
+                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
+                            .accessibilityIdentifier("outing-end-confirm")
+                        Button("لا، نكمل", role: .cancel) {}
+                    } message: {
+                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
+                    }
                 }
             }
         }

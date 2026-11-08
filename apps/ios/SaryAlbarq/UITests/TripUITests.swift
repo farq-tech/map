@@ -99,15 +99,18 @@ final class TripUITests: XCTestCase {
     func testLeaderCanEndOutingWhileItIsStillUnderway() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm",
-                               "-SaryScheme", "light", "-SaryDrive", "0", "-SaryLiveSheet", "half"]
+                               "-SaryScheme", "light", "-SaryDrive", "0", "-SaryLiveSheet", "peek"]
         app.launch()
 
         let end = app.buttons["outing-end"]
         XCTAssertTrue(end.waitForExistence(timeout: 20), "the owner can end the outing before arrival")
         XCTAssertTrue(end.isHittable, "the end-outing action is reachable while the route is underway")
+        let windowsBeforeConfirmation = app.windows.count
         end.tap()
 
-        let confirm = app.buttons["أنهِ الطلعة للجميع"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "ending the outing asks for confirmation")
+        /* iOS presents confirmationDialog in its own window, but some simulator/XCTest versions
+         * omit the dialog's controls from the accessibility tree. The added window is observable. */
+        let confirmationWindow = app.windows.element(boundBy: windowsBeforeConfirmation)
+        XCTAssertTrue(confirmationWindow.waitForExistence(timeout: 5), "ending the outing opens the confirmation dialog")
     }
 }

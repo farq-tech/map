@@ -42,11 +42,17 @@ final class PrivacyManifestTests: XCTestCase {
         let info = try XCTUnwrap(NSDictionary(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Info.plist")))
         let arURL = try XCTUnwrap(Bundle.main.url(forResource: "InfoPlist", withExtension: "strings", subdirectory: nil, localization: "ar"))
         let ar = try XCTUnwrap(NSDictionary(contentsOf: arURL))
+        let enURL = try XCTUnwrap(Bundle.main.url(forResource: "InfoPlist", withExtension: "strings", subdirectory: nil, localization: "en"))
+        let en = try XCTUnwrap(NSDictionary(contentsOf: enURL))
         for key in ["NSMicrophoneUsageDescription", "NSCameraUsageDescription", "NSLocationWhenInUseUsageDescription"] {
             XCTAssertEqual(info[key] as? String, ar[key] as? String, key)
         }
         let mic = try XCTUnwrap(ar["NSMicrophoneUsageDescription"] as? String)
-        XCTAssertTrue(mic.contains("١٠ دقائق"), "the older-version clips are kept 10 minutes")
+        XCTAssertTrue(mic.contains("٦ ساعات") && mic.contains("محاولة الإرسال التالية"), "pending recordings can remain in local app storage until a retry checks their age")
+        XCTAssertTrue(mic.contains("٢٤ ساعة") && mic.contains("١٠ دقائق"), "the two server-side audio paths have distinct retention times")
+        let enMic = try XCTUnwrap(en["NSMicrophoneUsageDescription"] as? String)
+        XCTAssertTrue(enMic.contains("temporarily keep it in app storage") && enMic.contains("six hours"), "the English disclosure also covers the local outbox")
+        XCTAssertTrue(enMic.contains("24 hours") && enMic.contains("10 minutes"), "the English disclosure matches both server retention paths")
         let cam = try XCTUnwrap(ar["NSCameraUsageDescription"] as? String)
         XCTAssertTrue(cam.contains("تصوير نقطة"), "the camera also takes a point's photo")
     }
