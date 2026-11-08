@@ -102,6 +102,18 @@ final class DesertGazetteerTests: XCTestCase {
         XCTAssertEqual(HomeDesertRules.merge(desert: desert, places: other).map(\.id), ["gazetteer:osm:node/5", "mb2"])
     }
 
+    func testCategorySearchUsesOnlyItsGazetteerKindAndKeepsAreaGeometry() {
+        XCTAssertEqual(HomeDesertRules.categoryKind("أبي أقرب نفود"), .nafud)
+        XCTAssertNil(HomeDesertRules.categoryKind("نفود الثويرات"), "a named area remains a name search")
+        let areas = HomeDesertRules.searchPlaces(g, "نفود", near: Self.riyadh)
+        XCTAssertEqual(areas.map(\.id), ["gazetteer:osm:relation/1", "gazetteer:geonames:10"])
+        XCTAssertNotNil(areas[0].areaPolygon)
+        XCTAssertEqual(areas[0].areaDistanceM ?? 0, 83_000, accuracy: 3_000)
+        XCTAssertEqual(areas[0].areaApproach?.lng ?? 0, 47.5, accuracy: 0.001)
+        let irrelevant = PlaceSearch.Place(id: "fuel", name: "محطة النفود", point: Self.riyadh, category: "وقود")
+        XCTAssertEqual(HomeDesertRules.merge(desert: areas, places: [irrelevant], desertOnly: true).map(\.id), areas.map(\.id))
+    }
+
     func testChipsGoThroughTheDesertSeam() {
         let byId = Dictionary(uniqueKeysWithValues: HomeCategory.desertOnes.map { ($0.id, $0) })
         XCTAssertEqual(byId["nufud"]?.desertSource, .gazetteer(.nafud))

@@ -39,16 +39,44 @@ enum HomeDesertRules {
 
     /// Free text against «دليل البر», as place-search rows.
     static func searchPlaces(_ g: DesertGazetteer, _ q: String, near: LngLat?, limit: Int = 5) -> [PlaceSearch.Place] {
-        g.search(q, near: near, limit: limit).map { h in
+        let hits: [DesertHit]
+        if let kind = categoryKind(q) {
+            hits = g.nearest(kind, from: near ?? GazetteerCategoryService.fallbackCenter, limit: limit)
+        } else {
+            hits = g.search(q, near: near, limit: limit)
+        }
+        return hits.map { h in
             let p = h.place
-            return PlaceSearch.Place(id: "gazetteer:\(p.id)", name: p.title, detail: p.secondary, point: p.point,
-                                     category: p.kind.arabic, icon: p.kind.systemImage, country: "SA")
+            let me = near ?? GazetteerCategoryService.fallbackCenter
+            let detail = [p.secondary, h.inside ? "أنت داخلها" : p.polygon != nil ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
+            return PlaceSearch.Place(id: "gazetteer:\(p.id)", name: p.title, detail: detail.isEmpty ? nil : detail, point: p.point,
+                                     category: p.kind.arabic, icon: p.kind.systemImage, country: "SA",
+                                     areaPolygon: p.polygon, areaDistanceM: p.polygon == nil ? nil : h.meters,
+                                     areaApproach: p.polygon.map { _ in p.approach(from: me) })
+        }
+    }
+
+    /// Category-only desert queries use the local gazetteer's type and edge distance, not text matches
+    /// from unrelated geocoders (for example a fuel station whose name happens to include «النفود»).
+    static func categoryKind(_ query: String) -> DesertKind? {
+        let stop: Set<String> = ["وين", "ابي", "ابغي", "اريد", "ابحث", "عن", "اقرب", "قريب", "مني", "من", "حول", "بالقرب", "عطني", "ورني", "دلني", "على", "where", "find", "show", "closest", "near", "me"]
+        let words = SearchLexicon.rawWords(query).map(SearchLexicon.key).filter { !stop.contains($0) }
+        guard words.count == 1,
+              case let .known(entry)? = SearchLexicon.segments(words[0]).first,
+              entry.role == .toponym else { return nil }
+        switch entry.id {
+        case "nafud": return .nafud
+        case "rawdat": return .rawda
+        case "faydat": return .fayda
+        default: return nil
         }
     }
 
     /// The gazetteer's rows first, then the place search's without the same place twice
     /// (same name, or within 2 km of a gazetteer point with a name that contains it).
-    static func merge(desert: [PlaceSearch.Place], places: [PlaceSearch.Place], limit: Int = PlaceSearch.maxResults) -> [PlaceSearch.Place] {
+    static func merge(desert: [PlaceSearch.Place], places: [PlaceSearch.Place], limit: Int = PlaceSearch.maxResults,
+                      desertOnly: Bool = false) -> [PlaceSearch.Place] {
+        if desertOnly { return Array(desert.prefix(limit)) }
         let names = Set(desert.map { DesertName.normalize($0.name) })
         let rest = places.filter { p in
             let n = DesertName.normalize(p.name)

@@ -254,7 +254,8 @@ test('desert search: intents, wording and ranking', async () => {
   assert.deepEqual(desert.parseIntents('مطر'), ['rain']);
   assert.deepEqual(desert.parseIntents('وين ربّع'), ['green']);
   assert.deepEqual(desert.parseIntents('مطر|ربيع'), ['rain', 'green']);
-  assert.deepEqual(desert.parseIntents('بر'), ['rain', 'green']);
+  assert.deepEqual(desert.parseIntents('بر'), []);
+  assert.deepEqual(desert.parseIntents('نفود'), [], 'a landform is not a rain or greening query');
   assert.equal(desert.rainHeadline(12, 72), 'نزل مطر هنا قبل ٣ أيام (حوالي ١٢ ملم)');
   assert.equal(desert.greenHeadline(0.15), 'هنا خضّر');
   assert.ok(desert.rainScore(20, 24) > desert.rainScore(20, 140));
@@ -281,6 +282,12 @@ test('desert search: intents, wording and ranking', async () => {
   const area = r.results.find((x) => x.type === 'area');
   assert.ok(area && area.name_ar === 'منطقة قرب روضة التنهات');
   assert.ok(r.attribution.some((a) => /OpenStreetMap/.test(a)));
+
+  const unknown = await desert.search({ q: 'نفود', near: { lat: 24.7, lng: 46.7 }, nowMs,
+    deps: { places, rainSum: null, greenState: null } });
+  assert.deepEqual(unknown.intents, []);
+  assert.equal(unknown.count, 0, 'unknown landform query must not return rain or green hotspots');
+  assert.equal(unknown.warming, false, 'must not fetch weather layers for an unrelated intent');
 });
 
 test('HTTP: weather + desert routes validate input', async () => {

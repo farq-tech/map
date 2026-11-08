@@ -64,6 +64,26 @@ final class DesertGazetteerUITests: XCTestCase {
         XCTAssertTrue(any(app, "start.withFriends").waitForExistence(timeout: 8), "«ابدأ» → «مين معك؟»")
     }
 
+    func testFreeTextNafudSearchKeepsAreaDistanceAndUsesNearestEdge() {
+        let app = launch()
+        let search = any(app, "home.search")
+        search.focusAndType("نفود\n")
+
+        let first = any(app, "home.result")
+        XCTAssertTrue(first.waitForExistence(timeout: 15), "free text uses the bundled desert gazetteer")
+        XCTAssertTrue(first.label.contains("أقرب طرف منك"), first.label)
+        XCTAssertTrue(first.label.contains("كم") || first.label.contains("م"), first.label)
+
+        let rows = app.descendants(matching: .any).matching(identifier: "home.result").allElementsBoundByIndex
+        XCTAssertFalse(rows.isEmpty)
+        XCTAssertTrue(rows.allSatisfy { $0.label.contains("نفود") || $0.label.contains("رملة") },
+                      "category intent returns desert areas only: \(rows.map(\.label))")
+
+        first.tap()
+        XCTAssertTrue(any(app, "home.place.name").waitForExistence(timeout: 8))
+        XCTAssertTrue(any(app, "home.place.start").exists)
+    }
+
     func testRainChipSaysSoonWithoutTheServer() {
         let app = launch()
         open(app, "rain")

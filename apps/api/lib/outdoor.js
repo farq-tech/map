@@ -273,23 +273,66 @@ function normalizeAr(s) {
     .trim();
 }
 
-function searchFeatures(q, limit = 20) {
+/* A category request constrains the result type. A trailing name narrows it further. */
+function categoryIntent(q) {
+  const normalized = normalizeAr(q)
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .replace(/^(?:(?:وين|ابي|ابغي|اريد|ورني|دلني على|ابحث عن)\s+)*(?:اقرب\s+)?/, '')
+    .replace(/\s+(?:قريب(?: مني)?|بالقرب مني|من حولي|near me|nearby)$/, '')
+    .trim();
+  const categories = [
+    { kinds: ['nafud'], aliases: ['نفود', 'نفوذ'] },
+    { kinds: ['dune'], aliases: ['طعس', 'طعوس', 'كثيب', 'كثبان'] },
+    { kinds: ['rawdah'], aliases: ['روضة', 'روضه', 'روضات'] },
+    { kinds: ['fayad'], aliases: ['فيضة', 'فيضه', 'فياض'] },
+    { kinds: ['wadi', 'shaib'], aliases: ['وادي', 'وديان', 'شعيب', 'شعاب'] },
+    { kinds: ['well'], aliases: ['بئر', 'بير', 'آبار', 'ابار'] },
+    { kinds: ['spring'], aliases: ['عين', 'ينبوع', 'ينابيع'] },
+    { kinds: ['camp'], aliases: ['مخيم', 'مخيمات'] },
+    { kinds: ['fuel'], aliases: ['محطة وقود', 'محطات وقود', 'بنزين', 'وقود'] },
+  ];
+  for (const category of categories) {
+    for (const rawAlias of category.aliases) {
+      const alias = normalizeAr(rawAlias);
+      if (normalized === alias) return { kinds: category.kinds, nameQuery: '', categoryOnly: true };
+      if (normalized.startsWith(`${alias} `)) {
+        return { kinds: category.kinds, nameQuery: normalized.slice(alias.length).trim(), categoryOnly: false };
+      }
+    }
+  }
+  return null;
+}
+
+function searchFeatures(q, limit = 20, near = null) {
   const needle = normalizeAr(q);
   if (needle.length < 2) return { type: 'FeatureCollection', count: 0, features: [], note: 'short_query' };
   const cap = Math.min(40, Math.max(1, Number(limit) || 20));
+  const intent = categoryIntent(q);
   const hits = [];
   for (const f of loadIndex()) {
+    if (intent) {
+      if (!intent.kinds.includes(f.properties.kind)) continue;
+      if (intent.nameQuery && !normalizeAr(f.properties.name).includes(intent.nameQuery)) continue;
+      const distance = near ? haversineMeters(near, { lng: f.properties.lng, lat: f.properties.lat }) : null;
+      hits.push({ feature: f, distance });
+      continue;
+    }
     const name = normalizeAr(f.properties.name);
     if (!name || !name.includes(needle)) continue;
-    hits.push(f);
-    if (hits.length >= cap) break;
+    const distance = near ? haversineMeters(near, { lng: f.properties.lng, lat: f.properties.lat }) : null;
+    hits.push({ feature: f, distance });
   }
+  if (near) hits.sort((a, b) => a.distance - b.distance);
+  const features = hits.slice(0, cap).map(({ feature, distance }) => distance == null
+    ? feature
+    : { ...feature, properties: { ...feature.properties, distance_m: Math.round(distance) } });
   return {
     type: 'FeatureCollection',
-    count: hits.length,
+    count: features.length,
+    ...(hits.length > features.length ? { truncated: true } : {}),
     source: 'osm',
     license: 'ODbL',
-    features: hits,
+    features,
   };
 }
 
@@ -316,6 +359,7 @@ module.exports = {
   queryFeatures,
   queryAround,
   searchFeatures,
+  categoryIntent,
   getFeature,
   stats,
   etagFor,

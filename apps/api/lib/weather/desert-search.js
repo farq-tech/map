@@ -24,13 +24,13 @@ function within(p, ms, fallback = null) {
 
 const toAr = (n) => String(n).replace(/\d/g, (c) => '٠١٢٣٤٥٦٧٨٩'[c]);
 
-/** `مطر|ربيع` → intents. Unknown words → both. */
+/** `مطر|ربيع` → intents. Unknown words stay unknown; they must not become both. */
 function parseIntents(q) {
   const s = String(q || '');
   const out = [];
   if (RAIN_RE.test(s)) out.push('rain');
   if (GREEN_RE.test(s)) out.push('green');
-  return out.length ? out : ['rain', 'green'];
+  return out;
 }
 
 function rainHeadline(mm, hoursAgo) {

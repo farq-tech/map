@@ -30,6 +30,10 @@ enum PlaceSearch {
         var country: String? = nil
         /// The name in the other language ("Starbucks" beside «ستاربكس») when known and different.
         var altName: String? = nil
+        /// Desert gazetteer area metadata; points retain the ordinary place-search behavior.
+        var areaPolygon: [[LngLat]]? = nil
+        var areaDistanceM: Double? = nil
+        var areaApproach: LngLat? = nil
 
         /// «Starbucks · مقهى · العليا، الرياض».
         var subtitle: String? {

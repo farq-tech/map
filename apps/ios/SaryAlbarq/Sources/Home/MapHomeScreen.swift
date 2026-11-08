@@ -450,8 +450,16 @@ struct MapHomeScreen: View {
                 VStack(spacing: 0) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        placeRow(icon: r.icon, title: r.name, detail: r.subtitle, point: r.point, id: "home.result") {
-                            pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: r.point.lat, lng: r.point.lng),
+                        placeRow(icon: r.icon, title: r.name, detail: r.subtitle, point: r.point, id: "home.result", meters: r.areaDistanceM) {
+                            if let polygon = r.areaPolygon {
+                                desertPicked = DesertCategoryItem(id: r.id, title: r.name, detail: r.subtitle, point: r.point,
+                                                                 meters: r.areaDistanceM, systemImage: r.icon, polygon: polygon,
+                                                                 approach: r.areaApproach)
+                            } else {
+                                desertPicked = nil
+                            }
+                            let target = r.areaApproach ?? r.point
+                            pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
                                        subtitle: r.subtitle, icon: r.icon))
                         }
                     }
@@ -706,7 +714,7 @@ struct MapHomeScreen: View {
             do {
                 let r = try await PlaceSearch.search(t, near: near)
                 guard !Task.isCancelled else { return }
-                results = HomeDesertRules.merge(desert: desert, places: r)
+                results = HomeDesertRules.merge(desert: desert, places: r, desertOnly: HomeDesertRules.categoryKind(t) != nil)
             } catch let e as PlaceSearch.SearchError {
                 results = desert
                 if desert.isEmpty { searchError = e.arabic }
