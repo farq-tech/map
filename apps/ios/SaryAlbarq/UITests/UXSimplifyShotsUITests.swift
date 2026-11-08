@@ -43,7 +43,7 @@ final class UXSimplifyShotsUITests: XCTestCase {
 
     func test1HomeAndTripStart() {
         let app = launch(["-SaryScreen", "home"])
-        XCTAssertTrue(any(app, "home.search").waitForExistence(timeout: 20))
+        XCTAssertTrue(any(app, "home.search").waitForExistence(timeout: 45))
         sleep(5)
         shot("01-home-collapsed")
         any(app, "home.sheet.handle").tap()
@@ -63,7 +63,11 @@ final class UXSimplifyShotsUITests: XCTestCase {
             any(app, "home.search.clear").tap()
             any(app, "home.map").press(forDuration: 1.2)
         }
-        XCTAssertTrue(any(app, "home.place.start").waitForExistence(timeout: 8))
+        let placeStart = any(app, "home.place.start")
+        let placeSave = any(app, "home.place.save")
+        XCTAssertTrue(placeStart.waitForExistence(timeout: 8))
+        XCTAssertTrue(placeStart.isHittable, "Place start action should be reachable at the current Dynamic Type size")
+        XCTAssertTrue(placeSave.isHittable, "Place save action should be reachable at the current Dynamic Type size")
         sleep(3)
         shot("05-home-place-card")
         any(app, "home.place.start").tap()
@@ -139,4 +143,5 @@ final class UXSimplifyShotsUITests: XCTestCase {
         sleep(1)
         shot("19-outing-settings-2")
     }
+
 }

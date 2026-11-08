@@ -14,6 +14,7 @@ struct MapHomeScreen: View {
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
@@ -163,8 +164,9 @@ struct MapHomeScreen: View {
         if selected != nil {
             // The picked-point card has only its title, coordinates, and two actions.
             // 200pt left a large empty area below the buttons; keep enough room for
-            // a two-line place name while letting the map remain visible.
-            base = 168
+            // a two-line place name while letting the map remain visible. At accessibility
+            // sizes, give the card room to grow; its content remains scrollable as a fallback.
+            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 168
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
@@ -199,7 +201,11 @@ struct MapHomeScreen: View {
                 .accessibilityAction { setExpanded(!expanded) }
                 .accessibilityIdentifier("home.sheet.handle")
             if let s = selected {
-                placeCard(s)
+                ScrollView {
+                    placeCard(s)
+                }
+                .scrollIndicators(.hidden)
+                .accessibilityIdentifier("home.place.scroll")
             } else {
                 searchBar
                 ScrollView {
@@ -542,19 +548,31 @@ struct MapHomeScreen: View {
             HStack(alignment: .top, spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: s.icon, color: p.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                         .accessibilityIdentifier("home.place.name")
-                    HStack(spacing: 6) {
-                        if let me = myPoint {
-                            Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
                         }
-                        if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                    } else {
+                        HStack(spacing: 6) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 Button { closePlace() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textPrimary)
-                        .frame(width: 34, height: 34).background(Circle().fill(p.sunken))
+                        .frame(width: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34,
+                               height: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34)
+                        .background(Circle().fill(p.sunken))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إغلاق"))
@@ -569,6 +587,18 @@ struct MapHomeScreen: View {
                 } label: { SaryButtonLabel(title: "احفظه كـ\(a.label)", systemImage: a.systemImage) }
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("home.place.assign")
+            } else if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: theme.space(.s)) {
+                    Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
+                        .buttonStyle(.sary(.primary))
+                        .accessibilityIdentifier("home.place.start")
+                    Button {
+                        if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
+                    } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
+                        .buttonStyle(.sary(.secondary))
+                        .disabled(isSaved)
+                        .accessibilityIdentifier("home.place.save")
+                }
             } else {
                 HStack(spacing: theme.space(.s)) {
                     Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
