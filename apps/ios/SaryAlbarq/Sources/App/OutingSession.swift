@@ -265,8 +265,8 @@ final class OutingSession: ObservableObject, Identifiable {
                     self.tick &+= 1
                     self.updateMesh()
                     /* A missed live status frame must not leave a joined member waiting forever.
-                     * While the outing is still created, reconcile with the server once a minute. */
-                    if self.tick % 60 == 0, self.view?.status == .created {
+                     * Reconcile frequently while waiting; stop as soon as the server starts it. */
+                    if self.tick % 15 == 0, self.view?.status == .created {
                         await self.refreshWaitingStatus()
                     }
                 }

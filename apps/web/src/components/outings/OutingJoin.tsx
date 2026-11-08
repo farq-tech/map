@@ -99,7 +99,7 @@ export default function OutingJoin() {
 				},
 				() => { /* Keep the last good preview; the next poll or explicit retry can recover. */ },
 			);
-		}, 60_000);
+		}, 15_000);
 		return () => { cancelled = true; window.clearInterval(timer); };
 	}, [token, preview?.status]);
 	const personal = preview?.kind === "personal" ? preview.invitee_name || null : null;
