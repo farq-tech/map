@@ -417,7 +417,9 @@ private struct LiveSheetBody: View {
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
             ConvoySection(controller: controller, features: features)
-            if !features.waypoints.isEmpty {
+            // Keep the section available for the first waypoint and show the honest
+            // unavailable state when the server has not deployed its routes.
+            if !features.waypoints.isEmpty || features.phase != .loading {
                 WaypointsSection(controller: controller, features: features)
             }
         }
