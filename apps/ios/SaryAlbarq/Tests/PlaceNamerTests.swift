@@ -101,6 +101,21 @@ final class PlaceNamerTests: XCTestCase {
         XCTAssertEqual(name, "شمال الثمامة بـ ١٢ كم")
     }
 
+    func testCancelledSelectionLookupReturnsFallbackWithoutWaitingForTimeout() async {
+        let p = north(thumama.point, km: 12)
+        let r = PlaceNameResolver(geocoder: FakeGeocoder(answer: .nothing, delayS: 3),
+                                  cache: PlaceNameCache(defaults: defaults), gazetteer: gz)
+        let lookup = Task { await r.name(for: p, within: 30) }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        let cancelledAt = Date()
+        lookup.cancel()
+        let name = await lookup.value
+
+        XCTAssertLessThan(Date().timeIntervalSince(cancelledAt), 1.5)
+        XCTAssertEqual(name, "شمال الثمامة بـ ١٢ كم")
+    }
+
     func testCacheIsBounded() {
         let c = PlaceNameCache(defaults: defaults)
         for i in 0 ..< PlaceNameCache.max + 20 { c.set(LngLat(lng: 46, lat: 20 + Double(i) * 0.01), "\(i)") }

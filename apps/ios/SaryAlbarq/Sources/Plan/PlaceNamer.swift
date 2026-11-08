@@ -153,17 +153,21 @@ private actor PlaceNameTimeoutRace {
     private var timerTask: Task<Void, Never>?
 
     func wait(seconds: Double, fallback: String, lookup: @escaping @Sendable () async -> String) async -> String {
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
-            lookupTask = Task {
-                let value = await lookup()
-                await self.finish(value)
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                lookupTask = Task {
+                    let value = await lookup()
+                    await self.finish(value)
+                }
+                timerTask = Task {
+                    let delay = seconds.isFinite ? min(60, max(0, seconds)) : 0
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    await self.finish(fallback)
+                }
             }
-            timerTask = Task {
-                let delay = seconds.isFinite ? min(60, max(0, seconds)) : 0
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                await self.finish(fallback)
-            }
+        } onCancel: {
+            Task { await self.finish(fallback) }
         }
     }
 
