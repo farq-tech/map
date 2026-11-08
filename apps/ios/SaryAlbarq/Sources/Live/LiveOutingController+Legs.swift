@@ -117,6 +117,10 @@ extension LiveOutingController {
         }
     }
 
+    func refreshWaitingStatus() {
+        Task { await session.refreshWaitingStatus() }
+    }
+
     /// «ابدأ الطلعة»: an outing needs no destination (a leg does). With one already chosen,
     /// its first leg starts with it, and the leader is offered guidance for everyone.
     func startOutingFlow() {

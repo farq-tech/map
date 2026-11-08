@@ -72,6 +72,8 @@ final class OutingSession: ObservableObject, Identifiable {
     @Published var errorText: String?
     /// Bumped once a second so ages and freshness re-render.
     @Published private(set) var tick = 0
+    /// A member waiting for the leader can refresh the server's authoritative status.
+    @Published private(set) var refreshingWaitingStatus = false
     /// The 1 s SOS hold finished and the alert is on its way.
     @Published private(set) var sosSending = false
     @Published private(set) var busy: Set<String> = []
@@ -262,6 +264,11 @@ final class OutingSession: ObservableObject, Identifiable {
                     guard let self, self.visible else { return }
                     self.tick &+= 1
                     self.updateMesh()
+                    /* A missed live status frame must not leave a joined member waiting forever.
+                     * While the outing is still created, reconcile with the server once a minute. */
+                    if self.tick % 60 == 0, self.view?.status == .created {
+                        await self.refreshWaitingStatus()
+                    }
                 }
             }
             timers.append(t)
@@ -942,6 +949,16 @@ final class OutingSession: ObservableObject, Identifiable {
             if wantsToShare { reassertServerShare(v) }
         }
         reconcileSharing()
+    }
+
+    /// Reconcile the waiting state with the authoritative outing snapshot.
+    /// This is also exposed through the waiting banner as an immediate recovery action.
+    func refreshWaitingStatus() async {
+        guard !isDemo, view?.status == .created, !refreshingWaitingStatus else { return }
+        refreshingWaitingStatus = true
+        defer { refreshingWaitingStatus = false }
+        guard let snapshot = try? await api.poll(id) else { return }
+        applySnapshot(snapshot)
     }
 
     #if DEBUG

@@ -84,6 +84,24 @@ export default function OutingJoin() {
 			(e) => setError(e instanceof OutingApiError ? e.code : "network"),
 		);
 	}, [token]);
+
+	/* Keep an invite preview current if its leader starts the outing after the link was opened. */
+	useEffect(() => {
+		if (!token || preview?.status !== "created") return;
+		let cancelled = false;
+		const timer = window.setInterval(() => {
+			if (document.visibilityState !== "visible") return;
+			OutingsApi.previewInvite(token).then(
+				(r) => {
+					if (cancelled) return;
+					if (r.invite.claim === "taken") setError("invite_taken");
+					else setPreview(r.invite);
+				},
+				() => { /* Keep the last good preview; the next poll or explicit retry can recover. */ },
+			);
+		}, 60_000);
+		return () => { cancelled = true; window.clearInterval(timer); };
+	}, [token, preview?.status]);
 	const personal = preview?.kind === "personal" ? preview.invitee_name || null : null;
 
 	/* One tap: create the identity if there is none, then join. */

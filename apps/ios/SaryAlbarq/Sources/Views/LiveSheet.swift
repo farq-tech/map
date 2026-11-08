@@ -449,6 +449,13 @@ private struct TripStatusCallout: View {
                         Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
                             .buttonStyle(.saryPrimary)
                             .accessibilityIdentifier("live.start")
+                    } else {
+                        Button { controller.refreshWaitingStatus() } label: {
+                            SaryButtonLabel(title: "حدّث حالة الطلعة", systemImage: "arrow.clockwise", busy: controller.session.refreshingWaitingStatus)
+                        }
+                        .buttonStyle(.sary(.secondary))
+                        .disabled(controller.session.refreshingWaitingStatus)
+                        .accessibilityIdentifier("live.refreshWaitingStatus")
                     }
                 }
             case .paused:
