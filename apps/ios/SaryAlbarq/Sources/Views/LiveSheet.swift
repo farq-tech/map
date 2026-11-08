@@ -443,7 +443,7 @@ private struct TripStatusCallout: View {
             switch ui.status {
             case .notStarted:
                 VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "بانتظار أمير الرحلة يبدأ الطلعة.", tone: .info)
+                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها.", tone: .info)
                         .accessibilityIdentifier("live.notStarted")
                     if v?.iLead == true {
                         Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }

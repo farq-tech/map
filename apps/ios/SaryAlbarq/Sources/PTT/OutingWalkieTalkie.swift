@@ -170,7 +170,10 @@ final class OutingWalkieTalkie: ObservableObject {
         }
     }
 
-    /// The outing screen closed / the outing is over: off the air, off the system channel.
+    /// The outing screen closed: stop its socket/audio, but keep the system PTT channel while
+    /// the member is still in an active outing. PushToTalk needs that joined channel to wake
+    /// the app and play a stored voice note while its UI is closed or the screen is locked.
+    /// Leaving the outing or ending it revokes the channel and its ephemeral push token.
     func detach(leftOuting: Bool) {
         leaving = true
         apply(floor.linkLost())
@@ -180,7 +183,7 @@ final class OutingWalkieTalkie: ObservableObject {
         channel?.setPTTJoined(false)
         channel = nil
         mesh?.onVoice = { _ in }
-        if route.isSystemChannel { route.leave() }
+        if leftOuting, route.isSystemChannel { route.leave() }
         if leftOuting { forgetToken() }
     }
 
@@ -248,6 +251,12 @@ final class OutingWalkieTalkie: ObservableObject {
             joinSystemChannelIfNeeded()
         }
         objectWillChange.send()
+    }
+
+    /// The user explicitly started a voice message. Join Apple's system PTT channel now so
+    /// incoming messages can wake this device and play through the system audio session later.
+    func prepareForBackgroundMessages() {
+        joinSystemChannelIfNeeded()
     }
 
     // MARK: inbound

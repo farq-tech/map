@@ -7,6 +7,19 @@ import XCTest
 final class PTTChannelsTests: XCTestCase {
     private let priv = "9b2f0c1e-7a6d-4c3b-8e2a-5d4c3b2a1f00"
 
+    @MainActor
+    private final class JoinedSystemRoute: PTTRoute {
+        var callbacks = PTTRouteCallbacks()
+        let isSystemChannel = true
+        private(set) var didLeave = false
+        func join(outingId: String, name: String) {}
+        func leave() { didLeave = true }
+        func beginTransmit() {}
+        func endTransmit() {}
+        func setRemote(_ name: String?) {}
+        func setChannelName(_ name: String) {}
+    }
+
     // MARK: wire
 
     func testChannelListDecodes() throws {
@@ -296,5 +309,21 @@ final class PTTChannelsTests: XCTestCase {
         XCTAssertEqual(w.channelId, "1")
         XCTAssertFalse(w.channels.contains { $0.isPrivate })
         w.detach(leftOuting: false)
+    }
+
+    @MainActor
+    func testClosingOutingScreenKeepsSystemPushToTalkChannelUntilLeavingOuting() {
+        let d = UserDefaults(suiteName: "ptt-detach-\(UUID().uuidString)")!
+        let stillMemberRoute = JoinedSystemRoute()
+        let stillMember = OutingWalkieTalkie(outingId: "o-\(UUID().uuidString)", me: "me", tokenBackend: nil,
+                                             route: stillMemberRoute, audio: PTTAudioEngine(testTone: true), defaults: d)
+        stillMember.detach(leftOuting: false)
+        XCTAssertFalse(stillMemberRoute.didLeave, "closing the map/session must keep background voice-note wake-ups")
+
+        let leavingRoute = JoinedSystemRoute()
+        let leaving = OutingWalkieTalkie(outingId: "o-\(UUID().uuidString)", me: "me", tokenBackend: nil,
+                                         route: leavingRoute, audio: PTTAudioEngine(testTone: true), defaults: d)
+        leaving.detach(leftOuting: true)
+        XCTAssertTrue(leavingRoute.didLeave, "a departed or ended outing must release its PTT channel")
     }
 }

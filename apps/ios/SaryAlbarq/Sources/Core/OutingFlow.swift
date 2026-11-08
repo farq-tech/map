@@ -160,7 +160,7 @@ enum OutingCTA: String, Equatable {
     var title: String {
         switch self {
         case .startOuting: return "ابدأ الطلعة"
-        case .waitLeader: return "بانتظار أمير الرحلة يبدأ"
+        case .waitLeader: return "بانتظار بدء الطلعة"
         case .whereTo: return "وين رايحين؟"
         case .startLeg: return "ابدأ المشوار"
         case .changeDestination: return "غيّر الوجهة"
@@ -238,7 +238,7 @@ enum OutingFlow {
         let endFirst = i.endSuggested && i.iOwn
         switch s {
         case .notStarted:
-            return OutingFlowUI(state: s, line: i.iLead ? "ما بدأت الطلعة" : "بانتظار أمير الرحلة يبدأ", primary: i.iLead ? .startOuting : .waitLeader)
+            return OutingFlowUI(state: s, line: i.iLead ? "ما بدأت الطلعة" : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها", primary: i.iLead ? .startOuting : .waitLeader)
         case .paused:
             return OutingFlowUI(state: s, line: "الطلعة متوقفة مؤقتًا", primary: nil)
         case .idle:
