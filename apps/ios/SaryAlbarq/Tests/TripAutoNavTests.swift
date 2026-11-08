@@ -425,7 +425,7 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertEqual(leg?.from, roadEnd)
         n.handle(.arrivedAtRouteEnd)
         XCTAssertEqual(n.phase, .offRoad, "switches to bearing guidance by itself")
-        XCTAssertEqual(NavOffRoad.note(fallback: n.fallback, bearing: leg?.bearing ?? 0).hasPrefix("بدون طريق معبّد: اتجه مع السهم"), true)
+        XCTAssertEqual(NavOffRoad.note(fallback: n.fallback, bearing: leg?.bearing ?? 0).hasPrefix("مافي طريق مزفلت: كمّل مع السهم"), true)
         var arrivedAt: NavTarget?
         n.onArrived = { arrivedAt = $0 }
         n.ingest(fix(LngLat(lng: campPos.lng + 0.0002, lat: campPos.lat)))
@@ -448,7 +448,7 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertTrue(n.direct)
         XCTAssertTrue(n.routes.isEmpty, "no road is drawn")
         XCTAssertNil(n.active)
-        XCTAssertTrue(said.first?.contains("بدون طريق معبّد") == true, said.first ?? "-")
+        XCTAssertTrue(said.first?.contains("مافي طريق مزفلت يوصّلك للوجهة") == true, said.first ?? "-")
         n.end()
     }
 

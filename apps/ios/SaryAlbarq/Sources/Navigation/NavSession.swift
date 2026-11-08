@@ -111,11 +111,13 @@ final class NavSession: ObservableObject {
     /// The arrival time: the engine's (Mapbox: live traffic) remaining time, smoothed (`NavETASmoother`).
     private(set) var etaSmoother = NavETASmoother()
     private var etaAnnouncer = NavETAAnnouncer()
+    private var openingVoicePending = false
 
     /// «باقي ربع ساعة وتوصل.» at the start, every 10 min, and when the arrival moved by more than 5 —
     /// never over a maneuver (only with 20 s and 150 m of road before the next one, the speaker free).
     func announceETAIfDue(_ p: NavProgress, now: Date = Date()) {
-        guard phase == .guiding, !rerouting, let a = etaSmoother.arrival, etaAnnouncer.isDue(arrival: a, now: now),
+        guard phase == .guiding, !rerouting, !openingVoicePending,
+              let a = etaSmoother.arrival, etaAnnouncer.isDue(arrival: a, now: now),
               !voice.isSpeaking else { return }
         let v = max(3, guidanceSpeed(now) ?? 0)
         guard p.distanceToManeuverM > 150, p.distanceToManeuverM / v > 20 else { return }
@@ -503,7 +505,7 @@ final class NavSession: ObservableObject {
         case .success, .failure(.noRoute):
             fallback = .noRoad
             retryable = false
-            voice.say("ما فيه طريق معبّد إلى \(t.name). كمّل مع السهم", clips: ["dir_06"])
+            voice.say("مافي طريق مزفلت يوصّلك للوجهة. كمّل مع السهم", clips: ["dir_06"])
             return true
         default:
             return false
@@ -546,7 +548,7 @@ final class NavSession: ObservableObject {
                     voice.say(intro + NavLine("ما قدرنا نحسب الطريق الحين. اتجه مع السهم \(way). نعيد المحاولة", clips: arrow("dir_07")))
                 } else if auto {
                     /* «ما فيه طريق مزفلت يوصّلك للوجهة» (dir_06), not bar_01: in the v4 set bar_01 says «انتهى الطريق المزفلت», wrong before any road. */
-                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("dir_06")))
+                    voice.say(intro + NavLine("مافي طريق مزفلت يوصّلك للوجهة. كمّل مع السهم \(way)", clips: arrow("dir_06")))
                 } else {
                     voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")", clips: arrow("dir_07"))
                 }
@@ -556,6 +558,7 @@ final class NavSession: ObservableObject {
             return
         }
         guard let r = selected else { return }
+        openingVoicePending = auto
         active = r
         routeRevision += 1
         phase = .guiding
@@ -577,16 +580,31 @@ final class NavSession: ObservableObject {
                 self.attach(local)
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
+            let opening = self.openingWithETA(intro)
+            self.openingVoicePending = false
             if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0, opening: true) {
-                self.sayGuidance(intro + line)
-            } else if !intro.clips.isEmpty || !intro.text.isEmpty {
-                self.voice.say(intro)
+                self.sayGuidance(opening + line)
+            } else if !opening.clips.isEmpty || !opening.text.isEmpty {
+                self.voice.say(opening)
             }
         }
         /* The trip's guidance keeps a location stream of its own: the voice goes on with the
          * screen locked even when this phone is not sharing (the Mapbox engine ignores the fixes). */
         if auto { locator.start() }
         UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    /// Put the first ETA into the route's opening prompt. The first GPS progress can arrive before
+    /// the opening instruction is spoken; defer the standalone ETA so it does not interrupt or
+    /// immediately repeat the same start announcement.
+    private func openingWithETA(_ intro: NavLine, now: Date = Date()) -> NavLine {
+        guard auto, let arrival = etaSmoother.arrival,
+              let remaining = etaSmoother.remaining(now), remaining >= NavETAAnnouncer.minRemainingS else { return intro }
+        etaAnnouncer.said(arrival: arrival, now: now)
+        let eta = NavLine(NavETAAnnouncer.text(arrival: arrival, remainingS: remaining),
+                          clips: NavETAAnnouncer.clip(remainingS: remaining).map { [$0] } ?? [],
+                          routeRevision: routeRevision, expiresAt: now.addingTimeInterval(15))
+        return intro + eta
     }
 
     private func attach(_ e: NavGuidanceEngine) {
@@ -656,7 +674,7 @@ final class NavSession: ObservableObject {
             if let leg = offRoad {
                 phase = .offRoad
                 locator.start()
-                voice.say(auto ? "انتهى الطريق المعبّد. اتجه مع السهم \(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
+                voice.say(auto ? "انتهى الطريق المزفلت. كمّل مع السهم باتجاه \(NavText.compassDefinite(leg.bearing))، \(NavText.spokenInDistance(leg.distanceM) ?? "")"
                                : "انتهى الطريق. \(NavOffRoad.summary(leg))",
                           clips: SaryVoiceScript.arrow(lead: "dir_05", bearing: leg.bearing, distanceM: leg.distanceM))
                 if let f = myFix() { ingest(f) }
@@ -737,6 +755,7 @@ final class NavSession: ObservableObject {
         progressSpeed = nil
         etaSmoother.reset()
         etaAnnouncer.reset()
+        openingVoicePending = false
         budget.reset()
         matchedFix = nil
         target = nil

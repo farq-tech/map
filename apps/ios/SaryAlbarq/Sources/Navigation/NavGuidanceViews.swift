@@ -178,6 +178,14 @@ struct NavManeuverBanner: View {
         .onChange(of: nav.phase) { _, phase in
             pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
         }
+        .alert("تعذر فتح النافذة العائمة", isPresented: Binding(
+            get: { pip.startError != nil },
+            set: { if !$0 { pip.startError = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { pip.startError = nil }
+        } message: {
+            Text(pip.startError ?? "")
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.banner")
     }
@@ -311,7 +319,7 @@ struct NavOffRoadPanel: View {
         let bearing = nav.offRoadNow?.bearing ?? leg?.bearing ?? 0
         let arrow: CGFloat = theme.drive ? 64 : 56
         VStack(spacing: 0) {
-            /* Lovable: «٣٠٠ م» big, «بدون طريق معبّد: اتجه مع السهم», the arrow in the orange tile. */
+            /* Lovable: «٣٠٠ م» big, «مافي طريق مزفلت: كمّل مع السهم», the arrow in the orange tile. */
             HStack(spacing: theme.space(.m)) {
                 ZStack {
                     RoundedRectangle(cornerRadius: arrow * 0.43, style: .continuous).fill(p.accent)
