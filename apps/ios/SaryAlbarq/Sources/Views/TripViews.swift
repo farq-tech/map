@@ -145,10 +145,10 @@ struct TripCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("trip.card")
         .confirmationDialog("تنهي الرحلة للجميع؟", isPresented: $confirmEnd, titleVisibility: .visible) {
-            Button("أنهِ الرحلة للجميع", role: .destructive, action: actions.endTrip)
+            Button("أنهِ الطلعة للجميع", role: .destructive, action: actions.endTrip)
             Button("ليس الآن", role: .cancel) {}
         } message: {
-            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الرحلة."
+            Text(ui.everyoneArrived ? "وصل الجميع. تنتهي الطلعة ويتوقف إرسال المواقع، وتقدرون تشوفون ملخص الطلعة."
                                     : "ما وصل الجميع بعد. تنتهي الطلعة للجميع ويتوقف إرسال المواقع.")
         }
     }
@@ -219,7 +219,7 @@ struct TripCard: View {
         } else {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))],
                       spacing: theme.space(.s)) {
-                stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters), id: "trip.driven")
+                stat("قطعنا", ui.drivenMeters >= 50 ? SaryFormat.distance(meters: ui.drivenMeters) : "—", id: "trip.driven")
                 stat("باقي", ui.myFixStaleSince == nil ? ui.remainingMeters.map { SaryFormat.distance(meters: $0) } ?? "—" : "—",
                      note: ui.myFixStaleSince != nil ? "آخر موقع قديم" : (ui.remainingApprox ? "تقريبي" : sourceNote), id: "trip.remaining")
                 stat("نوصل", ui.myFixStaleSince == nil ? ui.eta.map { NavText.clock($0) } ?? "—" : "—", note: ui.etaEstimated ? "تقديري" : "الملاحة", id: "trip.eta")
@@ -261,9 +261,12 @@ struct TripCard: View {
     private var arrived: some View {
         let p = theme.palette
         TripProgressBar(fraction: 1, height: 8, done: true)
-        HStack(spacing: theme.space(.s)) {
-            stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters))
-            stat("المدة", ui.elapsedSeconds.map { SaryFormat.duration(seconds: $0) } ?? "—")
+        /* Only real numbers (the owner's review: «قطعنا ٠ م» next to «المدة ١٨ د» says nothing). */
+        if ui.drivenMeters >= 50 || (ui.elapsedSeconds ?? 0) >= 60 {
+            HStack(spacing: theme.space(.s)) {
+                if ui.drivenMeters >= 50 { stat("قطعنا", SaryFormat.distance(meters: ui.drivenMeters)) }
+                if let e = ui.elapsedSeconds, e >= 60 { stat("المدة", SaryFormat.duration(seconds: e)) }
+            }
         }
         if let a = ui.arrivalLine {
             Label(a, systemImage: "flag.2.crossed").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
@@ -272,9 +275,9 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الجميع. أنهِ الرحلة ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الجميع. إذا خلصت الطلعة، أنهِها ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
-            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الرحلة", systemImage: "flag.checkered") }
+            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
                 .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
                 .accessibilityIdentifier("trip.end")
         } else {
@@ -286,7 +289,7 @@ struct TripCard: View {
 
     @ViewBuilder
     private var ended: some View {
-        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الرحلة", systemImage: "chart.bar.doc.horizontal") }
+        Button(action: actions.openSummary) { SaryButtonLabel(title: "ملخص الطلعة", systemImage: "chart.bar.doc.horizontal") }
             .buttonStyle(.saryPrimary)
             .accessibilityIdentifier("trip.summary")
         Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }

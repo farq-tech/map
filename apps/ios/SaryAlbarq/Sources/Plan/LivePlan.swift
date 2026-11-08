@@ -109,10 +109,10 @@ struct LivePlanModalView: View {
         let lead = controller.session.view?.iLead == true
         var a = PointActions(setDestination: nil, addPoint: nil, rally: nil)
         if !controller.nav.isActive {
-            a.navigateHere = { p in
+            a.navigateHere = { p, name in
                 controller.modal = nil
                 /* After the card's sheet has gone, so the nav sheets never race it. */
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p, name: name) }
             }
         }
         a.savePlace = { p, name in
@@ -204,8 +204,7 @@ private struct TripPlanCardContent: View {
                 }
                 SaryNavRow(title: tp.isEmpty ? (lead ? "خطّط الطلعة" : "الخطة") : "الخطة وقائمة التجهيز",
                            detail: planDetail(tp), systemImage: "map", id: "plan.openEditor") { controller.modal = .plan(.editor) }
-                SaryDivider()
-                SaryNavRow(title: "ابحث أو إحداثية", systemImage: "magnifyingglass", id: "plan.openSearch") { controller.modal = .plan(.search) }
+                /* «ابحث أو إحداثية» is once, in «المزيد» (it was here and in the tools). */
             }
             .padding(.horizontal, theme.space(.m))
         }

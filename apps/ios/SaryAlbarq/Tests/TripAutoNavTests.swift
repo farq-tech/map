@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import SaryAlbarq
 
@@ -8,6 +9,10 @@ private let olaya = LngLat(lng: 46.6744, lat: 24.7113)
 private let camp = OutingDestination(name: "مخيم النفود", lat: 24.7590, lng: 46.7491)
 private let fuel = OutingDestination(name: "محطة الوقود", lat: 24.7240, lng: 46.6960)
 private let lookout = OutingDestination(name: "الطعس", lat: 24.7400, lng: 46.7200)
+
+private extension DeviceFix {
+    func with(atMs t: Double) -> DeviceFix { var f = self; f.atMs = t; return f }
+}
 
 private func fix(_ p: LngLat, accuracy: Double = 5) -> DeviceFix {
     DeviceFix(lat: p.lat, lng: p.lng, accuracy: accuracy, heading: nil, speed: 12, atMs: Date().timeIntervalSince1970 * 1000)
@@ -70,6 +75,40 @@ final class TripAutoNavDecisionTests: XCTestCase {
         XCTAssertEqual(TripAutoNav.decide(active { $0.hasFix = false }), .none, "waits for GPS, never routes from nowhere")
         XCTAssertEqual(TripAutoNav.decide(active { $0.state.active = false }), .none, "nobody started it for this phone: «ابدأ الطلعة» alone does not")
         XCTAssertEqual(TripAutoNav.decide(active { $0.state.paused = true }), .none, "«أوقف التوجيه» on this phone")
+    }
+
+    /// Build 21 regression: guidance on, my fix 5 minutes old → nothing happened, in silence.
+    /// Now the wait is shown, and the first fresh fix starts it.
+    @MainActor func testAnOldFixWaitsVisiblyThenStartsWithTheFreshOne() {
+        let loc = LocationSharer()
+        let now = Date()
+        let nowMs = now.timeIntervalSince1970 * 1000
+        loc.ingest(fix(olaya, accuracy: 35).with(atMs: nowMs - 300_000), nowMs: nowMs)
+        XCTAssertNotNil(loc.lastFix, "the old fix is kept for the map")
+        var i = active { $0.hasFix = NavFixWait.isFresh(loc.lastFix, now: now) }
+        XCTAssertFalse(i.hasFix, "5 minutes old is not where I am")
+        XCTAssertEqual(TripAutoNav.decide(i), .none)
+        XCTAssertTrue(TripAutoNav.waitsForFix(i), "«ننتظر موقعك…» instead of silence")
+        let wait = NavFixWait(pending: .auto, since: now)
+        XCTAssertEqual(NavFixWait.text(accuracyM: 35, slow: wait.slow(now: now)), "ننتظر موقعك… · الدقة ±٣٥ م")
+        XCTAssertEqual(NavFixWait.text(accuracyM: nil, slow: wait.slow(now: now.addingTimeInterval(46))), "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف")
+        /* A fresh fix: decided again, it starts. */
+        loc.ingest(fix(olaya, accuracy: 8).with(atMs: nowMs + 1000), nowMs: nowMs + 1000)
+        i.hasFix = NavFixWait.isFresh(loc.lastFix, now: now.addingTimeInterval(1))
+        XCTAssertTrue(i.hasFix)
+        XCTAssertFalse(TripAutoNav.waitsForFix(i))
+        XCTAssertEqual(TripAutoNav.decide(i), .start(TripAutoNav.nextTarget(destination: camp, stops: [], reached: [])!))
+    }
+
+    func testNoWaitWhenNothingWouldStart() {
+        XCTAssertFalse(TripAutoNav.waitsForFix(active { $0.hasFix = false; $0.state.paused = true }), "paused: nothing to wait for")
+        XCTAssertFalse(TripAutoNav.waitsForFix(active { $0.hasFix = false; $0.state.active = false }))
+        XCTAssertFalse(TripAutoNav.waitsForFix(active { $0.hasFix = false; $0.status = .created }))
+    }
+
+    func testWaitingAsksTheGpsAtItsBest() {
+        XCTAssertEqual(LocationTuning.plan(.init(watching: true, urgent: true))?.desiredAccuracy, kCLLocationAccuracyBestForNavigation)
+        XCTAssertEqual(LocationTuning.plan(.init(watching: true, urgent: true))?.distanceFilter, kCLDistanceFilterNone)
     }
 
     func testAPersonsOwnNavigationIsNeverTakenOver() {
@@ -433,6 +472,31 @@ final class NavSessionAutoTests: XCTestCase {
         let stillOff = await n.retryRoute()
         XCTAssertFalse(stillOff)
         XCTAssertEqual(n.phase, .offRoad)
+        n.end()
+    }
+
+    /// Field report (build 23): STC 5G at 480 Mbps, yet the HUD said «بلا إنترنت». A router
+    /// failure while online must never blame the user's connection.
+    func testRouterFailureWhileOnlineIsNotCalledOffline() async {
+        let router = ScriptedRouter([.failure(.failed("")), .success(NavRoutePlan(routes: [road(to: campPos, id: "back")]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.retryInterval = 60
+        n.myFix = { fix(olaya) }
+        n.autoStart(to: campTarget)
+        await wait("bearing guidance") { n.phase == .offRoad }
+        XCTAssertEqual(n.fallback, .routeFailed)
+        XCTAssertNil(n.active, "never a made-up route")
+        let title = NavOffRoad.title(direct: n.direct, fallback: n.fallback)
+        XCTAssertEqual(title, "تعذّر حساب الطريق · اتجاه مباشر")
+        XCTAssertFalse(title.contains("إنترنت"))
+        XCTAssertFalse(NavOffRoad.note(fallback: n.fallback, bearing: 90).contains("إنترنت"))
+        XCTAssertFalse(n.activityLine?.text.contains("إنترنت") ?? true)
+        /* It keeps retrying, and switches to the road when the router answers. */
+        let done = await n.retryRoute()
+        XCTAssertTrue(done)
+        XCTAssertEqual(n.phase, .guiding)
+        XCTAssertNil(n.fallback)
         n.end()
     }
 

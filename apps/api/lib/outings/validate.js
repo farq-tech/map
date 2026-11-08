@@ -183,6 +183,21 @@ function isSecretShaped(v) {
   return typeof v === 'string' && /^[A-Za-z0-9_-]{43}$/.test(v);
 }
 
+/**
+ * An invite token as people actually paste it: a trailing Arabic diacritic
+ * («ً» stuck to the link), RTL / zero-width marks, spaces or a full link. Takes
+ * what follows the last '#', keeps only the token alphabet, and returns the
+ * token when exactly 43 characters remain; otherwise null («الرابط ناقص أو فيه خطأ»).
+ * Never widens what is accepted: the 256-bit secret must still be all there.
+ */
+function inviteToken(raw) {
+  if (typeof raw !== 'string' || raw.length > 2048) return null;
+  const hash = raw.lastIndexOf('#');
+  const tail = hash >= 0 ? raw.slice(hash + 1) : raw;
+  const t = tail.replace(/[^A-Za-z0-9_-]/g, '');
+  return isSecretShaped(t) ? t : null;
+}
+
 function digest(secret) {
   return crypto.createHash('sha256').update(String(secret)).digest();
 }
@@ -431,6 +446,7 @@ module.exports = {
   isUuid,
   newSecret,
   isSecretShaped,
+  inviteToken,
   digest,
   RECOVERY_LEN,
   newRecoveryCode,

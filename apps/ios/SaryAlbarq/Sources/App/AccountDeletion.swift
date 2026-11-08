@@ -111,12 +111,14 @@ enum LocalAccountData {
         WaypointCache.wipeAll()
         TrailStore.forgetAll()
         LocalDestinationStore.forgetAll(defaults: defaults)
+        OutingLegStore.forgetAll(defaults: defaults)
         OutingWalkieTalkie.forgetAll(defaults: defaults)
         VoiceNoteHeardStore.forgetAll(defaults: defaults)
         for k in defaults.dictionaryRepresentation().keys where k.hasPrefix(VoiceNoteUploader.keyPrefix) { defaults.removeObject(forKey: k) }
         try? FileManager.default.removeItem(at: VoiceNoteUploader.defaultDir)
         /* «المحادثات»: messages still waiting to be sent (the server deletes everything else). */
         ChatOutbox.wipeAll(defaults)
+        BlockedUsers.save([], defaults: defaults)
         MediaShareInbox.forget()
         /* «أماكني المحفوظة» and the GPX list (on-device files). */
         if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {

@@ -47,7 +47,7 @@ const APNS_ORIGINS = Object.freeze({
   sandbox: 'https://api.sandbox.push.apple.com',
 });
 /* 'voice_note': a walkie-talkie message for a phone the Push to Talk path could not wake. */
-const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent', 'voice_note']);
+const TIME_SENSITIVE = new Set(['sos', 'member_stuck', 'return_timer_overdue', 'member_silent', 'voice_note', 'nudge']);
 const ACTIVE = new Set(['stuck_reply', 'chat_message', 'ptt_channel_invite']);
 const ENVIRONMENTS = new Set(['sandbox', 'production']);
 const TOKEN_RE = /^[0-9a-f]{64,200}$/;

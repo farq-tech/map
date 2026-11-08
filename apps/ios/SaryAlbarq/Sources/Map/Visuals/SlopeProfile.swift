@@ -88,6 +88,7 @@ enum SlopeProfile {
         return out
     }
 
-    /// The legend line under the map's source line.
-    static let legend = "انحدار تقريبي ≥ ١٥٪ (من نموذج ارتفاع ~٣٠ م)"
+    /// The legend line under the map's source line (UX ٢١: plain words, the model details live in
+    /// «المؤثرات البصرية» settings).
+    static let legend = "⚠️ طلعة قوية"
 }

@@ -54,6 +54,11 @@ enum LiveModal: Identifiable, Equatable {
     case chat(ChatWith?)
     /// «ترددات»: the walkie-talkie's channels (five public + private ones).
     case pttChannels
+    /// «وين رايحين؟»: the next leg's destination (ux/الطلعة-والمشوار.md).
+    case whereTo
+    /// One focused part of the trip (UX simplification): the sheet holds only the essentials,
+    /// «المزيد» and the quick row open these.
+    case panel(LivePanel)
 
     var id: String {
         switch self {
@@ -81,6 +86,8 @@ enum LiveModal: Identifiable, Equatable {
         case .navSteps: return "navSteps"
         case .navStartChoice: return "navStartChoice"
         case .pttChannels: return "pttChannels"
+        case .whereTo: return "whereTo"
+        case let .panel(p): return "panel:\(p.rawValue)"
         }
     }
 
@@ -246,8 +253,12 @@ final class LiveOutingController: ObservableObject {
     @Published var tripConfirmEnd = false
     /// The first seconds after an invite join (`LiveOutingController+Arrival.swift`).
     @Published var arrival = InviteeArrivalState()
+    /// Guidance asked for without a fresh fix: «ننتظر موقعك…» until one comes (`+FixWait.swift`).
+    @Published var fixWait: NavFixWait?
     /// Bumps the planning preview's camera fit.
     var navCameraKey = 0
+    /// «المسارات» was opened mid-guidance: closing the options without choosing goes back to guiding.
+    var navResumeOnClose = false
     /// A line for a participant's card («روح له» refused: their position is old).
     @Published var cardMessage: [String: String] = [:]
     /// The trip's automatic guidance on this phone (`TripAutoNav`, LiveOutingController+AutoNav.swift).
@@ -413,7 +424,8 @@ final class LiveOutingController: ObservableObject {
         var i = LivePresenterInput(
             view: nearby.view,
             /* «أنت» on the map: the smoothed position, not the raw city-canyon fix. */
-            myFix: session.smoothedFix(location.lastFix),
+            /* While guiding: Mapbox's road-matched position (`NavSession.mapFix`). */
+            myFix: nav.mapFix(session.smoothedFix(location.lastFix)),
             gpsState: location.gpsState,
             locationAuthorized: location.canLocate,
             link: session.link,
@@ -484,7 +496,7 @@ final class LiveOutingController: ObservableObject {
             if showNames || m.isMe || convoyRole != nil {
                 m.chip = NameChipUI(name: m.name, color: m.color, isMe: m.isMe, presence: presence, hasVoice: p?.hasVoice ?? false, now: chipNow,
                                     stuck: safety.isStuck(m.id), convoy: convoyRole.map(ConvoyBadgeUI.init), viaNearby: m.viaNearby,
-                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince)
+                                    speaking: i.speakingUserId == m.id, silentSince: p?.silentSince, silentReason: p?.presenceReason)
             }
             if let n = m.note { m.bubble = NoteBubbleUI(text: n, color: m.color) }
             return m
@@ -551,6 +563,7 @@ final class LiveOutingController: ObservableObject {
         arrivalTick()
         updateSpeed()
         if let f = location.lastFix { nav.ingest(f) }
+        fixWaitTick()
         updateBackTrack()
         updateFollow()
         updateTrip()
@@ -871,7 +884,13 @@ final class LiveOutingController: ObservableObject {
         a.openNoteComposer = { [weak self] in self?.modal = .note }
         a.openNearestStations = { [weak self] in self?.openStations() }
         a.sos = SOSActions(
-            trigger: { [weak self] in Task { await self?.session.raiseSOS() } },
+            trigger: { [weak self] in
+                Task {
+                    guard let self else { return }
+                    /* An SOS overrides «أخفِ موقعي»: the real position went out; say it is shown again. */
+                    if await self.session.raiseSOS() { self.toast(HideText.sosShown) }
+                }
+            },
             imOK: { [weak self] in Task { await self?.session.cancelSOS() } },
             show: { [weak self] alertId in self?.showSOS(alertId) },
             call: { [weak self] alertId in
@@ -889,7 +908,7 @@ final class LiveOutingController: ObservableObject {
         a.selectTab = { [weak self] t in self?.selectedTab = t }
         a.participantsTab = ParticipantsTabActions(
             openParticipant: { [weak self] id in self?.openParticipant(id) },
-            addMyPhone: { [weak self] in self?.selectedTab = .trip; self?.sheetDetent = .full },
+            addMyPhone: { [weak self] in self?.modal = .panel(.phone) },
             rallyShow: { [weak self] in
                 guard let self, let r = self.rallyPoint else { return }
                 self.lowerSheetThenAsk(.point(r.position))
@@ -1013,10 +1032,26 @@ final class LiveOutingController: ObservableObject {
         session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
     }
 
-    /// Right after «انضم» nothing more is asked (the one-step join asked for the location).
-    /// «دائمًا» comes in context: the first time the person is back after sending paused off screen.
+    /// The «دائمًا» explainer is the after-join one («خلّ الربع يشوفونك طول الطلعة»).
+    @Published var shareAlwaysAfterJoin = false
+
+    /// Right after «انضم» (field 2026-11-06: members on «أثناء الاستخدام» went dark the moment
+    /// they locked the phone): explain «دائمًا» and ask iOS now, once per device. Otherwise it
+    /// comes in context: the first time the person is back after sending paused off screen.
     func followUpJoin() {
-        if session.joinedJustNow { session.joinedJustNow = false }
+        if session.joinedJustNow {
+            session.joinedJustNow = false
+            if location.canLocate, !session.hasAlwaysPermission, !UserDefaults.standard.bool(forKey: Self.shareAlwaysAskedKey) {
+                /* After the one-time welcome card («حياك في …»), never on top of it. */
+                let wait = arrival.welcomePending || arrivalWelcome != nil ? InviteeArrival.welcomeSeconds + 0.8 : 0.9
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                    guard let self, self.modal == nil, self.session.wantsToShare, !self.session.hasAlwaysPermission else { return }
+                    self.shareAlwaysAfterJoin = true
+                    self.modal = .shareAlways
+                }
+                return
+            }
+        }
         guard session.askAlwaysOnReturn, session.isVisible, UIApplication.shared.applicationState == .active else { return }
         session.askAlwaysOnReturn = false
         if location.canLocate { offerShareAlwaysIfNeeded() }
@@ -1058,7 +1093,24 @@ final class LiveOutingController: ObservableObject {
     func participantCard(_ id: String) -> ParticipantCardUIState? {
         guard let p = LiveOutingPresenter.participants(input).first(where: { $0.id == id }), let v = session.view else { return nil }
         return ParticipantCardUIState(participant: p, now: Date(), canManage: v.iOwn && !p.isMe && p.role != .leader,
-                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id])
+                                      isBusy: session.busy.contains("member:\(id)"), errorMessage: cardMessage[id],
+                                      canNudge: LiveOutingPresenter.canNudge(p, leader: v.iLead, active: v.status == .active))
+    }
+
+    /// «أخفِ موقعي» lives in the thin sharing strip of the trip sheet (two map buttons at most).
+    var canHideLocation: Bool {
+        guard let v = session.view, v.status == .active, v.me != nil, session.closedReason == nil else { return false }
+        return true
+    }
+
+    var isLocationHidden: Bool { session.hiddenSince != nil }
+
+    func toggleHidden() {
+        let hide = session.hiddenSince == nil
+        Task {
+            if await session.setHidden(hide) { toast(hide ? HideText.hiddenToast : HideText.shownToast) }
+            else { toast("ما قدرنا نغيّر — حاول مرة ثانية") }
+        }
     }
 
     func participantActions(_ id: String) -> ParticipantCardActions {
@@ -1082,7 +1134,14 @@ final class LiveOutingController: ObservableObject {
                     if self.session.view?.members[id] == nil { self.modal = nil }
                 }
             },
-            close: { [weak self] in self?.modal = nil }
+            close: { [weak self] in self?.modal = nil },
+            nudge: { [weak self] in
+                guard let self else { return }
+                Task {
+                    let name = self.session.view?.members[id]?.display_name ?? ""
+                    if let e = await self.session.nudge(id) { self.toast(e) } else { self.toast("وصل \(name) تنبيه يفتح سرى") }
+                }
+            }
         )
     }
 

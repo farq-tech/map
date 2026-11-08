@@ -19,9 +19,15 @@ enum NavPhase: Equatable {
 enum NavFallback: Equatable {
     /// The router knows no road to the target (a desert camp off the network).
     case noRoad
-    /// Routing failed (no network, router unreachable): bearing guidance while we retry.
+    /// The phone has no internet (the request never left): bearing guidance while we retry.
     /// Never a made-up route.
     case offline
+    /// The internet works but the router failed or timed out: bearing guidance while we retry.
+    /// Never «بلا إنترنت» — that would blame the user's connection for our server.
+    case routeFailed
+
+    /// Bearing guidance that keeps asking for a road route.
+    var retrying: Bool { self == .offline || self == .routeFailed }
 }
 
 enum NavCameraMode: Equatable {
@@ -99,36 +105,198 @@ final class NavSession: ObservableObject {
         voice.onSpoken = { [weak self] t in self?.spokenSubject.send(t) }
         locator.onFix = { [weak self] f in self?.ingest(f) }
         voice.onReevaluate = { [weak self] in self?.restateCurrent() }
+        voice.atPlayback = { [weak self] l, c in self?.playback(l, choice: c) ?? .play(l) }
+    }
+
+    /// The arrival time: the engine's (Mapbox: live traffic) remaining time, smoothed (`NavETASmoother`).
+    private(set) var etaSmoother = NavETASmoother()
+    private var etaAnnouncer = NavETAAnnouncer()
+
+    /// «باقي ربع ساعة وتوصل.» at the start, every 10 min, and when the arrival moved by more than 5 —
+    /// never over a maneuver (only with 20 s and 150 m of road before the next one, the speaker free).
+    func announceETAIfDue(_ p: NavProgress, now: Date = Date()) {
+        guard phase == .guiding, !rerouting, let a = etaSmoother.arrival, etaAnnouncer.isDue(arrival: a, now: now),
+              !voice.isSpeaking else { return }
+        let v = max(3, guidanceSpeed(now) ?? 0)
+        guard p.distanceToManeuverM > 150, p.distanceToManeuverM / v > 20 else { return }
+        let s = a.timeIntervalSince(now)
+        etaAnnouncer.said(arrival: a, now: now)
+        voice.say(NavLine(NavETAAnnouncer.text(arrival: a, remainingS: s), clips: NavETAAnnouncer.clip(remainingS: s).map { [$0] } ?? [],
+                          routeRevision: routeRevision, expiresAt: now.addingTimeInterval(15)))
+    }
+
+    /// When the last progress came, and my speed along the route from progress to progress.
+    private var progressAt = Date.distantPast
+    private var progressSpeed: Double?
+
+    /// Mapbox's map-matched position while it guides (not published: progress redraws anyway).
+    private(set) var matchedFix: DeviceFix?
+
+    private func fresh(_ f: DeviceFix?, _ now: Date) -> DeviceFix? {
+        guard let f, now.timeIntervalSince1970 * 1000 - f.atMs < 3000 else { return nil }
+        return f
+    }
+
+    /// «أنت» on the map while guiding: Mapbox's matched position (on the road, the same point the
+    /// distances are measured from, no smoothing lag) — else what the map draws otherwise.
+    func mapFix(_ f: DeviceFix?, now: Date = Date()) -> DeviceFix? {
+        guard phase == .guiding, !rerouting, var m = fresh(matchedFix, now) else { return f }
+        m.heading = HeadingChooser.course(m) ?? f?.heading
+        return m
+    }
+
+    /// My speed for prompt timing: the matched / raw fix's own (Doppler) when fresh, else along the route.
+    func guidanceSpeed(_ now: Date = Date()) -> Double? {
+        if let v = fresh(matchedFix, now)?.speed, v >= 0 { return v }
+        if let f = myFix(), let v = f.speed, v >= 0, now.timeIntervalSince1970 * 1000 - f.atMs < 3000 { return v }
+        return progressSpeed
+    }
+
+    private func noteProgress(_ p: NavProgress, now: Date = Date()) {
+        if let old = progress, old.stepIndex == p.stepIndex {
+            let dt = now.timeIntervalSince(progressAt)
+            if dt > 0.2, dt < 5 {
+                let v = max(0, (old.distanceToManeuverM - p.distanceToManeuverM) / dt)
+                progressSpeed = progressSpeed.map { 0.5 * $0 + 0.5 * v } ?? v
+            }
+        }
+        progressAt = now
+    }
+
+    /// The line as it is about to play (build 22, `NavPromptTiming`): rebuilt for the distance
+    /// when it ENDS, from the engine's distance now (projected from its last progress), rounded
+    /// down; the action alone when the turn is right there; held so it ends at the distance it
+    /// says; dropped when the maneuver is behind me.
+    func playback(_ line: NavLine, choice c: NavVoiceChoice, now: Date = Date()) -> NavVoice.Playback {
+        guard phase == .guiding, let id = line.maneuverID, let r = active, let p = progress,
+              let colon = id.firstIndex(of: ":"), Int(id[..<colon]) == routeRevision,
+              let index = Int(id[id.index(after: colon)...]), r.steps.indices.contains(index) else { return .play(line) }
+        if p.stepIndex > index { return .drop }
+        guard p.stepIndex == index else { return .play(line) }
+        let v = guidanceSpeed(now)
+        let age = min(3, max(0, now.timeIntervalSince(progressAt)))
+        let dNow = max(0, p.distanceToManeuverM - (v ?? 0) * age)
+        let step = r.steps[index]
+        let soft = isSoft(index)
+        let stage = NavPromptBudget.stage(distanceM: dNow, speedMps: v)
+        /* The per-maneuver budget, at the moment the voice commits to a line: one early + one final
+         * (one short line for a soft maneuver), never the same line twice. A reroute or Mapbox's
+         * traffic refresh of the same maneuver does not restart it (kept by maneuver, not route). */
+        func build(_ spoken: Double?) -> NavLine? {
+            guard let w = lineWords(index, distanceM: spoken ?? 0, dNow: dNow, speed: v, stage: stage, opening: line.opening) else { return nil }
+            var out = line
+            out.text = [line.leadText, w.text].filter { !$0.isEmpty }.joined(separator: ". ")
+            out.clips = line.leadClips + w.clips
+            return out
+        }
+        func own(_ out: NavLine) -> [String] { Array(out.clips.dropFirst(line.leadClips.count)) }
+        func commit(_ out: NavLine, held: TimeInterval) -> NavVoice.Playback {
+            var x = out
+            /* Charge the budget once, when the voice first commits to this line (even if it is held
+             * to end at a recorded distance); the re-queued held line carries `charged` and is not
+             * counted again. A restated line (after a call) is outside the budget. */
+            if !line.restate, !line.charged {
+                let o = own(out)
+                guard budget.allows(step, stage, soft: soft), !budget.repeats(step, clips: o) else { return .drop }
+                budget.note(step, stage, clips: o)
+                x.charged = true
+            }
+            x.expiresAt = now.addingTimeInterval(held + 5)
+            return held > 0 ? .hold(x, held) : .play(x)
+        }
+        /* A soft maneuver: a short line with no distance (or nothing), said as it comes. */
+        if soft {
+            guard let out = build(nil) else { return .drop }
+            return commit(out, held: 0)
+        }
+        let plan = NavPromptTiming.plan(distanceNowM: dNow, speedMps: v, latencyS: NavPromptTiming.startLatencyS(c),
+                                        canHold: true, heldS: line.heldS, band: NavPromptTiming.band(c)) { s in
+            guard let l = build(s) else { return 0 }
+            return NavPromptTiming.duration(c, clips: l.clips, text: l.text)
+        }
+        guard let out = build(plan.spokenM) else { return .drop }
+        /* The «now» was said: no later cue repeats it. */
+        saidAtM[id] = plan.spokenM == nil ? 0 : dNow
+        #if DEBUG
+        NavLog.log("prompt step=%d now=%.0fm v=%.1f said=%@ ends=%.0fm hold=%.1fs", index, dNow, v ?? -1,
+                   plan.spokenM.map { String(format: "%.0f", $0) } ?? "now", plan.endM, plan.holdS)
+        #endif
+        return commit(out, held: plan.holdS)
     }
 
     /// Bumped on every new route (start, reroute): lines built for an older one are dropped.
     private(set) var routeRevision = 0 {
-        didSet { voice.routeRevision = routeRevision; saidStages = [:] }
+        didSet { voice.routeRevision = routeRevision; saidAtM = [:] }
     }
-    /// Per maneuver («<revision>:<step>»), the cues already said (early / confirm / immediate).
-    private var saidStages: [String: Set<Int>] = [:]
+    /// Per maneuver («<revision>:<step>»), how far before it the last line was said.
+    private var saidAtM: [String: Double] = [:]
+
+    /// A cue for a maneuver already announced is a duplicate (the same moment twice: a repeated
+    /// event, the start line and Mapbox's first cue) unless I am clearly closer than when it was
+    /// last said. Build 21: the cue was keyed by distance *band* instead — two of Mapbox's cues in
+    /// one band (150 m and ~70 m are both "confirm" at 50 km/h) silenced the second, so the
+    /// «now» of a turn was never said at city speed. Every closer cue is said now.
+    static func isRepeat(distanceM d: Double, lastSaidM last: Double?) -> Bool {
+        guard let last else { return false }
+        return d > last - max(20, last * 0.25)
+    }
 
     /// The guidance line for step `index`, `d` metres ahead — nil when that cue was already said.
     /// «صوت سرى»: no name, «ثم …» when the next maneuver follows closely and there is time.
-    func guidanceLine(stepIndex index: Int, distanceM d: Double, force: Bool = false) -> NavLine? {
+    func guidanceLine(stepIndex index: Int, distanceM d: Double, force: Bool = false, opening: Bool = false, restate: Bool = false) -> NavLine? {
         guard let r = active, r.steps.indices.contains(index) else { return nil }
         let step = r.steps[index]
-        let speed = myFix()?.speed
-        let stage = NavCueBands.stage(distanceM: d, bands: NavCueBands.distances(speedMps: speed, unpaved: r.hasUnpaved))
+        let speed = guidanceSpeed()
         let key = "\(routeRevision):\(index)"
-        if !force, saidStages[key, default: []].contains(stage.rawValue) { return nil }
-        saidStages[key, default: []].insert(stage.rawValue)
+        if !force, Self.isRepeat(distanceM: d, lastSaidM: saidAtM[key]) {
+            voice.stats.dropped(.dedupe)
+            return nil
+        }
+        /* The per-maneuver budget (one early + one final at most, no repeats) is applied at
+         * playback, where the voice commits to a line; here we only build it. */
+        let stage = NavPromptBudget.stage(distanceM: d, speedMps: speed)
+        guard let words = lineWords(index, distanceM: d, dNow: d, speed: speed, stage: stage, opening: opening) else { return nil }
+        saidAtM[key] = d
+        var line = NavLine(words.text, clips: words.clips, maneuverID: key, routeRevision: routeRevision, expiresAt: Date().addingTimeInterval(10))
+        line.opening = opening
+        line.restate = restate
+        return line
+    }
+
+    /// Per maneuver, what was said (build 22: the owner heard one fork four times).
+    private var budget = NavPromptBudget()
+
+    /// Guidance lines go out here (tests replace it with a virtual speaker).
+    lazy var sayGuidance: (NavLine) -> Void = { [weak self] in self?.voice.say($0) }
+
+    /// A fork / lane that stays on the road it is on, or barely bends (`NavPromptBudget.isSoft`).
+    func isSoft(_ index: Int) -> Bool {
+        guard let r = active, r.steps.indices.contains(index) else { return false }
+        let s = r.steps[index]
+        return NavPromptBudget.isSoft(s, previous: index > 0 ? r.steps[index - 1] : nil, bendDeg: NavPromptBudget.bendDeg(r.coordinates, at: s.location))
+    }
+
+    /// The words for step `index`: `distanceM` is what is said (0: the action alone), `dNow` where I am.
+    /// nil: nothing to say (a soft maneuver's early cue).
+    private func lineWords(_ index: Int, distanceM d: Double, dNow: Double, speed: Double?, stage: NavPromptBudget.Stage, opening: Bool) -> (text: String, clips: [String])? {
+        guard let r = active, r.steps.indices.contains(index) else { return nil }
+        let step = r.steps[index]
+        if isSoft(index) {
+            if stage == .final { return NavPromptBudget.softLine(step) }
+            return opening ? ("كمّل سيده", ["mv_02"]) : nil
+        }
         var clips = SaryVoiceScript.step(step, distanceM: d, auto: auto, stop: isStopTarget)
-        let next = r.steps.indices.contains(index + 1) ? r.steps[index + 1] : nil
-        clips = SaryVoiceScript.withThen(clips, next: next, gapM: step.distanceM, distanceToManeuverM: d, speedMps: speed, stop: isStopTarget)
-        return NavLine(NavText.spoken(step, distanceM: d, targetName: target?.name), clips: clips,
-                       maneuverID: key, routeRevision: routeRevision, expiresAt: Date().addingTimeInterval(10))
+        if d > 0 {
+            let next = r.steps.indices.contains(index + 1) ? r.steps[index + 1] : nil
+            clips = SaryVoiceScript.withThen(clips, next: next, gapM: step.distanceM, distanceToManeuverM: dNow, speedMps: speed, stop: isStopTarget)
+        }
+        return (NavText.spoken(step, distanceM: d, targetName: target?.name), NavPromptBudget.tidy(clips))
     }
 
     /// After a call / Siri cut a line: the current maneuver, rebuilt for the distance now.
     func restateCurrent() {
         guard phase == .guiding, let p = progress,
-              let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM, force: true) else { return }
+              let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM, force: true, restate: true) else { return }
         voice.say(line)
     }
 
@@ -282,11 +450,15 @@ final class NavSession: ObservableObject {
             retryable = false
         case .failure(.notConfigured):
             goDirect(origin, t)
-            fallback = .offline
+            fallback = .routeFailed
             retryable = false
-        case .failure:
+        case .failure(.offline):
             goDirect(origin, t)
             fallback = .offline
+            retryable = true
+        case .failure:
+            goDirect(origin, t)
+            fallback = .routeFailed
             retryable = true
         }
         #if DEBUG
@@ -311,13 +483,13 @@ final class NavSession: ObservableObject {
     /// when the network comes back). True when there is nothing left to retry.
     @discardableResult
     func retryRoute() async -> Bool {
-        guard auto, phase == .offRoad, fallback == .offline, retryable else { return true }
+        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return true }
         guard !retrying, let t = target, let f = myFix() else { return false }
         retrying = true
         defer { retrying = false }
         let origin = LngLat(lng: f.lng, lat: f.lat)
         let r = await requestRoutes(origin: origin, heading: Policy.trustedHeading(f.heading, speed: f.speed), target: t)
-        guard auto, phase == .offRoad, fallback == .offline, target == t else { return true }
+        guard auto, phase == .offRoad, fallback?.retrying == true, target == t else { return true }
         switch r {
         case let .success(p) where !p.routes.isEmpty:
             #if DEBUG
@@ -340,7 +512,7 @@ final class NavSession: ObservableObject {
 
     /// The network is back: try the road route now instead of waiting for the timer.
     func retryNow() {
-        guard auto, phase == .offRoad, fallback == .offline, retryable else { return }
+        guard auto, phase == .offRoad, fallback?.retrying == true, retryable else { return }
         Task { await retryRoute() }
     }
 
@@ -370,8 +542,11 @@ final class NavSession: ObservableObject {
                 let arrow = { (lead: String) in SaryVoiceScript.arrow(lead: lead, bearing: leg.bearing, distanceM: leg.distanceM) }
                 if auto, fallback == .offline {
                     voice.say(intro + NavLine("ما فيه إنترنت لحساب الطريق. اتجه مع السهم \(way). نعيد المحاولة لما يرجع الاتصال", clips: arrow("rr_06")))
+                } else if auto, fallback == .routeFailed {
+                    voice.say(intro + NavLine("ما قدرنا نحسب الطريق الحين. اتجه مع السهم \(way). نعيد المحاولة", clips: arrow("dir_07")))
                 } else if auto {
-                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("bar_01")))
+                    /* «ما فيه طريق مزفلت يوصّلك للوجهة» (dir_06), not bar_01: in the v4 set bar_01 says «انتهى الطريق المزفلت», wrong before any road. */
+                    voice.say(intro + NavLine("بدون طريق معبّد. اتجه مع السهم \(way)", clips: arrow("dir_06")))
                 } else {
                     voice.say("لا يوجد طريق معروف. اتجه \(NavText.compassDefinite(leg.bearing)) \(NavText.spokenInDistance(leg.distanceM) ?? "")", clips: arrow("dir_07"))
                 }
@@ -402,8 +577,8 @@ final class NavSession: ObservableObject {
                 self.attach(local)
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
-            if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0) {
-                self.voice.say(intro + line)
+            if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0, opening: true) {
+                self.sayGuidance(intro + line)
             } else if !intro.clips.isEmpty || !intro.text.isEmpty {
                 self.voice.say(intro)
             }
@@ -417,6 +592,10 @@ final class NavSession: ObservableObject {
     private func attach(_ e: NavGuidanceEngine) {
         engine = e
         e.onEvent = { [weak self] ev in self?.handle(ev) }
+        matchedFix = nil
+        if let m = e as? MapboxGuidanceEngine {
+            m.onMatched = { [weak self] f in self?.matchedFix = f }
+        }
         if let local = e as? LocalGuidanceEngine {
             local.reroute = { [weak self] from, heading in await self?.rerouteLocally(from: from, heading: heading) }
             locator.start()
@@ -444,15 +623,19 @@ final class NavSession: ObservableObject {
         switch ev {
         case let .progress(p):
             guard phase == .guiding else { return }
+            noteProgress(p)
             progress = p
             if rerouting { rerouting = false }
+            etaSmoother.update(remainingS: p.durationRemainingS, speedMps: guidanceSpeed())
+            announceETAIfDue(p)
         case .offRoute:
             guard phase == .guiding else { return }
             rerouting = true
             /* Once, not on every reroute while the driver is still finding the way back. */
             if Date().timeIntervalSince(lastOffRouteSpoken) > 45 {
                 lastOffRouteSpoken = Date()
-                voice.say("خرجت عن الطريق، نحسب طريقًا جديدًا", clips: ["rr_01"])
+                /* «start_08», not «rr_01»: that clip says «درب يديد» (Emirati), the owner says «جديد». */
+                voice.say("طلعت عن الدرب، نضبط لك الطريق", clips: ["start_08"])
             }
         case let .rerouted(r):
             guard phase == .guiding else { return }
@@ -461,6 +644,9 @@ final class NavSession: ObservableObject {
             routeRevision += 1
             if let t = target { offRoad = NavOffRoad.lastLeg(routeEnd: r.end, target: t.position) }
             toast("مسار جديد")
+            /* The new route's first maneuver at once: Mapbox's own first cue for it came just
+             * BEFORE this event (still on the old route) and was lost — up to a minute of silence. */
+            if r.steps.count > 1, let line = guidanceLine(stepIndex: 1, distanceM: r.steps[0].distanceM, force: true, opening: true) { sayGuidance(line) }
         case let .rerouteFailed(m):
             rerouting = false
             toast(m)
@@ -480,17 +666,22 @@ final class NavSession: ObservableObject {
         case let .speak(t):
             /* Our own engine names the step: build the line here (stage, «ثم», revision). */
             if let i = t.maneuverID.flatMap(Int.init) {
-                if let line = guidanceLine(stepIndex: i, distanceM: progress?.distanceToManeuverM ?? 0) { voice.say(line) }
+                if let line = guidanceLine(stepIndex: i, distanceM: progress?.distanceToManeuverM ?? 0) { sayGuidance(line) }
             } else {
                 voice.say(t)
             }
         case let .cue(routerText):
+            /* Mid-reroute the cue belongs to the route being fetched: `.rerouted` says it. */
+            if rerouting { return }
             if let p = progress, active?.steps.indices.contains(p.stepIndex) == true {
-                if let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM) { voice.say(line) }
+                if let line = guidanceLine(stepIndex: p.stepIndex, distanceM: p.distanceToManeuverM) { sayGuidance(line) }
+            } else if let r = active, r.steps.count > 1, let line = guidanceLine(stepIndex: 1, distanceM: r.steps[0].distanceM, force: true) {
+                /* No progress yet (the first seconds, just after a reroute): the first maneuver of the route. */
+                voice.say(line)
             } else if NavText.isArabic(routerText) {
                 /* Router narration only as a last resort, and never in another language
-                 * (Valhalla narrates in English around Arabic street names). No clips: free
-                 * text has no structure to map, so «صوت سرى» waits for the next cue. */
+                 * (Valhalla narrates in English around Arabic street names). No clips: the
+                 * device voice says it (`NavVoice.speak`), never silence. */
                 voice.say(routerText, clips: [])
             }
         }
@@ -542,6 +733,12 @@ final class NavSession: ObservableObject {
 
     private func reset() {
         phase = .idle
+        progressAt = .distantPast
+        progressSpeed = nil
+        etaSmoother.reset()
+        etaAnnouncer.reset()
+        budget.reset()
+        matchedFix = nil
         target = nil
         routes = []
         selectedId = nil
@@ -579,7 +776,7 @@ final class NavSession: ObservableObject {
     }
 
     var remainingSeconds: Double? {
-        if let p = progress { return p.durationRemainingS }
+        if let p = progress { return etaSmoother.remaining() ?? p.durationRemainingS }
         return active?.durationS
     }
 

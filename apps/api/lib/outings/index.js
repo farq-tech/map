@@ -13,7 +13,8 @@
  */
 
 const createOutingsRouter = require('../../routes/outings');
-const { createOutingsService, OutingError } = require('./service');
+const { createOutingsService, OutingError, canLead } = require('./service');
+const { createLegs } = require('./legs');
 const { createHub } = require('./hub');
 const { attachOutingsSocket } = require('./ws');
 const { createPttRelay } = require('./ptt');
@@ -83,13 +84,40 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
         relay: ptt,
         apns,
         push: fanout,
+        blockersOf: (uid) => service.blockersOf(uid),
         ...(now ? { now } : {}),
       })
     : null;
-  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, voiceNotes, limits, routing });
+  /* «المشاوير»: legs inside an outing (lib/outings/legs.js, migration 016). */
+  const legs = service
+    ? createLegs({
+        q: (text, params) => pool.query(text, params).then((r) => r.rows),
+        tx: async (fn) => {
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const out = await fn((text, params) => client.query(text, params).then((r) => r.rows));
+            await client.query('COMMIT');
+            return out;
+          } catch (e) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw e;
+          } finally {
+            client.release();
+          }
+        },
+        hub: () => hub,
+        requireMember: (...a) => service.requireMember(...a),
+        canLead,
+        err: (code, status) => new OutingError(code, status),
+        ...(now ? { now } : {}),
+      })
+    : null;
+  const router = createOutingsRouter({ service, hub, push, apns, pttChannels, voiceNotes, legs, limits, routing });
   let sweepTimer = null;
   let timerSweep = null;
   let silenceSweep = null;
+  let presenceSweep = null;
   let socket = null;
   const ready = service && autoMigrate
     ? migrate(pool, { log: console.log }).catch((e) => {
@@ -104,6 +132,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
     apns,
     ptt,
     voiceNotes,
+    legs,
     router,
     ready,
     /** Live-socket lifetimes and close codes, plus the walkie-talkie relay's counters (numbers only). */
@@ -128,12 +157,18 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
         service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message));
       }, 60_000);
       silenceSweep.unref?.();
+      /* «مباشر / متأخر / منقطع» + reason: re-judged every 30 s for outings someone watches. */
+      presenceSweep = setInterval(() => {
+        service.sweepPresence().catch((e) => console.warn('[outings] presence sweep:', e.code || e.message));
+      }, 30_000);
+      presenceSweep.unref?.();
     },
     close() {
       ptt?.close(); // release any held floor while sockets can still hear it
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
       clearInterval(silenceSweep);
+      clearInterval(presenceSweep);
       socket?.close();
       apns.close();
     },

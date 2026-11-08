@@ -69,8 +69,12 @@ final class TripUITests: XCTestCase {
         for k in 0..<40 {
             move(to: approach(60 + Double(k % 3) * 6))
             usleep(1_000_000)
-            if app.staticTexts["وصلت 🎉"].exists { break }
+            if peek.label.contains("واقفين عند") { break }
         }
+        /* The arrival is said once: the header («واقفين عند …») and a 4 s toast; the trip's card with its
+         * numbers is in the «الرحلة» sheet, which no longer opens by itself (the owner's «زحمة» review). */
+        XCTAssertTrue(peek.label.contains("واقفين عند"), "the header says we are there: \(peek.label)")
+        peek.tap()
         XCTAssertTrue(app.staticTexts["وصلت 🎉"].waitForExistence(timeout: 15), "the arrival card")
         XCTAssertTrue(app.descendants(matching: .any)["trip.arrivalOrder"].exists, "who arrived first")
         attach(app, "arrived")
@@ -79,7 +83,7 @@ final class TripUITests: XCTestCase {
         let end = app.buttons["trip.end"]
         XCTAssertTrue(end.waitForExistence(timeout: 5))
         end.tap()
-        let confirm = app.buttons["أنهِ الرحلة للجميع"]
+        let confirm = app.buttons["أنهِ الطلعة للجميع"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
 

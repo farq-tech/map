@@ -21,7 +21,7 @@ final class LiveProductionTests: XCTestCase {
         onboarding.typeText(name)
         app.buttons["onboarding.start"].tap()
         if app.buttons["onboarding.skipLocation"].waitForExistence(timeout: 15) { app.buttons["onboarding.skipLocation"].tap() }
-        XCTAssertTrue(app.buttons["list.create"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.descendants(matching: .any)["home.search"].waitForExistence(timeout: 20))
         XCUIDevice.shared.system.open(url)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["Open", "فتح"] where springboard.buttons[label].waitForExistence(timeout: 3) {

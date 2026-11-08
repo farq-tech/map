@@ -225,6 +225,7 @@ struct ChatThreadView: View {
     @State private var draft = ""
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
+    @Environment(AppearanceSettings.self) private var appearance
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
@@ -233,9 +234,14 @@ struct ChatThreadView: View {
     }
     private var title: String { with.isGroup ? "دردشة الطلعة" : context.name(with.peer ?? "", fallback: thread.latest?.sender_name) }
 
-    var body: some View {
+    var body: some View { threadBody }
+
+    private func senderName(_ m: ChatMessage) -> String { context.name(m.sender_id, fallback: m.sender_name) }
+
+
+    private var threadBody: some View {
         let p = theme.palette
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             header
             ScrollViewReader { proxy in
                 ScrollView {
@@ -403,6 +409,25 @@ struct ChatThreadView: View {
         if m.text != nil && !m.deleted {
             Button { UIPasteboard.general.string = m.text } label: { Label("نسخ", systemImage: "doc.on.doc") }
         }
+        if chat.canReport(m) {
+            /* Submenus, not a sheet: a sheet does not present reliably from a context menu that is
+             * itself inside the chat sheet. The reason and the block confirm live in the menu. */
+            Menu {
+                ForEach(ChatReportReason.allCases) { r in
+                    Button(r.label) { Task { await chat.report(m, reason: r) } }
+                        .accessibilityIdentifier("chat.report.\(r.rawValue)")
+                }
+                Button("بلّغ واحظر \(senderName(m))", role: .destructive) { Task { await chat.report(m, reason: .abuse, block: true) } }
+                    .accessibilityIdentifier("chat.report.block")
+            } label: { Label("بلّغ عن الرسالة", systemImage: "exclamationmark.bubble") }
+                .accessibilityIdentifier("chat.menu.report")
+            /* Direct (no submenu/sheet): blocks at once — reversible from الإعدادات ← المحظورين, so
+             * no destructive confirm. A submenu cannot be driven from a context menu by XCUITest. */
+            Button(role: .destructive) { Task { await chat.block(m.sender_id, name: senderName(m)) } } label: {
+                Label("احظر \(senderName(m))", systemImage: "hand.raised.fill")
+            }
+            .accessibilityIdentifier("chat.menu.block")
+        }
         if chat.canDelete(m) {
             Button(role: .destructive) { Task { await chat.delete(m) } } label: {
                 Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الرحلة)", systemImage: "trash")
@@ -431,6 +456,9 @@ struct ChatThreadView: View {
         VStack(spacing: theme.space(.s)) {
             if let e = chat.lastError {
                 SaryInlineMessage(text: e, tone: .warning).accessibilityIdentifier("chat.error")
+            }
+            if let n = chat.notice {
+                SaryInlineMessage(text: n, tone: .info).accessibilityIdentifier("chat.notice")
             }
             if !writable {
                 SaryInlineMessage(text: ChatRules.errorText(thread.readOnlyReason ?? chat.readOnlyReason ?? "outing_ended"), tone: .info)

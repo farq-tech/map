@@ -94,6 +94,8 @@ enum LocationTuning {
         var speedMps: Double?
         /// The road matcher found a road recently (trail only).
         var onRoad = false
+        /// Guidance is waiting for a fresh fix («ننتظر موقعك…»): the best the chip can do, now.
+        var urgent = false
     }
 
     struct Plan: Equatable {
@@ -118,6 +120,9 @@ enum LocationTuning {
         if n.trail {
             let t = trailSettings(onRoad: n.onRoad)
             return Plan(desiredAccuracy: n.motion == .walking ? kCLLocationAccuracyBest : t.desiredAccuracy, distanceFilter: t.distanceFilter, activityType: act)
+        }
+        if n.urgent {
+            return Plan(desiredAccuracy: kCLLocationAccuracyBestForNavigation, distanceFilter: kCLDistanceFilterNone, activityType: act)
         }
         if n.sharing {
             if n.offScreen && n.backgroundShare {

@@ -53,11 +53,11 @@ final class ConvoyIntelUITests: XCTestCase {
     func testGroupRowsShowTheLeaderDistance() {
         let app = launch([])
         any(app, "outing-sheet-summary").tap()
-        app.buttons["tab.group"].tap()
         XCTAssertTrue(any(app, "participant-row").waitForExistence(timeout: 5))
         sleep(2)
         shot(app, "convoy-group-tab")
-        XCTAssertTrue(any(app, "rally-card").exists)
+        any(app, "sheet.rally").tap()
+        XCTAssertTrue(any(app, "rally-card").waitForExistence(timeout: 6), "the rally point one tap away")
     }
 
     func testRulesScreenFromSettings() {

@@ -44,14 +44,14 @@ final class SaryAlbarqUITests: XCTestCase {
         // Tap the status bar, not the map centre: a demo car sits there and would open its card.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the interruption monitor answer a permission prompt
         XCTAssertTrue(app.buttons["outing-back"].waitForExistence(timeout: 10), "trip header")
-        XCTAssertTrue(app.buttons["outing-actions"].exists, "«أدوات» on the map's side")
+        XCTAssertTrue(app.buttons["outing-actions"].exists, "«المزيد» at the end of the sheet's quick row")
         XCTAssertTrue(app.buttons["outing-locate"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["outing-sos"].exists, "SOS dock")
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         summary.tap()
-        XCTAssertTrue(app.buttons["tab.trip"].waitForExistence(timeout: 5) || app.staticTexts["الرحلة"].exists, "tabs at half height")
-        app.buttons["tab.group"].tap()
+        XCTAssertFalse(app.buttons["tab.trip"].exists, "no tabs any more: one sheet")
+        XCTAssertTrue(app.descendants(matching: .any)["participant-row"].firstMatch.waitForExistence(timeout: 5), "the people at half height")
         XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "participant-row").count, 4)
         XCTAssertTrue(app.staticTexts["أبو فهد"].exists)
         sleep(1)
@@ -94,8 +94,13 @@ final class SaryAlbarqUITests: XCTestCase {
         while Date() < deadline {
             for l in labels where springboard.buttons[l].exists {
                 shot("2-system-location-alert")
-                springboard.buttons[l].tap()
-                return true
+                /* iOS 27: a tap during the alert's entry animation is dropped. Tap until it is gone. */
+                let b = springboard.buttons[l]
+                while b.exists && Date() < deadline {
+                    if b.isHittable { b.tap() }
+                    usleep(500_000)
+                }
+                if !b.exists { return true }
             }
             usleep(250_000)
         }
@@ -169,7 +174,7 @@ final class SaryAlbarqUITests: XCTestCase {
         /* Build 21: iOS never asked → the Najdi pre-prompt is right above the button (no extra screen). */
         let pre = any(app, "join.prePrompt").firstMatch
         XCTAssertTrue(pre.exists, "the pre-prompt before the system alert")
-        XCTAssertTrue(pre.label.contains("عشان العيال يشوفونك وتوصلك الفزعة"), pre.label)
+        XCTAssertTrue(pre.label.contains("عشان الربع يشوفونك وتوصلهم الطوارئ"), pre.label)
         sleep(1)
         shot("1-invite-one-screen", app)
 
@@ -195,7 +200,14 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertFalse(locating.exists, "a good fix arrives (simulator location set) and «نحدد موقعك…» goes")
         shot("2c-arrival-located", app)
         XCTAssertFalse(app.buttons["notify.allow"].exists, "notifications are not asked at join")
-        XCTAssertFalse(app.buttons["share.always.allow"].exists, "«دائمًا» is not asked at join")
+        /* Field 2026-11-06: «دائمًا» is now explained right after joining (after the welcome card),
+         * so the share keeps going with the phone locked until the trip ends. */
+        let later = app.buttons["share.always.later"]
+        XCTAssertTrue(later.waitForExistence(timeout: 20), "«دائمًا» explained right after joining")
+        XCTAssertTrue(app.staticTexts["خلّ الربع يشوفونك طول الطلعة"].exists, "the after-join explainer")
+        shot("2d-always-after-join", app)
+        later.tap()
+        XCTAssertTrue(later.waitForNonExistence(timeout: 5))
         summary.tap()
         let sharing = app.staticTexts["live.sharing"]
         XCTAssertTrue(sharing.waitForExistence(timeout: 10))
@@ -205,12 +217,12 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(sharing.label.contains("مُشارَك"), "sharing ON by itself: \(sharing.label)")
         XCTAssertFalse(app.buttons["live.share"].exists, "no «شارك موقعي»")
         XCTAssertFalse(app.buttons["live.stopSharing"].exists, "no «أوقف»")
-        XCTAssertTrue(app.buttons["live.leave"].exists, "«غادر الطلعة» is the way out, right there")
+        XCTAssertTrue(app.buttons["outing-actions"].exists, "«غادر الطلعة» is in «المزيد»")
         sleep(1)
         shot("3-in-trip-sharing-on", app)
 
         app.buttons["tab.more"].tap()
-        let who = any(app, "settings.whoSees")
+        let who = any(app, "settings.sharing")
         XCTAssertTrue(who.waitForExistence(timeout: 5))
         who.tap()
         XCTAssertTrue(any(app, "settings-battery").waitForExistence(timeout: 5))
@@ -221,19 +233,20 @@ final class SaryAlbarqUITests: XCTestCase {
         app.buttons["settings.sub.back"].tap()
         XCTAssertTrue(app.buttons["settings.back"].waitForExistence(timeout: 3))
         app.buttons["settings.back"].tap()
-        if app.buttons["tab.trip"].waitForExistence(timeout: 3) { app.buttons["tab.trip"].tap() }
-        XCTAssertTrue(app.buttons["live.leave"].waitForExistence(timeout: 5))
-        app.buttons["live.leave"].tap()
+        let confirmLeave = app.openLeaveConfirmation()
         XCTAssertTrue(app.staticTexts["تغادر الطلعة؟"].waitForExistence(timeout: 5) || app.sheets.firstMatch.waitForExistence(timeout: 2), "confirmation first")
         shot("5-leave-confirm", app)
-        XCTAssertTrue(app.buttons["غادر الطلعة"].firstMatch.exists)
+        XCTAssertTrue(confirmLeave.exists)
         /* iOS 26+ shows the dialog as a popover without «إلغاء»: tapping outside cancels. */
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.42)).tap()
         let title = app.staticTexts["تغادر الطلعة؟"]
         let gone = Date().addingTimeInterval(5)
         while title.exists && Date() < gone { usleep(250_000) }
         XCTAssertFalse(title.exists, "dismissed")
-        XCTAssertTrue(sharing.exists, "cancel keeps the trip and the share")
+        /* The tap outside may also close «المزيد» and lower the sheet: raise it again to read the state. */
+        if app.buttons["outing-actions-close"].exists { app.buttons["outing-actions-close"].tap() }
+        if !sharing.waitForExistence(timeout: 2) { summary.tap() }
+        XCTAssertTrue(sharing.waitForExistence(timeout: 5), "cancel keeps the trip and the share")
     }
 
     /// Refused: not joined. One calm screen; «افتح الإعدادات» → allow → back: joins and enters by itself.

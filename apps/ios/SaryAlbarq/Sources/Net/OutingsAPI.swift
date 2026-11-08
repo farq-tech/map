@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Security
 
 enum Endpoints {
@@ -47,7 +48,7 @@ struct OutingAPIError: Error, Equatable {
     /// A sentence a person can act on — same table as the web's `outingErrorText`.
     var arabic: String {
         let t: [String: String] = [
-            "invite_invalid": "رابط الدعوة غير صحيح.",
+            "invite_invalid": "الرابط ناقص أو فيه خطأ.",
             "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من أمير الرحلة رابطًا جديدًا.",
             "invite_revoked": "ألغى أمير الرحلة هذا الرابط. اطلب رابطًا جديدًا.",
             "outing_ended": "انتهت هذه الطلعة.",
@@ -82,7 +83,7 @@ struct OutingAPIError: Error, Equatable {
             "implausible_summary": "أرقام الرحلة على هذا الجهاز غير منطقية، فلم نرسلها.",
             "invalid_summary": "تعذّر إرسال الملخص.",
             "server_busy": "الخادم مشغول. أعد المحاولة بعد قليل.",
-            "invite_taken": "هذه الدعوة لشخص آخر. اطلب من أمير الرحلة دعوة باسمك.",
+            "invite_taken": "هذه الدعوة لشخص آخر. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «حسابي» أو اطلب من أمير الرحلة دعوة جديدة باسمك.",
             "open_links_disabled": "أوقف أمير الرحلة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
             "invite_used": "استُخدمت هذه الدعوة، وصاحبها في الطلعة.",
             "invite_replaced": "أُرسلت لهذا الشخص دعوة أحدث.",
@@ -95,44 +96,133 @@ struct OutingAPIError: Error, Equatable {
     }
 }
 
-/// The identity token lives in this device's Keychain only, never in UserDefaults.
-enum IdentityStore {
-    private static let service = "sa.sary.albarq.identity"
-    private static let account = "outings.v1"
+/// Where the identity is kept. The real one is the Keychain; tests swap in memory
+/// (a "relaunch" is a new read from the same backend).
+protocol IdentityKeychain {
+    func read() -> (status: OSStatus, data: Data?)
+    /// Update in place when present, add otherwise. Never delete-then-add.
+    func write(_ data: Data) -> OSStatus
+    func delete() -> OSStatus
+}
 
-    static func load() -> Identity? {
-        let q: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
+struct SystemIdentityKeychain: IdentityKeychain {
+    let service = "sa.sary.albarq.identity"
+    let account = "outings.v1"
+
+    private var base: [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+    }
+
+    func read() -> (status: OSStatus, data: Data?) {
+        var q = base
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return try? JSONDecoder().decode(Identity.self, from: d)
+        let st = SecItemCopyMatching(q as CFDictionary, &out)
+        return (st, out as? Data)
     }
 
-    static func save(_ id: Identity?) {
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        SecItemDelete(base as CFDictionary)
-        guard let id, let d = try? JSONEncoder().encode(id) else { return }
-        var add = base
-        add[kSecValueData as String] = d
+    func write(_ data: Data) -> OSStatus {
         /* Readable after first unlock, so a relaunch in the background (screen locked) still has it. */
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        let attrs: [String: Any] = [kSecValueData as String: data,
+                                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let st = SecItemUpdate(base as CFDictionary, attrs as CFDictionary)
+        guard st == errSecItemNotFound else { return st }
+        var add = base
+        for (k, v) in attrs { add[k] = v }
+        return SecItemAdd(add as CFDictionary, nil)
     }
+
+    func delete() -> OSStatus { SecItemDelete(base as CFDictionary) }
+}
+
+/// The identity token lives in this device's Keychain only, never in UserDefaults.
+///
+/// Build 20 lost signed-in people on relaunch: `load()` turned *any* Keychain
+/// failure into "no identity" (e.g. errSecInteractionNotAllowed while iOS starts
+/// the app in the background before protected data is available — a location
+/// relaunch, a pushtotalk wake-up, prewarming). The app then showed onboarding,
+/// and `save()` (delete, then add) of the new identity destroyed the old one.
+/// Now: "not found" and "cannot read right now" are different answers, the
+/// write updates in place, and only an explicit sign-out / account deletion
+/// deletes (`clear()`).
+enum IdentityStore {
+    enum Read: Equatable {
+        case found(Identity)
+        /// Nothing saved on this device.
+        case none
+        /// The Keychain did not answer (locked before first unlock, prewarm, I/O): try again later.
+        case unavailable(OSStatus)
+    }
+
+    static var keychain: IdentityKeychain = SystemIdentityKeychain()
+    private static let lock = NSLock()
+    private static var cached: Identity?
+    /// Whether iOS has protected data available (false before first unlock / during prewarm).
+    /// Injectable for tests.
+    static var protectedDataAvailable: () -> Bool = {
+        if Thread.isMainThread { return MainActor.assumeIsolated { UIApplication.shared.isProtectedDataAvailable } }
+        return true
+    }
+    private static var migrated = false
+
+    static func read() -> Read {
+        let (st, data) = keychain.read()
+        switch st {
+        case errSecSuccess:
+            guard let data, let id = try? JSONDecoder().decode(Identity.self, from: data) else { return .unavailable(errSecDecode) }
+            lock.withLock { cached = id }
+            /* Items saved by builds before 21 may still be «when unlocked only»: such an item is
+             * invisible (errSecItemNotFound) when iOS relaunches the app with the phone locked.
+             * Re-write it once per process so it moves to «after first unlock» (update in place). */
+            let first = lock.withLock { () -> Bool in defer { migrated = true }; return !migrated }
+            if first { _ = keychain.write(data) }
+            return .found(id)
+        case errSecItemNotFound:
+            /* Not found while protected data is unavailable is not an answer: a «when unlocked»
+             * item hides then. Only an unlocked phone can say "nothing saved". */
+            return protectedDataAvailable() ? .none : .unavailable(st)
+        default:
+            return .unavailable(st)
+        }
+    }
+
+    /// The identity, or nil when none is saved *or* it cannot be read right now.
+    static func load() -> Identity? {
+        if case let .found(id) = read() { return id }
+        return nil
+    }
+
+    /// The token for a request: the last identity read or saved in this process,
+    /// so a transient Keychain miss never sends a request without one.
+    static func currentToken() -> String? {
+        if let t = lock.withLock({ cached?.token }) { return t }
+        return load()?.token
+    }
+
+    @discardableResult
+    static func save(_ id: Identity?) -> Bool {
+        guard let id else { clear(); return true }
+        guard let d = try? JSONEncoder().encode(id) else { return false }
+        lock.withLock { cached = id }
+        return keychain.write(d) == errSecSuccess
+    }
+
+    /// Explicit sign-out / account deletion / test reset only.
+    static func clear() {
+        lock.withLock { cached = nil }
+        _ = keychain.delete()
+    }
+
+    /// Tests: forget the in-process copy, as a new launch would.
+    static func forgetCache() { lock.withLock { cached = nil; migrated = false } }
 }
 
 /// REST client for `/api/outings`. Invite tokens travel in bodies, never URLs.
 final class OutingsAPI {
     var tokenProvider: () -> String?
-    var onUnauthorized: () -> Void = {}
+    /// A 401 for a request that carried this token. Requests without a token never sign anyone out.
+    var onUnauthorized: (_ sentToken: String) -> Void = { _ in }
     private let session: URLSession
     /// Internal so the voice-note client (Sources/VoiceNotes) builds its raw-audio requests the same way.
     let base: URL
@@ -160,7 +250,8 @@ final class OutingsAPI {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
-        if auth, let t = tokenProvider() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let sent = auth ? tokenProvider() : nil
+        if let t = sent { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         let data: Data, resp: URLResponse
         do {
             (data, resp) = try await session.data(for: req)
@@ -170,7 +261,7 @@ final class OutingsAPI {
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         if !(200..<300).contains(status) || obj?["ok"] as? Bool == false {
-            if status == 401 { onUnauthorized() }
+            if status == 401, let sent { onUnauthorized(sent) }
             throw OutingAPIError(code: obj?["error"] as? String ?? "http_\(status)", status: status)
         }
         do {
@@ -311,10 +402,27 @@ final class OutingsAPI {
     }
     func get(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)") }
     func poll(_ id: String) async throws -> OutingSnapshot { try await call("GET", "/\(id)/live") }
-    func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil) async throws {
+    /// `hint` / `lowPower`: why this phone may go quiet («أثناء الاستخدام» in the background, Low
+    /// Power Mode…), so the others see the reason (server presence.js), never a vague «انقطع».
+    func heartbeat(_ id: String, gps: GpsState, battery: BatteryInfo? = nil, hint: PresenceHint? = nil, lowPower: Bool? = nil) async throws {
         struct Bat: Encodable { var level: Double; var charging: Bool }
-        struct B: Encodable { var gps: String; var battery: Bat? }
-        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: B(gps: gps.rawValue, battery: battery.map { Bat(level: $0.level, charging: $0.charging) }), timeout: 8)
+        struct B: Encodable { var gps: String; var battery: Bat?; var hint: String?; var low_power: Bool? }
+        let _: OkBox = try await call("POST", "/\(id)/heartbeat", body: B(gps: gps.rawValue, battery: battery.map { Bat(level: $0.level, charging: $0.charging) },
+                                                                          hint: hint?.rawValue, low_power: lowPower), timeout: 8)
+    }
+
+    /// The app is being closed (`applicationWillTerminate`): tell the server in the ~2 s left, so
+    /// the others read «سرى مسكّر عنده» instead of guessing. Blocking on purpose; best effort.
+    func heartbeatTerminatingNow(_ id: String, gps: GpsState, wait: TimeInterval = 2) {
+        guard let t = tokenProvider() else { return }
+        var req = URLRequest(url: base.appendingPathComponent("api/outings/\(id)/heartbeat"), timeoutInterval: wait)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["gps": gps.rawValue, "hint": PresenceHint.terminated.rawValue])
+        let done = DispatchSemaphore(value: 0)
+        session.dataTask(with: req) { _, _, _ in done.signal() }.resume()
+        _ = done.wait(timeout: .now() + wait)
     }
     func sendPosition(_ id: String, fix: WireFix) async throws {
         struct B: Encodable { var fix: WireFix }
@@ -346,6 +454,15 @@ final class OutingsAPI {
         let r: SosBox = try await call("POST", "/\(id)/sos", body: B(fix: fix))
         return r.sos
     }
+    struct HiddenBox: Decodable { var hidden: Bool; var since: String? }
+    /// «أخفِ موقعي / أظهر موقعي».
+    func setHidden(_ id: String, hidden: Bool) async throws -> HiddenBox {
+        try await call("PUT", "/\(id)/hidden", body: ["hidden": hidden])
+    }
+    /// «نبّهه» (leader): one push to that member only. Errors: member_hidden, too_frequent, leader_only.
+    func nudge(_ id: String, member: String) async throws {
+        let _: OkBox = try await call("POST", "/\(id)/members/\(member)/nudge")
+    }
     func cancelSos(_ id: String) async throws {
         let _: SosBox = try await call("DELETE", "/\(id)/sos")
     }
@@ -376,13 +493,14 @@ final class OutingsAPI {
         req.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue(String(durationMs), forHTTPHeaderField: "X-Clip-Duration-Ms")
-        if let t = tokenProvider() { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        let sent = tokenProvider()
+        if let t = sent { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         req.httpBody = audio
         let (data, resp) = try await raw(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         guard (200..<300).contains(status) else {
-            if status == 401 { onUnauthorized() }
+            if status == 401, let sent { onUnauthorized(sent) }
             throw OutingAPIError(code: obj?["error"] as? String ?? "http_\(status)", status: status)
         }
         if let c = try? JSONDecoder().decode(ClipBox.self, from: data) { return c.clip }

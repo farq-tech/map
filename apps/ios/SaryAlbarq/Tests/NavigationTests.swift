@@ -233,9 +233,14 @@ final class StubURLProtocol: URLProtocol {
 final class FakeMapbox: NavRoutingProvider {
     let name = "Mapbox"
     var calls = 0
+    /// Throw this instead of answering.
+    var fail: NavRoutingError?
+    /// Where the route ends (default: at the target, i.e. Mapbox covers it).
+    var end: LngLat?
     func routes(_ r: NavRouteRequest) async throws -> NavRoutePlan {
         calls += 1
-        return NavRoutePlan(routes: [NavRoute(id: "mapbox-0", coordinates: [r.origin, r.target.position], distanceM: 1000, durationS: 100, steps: [])])
+        if let fail { throw fail }
+        return NavRoutePlan(routes: [NavRoute(id: "mapbox-0", coordinates: [r.origin, end ?? r.target.position], distanceM: 1000, durationS: 100, steps: [])])
     }
 }
 
@@ -307,15 +312,52 @@ final class NavRoutingProviderTests: XCTestCase {
         }
     }
 
-    func testAutoUsesValhallaOnlyWhenTheServerSaysEnabled() async throws {
+    /// «تلقائي»: Mapbox with traffic wherever it reaches the target (live ETA in town), even with Valhalla on.
+    func testAutoKeepsMapboxWithTrafficOnRoadsItCovers() async throws {
         StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
-        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":false}".utf8))
-        let mb = FakeMapbox()
-        var p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
-        XCTAssertEqual(p.routes.first?.id, "mapbox-0", "disabled → Mapbox")
         StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
-        p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
-        XCTAssertEqual(p.routes.first?.id, "farq-0", "enabled → Valhalla")
+        let mb = FakeMapbox()
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto })
+        let p = try await sw.routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0")
+        XCTAssertEqual(sw.name, "Mapbox")
+        XCTAssertFalse(StubURLProtocol.seen.contains { $0.url?.path == "/api/outings/routing/route" }, "Valhalla not asked in town")
+        XCTAssertEqual(NavRouteSpec.from(req().options).profile, .drivingTraffic, "default options: driving-traffic")
+    }
+
+    /// «تلقائي»: Mapbox stops 2 km short (desert / a road it does not know) → Valhalla, which reaches it.
+    func testAutoUsesValhallaWhereMapboxStopsShort() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
+        let mb = FakeMapbox()
+        mb.end = LngLat(lng: 46.695, lat: 24.69)
+        let p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "farq-0")
+    }
+
+    /// «تلقائي»: Mapbox has no route → Valhalla; Valhalla disabled → Mapbox's own error; offline → no second server.
+    func testAutoFallsToValhallaOnlyWhenEnabledAndMapboxFails() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":true}".utf8))
+        let mb = FakeMapbox()
+        mb.fail = .noRoute
+        let p = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(p.routes.first?.id, "farq-0")
+
+        mb.fail = .offline
+        StubURLProtocol.seen = []
+        do { _ = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req()); XCTFail("offline") }
+        catch { XCTAssertEqual(error as? NavRoutingError, .offline) }
+        XCTAssertTrue(StubURLProtocol.seen.isEmpty)
+
+        StubURLProtocol.routes["/api/outings/routing/status"] = (200, Data("{\"enabled\":false}".utf8))
+        mb.fail = .noRoute
+        mb.end = LngLat(lng: 46.695, lat: 24.69)
+        do { _ = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req()); XCTFail("disabled") }
+        catch { XCTAssertEqual(error as? NavRoutingError, .noRoute) }
+        mb.fail = nil
+        let short = try await SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .auto }).routes(req())
+        XCTAssertEqual(short.routes.first?.id, "mapbox-0", "disabled → Mapbox even when it stops short")
     }
 
     func testMapboxChoiceNeverCallsTheCompanyServer() async throws {
@@ -325,9 +367,24 @@ final class NavRoutingProviderTests: XCTestCase {
         XCTAssertEqual(mb.calls, 1)
     }
 
-    func testDefaultChoiceIsMapbox() {
+    /// «صوت سرى» is built from our NavStep, not from the router's text: a Valhalla route must give every
+    /// maneuver its clips (and a spoken cue) just as a Mapbox one does, or the default «تلقائي» goes quiet.
+    func testValhallaManeuversMapToSaryVoiceClips() async throws {
+        StubURLProtocol.routes["/api/outings/routing/route"] = (200, fixture)
+        let p = try await farq().routes(req())
+        for r in p.routes {
+            for (i, s) in r.steps.enumerated() where s.maneuver.kind != .depart {
+                let near = SaryVoiceScript.step(s, distanceM: 300)
+                XCTAssertFalse(near.isEmpty, "\(r.id) step \(i) \(s.maneuver.kind)")
+                XCTAssertNotEqual(near.last, "mv_02", "\(r.id) step \(i): an action, not «كمّل سيده»")
+                XCTAssertFalse(s.spoken.isEmpty, "\(r.id) step \(i): the router announces it")
+            }
+        }
+    }
+
+    func testDefaultChoiceIsAuto() {
         UserDefaults.standard.removeObject(forKey: NavProviderChoice.key)
-        XCTAssertEqual(NavProviderChoice.current, .mapbox)
+        XCTAssertEqual(NavProviderChoice.current, .auto, "Mapbox with traffic in town, Farq's Valhalla off Mapbox's roads")
     }
 }
 
@@ -521,5 +578,101 @@ final class ExternalNavTests: XCTestCase {
         let schemes = o["LSApplicationQueriesSchemes"] as? [String] ?? []
         XCTAssertTrue(schemes.contains("comgooglemaps"))
         XCTAssertTrue(schemes.contains("waze"))
+    }
+
+    /// «خيارات المسار»: the routes are framed in the map left between the header and the sheet —
+    /// never a padding taller than the map (Mapbox refused it and the map stayed where it was).
+    func testRouteOptionsCameraAlwaysLeavesRoomForTheRoutes() {
+        let size = CGSize(width: 402, height: 874)
+        /* The build 21 case: header 160 pt, options sheet 520 pt tall. */
+        let p = NavMapDrawer.fitPadding(size: size, chrome: UIEdgeInsets(top: 160, left: 0, bottom: 520, right: 0), bottomShare: 0.55)
+        XCTAssertLessThanOrEqual(p.top + p.bottom, size.height * (1 - NavMapDrawer.minVisibleShare) + 0.5)
+        XCTAssertGreaterThan(size.height - p.top - p.bottom, 170, "a strip of map is left for the routes")
+        XCTAssertGreaterThan(p.bottom, 450, "still clears most of the sheet")
+        /* Plenty of room: the plain margins. */
+        let q = NavMapDrawer.fitPadding(size: size, chrome: UIEdgeInsets(top: 50, left: 0, bottom: 100, right: 0), bottomShare: 0.3)
+        XCTAssertEqual(q.top, 120)
+        XCTAssertEqual(q.bottom, 874 * 0.3 + 24, accuracy: 0.5)
+        XCTAssertEqual(q.left, 50)
+    }
+}
+
+/// The guidance HUD v2 rules and the traffic colours on the route.
+final class NavHUDTests: XCTestCase {
+    private func step(_ kind: NavManeuverKind, road: String? = nil, sign: String? = nil, dist: Double = 1000) -> NavStep {
+        NavStep(maneuver: .init(kind: kind, direction: .left), roadName: road, signText: sign, location: riyadh, distanceM: dist, durationS: 60)
+    }
+
+    func testThenOnlyWhenTheNextTurnIsClose() {
+        let next = step(.turn, road: "طريق العليا")
+        XCTAssertTrue(NavHUD.showsThen(step(.turn, dist: 250), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 400), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 3300), next: next))
+        XCTAssertFalse(NavHUD.showsThen(step(.turn, dist: 100), next: nil))
+        XCTAssertFalse(NavHUD.showsThen(step(.arrive, dist: 0), next: next))
+    }
+
+    func testDistanceSplitsNumberAndUnit() {
+        let km = NavHUD.distanceParts(3300)
+        XCTAssertEqual(km.value, "٣٫٣")
+        XCTAssertEqual(km.unit, "كم")
+        let m = NavHUD.distanceParts(480)
+        XCTAssertEqual(m.value, "٤٨٠")
+        XCTAssertEqual(m.unit, "م")
+    }
+
+    func testTitleIsTheRoadElseTheAction() {
+        XCTAssertEqual(NavHUD.title(step(.turn, road: "طريق الملك فهد"), targetName: nil), "طريق الملك فهد")
+        XCTAssertEqual(NavHUD.title(step(.offRamp, sign: "مخرج 5"), targetName: nil), NavText.arabicDigitsOnly("مخرج 5"))
+        XCTAssertEqual(NavHUD.title(step(.turn), targetName: nil), NavText.action(.init(kind: .turn, direction: .left)))
+        XCTAssertEqual(NavHUD.title(step(.arrive), targetName: "حطين"), "حطين")
+        XCTAssertEqual(NavHUD.title(step(.arrive), targetName: nil), "وجهتك")
+    }
+
+    func testOverLimit() {
+        XCTAssertTrue(NavHUD.overLimit(kmh: 90, limit: 80))
+        XCTAssertTrue(NavHUD.overLimit(kmh: 80.6, limit: 80))
+        XCTAssertFalse(NavHUD.overLimit(kmh: 80.4, limit: 80))
+        XCTAssertFalse(NavHUD.overLimit(kmh: 120, limit: nil))
+        XCTAssertFalse(NavHUD.overLimit(kmh: nil, limit: 80))
+    }
+
+    func testTripLineAndShare() {
+        let eta = Date(timeIntervalSince1970: 1_762_466_160) // 00:56 Riyadh
+        XCTAssertEqual(NavHUD.tripLine(meters: 19_000, eta: eta), "١٩ كم · ١٢:٥٦ ص")
+        let s = NavHUD.shareText(target: "حطين", eta: eta, seconds: 22 * 60)
+        XCTAssertTrue(s.contains("إلى حطين") && s.contains("١٢:٥٦ ص") && s.contains("٢٢ د"), s)
+    }
+
+    func testCongestionBands() {
+        XCTAssertEqual(NavCongestion(numeric: 10), .low)
+        XCTAssertEqual(NavCongestion(numeric: 45), .moderate)
+        XCTAssertEqual(NavCongestion(numeric: 70), .heavy)
+        XCTAssertEqual(NavCongestion(numeric: 95), .severe)
+        XCTAssertEqual(NavCongestion(numeric: nil), .unknown)
+        XCTAssertEqual([NavCongestion.unknown, .low, .moderate, .heavy, .severe].map(\.band), [0, 0, 1, 2, 3])
+    }
+
+    func testTrafficRunsMergeAndTrimBehindTheCar() {
+        /* Five ~111 m segments north. */
+        let pts = (0...5).map { LngLat(lng: 46.7, lat: 24.7 + Double($0) * 0.001) }
+        let c: [NavCongestion] = [.low, .low, .heavy, .severe, .moderate]
+        let all = NavTraffic.runs(pts, congestion: c, from: 0)!
+        XCTAssertEqual(all.map(\.band), [0, 2, 3, 1])
+        XCTAssertEqual(all[0].coordinates.count, 3, "two low segments merge")
+        /* 1.5 segments driven: the first run starts mid-segment, still blue. */
+        let seg = Vehicle.distanceMeters(pts[0], pts[1])
+        let ahead = NavTraffic.runs(pts, congestion: c, from: seg * 1.5)!
+        XCTAssertEqual(ahead.map(\.band), [0, 2, 3, 1])
+        XCTAssertEqual(ahead[0].coordinates.first!.lat, 24.7015, accuracy: 0.0001)
+        /* Past the jam: only what is ahead. */
+        XCTAssertEqual(NavTraffic.runs(pts, congestion: c, from: seg * 3.5)!.map(\.band), [3, 1])
+    }
+
+    func testNoTrafficMeansOnePlainColour() {
+        let pts = (0...3).map { LngLat(lng: 46.7, lat: 24.7 + Double($0) * 0.001) }
+        XCTAssertNil(NavTraffic.runs(pts, congestion: nil, from: 0), "Valhalla / the desert: no annotation")
+        XCTAssertNil(NavTraffic.runs(pts, congestion: [.low, .low, .low], from: 0), "all free: the plain route")
+        XCTAssertNil(NavTraffic.runs(pts, congestion: [.heavy], from: 0), "a mismatched annotation is never drawn")
     }
 }

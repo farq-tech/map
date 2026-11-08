@@ -6,7 +6,8 @@ import UIKit
 /// and its actions. The rules themselves are pure (`TripRecord`, `TripPresenter`).
 extension LiveOutingController {
     /// The trip's destination: the outing's (the plan's), never a guess.
-    var tripDestination: OutingDestination? { planModel?.plan.destination }
+    /// The current «مشوار» first (mine, else the group's), then the plan's.
+    var tripDestination: OutingDestination? { legs.current?.destination ?? planModel?.plan.destination }
 
     /// The outing this one is «طريق العودة» from (this phone only).
     var returnOrigin: String? { ReturnTripStore.origin(of: session.id) }
@@ -20,6 +21,7 @@ extension LiveOutingController {
             guard let self, self.tripDestination != nil else { return nil }
             return self.tripPanel
         }
+        registerLegs()
         trip.startClock { [weak self] in
             guard let self else { return }
             self.updateTrip()
@@ -40,6 +42,11 @@ extension LiveOutingController {
         var i = TripPresenterInput()
         let v = session.displayView
         i.record = trip.record
+        /* A leg's numbers start with the leg (not the outing): «قطعنا» / «المدة» / ETA agree with «سجل الطلعة». */
+        if let leg = legs.current ?? LegLifecycle.lastArrived(legs.legs), let ls = leg.startedDate, var st = i.record.start {
+            st.atMs = max(st.atMs, ls.timeIntervalSince1970 * 1000)
+            i.record.start = st
+        }
         i.destination = tripDestination
         i.status = v?.status
         i.iLead = v?.iOwn == true
@@ -75,9 +82,7 @@ extension LiveOutingController {
             returnTrip: { [weak self] in self?.startReturnTrip() },
             followOldTrail: { [weak self] in self?.followOldTrail() },
             expand: { [weak self] in
-                guard let self else { return }
-                self.selectedTab = .trip
-                self.sheetDetent = .half
+                self?.modal = .panel(.route)
             })
     }
 
@@ -117,13 +122,19 @@ extension LiveOutingController {
         case .started:
             break
         case .arrived:
+            legArrivedHere()
             UINotificationFeedback.success()
-            toast("وصلت \(tripDestination?.name ?? "الوجهة") 🎉")
-            /* The trip's own guidance ends on «وصلتوا»; a person's own navigation just ends. */
-            if nav.auto { nav.finishArrival() } else if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
-            /* The arrival card is at the top of «المشاركون». */
-            selectedTab = .trip
-            if sheetDetent == .peek { sheetDetent = .half }
+            /* The arrival is said ONCE (the owner's «زحمة» review): the header already reads
+             * «واقفين عند X»; the moment is either the guidance's «وصلتوا» card or one toast, for
+             * 4 s; the leg's numbers are in the «الرحلة» sheet only (not opened by itself). */
+            if nav.auto, nav.phase == .guiding || nav.phase == .offRoad {
+                nav.finishArrival()
+                closeArrivalCardSoon()
+            } else {
+                if nav.phase == .guiding || nav.phase == .offRoad { endNav() }
+                /* The guidance's own «وصلتوا» card is already the moment. */
+                if nav.phase != .arrived { arrivalToast("وصلنا \(tripDestination?.name ?? "الوجهة") 🎉") }
+            }
         case let .memberArrived(id, _):
             guard let name = v?.members[id]?.display_name else { break }
             toast("وصل \(name) \(tripDestination?.name ?? "الوجهة")")

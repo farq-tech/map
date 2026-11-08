@@ -69,7 +69,7 @@ final class MediaHTTPBackend: MediaBackend {
     private let token: () -> String?
     private let session: URLSession
 
-    init(outingId: String, base: URL = Endpoints.apiBase, session: URLSession = .shared, token: @escaping () -> String? = { IdentityStore.load()?.token }) {
+    init(outingId: String, base: URL = Endpoints.apiBase, session: URLSession = .shared, token: @escaping () -> String? = { IdentityStore.currentToken() }) {
         self.outingId = outingId
         self.base = base
         self.session = session

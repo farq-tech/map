@@ -10,12 +10,17 @@ extension LiveOutingController {
                                 driveMode: drive, sheetRaised: sheetDetent != .peek, exploring: exploreActive)
     }
 
-    /// Tapping the trip header: the trip's details («الرحلة» at half height).
+    /// Tapping the trip header: the trip's details (destination, progress, legs, plan).
     func openTripDetails() {
         statusExpanded = false
         bellOpen = false
-        selectedTab = .trip
-        sheetDetent = .half
+        modal = .panel(.route)
+    }
+
+    /// The sheet's row of key actions shows under the summary line (stopped / looking; never
+    /// while driving, guiding, or after the end).
+    func showsQuickRow(drive: Bool) -> Bool {
+        !tripEnded && !nav.isActive && liveContext(drive: drive) != .driving
     }
 
     /// «طريق العودة» on the map by itself: while it runs, after arrival, or off the planned route.
@@ -71,7 +76,7 @@ extension LiveOutingController {
         if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { return }
         let run: () -> Void = { [weak self] in self?.runAction(id) }
         switch id {
-        case "backtrack", "follow", "fit", "rally", "timer", "effects", "realistic": run()
+        case "backtrack", "follow", "fit", "effects", "realistic", "settings": run()
         default: DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: run)
         }
     }
@@ -102,8 +107,11 @@ extension LiveOutingController {
         case "channels": modal = .pttChannels
         case "enjad": openEnjad(.emergency)
         case "fit": a.fitGroup()
-        case "rally": selectedTab = .group; sheetDetent = .half
-        case "timer": selectedTab = .trip; sheetDetent = .half
+        case "rally": modal = .panel(.rally)
+        case "timer": modal = .panel(.safety)
+        case "route": modal = .panel(.route)
+        case "invite": modal = .panel(.invite)
+        case "settings": openSettings()
         case "convoy": modal = .convoyAlerts
         case "brief":
             if let f = location.lastFix { modal = .plan(.brief(LngLat(lng: f.lng, lat: f.lat), name: nil)) } else { toast("ننتظر أول قراءة من GPS") }

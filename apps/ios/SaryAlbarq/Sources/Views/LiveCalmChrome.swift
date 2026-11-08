@@ -8,6 +8,8 @@ enum LiveCalmRules {
         let others = participants.filter { !$0.isMe }
         guard !others.isEmpty else { return nil }
         let live = others.filter { $0.presence.isLive }
+        /* UX ٢١: «٠ مباشر» is noise — nothing to say until somebody is live. */
+        guard !live.isEmpty else { return nil }
         var parts = ["\(SaryFormat.number(live.count)) مباشر"]
         if let far = live.compactMap(\.distanceMeters).max() {
             parts.append("الأبعد \(SaryFormat.distance(meters: far))")
@@ -20,14 +22,10 @@ enum LiveCalmRules {
     static func sideItems(camera: SaryMapControlItem, backTrack: SaryMapControlItem?, plusBadge: Int?,
                           driving: Bool, ended: Bool) -> [SaryMapControlItem] {
         guard !driving else { return [] }
+        /* «أدوات» («+») is no longer on the map: it is «المزيد» at the end of the sheet's quick row
+         * (UX simplification — one way in, not two). `plusBadge` rides on that button now. */
         var items = [camera]
         if let backTrack { items.append(backTrack) }
-        if !ended {
-            var plus = SaryMapControlItem.actions
-            plus.label = "أدوات"
-            plus.badge = plusBadge
-            items.append(plus)
-        }
         return items
     }
 }
@@ -57,6 +55,8 @@ struct LiveSideButtons: View {
     var action: (String) -> Void
     /// The map's bearing: when it is turned, the camera button shows the north (it was a separate compass).
     var bearing: Double = 0
+    /// Captions under the buttons (off while guiding: four bare circles, labels for VoiceOver).
+    var captions = true
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -67,7 +67,7 @@ struct LiveSideButtons: View {
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
                         let turned = item.id == "locate" && !item.isActive && abs(Self.wrap(bearing)) > 3
-                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : "scope") : item.systemImage))
+                        Image(systemName: item.id == "actions" ? "plus" : (item.id == "locate" ? (turned ? "location.north.line.fill" : (captions ? "scope" : item.systemImage)) : item.systemImage))
                             .rotationEffect(.degrees(turned ? -bearing : 0))
                             .font(.system(size: item.id == "actions" ? 22 : 20, weight: .semibold))
                             .foregroundStyle(filled ? p.onAccent : p.textPrimary)
@@ -90,7 +90,7 @@ struct LiveSideButtons: View {
                     .accessibilityValue(Text(item.value ?? ""))
                     .accessibilityAddTraits(item.isActive ? .isSelected : [])
                     .accessibilityIdentifier(item.accessibilityID)
-                    LovableCaption(text: item.label)
+                    if captions { LovableCaption(text: item.label) }
                 }
             }
         }
@@ -100,8 +100,8 @@ struct LiveSideButtons: View {
     static func wrap(_ d: Double) -> Double { var x = d.truncatingRemainder(dividingBy: 360); if x > 180 { x -= 360 }; if x < -180 { x += 360 }; return x }
 }
 
-/// SOS (Lovable): a red disc with «SOS» under the header on the left, «اضغط ثانية» under it.
-/// Fires after a 1 s hold (unchanged). Never hidden while the trip runs.
+/// SOS (Lovable): a red disc with «SOS · طوارئ» under the header on the left, «اضغط مطوّل» under it.
+/// A 1 s hold, then a 3 s «تراجع» countdown (`SOSCountdown`). Never hidden while the trip runs.
 struct LovableSOS: View {
     var state: MySOSUI
     var size: CGFloat
@@ -112,7 +112,7 @@ struct LovableSOS: View {
             SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true)
                 .padding(4)
                 .chromeFrame("sos")
-            LovableCaption(text: "اضغط ثانية")
+            LovableCaption(text: "اضغط مطوّل")
         }
     }
 }
@@ -155,12 +155,12 @@ struct ConvoyLinePill: View {
             HStack(spacing: 6) {
                 Circle().fill(theme.palette.live).frame(width: 8, height: 8)
                 Text(text)
-                    .font(.sary(12, .medium))
+                    .font(.sary(13, .medium))
                     .foregroundStyle(theme.palette.textPrimary)
                     .lineLimit(1)
             }
             .padding(.horizontal, 14)
-            .frame(height: 32)
+            .frame(height: 44)
             .saryGlass(Capsule(), role: .chrome, interactive: true)
         }
         .buttonStyle(SaryPressStyle())
@@ -182,7 +182,7 @@ struct AlertHistoryButton: View {
             Image(systemName: open ? "xmark" : "clock.arrow.circlepath")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.palette.textPrimary)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .saryGlass(Circle(), role: .chrome, interactive: true)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())

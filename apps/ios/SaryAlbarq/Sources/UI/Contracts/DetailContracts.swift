@@ -17,6 +17,8 @@ struct ParticipantCardUIState: Equatable {
     /// True while promote/remove is in flight: those buttons are disabled.
     var isBusy: Bool = false
     var errorMessage: String?
+    /// I lead, they are not live and did not hide on purpose: «نبّهه» (one push to them).
+    var canNudge: Bool = false
 }
 
 struct ParticipantCardActions {
@@ -34,6 +36,8 @@ struct ParticipantCardActions {
     var removeMember: () -> Void = {}
     /// Close button / swipe down.
     var close: () -> Void = {}
+    /// «نبّهه» (leader): ask them to open the app so their position reaches the group.
+    var nudge: () -> Void = {}
 }
 
 // MARK: - Note composer («رسالة»)
@@ -126,6 +130,8 @@ struct NameChipUI: Equatable {
     var speaking: Bool = false
     /// Sharing went silent: «انقطع منذ ١٠ د» instead of the age.
     var silentSince: Date? = nil
+    /// Why (server presence): «ما فيه شبكة» / «جواله مقفل الموقع»… replaces «انقطع».
+    var silentReason: PresenceReason? = nil
 }
 
 struct NoteBubbleUI: Equatable {

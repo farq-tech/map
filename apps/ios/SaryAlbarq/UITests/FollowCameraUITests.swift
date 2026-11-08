@@ -112,6 +112,11 @@ final class FollowCameraUITests: XCTestCase {
         let app = launch(["-SaryNavDemo", "-SaryNavTo", "24.7220,46.6650,حطين", "-SaryNavDelay", "3", "-SaryNavStart"])
         XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 20))
         XCTAssertTrue(waitMode(app, "heading"))
+        /* v2: «نظرة عامة» is in the guidance sheet pulled up by its grabber. */
+        let bar = el(app, "nav.bottomBar")
+        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0))
+        start.press(forDuration: 0.08, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -360)))
+        XCTAssertTrue(el(app, "nav.overview").waitForExistence(timeout: 6))
         el(app, "nav.overview").tap()
         XCTAssertTrue(waitMode(app, "free"))
         XCTAssertTrue(el(app, "camera.recenter").waitForExistence(timeout: 5), "the pill brings guidance back from the overview too")

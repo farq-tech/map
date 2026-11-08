@@ -59,7 +59,7 @@ final class AppModel: ObservableObject {
     private var sessionSink: AnyCancellable?
 
     init(arguments: [String] = ProcessInfo.processInfo.arguments) {
-        let api = OutingsAPI(tokenProvider: { IdentityStore.load()?.token })
+        let api = OutingsAPI(tokenProvider: { IdentityStore.currentToken() })
         self.api = api
         location = LocationSharer()
         push = PushRegistrar(backend: api)
@@ -78,6 +78,7 @@ final class AppModel: ObservableObject {
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
+            OutingLegStore.forgetAll()
             RecentPlaces.forget()
             /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
             LocalAccountData.wipe()
@@ -95,11 +96,16 @@ final class AppModel: ObservableObject {
         if isDemo {
             identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: "أنا", avatar: nil, phone: nil))
         } else {
-            identity = IdentityStore.load()
+            applyIdentityRead(IdentityStore.read())
         }
-        api.onUnauthorized = { [weak self] in
-            Task { @MainActor in self?.signedOutByServer() }
+        api.onUnauthorized = { [weak self] sent in
+            Task { @MainActor in self?.serverRejected(sent) }
         }
+        /* The Keychain could not answer at launch (started by iOS before protected data is
+         * available): read again as soon as it is, never fall back to onboarding meanwhile. */
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.retryIdentityRead() }
+        })
         let forcedOffline = arguments.contains("-SaryOffline")
         monitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor in
@@ -200,6 +206,58 @@ final class AppModel: ObservableObject {
 
     var signedIn: Bool { identity != nil }
 
+    /// The Keychain did not answer yet (not "no identity"): the splash stays, onboarding never shows.
+    @Published private(set) var identityPending = false
+
+    /// Launch / retry: found → signed in; none → onboarding; unavailable → wait and read again.
+    func applyIdentityRead(_ r: IdentityStore.Read) {
+        switch r {
+        case let .found(id):
+            let wasPending = identityPending
+            identityPending = false
+            identity = id
+            /* The list loads with HomeView (.task) once the splash goes. */
+            if wasPending {
+                resumeActiveShare()
+                Task { await push.refresh(signedIn: true) }
+            }
+        case .none:
+            identityPending = false
+            identity = nil
+        case .unavailable:
+            identityPending = true
+            identity = nil
+        }
+    }
+
+    /// Protected data back / app in the foreground: read again while pending, and also while
+    /// signed out — a quick relaunch could have read "nothing" before the Keychain was ready,
+    /// and the account must come back instead of the welcome screen staying (only an explicit
+    /// sign-out deletes it, so a found identity is always the real one).
+    func retryIdentityRead() {
+        guard !isDemo, identityPending || identity == nil, !loading else { return }
+        let r = IdentityStore.read()
+        if case .none = r, !identityPending { return }
+        applyIdentityRead(r)
+    }
+
+    private var verifyingAuth = false
+
+    /// A 401 for a request that carried `sent`. Only the current token counts, and only
+    /// when GET /me says the same: a stray 401 (an old token, a proxy) never signs anyone out.
+    private func serverRejected(_ sent: String) {
+        guard !isDemo, let id = identity, id.token == sent, !verifyingAuth else { return }
+        verifyingAuth = true
+        Task { @MainActor in
+            defer { verifyingAuth = false }
+            do {
+                _ = try await api.me()
+            } catch let e as OutingAPIError where e.status == 401 {
+                if identity?.token == sent { signedOutByServer() }
+            } catch {}
+        }
+    }
+
     /// Waypoints / convoy: the real API, or the demo's in-memory one.
     var featuresBackend: OutingFeaturesBackend { isDemo ? DemoFeatures.backend : api }
 
@@ -219,6 +277,19 @@ final class AppModel: ObservableObject {
             /* `-demo` has no server: the identity is local (the one-step join's silent identity). */
             identity = Identity(token: "", user: PublicUser(id: DemoData.currentMe, display_name: clean, avatar: nil, phone: nil))
             return true
+        }
+        /* Never make a second identity over one this phone already has: the Keychain may have
+         * been unreadable at launch, and a new one used to overwrite (destroy) the real account. */
+        switch IdentityStore.read() {
+        case let .found(existing):
+            applyIdentityRead(.found(existing))
+            return true
+        case .unavailable:
+            identityPending = true
+            errorText = "تعذّر قراءة حسابك على هذا الجهاز. افتح قفل الجوال وحاول مرة ثانية."
+            return false
+        case .none:
+            break
         }
         loading = true
         defer { loading = false }
@@ -678,6 +749,7 @@ final class AppModel: ObservableObject {
         session?.foreground(active || CarPlayHub.active)
         parkedSession?.foreground(active || CarPlayHub.active)
         if active {
+            retryIdentityRead()
             Task { await refresh() }
             Task { await push.refresh(signedIn: signedIn && !isDemo) }
         }

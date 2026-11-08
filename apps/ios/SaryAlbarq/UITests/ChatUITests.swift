@@ -39,9 +39,9 @@ final class ChatUITests: XCTestCase {
 
     func testGroupTabEntryBadgeSendAndReceive() {
         let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
-        let entry = any(app, "chat.entry")
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "«المحادثات» first in the Group tab")
-        XCTAssertTrue(any(app, "tab.badge").waitForExistence(timeout: 5), "unread badge on «المجموعة»")
+        let entry = any(app, "sheet.chat")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "«المحادثة» in the sheet's quick row")
+        XCTAssertTrue(entry.label.contains("،"), "the unread count on it: \(entry.label)")
         shot(app, "chat-01-group-tab-badge")
         entry.tap()
         XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5))
@@ -70,13 +70,31 @@ final class ChatUITests: XCTestCase {
         shot(app, "chat-04-conversations-after")
     }
 
-    func testPlusOpensChatsInTwoTaps() {
+    /// App Store 1.2: a chat message's context menu offers «بلّغ عن الرسالة» and «احظر فلان».
+    /// (SwiftUI context-menu items are not reliably tappable by XCUITest — see the reasons submenu —
+    /// so the block/unblock effects and the report reasons are covered in ChatModerationTests.)
+    func testMessageMenuOffersReportAndBlock() {
+        let app = launch(["-SaryLiveSheet", "half", "-SaryLiveTab", "group"])
+        let entry = any(app, "sheet.chat")
+        XCTAssertTrue(entry.waitForExistence(timeout: 10))
+        entry.tap()
+        XCTAssertTrue(any(app, "chat.row.group").waitForExistence(timeout: 5))
+        any(app, "chat.row.group").tap()
+        let his = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "هلا بالشباب")).firstMatch
+        XCTAssertTrue(his.waitForExistence(timeout: 5), "a friend's message")
+
+        his.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["chat.menu.report"].waitForExistence(timeout: 4) || app.buttons["بلّغ عن الرسالة"].exists, "«بلّغ عن الرسالة» in the menu")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'احظر'")).firstMatch.waitForExistence(timeout: 4), "«احظر فلان» in the menu")
+        shot(app, "chat-10-message-menu")
+    }
+
+    func testQuickRowOpensChatsInOneTap() {
         let app = launch()
-        app.buttons["outing-actions"].tap()
-        let item = any(app, "outing-chat")
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "«+» → المحادثات")
+        let item = any(app, "sheet.chat")
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "«المحادثة» in the quick row")
         item.tap()
-        XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5), "two taps from the map")
+        XCTAssertTrue(any(app, "chat.home").waitForExistence(timeout: 5), "one tap from the map")
     }
 
     func testQuickReplyAndLocationShare() {

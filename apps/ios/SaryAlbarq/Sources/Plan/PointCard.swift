@@ -9,7 +9,7 @@ struct PointActions {
     var weatherHere: ((LngLat) -> Void)? = PointActions.weatherHook
     /// «ملاحة إلى هنا» (turn-by-turn, live outing only): the map's single long press is the
     /// point card, so navigation to a pressed point starts from here.
-    var navigateHere: ((LngLat) -> Void)? = nil
+    var navigateHere: ((LngLat, String?) -> Void)? = nil
     /// «احفظ في أماكني» (on-device saved places, live outing only).
     var savePlace: ((LngLat, String?) -> Void)? = nil
     /// «طيران درون استكشافي» (live map only; disabled while driving — see MapVisualsHub).
@@ -184,7 +184,7 @@ struct PointCard: View {
         let pt = point
         var out: [Extra] = []
         let name = resolvedName
-        if let f = actions.navigateHere { out.append(Extra(id: "point.navigate", title: "ملاحة إلى هنا", icon: SaryIcon.directions) { f(pt) }) }
+        if let f = actions.navigateHere { out.append(Extra(id: "point.navigate", title: "ملاحة إلى هنا", icon: SaryIcon.directions) { f(pt, name) }) }
         if let f = actions.weatherHere { out.append(Extra(id: "point.weather", title: "الطقس هنا", icon: "cloud.sun.fill") { f(pt) }) }
         if let f = actions.setDestination { out.append(Extra(id: "point.destination", title: "اجعلها الوجهة", icon: "flag.checkered") { f(pt, name) }) }
         if let f = actions.addPoint { out.append(Extra(id: "point.add", title: "أضف نقطة", icon: "mappin.and.ellipse") { f(pt) }) }
@@ -274,8 +274,8 @@ struct CoordinateSearchSheet: View {
                 Button { showMe = false } label: { SaryButtonLabel(title: "رجوع للبحث", systemImage: SaryIcon.back) }
                     .buttonStyle(.sary(.plain))
             } else {
-                SaryTextField(title: "مكان أو إحداثية", placeholder: "٢٤٫٧١٣٦، ٤٦٫٦٧٥٣ أو اسم مكان", text: $text, id: "search.field",
-                              help: "يقبل: عشري، درجات ودقائق وثوانٍ (مثل 24°42'49\"N)، درجات ودقائق، روابط Google أو Apple Maps، و Plus Code.")
+                SaryTextField(title: "مكان أو إحداثية", placeholder: "مطعم، شاليهات، اسم حي… أو إحداثية", text: $text, id: "search.field",
+                              help: "يقبل: أي مكان في السعودية (مطاعم، شاليهات، محطات، أحياء، مدن)، عشري، درجات ودقائق وثوانٍ (مثل 24°42'49\"N)، درجات ودقائق، روابط Google أو Apple Maps، و Plus Code.")
                     .onChange(of: text) { _, v in schedule(v) }
                 if let parsed {
                     SarySection(title: "إحداثية") {
@@ -310,10 +310,10 @@ struct CoordinateSearchSheet: View {
                                 if i > 0 { SaryDivider() }
                                 Button { picked = (r.point, String(r.name.prefix(TripPlan.destinationNameMax))) } label: {
                                     HStack(spacing: theme.space(.m)) {
-                                        SaryRowIcon(systemImage: "mappin")
+                                        SaryRowIcon(systemImage: r.icon)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(r.name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                                            if let d = r.detail { Text(d).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                                            if let d = r.subtitle { Text(d).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                                         }
                                         Spacer()
                                         if let near { Text(SaryFormat.distance(meters: PlanGeo.meters(near, r.point))).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
@@ -326,7 +326,7 @@ struct CoordinateSearchSheet: View {
                             }
                         }
                     } else if !searching && searchError == nil && text.count >= 2 {
-                        Text("ما وجدنا مكانًا بهذا الاسم.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        Text("ما وجدنا مكانًا بهذا الاسم. جرّب كلمة ثانية مثل «مطعم» أو «شاليهات» أو اسم الحي.").saryText(.subhead).foregroundStyle(p.textSecondary)
                     }
                 }
                 if myFix != nil {

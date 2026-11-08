@@ -79,6 +79,7 @@ struct LiveOutingScreen: View {
                      * (the layer offline areas always cover). */
                     layer: exploring ? controller.mapLayer : .satellite,
                     terrain3D: exploring && controller.terrain3D,
+                    tripEnded: controller.tripEnded,
                     explore: controller.mapExplore(places: savedPlaces.places, tracks: trackLibrary),
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
@@ -122,7 +123,7 @@ struct LiveOutingScreen: View {
                     }
                 }
                 .saryAppearance(appearance)
-                .sarySheetPresentation(detent: $controller.sheetDetent, trip: false)
+                .sarySheetPresentation(detent: $controller.sheetDetent, trip: controller.showsQuickRow(drive: theme.drive))
         }
     }
 
@@ -144,7 +145,7 @@ struct LiveOutingScreen: View {
     private var bottomInset: CGFloat {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
-        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: false))
+        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: controller.showsQuickRow(drive: theme.drive)))
     }
 
     private var topChromeBottom: CGFloat {
@@ -153,7 +154,7 @@ struct LiveOutingScreen: View {
 
     /// What our chrome covers, for the map's keep-group framing and ornaments.
     private func chromeInsets(full: CGSize) -> UIEdgeInsets {
-        let dockTop = ["dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
+        let dockTop = ["flow", "dock", "convoy", "cluster-row", "readout"].compactMap { frames[$0]?.minY }.min() ?? (full.height - bottomInset)
         let sheetTop = full.height - bottomInset
         let bottom = max(0, full.height - min(dockTop, sheetTop))
         let side = ["cluster", "speed"].compactMap { frames[$0] }
@@ -184,7 +185,9 @@ struct LiveOutingScreen: View {
         /* This layer sits inside the safe area; the sheet edge is measured on the whole screen. */
         let lift = max(0, bottomInset - safeBottom)
         let ended = controller.tripEnded
-        let side = exploring ? exploreSide : sideItems(driving: driving, ended: ended)
+        /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
+        let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
+        let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && !ended
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
@@ -206,7 +209,7 @@ struct LiveOutingScreen: View {
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger)),
-                             side: showSide ? AnyView(sideView(side, exploring: exploring).chromeFrame("cluster")) : nil)
+                             side: showSide ? AnyView(sideView(side, exploring: exploring, captions: !guidingHUD).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
@@ -258,26 +261,67 @@ struct LiveOutingScreen: View {
                         .padding(.horizontal, theme.space(.m))
                         .opacity(controller.sheetDetent == .full ? 0 : 1)
                         .allowsHitTesting(controller.sheetDetent != .full)
+                    /* ONE big button at a time (ux/الطلعة-والمشوار.md): stopped — the outing's primary action
+                     * («ابدأ الطلعة» / «وين رايحين؟» / «ابدأ المشوار») is big and the walkie-talkie is a round
+                     * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
+                    let flow = controller.flowUI
+                    let hasCTA = flow.primary != nil
+                    /* «وصلنا» while driving a leg is the only compact case; any stopped state («وين رايحين؟»,
+                     * «ابدأ المشوار»…) keeps the primary big even if the car is still rolling. */
+                    let ctaCompact: Bool = {
+                        /* The sheet raised (reading the people / the quick row): the primary shrinks to a pill
+                         * at the side so it never covers the cars and markers above the sheet. */
+                        if controller.sheetDetent != .peek { return true }
+                        if case .onLeg = flow.state { return driving }
+                        return false
+                    }()
+                    let pttBig = driving && (ctaCompact || !hasCTA)
                     HStack(alignment: .center, spacing: theme.space(.s)) {
-                        if driving && controller.speed.everRead {
+                        /* UX ٢١: no empty «—» bubble — only with a real reading. Guiding (v2) uses NavSpeedCluster. */
+                        if driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD {
                             LovableSpeedBubble(ui: controller.speedometerUI)
                                 .chromeFrame("speed")
                                 .transition(.opacity)
                         }
-                        if !driving { Spacer() }
-                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, level: controller.pttLevel, pill: true, big: driving,
+                        if hasCTA && !ctaCompact {
+                            OutingPrimaryCTA(ui: flow, compact: false, tapped: controller.flowTapped)
+                                .chromeFrame("flow")
+                        } else if !driving {
+                            Spacer()
+                        }
+                        /* Round beside the big primary: no caption under it (its label is spoken by VoiceOver). */
+                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttBig || !hasCTA, level: controller.pttLevel, pill: pttBig || !hasCTA, big: pttBig,
                                       channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
                                       openChannels: { controller.modal = .pttChannels })
                             .chromeFrame("ptt")
-                        if driving { Spacer() }
+                        if ctaCompact {
+                            Spacer(minLength: 0)
+                            OutingPrimaryCTA(ui: flow, compact: true, tapped: controller.flowTapped)
+                                .chromeFrame("flow")
+                        } else if driving && !hasCTA {
+                            Spacer()
+                        }
+                        if guidingHUD && controller.speed.everRead {
+                            NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
+                                .chromeFrame("speed")
+                                .transition(.opacity)
+                        }
                         if rowMode {
                             SaryControlCluster(items: rowItems(exploring: exploring), axis: .horizontal, action: controlTapped)
                                 .chromeFrame("cluster-row")
                                 .transition(.opacity)
                         }
                     }
+                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
+                                        titleVisibility: .visible) {
+                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
+                        Button("لا، نكمل", role: .cancel) {}
+                    } message: {
+                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
+                    }
                     .overlay(alignment: .topTrailing) {
-                        if driving, controller.nav.phase == .guiding, let k = controller.nav.progress?.speedLimitKmh {
+                        /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
+                        if guidingHUD, !controller.speed.everRead, let k = controller.nav.progress?.speedLimitKmh {
                             NavSpeedLimitSign(kmh: k)
                                 .chromeFrame("speedlimit")
                                 .alignmentGuide(.top) { $0[.bottom] + 8 }
@@ -330,9 +374,9 @@ struct LiveOutingScreen: View {
     }
 
     @ViewBuilder
-    private func sideView(_ items: [SaryMapControlItem], exploring: Bool) -> some View {
+    private func sideView(_ items: [SaryMapControlItem], exploring: Bool, captions: Bool = true) -> some View {
         BearingObserving(overlay: controller.overlay) { b in
-            LiveSideButtons(items: items, action: controlTapped, bearing: b)
+            LiveSideButtons(items: items, action: controlTapped, bearing: b, captions: captions)
         }
     }
 
@@ -350,8 +394,12 @@ struct LiveOutingScreen: View {
         let all = SaryMapControlItem.liveDefaults(following: controller.following, backTracking: controller.backTrack != nil)
         let back = controller.showsBackTrackShortcut && !ended ? all.first { $0.id == "backtrack" } : nil
         /* I am stuck: «غرّزت» is in there. */
-        return LiveCalmRules.sideItems(camera: controller.cameraModeItem, backTrack: back,
-                                       plusBadge: controller.safety.myStuck != nil ? 1 : nil, driving: driving, ended: ended)
+        let items = LiveCalmRules.sideItems(camera: controller.cameraModeItem, backTrack: back,
+                                            plusBadge: controller.safety.myStuck != nil ? 1 : nil, driving: driving, ended: ended)
+        /* Two buttons at most (the owner's «زحمة» review): «طريق العودة» is in «أدوات» and «وين رايحين؟». */
+        guard items.count > 2 else { return items }
+        /* While «طريق العودة» runs it is the way out: it stays, «تتبعني» steps aside. */
+        return controller.backTrack != nil ? items.filter { $0.id != controller.cameraModeItem.id } : items.filter { $0.id != "backtrack" }
     }
 
     /// The same buttons in one row when the sheet is at half height.
@@ -437,6 +485,11 @@ private struct LiveTopStack: View {
             if !exploring && !controller.tripEnded {
                 /* After an invite: «نحدد موقعك…», the one-time welcome, «موقعك مو ظاهر للعيال». */
                 InviteeArrivalStack(controller: controller)
+            }
+            if !exploring, !controller.tripEnded, let line = controller.fixWaitLine {
+                /* Guidance asked for, my fix is old: never silent («ننتظر موقعك…»), starts by itself. */
+                NavFixWaitRow(text: line, slow: controller.fixWait?.slow(now: Date()) == true, cancel: controller.cancelFixWait)
+                    .transition(.opacity)
             }
             if !exploring, let prompt = controller.guidancePrompt {
                 /* The trip runs without guidance on this phone: one tap, for me only. */
@@ -533,14 +586,19 @@ private struct LiveTopStack: View {
             let trip = controller.showsTripStrip ? controller.tripPanel : nil
             let follow = plan.following && plan.plan.hasRoute ? TripHeaderPresenter.follow(plan.followStatus(fix: location.lastFix, now: ctx.date)) : nil
             let h = TripHeaderUI(title: TripHeaderPresenter.title(outingName: ui.outingName, trip: trip, ended: controller.tripEnded),
-                                 line: TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars),
+                                 /* «الطلعة» و«المشوار»: the state, unmistakable (ux/الطلعة-والمشوار.md). */
+                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI.line
+                                     : TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars)),
                                  level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
                                  bell: bell)
             /* «تخفيف الزحمة» ٤–٥: the weather while stopped only (dangerous weather comes as an alert);
              * no binoculars here («أدوات» → «استكشاف وطبقات»); nothing live after the end. */
             let ended = controller.tripEnded
-            TripHeader(ui: h, weather: driving || ended ? nil : weather.chip(now: ctx.date),
-                       accessibility: [ui.outingName, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line, ui.connection.label].compactMap { $0 }.joined(separator: "، "),
+            /* A small phone (iPhone SE): the state line needs the width more than the weather pill
+             * (the weather stays in the sheet and its own alerts). */
+            TripHeader(ui: h, weather: driving || ended || UIScreen.main.bounds.width < 380 ? nil : weather.chip(now: ctx.date),
+                       accessibility: [ui.outingName, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line,
+                                       trip?.phase == .underway ? trip?.remainingLine : nil, ui.connection.label].compactMap { $0 }.joined(separator: "، "),
                        back: controller.actions.back,
                        open: controller.openTripDetails,
                        statusTapped: { controller.bellOpen = false; controller.statusExpanded.toggle() },

@@ -26,6 +26,21 @@ final class CarPlayCoordinator: NSObject {
     private var maneuverKey: String?
     private var maneuvers: [CPManeuver] = []
     private var usingRoad = false
+    /// `.place` trips: where to («روح لفلان», a searched / recent place).
+    private var placeTarget: (position: LngLat, label: String, memberId: String?)?
+    /// The trip preview («الأسرع / الأقصر») while the phone plans road routes.
+    private var preview: (kind: CarPlayTripKind, target: (position: LngLat, label: String, memberId: String?), since: Date)?
+    private var previewTrip: CPTrip?
+    private var previewRouteId: String?
+    private var pausedForReroute = false
+    private var recents = CarPlayRecents.load()
+
+    // Search.
+    private var searchTask: Task<Void, Never>?
+    private var searchResults: [PlaceSearch.Place] = []
+
+    // Walkie-talkie.
+    private var recordingAlertUp = false
 
     // Alerts.
     private var book = CarPlayAlertBook()
@@ -124,6 +139,12 @@ final class CarPlayCoordinator: NSObject {
                              course: fix.flatMap { Policy.trustedHeading($0.heading, speed: $0.speed) },
                              destination: src?.carPlayDestination(), trip: src?.carPlayTripProgress(), stuck: src?.carPlayStuckMembers() ?? [],
                              convoy: src?.carPlayConvoy(), now: Date())
+        if let t = s.voiceNotes.carPlayTalking { i.talking = CarPlayTalking(noteId: t.id, userId: t.userId, name: t.name) }
+        if let src, let v = s.view {
+            for m in v.orderedMembers where m.user_id != v.myId {
+                if let r = src.carPlayPresenceReason(m.user_id) { i.presenceReasons[m.user_id] = r }
+            }
+        }
         #if DEBUG
         debugDecorate(&i, session: s)
         #endif
@@ -141,8 +162,10 @@ final class CarPlayCoordinator: NSObject {
         }
         hideNoOuting()
         let i = input(s)
+        updatePreview(i)
         let g = updateTrip(i, session: s)
         mapVC.show(mapContent(i, session: s))
+        updateRecording(s)
         updateButtons(i)
         updateAlerts(i, guidance: g)
         updateMembersList(i)
@@ -165,6 +188,12 @@ final class CarPlayCoordinator: NSObject {
         c.rally = CarPlayPresenter.rally(i)
         c.destination = CarPlayPresenter.destination(i)
         if usingRoad { c.routeLine = CarPlayFeatures.roadNavigation?.carPlayRoadProgress()?.routeLine ?? [] }
+        if preview != nil, let road = CarPlayFeatures.roadNavigation {
+            let opts = road.carPlayRouteOptions()
+            c.routeLine = (opts.first { $0.id == previewRouteId } ?? opts.first)?.line ?? []
+            if let t = preview?.target, tripKindForPin(preview!.kind) { c.destination = (t.position, t.label) }
+        }
+        if tripKind == .place, let t = placeTarget { c.destination = (t.position, t.label) }
         c.highlightTrail = tripKind == .wayBack
         return c
     }
@@ -183,7 +212,7 @@ final class CarPlayCoordinator: NSObject {
         }
         return [
             button("location.fill", "موقعي") { $0.mapVC.follow() },
-            button("person.3.fill", "المجموعة") { $0.fitGroup() },
+            button("person.3.fill", "الربع") { $0.fitGroup() },
             button("plus.magnifyingglass", "تكبير") { $0.mapVC.zoom(by: 1) },
             button("minus.magnifyingglass", "تصغير") { $0.mapVC.zoom(by: -1) },
         ]
@@ -198,17 +227,25 @@ final class CarPlayCoordinator: NSObject {
 
     private func updateButtons(_ i: CarPlayInput) {
         let mySOS = i.view?.me?.sos != nil
-        let leading = tripKind != nil ? "إنهاء" : "طريق الرجعة"
+        let recording = session?.voiceNotes.carPlayRecording == true
+        let leading = preview != nil ? "إلغاء" : (tripKind != nil ? "إنهاء" : "طريق العودة")
+        let talk = recording ? "أرسل" : "اضغط وسجّل"
         let sos = mySOS ? "ألغِ النداء" : "نداء"
-        let key = "\(leading)|\(sos)"
+        let key = "\(leading)|\(talk)|\(sos)"
         guard key != buttonKey else { return }
         buttonKey = key
-        mapTemplate.leadingNavigationBarButtons = [
-            tripKind != nil ? bar("إنهاء") { $0.endTrip(cancelled: true) } : bar("طريق الرجعة") { $0.startTrip(.wayBack) },
-            bar("العيال") { $0.showMembers() },
-        ]
+        let first: CPBarButton
+        if preview != nil {
+            first = bar("إلغاء") { $0.cancelPreview() }
+        } else if tripKind != nil {
+            first = bar("إنهاء") { $0.endTrip(cancelled: true) }
+        } else {
+            first = bar("طريق العودة") { $0.startTrip(.wayBack) }
+        }
+        /* «اضغط وسجّل» → «أرسل»: the phone's own talk button (tap, talk, tap). */
+        mapTemplate.leadingNavigationBarButtons = [first, bar(talk) { $0.talkPressed() }]
         mapTemplate.trailingNavigationBarButtons = [
-            bar("إلى…") { $0.showTrips() },
+            bar("وين؟") { $0.showTrips() },
             bar(sos) { $0.sosPressed() },
         ]
     }
@@ -363,34 +400,37 @@ final class CarPlayCoordinator: NSObject {
 
     // MARK: trips
 
+    /// «وين نروح؟»: search, the outing's points, «روح لفلان», recent places, tools.
     private func showTrips() {
         guard let s = session else { return }
-        let i = input(s)
-        var items: [CPListItem] = []
-        for kind in CarPlayPresenter.availableTrips(i, trail: s.trail) {
-            let detail: String
-            switch kind {
-            case .wayBack:
-                let d = s.trail.start.flatMap { st in i.myPosition.map { Vehicle.distanceMeters($0, st.position) } }
-                detail = "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? "")
-            case .rally:
-                let r = CarPlayPresenter.rally(i)!
-                detail = (CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: r.position)?.text ?? r.label) + " · اتجاه تقريبي"
-            case .destination:
-                let d = CarPlayPresenter.destination(i)!
-                detail = CarPlayPresenter.tripLine(i)
-                    ?? (CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: d.position)?.text ?? d.label) + " · اتجاه تقريبي"
-            }
-            let icon = kind == .wayBack ? "arrow.uturn.backward" : (kind == .rally ? "flag.fill" : "mappin.and.ellipse")
-            let item = CPListItem(text: kind.title, detailText: detail, image: UIImage(systemName: icon))
-            item.handler = { [weak self] _, done in
-                MainActor.assumeIsolated {
-                    self?.interface.popToRootTemplate(animated: true, completion: nil)
-                    self?.startTrip(kind)
+        let t = CPListTemplate(title: "وين نروح؟", sections: destinationSections(input(s), session: s))
+        t.emptyViewTitleVariants = ["ما فيه وجهة بعد"]
+        interface.pushTemplate(t, animated: true, completion: nil)
+    }
+
+    private func destinationSections(_ i: CarPlayInput, session s: OutingSession) -> [CPListSection] {
+        let search = CPListItem(text: "ابحث عن مكان", detailText: "في السعودية", image: UIImage(systemName: "magnifyingglass"))
+        search.handler = { [weak self] _, done in
+            MainActor.assumeIsolated { self?.showSearch() }
+            done()
+        }
+        let members = CPListItem(text: "العيال", detailText: CarPlayPresenter.mySharingLine(i), image: UIImage(systemName: "person.3.fill"))
+        members.handler = { [weak self] _, done in
+            MainActor.assumeIsolated { self?.showMembers() }
+            done()
+        }
+        var sections = [CPListSection(items: [search, members], header: nil, sectionIndexTitle: nil)]
+        for sec in CarPlayDestinations.sections(i, trail: s.trail, recents: recents) {
+            let items = sec.rows.map { r -> CPListItem in
+                let item = CPListItem(text: r.title, detailText: r.detail, image: UIImage(systemName: r.symbol))
+                item.isEnabled = r.action != .disabled
+                item.handler = { [weak self] _, done in
+                    MainActor.assumeIsolated { self?.destinationTapped(r.action) }
+                    done()
                 }
-                done()
+                return item
             }
-            items.append(item)
+            sections.append(CPListSection(items: items, header: sec.header, sectionIndexTitle: nil))
         }
         let pan = CPListItem(text: "حرّك الخريطة", detailText: "بالأسهم على الشاشة", image: UIImage(systemName: "arrow.up.and.down.and.arrow.left.and.right"))
         pan.handler = { [weak self] _, done in
@@ -409,11 +449,71 @@ final class CarPlayCoordinator: NSObject {
             }
             tools.append(stuck)
         }
-        var sections: [CPListSection] = []
-        if !items.isEmpty { sections.append(CPListSection(items: items, header: "وين تبي؟", sectionIndexTitle: nil)) }
-        sections.append(CPListSection(items: tools, header: nil, sectionIndexTitle: nil))
-        let t = CPListTemplate(title: "إلى…", sections: sections)
+        sections.append(CPListSection(items: tools, header: "أدوات", sectionIndexTitle: nil))
+        return sections
+    }
+
+    private func destinationTapped(_ a: CarPlayDestinationRow.Action) {
+        interface.popToRootTemplate(animated: true, completion: nil)
+        switch a {
+        case let .trip(kind): startTrip(kind)
+        case let .member(id, name, p): startPlace(p, label: CarPlayPresenter.shortName(name), memberId: id)
+        case let .place(name, p): startPlace(p, label: name, memberId: nil)
+        case .disabled: break
+        }
+    }
+
+    /// A searched / recent place, or «روح لفلان».
+    func startPlace(_ p: LngLat, label: String, memberId: String?) {
+        if memberId == nil {
+            recents.add(name: label, at: p)
+            recents.save()
+        }
+        placeTarget = (p, label, memberId)
+        startTrip(.place)
+    }
+
+    // MARK: search («ابحث عن مكان»)
+
+    private func showSearch() {
+        let t = CPSearchTemplate()
+        t.delegate = self
         interface.pushTemplate(t, animated: true, completion: nil)
+    }
+
+    fileprivate func search(_ text: String, completion: @escaping ([CPListItem]) -> Void) {
+        searchTask?.cancel()
+        let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard q.count >= 2 else { searchResults = []; completion([]); return }
+        let near = session.flatMap { input($0).myPosition }
+        searchTask = Task { [weak self] in
+            /* Typing settles first (CarPlay limits keyboard use; dictation sends whole words). */
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            let found: [PlaceSearch.Place]
+            var note: String?
+            do { found = try await PlaceSearch.search(q, near: near) } catch {
+                found = []
+                note = (error as? PlaceSearch.SearchError)?.arabic ?? "تعذّر البحث الآن"
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.searchResults = found
+            var items = found.prefix(12).map { p -> CPListItem in
+                let d = CarPlayPresenter.distanceAndDirection(from: near, to: p.point)?.text
+                let item = CPListItem(text: p.name, detailText: [d, p.detail].compactMap { $0 }.joined(separator: " · "),
+                                      image: UIImage(systemName: "mappin.circle.fill"))
+                item.userInfo = p.id
+                return item
+            }
+            if items.isEmpty { items = [CPListItem(text: note ?? "ما لقينا شي", detailText: nil)] }
+            completion(Array(items))
+        }
+    }
+
+    fileprivate func searchPicked(_ item: CPListItem) {
+        guard let id = item.userInfo as? String, let p = searchResults.first(where: { $0.id == id }) else { return }
+        interface.popToRootTemplate(animated: true, completion: nil)
+        startPlace(p.point, label: p.name, memberId: nil)
     }
 
     private func confirmStuck() {
@@ -435,12 +535,21 @@ final class CarPlayCoordinator: NSObject {
         case .wayBack: return (backTrack?.startPoint ?? session?.trail.start?.position).map { ($0, "نقطة البداية") }
         case .rally: return CarPlayPresenter.rally(i)
         case .destination: return CarPlayPresenter.destination(i)
+        case .place: return placeTarget.map { ($0.position, $0.label) }
         }
+    }
+
+    private func tripKindForPin(_ k: CarPlayTripKind) -> Bool { k == .place }
+
+    private func tripTitle(_ kind: CarPlayTripKind) -> String {
+        kind == .place ? (placeTarget.map { "إلى \($0.label)" } ?? kind.title) : kind.title
     }
 
     func startTrip(_ kind: CarPlayTripKind) {
         guard let s = session else { return }
+        let keepPlace = placeTarget
         endTrip(cancelled: true)
+        placeTarget = keepPlace
         let i = input(s)
         if kind == .wayBack {
             guard let bt = BackTrack(s.trail) else {
@@ -450,25 +559,107 @@ final class CarPlayCoordinator: NSObject {
             backTrack = bt
         }
         guard let target = targetFor(kind, i) else { return }
-        /* A road route when the turn-by-turn provider can make one; else trail / straight line. */
-        usingRoad = kind != .wayBack && (CarPlayFeatures.roadNavigation?.carPlayStartRoadRoute(to: target.position, label: target.label) ?? false)
-        let origin = i.myPosition.map { MKMapItem(placemark: MKPlacemark(coordinate: $0.coordinate)) } ?? MKMapItem.forCurrentLocation()
-        let dest = MKMapItem(placemark: MKPlacemark(coordinate: target.position.coordinate))
-        dest.name = target.label
-        let info: String = usingRoad ? "طريق بالسيارة" : (kind == .wayBack ? "على مسارك المسجّل" : "اتجاه تقريبي · بدون طرق")
-        let choice = CPRouteChoice(summaryVariants: [kind.title], additionalInformationVariants: [info], selectionSummaryVariants: [info])
-        let trip = CPTrip(origin: origin, destination: dest, routeChoices: [choice])
+        /* A road target: plan on the phone and show the trip preview («الأسرع / الأقصر»). */
+        if kind != .wayBack, let road = CarPlayFeatures.roadNavigation,
+           road.carPlayPlanRoadRoute(to: target.position, label: target.label, memberId: kind == .place ? placeTarget?.memberId : nil) {
+            preview = (kind, (target.position, target.label, kind == .place ? placeTarget?.memberId : nil), Date())
+            previewTrip = nil
+            previewRouteId = nil
+            buttonKey = ""
+            refresh()
+            return
+        }
+        beginSession(kind, target: target, road: false, choice: nil)
+    }
+
+    /// Starts the CPNavigationSession (road: on the chosen route; else trail / straight line).
+    private func beginSession(_ kind: CarPlayTripKind, target: (position: LngLat, label: String), road: Bool, choice: CPRouteChoice?, trip: CPTrip? = nil) {
+        usingRoad = road
+        let me = session.flatMap { input($0).myPosition }
+        let t: CPTrip
+        if let trip, let choice, road {
+            t = trip
+            _ = choice
+        } else {
+            let origin = me.map { MKMapItem(placemark: MKPlacemark(coordinate: $0.coordinate)) } ?? MKMapItem.forCurrentLocation()
+            let dest = MKMapItem(placemark: MKPlacemark(coordinate: target.position.coordinate))
+            dest.name = target.label
+            let info: String = road ? "طريق بالسيارة" : (kind == .wayBack ? "على مسارك المسجّل" : "اتجاه تقريبي · بدون طرق")
+            let c = CPRouteChoice(summaryVariants: [tripTitle(kind)], additionalInformationVariants: [info], selectionSummaryVariants: [info])
+            t = CPTrip(origin: origin, destination: dest, routeChoices: [c])
+        }
         tripKind = kind
-        navSession = mapTemplate.startNavigationSession(for: trip)
+        navSession = mapTemplate.startNavigationSession(for: t)
         maneuverKey = nil
+        pausedForReroute = false
         buttonKey = ""
         mapVC.follow()
         refresh()
     }
 
+    // MARK: trip preview («الأسرع / الأقصر»)
+
+    static let previewTimeoutS: TimeInterval = 15
+
+    private func updatePreview(_ i: CarPlayInput) {
+        guard let p = preview, let road = CarPlayFeatures.roadNavigation else { return }
+        let options = road.carPlayRouteOptions()
+        if previewTrip == nil, !options.isEmpty {
+            let me = i.myPosition
+            let origin = me.map { MKMapItem(placemark: MKPlacemark(coordinate: $0.coordinate)) } ?? MKMapItem.forCurrentLocation()
+            let dest = MKMapItem(placemark: MKPlacemark(coordinate: p.target.position.coordinate))
+            dest.name = p.target.label
+            let trip = CPTrip(origin: origin, destination: dest, routeChoices: CarPlayManeuverMapper.routeChoices(options))
+            trip.userInfo = tripTitle(p.kind)
+            previewTrip = trip
+            previewRouteId = trip.routeChoices.first?.userInfo as? String
+            let text = CPTripPreviewTextConfiguration(startButtonTitle: CarPlayManeuverMapper.previewText.start,
+                                                      additionalRoutesButtonTitle: CarPlayManeuverMapper.previewText.more,
+                                                      overviewButtonTitle: CarPlayManeuverMapper.previewText.overview)
+            mapTemplate.showTripPreviews([trip], textConfiguration: text)
+            mapVC.fitGroup(extra: [p.target.position])
+            return
+        }
+        /* No road route (desert, no network): the honest straight line instead. */
+        if previewTrip == nil, road.carPlayPlanFailed || Date().timeIntervalSince(p.since) > Self.previewTimeoutS {
+            let kind = p.kind
+            let target = (p.target.position, p.target.label)
+            road.carPlayStopRoadRoute()
+            preview = nil
+            beginSession(kind, target: target, road: false, choice: nil)
+        }
+    }
+
+    private func cancelPreview() {
+        guard preview != nil else { return }
+        mapTemplate.hideTripPreviews()
+        CarPlayFeatures.roadNavigation?.carPlayStopRoadRoute()
+        preview = nil
+        previewTrip = nil
+        previewRouteId = nil
+        placeTarget = nil
+        buttonKey = ""
+        refresh()
+    }
+
+    fileprivate func previewStarted(_ trip: CPTrip, choice: CPRouteChoice) {
+        guard let p = preview, let road = CarPlayFeatures.roadNavigation else { return }
+        mapTemplate.hideTripPreviews()
+        let id = (choice.userInfo as? String) ?? road.carPlayRouteOptions().first?.id
+        preview = nil
+        previewTrip = nil
+        if let id { road.carPlayStartGuidance(routeId: id) }
+        beginSession(p.kind, target: (p.target.position, p.target.label), road: id != nil, choice: choice, trip: trip)
+    }
+
     private func endTrip(cancelled: Bool) {
         if let n = navSession { cancelled ? n.cancelTrip() : n.finishTrip() }
-        if usingRoad { CarPlayFeatures.roadNavigation?.carPlayStopRoadRoute() }
+        if usingRoad || preview != nil { CarPlayFeatures.roadNavigation?.carPlayStopRoadRoute() }
+        if preview != nil { mapTemplate.hideTripPreviews() }
+        preview = nil
+        previewTrip = nil
+        placeTarget = nil
+        pausedForReroute = false
         navSession = nil
         tripKind = nil
         backTrack = nil
@@ -490,44 +681,59 @@ final class CarPlayCoordinator: NSObject {
                 let st = bt.update(me)
                 backTrack = bt
                 return CarPlayGuide.wayBack(st, course: i.course)
-            case .rally, .destination:
+            case .rally, .destination, .place:
                 guard let t = targetFor(kind, i) else { return CarPlayGuide.waiting(kind) }
                 return CarPlayGuide.straight(kind, from: i.myPosition, to: t.position, course: i.course)
             }
         }
-        /* Maneuvers: the road provider's own list, or our one guidance card. */
-        var cards: [(text: [String], symbol: String, distanceM: Double?)] = []
-        if g.phase == .road, let p = progress {
-            cards = p.maneuvers.prefix(2).map { ([$0.instruction, $0.shortInstruction ?? $0.instruction], $0.symbol, $0.distanceM) }
-        } else {
-            cards = [(["\(g.instruction) · \(g.detail)", g.instruction], g.symbol, g.remainingM)]
+        /* Rerouting: CarPlay shows «نحسب طريق ثاني…» until the new route's maneuvers come. */
+        if g.phase == .road, let p = progress, p.rerouting {
+            if !pausedForReroute {
+                pausedForReroute = true
+                nav.pauseTrip(for: .rerouting, description: "نحسب طريق ثاني…")
+            }
+            return g
         }
-        let key = cards.map { $0.text.joined() + $0.symbol }.joined(separator: "|")
+        if pausedForReroute { pausedForReroute = false; maneuverKey = nil }
+        /* Maneuvers: the road provider's own list, or our one guidance card. */
+        var cards: [CarPlayRoadManeuver] = []
+        if g.phase == .road, let p = progress {
+            cards = Array(p.maneuvers.prefix(2))
+        } else {
+            cards = [CarPlayRoadManeuver(instruction: "\(g.instruction) · \(g.detail)", shortInstruction: g.instruction,
+                                         distanceM: g.remainingM ?? 0, symbol: g.symbol)]
+        }
+        let key = cards.map { $0.instruction + $0.symbol + ($0.cpManeuverType ?? "") + "\($0.lanes.count)" }.joined(separator: "|")
         if key != maneuverKey {
             maneuverKey = key
-            maneuvers = cards.map { c in
-                let m = CPManeuver()
-                m.instructionVariants = c.text
-                m.symbolImage = UIImage(systemName: c.symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 64, weight: .bold))?
-                    .withTintColor(.white, renderingMode: .alwaysOriginal)
-                if let d = c.distanceM { m.initialTravelEstimates = Self.estimates(d, speed: i.myFix?.speed) }
-                return m
+            maneuvers = cards.map { CarPlayManeuverMapper.maneuver($0, speed: i.myFix?.speed) }
+            if #available(iOS 18.0, *) {
+                var guidances: [CPLaneGuidance] = []
+                for (k, c) in cards.enumerated() {
+                    guard let lg = CarPlayManeuverMapper.laneGuidance(c, turn: nil) else { continue }
+                    guidances.append(lg)
+                    maneuvers[k].linkedLaneGuidance = lg
+                }
+                if !guidances.isEmpty { nav.add(guidances) }
+                nav.currentLaneGuidance = guidances.first
             }
             nav.upcomingManeuvers = maneuvers
         }
-        if let first = maneuvers.first, let d = cards.first?.distanceM {
-            nav.updateEstimates(Self.estimates(d, speed: i.myFix?.speed), for: first)
+        if let first = maneuvers.first, let c = cards.first {
+            let d = g.phase == .road ? c.distanceM : (g.remainingM ?? 0)
+            nav.updateEstimates(CarPlayManeuverMapper.estimates(distanceM: d, durationS: c.durationS, speed: i.myFix?.speed), for: first)
         }
         let remaining = progress?.remainingM ?? g.remainingM
         if let remaining, let trip = trips.first {
-            let est = progress.map { CPTravelEstimates(distanceRemaining: Measurement(value: $0.remainingM, unit: .meters), timeRemaining: $0.remainingS) }
+            /* Road: the router's remaining time (Mapbox traffic ETA). Else only from real speed. */
+            let est = progress.map { CarPlayManeuverMapper.tripEstimates(remainingM: $0.remainingM, remainingS: $0.remainingS, speed: i.myFix?.speed) }
                 ?? Self.estimates(remaining, speed: i.myFix?.speed)
             mapTemplate.updateEstimates(est, for: trip)
         }
         if g.arrived {
             let title = g.instruction
             endTrip(cancelled: false)
-            present(CPNavigationAlert(titleVariants: [title], subtitleVariants: [kind.title + " انتهى"], image: UIImage(systemName: "flag.checkered"),
+            present(CPNavigationAlert(titleVariants: [title], subtitleVariants: [tripTitle(kind) + " انتهى"], image: UIImage(systemName: "flag.checkered"),
                                       primaryAction: CPAlertAction(title: "تمام", style: .default) { _ in }, secondaryAction: nil, duration: 8),
                     id: "arrived:\(kind.rawValue)")
             return nil
@@ -583,12 +789,24 @@ final class CarPlayCoordinator: NSObject {
         switch a.kind {
         case .friendSOS, .stuck:
             let pos = a.position
-            primary = action("أظهره", .default) { c in if let pos { c.mapVC.center(on: pos) } }
+            let name = a.title.components(separatedBy: " ").prefix(a.title.hasPrefix("أبو ") || a.title.hasPrefix("أم ") ? 2 : 1).joined(separator: " ")
+            let memberId = a.memberId
+            if let pos {
+                /* «اتجه له»: road route to where their help request is (preview first). */
+                primary = action("اتجه له", .default) { c in c.startPlace(pos, label: name, memberId: memberId) }
+            } else {
+                primary = action("تمام", .default) { _ in }
+            }
             if let phone = a.phone {
                 secondary = action("اتصال", .default) { c in c.call(phone) }
+            } else if let pos {
+                secondary = action("أظهره", .cancel) { c in c.mapVC.center(on: pos) }
             } else {
                 secondary = action("تمام", .cancel) { _ in }
             }
+        case .talking:
+            primary = action("وقّف", .default) { c in c.session?.voiceNotes.carPlayStopPlaying() }
+            secondary = action("تمام", .cancel) { _ in }
         case .offTrack:
             primary = action("تمام", .default) { _ in }
         case .convoyGap, .arrived:
@@ -601,6 +819,7 @@ final class CarPlayCoordinator: NSObject {
             case .offTrack: return UIImage(systemName: "arrow.uturn.backward.circle.fill")
             case .convoyGap: return UIImage(systemName: "car.2.fill")
             case .arrived: return UIImage(systemName: "flag.checkered")
+            case .talking: return UIImage(systemName: "waveform.circle.fill")?.withTintColor(.systemTeal, renderingMode: .alwaysOriginal)
             }
         }()
         return CPNavigationAlert(titleVariants: [a.title], subtitleVariants: [a.subtitle], image: image,
@@ -612,6 +831,44 @@ final class CarPlayCoordinator: NSObject {
                                   primaryAction: CPAlertAction(title: "تمام", style: .default) { [weak self] _ in
                                       MainActor.assumeIsolated { self?.shownAlert = nil }
                                   }, secondaryAction: nil, duration: 6), id: "arrived:info")
+    }
+
+    // MARK: walkie-talkie («اضغط وسجّل»)
+
+    private func talkPressed() {
+        guard let s = session else { return }
+        s.voiceNotes.carPlayTalkTapped()
+        buttonKey = ""
+        refresh()
+    }
+
+    /// While recording: a big card «تكلّم… نسجّل» with «أرسل» / «احذف».
+    private func updateRecording(_ s: OutingSession) {
+        let rec = s.voiceNotes.carPlayRecording
+        guard rec != recordingAlertUp else { return }
+        recordingAlertUp = rec
+        if rec {
+            let send = CPAlertAction(title: "أرسل", style: .default) { [weak self] _ in
+                MainActor.assumeIsolated { self?.recordingAlertUp = false; self?.shownAlert = nil; self?.talkPressed() }
+            }
+            let drop = CPAlertAction(title: "احذف", style: .destructive) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.recordingAlertUp = false
+                    self?.shownAlert = nil
+                    self?.session?.voiceNotes.carPlayCancelRecording()
+                    self?.buttonKey = ""
+                    self?.refresh()
+                }
+            }
+            present(CPNavigationAlert(titleVariants: ["تكلّم… نسجّل"], subtitleVariants: ["للطلعة كلها · دقيقة بالأكثر"],
+                                      image: UIImage(systemName: "mic.circle.fill")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal),
+                                      primaryAction: send, secondaryAction: drop, duration: 0), id: "arrived:recording")
+        } else if shownAlert?.id == "arrived:recording" {
+            replacingAlert = true
+            mapTemplate.dismissNavigationAlert(animated: true) { [weak self] _ in MainActor.assumeIsolated { self?.replacingAlert = false } }
+            shownAlert = nil
+        }
+        buttonKey = ""
     }
 
     // MARK: my SOS (two deliberate steps)
@@ -669,10 +926,13 @@ final class CarPlayCoordinator: NSObject {
         if args.contains("-SaryCarPlayDestination"), i.destination == nil {
             i.destination = CarPlayDestination(position: LngLat(lng: 46.7105, lat: 24.7402), label: "روضة خريم")
         }
+        if args.contains("-SaryCarPlayTalk"), i.talking == nil, let f = friends.first {
+            i.talking = CarPlayTalking(noteId: "debug-talk", userId: f.user_id, name: f.display_name)
+        }
         i.view = v
     }
 
-    /// `-SaryCarPlayShow members|trips|wayback|rally|destination|sos|pan` after the map is up.
+    /// `-SaryCarPlayShow members|trips|dest|search|place|talk|wayback|rally|destination|sos|pan` after the map is up.
     private func debugScript() {
         let args = ProcessInfo.processInfo.arguments
         guard let k = args.firstIndex(of: "-SaryCarPlayShow"), k + 1 < args.count else { return }
@@ -688,6 +948,17 @@ final class CarPlayCoordinator: NSObject {
             case "sos": self.sosPressed()
             case "pan": self.mapTemplate.showPanningInterface(animated: true)
             case "group": self.fitGroup()
+            case "dest": self.showTrips()
+            case "search": self.showTrips(); DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.showSearch() }
+            case "talk": self.talkPressed()
+            case "place":
+                /* A road trip in Riyadh (King Fahd Rd → Kingdom Centre area): preview, then guidance. */
+                self.startPlace(LngLat(lng: 46.6753, lat: 24.7114), label: "برج المملكة", memberId: nil)
+                if args.contains("-SaryCarPlayGo") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                        if let t = self.previewTrip, let c = t.routeChoices.first { self.previewStarted(t, choice: c) }
+                    }
+                }
             default: break
             }
         }
@@ -727,6 +998,17 @@ extension CarPlayCoordinator: CPMapTemplateDelegate {
         }
     }
 
+    nonisolated func mapTemplate(_ mapTemplate: CPMapTemplate, startedTrip trip: CPTrip, using routeChoice: CPRouteChoice) {
+        MainActor.assumeIsolated { previewStarted(trip, choice: routeChoice) }
+    }
+
+    nonisolated func mapTemplate(_ mapTemplate: CPMapTemplate, selectedPreviewFor trip: CPTrip, using routeChoice: CPRouteChoice) {
+        MainActor.assumeIsolated {
+            previewRouteId = routeChoice.userInfo as? String
+            refresh()
+        }
+    }
+
     nonisolated func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
         MainActor.assumeIsolated {
             navSession = nil
@@ -746,5 +1028,16 @@ extension CarPlayCoordinator: CPInterfaceControllerDelegate {
             }
             if aTemplate is CPAlertTemplate { sosSheetUp = false }
         }
+    }
+}
+
+extension CarPlayCoordinator: CPSearchTemplateDelegate {
+    nonisolated func searchTemplate(_ searchTemplate: CPSearchTemplate, updatedSearchText searchText: String, completionHandler: @escaping ([CPListItem]) -> Void) {
+        MainActor.assumeIsolated { search(searchText, completion: completionHandler) }
+    }
+
+    nonisolated func searchTemplate(_ searchTemplate: CPSearchTemplate, selectedResult item: CPListItem, completionHandler: @escaping () -> Void) {
+        MainActor.assumeIsolated { searchPicked(item) }
+        completionHandler()
     }
 }

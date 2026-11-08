@@ -226,7 +226,7 @@ struct VisualEffectsSection: View {
                 SaryToggleRow(title: "توهج المسارات", subtitle: "هالة خفيفة ثابتة تُقرأ في الليل", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                               isOn: $glow, id: "settings.visuals.glow")
                 SaryDivider()
-                SaryToggleRow(title: "انحدار تقريبي", subtitle: "يلوّن المقاطع الحادة من نموذج ارتفاع ~٣٠ م", systemImage: "chart.line.uptrend.xyaxis",
+                SaryToggleRow(title: "الطلعات القوية", subtitle: "يلوّن المقاطع الحادة (≥ ١٥٪ تقريبًا من نموذج الارتفاع)", systemImage: "chart.line.uptrend.xyaxis",
                               isOn: $slope, id: "settings.visuals.slope")
                 SaryDivider()
                 SaryToggleRow(title: "مبانٍ ثلاثية الأبعاد في المدن", subtitle: "مجسّمات بارتفاعاتها عند إمالة صور القمر الصناعي", systemImage: "building.2.fill",

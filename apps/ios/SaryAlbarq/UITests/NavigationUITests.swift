@@ -80,7 +80,8 @@ final class NavigationUITests: XCTestCase {
             let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode(m))
             XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15))
             XCTAssertTrue(el(app, "nav.lanes").exists, "lanes")
-            XCTAssertTrue(el(app, "nav.next").exists, "next maneuver")
+            /* v2: «ثم …» only when the next turn is within 400 m (the demo's next turn is ~1 km away). */
+            XCTAssertFalse(el(app, "nav.next").exists, "no «ثم» for a far next turn")
             XCTAssertTrue(el(app, "nav.speedLimit").waitForExistence(timeout: 5), "speed limit")
             XCTAssertTrue(el(app, "nav.bottomBar").exists)
             XCTAssertTrue(el(app, "nav.eta").exists)
@@ -88,6 +89,7 @@ final class NavigationUITests: XCTestCase {
             sleep(2)
             shot(app, "nav-guidance-\(m)")
             if m == "light" {
+                openTripOptions(app)
                 app.buttons["nav.stepsButton"].tap()
                 XCTAssertTrue(el(app, "nav.steps").waitForExistence(timeout: 5))
                 sleep(1)
@@ -96,6 +98,55 @@ final class NavigationUITests: XCTestCase {
                 app.buttons["nav.end"].tap()
                 XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«إنهاء» ends guidance")
             }
+            app.terminate()
+        }
+    }
+
+    /// Pull the guidance sheet up from its grabber: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة».
+    private func openTripOptions(_ app: XCUIApplication) {
+        dragSheetUp(app)
+        XCTAssertTrue(el(app, "nav.options.trip").waitForExistence(timeout: 5), "the trip options under the bar")
+    }
+
+    /// Drag the native sheet up by its grabber (just above the guidance bar) to «نصف».
+    func dragSheetUp(_ app: XCUIApplication) {
+        let bar = el(app, "nav.bottomBar")
+        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0))
+        let end = start.withOffset(CGVector(dx: 0, dy: -360))
+        start.press(forDuration: 0.08, thenDragTo: end)
+    }
+
+    /// The v2 HUD (Google-like clarity, Sary's colours): one big banner, the time left in the bottom bar,
+    /// a red «إنهاء», four round buttons at most on the right, SOS kept, and the speed bottom-left.
+    func testGuidanceHUDv2() {
+        for m in ["drive", "dark"] {
+            let app = launch(["-SaryNavDemo", "-SaryNavTraffic", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode(m))
+            XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15), "the maneuver banner")
+            XCTAssertTrue(el(app, "nav.distance").exists, "the distance, big")
+            let title = el(app, "nav.instruction")
+            XCTAssertTrue(title.label.contains("طريق مكة المكرمة"), title.label)
+            XCTAssertLessThan(title.frame.height, 60, "the road on one line")
+            XCTAssertFalse(el(app, "nav.banner.eta").frame.intersects(el(app, "nav.banner").frame), "the ETA left the banner")
+            let remaining = el(app, "nav.remainingTime")
+            XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")
+            XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم · ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
+            let end = app.buttons["nav.end"]
+            XCTAssertTrue(end.exists && end.isHittable, "a clear «إنهاء»")
+            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«إنهاء» is in the bottom bar")
+            XCTAssertTrue(el(app, "outing-sos").exists, "SOS is never hidden while guiding")
+            let round = ["outing-locate", "nav.search", "nav.mute", "nav.routes"].filter { el(app, $0).exists }
+            XCTAssertGreaterThanOrEqual(round.count, 3, "the round buttons: \(round)")
+            XCTAssertLessThanOrEqual(round.count, 4, "four at most")
+            for id in round {
+                XCTAssertGreaterThan(el(app, id).frame.midX, app.frame.width / 2, "\(id) on the right")
+            }
+            sleep(2)
+            shot(app, "nav-hud-v2-\(m)")
+            openTripOptions(app)
+            for id in ["nav.opt.routes", "nav.opt.share", "nav.opt.voice"] {
+                XCTAssertTrue(el(app, id).exists, id)
+            }
+            shot(app, "nav-hud-v2-options-\(m)")
             app.terminate()
         }
     }

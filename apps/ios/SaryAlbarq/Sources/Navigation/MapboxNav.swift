@@ -43,7 +43,10 @@ enum MapboxNavCore {
         routing.prefersOnlineRoute = true
         let config = CoreConfig(
             routingConfig: routing,
-            locationSource: .live,
+            /* Our own CLLocationManager for the SDK (build 22): its `.live` one is left at iOS's
+             * defaults (kCLLocationAccuracyBest, activityType .other). Guidance wants Apple's
+             * navigation settings: BestForNavigation + automotiveNavigation, never paused. */
+            locationSource: .custom(MapboxNavLocation.shared.client),
             copilotEnabled: false,
             locale: Locale(identifier: "ar"),
             /* No predictive tile pre-fetching around the route: extra downloads we do not need. */
@@ -54,6 +57,53 @@ enum MapboxNavCore {
         let p = MapboxNavigationProvider(coreConfig: config)
         provider = p
         return p.mapboxNavigation
+    }
+}
+
+/// The location feed of the Navigation SDK, configured for driving guidance.
+@MainActor
+final class MapboxNavLocation: NSObject, CLLocationManagerDelegate {
+    static let shared = MapboxNavLocation()
+
+    let manager = CLLocationManager()
+    private let locations = PassthroughSubject<CLLocation, Never>()
+    private let headings = PassthroughSubject<CLHeading, Never>()
+
+    /// What guidance asks of the chip (tests read it).
+    nonisolated static let desiredAccuracy = kCLLocationAccuracyBestForNavigation
+    nonisolated static let activityType = CLActivityType.automotiveNavigation
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = Self.desiredAccuracy
+        manager.activityType = Self.activityType
+        manager.distanceFilter = kCLDistanceFilterNone
+        manager.pausesLocationUpdatesAutomatically = false
+        if Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes").flatMap({ $0 as? [String] })?.contains("location") == true {
+            manager.allowsBackgroundLocationUpdates = true
+        }
+    }
+
+    var client: LocationClient {
+        LocationClient(
+            locations: locations.eraseToAnyPublisher(),
+            headings: headings.eraseToAnyPublisher(),
+            startUpdatingLocation: { [manager] in manager.startUpdatingLocation() },
+            stopUpdatingLocation: { [manager] in manager.stopUpdatingLocation() },
+            startUpdatingHeading: { [manager] in manager.startUpdatingHeading() },
+            stopUpdatingHeading: { [manager] in manager.stopUpdatingHeading() }
+        )
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations l: [CLLocation]) {
+        guard let last = l.last else { return }
+        /* The manager was made on the main thread: its callbacks come there, in order. */
+        MainActor.assumeIsolated { self.locations.send(last) }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading h: CLHeading) {
+        MainActor.assumeIsolated { self.headings.send(h) }
     }
 }
 
@@ -113,7 +163,7 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
     nonisolated static func map(_ e: DirectionsError) -> NavRoutingError {
         switch e {
         case .unableToRoute, .noMatches, .unableToLocate: return .noRoute
-        case let .network(u): return u.code == .notConnectedToInternet || u.code == .networkConnectionLost || u.code == .timedOut ? .offline : .failed("")
+        case let .network(u): return u.code == .notConnectedToInternet || u.code == .networkConnectionLost ? .offline : .failed("")
         default: return .failed("")
         }
     }
@@ -154,7 +204,30 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         }
         let via = names.sorted { $0.value > $1.value }.prefix(1).map(\.key).first
         return NavRoute(id: id, coordinates: coords, distanceM: route.distance, durationS: route.expectedTravelTime,
-                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via)
+                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via, congestion: congestion(route))
+    }
+
+    /// Per-segment traffic from the `driving-traffic` annotations (numeric, else the named levels).
+    nonisolated static func congestion(_ route: Route) -> [NavCongestion]? {
+        var out: [NavCongestion] = []
+        for leg in route.legs {
+            if let n = leg.segmentNumericCongestionLevels {
+                out += n.map { NavCongestion(numeric: $0) }
+            } else if let l = leg.segmentCongestionLevels {
+                out += l.map { lvl -> NavCongestion in
+                    switch lvl {
+                    case .low: return .low
+                    case .moderate: return .moderate
+                    case .heavy: return .heavy
+                    case .severe: return .severe
+                    default: return .unknown
+                    }
+                }
+            } else {
+                return nil
+            }
+        }
+        return out.isEmpty ? nil : out
     }
 
     nonisolated static func maneuver(_ s: RouteStep) -> NavManeuver {
@@ -217,6 +290,8 @@ final class MapboxGuidanceEngine: NavGuidanceEngine {
     private var currentRouteId: String?
     private var speedLimit: Int?
     nonisolated(unsafe) private var running = false
+    /// The SDK's map-matched position (on the road, the one its progress is measured from).
+    var onMatched: (DeviceFix) -> Void = { _ in }
 
     deinit {
         /* Never leave a billed trip (and the SDK's GPS) running behind a closed screen. */
@@ -272,6 +347,7 @@ final class MapboxGuidanceEngine: NavGuidanceEngine {
                                                speedLimitKmh: self.speedLimit)))
         }.store(in: &bag)
         n.locationMatching.receive(on: DispatchQueue.main).sink { [weak self] m in
+            if let f = LocationTuning.deviceFix(m.enhancedLocation) { self?.onMatched(f) }
             guard let v = m.speedLimit.value else { self?.speedLimit = nil; return }
             self?.speedLimit = Int(v.converted(to: .kilometersPerHour).value.rounded())
         }.store(in: &bag)

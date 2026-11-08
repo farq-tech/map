@@ -311,3 +311,118 @@ test('personal invites — single use, rejoin, other identity, revoke, resend, e
   assert.equal((await api('DELETE', '/me', temp.token)).status, 200);
   assert.equal((await api('POST', '/invites/join', stranger.token, { token: i3.token })).body.error, 'invite_taken');
 });
+
+test('invite tokens as pasted: diacritics, RTL marks, spaces, a full link (pure)', () => {
+  const tok = v.newSecret();
+  assert.equal(v.inviteToken(tok), tok);
+  assert.equal(v.inviteToken(`${tok}ً`), tok, 'a trailing «ً» stuck to the link');
+  assert.equal(v.inviteToken(`‏ ${tok} ‎؜\n`), tok, 'RTL / LRM / ALM marks and spaces');
+  assert.equal(v.inviteToken(`https://farq-map-investor.vercel.app/outings/join#${tok}ً`), tok, 'the whole link');
+  assert.equal(v.inviteToken(`${tok.slice(0, 20)}ّ${tok.slice(20)}`), tok, 'a shadda in the middle');
+  assert.equal(v.inviteToken(tok.slice(0, 42)), null, 'one character short is not fixed up');
+  assert.equal(v.inviteToken(`${tok}A`), null, 'an extra token-alphabet character is not dropped');
+  assert.equal(v.inviteToken(null), null);
+  assert.equal(v.inviteToken('x'.repeat(5000)), null);
+});
+
+test('personal invites — the same person back with a new account (phone), removed stays out, sanitised tokens', { skip, timeout: 60_000 }, async (t) => {
+  const pool = createPool(await isolatedDb(URL_));
+  await pool.query('DROP SCHEMA IF EXISTS sary CASCADE');
+  await migrate(pool);
+  const outings = setupOutings({ pool, autoMigrate: false, config: { minFixIntervalMs: 0, persistEveryMs: 0, authCacheMs: 0 }, limits: { invitePer10Min: 1000, identityPerHour: 1000 } });
+  const app = express();
+  app.use(express.json());
+  app.use('/api/outings', outings.router);
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  outings.attach(server);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  t.after(async () => {
+    outings.close();
+    await new Promise((r) => server.close(r));
+    await pool.end();
+  });
+  async function api(method, path, token, body) {
+    const res = await fetch(`${base}/api/outings${path}`, {
+      method,
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  }
+  async function person(name, phone) {
+    const r = await api('POST', '/me', null, { display_name: name });
+    assert.equal(r.status, 201);
+    if (phone) assert.equal((await api('PATCH', '/me', r.body.token, { phone })).status, 200);
+    return { token: r.body.token, id: r.body.user.id };
+  }
+  const active = async (oid, leader) => (await api('GET', `/${oid}`, leader.token)).body.members;
+
+  const leader = await person('أبو فهد', '0559998888');
+  const made = await api('POST', '/', leader.token, { name: 'طلعة', invites: 'personal' });
+  const oid = made.body.outing_id;
+  await api('POST', `/${oid}/status`, leader.token, { action: 'start' });
+  const inv = (await api('POST', `/${oid}/invites/personal`, leader.token, { name: 'فهد أخوي', phone: '0501234567' })).body.invite;
+
+  /* Fahd joins with his first account. */
+  const fahd1 = await person('جوس', '0501234567');
+  assert.equal((await api('POST', '/invites/join', fahd1.token, { token: inv.token })).status, 200);
+
+  /* Signed out on his phone; a new account, same number. The preview lets him in
+   * (build ≤ 20: claim «open»), and joining moves the seat to the new account. */
+  const fahd2 = await person('جوس', '+966 50 123 4567');
+  const pv = (await api('POST', '/invites/preview', fahd2.token, { token: inv.token })).body.invite;
+  assert.equal(pv.claim, 'open');
+  assert.equal(pv.reclaim, true);
+  const j = await api('POST', '/invites/join', fahd2.token, { token: `${inv.token}ً` });
+  assert.equal(j.status, 200, JSON.stringify(j.body));
+  assert.equal(j.body.already, false);
+  let members = await active(oid, leader);
+  assert.ok(members.some((m) => m.user_id === fahd2.id && m.display_name === 'فهد أخوي'));
+  assert.ok(!members.some((m) => m.user_id === fahd1.id), 'the old account left: one line per person');
+  assert.equal((await pool.query(`SELECT consumed_by FROM sary.outing_invites WHERE id = $1`, [inv.id])).rows[0].consumed_by, fahd2.id);
+  assert.equal((await api('POST', '/invites/preview', fahd2.token, { token: inv.token })).body.invite.claim, 'yours');
+  assert.equal((await api('POST', '/invites/join', fahd2.token, { token: inv.token })).body.already, true);
+
+  /* A stranger with the forwarded link: no number, or another number → still «لشخص آخر». */
+  const nobody = await person('غريب');
+  const other = await person('غريب ثاني', '0551112222');
+  for (const s of [nobody, other]) {
+    assert.equal((await api('POST', '/invites/preview', s.token, { token: inv.token })).body.invite.claim, 'taken');
+    const r = await api('POST', '/invites/join', s.token, { token: inv.token });
+    assert.deepEqual([r.status, r.body.error], [409, 'invite_taken']);
+  }
+  assert.ok((await active(oid, leader)).some((m) => m.user_id === fahd2.id), 'the stranger did not move the seat');
+
+  /* The same account, after leaving and after the link expired, comes back (bound to him). */
+  assert.equal((await api('POST', `/${oid}/leave`, fahd2.token)).status, 200);
+  await pool.query(`UPDATE sary.outing_invites SET expires_at = now() - interval '1 minute' WHERE id = $1`, [inv.id]);
+  assert.equal((await api('POST', '/invites/preview', fahd2.token, { token: inv.token })).body.invite.claim, 'yours');
+  assert.equal((await api('POST', '/invites/join', fahd2.token, { token: inv.token })).status, 200);
+  assert.equal((await api('POST', '/invites/preview', other.token, { token: inv.token })).body.invite.claim, 'taken', 'expired + taken still says taken');
+  assert.equal((await api('POST', '/invites/join', other.token, { token: inv.token })).body.error, 'invite_taken');
+  /* …but an expired link is not a way in for anyone it was never bound to. */
+  const fresh = (await api('POST', `/${oid}/invites/personal`, leader.token, { name: 'ناصر' })).body.invite;
+  await pool.query(`UPDATE sary.outing_invites SET expires_at = now() - interval '1 minute' WHERE id = $1`, [fresh.id]);
+  assert.equal((await api('POST', '/invites/join', other.token, { token: fresh.token })).body.error, 'invite_expired');
+
+  /* Removed by the leader: a new account with the same number does not walk back in. */
+  assert.equal((await api('DELETE', `/${oid}/members/${fahd2.id}`, leader.token)).status, 200);
+  const fahd3 = await person('جوس', '0501234567');
+  assert.equal((await api('POST', '/invites/preview', fahd3.token, { token: inv.token })).body.invite.claim, 'taken');
+  assert.equal((await api('POST', '/invites/join', fahd3.token, { token: inv.token })).body.error, 'invite_taken');
+
+  /* Revoked by the leader: no reclaim either. */
+  const inv2 = (await api('POST', `/${oid}/invites/personal`, leader.token, { name: 'سعد', phone: '0554443333' })).body.invite;
+  const saad1 = await person('سعد', '0554443333');
+  assert.equal((await api('POST', '/invites/join', saad1.token, { token: inv2.token })).status, 200);
+  await api('DELETE', `/${oid}/invites/personal/${inv2.id}`, leader.token);
+  const saad2 = await person('سعد', '0554443333');
+  assert.equal((await api('POST', '/invites/join', saad2.token, { token: inv2.token })).body.error, 'invite_revoked');
+
+  /* Sanitised tokens on the wire; a broken one is invalid (404), never «taken». */
+  assert.equal((await api('POST', '/invites/preview', null, { token: `‏${inv2.token} ً` })).status, 410);
+  const broken = await api('POST', '/invites/preview', fahd3.token, { token: inv.token.slice(0, 40) });
+  assert.deepEqual([broken.status, broken.body.error], [404, 'invite_invalid']);
+  assert.equal((await api('POST', '/invites/join', fahd3.token, { token: `${inv.token.slice(0, 40)}ً` })).body.error, 'invite_invalid');
+});

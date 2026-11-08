@@ -392,3 +392,87 @@ test('trip chat — 30-day retention after the trip ends, and «احذف حسا�
   assert.equal(Number((await pool.query('SELECT count(*) FROM sary.chat_reads WHERE user_id = $1', [B.user.id])).rows[0].count), 0);
   assert.equal(Number((await pool.query('SELECT count(*) FROM sary.chat_messages WHERE sender_id = $1 OR recipient_id = $1', [B.user.id])).rows[0].count), 0);
 });
+
+test('«بلّغ» و«احظر» (App Store 1.2) — reports stored, blocked chat & voice notes hidden, DMs refused, SOS still reaches the blocker', { skip, timeout: 90_000 }, async (t) => {
+  const { pool, api, person, live, pushed, settle } = await boot(t, { config: { reportsPerHour: 3 } });
+  const A = await person('أبو فهد');
+  const B = await person('مزعج');
+  const C = await person('ناصر');
+  const D = await person('غريب');
+  const o = { id: (await api('POST', '/', A.token, { name: 'طلعة الصمان' })).body.outing_id };
+  const inv = (await api('POST', `/${o.id}/invites`, A.token, {})).body.invite.token;
+  for (const p of [B, C]) assert.equal((await api('POST', '/invites/join', p.token, { token: inv })).status, 200);
+
+  const bad = (await api('POST', `/${o.id}/chat/group`, B.token, { client_id: 'b-1', text: 'كلام مسيء' })).body.message;
+
+  /* --- report --- */
+  assert.equal((await api('POST', `/${o.id}/chat/${bad.id}/report`, C.token, { reason: 'nope' })).body.error, 'invalid_reason');
+  assert.equal((await api('POST', `/${o.id}/chat/${bad.id}/report`, D.token, { reason: 'abuse' })).status, 404, 'an outsider cannot report');
+  assert.equal((await api('POST', `/${o.id}/chat/${bad.id}/report`, B.token, { reason: 'abuse' })).body.error, 'cannot_report_self');
+  const r1 = await api('POST', `/${o.id}/chat/${bad.id}/report`, C.token, { reason: 'abuse', note: 'سب' });
+  assert.equal(r1.status, 201);
+  assert.equal(r1.body.duplicate, false);
+  const r2 = await api('POST', `/${o.id}/chat/${bad.id}/report`, C.token, { reason: 'abuse' });
+  assert.equal(r2.body.duplicate, true, 'one report per person per message');
+  const [stored] = (await pool.query(`SELECT * FROM sary.chat_reports WHERE message_id = $1`, [bad.id])).rows;
+  assert.equal(stored.reporter_id, C.user.id);
+  assert.equal(stored.sender_id, B.user.id);
+  assert.equal(stored.body_snapshot, 'كلام مسيء');
+  assert.equal(stored.status, 'open');
+  /* rate limit: 3 an hour in this test (the two above count) */
+  await api('POST', `/${o.id}/chat/${bad.id}/report`, C.token, { reason: 'spam' });
+  assert.equal((await api('POST', `/${o.id}/chat/${bad.id}/report`, C.token, { reason: 'spam' })).status, 429, 'reports are rate-limited');
+
+  /* --- block: A blocks B (and reports with block:true works the same) --- */
+  assert.equal((await api('POST', `/me/blocks/${A.user.id}`, A.token)).body.error, 'cannot_block_self');
+  assert.equal((await api('POST', `/me/blocks/00000000-0000-4000-8000-000000000000`, A.token)).status, 404);
+  const rb = await api('POST', `/${o.id}/chat/${bad.id}/report`, A.token, { reason: 'harassment', block: true });
+  assert.equal(rb.body.blocked, true);
+  const list = (await api('GET', '/me/blocks', A.token)).body.blocks;
+  assert.deepEqual(list.map((b) => [b.user_id, b.display_name]), [[B.user.id, 'مزعج']]);
+  assert.equal((await api('POST', `/me/blocks/${B.user.id}`, A.token)).status, 201, 'idempotent');
+
+  /* history: hidden for A only */
+  const histA = (await api('GET', `/${o.id}/chat/group`, A.token)).body.messages;
+  assert.ok(!histA.some((m) => m.sender_id === B.user.id), 'blocked sender is gone from my history');
+  const histC = (await api('GET', `/${o.id}/chat/group`, C.token)).body.messages;
+  assert.ok(histC.some((m) => m.sender_id === B.user.id), 'others still see it');
+  assert.equal((await api('GET', `/${o.id}/chat`, A.token)).body.unread_total, 0, 'no unread badge from a blocked sender');
+
+  /* DMs: refused both ways */
+  assert.equal((await api('POST', `/${o.id}/chat/${A.user.id}`, B.token, { client_id: 'b-dm', text: 'هاه' })).body.error, 'blocked');
+  assert.equal((await api('POST', `/${o.id}/chat/${B.user.id}`, A.token, { client_id: 'a-dm', text: 'هاه' })).body.error, 'blocked');
+
+  /* realtime + push: not delivered to A, still to C */
+  const la = live(A.token, o.id);
+  const lc = live(C.token, o.id);
+  await Promise.all([la.ready, lc.ready]);
+  pushed.length = 0;
+  await api('POST', `/${o.id}/chat/group`, B.token, { client_id: 'b-2', text: 'مرة ثانية' });
+  await lc.until((m) => m.type === 'chat_message' && m.message.client_id === 'b-2');
+  await settle(300);
+  assert.ok(!la.inbox.some((m) => m.type === 'chat_message' && m.message.client_id === 'b-2'), 'no live frame for the blocker');
+
+  /* SOS from the blocked person still reaches the blocker (safety beats blocking) */
+  assert.equal((await api('POST', `/${o.id}/sos`, B.token, { fix: null })).status, 200);
+  const sos = await la.until((m) => m.type === 'sos');
+  assert.equal(sos.user_id || sos.sos?.user_id, B.user.id);
+
+  /* voice notes: the list skips a blocked sender (no auto-play, no listing) */
+  await pool.query(
+    `INSERT INTO sary.ptt_voice_notes (outing_id, channel, sender_id, client_id, mime, duration_ms, bytes, audio)
+     VALUES ($1, '1', $2, 'vn-1', 'audio/mp4', 1500, 3, '\\x000102')`,
+    [o.id, B.user.id],
+  );
+  const notesA = (await api('GET', `/${o.id}/voice-notes?channel=1`, A.token)).body.notes;
+  const notesC = (await api('GET', `/${o.id}/voice-notes?channel=1`, C.token)).body.notes;
+  assert.equal(notesA.length, 0, 'blocked sender: no voice notes for me');
+  assert.equal(notesC.length, 1);
+
+  /* unblock: back to normal */
+  assert.equal((await api('DELETE', `/me/blocks/${B.user.id}`, A.token)).body.blocked, false);
+  assert.equal((await api('GET', '/me/blocks', A.token)).body.blocks.length, 0);
+  assert.ok((await api('GET', `/${o.id}/chat/group`, A.token)).body.messages.some((m) => m.sender_id === B.user.id));
+  assert.equal((await api('POST', `/${o.id}/chat/${A.user.id}`, B.token, { client_id: 'b-dm2', text: 'آسف' })).status, 201);
+  void pushed;
+});

@@ -286,12 +286,15 @@ final class MotionFX {
                 circle(p + (s.offset + back) * scale, r: 2.6 * scale, color: "#000000", o: s.opacity * (drive ? 0.8 : 1), blur: 0.85, z: 0, emissive: 0)
             }
             if lightsOn, c.pose.moving {
-                let k = drive ? 0.6 : 1.0
-                for (d, r, o) in [(5.0, 2.2, 0.30), (10.0, 3.5, 0.22), (16.0, 4.8, 0.14), (23.0, 6.0, 0.08)] {
-                    circle(p + MotionVec.heading(h, d * scale), r: r * scale, color: "#fff1c4", o: o * k, blur: 1, z: 1, emissive: 1)
+                /* Owner 2026-11-07: «شوي زيادة، مو مرة». Measured on satellite at night: the old
+                 * pale, fully blurred beam added ~0.5% brightness ahead of the car (invisible).
+                 * Now a visible soft glow that fades with distance, reach 23 m → 27 m. */
+                let k = drive ? 0.85 : 1.0
+                for (d, r, o) in [(5.0, 2.3, 0.62), (10.0, 3.6, 0.46), (16.0, 4.9, 0.30), (22.0, 6.0, 0.17), (27.0, 6.8, 0.08)] {
+                    circle(p + MotionVec.heading(h, d * scale), r: r * scale, color: "#fff1c4", o: o * k, blur: 0.75, z: 1, emissive: 1)
                 }
                 for s in [-0.7, 0.7] {
-                    circle(p + MotionVec.heading(h, -2.55 * scale) + MotionVec.heading(h + 90, s * scale), r: 0.75 * scale, color: "#ff2a1a", o: 0.45 * k, blur: 1, z: 1, emissive: 1)
+                    circle(p + MotionVec.heading(h, -2.55 * scale) + MotionVec.heading(h + 90, s * scale), r: 0.75 * scale, color: "#ff2a1a", o: 0.55 * k, blur: 1, z: 1, emissive: 1)
                 }
             }
         }

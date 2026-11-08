@@ -30,20 +30,23 @@ struct SendGate: Equatable {
     var closed = false
     /// iOS location permission is «دائمًا» (Always).
     var alwaysAuthorized = false
+    /// «أخفِ موقعي»: I stay in the trip, my position is not sent (an SOS still is).
+    var hidden = false
 
     /// Everything except where the app is (screen / background).
     private var intentOpen: Bool {
         consent && osAuthorized && userWantsShare && serverSharing && outingActive && !closed
     }
 
-    var allowsPosition: Bool { intentOpen && (foreground || alwaysAuthorized) }
+    var allowsPosition: Bool { intentOpen && !hidden && (foreground || alwaysAuthorized) }
 
     /// Allowed, and the app is off screen: send over HTTP (`BackgroundPositionSender`), not the socket.
-    var allowsBackgroundPosition: Bool { intentOpen && !foreground && alwaysAuthorized }
+    var allowsBackgroundPosition: Bool { intentOpen && !hidden && !foreground && alwaysAuthorized }
 
     /// An SOS goes out on a 1 s hold even with sharing off (it is the decision
     /// to be found), but it carries a position only when the same gate is open.
-    var allowsSosFix: Bool { allowsPosition }
+    /// It ignores «أخفِ موقعي»: an SOS always carries the real position (and shows it again).
+    var allowsSosFix: Bool { intentOpen && (foreground || alwaysAuthorized) }
 }
 
 /// Per-identity, per-outing consent and "was sharing" memory.

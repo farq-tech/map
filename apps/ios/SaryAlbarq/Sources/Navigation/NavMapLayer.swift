@@ -10,6 +10,8 @@ struct MapNavDrawing: Equatable {
         var id: String
         var coordinates: [LngLat]
         var selected: Bool
+        /// The remaining route in traffic bands (nil: one plain colour).
+        var traffic: [NavTrafficRun]? = nil
     }
 
     struct Label: Equatable {
@@ -56,6 +58,8 @@ final class NavMapDrawer {
     static let offSource = "sary-nav-offroad"
     static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main", "sary-nav-off-casing", "sary-nav-off"]
     static let routeBlue = "#2B7BF0"
+    /// Traffic bands on the chosen route: free (blue), slow (orange), heavy (red), standstill (dark red).
+    static let trafficColors = ["#F08A24", "#E0362C", "#8E1B1B"]
 
     /// Guidance owns the camera (the group framing and «موقعي» stand aside).
     var ownsCamera: Bool { drawing.camera != nil }
@@ -103,7 +107,8 @@ final class NavMapDrawer {
              "paint": ["line-color": "#ffffff", "line-width": width(12), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": sel, "layout": round,
              /* Still visible behind 3D buildings (Olaya towers would hide the turn otherwise). */
-             "paint": ["line-color": Self.routeBlue, "line-width": width(8), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
+             "paint": ["line-color": ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue] as [Any],
+                       "line-width": width(8), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
             /* The off-road remainder: dashed, amber, thin — visibly NOT a road. */
             ["id": "sary-nav-off-casing", "type": "line", "source": Self.offSource, "layout": ["line-cap": "round"],
              "paint": ["line-color": "#16110b", "line-width": width(6), "line-opacity": 0.7, "line-dasharray": [1.4, 1.4], "line-emissive-strength": 1] as [String: Any]],
@@ -120,6 +125,15 @@ final class NavMapDrawer {
         var feats: [Feature] = []
         /* Alternatives first, the chosen route last (drawn on top by its own layer anyway). */
         for r in drawing.routes.sorted(by: { !$0.selected && $1.selected }) where r.coordinates.count >= 2 {
+            if r.selected, let runs = r.traffic, !runs.isEmpty {
+                /* One feature per traffic band («c»); the casing still sees one continuous line. */
+                for run in runs where run.coordinates.count >= 2 {
+                    var f = Feature(geometry: .lineString(LineString(run.coordinates.map(\.coordinate))))
+                    f.properties = ["s": .number(1), "id": .string(r.id), "c": .number(Double(run.band))]
+                    feats.append(f)
+                }
+                continue
+            }
             var f = Feature(geometry: .lineString(LineString(r.coordinates.map(\.coordinate))))
             f.properties = ["s": .number(r.selected ? 1 : 0), "id": .string(r.id)]
             feats.append(f)
@@ -166,7 +180,8 @@ final class NavMapDrawer {
             host.view.frame = CGRect(origin: .zero, size: host.sizeThatFits(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)))
             let a = ViewAnnotation(coordinate: l.at.coordinate, view: host.view)
             a.variableAnchors = [.init(anchor: .bottom, offsetY: 6), .init(anchor: .top, offsetY: -6), .init(anchor: .left, offsetX: 6), .init(anchor: .right, offsetX: -6)]
-            a.allowOverlap = false
+            /* Both route times always show (like Google: «١٢ د» on each route): a couple of labels, never a crowd. */
+            a.allowOverlap = true
             a.priority = l.selected ? 80 : 70
             map.viewAnnotations.add(a)
             labelPins[id] = (l, a, host)
@@ -175,18 +190,37 @@ final class NavMapDrawer {
 
     // MARK: camera
 
+    /// The padding that fits the routes in the map left visible by the header (`chrome.top`) and
+    /// the sheet (`bottomShare` of the height, or `chrome.bottom` if taller). Always leaves at least
+    /// `minVisibleShare` of the height and of the width for the routes (top and bottom shrink in proportion).
+    static let minVisibleShare: CGFloat = 0.2
+
+    static func fitPadding(size: CGSize, chrome: UIEdgeInsets, bottomShare: Double) -> UIEdgeInsets {
+        var top = chrome.top + 70
+        var bottom = max(chrome.bottom, size.height * bottomShare) + 24
+        let room = size.height * (1 - minVisibleShare)
+        if top + bottom > room, top + bottom > 0 {
+            let k = room / (top + bottom)
+            top *= k
+            bottom *= k
+        }
+        let side = min(50, size.width * (1 - minVisibleShare) / 2)
+        return UIEdgeInsets(top: top, left: side, bottom: bottom, right: side)
+    }
+
     private func camera(chrome: UIEdgeInsets, me: LngLat?, heading: Double?) {
         guard let map, map.bounds.height > 0, let cam = drawing.camera else { return }
         let reduce = UIAccessibility.isReduceMotionEnabled
         switch cam {
         case let .fit(pts, share):
             guard drawing.cameraKey != lastCameraKey, let b = GroupFraming.bounds(pts) else { return }
-            lastCameraKey = drawing.cameraKey
             let coords = [CLLocationCoordinate2D(latitude: b.south, longitude: b.west), CLLocationCoordinate2D(latitude: b.north, longitude: b.east)]
-            let bottom = max(chrome.bottom, map.bounds.height * share) + 24
-            let pad = UIEdgeInsets(top: chrome.top + 70, left: 50, bottom: bottom, right: 50)
+            let pad = Self.fitPadding(size: map.bounds.size, chrome: chrome, bottomShare: share)
+            /* Build 18+: the header and the options sheet together could pad more than the map is tall;
+             * Mapbox then threw, the error was swallowed and the key spent — the map stayed at city zoom. */
             guard var c = try? map.mapboxMap.camera(for: coords, camera: CameraOptions(padding: .zero, bearing: 0, pitch: 0),
                                                     coordinatesPadding: pad, maxZoom: 16.5, offset: nil) else { return }
+            lastCameraKey = drawing.cameraKey
             c.padding = nil
             map.camera.ease(to: c, duration: reduce ? 0 : 0.9)
         }

@@ -64,7 +64,9 @@ extension LiveOutingController {
         case let .failure(e):
             toast(e.message)
         case let .success(t):
-            guard location.lastFix != nil else { return toast(NavRefusal.noFix.message) }
+            /* No fresh fix: never silent — «ننتظر موقعك…», and the plan starts by itself once one comes. */
+            guard hasFreshFix else { return beginFixWait(.navigate(t)) }
+            if case .navigate = fixWait?.pending { fixWait = nil }
             backTrackOffForNav()
             following = false
             sheetDetent = .peek
@@ -81,7 +83,11 @@ extension LiveOutingController {
     func directions(_ r: Result<NavTarget, NavRefusal>) {
         if case let .failure(e) = r { return toast(e.message) }
         guard case let .success(t) = r else { return }
-        guard location.lastFix != nil else { return toast(NavRefusal.noFix.message) }
+        guard hasFreshFix else {
+            modal = nil
+            return beginFixWait(.directions(t))
+        }
+        if case .directions = fixWait?.pending { fixWait = nil }
         modal = nil
         let ask = Self.directionsNeedsConfirm(nav.phase)
         /* After the card's sheet has gone (a dialog or sheet over a closing one is dropped). */
@@ -124,12 +130,13 @@ extension LiveOutingController {
     }
 
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
-    func navLongPressed(_ p: LngLat) {
+    func navLongPressed(_ p: LngLat, name: String? = nil) {
         guard !nav.isActive else { return }
-        navigate(NavTargets.point(p))
+        navigate(NavTargets.point(p, name: name))
     }
 
     func startNav() {
+        navResumeOnClose = false
         /* Start first: closing the options sheet while still planning would cancel the plan. */
         nav.start()
         modal = nil
@@ -146,7 +153,21 @@ extension LiveOutingController {
 
     /// The options sheet went away without «ابدأ».
     func navOptionsClosed() {
-        if nav.phase == .planning { nav.cancelPlanning() }
+        guard nav.phase == .planning else { navResumeOnClose = false; return }
+        /* Opened from «المسارات» while guiding: never leave the driver without guidance. */
+        if navResumeOnClose, !nav.routes.isEmpty { return startNav() }
+        navResumeOnClose = false
+        nav.cancelPlanning()
+    }
+
+    /// «المسارات» while guiding: a person's own target only (the trip's guidance follows the plan).
+    var navCanShowRoutes: Bool { nav.phase == .guiding && !nav.auto && nav.target != nil }
+
+    /// The route options again for the same target (alternatives, «أسرع»…); «ابدأ» or closing resumes.
+    func navShowRoutes() {
+        guard navCanShowRoutes, let t = nav.target else { return }
+        navResumeOnClose = true
+        navigate(.success(t))
     }
 
     func navUserMovedMap() {
@@ -188,7 +209,12 @@ extension LiveOutingController {
             d.camera = .fit(pts, bottomShare: 0.55)
             d.cameraKey = navCameraKey * 1000 + nav.routes.count
         case .guiding:
-            if let r = nav.active { d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true)] }
+            if let r = nav.active {
+                /* Traffic colours along what is left (Mapbox `driving-traffic`); none in the desert / Valhalla. */
+                let done = nav.progress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
+                d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true,
+                                  traffic: NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done))]
+            }
             d.camera = navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
         case .offRoad, .arrived:
@@ -250,6 +276,23 @@ extension LiveOutingController {
 
     // MARK: the control cluster while navigating
 
+    /// The round buttons on the right while guiding (v2, four at most): the camera (compass /
+    /// recentre), «على الطريق» (the nearest station), the voice, «مسارات». SOS keeps its own place.
+    var navSideItems: [SaryMapControlItem] {
+        var items = [
+            cameraModeItem,
+            SaryMapControlItem(id: "nav.search", systemImage: "fuelpump.fill", label: "على الطريق", accessibilityID: "nav.search",
+                               hint: "أقرب محطة على طريقك"),
+            SaryMapControlItem(id: "nav.mute", systemImage: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                               label: nav.muted ? "الصوت مكتوم" : "الصوت", accessibilityID: "nav.mute", isActive: nav.muted),
+        ]
+        if navCanShowRoutes {
+            items.append(SaryMapControlItem(id: "nav.routes", systemImage: "arrow.triangle.branch", label: "مسارات",
+                                            accessibilityID: "nav.routes", hint: "الطرق البديلة"))
+        }
+        return Array(items.prefix(4))
+    }
+
     /// While guiding: the camera button («تتبعني» / «باتجاهي») and «نظرة عامة» (voice and steps sit in the guidance bar).
     var navControlItems: [SaryMapControlItem] {
         [
@@ -272,6 +315,8 @@ extension LiveOutingController {
         case "nav.follow": recenterCamera()
         case "nav.mute": nav.muted.toggle()
         case "nav.steps": modal = .navSteps
+        case "nav.search": openStations()
+        case "nav.routes": navShowRoutes()
         default: break
         }
     }
@@ -350,6 +395,11 @@ extension LiveOutingController {
         case "arrived": nav.debugSet(phase: .arrived, target: t, routes: [r], progress: nil, offRoad: nil)
         default: nav.debugSet(phase: .guiding, target: t, routes: [r], progress: p, offRoad: nav.offRoad)
         }
+        /* `-SaryNavOverview`: a flat top-down of the whole route (proof of the traffic colours). */
+        if ProcessInfo.processInfo.arguments.contains("-SaryNavOverview") {
+            nav.camera = .overview
+            navCameraKey += 1
+        }
         sheetDetent = .peek
         if ProcessInfo.processInfo.arguments.contains("-SaryNavSteps") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.modal = .navSteps }
@@ -389,8 +439,25 @@ final class DemoNavProvider: NavRoutingProvider {
                         speedLimitKmh: 80),
                 NavStep(maneuver: .init(kind: .arrive, direction: nil), roadName: nil, location: end, distanceM: 0, durationS: 0),
             ]
+            /* `-SaryNavTraffic`: a Riyadh rush hour on the road part (screenshots of the traffic colours). */
+            var jam: [NavCongestion]? = nil
+            if args.contains("-SaryNavTraffic"), !endsShort {
+                let n = c.count - 1
+                /* Front-loaded so the bands show in the follow camera (near the car): dark red → red → orange → blue. */
+                jam = (0..<n).map { i in
+                    switch Double(i) / Double(n) {
+                    case ..<0.12: return .severe
+                    case ..<0.24: return .heavy
+                    case ..<0.40: return .moderate
+                    case ..<0.60: return .low
+                    case ..<0.70: return .heavy
+                    case ..<0.80: return .moderate
+                    default: return .low
+                    }
+                }
+            }
             return NavRoute(id: id, coordinates: c, distanceM: d1 + d2, durationS: (d1 / 14 + d2 / 16) * factor, steps: steps,
-                            hasUnpaved: endsShort, hasTolls: false, via: first)
+                            hasUnpaved: endsShort, hasTolls: false, via: first, congestion: jam)
         }
         return NavRoutePlan(routes: [route("demo-a", k1, first: "طريق الملك فهد", second: "طريق مكة المكرمة", factor: 1),
                                      route("demo-b", k2, first: "طريق العليا", second: "طريق الملك عبدالله", factor: 1.18)])

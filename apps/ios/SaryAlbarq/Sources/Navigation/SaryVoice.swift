@@ -1,8 +1,8 @@
 import AVFoundation
 import Foundation
 
-// «صوت سرى»: the owner's own recorded Najdi phrases speak the guidance. Each spoken
-// line is a short sequence of his clips («بعد ثلاث مية متر» · «انعطف يمين»), built
+// «صوت سرى»: the owner's Najdi phrases (his own voice, ElevenLabs v4 set) speak the guidance.
+// Each spoken line is a short sequence of his clips («بعد ثلاث مية متر.» · «لف يمين.»), built
 // from the maneuver itself (kind, direction, exit, distance), never by parsing text.
 // Street and place names are never said in his voice: they stay on the banner.
 // «صوت الجهاز» (AVSpeechSynthesizer, ar-SA) stays a full option for those who want
@@ -43,6 +43,21 @@ struct NavLine: Equatable {
     var expiresAt: Date? = nil
     /// A safety line: while I am talking on the walkie-talkie it becomes a vibration and a text instead.
     var safety = false
+    /// Said before the guidance part («نبدأ التوجيه» + the first instruction): kept when the
+    /// guidance part is rebuilt at playback (`NavPromptTiming`).
+    var leadText = ""
+    var leadClips: [String] = []
+    /// Held until then so it ends at a recorded distance; `heldS`: held so far (at most `NavPromptTiming.maxHoldS`).
+    var notBefore: Date? = nil
+    var heldS = 0.0
+    /// The first line of a route (start / reroute): a soft maneuver far ahead may say «كمّل سيده».
+    var opening = false
+    /// Said again after a call cut it: outside the per-maneuver budget (`NavPromptBudget`).
+    var restate = false
+    /// Already charged against the per-maneuver budget: a held line, re-queued, is not counted twice.
+    var charged = false
+
+    func isHeld(_ now: Date = Date()) -> Bool { notBefore.map { $0 > now } ?? false }
 
     init(_ text: String, clips: [String], maneuverID: String? = nil, routeRevision: Int? = nil, expiresAt: Date? = nil, safety: Bool = false) {
         self.text = text
@@ -60,6 +75,8 @@ struct NavLine: Equatable {
         out.text = t
         out.clips = a.clips + b.clips
         out.safety = a.safety || b.safety
+        out.leadText = [a.leadText, a.text, b.leadText].filter { !$0.isEmpty }.joined(separator: ". ")
+        out.leadClips = a.leadClips + a.clips + b.leadClips
         return out
     }
 }
@@ -91,17 +108,22 @@ enum SaryVoiceScript {
     /// Past the last recorded distance (200 km) by more than half a step: no «بعد …» we could say honestly.
     static let farM = 225_000.0
 
-    /// The «بعد …» clip for `m` metres: the nearest recorded distance after the same rounding
-    /// as the banner (`NavText.roundedMeters`). nil when it is right here, or farther than we recorded.
+    /// The «بعد …» clip for `m` metres: the largest recorded distance NOT above `m` (rounded
+    /// down, never up: build 21 said «بعد مية متر» at 75 m because 75 rounded to the nearer 100).
+    /// nil when it is right here, or farther than we recorded.
     static func distance(_ m: Double, miles: Bool = DistanceUnits.miles) -> String? {
+        floorBand(m, miles: miles)?.key
+    }
+
+    /// The recorded distance (metres, clip) said for `m`: the largest one ≤ `m`.
+    static func floorBand(_ m: Double, miles: Bool = DistanceUnits.miles) -> (m: Double, key: String)? {
         guard m.isFinite else { return nil }
         if miles {
             guard m >= imperialNowM, m <= imperialFarM else { return nil }
-            return imperial.min { abs($0.m - m) < abs($1.m - m) }?.key
+            return imperial.last { $0.m <= m + 0.5 }
         }
         guard m >= nowM, m <= farM else { return nil }
-        let r = NavText.roundedMeters(m)
-        return distances.min { abs($0.m - r) < abs($1.m - r) }?.key
+        return distances.last { $0.m <= m + 0.5 }
     }
 
     static func isFar(_ m: Double, miles: Bool = DistanceUnits.miles) -> Bool { m > (miles ? imperialFarM : farM) }
@@ -129,8 +151,8 @@ enum SaryVoiceScript {
         }
     }
 
-    /// Roundabout exits 1–9 («في الدوّار خذ المخرج …»); the last exit: «خذ المخرج الأخير»;
-    /// all the way round: «لف بالدوّار وارجع»; past nine (not the last): «ادخل الدوّار» (the number is on the banner).
+    /// Roundabout exits 1–9 («في الدوّار، خذ المخرج …»); the last exit: «خذ آخر مخرج»;
+    /// all the way round: «ديور بالدوّار وارجع»; past nine (not the last): «ادخل الدوّار» (the number is on the banner).
     static func roundabout(exit: Int?, direction: NavTurnDirection? = nil, last: Bool = false) -> String {
         if direction == .uTurn { return "x_02" }
         if last { return "x_01" }
@@ -154,7 +176,12 @@ enum SaryVoiceScript {
             if m.direction == .uTurn { return ["turns_07"] }
             return [s == .right ? "mv_15" : s == .left ? "mv_16" : "mv_02"]
         case .useLane: return [s == .right ? "mv_18" : s == .left ? "mv_19" : "mv_17"]
-        case .roundabout: return [roundabout(exit: m.exit, direction: m.direction, last: m.lastExit)]
+        case .roundabout:
+            /* The exit number is the router's own (Mapbox `maneuver.exit`, Valhalla's
+             * roundabout_exit_count through OSRM JSON), never counted by us. Without one:
+             * «ادخل الدوّار.» + the direction — never a guessed number. */
+            if m.exit == nil, !m.lastExit, let d = m.direction, d != .uTurn { return ["round_01", turn(d)] }
+            return [roundabout(exit: m.exit, direction: m.direction, last: m.lastExit)]
         case .exitRoundabout: return ["rb_01"]
         case .depart: return ["mv_01"]
         case .arrive: return ["arr_02"]
@@ -162,7 +189,7 @@ enum SaryVoiceScript {
     }
 
     /// One guidance line: [«بعد …»] [the action]. No road name, ever (it is on the banner).
-    /// Farther than we recorded: «استمر للأمام» (never an action that sounds like «now»).
+    /// Farther than we recorded: «كمّل سيده» (never an action that sounds like «now»).
     /// `stop`: a stop / rally point on the way (not the destination): «على يمينك» rather than «وجهتك على يمينك».
     static func step(_ step: NavStep, distanceM: Double, auto: Bool = false, stop: Bool = false, miles: Bool = DistanceUnits.miles) -> [String] {
         let far = isFar(distanceM, miles: miles)
@@ -184,10 +211,10 @@ enum SaryVoiceScript {
         return d + action(step.maneuver)
     }
 
-    /// The next maneuver comes right after this one: «… ثم انعطف يسار».
+    /// The next maneuver comes right after this one: «… وبعدها، لف يسار» (`turns_14` is the connector).
     static let thenWithinM = 150.0
 
-    /// [this line] «ثم» [next action] — only when the next maneuver is close after this one AND
+    /// [this line] «وبعدها،» [next action] — only when the next maneuver is close after this one AND
     /// the longer line still ends before I reach this maneuver (time = distance ÷ speed).
     static func withThen(_ line: [String], next: NavStep?, gapM: Double, distanceToManeuverM: Double, speedMps: Double?, stop: Bool = false) -> [String] {
         guard let next, gapM > 0, gapM <= thenWithinM, line.last != "mv_02" else { return line }
@@ -198,21 +225,21 @@ enum SaryVoiceScript {
         return full
     }
 
-    /// «اتجه شمال» … «اتجه جنوب غرب» (eight directions, like `NavText.compassDefinite`).
+    /// «توجّه شمال» … «توجّه جنوب غرب» (eight directions, like `NavText.compassDefinite`).
     static func compass(_ deg: Double) -> String {
         let keys = ["bar_02", "dir_01", "bar_04", "dir_03", "bar_03", "dir_04", "bar_05", "dir_02"]
         let d = (deg.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
         return keys[Int((d + 22.5) / 45) % 8]
     }
 
-    /// The arrow: [lead] [«اتجه …»] [«بعد …» «وجهتك قدامك»].
+    /// The arrow: [lead] [«توجّه …»] [«بعد …» «وجهتك قدّامك»].
     static func arrow(lead: String, bearing: Double, distanceM: Double, miles: Bool = DistanceUnits.miles) -> [String] {
         var out = [lead, compass(bearing)]
         if let d = distance(distanceM, miles: miles) { out += [d, "start_06"] }
         return out
     }
 
-    /// Automatic guidance starts («نبدأ التوجيه إلى …» / «نكمل إلى …»): no name.
+    /// Automatic guidance starts: «بسم الله نبدأ.» / resumed «بدأ التوجيه.» — no name.
     static func intro(resumed: Bool) -> [String] { [resumed ? "start_02" : "start_01"] }
 }
 
@@ -254,7 +281,7 @@ enum SaryVoiceCatalog {
 
     private static var durations: [String: Double] = [:]
 
-    /// Seconds of one clip (file header only), for «is there time for «ثم» …».
+    /// Seconds of one clip (file header only), for «is there time for «وبعدها،» …».
     static func duration(_ key: String) -> Double {
         if let d = durations[key] { return d }
         guard let u = url(key), let f = try? AVAudioFile(forReading: u) else { return 0 }
@@ -263,9 +290,9 @@ enum SaryVoiceCatalog {
         return d
     }
 
-    /// The whole line said: clips plus the gaps between them.
+    /// The whole line said: clips plus the gaps between them, minus the pads cut at the joins (at most).
     static func duration(_ keys: [String]) -> Double {
-        keys.map(duration).reduce(0, +) + Double(max(0, keys.count - 1)) * SaryClipPlayer.gapS
+        keys.map(duration).reduce(0, +) + Double(max(0, keys.count - 1)) * (SaryClipPlayer.gapS - 2 * SaryClipPlayer.padS)
     }
 }
 
@@ -297,12 +324,19 @@ enum NavCueBands {
 
 // MARK: - Playing a line
 
-/// Joins the clips of one line into ONE PCM buffer (a short silence between them, no crossfade)
+/// Joins the clips of one line into ONE PCM buffer (pads cut at the joins, a short silence between them, no crossfade)
 /// and plays it on one AVAudioPlayerNode. Decoding happens off the main thread.
 @MainActor
 final class SaryClipPlayer: NSObject {
-    /// Between two clips of one line.
-    nonisolated static let gapS = 0.045
+    /// Between two clips of one line (added after the silent pads at the join are cut).
+    nonisolated static let gapS = 0.035
+    /// Every clip has an 80 ms digital-silence pad at both ends. Inside a line the pads at the
+    /// joins are cut (never more than the pad, never past the first sample above
+    /// `edgeThresholdDB`), so «بعد ثلاث مية متر» + «لف يمين» flow: ~70–100 ms audible gap.
+    /// The outer edges of the line keep their pads.
+    nonisolated static let padS = 0.080
+    nonisolated static let edgeThresholdDB: Float = -50
+    nonisolated static let edgeWindowS = 0.002
     /// A micro fade at both edges of every clip (no click at the joins; not a crossfade).
     nonisolated static let fadeS = 0.008
     nonisolated static let sampleRate = 44_100.0
@@ -313,6 +347,8 @@ final class SaryClipPlayer: NSObject {
     /// Bumped on every play/stop: callbacks of an older line are ignored (stopping the node fires them).
     private var token = 0
     private(set) var isPlaying = false
+    /// The last line that could not be composed (`.missing(key)` names the key).
+    private(set) var lastError: ComposeError?
     var onFinish: () -> Void = {}
     private var configObserver: NSObjectProtocol?
 
@@ -379,9 +415,32 @@ final class SaryClipPlayer: NSObject {
                 cacheLock.unlock()
             }
             if i > 0 { out += [Float](repeating: 0, count: Int(gap * sampleRate)) }
-            out += faded(s ?? [])
+            out += faded(joinTrimmed(s ?? [], head: i > 0, tail: i < keys.count - 1))
         }
         return (out, sampleRate)
+    }
+
+    /// Silent samples (below `edgeThresholdDB`, `edgeWindowS` windows) at the start (`fromEnd` false)
+    /// or the end of a clip, capped at the pad: speech is never cut.
+    nonisolated static func silentEdge(_ s: [Float], fromEnd: Bool) -> Int {
+        let w = max(1, Int(edgeWindowS * sampleRate)), cap = min(Int(padS * sampleRate), s.count / 2)
+        let thr = pow(10, edgeThresholdDB / 20)
+        var n = 0
+        while n + w <= cap {
+            var e: Float = 0
+            for j in n..<(n + w) { let v = s[fromEnd ? s.count - 1 - j : j]; e += v * v }
+            if (e / Float(w)).squareRoot() > thr { break }
+            n += w
+        }
+        return n
+    }
+
+    /// The clip with the silent pad cut at the edges that are joins inside the line.
+    nonisolated static func joinTrimmed(_ s: [Float], head: Bool, tail: Bool) -> [Float] {
+        let a = head ? silentEdge(s, fromEnd: false) : 0
+        let b = tail ? silentEdge(s, fromEnd: true) : 0
+        guard a + b < s.count else { return s }
+        return Array(s[a..<(s.count - b)])
     }
 
     /// `fadeS` linear ramp in and out at the clip's edges (the middle is untouched).
@@ -405,10 +464,15 @@ final class SaryClipPlayer: NSObject {
         let t = token
         isPlaying = true
         Task.detached(priority: .userInitiated) {
-            let line = try? Self.compose(keys)
+            let result = Result { try Self.compose(keys) }
             await MainActor.run {
                 guard t == self.token else { return }
-                guard let line, let buf = self.buffer(line.samples) else {
+                if case let .failure(e) = result {
+                    /* A missing or broken clip is an error, never a silent substitute. */
+                    self.lastError = e as? ComposeError
+                    NSLog("[SaryVoice] line not played: %@ [%@]", String(describing: e), keys.joined(separator: " "))
+                }
+                guard let line = try? result.get(), let buf = self.buffer(line.samples) else {
                     self.isPlaying = false
                     started(false)
                     return self.onFinish()

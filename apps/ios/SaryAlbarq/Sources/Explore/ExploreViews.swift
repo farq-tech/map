@@ -227,12 +227,12 @@ struct ExploreLayersSheet: View {
                 }
             }
             HiResLayerSection()
-            SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap عبر Mapbox: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
+            SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
                 SaryToggleRow(title: "مسارات البر (OSM)", subtitle: "طبعات الطرق الترابية مثل OsmAnd",
                               systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", isOn: $osmTracks, id: "explore-osm-tracks")
                     .padding(.horizontal, theme.space(.m))
             }
-            SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من بيانات Mapbox Terrain، ويظهر «غير متاح» حتى تُحمَّل بيانات المنطقة.") {
+            SarySection(title: "التضاريس", footer: "الارتفاع عند علامة الوسط من نموذج الارتفاع، ويظهر «غير متاح» لين تنزل بيانات المنطقة.") {
                 /* «تخفيف الزحمة» ١٠: this was a button on the map; now one tap here (the map's «الطبقات» lights up). */
                 Button { controller.terrain3D.toggle() } label: {
                     HStack(spacing: theme.space(.m)) {
@@ -457,8 +457,8 @@ struct TracksSheet: View {
 
     var body: some View {
         let p = theme.palette
-        SaryPage(title: "مسارات GPX", subtitle: "المستوردة والمصدّرة على هذا الجوال", close: { controller.modal = nil }) {
-            Button { importing = true } label: { SaryButtonLabel(title: "استورد ملف GPX أو KML", systemImage: "square.and.arrow.down", busy: busy) }
+        SaryPage(title: "ملفات المسارات", subtitle: "المستوردة والمصدّرة على هذا الجوال", close: { controller.modal = nil }) {
+            Button { importing = true } label: { SaryButtonLabel(title: "استورد ملف مسار", systemImage: "square.and.arrow.down", busy: busy) }
                 .buttonStyle(.sary(.primary))
                 .disabled(busy)
                 .accessibilityIdentifier("tracks.import")
@@ -532,7 +532,7 @@ struct TracksSheet: View {
                 .accessibilityLabel(Text("اعرض \(t.name) على الخريطة"))
                 .accessibilityIdentifier("tracks.toggle")
             Menu {
-                Button { shareURL = try? RouteFile.exportFile(name: t.name, points: t.points) } label: { Label("شارك ملف GPX", systemImage: SaryIcon.share) }
+                Button { shareURL = try? RouteFile.exportFile(name: t.name, points: t.points) } label: { Label("شارك ملف المسار", systemImage: SaryIcon.share) }
                 Button(role: .destructive) { deleting = t } label: { Label("احذف", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis.circle").font(.system(size: 20, weight: .semibold)).foregroundStyle(p.textSecondary)

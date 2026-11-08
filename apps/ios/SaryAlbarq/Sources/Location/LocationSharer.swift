@@ -125,6 +125,11 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// Tests that drive fixes by hand: ignore the simulator's own GPS (its location leaks
     /// in whenever the host app holds the permission, and races the scripted fixes).
     var ignoresSystemFixes = false
+    /// UI tests: my last fix as given (no gate), e.g. one 5 minutes old.
+    func debugSetLastFix(_ f: DeviceFix) {
+        lastFix = f
+        displayFix = f
+    }
     private var effectiveAuthorization: CLAuthorizationStatus { testAuthorization ?? authorization }
     #else
     private var effectiveAuthorization: CLAuthorizationStatus { authorization }
@@ -284,7 +289,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     var need: LocationTuning.Need {
         LocationTuning.Need(watching: watching, sharing: isSharing, trail: trailActive || backgroundTrail,
                             offScreen: offScreen, backgroundShare: backgroundShare, mode: effectiveMode,
-                            motion: motion, speedMps: lastFix?.speed, onRoad: onRoad)
+                            motion: motion, speedMps: lastFix?.speed, onRoad: onRoad, urgent: wantsFreshFix)
     }
 
     /// The one place the manager's accuracy, distance filter and activity type are set.
@@ -311,6 +316,24 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         if plan == nil { manager.stopUpdatingLocation() }
     }
 
+    /// Guidance waits for a fix («ننتظر موقعك…»): the GPS at its best, no filter, until a fresh one
+    /// comes (`ingest` lowers it again). Starts the updates if nothing else had.
+    private(set) var wantsFreshFix = false
+
+    func requestFreshFix() {
+        guard canLocate else { return }
+        wantsFreshFix = true
+        if !watching { watching = true }
+        applySettings()
+        manager.startUpdatingLocation()
+    }
+
+    func endFreshFixRequest() {
+        guard wantsFreshFix else { return }
+        wantsFreshFix = false
+        applySettings()
+    }
+
     func watchForeground() {
         guard canLocate, !watching else { return }
         watching = true
@@ -329,7 +352,10 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         filter.reset()
         isSharing = true
         manager.pausesLocationUpdatesAutomatically = false
-        if hasAlways { armBackgroundSharing() }
+        /* «دائمًا»: everything. «أثناء الاستخدام» on screen (iOS 17+): the background activity
+         * session (blue indicator) keeps the updates — and the share — going with the screen locked
+         * until the trip ends; only a relaunch after iOS kills the app needs «دائمًا». */
+        if hasAlways || UIApplication.shared.applicationState != .background { armBackgroundSharing() }
         applyBackgroundMode()
         retune(speed: lastFix?.speed)
         manager.startUpdatingLocation()
@@ -337,11 +363,15 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         askFullAccuracyIfReduced(purposeKey: Self.tripPurposeKey)
     }
 
-    /// «دائمًا» + sharing: keep the GPS and the app alive off screen as much as iOS allows.
+    /// Sharing: keep the GPS and the app alive off screen as much as iOS allows, for the whole trip.
+    /// «أثناء الاستخدام»: the activity session only (taken on screen). «دائمًا»: plus the
+    /// significant-change / region backstops that relaunch the app after iOS terminates it.
     private func armBackgroundSharing() {
-        guard !backgroundShare else { return }
-        backgroundShare = true
-        if shareActivitySession == nil { shareActivitySession = CLBackgroundActivitySession() }
+        if !backgroundShare {
+            backgroundShare = true
+            if shareActivitySession == nil { shareActivitySession = CLBackgroundActivitySession() }
+        }
+        guard hasAlways else { return }
         if #available(iOS 18.0, *), shareServiceSession == nil {
             shareServiceSession = CLServiceSession(authorization: .always, fullAccuracyPurposeKey: Self.tripPurposeKey)
         }
@@ -350,6 +380,10 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
             manager.startMonitoringSignificantLocationChanges()
         }
     }
+
+    /// The share keeps going off screen right now: «دائمًا», or «أثناء الاستخدام» with the
+    /// background activity session held (iOS 17+). The session's `SendGate` reads this.
+    var sharesInBackground: Bool { backgroundShare && canLocate && (hasAlways || shareActivitySession != nil) }
 
     private func disarmBackgroundSharing() {
         guard backgroundShare else { return }
@@ -366,7 +400,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// The one place the background flags are set: the trail needs any location permission
     /// (iOS 17+ activity session), a background share needs «دائمًا».
     private func applyBackgroundMode() {
-        let on = ((backgroundTrail || trailWantsBackground) && canLocate) || (backgroundShare && hasAlways)
+        let on = ((backgroundTrail || trailWantsBackground) && canLocate) || sharesInBackground
         if manager.allowsBackgroundLocationUpdates != on { manager.allowsBackgroundLocationUpdates = on }
         if manager.showsBackgroundLocationIndicator != on { manager.showsBackgroundLocationIndicator = on }
     }
@@ -380,7 +414,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// A small exit region around me, re-armed as I move: if iOS has terminated the app,
     /// leaving it relaunches the app in the background sooner than a significant change would.
     private func rearmRegion(_ f: DeviceFix) {
-        guard backgroundShare, CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else { return }
+        guard backgroundShare, hasAlways, CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else { return }
         if let c = regionCenter, Geo.haversineMeters(c.coordinate, f.coordinate) < Self.backstopRadiusM / 2, f.atMs - c.atMs < 120_000 { return }
         regionCenter = f
         let r = CLCircularRegion(center: CLLocationCoordinate2D(latitude: f.lat, longitude: f.lng), radius: Self.backstopRadiusM, identifier: Self.backstopRegionId)
@@ -438,9 +472,13 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
             }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopSharing() }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopTrail(); self.stopBackgroundTrail() }
-            /* «أثناء الاستخدام» still keeps the trail (activity session); only the background SHARE needs «دائمًا». */
-            if st != .authorizedAlways { self.disarmBackgroundSharing() }
-            if st == .authorizedAlways, self.isSharing { self.armBackgroundSharing() }
+            /* «أثناء الاستخدام» keeps the share (activity session) but not the relaunch backstops. */
+            if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.disarmBackgroundSharing() }
+            if st == .authorizedWhenInUse, self.backgroundShare {
+                self.manager.stopMonitoringSignificantLocationChanges()
+                for r in self.manager.monitoredRegions where r.identifier == Self.backstopRegionId { self.manager.stopMonitoring(for: r) }
+            }
+            if self.isSharing, st == .authorizedAlways || UIApplication.shared.applicationState != .background { self.armBackgroundSharing() }
             self.applyBackgroundMode()
             if self.trailActive { self.askFullAccuracyIfReduced() }
             self.onAuthorizationChange()
@@ -464,6 +502,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         guard case let .accept(ok) = gate.judge(f, nowMs: nowMs) else { return publishStats(f, source: source, nowMs: nowMs) }
         lastFix = ok
         displayFix = smoother.update(ok)
+        if wantsFreshFix, nowMs - ok.atMs < GpsQuality.staleMs { wantsFreshFix = false; applySettings() }
         publishStats(ok, source: source, nowMs: nowMs)
         /* Every believable fix goes to the trail (raw log + its own smoother); no accuracy downgrade
          * when parked: a coarse chip at a red light used to cost the next minutes of the drive. */

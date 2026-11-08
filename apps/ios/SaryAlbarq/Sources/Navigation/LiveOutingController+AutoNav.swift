@@ -51,7 +51,7 @@ extension LiveOutingController {
         i.destination = tripDestination
         i.stops = tripStops
         i.tripArrived = trip.record.me.arrived
-        i.hasFix = location.lastFix.map { Date().timeIntervalSince1970 * 1000 - $0.atMs < 120_000 } ?? false
+        i.hasFix = NavFixWait.isFresh(location.lastFix, now: Date())
         i.navPhase = nav.phase
         i.navAuto = nav.auto
         i.navTarget = nav.target
@@ -67,6 +67,12 @@ extension LiveOutingController {
             if s != autoNavState { setAutoNavState(s) }
         }
         autoNavOffRoadTrack()
+        /* Guidance is on but my fix is old: say so and ask the GPS now; every fresh fix decides again. */
+        if TripAutoNav.waitsForFix(autoNavInput) {
+            if fixWait == nil { beginFixWait(.auto) }
+        } else if fixWait?.pending == .auto {
+            fixWait = nil
+        }
         switch TripAutoNav.decide(autoNavInput) {
         case .none:
             break
@@ -239,6 +245,7 @@ extension LiveOutingController {
         func arg(_ k: String) -> Double? { a.firstIndex(of: k).flatMap { $0 + 1 < a.count ? Double(a[$0 + 1]) : nil } }
         /* `-SaryAutoNavActive`: guidance already on for this phone (a relaunch mid-trip). */
         if a.contains("-SaryAutoNavActive") { var s = autoNavState; s.active = true; setAutoNavState(s) }
+        fixWaitDebugLaunch()
         /* `-SaryAutoNavAsk`: the setting off (the leader's «للكل» is offered, not started). */
         if a.contains("-SaryAutoNavAsk") { TripAutoNavPrefs.set(false) }
         /* `-SaryDemoLeaderBroadcast <s>` / `-SaryDemoFakeBroadcast <s>`: the leader's «للكل»

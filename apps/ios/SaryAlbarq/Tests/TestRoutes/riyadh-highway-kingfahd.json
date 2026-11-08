@@ -1,0 +1,181 @@
+{
+  "name": "riyadh-highway-kingfahd",
+  "description": "King Fahd Rd / ring roads south (Mapbox Directions geometry) at road speeds: 100 km/h on stretches over 2 km, 70 over 500 m, 40 in between.",
+  "gpx": "riyadh-highway-kingfahd.gpx",
+  "unpaved": false,
+  "maneuvers": [
+    {
+      "kind": "depart",
+      "direction": null,
+      "lat": 24.769999,
+      "lng": 46.628998,
+      "distanceM": 85.6
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.770711,
+      "lng": 46.62868,
+      "distanceM": 81.0
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.771038,
+      "lng": 46.629396,
+      "distanceM": 77.6
+    },
+    {
+      "kind": "newName",
+      "direction": "left",
+      "lat": 24.770413,
+      "lng": 46.629735,
+      "distanceM": 199.7
+    },
+    {
+      "kind": "newName",
+      "direction": "left",
+      "lat": 24.771143,
+      "lng": 46.63154,
+      "distanceM": 79.5
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.771794,
+      "lng": 46.631216,
+      "distanceM": 74.7
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.772074,
+      "lng": 46.631888,
+      "distanceM": 145.1
+    },
+    {
+      "kind": "turn",
+      "direction": "left",
+      "lat": 24.770888,
+      "lng": 46.632483,
+      "distanceM": 521.3
+    },
+    {
+      "kind": "endOfRoad",
+      "direction": "left",
+      "lat": 24.772848,
+      "lng": 46.637167,
+      "distanceM": 131.5
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.773922,
+      "lng": 46.636626,
+      "distanceM": 347.1
+    },
+    {
+      "kind": "endOfRoad",
+      "direction": "right",
+      "lat": 24.775248,
+      "lng": 46.639734,
+      "distanceM": 1214.3
+    },
+    {
+      "kind": "fork",
+      "direction": "slightLeft",
+      "lat": 24.765082,
+      "lng": 46.636693,
+      "distanceM": 541.9
+    },
+    {
+      "kind": "turn",
+      "direction": "slightLeft",
+      "lat": 24.760308,
+      "lng": 46.635917,
+      "distanceM": 4073.0
+    },
+    {
+      "kind": "turn",
+      "direction": "slightLeft",
+      "lat": 24.726895,
+      "lng": 46.652183,
+      "distanceM": 623.5
+    },
+    {
+      "kind": "fork",
+      "direction": "slightLeft",
+      "lat": 24.724245,
+      "lng": 46.656349,
+      "distanceM": 416.5
+    },
+    {
+      "kind": "fork",
+      "direction": "slightRight",
+      "lat": 24.725947,
+      "lng": 46.66001,
+      "distanceM": 392.2
+    },
+    {
+      "kind": "fork",
+      "direction": "slightRight",
+      "lat": 24.727345,
+      "lng": 46.663562,
+      "distanceM": 8.6
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.727369,
+      "lng": 46.663643,
+      "distanceM": 250.9
+    },
+    {
+      "kind": "turn",
+      "direction": "slightLeft",
+      "lat": 24.725516,
+      "lng": 46.664844,
+      "distanceM": 10137.1
+    },
+    {
+      "kind": "offRamp",
+      "direction": "slightRight",
+      "lat": 24.642971,
+      "lng": 46.703042,
+      "distanceM": 342.4
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.639914,
+      "lng": 46.703259,
+      "distanceM": 204.6
+    },
+    {
+      "kind": "turn",
+      "direction": "right",
+      "lat": 24.639789,
+      "lng": 46.701242,
+      "distanceM": 26.5
+    },
+    {
+      "kind": "arrive",
+      "direction": "left",
+      "lat": 24.640025,
+      "lng": 46.701207,
+      "distanceM": 0
+    }
+  ],
+  "expect": {
+    "prompts": {
+      "neverOverstate": true,
+      "maxErrorM": null,
+      "immediateBelowM": 40,
+      "announceIfApproachM": 400
+    },
+    "arrival": {
+      "withinM": 40
+    }
+  },
+  "events": []
+}

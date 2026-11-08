@@ -189,6 +189,8 @@ enum ChatRules {
         case "too_frequent", "rate_limited": return "مهلًا، رسائل كثيرة بسرعة."
         case "not_allowed": return "ما تقدر تحذف هذه الرسالة."
         case "not_a_member": return "لست عضوًا في هذه الطلعة."
+        case "blocked": return "ما تقدر تراسله — فيه حظر بينكم."
+        case "invalid_reason": return "اختر سبب البلاغ."
         default: return "ما وصلت — نعيد المحاولة تلقائيًا."
         }
     }
@@ -230,5 +232,71 @@ enum ChatRules {
         }
         let readers = reads.filter { $0.key != me && $0.value >= m.seq }.count
         return others > 0 && readers >= others ? .read : .sent
+    }
+}
+
+// MARK: - «بلّغ عن الرسالة» و«احظر» (App Store 1.2)
+
+/// Why a message is reported (wire values match the server's REPORT_REASONS).
+enum ChatReportReason: String, CaseIterable, Identifiable {
+    case abuse, harassment, spam, sexual, violence, other
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .abuse: "كلام مسيء أو سب"
+        case .harassment: "مضايقة أو تهديد"
+        case .spam: "إزعاج أو رسائل مكررة"
+        case .sexual: "محتوى غير لائق"
+        case .violence: "عنف أو خطر"
+        case .other: "شي ثاني"
+        }
+    }
+}
+
+/// One person I blocked, as the server lists them.
+struct BlockedUser: Codable, Equatable, Identifiable {
+    var user_id: String
+    var display_name: String?
+    var created_at: String?
+    var id: String { user_id }
+}
+
+/// The server side of reporting and blocking. Defaults throw «unsupported» so fakes and the demo
+/// need not implement it; `OutingsAPI` does.
+protocol ChatModerationBackend: AnyObject {
+    func chatReport(_ outingId: String, messageId: String, reason: ChatReportReason, block: Bool) async throws
+    func blockUser(_ userId: String) async throws
+    func unblockUser(_ userId: String) async throws
+    func listBlocks() async throws -> [BlockedUser]
+}
+
+/// The people I blocked, on this phone (mirrors the server's `/me/blocks`). Their chat messages and
+/// voice notes are hidden here even before the server filters them. SOS is NEVER filtered by this.
+enum BlockedUsers {
+    static let key = "sary.blocked.v1"
+    /// Posted whenever the list changes (settings, chat, voice notes listen).
+    static let changed = Notification.Name("sary.blocked.changed")
+
+    static func load(_ defaults: UserDefaults = .standard) -> [BlockedUser] {
+        guard let d = defaults.data(forKey: key), let l = try? JSONDecoder().decode([BlockedUser].self, from: d) else { return [] }
+        return l
+    }
+
+    static func storedIds(_ defaults: UserDefaults = .standard) -> Set<String> { Set(load(defaults).map(\.user_id)) }
+
+    static func save(_ l: [BlockedUser], defaults: UserDefaults = .standard) {
+        if l.isEmpty { defaults.removeObject(forKey: key) } else if let d = try? JSONEncoder().encode(l) { defaults.set(d, forKey: key) }
+        NotificationCenter.default.post(name: changed, object: nil)
+    }
+
+    static func add(_ userId: String, name: String?, defaults: UserDefaults = .standard) {
+        var l = load(defaults)
+        guard !l.contains(where: { $0.user_id == userId }) else { return }
+        l.insert(BlockedUser(user_id: userId, display_name: name, created_at: ISODate.string(Date())), at: 0)
+        save(l, defaults: defaults)
+    }
+
+    static func remove(_ userId: String, defaults: UserDefaults = .standard) {
+        save(load(defaults).filter { $0.user_id != userId }, defaults: defaults)
     }
 }

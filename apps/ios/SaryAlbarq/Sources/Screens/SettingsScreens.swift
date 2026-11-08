@@ -142,14 +142,14 @@ struct SettingsView: View {
                 SaryNavRow(title: "تنبيهات القافلة", detail: "الابتعاد عن الأمير، الوقوف المفاجئ، الانقطاع، التأخر", systemImage: "car.2.fill",
                            id: "settings.convoyAlerts") { open(.convoyAlerts) }
             }
-            SarySection(title: "قناة الطلعة", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت العيال بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
+            SarySection(title: "اللاسلكي", footer: "صوت «كشش» ونغمة قصيرة لما يبدأ الإرسال، ونغمة «حوّل» لما ينتهي، وصوت الربع بنبرة اللاسلكي. على شاشة القفل يشغّل iOS نغماته هو لإرسالك.") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     HStack(spacing: theme.space(.m)) {
                         SaryRowIcon(systemImage: "waveform")
                         VStack(alignment: .leading, spacing: 2) {
                             Text("طريقة اللاسلكي").saryText(.body, weight: .medium).foregroundStyle(theme.palette.textPrimary)
                             Text(talkMode == .notes ? "اضغط وسجّل، ثم «أرسل»: توصل لكل اللي على ترددك ولو انقطع النت شوي"
-                                                    : "اضغط مطولًا وتكلم مباشرة — يحتاج اتصال قوي عند الكل")
+                                                    : "امسك الزر وتكلم مباشرة · يحتاج شبكة قوية عند الكل")
                                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
                         }
                     }
@@ -175,6 +175,8 @@ struct SettingsView: View {
             IntroSettingsSection()
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
+                SaryDivider()
+                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من الدردشة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
             }
             SarySection(title: "المظهر والقيادة") {
                 SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
@@ -182,7 +184,7 @@ struct SettingsView: View {
             SarySection(title: "الخرائط والبيانات") {
                 SaryNavRow(title: "الخرائط بلا إنترنت", detail: "احفظ منطقة الطلعة قبل ما تفقد التغطية", systemImage: "arrow.down.circle.fill", id: "settings.offline") { open(.offlineMaps) }
                 SaryDivider()
-                SaryNavRow(title: "متقدم", detail: "سجل المسار (GPX)، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
+                SaryNavRow(title: "متقدم", detail: "سجل المسار، مزوّد المسارات", systemImage: "wrench.and.screwdriver.fill", id: "settings.advanced") { open(.advanced) }
             }
             VisualEffectsSection()
             SarySection {
@@ -527,6 +529,7 @@ struct AboutView: View {
                     Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
                     Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
                     HiResLicenseNotice()
+                    VoiceDenoiseLicenseNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))
@@ -545,27 +548,27 @@ struct AdvancedSettingsView: View {
     var back: () -> Void
     @Environment(\.sary) private var theme
     @State private var gpx: [(id: String, url: URL)] = []
-    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.mapbox.rawValue
+    @AppStorage(NavProviderChoice.key) private var navProvider = NavProviderChoice.auto.rawValue
 
     var body: some View {
         let p = theme.palette
         SaryPage(title: "متقدم", back: back) {
-            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) بصيغة GPX، لترسله لفريق سَرى البارق إذا طلبوه.") {
+            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
                     Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
                         .padding(.vertical, theme.space(.s))
                 }
                 ForEach(Array(gpx.enumerated()), id: \.offset) { n, item in
                     ShareLink(item: item.url) {
-                        SaryButtonLabel(title: n == 0 ? "تصدير سجل المسار (GPX)" : "تصدير سجل المسار (GPX) · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
+                        SaryButtonLabel(title: n == 0 ? "صدّر سجل المسار" : "صدّر سجل المسار · \(SaryFormat.number(n + 1))", systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("about.gpx.\(n)")
                 }
             }
-            SarySection(title: "مزوّد المسارات", footer: "Mapbox هو الافتراضي. «فرق» يجرّب خادم الشركة (Valhalla) أولًا، و«تلقائي» يستخدمه فقط إذا كان مفعّلًا على الخادم؛ وإذا ما قدر يرد نرجع لـ Mapbox تلقائيًا.") {
+            SarySection(title: "مزوّد المسارات", footer: "«تلقائي» هو الافتراضي: مزوّد الخرائط بالزحام الحي في المدن والطرق المعبّدة (وقت وصول دقيق)، وخادمنا للبر والطرق اللي ما يغطيها أو إذا تعذّر. «فرق» يجرّب خادمنا أول دايم، والثالث ما يسأل خادمنا أبد.") {
                 SarySegmented(options: NavProviderChoice.allCases, selection: Binding(
-                    get: { NavProviderChoice(rawValue: navProvider) ?? .mapbox },
+                    get: { NavProviderChoice(rawValue: navProvider) ?? .auto },
                     set: { navProvider = $0.rawValue }), label: \.label, id: "dev.navProvider")
             }
         }
@@ -578,4 +581,72 @@ struct AdvancedSettingsView: View {
 enum MapboxTelemetry {
     static let key = "MGLMapboxMetricsEnabled"
     static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+}
+
+/// Settings → «المحظورين» (App Store 1.2): the people I blocked, each with «إلغاء الحظر».
+/// Loads the server's list (`GET /me/blocks`); the phone's copy shows at once and offline.
+struct BlockedUsersView: View {
+    var back: () -> Void
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.sary) private var theme
+    @State private var list: [BlockedUser] = BlockedUsers.load()
+    @State private var busy: String?
+    @State private var error: String?
+
+    var body: some View {
+        let p = theme.palette
+        SaryPage(title: "المحظورين", subtitle: "ما تشوف رسائلهم ولا رسائلهم الصوتية، وما يقدرون يراسلونك على الخاص", back: back) {
+            if let error { SaryInlineMessage(text: error, tone: .warning).accessibilityIdentifier("blocked.error") }
+            SarySection(footer: "الطوارئ من أي أحد توصلك دايم، حتى لو حاظره. للسلامة.") {
+                if list.isEmpty {
+                    Text("ما حظرت أحد.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .accessibilityIdentifier("blocked.empty")
+                }
+                ForEach(Array(list.enumerated()), id: \.element.user_id) { i, b in
+                    if i > 0 { SaryDivider() }
+                    HStack(spacing: theme.space(.m)) {
+                        SaryAvatar(name: b.display_name ?? "؟", color: 0x9AA5AD, size: 36)
+                        Text(b.display_name ?? "عضو").saryText(.body, weight: .medium).foregroundStyle(p.textPrimary).lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { Task { await unblock(b) } } label: {
+                            Group {
+                                if busy == b.user_id { ProgressView() } else { Text("إلغاء الحظر").saryText(.callout, weight: .bold) }
+                            }
+                            .foregroundStyle(p.accentText)
+                            .padding(.horizontal, theme.space(.m))
+                            .frame(minWidth: 44, minHeight: 44)
+                            .background(Capsule().fill(p.sunken))
+                        }
+                        .buttonStyle(SaryPressStyle())
+                        .disabled(busy != nil)
+                        .accessibilityLabel(Text("إلغاء حظر \(b.display_name ?? "العضو")"))
+                        .accessibilityIdentifier("blocked.unblock")
+                    }
+                    .padding(.vertical, theme.space(.xs))
+                    .accessibilityIdentifier("blocked.row")
+                }
+            }
+        }
+        .task { await refresh() }
+    }
+
+    private func refresh() async {
+        guard !model.isDemo, let l = try? await model.api.listBlocks() else { return }
+        list = l
+        BlockedUsers.save(l)
+    }
+
+    private func unblock(_ b: BlockedUser) async {
+        busy = b.user_id
+        defer { busy = nil }
+        do {
+            if !model.isDemo { try await model.api.unblockUser(b.user_id) }
+            BlockedUsers.remove(b.user_id)
+            list.removeAll { $0.user_id == b.user_id }
+            error = nil
+        } catch {
+            self.error = "ما قدرنا نلغي الحظر الحين. جرّب مرة ثانية."
+        }
+    }
 }

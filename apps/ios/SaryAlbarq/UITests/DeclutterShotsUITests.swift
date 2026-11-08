@@ -96,7 +96,7 @@ final class DeclutterShotsUITests: XCTestCase {
         let end = app.buttons["trip.end"]
         guard end.waitForExistence(timeout: 30) else { return XCTFail("trip.end") }
         end.tap()
-        let confirm = app.buttons["أنهِ الرحلة للجميع"]
+        let confirm = app.buttons["أنهِ الطلعة للجميع"]
         guard confirm.waitForExistence(timeout: 5) else { return XCTFail("confirm") }
         confirm.tap()
         _ = app.buttons["trip.summary"].waitForExistence(timeout: 10)

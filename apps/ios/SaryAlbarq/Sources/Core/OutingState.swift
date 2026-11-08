@@ -30,6 +30,10 @@ enum LiveEvent: Equatable {
     case memberSilent(SilentInfo)
     /// `reason` nil = a fresh fix arrived; else left / removed / sharing_off / going_offline.
     case memberResumed(userId: String, reason: String?)
+    /// «مباشر / متأخر / منقطع» + why (MemberPresence.swift).
+    case memberPresence(userId: String, presence: MemberPresence)
+    /// «أخفِ موقعي / أظهر موقعي». `reason`: self | sos (an SOS showed it again).
+    case memberHidden(userId: String, hidden: Bool, since: String?, reason: String?)
 
     /// Decode one server frame; nil for frames that are not events (ack, pong, ready…).
     static func decode(_ obj: [String: Any]) -> LiveEvent? {
@@ -86,6 +90,13 @@ enum LiveEvent: Equatable {
             return .convoy(decodeJSON(obj["convoy"]))
         case "plan_updated":
             return .planUpdated(decodeJSON(obj["plan"]))
+        case "member_presence":
+            guard let uid, let st = (obj["state"] as? String).flatMap(MemberPresence.State.init(rawValue:)) else { return nil }
+            return .memberPresence(userId: uid, presence: MemberPresence(state: st, reason: obj["reason"] as? String,
+                                                                          last_fix_at: obj["last_fix_at"] as? String, since: obj["since"] as? String))
+        case "member_hidden":
+            guard let uid else { return nil }
+            return .memberHidden(userId: uid, hidden: obj["hidden"] as? Bool ?? false, since: obj["since"] as? String, reason: obj["reason"] as? String)
         case "checklist_updated":
             return (decodeJSON(obj["items"]) as [ChecklistItem]?).map(LiveEvent.checklistUpdated)
         default:
@@ -139,6 +150,20 @@ struct OutingView: Equatable {
         switch e {
         case .memberSilent, .memberResumed:
             break
+        case let .memberPresence(uid, p):
+            members[uid]?.presence = p
+        case let .memberHidden(uid, hidden, since, _):
+            guard members[uid] != nil else { return }
+            members[uid]?.hidden = hidden
+            members[uid]?.hidden_at = hidden ? since : nil
+            /* Hidden: never draw the last position as if live (the server deleted it too). */
+            if hidden {
+                positions[uid] = nil
+                silent[uid] = nil
+                members[uid]?.presence = MemberPresence(state: .hidden, reason: "hidden", last_fix_at: nil, since: since)
+            } else if members[uid]?.presence?.state == .hidden {
+                members[uid]?.presence = nil
+            }
         case let .position(p):
             guard members[p.user_id]?.sharing == true, status == .active else { return }
             if let old = positions[p.user_id],

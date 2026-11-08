@@ -49,14 +49,15 @@ final class PersonalInvitesUITests: XCTestCase {
     func testLeaderInvitesAContactAndSeesStatuses() {
         let app = launchLive()
         any(app, "outing-sheet-summary").tap()
-        let group = app.buttons["tab.group"]
-        XCTAssertTrue(group.waitForExistence(timeout: 5))
-        group.tap()
         XCTAssertTrue(app.staticTexts["فهد أخوي"].waitForExistence(timeout: 5), "the inviter's name in the group list")
         XCTAssertTrue(any(app, "participant.nickname").exists, "their own name beside it")
         XCTAssertTrue(app.staticTexts["جوس"].exists)
         XCTAssertTrue(any(app, "participant.neverShared").exists, "«ما شارك موقعه» for a member without a location")
         shot(app, "1-group-list")
+        /* «ادعُ ربعك» under the people opens the invites. */
+        let invite = any(app, "sheet.invite")
+        scrollTo(app, invite)
+        invite.tap()
 
         let pick = app.buttons["invite.pickContact"]
         scrollTo(app, pick)
@@ -98,7 +99,9 @@ final class PersonalInvitesUITests: XCTestCase {
     func testManualInviteChecksTheNumber() {
         let app = launchLive()
         any(app, "outing-sheet-summary").tap()
-        app.buttons["tab.group"].tap()
+        let invite = any(app, "sheet.invite")
+        scrollTo(app, invite)
+        invite.tap()
         let manual = app.buttons["invite.manual"]
         scrollTo(app, manual)
         manual.tap()

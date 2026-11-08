@@ -58,6 +58,11 @@ struct Member: Codable, Equatable, Identifiable {
     var invited: Bool? = nil
     /// Last four digits of the number they were invited on (never the full number).
     var phone_last4: String? = nil
+    /// «مباشر / متأخر / منقطع» + why (server-decided, active outings only). See MemberPresence.swift.
+    var presence: MemberPresence? = nil
+    /// «أخفِ موقعي»: still in the trip, position not sent (`hidden_at`: since when).
+    var hidden: Bool? = nil
+    var hidden_at: String? = nil
 
     var id: String { user_id }
 }
@@ -225,6 +230,8 @@ struct InvitePreview: Codable, Equatable {
     var invitee_name: String? = nil
     /// open · yours (used by me: rejoin) · taken (someone else used it) · claimed (used; asked anonymously).
     var claim: String? = nil
+    /// The same person back with a new account (phone matches the leader's contact): joining moves the seat here.
+    var reclaim: Bool? = nil
     var already_member: Bool? = nil
     /// The trip's destination («روضة الثمامة»), when the server sends it (newer servers only).
     var destination_name: String? = nil

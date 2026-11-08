@@ -74,7 +74,7 @@ function parseAgeMs(raw) {
   return Math.min(Math.round(n), NOTE_TTL_MS - 60_000);
 }
 
-function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, relay = null, apns = null, push = null, now = () => Date.now(), log = console.warn } = {}) {
+function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, relay = null, apns = null, push = null, blockersOf = null, now = () => Date.now(), log = console.warn } = {}) {
   const lastAt = new Map(); // userId → ms of the last accepted upload
   const stats = { uploaded: 0, duplicates: 0, socket: 0, compat: 0, ptt_pushed: 0, alerted: 0, fetched: 0, swept: 0 };
 
@@ -156,7 +156,9 @@ function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, rela
     ).catch(() => {});
     const note = shape(row);
     const name = String(m.invited_name || user.display_name || '').slice(0, 40) || 'عضو';
-    deliver(outingId, user.id, name, note);
+    /* «احظر»: whoever blocked the sender neither hears it play by itself nor gets woken for it. */
+    const blockers = blockersOf ? await blockersOf(user.id).catch(() => new Set()) : new Set();
+    deliver(outingId, user.id, name, note, blockers);
     return { note, duplicate: false };
   }
 
@@ -165,13 +167,14 @@ function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, rela
     return { id: note.id, user_id: note.user_id, mime: note.mime, duration_ms: note.duration_ms, bytes: note.bytes, at: note.recorded_at, expires_at: note.expires_at, url: note.url, channel: note.channel };
   }
 
-  function deliver(outingId, senderId, name, note) {
+  function deliver(outingId, senderId, name, note, blockers = new Set()) {
     const ch = note.channel;
     const away = hub.awayUsers ? hub.awayUsers(outingId) : new Set();
     /** On screen right now, with a socket that will play or show it: no push for them. */
     const watching = new Set([senderId]);
     for (const c of hub.roomOf ? hub.roomOf(outingId) : []) {
       if (!c.userId || c.userId === senderId || !isAllowed(outingId, ch, c.userId)) continue;
+      if (blockers.has(c.userId)) continue;
       if (c.caps?.has('voice_notes')) {
         hub.send(c, { type: 'voice_note', note });
         stats.socket += 1;
@@ -182,6 +185,7 @@ function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, rela
         if (!away.has(c.userId)) watching.add(c.userId);
       }
     }
+    for (const b of blockers) watching.add(b);
     void wake(outingId, senderId, name, note, watching).catch((e) => log('[outings-voice] push', e?.code || e?.message));
   }
 
@@ -232,8 +236,9 @@ function createVoiceNotes({ q, hub, requireMember, err, pttChannels = null, rela
       `SELECT ${META} FROM sary.ptt_voice_notes n
        JOIN sary.outing_members s ON s.outing_id = n.outing_id AND s.user_id = n.sender_id AND s.status = 'active'
        WHERE n.outing_id = $1 AND n.channel = $2 AND n.expires_at > now()
+         AND NOT EXISTS (SELECT 1 FROM sary.user_blocks ub WHERE ub.blocker_id = $4 AND ub.blocked_id = n.sender_id)
        ORDER BY n.created_at DESC LIMIT $3`,
-      [outingId, ch, LIST_LIMIT],
+      [outingId, ch, LIST_LIMIT, user.id],
     );
     const at = now();
     return { notes: rows.map((r) => shape(r, at)), channel: ch, server_now: new Date(at).toISOString() };

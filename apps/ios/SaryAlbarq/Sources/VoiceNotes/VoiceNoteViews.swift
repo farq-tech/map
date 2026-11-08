@@ -149,7 +149,7 @@ struct VoiceNotePlayingCard: View {
             }
             .frame(width: 44, height: 44)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(playing.name) يتكلم…")
+                Text("رسالة من \(playing.name)")
                     .font(.sary(16, .bold))
                     .foregroundStyle(p.textPrimary)
                     .lineLimit(1)
