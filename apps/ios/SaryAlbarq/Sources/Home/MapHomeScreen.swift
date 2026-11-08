@@ -161,7 +161,10 @@ struct MapHomeScreen: View {
     private func sheetHeight(screen: CGFloat) -> CGFloat {
         let base: CGFloat
         if selected != nil {
-            base = 200
+            // The picked-point card has only its title, coordinates, and two actions.
+            // 200pt left a large empty area below the buttons; keep enough room for
+            // a two-line place name while letting the map remain visible.
+            base = 168
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
