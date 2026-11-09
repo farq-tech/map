@@ -97,6 +97,26 @@ final class OutingStateTests: XCTestCase {
         XCTAssertEqual(v.orderedMembers.map(\.user_id), ["a", "b"])
         XCTAssertEqual(v.colors["a"], CarColors.palette[0])
     }
+
+    func testGroupLegUpdateEventDecodesForImmediateRefresh() {
+        let raw: [String: Any] = [
+            "type": "leg_updated",
+            "leg": [
+                "id": "leg-1", "seq": 1, "scope": "group",
+                "destination": ["name": "مخيم النفود", "lat": 28.12, "lng": 41.25],
+                "state": "arrived", "started_at": "2026-11-09T06:00:00.000Z",
+                "arrived_at": "2026-11-09T06:30:00.000Z", "distance_m": 8200,
+                "duration_s": 1800,
+            ] as [String: Any],
+        ]
+        let expected = OutingLeg(
+            id: "leg-1", seq: 1, scope: .group,
+            destination: OutingDestination(name: "مخيم النفود", lat: 28.12, lng: 41.25),
+            state: .arrived, started_at: "2026-11-09T06:00:00.000Z",
+            arrived_at: "2026-11-09T06:30:00.000Z", distance_m: 8200, duration_s: 1800
+        )
+        XCTAssertEqual(LiveEvent.decode(raw), .legUpdated(expected))
+    }
 }
 
 final class InviteLinkTests: XCTestCase {

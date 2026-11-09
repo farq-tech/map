@@ -25,6 +25,8 @@ enum LiveEvent: Equatable {
     case convoy(ConvoyInfo?)
     /// «تخطيط الطلعة»: nil when the frame carries no plan (refetch it).
     case planUpdated(TripPlan?)
+    /// A group leg changed; the leg store refetches the authoritative timeline.
+    case legUpdated(OutingLeg)
     case checklistUpdated([ChecklistItem])
     /// «انقطع الإرسال» (see MemberSilence.swift).
     case memberSilent(SilentInfo)
@@ -90,6 +92,8 @@ enum LiveEvent: Equatable {
             return .convoy(decodeJSON(obj["convoy"]))
         case "plan_updated":
             return .planUpdated(decodeJSON(obj["plan"]))
+        case "leg_updated":
+            return (decodeJSON(obj["leg"]) as OutingLeg?).map(LiveEvent.legUpdated)
         case "member_presence":
             guard let uid, let st = (obj["state"] as? String).flatMap(MemberPresence.State.init(rawValue:)) else { return nil }
             return .memberPresence(userId: uid, presence: MemberPresence(state: st, reason: obj["reason"] as? String,
@@ -229,7 +233,7 @@ struct OutingView: Equatable {
         case let .convoy(c):
             snapshot.outing.convoy = c
             snapshot.convoy = nil
-        case .safety, .waypointAdded, .waypointRemoved, .planUpdated, .checklistUpdated:
+        case .safety, .waypointAdded, .waypointRemoved, .planUpdated, .legUpdated, .checklistUpdated:
             /* Safety state lives in SafetyController; waypoints are kept by OutingFeaturesModel
                (loaded with GET /waypoints); the plan and checklist by PlanModel. */
             break
