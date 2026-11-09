@@ -47,7 +47,11 @@ struct PlaceBriefSection: View {
                     if !ui.hours.isEmpty {
                         VStack(alignment: .leading, spacing: theme.space(.s)) {
                             Text("الساعات القادمة").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
-                            HoursStrip(hours: ui.hours).accessibilityIdentifier("brief.hours")
+                            /* The floating SOS window occupies the bottom-left corner over sheets.
+                             * In RTL, reserve that edge so forecast tiles remain fully readable. */
+                            HoursStrip(hours: ui.hours)
+                                .padding(.trailing, 104)
+                                .accessibilityIdentifier("brief.hours")
                         }
                     }
                 }

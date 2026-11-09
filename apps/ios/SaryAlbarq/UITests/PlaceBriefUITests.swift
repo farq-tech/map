@@ -69,6 +69,16 @@ final class PlaceBriefUITests: XCTestCase {
         }
         XCTAssertTrue(any(app, "brief.elevation").label.contains("الارتفاع"), "elevation, a value or «غير متاح»")
         XCTAssertTrue(any(app, "brief.assessment").label.contains("غبار كثيف"))
+        let sos = any(app, "sos.overlay")
+        XCTAssertTrue(sos.waitForExistence(timeout: 3), "emergency access stays visible over the sheet")
+        let hourTiles = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "brief.hour."))
+        XCTAssertGreaterThan(hourTiles.count, 0, "forecast tiles are individually accessible")
+        for index in 0..<hourTiles.count {
+            let tile = hourTiles.element(boundBy: index)
+            if tile.isHittable {
+                XCTAssertFalse(sos.frame.intersects(tile.frame), "SOS must not cover \(tile.identifier)")
+            }
+        }
         shot(app, "place-brief-expanded")
         /* The card's actions stay, under the brief. */
         /* On a smaller phone the sheet first grows to full height, then scrolls. */

@@ -170,6 +170,7 @@ struct HoursStrip: View {
                     .padding(.vertical, theme.space(.s))
                     .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
                     .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("brief.hour.\(Int(h.id))")
                 }
             }
         }
