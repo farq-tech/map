@@ -70,6 +70,18 @@ extension LiveOutingHost {
         model.pendingStart = nil
         if v.status == .created, !controller.session.isDemo { controller.startOuting() }
     }
+
+    fileprivate func startPendingMapDestination() {
+        guard let request = model.pendingMapDestination,
+              request.outingId == controller.session.id,
+              let outing = controller.session.displayView else { return }
+        model.pendingMapDestination = nil
+        guard outing.status == .active else {
+            model.errorText = "الطلعة ليست نشطة الآن. افتح طلعة نشطة لاختيار وجهة."
+            return
+        }
+        controller.startLegFromMap(request.destination)
+    }
 }
 
 struct InviteToken: Identifiable { let id: String }
@@ -123,9 +135,17 @@ struct LiveOutingHost: View {
                 }
             }
             .onReceive(controller.session.objectWillChange) { _ in
-                DispatchQueue.main.async { startIfAsked() }
+                DispatchQueue.main.async {
+                    startIfAsked()
+                    startPendingMapDestination()
+                }
             }
-            .onAppear { startIfAsked() }
+            .onAppear {
+                DispatchQueue.main.async {
+                    startIfAsked()
+                    startPendingMapDestination()
+                }
+            }
             .onReceive(model.$offerNotifications) { offer in
                 /* First join: notifications are NOT asked at join (build 14). Our explainer comes with
                  * the first alert worth sending in this trip (a friend's message, SOS, convoy alert). */

@@ -42,6 +42,13 @@ final class AppModel: ObservableObject {
     @Published var offerNotifications = false
     /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
     @Published var pendingStart: String?
+    /// A point selected on the home map should open the active outing and start a leg there,
+    /// instead of accidentally creating a second outing.
+    struct PendingMapDestination: Equatable {
+        var outingId: String
+        var destination: OutingDestination
+    }
+    @Published var pendingMapDestination: PendingMapDestination?
     /// «ملخص الرحلة» from the live map after the end: «طلعاتي» opens this summary.
     @Published var pendingSummary: String?
 
@@ -622,7 +629,10 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    func open(_ outingId: String) {
+    func open(_ outingId: String, mapDestination: OutingDestination? = nil) {
+        if let mapDestination {
+            pendingMapDestination = PendingMapDestination(outingId: outingId, destination: mapDestination)
+        }
         if let p = parkedSession {
             if p.id == outingId, session == nil { return unpark() }
             if p.id != outingId { closeParked() }

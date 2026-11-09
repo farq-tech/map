@@ -3,7 +3,7 @@ import SwiftUI
 /// The first screen: a map, the category chips floating over it, and ONE bottom sheet —
 /// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
-/// The flow (after Hudhud's, not its look): search → pick → «أنشئ طلعة» → «مين معك؟» → the trip.
+/// The flow: search → pick → continue the active outing or create a new one when no outing is active.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
     /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking
@@ -589,7 +589,7 @@ struct MapHomeScreen: View {
                     .accessibilityIdentifier("home.place.assign")
             } else if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "أنشئ طلعة", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {
@@ -601,7 +601,7 @@ struct MapHomeScreen: View {
                 }
             } else {
                 HStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "أنشئ طلعة", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {
@@ -723,11 +723,20 @@ struct MapHomeScreen: View {
         desertPicked = nil
     }
 
-    /// «ابدأ» → «مين معك؟» (the quick «طلعة»: this place, leaving now).
+    /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
     private func start(_ d: OutingDestination) {
         RecentPlaces.add(d)
         recent = RecentPlaces.load()
+        if let outing = activeOuting {
+            DispatchQueue.main.async { model.open(outing.id, mapDestination: d) }
+            return
+        }
         startFor = StartTarget(destination: d)
+    }
+
+    private var placeStartTitle: String {
+        guard let outing = activeOuting else { return "أنشئ طلعة" }
+        return outing.role == "owner" ? "وجّه القافلة إلى هنا" : "ابدأ مشوارًا لنفسي"
     }
 
     private func schedule(_ q: String, now: Bool = false) {

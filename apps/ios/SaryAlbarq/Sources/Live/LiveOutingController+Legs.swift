@@ -147,6 +147,16 @@ extension LiveOutingController {
         objectWillChange.send()
     }
 
+    /// A point selected from the home map is an explicit «go there» action: open the existing
+    /// outing, then start the shared leg as leader or a personal leg as a member.
+    func startLegFromMap(_ d: OutingDestination) {
+        modal = nil
+        RecentPlaces.add(d)
+        legs.picked = d
+        Task { await beginLeg(to: d) }
+        objectWillChange.send()
+    }
+
     /// «ابدأ المشوار».
     func startLegFlow() {
         guard let d = legPicked else { modal = .whereTo; return }

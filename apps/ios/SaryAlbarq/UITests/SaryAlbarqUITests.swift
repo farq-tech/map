@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 
 /// Launches the real app on the simulator. `-demo` loads a fixed, clearly
@@ -56,6 +57,34 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["أبو فهد"].exists)
         sleep(1)
         attach(app, "live-half")
+    }
+
+    /// Selecting a point from Home during an existing outing starts a leg in that outing.
+    func testMapPointStartsLegInActiveOuting() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "home", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0"]
+        allowLocation()
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(coordinate: CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744), altitude: 600,
+                                                                     horizontalAccuracy: 5, verticalAccuracy: 5, course: 0, speed: 0, timestamp: Date()))
+        app.launch()
+        app.allowLocationIfAsked()
+
+        let map = app.descendants(matching: .any)["home.map"].firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 30))
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).press(forDuration: 1.2)
+
+        let start = app.descendants(matching: .any)["home.place.start"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        XCTAssertEqual(start.label, "وجّه القافلة إلى هنا")
+        start.tap()
+
+        let liveMap = app.descendants(matching: .any)["outing-sheet-summary"].firstMatch
+        XCTAssertTrue(liveMap.waitForExistence(timeout: 30), "the existing outing should open")
+        let line = app.descendants(matching: .any)["trip.header.line"].firstMatch
+        XCTAssertTrue(line.waitForExistence(timeout: 10))
+        let destination = NSPredicate(format: "label CONTAINS %@", "في الطريق إلى نقطة على الخريطة")
+        expectation(for: destination, evaluatedWith: line)
+        waitForExpectations(timeout: 15)
     }
 
     private func attach(_ app: XCUIApplication, _ name: String) {
