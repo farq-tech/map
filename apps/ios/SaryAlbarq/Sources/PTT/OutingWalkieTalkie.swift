@@ -37,9 +37,9 @@ final class OutingWalkieTalkie: ObservableObject {
     // «ترددات»: which channel we are on, and what the server says about all of them.
     /// "1"…"5" or a private channel's id. Saved per outing.
     @Published private(set) var channelId: String
-    @Published private(set) var channels: [PTTChannelInfo] = PTTChannels.publicList
+    @Published private(set) var channels: [PTTChannelInfo]
     /// «+ تردد خاص»: the server says I may (the trip's leader).
-    @Published private(set) var canCreatePrivate = false
+    @Published private(set) var canCreatePrivate: Bool
     /// The server knows «ترددات» (it sent a channel list or a channel-tagged signal). Until then —
     /// a production server before the channels deploy — everyone is on one channel, the chip is
     /// hidden and nothing about channels is sent that could change what we hear.
@@ -110,7 +110,7 @@ final class OutingWalkieTalkie: ObservableObject {
     }
     #endif
 
-    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard,
+    init(outingId: String, me: String, tokenBackend: PTTTokenBackend?, demo: Bool = false, demoCanCreatePrivate: Bool = false, route: PTTRoute? = nil, audio: PTTAudioEngine = PTTAudioEngine(), defaults: UserDefaults = .standard,
          diag: @escaping (String, String) -> Void = { PTTDiagnosticsLog.shared.add($0, $1) }) {
         self.diag = diag
         self.outingId = outingId
@@ -122,7 +122,15 @@ final class OutingWalkieTalkie: ObservableObject {
         var f = PTTFloor(me: me)
         _ = f.setMuted(defaults.bool(forKey: Self.mutedKeyPrefix + outingId))
         floor = f
-        channelId = Self.savedChannel(outingId, defaults: defaults)
+        let savedChannel = Self.savedChannel(outingId, defaults: defaults)
+        channelId = savedChannel
+        self.demo = demo
+        _channels = Published(initialValue: PTTChannels.publicList.map { channel in
+            var channel = channel
+            if demo, channel.id == savedChannel, !f.muted { channel.listeners = [me] }
+            return channel
+        })
+        _canCreatePrivate = Published(initialValue: demo && demoCanCreatePrivate)
         self.route.callbacks = callbacks()
         inApp.callbacks = callbacks()
         audio.onFrame = { [weak self] frame in
@@ -148,7 +156,9 @@ final class OutingWalkieTalkie: ObservableObject {
         self.mesh = mesh
         mesh?.onVoice = { [weak self] m in self?.nearbyVoice(m) }
         demo = channel == nil && channelBackend == nil
-        if demo { channelsSupported = false }
+        /* `channelsSupported` already starts false. Avoid a redundant @Published write while
+         * the demo session is synchronously attached during SwiftUI StateObject creation. */
+        if demo, channelsSupported { channelsSupported = false }
         channel?.setPTTChannel(channelId)
         channel?.setPTTJoined(!muted)
         if demo { refreshDemoChannels() }
@@ -335,6 +345,7 @@ final class OutingWalkieTalkie: ObservableObject {
                 else { channel?.pttStop() }
                 if !isTalking { stopMic() }
             case let .startCapture(burst):
+                nowMs = Self.now()
                 capturingBurst = burst
                 micWanted = true
                 if mode == .nearby { mesh?.sendVoice(.start, body: Data([burst])) }
@@ -345,7 +356,7 @@ final class OutingWalkieTalkie: ObservableObject {
                 startCaptureIfReady()
                 /* "Speak now": once the floor is ours *and* the session is live. The engine sends
                    silence while it sounds, so the chirp never goes on air. */
-                if let c = cues.talkGranted(audioReady: audioReady || !audioRoute.isSystemChannel, cueContext) { audio.playCue(c) }
+                if let c = cues.talkGranted(audioReady: audioReady, cueContext) { audio.playCue(c) }
             case .stopCapture:
                 /* Roger first (the mic is gated while it sounds), then the mic closes. */
                 if let c = cues.talkEnded(cueContext) { audio.playCue(c) }
@@ -356,9 +367,18 @@ final class OutingWalkieTalkie: ObservableObject {
             case let .startPlayback(t):
                 playbackOn = true
                 audio.armReceive(burst: t.burst)
+                pendingPlayback = t.burst
                 audioRoute.setRemote(displayName(t))
-                /* The system route activates the session asynchronously (didActivate). */
-                if audioReady || !audioRoute.isSystemChannel { startPlayback(burst: t.burst) } else { pendingPlayback = t.burst; armPlaybackFallback(t) }
+                /* If activation completed synchronously because the session was already active,
+                 * playbackReady may have drained this pending burst inside setRemote. */
+                if audioReady, pendingPlayback == t.burst {
+                    pendingPlayback = nil
+                    startPlayback(burst: t.burst)
+                } else if !audioReady {
+                    /* The system route normally activates via PushToTalk. If it doesn't, the
+                     * foreground fallback borrows the app route; that route also confirms ready. */
+                    if audioRoute.isSystemChannel { armPlaybackFallback(t) }
+                }
             case .stopPlayback:
                 PTTAudioEngine.log.notice("[PTT] stop playback (mode=\(String(describing: self.mode), privacy: .public) live=\(self.channel?.isLive == true))")
                 playbackOn = false
@@ -397,11 +417,9 @@ final class OutingWalkieTalkie: ObservableObject {
 
     private func startCaptureIfReady() {
         guard micWanted, !micOn else { return }
-        /* The in-app route activates the session synchronously; the system one on didActivate. */
-        if audioReady || !audioRoute.isSystemChannel {
-            micOn = true
-            audio.startCapture(burst: capturingBurst ?? 0)
-        }
+        guard audioReady else { return }
+        micOn = true
+        audio.startCapture(burst: capturingBurst ?? 0)
     }
 
     private var cueContext: PTTRadioCueSequencer.Context {
@@ -481,6 +499,15 @@ final class OutingWalkieTalkie: ObservableObject {
                 self.pendingPlayback = nil
                 self.startPlayback(burst: b)
             }
+        }
+        c.audioUnavailable = { [weak self] in
+            guard let self else { return }
+            self.audioReady = false
+            self.pendingPlayback = nil
+            self.playbackOn = false
+            self.audio.stopPlayback(cue: nil)
+            self.diag("audio", "in-app speaker unavailable")
+            self.show("تعذر تشغيل صوت اللاسلكي")
         }
         c.audioDeactivated = { [weak self] in self?.audioReady = false }
         c.systemBeganTransmit = { [weak self] in
@@ -576,9 +603,15 @@ final class OutingWalkieTalkie: ObservableObject {
     }
 
     private func tick() {
-        nowMs = Self.now()
+        let now = Self.now()
+        /* The clock is only UI state while we hold the floor. Publishing it twice a second
+         * while idle needlessly invalidated the map and could race SwiftUI's first render. */
+        if case .talking = floor.state, Int(now / 1000) != Int(nowMs / 1000) { nowMs = now }
         refreshMode()
-        apply(floor.tick(nowMs: nowMs))
+        if floor.needsTick(nowMs: now) {
+            let effects = floor.tick(nowMs: now)
+            if !effects.isEmpty { apply(effects) }
+        }
     }
 
     private func show(_ text: String) {
@@ -724,12 +757,14 @@ final class OutingWalkieTalkie: ObservableObject {
     /// No server (the demo): the five public channels and ours, with only me listening where I am.
     private func refreshDemoChannels() {
         guard demo else { return }
-        channels = (PTTChannels.publicList + demoPrivate).map { c in
+        let updatedChannels = (PTTChannels.publicList + demoPrivate).map { c in
             var c = c
             c.listeners = c.id == channelId && !muted ? [me] : []
             return c
         }
-        canCreatePrivate = demoLeader()
+        if channels != updatedChannels { channels = updatedChannels }
+        let canCreate = demoLeader()
+        if canCreatePrivate != canCreate { canCreatePrivate = canCreate }
     }
 
     private var lastNearbyBurst: UInt8?

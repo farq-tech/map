@@ -109,10 +109,12 @@ final class AppModel: ObservableObject {
         })
         let forcedOffline = arguments.contains("-SaryOffline")
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
-                guard let self else { return }
-                let now = forcedOffline ? false : path.status == .satisfied
-                if now && !self.online { self.session?.networkBack(); self.parkedSession?.networkBack() }
+            let now = forcedOffline ? false : path.status == .satisfied
+            /* NWPathMonitor can report immediately while SwiftUI is still creating its first
+             * StateObject graph. Publish on the next main-loop turn, and skip duplicate states. */
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.online != now else { return }
+                if now { self.session?.networkBack(); self.parkedSession?.networkBack() }
                 self.online = now
             }
         }
@@ -186,10 +188,14 @@ final class AppModel: ObservableObject {
             Task { try? await Task.sleep(nanoseconds: 1_500_000_000); activity.debugStart(name) }
         }
         #endif
-        Task {
+        Task { @MainActor [weak self] in
             /* A short branded beat, never a wait: the list loads behind it. */
             try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
-            launching = false
+            guard let self, self.launching else { return }
+            DispatchQueue.main.async {
+                guard self.launching else { return }
+                self.launching = false
+            }
         }
         Task {
             await push.refresh(signedIn: identity != nil)
@@ -448,7 +454,10 @@ final class AppModel: ObservableObject {
     // MARK: outings
 
     func refresh() async {
-        guard identity != nil, !isDemo else { if isDemo { listPhase = .loaded }; return }
+        guard identity != nil, !isDemo else {
+            if isDemo, listPhase != .loaded { listPhase = .loaded }
+            return
+        }
         if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()

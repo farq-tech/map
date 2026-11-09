@@ -114,9 +114,13 @@ struct LiveOutingHost: View {
         LiveOutingScreen(controller: controller)
             /* A new destination (or one kept on this phone) moves the weather chip at once. */
             .onReceive(model.plans.model(controller.session.id).$plan.map(\.destination).removeDuplicates()) { _ in
-                controller.feedWeather(force: true)
-                controller.updateTrip()
-                DispatchQueue.main.async { startIfAsked() }
+                /* onReceive may run as SwiftUI is reconciling this host. Keep the weather model
+                 * and trip controller mutations out of that view-update transaction. */
+                DispatchQueue.main.async {
+                    controller.feedWeather(force: true)
+                    controller.updateTrip()
+                    startIfAsked()
+                }
             }
             .onReceive(controller.session.objectWillChange) { _ in
                 DispatchQueue.main.async { startIfAsked() }

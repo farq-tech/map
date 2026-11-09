@@ -71,7 +71,9 @@ final class OutingSession: ObservableObject, Identifiable {
     }
     @Published var errorText: String?
     /// Bumped once a second so ages and freshness re-render.
-    @Published private(set) var tick = 0
+    /* Internal timer cadence only; no view observes it, so don't publish a whole-session update
+     * every second while the live map is open. */
+    private(set) var tick = 0
     /// A member waiting for the leader can refresh the server's authoritative status.
     @Published private(set) var refreshingWaitingStatus = false
     /// The 1 s SOS hold finished and the alert is on its way.
@@ -160,7 +162,14 @@ final class OutingSession: ObservableObject, Identifiable {
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
-        walkie = OutingWalkieTalkie(outingId: id, me: myUserId, tokenBackend: demo == nil ? api : nil, defaults: env.defaults)
+        walkie = OutingWalkieTalkie(
+            outingId: id,
+            me: myUserId,
+            tokenBackend: demo == nil ? api : nil,
+            demo: demo != nil,
+            demoCanCreatePrivate: demo?.snapshot.me.role == "owner",
+            defaults: env.defaults
+        )
         if let demo {
             /* The demo has no server: «أبو فهد» (or the first friend) answers each note with the same recording. */
             let friend = demo.members.keys.sorted().first { $0 != myUserId } ?? "demo-friend"
@@ -240,7 +249,10 @@ final class OutingSession: ObservableObject, Identifiable {
     func open() {
         visible = env.isForeground()
         /* «المحادثات»: the conversation list and badges, then whatever waited in the outbox. */
-        Task { await chat.refresh() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) { [weak self] in
+            guard let self, self.closedReason == nil else { return }
+            Task { await self.chat.refresh() }
+        }
         location.setOffScreen(!visible)
         location.onTrailFix = { [weak self] f in self?.trailFix(f) }
         matcher?.onChange = { [weak self] in
@@ -260,14 +272,19 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         if env.timers {
             let t = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                Task { @MainActor in
+                /* Timer callbacks run on the main run loop; queue observable mutations for the
+                 * next turn so they cannot publish inside SwiftUI's current view update. */
+                DispatchQueue.main.async { [weak self] in
                     guard let self, self.visible else { return }
                     self.tick &+= 1
                     self.updateMesh()
                     /* A missed live status frame must not leave a joined member waiting forever.
                      * Reconcile frequently while waiting; stop as soon as the server starts it. */
                     if self.tick % 15 == 0, self.view?.status == .created {
-                        await self.refreshWaitingStatus()
+                        Task { @MainActor [weak self] in
+                            guard let self, self.tick % 15 == 0, self.view?.status == .created else { return }
+                            await self.refreshWaitingStatus()
+                        }
                     }
                 }
             }
@@ -668,6 +685,11 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     private func reconcileSharing() {
+        let wasAuthorized = location.canLocate
+        let wasSharing = location.isSharing
+        let wasWantsToShare = wantsToShare
+        let wasRecordingInBackground = recordingInBackground
+        let wasBackgroundSending = backgroundSender?.running == true
         /* Ended, left, removed, switch off: the screen-locked trail stops at once. */
         if recordingInBackground && !canRecordTrailInBackground { stopBackgroundTrail() }
         syncTrailGPS()
@@ -692,7 +714,13 @@ final class OutingSession: ObservableObject, Identifiable {
             backgroundSender?.stop()
         }
         updateMesh()
-        objectWillChange.send()
+        /* Authorization callbacks may repeat the same state during the first SwiftUI update.
+         * Publish only if this reconciliation actually changed session-visible sharing state. */
+        if wasAuthorized != location.canLocate || wasSharing != location.isSharing ||
+            wasWantsToShare != wantsToShare || wasRecordingInBackground != recordingInBackground ||
+            wasBackgroundSending != (backgroundSender?.running == true) {
+            objectWillChange.send()
+        }
     }
 
     // MARK: nearby (phone to phone)

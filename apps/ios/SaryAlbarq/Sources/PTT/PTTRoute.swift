@@ -49,9 +49,11 @@ struct PTTRouteCallbacks {
     var transmitFailed: () -> Void = {}
     /// The speaker may play now.
     var playbackReady: () -> Void = {}
+    /// The app-owned audio session could not be activated for received voice.
+    var audioUnavailable: () -> Void = {}
     /// The ephemeral APNs token for this channel (hex), for POST /ptt/token.
     var token: (String) -> Void = { _ in }
-    /// The system took the audio session back (system route only).
+    /// The active route deactivated its audio session; capture and playback must pause.
     var audioDeactivated: () -> Void = {}
     /// Left the channel from the system UI.
     var leftChannel: () -> Void = {}
@@ -64,45 +66,109 @@ final class PTTInAppRoute: PTTRoute {
     var callbacks = PTTRouteCallbacks()
     let isSystemChannel = false
     private var sessionActive = false
+    private var activationPending = false
+    private var deactivationPending = false
+    private var wantsSession = false
+    private var activationWaiters: [(Bool) -> Void] = []
+    private var ducked = false
+    private let legacySessionQueue = DispatchQueue(label: "sa.sary.ptt.session", qos: .userInitiated)
 
     func join(outingId: String, name: String) {}
     func leave() { deactivate() }
 
     func beginTransmit() {
-        activate()
-        callbacks.transmitReady()
+        activate { [weak self] active in
+            guard let self else { return }
+            if active { self.callbacks.transmitReady() }
+            else { self.callbacks.transmitEnded() }
+        }
     }
 
     func endTransmit() { deactivateSoon() }
 
     func setRemote(_ name: String?) {
         if name != nil {
-            activate()
-            callbacks.playbackReady()
+            activate { [weak self] active in
+                guard let self else { return }
+                if active { self.callbacks.playbackReady() }
+                else { self.callbacks.audioUnavailable() }
+            }
         } else {
             deactivateSoon()
         }
     }
 
-    private func activate() {
-        guard !sessionActive else { return }
+    private func activate(completion: @escaping (Bool) -> Void) {
+        wantsSession = true
+        pendingDeactivate?.cancel()
+        pendingDeactivate = nil
+        guard !sessionActive else { completion(true); return }
+        activationWaiters.append(completion)
+        guard !activationPending, !deactivationPending else { return }
+        startActivation()
+    }
+
+    private func startActivation() {
+        guard wantsSession, !activationPending, !deactivationPending, !sessionActive else { return }
+        activationPending = true
         /* «إذاعة الطلعة» pauses while the walkie-talkie has the speaker, and resumes after. */
-        GroupAudioDuck.began(.ptt)
+        if !ducked { GroupAudioDuck.began(.ptt); ducked = true }
         let s = AVAudioSession.sharedInstance()
         do {
             try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP])
-            try s.setActive(true)
-            PTTDiagnosticsLog.shared.add("audio", "in-app session active")
-            PTTSpeaker.engage(s, why: "in-app")
         } catch {
-            PTTDiagnosticsLog.shared.add("audio", "in-app session failed: \((error as NSError).domain)#\((error as NSError).code)")
+            finishActivation(s, active: false, error: error)
+            return
         }
-        sessionActive = true
+
+        if #available(iOS 27.0, *) {
+            /* The new API is asynchronous by contract; don't block the UI on an audio route
+             * transition while the person is holding the walkie-talkie button. */
+            s.activate(options: []) { [weak self] active, error in
+                DispatchQueue.main.async { self?.finishActivation(s, active: active, error: error) }
+            }
+        } else {
+            /* iOS 17–26 lack the async API. Keep their established immediate PTT behavior. */
+            legacySessionQueue.async { [weak self] in
+                let result = Result { try s.setActive(true) }
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success: self?.finishActivation(s, active: true, error: nil)
+                    case let .failure(error): self?.finishActivation(s, active: false, error: error)
+                    }
+                }
+            }
+        }
+    }
+
+    private func finishActivation(_ session: AVAudioSession, active: Bool, error: Error?) {
+        activationPending = false
+        sessionActive = active
+        if active, wantsSession {
+            PTTDiagnosticsLog.shared.add("audio", "in-app session active")
+            PTTSpeaker.engage(session, why: "in-app")
+            let waiters = activationWaiters
+            activationWaiters.removeAll()
+            waiters.forEach { $0(true) }
+        } else if active {
+            /* A short press may end while iOS is still switching the route. Don't leave the
+             * session active after that late completion. */
+            activationWaiters.removeAll()
+            deactivate()
+        } else {
+            let error = error as NSError?
+            PTTDiagnosticsLog.shared.add("audio", "in-app session failed: \(error?.domain ?? "audio")#\(error?.code ?? 0)")
+            if ducked { GroupAudioDuck.ended(.ptt); ducked = false }
+            let waiters = activationWaiters
+            activationWaiters.removeAll()
+            if wantsSession { waiters.forEach { $0(false) } }
+        }
     }
 
     private var pendingDeactivate: DispatchWorkItem?
 
     private func deactivateSoon() {
+        wantsSession = false
         pendingDeactivate?.cancel()
         let w = DispatchWorkItem { [weak self] in self?.deactivate() }
         pendingDeactivate = w
@@ -113,12 +179,35 @@ final class PTTInAppRoute: PTTRoute {
 
     private func deactivate() {
         pendingDeactivate?.cancel()
-        guard sessionActive else { return }
+        pendingDeactivate = nil
+        wantsSession = false
+        guard sessionActive, !deactivationPending else { return }
         sessionActive = false
         PTTSpeaker.disengage()
+        callbacks.audioDeactivated()
         let music = GroupAudioDuck.musicOwnsSession
-        if !music { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
-        GroupAudioDuck.ended(.ptt)
+        let s = AVAudioSession.sharedInstance()
+        guard !music else { finishDeactivation(); return }
+        deactivationPending = true
+        if #available(iOS 27.0, *) {
+            s.deactivate(options: [.notifyOthersOnDeactivation]) { [weak self] _, error in
+                DispatchQueue.main.async {
+                    if let error { PTTDiagnosticsLog.shared.add("audio", "in-app deactivation failed: \((error as NSError).code)") }
+                    self?.finishDeactivation()
+                }
+            }
+        } else {
+            legacySessionQueue.async { [weak self] in
+                try? s.setActive(false, options: .notifyOthersOnDeactivation)
+                DispatchQueue.main.async { self?.finishDeactivation() }
+            }
+        }
+    }
+
+    private func finishDeactivation() {
+        deactivationPending = false
+        if ducked { GroupAudioDuck.ended(.ptt); ducked = false }
+        if wantsSession { startActivation() }
     }
 }
 

@@ -115,6 +115,21 @@ final class PTTChannelsTests: XCTestCase {
         XCTAssertEqual(head, PTTRadioSynth.peak, accuracy: 0.02)
     }
 
+    @MainActor
+    func testInAppRouteWaitsForSessionActivationAndReportsDeactivation() async {
+        let route = PTTInAppRoute()
+        let ready = expectation(description: "speaker is ready only after session activation")
+        let stopped = expectation(description: "route reports session deactivation")
+        route.callbacks.playbackReady = { ready.fulfill() }
+        route.callbacks.audioUnavailable = { XCTFail("simulator audio session should activate") }
+        route.callbacks.audioDeactivated = { stopped.fulfill() }
+
+        route.setRemote("سعد")
+        await fulfillment(of: [ready], timeout: 5)
+        route.leave()
+        await fulfillment(of: [stopped], timeout: 5)
+    }
+
     // MARK: floor
 
     func testSwitchingChannelsEndsWhatWasOnAirQuietly() {

@@ -45,7 +45,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// light Kalman on the move, heading only when the course is trustworthy). Display only.
     @Published private(set) var displayFix: DeviceFix?
     /// «جودة GPS» (developer readout).
-    @Published private(set) var quality = GpsQualityStats()
+    @Published private(set) var quality = GpsQualityStats(settings: "off")
     @Published private(set) var isSharing = false
     @Published private(set) var effectiveMode: ShareMode = .balanced
 
@@ -438,6 +438,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     /// The session tells us when the app leaves / returns to the screen.
     func setOffScreen(_ off: Bool) {
+        guard offScreen != off else { return }
         offScreen = off
         retune(speed: lastFix?.speed)
     }
@@ -475,12 +476,13 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     private func retune(speed: Double?) {
         let d = UIDevice.current
-        effectiveMode = LocationTuning.effectiveMode(
+        let mode = LocationTuning.effectiveMode(
             chosen: chosenMode,
             lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
             batteryLevel: d.batteryLevel,
             charging: d.batteryState == .charging || d.batteryState == .full
         )
+        if effectiveMode != mode { effectiveMode = mode }
         /* While «مساري» records, the GPS stays at its best (on screen and off); the send
          * policy (`Policy` on screen, `BackgroundCadence` off screen) still decides what is sent.
          * Off screen with a background share: best when moving, reduced when parked. */
@@ -495,8 +497,9 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
         let st = manager.authorizationStatus
         let acc = manager.accuracyAuthorization
         Task { @MainActor in
-            self.authorization = st
-            self.accuracyAuthorization = acc
+            let authorizationChanged = self.authorization != st || self.accuracyAuthorization != acc
+            if self.authorization != st { self.authorization = st }
+            if self.accuracyAuthorization != acc { self.accuracyAuthorization = acc }
             if st != .notDetermined { self.finishWhenInUseIfResolved() }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopSharing() }
             if !(st == .authorizedWhenInUse || st == .authorizedAlways) { self.stopTrail(); self.stopBackgroundTrail() }
@@ -509,7 +512,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
             if self.isSharing, st == .authorizedAlways || UIApplication.shared.applicationState != .background { self.armBackgroundSharing() }
             self.applyBackgroundMode()
             if self.trailActive { self.askFullAccuracyIfReduced() }
-            self.onAuthorizationChange()
+            if authorizationChanged { self.onAuthorizationChange() }
             if st != .notDetermined, st != .authorizedWhenInUse || self.alwaysPromptSeen { self.finishAlways() }
         }
     }

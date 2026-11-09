@@ -111,15 +111,20 @@ final class PushRegistrar: ObservableObject {
         set { defaults.set(newValue, forKey: Self.explainedKey) }
     }
 
+    private func setState(_ next: PushState) {
+        guard state != next else { return }
+        state = next
+    }
+
     /// On launch / foreground: re-read the system state; if allowed, ask Apple for the token again (cheap).
     func refresh(signedIn: Bool) async {
-        guard enabled else { state = .off; return }
+        guard enabled else { setState(.off); return }
         switch await system.authorization() {
-        case .notDetermined: state = .notAsked
-        case .denied: state = .denied
+        case .notDetermined: setState(.notAsked)
+        case .denied: setState(.denied)
         default:
             if signedIn {
-                if state != .registered && state != .serverNotReady { state = .waitingForToken }
+                if state != .registered && state != .serverNotReady { setState(.waitingForToken) }
                 system.registerForRemoteNotifications()
             }
         }
@@ -132,10 +137,10 @@ final class PushRegistrar: ObservableObject {
         defaults.set(true, forKey: Self.enabledKey)
         let ok = await system.requestAuthorization()
         if ok {
-            state = .waitingForToken
+            setState(.waitingForToken)
             if signedIn { system.registerForRemoteNotifications() }
         } else {
-            state = .denied
+            setState(.denied)
         }
         return ok
     }
@@ -147,13 +152,13 @@ final class PushRegistrar: ObservableObject {
 
     #if DEBUG
     /// Screenshots in demo mode: show the state the production server gives today.
-    func debugShow(_ s: PushState) { state = s }
+    func debugShow(_ s: PushState) { setState(s) }
     #endif
 
-    func didFail() { if enabled { state = .failed("تعذّر الحصول على رمز التنبيهات من Apple.") } }
+    func didFail() { if enabled { setState(.failed("تعذّر الحصول على رمز التنبيهات من Apple.")) } }
 
     func register(_ token: String, signedIn: Bool) async {
-        guard enabled else { state = .off; return }
+        guard enabled else { setState(.off); return }
         guard signedIn else { return }
         /* Apple hands the token back on every registerForRemoteNotifications(); the server only
          * needs it when it changed (or once a day). This was a GET+POST /push/apns on every
@@ -161,7 +166,7 @@ final class PushRegistrar: ObservableObject {
         if token == registeredToken, defaults.string(forKey: Self.registeredForKey) == accountId(),
            let at = defaults.object(forKey: Self.registeredAtKey) as? Date,
            now().timeIntervalSince(at) < Self.reconfirmAfter, at <= now() {
-            state = .registered
+            setState(.registered)
             return
         }
         guard inFlight != token else { return }
@@ -169,18 +174,18 @@ final class PushRegistrar: ObservableObject {
         defer { inFlight = nil }
         do {
             let cfg = try await backend.apnsConfig()
-            guard cfg.enabled else { state = .serverNotReady; return }
+            guard cfg.enabled else { setState(.serverNotReady); return }
             try await backend.registerApns(token: token, environment: environment, bundleId: bundleId)
             /* Apple rotated the token: the old one is dead weight on the server. */
             if let old = registeredToken, old != token { try? await backend.unregisterApns(token: old) }
             defaults.set(token, forKey: Self.tokenKey)
             defaults.set(now(), forKey: Self.registeredAtKey)
             defaults.set(accountId(), forKey: Self.registeredForKey)
-            state = .registered
+            setState(.registered)
         } catch let e as OutingAPIError {
-            if e.code == "apns_disabled" || e.status == 503 || e.status == 404 { state = .serverNotReady } else { state = .failed(e.arabic) }
+            if e.code == "apns_disabled" || e.status == 503 || e.status == 404 { setState(.serverNotReady) } else { setState(.failed(e.arabic)) }
         } catch {
-            state = .failed("تعذّر تسجيل التنبيهات.")
+            setState(.failed("تعذّر تسجيل التنبيهات."))
         }
     }
 
@@ -191,7 +196,7 @@ final class PushRegistrar: ObservableObject {
             await refresh(signedIn: signedIn)
         } else {
             await unregister()
-            state = .off
+            setState(.off)
         }
     }
 
@@ -211,7 +216,7 @@ final class PushRegistrar: ObservableObject {
         defaults.removeObject(forKey: Self.explainedKey)
         defaults.removeObject(forKey: Self.enabledKey)
         system.unregisterForRemoteNotifications()
-        state = .notAsked
+        setState(.notAsked)
     }
 
     static func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }
