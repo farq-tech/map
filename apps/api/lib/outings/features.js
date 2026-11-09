@@ -290,8 +290,13 @@ function createFeatures(ctx) {
       overdue += 1;
       emitTimer(d.outing_id, d.user_id, 'overdue', row.due_at);
       const [owner] = await q(`SELECT display_name FROM sary.users WHERE id = $1`, [d.user_id]);
-      void pushWatchers(d.id, 'overdue', owner?.display_name);
-      void pushFeature('return_timer_overdue', d.outing_id, d.user_id, { exceptUserId: null });
+      /* The sweep is the durable transition that declares the timer overdue.
+       * Finish its best-effort notifications before resolving so shutdowns and
+       * tests cannot close the pool while these queries are still in flight. */
+      await Promise.all([
+        pushWatchers(d.id, 'overdue', owner?.display_name),
+        pushFeature('return_timer_overdue', d.outing_id, d.user_id, { exceptUserId: null }),
+      ]);
     }
     return { overdue };
   }

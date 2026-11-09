@@ -376,7 +376,7 @@ test('ptt end to end: token routes, live relay over the outing socket, pushtotal
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

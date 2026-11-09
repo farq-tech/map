@@ -175,7 +175,7 @@ test('outing features end to end', { skip, timeout: 120_000 }, async (t) => {
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -611,7 +611,7 @@ test('watch link is rate limited per address', { skip, timeout: 30_000 }, async 
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -635,7 +635,7 @@ test('offline mesh key: members only, rotated on leave / removal / account delet
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

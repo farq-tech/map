@@ -39,11 +39,17 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
   const apns = createApnsNotifier({ pool, config: apnsOpts.config || apnsConfigFromEnv(), sender: apnsOpts.sender, viewers, maxPerUser: apnsOpts.maxPerUser });
   const fanout = combineNotifiers(push, apns);
   const service = pool ? createOutingsService({ pool, events: hub, push: fanout, webPush: push, config, ...(now ? { now } : {}) }) : null;
+  const pendingPushes = new Set();
+  function trackPush(work) {
+    const task = Promise.resolve(work);
+    pendingPushes.add(task);
+    task.then(() => pendingPushes.delete(task), () => pendingPushes.delete(task));
+  }
   if (service && fanout.enabled) {
     const emit = hub.emit;
     hub.emit = (outingId, event, opts) => {
       emit(outingId, event, opts);
-      if (PUSHED_EVENTS.has(event?.type)) void service.announce(outingId, event.user_id, event);
+      if (PUSHED_EVENTS.has(event?.type)) trackPush(service.announce(outingId, event.user_id, event));
     };
   }
   /* «قناة الطلعة»: live walkie-talkie relay on the same socket (relay only, nothing stored),
@@ -163,7 +169,7 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
       }, 30_000);
       presenceSweep.unref?.();
     },
-    close() {
+    async close() {
       ptt?.close(); // release any held floor while sockets can still hear it
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
@@ -171,6 +177,9 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
       clearInterval(presenceSweep);
       socket?.close();
       apns.close();
+      /* SOS is delivered after the live event; drain its DB work before the
+       * caller closes the pool during graceful shutdown. */
+      await Promise.all([service?.drainBackgroundTasks(), Promise.allSettled([...pendingPushes])]);
     },
   };
 }

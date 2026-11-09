@@ -113,7 +113,7 @@ async function boot(t, extra = {}) {
   const sockets = [];
   t.after(async () => {
     for (const s of sockets) s.terminate();
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

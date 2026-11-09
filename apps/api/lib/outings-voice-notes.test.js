@@ -112,7 +112,7 @@ test('voice notes end to end: members only, channel-scoped, delivered live / old
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
