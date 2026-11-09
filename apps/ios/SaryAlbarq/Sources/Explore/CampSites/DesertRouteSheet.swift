@@ -55,7 +55,7 @@ struct DesertRouteSheet: View {
                     .sarySurface(radius: SaryRadius.l)
                     .accessibilityIdentifier("routes.outside")
             case .none:
-                SaryStateView(kind: .empty(title: "ما لقينا درب آمن", message: "جرّب «اتجه» أو نقطة ثانية.", systemImage: "xmark.octagon"))
+                SaryStateView(kind: .empty(title: "ما لقينا مسارًا مقترحًا", message: "جرّب «اتجه» أو اختر نقطة ثانية.", systemImage: "xmark.octagon"))
                     .sarySurface(radius: SaryRadius.l)
             case .ready:
                 ForEach(hub.options) { o in card(o) }

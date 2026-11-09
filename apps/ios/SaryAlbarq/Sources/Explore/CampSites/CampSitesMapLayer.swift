@@ -170,14 +170,22 @@ final class CampSitesMapLayer {
 
 /// «الطبقات» → «أماكن مقترحة للكشتة».
 struct CampSitesLayerSection: View {
+    @ObservedObject var controller: LiveOutingController
     @ObservedObject private var hub = CampSitesHub.shared
     @Environment(\.sary) private var theme
 
     var body: some View {
         SarySection(title: "الكشتة", footer: "\(CampReason.estimateNote). مواقع مرشحة من صور أقمار وبيانات مفتوحة (الثمامة، الدهناء، النفود)، بعيدة عن مجاري السيول والسبخات والعمران. \(CampReason.legalNote).") {
-            SaryToggleRow(title: "أماكن مقترحة للكشتة", subtitle: "نقاط برتقالية على الخريطة",
-                          systemImage: "tent.fill", isOn: $hub.layerOn, id: "explore-camp-sites")
+            VStack(spacing: theme.space(.s)) {
+                SaryToggleRow(title: "أماكن مقترحة للكشتة", subtitle: "نقاط برتقالية على الخريطة",
+                              systemImage: "tent.fill", isOn: $hub.layerOn, id: "explore-camp-sites")
+                    .padding(.horizontal, theme.space(.m))
+                SaryNavRow(title: "اقترح لي مكان كشتة", detail: "أفضل خمسة مواقع وطقس الليلة",
+                           systemImage: "tent", id: "explore-camp-suggest") {
+                    controller.performAction("camp")
+                }
                 .padding(.horizontal, theme.space(.m))
+            }
         }
     }
 }

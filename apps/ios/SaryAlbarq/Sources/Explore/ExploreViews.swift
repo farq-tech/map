@@ -227,7 +227,14 @@ struct ExploreLayersSheet: View {
                 }
             }
             HiResLayerSection()
-            CampSitesLayerSection()
+            CampSitesLayerSection(controller: controller)
+            SarySection(title: "دروب البر", footer: "خيارات تقديرية تساعد على مقارنة المسارات، ولا تثبت حالة الرمل أو خلو الدرب من الغراز. حدّد وجهة للطلعة لتظهر الخيارات.") {
+                SaryNavRow(title: "مسار برّي إلى الوجهة", detail: "الأسهل أو المتوازن أو الأقصر",
+                           systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath", id: "explore-desert-route") {
+                    controller.performAction("desertRoute")
+                }
+                .padding(.horizontal, theme.space(.m))
+            }
             SarySection(title: "مسارات البر", footer: "طبعات البر من بيانات OpenStreetMap: خط متقطع بني فاتح بحافة داكنة يُقرأ فوق صور القمر الصناعي، والفاتح للمعبّد. درجة المسار ونوع السطح (رمل، حصى، تراب) غير متوفرة في هذه البيانات بعد. تظهر من تقريب متوسط في الاستكشاف وأثناء القيادة خارج الطرق. \(OffroadTracks.attribution)") {
                 SaryToggleRow(title: "مسارات البر (OSM)", subtitle: "طبعات الطرق الترابية مثل OsmAnd",
                               systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill", isOn: $osmTracks, id: "explore-osm-tracks")
