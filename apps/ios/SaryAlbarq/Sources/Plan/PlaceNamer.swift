@@ -260,12 +260,21 @@ extension RecentPlaces {
         }
         /* Re-read: a place may have been added meanwhile; rename only the entries that are still bare. */
         var all = load(defaults: defaults)
+        var changed = false
         for i in all.indices where PlaceLabel.isGeneric(all[i].name) {
             if let hit = named.first(where: { $0.0.lat == all[i].lat && $0.0.lng == all[i].lng }) {
                 all[i].name = String(hit.1.prefix(TripPlan.destinationNameMax))
+                changed = true
             }
         }
-        if let d = try? JSONEncoder().encode(all) { defaults.set(d, forKey: key) }
+        if changed, let d = try? JSONEncoder().encode(all) {
+            defaults.set(d, forKey: key)
+            DispatchQueue.main.async { NotificationCenter.default.post(name: .saryRecentPlacesChanged, object: nil) }
+        }
         return all
     }
+}
+
+extension Notification.Name {
+    static let saryRecentPlacesChanged = Notification.Name("sary.recentPlaces.changed")
 }

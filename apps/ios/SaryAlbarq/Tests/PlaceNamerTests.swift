@@ -134,6 +134,18 @@ final class PlaceNamerTests: XCTestCase {
         XCTAssertEqual(RecentPlaces.load(defaults: defaults).map(\.name), all.map(\.name), "saved")
     }
 
+    func testRecentPlaceRenameNotifiesAnAlreadyOpenHomeScreen() async {
+        let bare = OutingDestination(name: "نقطة على الخريطة", lat: north(thumama.point, km: 12).lat, lng: thumama.point.lng)
+        RecentPlaces.add(bare, defaults: defaults)
+        let changed = expectation(forNotification: .saryRecentPlacesChanged, object: nil)
+        let r = PlaceNameResolver(geocoder: FakeGeocoder(answer: .nothing), cache: PlaceNameCache(defaults: defaults), gazetteer: gz)
+
+        let names = await RecentPlaces.resolveNames(defaults: defaults, resolver: r)
+
+        XCTAssertEqual(names.first?.name, "شمال الثمامة بـ ١٢ كم")
+        await fulfillment(of: [changed], timeout: 1)
+    }
+
     @MainActor
     func testSavedPlaceWithoutANameGetsOne() async throws {
         let file = "saved-places-namer-test.json"

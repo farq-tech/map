@@ -97,6 +97,9 @@ struct MapHomeScreen: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
+            recent = RecentPlaces.load()
+        }
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
         .onChange(of: query) { _, q in schedule(q) }
