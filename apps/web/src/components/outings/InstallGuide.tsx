@@ -50,8 +50,8 @@ function StepIcon({ icon }: { icon: GuideStepInfo["icon"] }) {
 const ARABIC_DIGITS = ["٠", "١", "٢", "٣"];
 
 /**
- * iPhone, no app: one line, one big button, three numbered steps. Everything else
- * (joining from the browser) hides behind a small link at the bottom.
+ * iPhone/iPad invite fallback when the link stays in a browser: install steps, a direct
+ * app-open action for existing users, and an option to continue in the browser.
  */
 export function InstallGuide({
 	owner,

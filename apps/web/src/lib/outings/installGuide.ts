@@ -1,9 +1,9 @@
 /**
- * «نزّل سرى البارق وانضم» — the invite page for someone with neither the app nor TestFlight.
+ * «نزّل سرى البارق وانضم» — invite fallback when the link stays in an iPhone/iPad browser.
  *
- * Written for someone who does not know phones well: one line, one big button, three short
- * numbered steps with the icons they will look for. No technical words besides TestFlight,
- * which is the name of an app they have to find.
+ * The page offers a direct app-open path for existing users, plus one clear install button and
+ * three short numbered steps for new users. No technical words besides TestFlight, which is the
+ * name of an app they have to find.
  *
  * Steps (iPhone):
  *   ١ نزّل TestFlight                 → the TestFlight app in the App Store
