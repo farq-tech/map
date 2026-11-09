@@ -44,6 +44,8 @@ describe("install guide (iPhone, no app)", () => {
 		const html = render(1);
 		expect(html).toContain("دعاك أبو فهد لطلعة كشتة النفود 🏕️");
 		expect(html).toContain("نزّل سرى البارق وانضم");
+		expect(html).toContain('data-testid="outing-guide-open-app"');
+		expect(html).toContain("عندك التطبيق؟ افتح الدعوة فيه");
 		expect(html.match(/data-testid="outing-guide-step-\d"/g)).toHaveLength(3);
 		expect(html).toContain("نزّل TestFlight");
 		expect(html).toContain("نزّل سرى البارق<");

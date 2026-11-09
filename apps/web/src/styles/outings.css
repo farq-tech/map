@@ -1785,6 +1785,19 @@ a.sary-o-primary {
 	transform: scale(0.98);
 }
 
+.sary-o-guide-open-app {
+	align-self: center;
+	min-height: 44px;
+	border: 0;
+	background: none;
+	color: rgba(244, 239, 230, 0.88);
+	font: inherit;
+	font-size: 0.95rem;
+	font-weight: 700;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
 .sary-o-guide-steps {
 	list-style: none;
 	margin: 0;

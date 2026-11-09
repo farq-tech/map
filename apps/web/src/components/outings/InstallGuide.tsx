@@ -95,19 +95,26 @@ export function InstallGuide({
 	};
 
 	const main = async () => {
-		const appUrl = appOpenUrl(token);
-		if (step === 3 && appUrl) {
-			const link = inviteLink(window.location.origin, token);
-			if (link) await copyText(link);
-			openAppOrInstall(appUrl, install.url, {
-				go: (u) => (window.location.href = u),
-				visible: () => document.visibilityState === "visible",
-				setTimeout: (fn, ms) => window.setTimeout(fn, ms),
-			});
+		if (step === 3) {
+			await openApp();
 			return;
 		}
 		/* Apple's TestFlight page itself says «نزّل TestFlight أولًا» when it is missing. */
 		await leaveFor(2, install.url);
+	};
+
+	/* When a Universal Link falls back to the browser (for example inside an in-app browser),
+	 * existing users need a direct, tap-triggered custom-scheme path into the same invite. */
+	const openApp = async () => {
+		const appUrl = appOpenUrl(token);
+		if (!appUrl) return;
+		const link = inviteLink(window.location.origin, token);
+		if (link) await copyText(link);
+		openAppOrInstall(appUrl, install.url, {
+			go: (u) => (window.location.href = u),
+			visible: () => document.visibilityState === "visible",
+			setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+		});
 	};
 
 	return (
@@ -117,6 +124,9 @@ export function InstallGuide({
 			</h1>
 			<button type="button" className="sary-o-guide-main" onClick={() => void main()} data-testid="outing-guide-main">
 				{mainButtonText(step)}
+			</button>
+			<button type="button" className="sary-o-guide-open-app" onClick={() => void openApp()} data-testid="outing-guide-open-app">
+				عندك التطبيق؟ افتح الدعوة فيه
 			</button>
 			<ol className="sary-o-guide-steps" data-testid="outing-guide-steps">
 				{steps.map((s) => {
