@@ -9,7 +9,8 @@ extension LiveOutingController {
         if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
         #endif
         /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla. */
-        return SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
+        let streets = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
+        return DesertAwareRouteProvider(base: streets)
     }
 
     // MARK: starting points

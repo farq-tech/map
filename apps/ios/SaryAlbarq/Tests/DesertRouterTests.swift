@@ -95,4 +95,110 @@ final class DesertRouterTests: XCTestCase {
         while let top = h.pop() { out.append(top.1) }
         XCTAssertEqual(out, [1, 2, 3, 4, 5])
     }
+
+    func testDesertAwareProviderConnectsCityRoadToMappedTrackAndGridRoute() async throws {
+        var grid = DesertGrid(rows: 60, cols: 60)
+        set(&grid, rows: 18..<42, cols: 30..<31, .firm, flags: DesertGrid.track)
+        let target = grid.point(42 * grid.cols + 30)
+        let origin = LngLat(lng: 45.9, lat: 24.7) // City side, outside the pilot raster.
+        let base = TestDesertRoadProvider { request in
+            if request.target.name != "مدخل درب البر" { throw NavRoutingError.noRoute }
+            let roadEnd = request.target.position
+            return NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, roadEnd],
+                                                   distanceM: Vehicle.distanceMeters(origin, roadEnd),
+                                                   durationS: 600, steps: [], via: "street network")])
+        }
+        let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
+                                                regionForPoint: { _ in "test" }, rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "destination", position: target),
+                                      options: NavRouteOptions())
+
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first)
+        XCTAssertEqual(route.start, origin)
+        XCTAssertTrue(route.hasUnpaved)
+        XCTAssertTrue(route.via?.contains("درب بري محسوب") == true)
+        XCTAssertGreaterThanOrEqual(route.coordinates.count, 3)
+        XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
+        XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
+    }
+
+    func testDesertAwareProviderPreservesStreetRouteIfGridCannotComplete() async throws {
+        var grid = DesertGrid(rows: 30, cols: 30)
+        set(&grid, rows: 10..<20, cols: 4..<5, .sand, flags: DesertGrid.track)
+        set(&grid, rows: 0..<30, cols: 15..<16, .forbidden)
+        let target = grid.point(15 * grid.cols + 20)
+        let origin = LngLat(lng: 46.0, lat: 24.8)
+        let base = TestDesertRoadProvider { request in
+            if request.target.name != "مدخل درب البر" { throw NavRoutingError.noRoute }
+            return NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, request.target.position],
+                                                   distanceM: 5_000, durationS: 600, steps: [])])
+        }
+        let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
+                                                regionForPoint: { _ in "test" }, rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "destination", position: target),
+                                      options: NavRouteOptions())
+
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first)
+        XCTAssertEqual(route.id, "street")
+        XCTAssertEqual(route.start, origin)
+        let end = try XCTUnwrap(route.end)
+        XCTAssertNotEqual(grid.cell[grid.index(end)] & (DesertGrid.track | DesertGrid.road), 0)
+    }
+
+    func testDesertRouterDoesNotClampOutsidePointsToRasterEdge() {
+        let grid = DesertGrid(rows: 10, cols: 10)
+        let outside = LngLat(lng: 47, lat: 26)
+        XCTAssertTrue(DesertRouter.options(grid, from: outside, to: grid.point(55), rain: false).isEmpty)
+    }
+
+    func testProvidedThumamahPinGetsStreetPrefixAndRasterRoute() async throws {
+        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
+        let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
+        let target = LngLat(lng: 46.53676, lat: 25.26679)
+        let origin = LngLat(lng: 46.50, lat: 24.90)
+        let base = TestDesertRoadProvider { request in
+            if request.target.name != "مدخل درب البر" { throw NavRoutingError.noRoute }
+            let entry = request.target.position
+            return NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, entry],
+                                                   distanceM: Vehicle.distanceMeters(origin, entry),
+                                                   durationS: 1_200, steps: [], via: "street network")])
+        }
+        let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
+                                                regionForPoint: { DesertAwareRouteProvider.regionName(containing: $0) },
+                                                rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "نقطة على الخريطة", position: target),
+                                      options: NavRouteOptions())
+
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first)
+        XCTAssertEqual(route.start, origin)
+        XCTAssertTrue(route.hasUnpaved)
+        XCTAssertTrue(route.via?.contains("درب بري محسوب") == true)
+        XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
+        XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
+        XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
+    }
+}
+
+private final class TestDesertRoadProvider: NavRoutingProvider {
+    var name = "test streets"
+    var requestedAccessPoints = 0
+    var lastAccessPoint: LngLat?
+    let handler: (NavRouteRequest) async throws -> NavRoutePlan
+
+    init(handler: @escaping (NavRouteRequest) async throws -> NavRoutePlan) { self.handler = handler }
+
+    func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
+        if request.target.name == "مدخل درب البر" {
+            requestedAccessPoints += 1
+            lastAccessPoint = request.target.position
+        }
+        return try await handler(request)
+    }
 }
