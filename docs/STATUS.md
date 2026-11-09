@@ -1,12 +1,13 @@
-# حالة سَرى البارق — آخر تحقق 2026-11-09
+# حالة سَرى البارق — آخر تحقق 2026-11-09، الساعة 14:10 بتوقيت الرياض
 
 هذا سجل العمل المشترك. اقرأه قبل أي تغيير، وحدّث البند عند ظهور دليل جديد. الحالة أدناه مبنية على `origin/main` وفحص GitHub وApp Store Connect في 2026-11-09؛ الفروع المفتوحة ليست جزءًا من التطبيق المنشور حتى تندمج وتُختبر.
 
 ## الإصدار وTestFlight
 
-- App Store Connect يعرض التطبيق `sa.sary.albarq`، الإصدار `1.0.0`. البناءان **27** (`94eebd45-6db1-4aae-b425-9b5a1286e766`) و**28** (`faefc83b-48c3-4c84-b7f8-c4a92df4ee86`) حالتهما `VALID` وغير منتهيين، ورُفعا في 2026-11-08. هذا يثبت قبول الرفع والمعالجة فقط؛ **لم يثبت** تعيينهما لمجموعة TestFlight أو وصولهما للمختبرين، كما لم يثبت الفحص مصدر الشيفرة الذي بُني منه كل رقم.
-- لذلك لا ننسب مزايا PR بعينه إلى 27 أو 28 حتى نثبت commit الأرشيف/الرفع ومجموعة الاختبار. Build 23 منتهٍ (`EXPIRED`) لغياب مفتاح Mapbox.
-- متطلب الإرسال للمختبرين: تأكيد مجموعة TestFlight ثم تثبيت البناء من TestFlight واختبار smoke على جهاز فعلي. طلب قراءة علاقة `betaGroups` أعاد 403 في فحص سابق؛ يلزم إعادة التحقق من حساب App Store Connect.
+- App Store Connect يعرض التطبيق `sa.sary.albarq` بالإصدار `1.0.0`. البناء **29** (`b920183a-5a01-4b7e-8425-52b1e93f77d0`) حالته `VALID` بعد رفعه في 2026-11-09. `altool --validate-app` نجح بلا أخطاء. الأرشيف: `/tmp/SaryAlbarq-Build29.xcarchive`؛ IPA الموقّع بتوزيع Apple: `/tmp/SaryAlbarq-Build29-Export/SaryAlbarq.ipa`. ملف IPA يعلن عائلتي الجهاز 1 و2 (iPhone وiPad). الأرشيف بُني من شجرة العمل التي أصبحت commit `c8046d3`، ورُفع هذا الرأس على PR #142.
+- `processingState=VALID` يثبت قبول الملف ومعالجته فقط. لم نتحقق من تعيين Build 29 لمجموعة TestFlight: قراءة علاقة `/v1/builds/{id}/betaGroups` أعادت 403؛ لذلك لا نزعم ظهوره للمختبرين.
+- Build 27 (`94eebd45-6db1-4aae-b425-9b5a1286e766`) وBuild 28 (`faefc83b-48c3-4c84-b7f8-c4a92df4ee86`) ما زالا `VALID` وغير منتهيين. Build 23 منتهٍ (`EXPIRED`) لغياب مفتاح Mapbox. لا ننسب تغييرات إلى بناء دون دليل مصدر.
+- متطلب الإرسال للمختبرين: تأكيد مجموعة TestFlight ثم تثبيت البناء منها واختبار smoke على جهاز فعلي. مصدر الحساب لا يملك صلاحية قراءة علاقة `betaGroups`؛ يحتاج مسؤول App Store Connect إلى التحقق من مجموعة المختبرين.
 
 ## ما وصل إلى `main`
 
@@ -15,14 +16,20 @@
 - #132/#134: توحيد البحث العربي والإنجليزي وإصلاح دمج فروع الأماكن القريبة.
 - #131: هذا السجل المشترك.
 
+## مدموج في فرع التكامل ولم يصل بعد إلى `main`
+
+- #138 (Build 28 iPad/اعتمادية الرحلة) دُمج في `codex/build27-integration` بتاريخ 2026-11-09 عبر merge commit `db2820d`. لا يزال فرع التكامل نفسه قيد المراجعة في #137؛ هذا لا يعني وصول #138 إلى `main`.
+- Build 29 بُني من فرع التكامل بعد commit `c8046d3` ورُفع إلى App Store Connect بحالة `VALID`. PR #142 مفتوح كمسودة لمراجعة الكود؛ رقم البناء ومعالجة Apple لا يثبتان أن الـPR اندمج أو أن المختبرين حصلوا عليه.
+
+
 ## الأعمال المفتوحة
 
-الفروع وPRs أدناه فُحصت في GitHub يوم 2026-11-09. «Draft» يعني أن المراجعة/الدمج غير جاهزين. حالات `verify` الحمراء لا تعني فشل اختبارات الشيفرة عندما لم تبدأ الوظيفة: في #126 و#137 و#138 و#139 أكد GitHub أن الوظيفة لم تبدأ بسبب قفل الحساب لمشكلة فوترة. Vercel Preview ناجح لا يثبت عمل API أو iOS.
+الفروع وPRs أدناه فُحصت في GitHub يوم 2026-11-09. «Draft» يعني أن المراجعة/الدمج غير جاهزين. حالة `verify` الحمراء في #142 فشلت قبل أي خطوة، وتوضح annotation أن حساب المستودع مقفل لمشكلة فوترة (`run 42606969448`)؛ لا تعد فشل اختبار للشيفرة ولا نجاحًا لها. Vercel Preview ناجح لا يثبت عمل API أو iOS.
 
 | العمل / الدليل الحالي | PR والفرع | المالك | الموعد والخطوة التالية |
 |---|---|---|---|
 | تكامل التنقل والطقس ودليل البر، مع اختبارات واجهة شاملة ما زالت فيها إخفاقات مسجلة. آخر جرد كامل سابق: 135 ناجحًا، 12 فاشلًا، 26 متجاوزًا من 173. أُعيد اختبار `ExploreUITests.testSavePlaceAndListIt` على رأس #139 الحالي ونجح 1/1 (`/tmp/Sary-Explore-SavePlace-2026-11-09.xcresult`)، لذلك هذا الإخفاق السابق لم يتكرر؛ يلزم تحديث جرد الباقي بدل احتساب الـ12 كأنها ما زالت مؤكدة. لا يوجد دليل على أن Build 27 يحتوي هذا الرأس. | #137 Draft — `codex/build27-integration` → `main` | Codex | 2026-11-10: إعادة مجموعة UI وتحديث قائمة الإخفاقات، إعادة CI بعد حل الفوترة، توثيق commit الأرشيف، ثم اختبار جهاز/توزيع قبل اعتبار البناء متاحًا. |
-| تحسين iPad واعتمادية الرحلة والتحكم باستهلاك البطارية؛ توجد أدلة سيناريو وجهة على المحاكي واختبارات OutingFlow 15/15 من فحص سابق. كما اجتاز `VisualsUITests.testDroneButtonInPointCardFliesAndStopsOnTouch` على محاكي iPhone 18 Pro **1/1** (`/tmp/Sary-Drone-HitTest-2026-11-09.xcresult`): ضغط زر الدرون بدأ الحركة ولمس الخريطة أوقفها؛ `ExploreUITests.testEnterFromToolsAndExitInOneTap` و`testEnterFromActionsAndSwitchLayers` اجتازا كذلك 1/1 لكل منهما (`/tmp/Sary-Explore-ToolsTap-2026-11-09.xcresult`, `/tmp/Sary-Explore-LayersTap-2026-11-09.xcresult`)، ويغطيان أزرار الخروج والطبقات والطبوغرافي وفتح الخرائط بلا إنترنت. كما غُيّر نص بطاقة النقطة إلى «أنشئ طلعة» لأن الفعل يفتح معالج إنشاء طلعة، واجتاز `UXSimplifyShotsUITests.testMapPointCardSaveAndStartActions` **1/1** (`/tmp/Sary-Home-Button-Label-2026-11-09.xcresult`). ثم أضيف السلوك السياقي عند وجود طلعة نشطة: القائد يبدأ مشوارًا جماعيًا إلى نقطة الخريطة، والمشارك يبدأ مشوارًا شخصيًا؛ `SaryAlbarqUITests.testMapPointStartsLegInActiveOuting` اجتاز **1/1** على iPhone 18 Pro simulator (`/Users/m4pro/Library/Developer/Xcode/DerivedData/SaryAlbarq-gvshbgpmovbootayckmkefzaegcv/Logs/Test/Test-SaryAlbarq-2026.11.09_08-50-24-+0300.xcresult`). هذا الاختبار ببيانات demo، ولا يثبت تزامن هاتفين، وظهر فيه تحذيرا SwiftUI `Invalid frame dimension` و`Publishing changes from within view updates`. واختبرنا الدعوة اليدوية بالاسم من دون رقم، مع رفض رقم غير صحيح، ونجح `PersonalInvitesUITests.testManualInviteValidatesOptionalNumberAndAllowsNameOnly` **1/1** (`/tmp/Sary-Personal-Invite-NameOnly-2026-11-09.xcresult`); واجتاز تدفق الانضمام عبر رابط عرض تجريبي `SaryAlbarqUITests.testInviteOneTapJoinsAndSharesAtOnce` **1/1** (`/tmp/Sary-Invite-Join-B28-2026-11-09.xcresult`). اختبار الرابط تجريبي ولا يثبت WhatsApp أو جهازين. لا تثبت الاختبارات بقية الأزرار أو جهازًا فعليًا، ولا يثبت ذلك أن Build 28 يحتوي التغييرات. GitHub `verify` على رأس `00ec10b` فشل قبل الخطوات (`42570287919`) لأن حساب المستودع مقفل لفوترة؛ معاينة Vercel وVercel Preview Comments نجحت. | #138 Draft — `codex/build28-ipad-reliability` → `codex/build27-integration` | Codex | 2026-11-10: اختبر مزامنة المشوار على هاتفين، عالج/صنّف تحذير SwiftUI، أعد CI بعد حل الفوترة، واربط التغيير ببناء معلوم قبل التوزيع. |
+| Build 29 والتفاعلات المركّزة وخط القبلة؛ التغييرات تشمل Huwaiya، تحديثات الرحلة/الموقع والدعوات، وتحسين الواجهة والاختبارات. اجتازت 7 حالات UI مركّزة عبر `/tmp/Sary-B29-AllFocused.xcresult` و`/tmp/Sary-B29-Qibla-Retry2.xcresult`؛ `QiblaTests` ‏7/7. Release archive وApple validation نجحا وASC يعرض `VALID`. ليست مجموعة iOS كاملة، ولا تثبت بقية الأزرار أو اختبار جهاز فعلي؛ مجموعة Build 28 الكاملة السابقة سجلت 15 فشلًا و29 تخطيًا من 1555. تعيين TestFlight غير متحقق (403). | [#142](https://github.com/farq-tech/map/pull/142) Draft — `codex/build29-release` → `codex/build27-integration` | Codex | 2026-11-10: أعد CI بعد حل الفوترة، أعد المجموعة الكاملة وفرز إخفاقاتها، ثم تحقق من مجموعة المختبرين واختبر على iPhone/iPad فعليين قبل تغيير حالة PR. |
 | تسمية المواقع بدل «نقطة على الخريطة»: `PlaceNamerTests` أُعيدت على iPhone 18 Pro / iOS 27.2 ونجحت **14/14**؛ النتيجة `/tmp/Sary-PlaceNamer-2026-11-09-current.xcresult`. Apple geocoder الحي والجهاز الفعلي غير مختبرين. | #139 Draft — `codex/place-namer-b27` → `codex/build27-integration` | Codex | 2026-11-10: اختبار البطاقة مع Apple geocoder حيًا وجهاز فعلي؛ إعادة CI بعد حل الفوترة. |
 | الطبقات والبحث المقصود وPiP. لا يُستنتج من اسم PR أنها جاهزة أو أن PiP مدعوم إنتاجيًا. | #136 Draft — `feat/build26-navigation-pip-search` → `main` | Codex | 2026-11-11: تدقيق السلوك الفعلي لكل مسار، اختبار PiP على جهاز فعلي، ثم دمج ما اجتاز التحقق أو إغلاقه بسبب موثق إذا غطاه #137. |
 | دليل البر بمصادر OSM/GeoNames وبيانات مخيمات/مسارات محددة. على فرع #133: اختبارات البيانات Python 63/63، iOS unit 37/37، وUI 5/5 وفق السجل؛ لم يثبت ميدانيًا أن المسار صالح أو خالٍ من الغراز. | #133 Ready — `feat/desert-gazetteer` → `main` (يشمل #110) | Codex | 2026-11-10: مراجعة مصدر وحداثة/ترخيص البيانات وتحذير سلامة المسارات؛ إعادة CI بعد حل الفوترة؛ إغلاق #110 كتكرار بعد دمج العمل. |
@@ -36,7 +43,7 @@
 
 ## بوابات خارجية / قرارات المالك
 
-- **GitHub Actions:** وظائف `verify` لعدة PRs فشلت قبل بدء أي خطوة. annotations التي فُحصت لـ#126 و#137 و#138 و#139، وكذلك #141 (`run 42570996817`)، تقول إن حساب المستودع مقفول بسبب مشكلة فوترة. المالك/مسؤول الحساب: حل الفوترة ثم إعادة تشغيل CI؛ لا تُعامل النتيجة الحمراء كفشل اختبار شيفرة، ولا كنجاح.
+- **GitHub Actions:** `verify` في #142 (`run 42606969448`) فشل قبل أي خطوة؛ annotation تؤكد قفل الحساب بسبب الفوترة. كما فشل `verify` في #141 قبل الخطوات (`run 42571121333`) وفق annotation المفحوصة. المالك/مسؤول الحساب: حل الفوترة ثم إعادة تشغيل CI؛ لا تُعامل النتيجة الحمراء كفشل اختبار شيفرة، ولا كنجاح.
 - **التحقق من WeatherKit على توزيع فعلي:** اختار المالك WeatherKit دون غبار/PM10. App Store Connect API يؤكد أن capability مفعلة على `sa.sary.albarq`، لكن تغييرات الفرع غير مدموجة ولم يُفحص provisioning profile/توقيع TestFlight أو استجابة WeatherKit الحية؛ قائمة App Store Connect الحالية لا تعرض ملفًا لـ`sa.sary.albarq`. بعد الدمج، تحقق من entitlement في التوزيع واختبر استجابة فعلية قبل إعلان الميزة متاحة.
 - **اختبار iPhone فعلي:** محاكي iPhone 18 Pro وiPad Pro متاحان، لكن لا يُدّعى اختبار جهاز فعلي إلا بعد اتصال جهاز مفتوح والتحقق منه عبر `devicectl`.
 
