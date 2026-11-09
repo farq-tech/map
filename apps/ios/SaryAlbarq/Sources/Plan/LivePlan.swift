@@ -103,6 +103,7 @@ struct LivePlanModalView: View {
         ScrollView {
             PointCard(subject: .point(p, name: name), actions: actions(plan), close: close, brief: opts)
         }
+        .accessibilityIdentifier("point.sheet.scroll")
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents(compact ? [.height(330), .large] : [.fraction(0.62), .large])
     }
