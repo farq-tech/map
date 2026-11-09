@@ -1,5 +1,24 @@
 import CoreLocation
 import SwiftUI
+import UIKit
+
+enum QiblaLocationState: Equatable {
+    case locating
+    case denied
+    case failed
+
+    static func authorization(_ status: CLAuthorizationStatus) -> Self {
+        switch status {
+        case .notDetermined, .authorizedAlways, .authorizedWhenInUse: return .locating
+        case .restricted, .denied: return .denied
+        @unknown default: return .failed
+        }
+    }
+
+    static func failure(_ error: Error) -> Self {
+        (error as? CLError)?.code == .denied ? .denied : .failed
+    }
+}
 
 /// «القبلة»: the direction of the Kaaba from where the person stands.
 enum Qibla {
@@ -78,8 +97,13 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
     /// True north when CoreLocation has a location fix; magnetic otherwise.
     @Published private(set) var isTrueNorth = false
     @Published private(set) var coordinate: CLLocationCoordinate2D?
+    @Published private(set) var locationState: QiblaLocationState = .locating
 
     private let manager = CLLocationManager()
+    private var locationTimeout: Task<Void, Never>?
+    #if DEBUG
+    private var simulatedLocationState: QiblaLocationState?
+    #endif
 
     init(fallback: CLLocationCoordinate2D? = nil) {
         coordinate = fallback
@@ -97,16 +121,70 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
             isTrueNorth = true
         }
         if let lat = arg("-SaryQiblaLat"), let lng = arg("-SaryQiblaLng") { coordinate = .init(latitude: lat, longitude: lng) }
+        if let i = a.firstIndex(of: "-SaryQiblaLocationState"), i + 1 < a.count {
+            switch a[i + 1] {
+            case "denied": simulatedLocationState = .denied; locationState = .denied
+            case "failed": simulatedLocationState = .failed; locationState = .failed
+            default: break
+            }
+        }
         #endif
     }
 
     func start() {
-        if manager.authorizationStatus == .notDetermined { manager.requestWhenInUseAuthorization() }
-        manager.startUpdatingLocation()
+        #if DEBUG
+        if simulatedLocationState != nil {
+            if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
+            return
+        }
+        #endif
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            locationState = .locating
+            manager.requestWhenInUseAuthorization()
+        case .restricted, .denied:
+            locationState = .denied
+        case .authorizedAlways, .authorizedWhenInUse:
+            beginLocationRequest()
+        @unknown default:
+            locationState = .failed
+        }
         if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
     }
 
+    func retryLocation() {
+        #if DEBUG
+        if simulatedLocationState != nil {
+            locationState = .locating
+            scheduleLocationTimeout()
+            return
+        }
+        #endif
+        guard manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse else {
+            locationState = .denied
+            return
+        }
+        beginLocationRequest()
+    }
+
+    private func beginLocationRequest() {
+        locationState = .locating
+        manager.startUpdatingLocation()
+        scheduleLocationTimeout()
+    }
+
+    private func scheduleLocationTimeout() {
+        locationTimeout?.cancel()
+        locationTimeout = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard let self, self.coordinate == nil, self.locationState == .locating else { return }
+            self.locationState = .failed
+        }
+    }
+
     func stop() {
+        locationTimeout?.cancel()
+        locationTimeout = nil
         manager.stopUpdatingLocation()
         manager.stopUpdatingHeading()
     }
@@ -115,6 +193,8 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
         guard let c = locations.last?.coordinate else { return }
         Task { @MainActor in
             self.coordinate = c
+            self.locationTimeout?.cancel()
+            self.locationState = .locating
             /* A kilometre is plenty for a direction; stop the GPS, keep the compass. */
             self.manager.stopUpdatingLocation()
         }
@@ -131,7 +211,35 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            #if DEBUG
+            // Keep the UI-test location state deterministic even when the simulator has
+            // a persisted authorization choice from an earlier test.
+            if self.simulatedLocationState != nil { return }
+            #endif
+            switch QiblaLocationState.authorization(status) {
+            case .locating where status != .notDetermined:
+                if self.coordinate == nil { self.beginLocationRequest() }
+            case .denied:
+                self.locationTimeout?.cancel()
+                self.locationState = .denied
+            case .locating:
+                self.locationState = .locating
+            case .failed:
+                self.locationState = .failed
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        let state = QiblaLocationState.failure(error)
+        Task { @MainActor in
+            self.locationTimeout?.cancel()
+            self.locationState = state
+        }
+    }
 
     nonisolated func locationManagerShouldDisplayHeadingCalibration(_ manager: CLLocationManager) -> Bool { false }
 }
@@ -154,12 +262,32 @@ struct QiblaView: View {
                 if let c = compass.coordinate {
                     content(c)
                 } else {
-                    VStack(spacing: theme.space(.s)) {
-                        ProgressView()
-                        Text("ننتظر موقعك لنحسب اتجاه القبلة").saryText(.body).foregroundStyle(p.textSecondary)
+                    VStack(spacing: theme.space(.m)) {
+                        if compass.locationState == .locating {
+                            ProgressView()
+                            Text("ننتظر موقعك لنحسب اتجاه القبلة").saryText(.body).foregroundStyle(p.textSecondary)
+                                .accessibilityIdentifier("qibla.waiting")
+                        } else if compass.locationState == .denied {
+                            Image(systemName: "location.slash.fill").font(.system(size: 28)).foregroundStyle(p.warning)
+                            Text("اسمح للموقع لنحسب اتجاه القبلة").saryText(.body).foregroundStyle(p.textPrimary)
+                                .accessibilityIdentifier("qibla.location-denied")
+                            Button {
+                                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                            } label: {
+                                Label("إعدادات الموقع", systemImage: "gearshape.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("qibla.open-settings")
+                        } else {
+                            Image(systemName: "location.circle").font(.system(size: 28)).foregroundStyle(p.warning)
+                            Text("ما قدرنا نحدد موقعك الآن").saryText(.body).foregroundStyle(p.textPrimary)
+                                .accessibilityIdentifier("qibla.location-error")
+                            Button("حاول مرة ثانية") { compass.retryLocation() }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("qibla.retry")
+                        }
                     }
                     .frame(maxWidth: .infinity, minHeight: 320)
-                    .accessibilityIdentifier("qibla.waiting")
                 }
             }
         }

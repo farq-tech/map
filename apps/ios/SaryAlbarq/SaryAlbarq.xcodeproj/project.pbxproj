@@ -529,6 +529,10 @@
 		FEA03BD446C7A977227A36A4 /* CarIcon-d6452f.png in Resources */ = {isa = PBXBuildFile; fileRef = 4268C5DABBBC6BA6C587658B /* CarIcon-d6452f.png */; };
 		FEB50B835B38084895589D9C /* PTTRadioSounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D35F02889A5EC0134D5304 /* PTTRadioSounds.swift */; };
 		FEC0656AF815344CE70E7F3A /* WeatherChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7D103A86D3A736B06E9438E /* WeatherChip.swift */; };
+		23840531EA8385EE335FAA6F /* itfHuwiyaArabic-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 9C57E608827CC2E03070DA21 /* itfHuwiyaArabic-Regular.otf */; };
+		6958AF0760D56E9A42498EFD /* itfHuwiyaArabic-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = 1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */; };
+		BD744CBC9883E2DF048B6405 /* itfHuwiyaArabic-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */; };
+		8E4767056282B09A468B40B0 /* itfHuwiyaArabic-Black.otf in Resources */ = {isa = PBXBuildFile; fileRef = C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1101,6 +1105,10 @@
 		FE9BC401E005AFE8C3788F3C /* NavETATests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavETATests.swift; sourceTree = "<group>"; };
 		FF000A053D67AA53866613C3 /* CarColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarColors.swift; sourceTree = "<group>"; };
 		FFE442D7AFEE6869AAD0FB1F /* DemoPlanBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoPlanBackend.swift; sourceTree = "<group>"; };
+		9C57E608827CC2E03070DA21 /* itfHuwiyaArabic-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Regular.otf"; sourceTree = "<group>"; };
+		1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Medium.otf"; sourceTree = "<group>"; };
+		6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Bold.otf"; sourceTree = "<group>"; };
+		C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Black.otf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1311,6 +1319,10 @@
 				B430BBE95C4BA1DF1C77AD46 /* Tajawal-ExtraBold.ttf */,
 				3D5C85CCC6B74649921DD885 /* Tajawal-Medium.ttf */,
 				A2131F99E5536E594F29D904 /* Tajawal-Regular.ttf */,
+				9C57E608827CC2E03070DA21 /* itfHuwiyaArabic-Regular.otf */,
+				1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */,
+				6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */,
+				C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */,
 			);
 			path = Fonts;
 			sourceTree = "<group>";
@@ -2311,6 +2323,10 @@
 				808DCD3C26D893B0F099B7BA /* Tajawal-ExtraBold.ttf in Resources */,
 				5B9712F875F3A7D8D7764970 /* Tajawal-Medium.ttf in Resources */,
 				A7F4AD5D6CF4BCD5C02A66F5 /* Tajawal-Regular.ttf in Resources */,
+				23840531EA8385EE335FAA6F /* itfHuwiyaArabic-Regular.otf in Resources */,
+				6958AF0760D56E9A42498EFD /* itfHuwiyaArabic-Medium.otf in Resources */,
+				BD744CBC9883E2DF048B6405 /* itfHuwiyaArabic-Bold.otf in Resources */,
+				8E4767056282B09A468B40B0 /* itfHuwiyaArabic-Black.otf in Resources */,
 				CF34B1E0EBC779D43EE7E2E8 /* camp-sites-dahna.geojson in Resources */,
 				2366305671698D07EC24D3A7 /* camp-sites-nafud.geojson in Resources */,
 				704AD7D0DEECD680C8B2FED0 /* camp-sites-thumamah.geojson in Resources */,
@@ -2341,6 +2357,10 @@
 				8FA7B88996BB67B532C27B3B /* Tajawal-ExtraBold.ttf in Resources */,
 				ED70ADD0AABE3D5CC74F14DE /* Tajawal-Medium.ttf in Resources */,
 				080E3E57E6680A8E26D8A269 /* Tajawal-Regular.ttf in Resources */,
+				23840531EA8385EE335FAA6F /* itfHuwiyaArabic-Regular.otf in Resources */,
+				6958AF0760D56E9A42498EFD /* itfHuwiyaArabic-Medium.otf in Resources */,
+				BD744CBC9883E2DF048B6405 /* itfHuwiyaArabic-Bold.otf in Resources */,
+				8E4767056282B09A468B40B0 /* itfHuwiyaArabic-Black.otf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2929,7 +2949,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -3032,7 +3052,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 29;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

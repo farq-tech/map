@@ -154,6 +154,9 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
          * value after a prompt, a Settings change, or simulator reset. Avoid waiting for a
          * prompt that iOS will not show when permission is already decided. */
         refreshAuthorization()
+        #if DEBUG
+        NSLog("[JOIN_DIAG] requestWhenInUse initial=%d manager=%d", authorization.rawValue, manager.authorizationStatus.rawValue)
+        #endif
         guard authorization == .notDetermined else { return authorization }
         return await withCheckedContinuation { c in
             whenInUseContinuation = c
@@ -170,12 +173,23 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
                 }
             }
             manager.requestWhenInUseAuthorization()
+            /* Core Location normally calls its delegate after the system prompt closes.
+             * On some iOS/simulator runs the prompt returns without that callback (or without
+             * an activation notification), leaving join flows waiting forever. Re-read the
+             * authoritative manager state once as a backstop; a still-undetermined request
+             * remains pending for the real delegate response. */
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                MainActor.assumeIsolated { self?.finishWhenInUseIfResolved() }
+            }
         }
     }
 
     @MainActor
     private func finishWhenInUseIfResolved() {
         let status = manager.authorizationStatus
+        #if DEBUG
+        NSLog("[JOIN_DIAG] finish permission manager=%d continuation=%d", status.rawValue, whenInUseContinuation == nil ? 0 : 1)
+        #endif
         guard status != .notDetermined, let continuation = whenInUseContinuation else { return }
         authorization = status
         accuracyAuthorization = manager.accuracyAuthorization
@@ -496,6 +510,9 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let st = manager.authorizationStatus
         let acc = manager.accuracyAuthorization
+        #if DEBUG
+        NSLog("[JOIN_DIAG] delegate authorization=%d accuracy=%d", st.rawValue, acc.rawValue)
+        #endif
         Task { @MainActor in
             let authorizationChanged = self.authorization != st || self.accuracyAuthorization != acc
             if self.authorization != st { self.authorization = st }

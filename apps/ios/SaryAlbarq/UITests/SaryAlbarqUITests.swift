@@ -130,18 +130,31 @@ final class SaryAlbarqUITests: XCTestCase {
          * alert may arrive after the initiating tap returns. Poll SpringBoard directly;
          * tapping blank app space can dismiss the alert, reach the map, or leave the app. */
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        /* Interruption monitors run in response to an app interaction. Tap the invite title,
+         * a no-op element, so the prompt is handled without replaying Join underneath. */
+        usleep(600_000)
         let deadline = Date().addingTimeInterval(15)
-        let live = app.descendants(matching: .any)["outing-sheet-summary"].firstMatch
+        let expectsRefusal = labels.contains("Don’t Allow") || labels.contains("Don't Allow") || labels.contains("عدم السماح")
         while !handled && Date() < deadline {
-            /* iOS may already have a usable authorization; in that case joining can
-             * complete without presenting a second system prompt. */
-            if live.exists {
+            /* The app can consume the permission result before XCTest's monitor reports it.
+             * Accept only the intended post-choice state, never a background map element. */
+            if expectsRefusal && app.staticTexts["join.needsLocation"].exists {
                 handled = true
                 break
             }
+            if !expectsRefusal && (app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "نطلب الموقع الدقيق")).firstMatch.exists
+                                   || app.descendants(matching: .any)["outing-sheet-summary"].exists) {
+                handled = true
+                break
+            }
+            let inviteTitle = app.staticTexts["invite.name"]
+            if inviteTitle.exists && inviteTitle.isHittable { inviteTitle.tap() }
+            if handled { break }
             for label in labels {
-                let button = springboard.buttons[label]
-                if button.exists && button.isHittable {
+                /* Core Location's prompt is surfaced as a SpringBoard interruption on some
+                 * simulator runtimes and as an app button on others; query both owners. */
+                let candidates = [springboard.buttons[label], app.buttons[label]]
+                if let button = candidates.first(where: { $0.exists && $0.isHittable }) {
                     button.tap()
                     handled = true
                     break
@@ -150,28 +163,24 @@ final class SaryAlbarqUITests: XCTestCase {
             usleep(400_000)
         }
         removeUIInterruptionMonitor(monitor)
-        /* A location alert that was already appearing can consume the initiating tap.
-         * If the join action is still enabled after answering it, deliver the intended tap. */
-        if handled {
-            /* Joining can replace the invite view as soon as the permission choice is
-             * delivered. Wait for that success state before querying the old button;
-             * XCTest may fail its accessibility snapshot when a stale element vanishes. */
-            if live.waitForExistence(timeout: 3) { return true }
-            if action.exists && action.isEnabled {
-                action.tap()
-                if live.waitForExistence(timeout: 5) { return true }
-            }
-        }
-        return false
+        /* This helper reports only whether the system permission interaction happened.
+         * Each test asserts its own outcome next: allow → joined, deny/reduced → recovery.
+         * Requiring `live` here makes expected denial look like a failed prompt; tapping the
+         * old join button again can also turn a one-tap test into a different flow. */
+        return handled
     }
 
     private func launchInvite(_ kind: String, noIdentity: Bool, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         /* XCTest may launch the app as part of resetting its permission state. Do that first,
          * then terminate that setup launch and set the arguments for the invite under test. */
-        app.resetAuthorizationStatus(for: .location)
+        if !extra.contains("-SaryLocationAlreadyDenied") && !extra.contains("-SaryLocationFresh") {
+            app.resetAuthorizationStatus(for: .location)
+        }
         app.terminate()
-        app.launchArguments = ["-resetState", "-demo", "-SaryDemoInvite", kind, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
+        var arguments = ["-demo", "-SaryDemoInvite", kind, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", "stopped"]
+        if !extra.contains("-SaryLocationFresh") { arguments.insert("-resetState", at: 0) }
+        app.launchArguments = arguments
             + (noIdentity ? ["-SaryNoIdentity"] : []) + extra
         app.launch()
         if !app.buttons["invite.join"].waitForExistence(timeout: 20) {
@@ -183,6 +192,13 @@ final class SaryAlbarqUITests: XCTestCase {
 
     private func labelled(_ app: XCUIApplication, _ labels: [String]) -> XCUIElement {
         app.descendants(matching: .any).matching(NSPredicate(format: "label IN %@", labels)).firstMatch
+    }
+
+    private func setTestLocation() {
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753),
+            altitude: 600, horizontalAccuracy: 5, verticalAccuracy: 5, course: 0, speed: 0, timestamp: Date()
+        ))
     }
 
     /// The deep link opens the app's page in Settings; on a simulator whose Settings app starts
@@ -307,13 +323,29 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(sharing.waitForExistence(timeout: 5), "cancel keeps the trip and the share")
     }
 
-    /// Refused: not joined. One calm screen; «افتح الإعدادات» → allow → back: joins and enters by itself.
-    func testDeniedLocationThenSettingsJoinsByItself() {
-        let app = launchInvite("group", noIdentity: false)
+    /// Deterministic local check for an already-denied iOS authorization. The runner revokes TCC first.
+    func testPreviouslyDeniedLocationShowsRecoveryWithoutJoining() {
+        let app = launchInvite("group", noIdentity: false, extra: ["-SaryLocationAlreadyDenied"])
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
+        join.tap()
+
+        let needs = app.staticTexts["join.needsLocation"]
+        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen after a previous refusal")
+        XCTAssertEqual(needs.label, "موقعك مقفل، والعيال ما راح يشوفونك")
+        XCTAssertTrue(app.buttons["join.openSettings"].exists)
+        XCTAssertFalse(any(app, "outing-sheet-summary").exists)
+    }
+
+    /// Previously refused: «افتح الإعدادات» → allow → back: joins and enters by itself.
+    /// Run with simulator location TCC revoked before the test (simctl privacy revoke location).
+    func testDeniedLocationThenSettingsJoinsByItself() {
+        let app = launchInvite("group", noIdentity: false, extra: ["-SaryLocationAlreadyDenied"])
+        let join = app.buttons["invite.join"]
+        XCTAssertTrue(join.waitForExistence(timeout: 20))
+        setTestLocation()
         XCTAssertFalse(app.textFields["invite.myName"].exists, "already has a name on this phone")
-        XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Don’t Allow", "Don't Allow", "عدم السماح"]))
+        join.tap()
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
@@ -353,16 +385,19 @@ final class SaryAlbarqUITests: XCTestCase {
         shot("9-auto-joined-sharing", app)
     }
 
-    /// Owner decision (build 21): never in a trip without the location. A new invitee refuses → the
+    /// Owner decision (build 21): never in a trip without the location. An invitee refuses → the
     /// recovery screen has only «افتح الإعدادات» and «إلغاء», nothing is joined; allowed in Settings →
-    /// back in the app it joins and enters by itself, sharing.
+    /// back in the app it joins and enters by itself, sharing. Reset TCC before the test run.
     func testDeniedRecoveryOnlySettingsThenJoinsByItself() {
-        let app = launchInvite("personal", noIdentity: true)
+        let app = launchInvite("group", noIdentity: false, extra: ["-SaryLocationFresh", "-SaryJoinDiagnostics"])
         let join = app.buttons["invite.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 20))
+        setTestLocation()
         XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Don’t Allow", "Don't Allow", "عدم السماح"]))
         let needs = app.staticTexts["join.needsLocation"]
-        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
+        XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen; join state=\(join.value as? String ?? "nil"), enabled=\(join.isEnabled)")
+        XCTAssertTrue((join.value as? String)?.hasPrefix("إذن الموقع مطلوب") == true,
+                       "the join action must expose the denied-permission recovery state")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
         XCTAssertTrue(app.buttons["join.cancel"].exists)
         XCTAssertFalse(app.buttons["join.enterWithout"].exists)

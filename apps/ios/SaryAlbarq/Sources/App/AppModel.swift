@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 import Network
 import SwiftUI
@@ -27,6 +28,10 @@ final class AppModel: ObservableObject {
     private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
+    /// Join was tapped and iOS is resolving location permission. Keep this across a sheet
+    /// recreation when the system permission alert takes the app inactive.
+    @Published private var pendingInviteJoinAttempt: String?
+    private static let pendingInviteJoinAttemptKey = "sary.invite.pending-join-hash"
     /// First launch after installing from an invite page: the pasteboard probably holds the
     /// link (`DeferredInvite`). The first page offers «كمّل دعوتك» with the system «لصق» button.
     @Published var deferredInviteHint = false
@@ -91,7 +96,7 @@ final class AppModel: ObservableObject {
             LocalAccountData.wipe()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,
                       ConvoyAlertPrefs.key,
-                      "sary.dev.unlocked", LiveContextOverride.key] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
+                      "sary.dev.unlocked", LiveContextOverride.key, Self.pendingInviteJoinAttemptKey] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
             #if DEBUG
@@ -535,6 +540,54 @@ final class AppModel: ObservableObject {
                                  destination_name: "روضة الثمامة")
         }
         return try await api.preview(token: token)
+    }
+
+    /// Persist only a one-way fingerprint, never the invite token itself, so permission recovery
+    /// still works if iOS rebuilds the invite sheet or relaunches the app after its alert.
+    func markPendingInviteJoinAttempt(_ token: String) {
+        pendingInviteJoinAttempt = token
+        let fingerprint = Self.inviteFingerprint(token)
+        UserDefaults.standard.set(fingerprint, forKey: Self.pendingInviteJoinAttemptKey)
+        #if DEBUG
+        NSLog("[JOIN_DIAG] persist attempt=%@", String(fingerprint.prefix(8)))
+        #endif
+    }
+
+    func hasPendingInviteJoinAttempt(_ token: String) -> Bool {
+        if pendingInviteJoinAttempt == token {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] memory attempt matches")
+            #endif
+            return true
+        }
+        guard let stored = UserDefaults.standard.string(forKey: Self.pendingInviteJoinAttemptKey) else {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] no persisted attempt")
+            #endif
+            return false
+        }
+        guard stored == Self.inviteFingerprint(token) else {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] persisted attempt mismatch; clearing")
+            #endif
+            UserDefaults.standard.removeObject(forKey: Self.pendingInviteJoinAttemptKey)
+            return false
+        }
+        pendingInviteJoinAttempt = token
+        #if DEBUG
+        NSLog("[JOIN_DIAG] restored attempt from fingerprint")
+        #endif
+        return true
+    }
+
+    func clearPendingInviteJoinAttempt(_ token: String) {
+        guard pendingInviteJoinAttempt == token || hasPendingInviteJoinAttempt(token) else { return }
+        pendingInviteJoinAttempt = nil
+        UserDefaults.standard.removeObject(forKey: Self.pendingInviteJoinAttemptKey)
+    }
+
+    private static func inviteFingerprint(_ token: String) -> String {
+        SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// «انضم للطلعة» once iOS allowed the location (the one-step join, `JoinMachine`): join,

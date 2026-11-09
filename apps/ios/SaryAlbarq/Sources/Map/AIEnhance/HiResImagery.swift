@@ -386,7 +386,8 @@ final class HiResBadgeView: UIView {
         blur.isUserInteractionEnabled = false
         addSubview(blur)
         label.text = "مُحسّنة"
-        label.font = UIFont(name: "Tajawal-Bold", size: 13) ?? .boldSystemFont(ofSize: 13)
+        SaryFonts.registerIfNeeded()
+        label.font = UIFont(name: SaryWeight.bold.postScript, size: 13) ?? .boldSystemFont(ofSize: 13)
         label.textColor = .white
         label.textAlignment = .center
         addSubview(label)

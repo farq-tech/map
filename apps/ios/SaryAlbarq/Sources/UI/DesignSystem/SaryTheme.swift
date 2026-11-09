@@ -140,7 +140,7 @@ extension View {
     /// Attach ONCE at the app root (and on any sheet / full-screen cover whose
     /// content is built outside this hierarchy). Injects `AppearanceSettings`
     /// into the environment, resolves the theme, forces Arabic RTL, registers
-    /// Tajawal and applies the text-size step on top of Dynamic Type.
+    /// Huwiya and applies the text-size step on top of Dynamic Type.
     func saryAppearance(_ settings: AppearanceSettings) -> some View {
         SaryFonts.registerIfNeeded()
         return modifier(SaryAppearanceRoot(settings: settings))
@@ -205,7 +205,7 @@ private struct SaryThemeResolver: ViewModifier {
 
 // MARK: - Text modifiers
 
-/// Tajawal in a ramp style, Dynamic Type + drive scale.
+/// Huwiya in a ramp style, Dynamic Type + drive scale.
 private struct SaryTextModifier: ViewModifier {
     @Environment(\.sary) private var theme
     var style: SaryTextStyle
