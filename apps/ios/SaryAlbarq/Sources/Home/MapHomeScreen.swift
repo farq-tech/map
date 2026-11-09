@@ -3,7 +3,7 @@ import SwiftUI
 /// The first screen: a map, the category chips floating over it, and ONE bottom sheet —
 /// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
-/// The flow (after Hudhud's, not its look): search → pick → «ابدأ» → «مين معك؟» → the trip.
+/// The flow (after Hudhud's, not its look): search → pick → «أنشئ طلعة» → «مين معك؟» → the trip.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
     /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking
@@ -589,7 +589,7 @@ struct MapHomeScreen: View {
                     .accessibilityIdentifier("home.place.assign")
             } else if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: "أنشئ طلعة", systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {
@@ -601,7 +601,7 @@ struct MapHomeScreen: View {
                 }
             } else {
                 HStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: "أنشئ طلعة", systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {

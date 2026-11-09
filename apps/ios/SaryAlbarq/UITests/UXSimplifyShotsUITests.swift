@@ -2,7 +2,7 @@ import CoreLocation
 import XCTest
 
 /// Visual proof for the UX simplification (docs/ux-simplify-inventory.md): the home map and its
-/// sheet (collapsed / raised), search → place → «ابدأ» → «مين معك؟» → invite → the trip, the
+/// sheet (collapsed / raised), search → place → «أنشئ طلعة» → «مين معك؟» → invite → the trip, the
 /// profile sheet, settings, and the simplified outing sheet with «المزيد». Screenshots only run
 /// with SARY_SHOTS (TEST_RUNNER_SARY_SHOTS for xcodebuild); they are written there.
 final class UXSimplifyShotsUITests: XCTestCase {
@@ -107,6 +107,7 @@ final class UXSimplifyShotsUITests: XCTestCase {
 
         let start = any(app, "home.place.start")
         XCTAssertTrue(start.isHittable, "the point-card start button must be tappable over the map")
+        XCTAssertEqual(start.label, "أنشئ طلعة", "make clear that this creates a new outing; it is not immediate turn-by-turn navigation")
         start.tap()
 
         let chosenDestination = any(app, "start.destination")
