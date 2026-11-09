@@ -6,6 +6,39 @@ import XCTest
 final class LayersToggleUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testWeatherLayersToggleAndRainPeriodAreReachable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryWeather", "none",
+                               "-SaryScheme", "dark", "-SaryDrive", "0", "-SaryContext", "stopped",
+                               "-SaryExplore", "-SaryLiveModal", "layers"]
+        app.launch()
+        app.allowLocationIfAsked()
+
+        let sheet = app.descendants(matching: .any)["explore.layers.sheet"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 20))
+
+        let rain = app.descendants(matching: .any)["weather.layer.rain"]
+        XCTAssertTrue(rain.waitForExistence(timeout: 8))
+        rain.scrollIntoView(in: app, margin: 120)
+        XCTAssertTrue(rain.isHittable, "the rainfall layer is within the scrollable layers sheet")
+        rain.tap()
+        XCTAssertTrue(rain.isSelected, "rainfall becomes the active weather layer")
+
+        let sevenDays = app.buttons["weather.rain.days.7"]
+        XCTAssertTrue(sevenDays.waitForExistence(timeout: 5), "the 1/3/7-day period picker appears only for rainfall")
+        XCTAssertTrue(sevenDays.isHittable)
+        sevenDays.tap()
+        XCTAssertTrue(sevenDays.isSelected, "the selected accumulation period is visible")
+
+        let clouds = app.descendants(matching: .any)["weather.layer.clouds"]
+        clouds.scrollIntoView(in: app, margin: 120)
+        XCTAssertTrue(clouds.isHittable, "the cloud layer is reachable")
+        clouds.tap()
+        XCTAssertTrue(clouds.isSelected, "switching to clouds selects one overlay at a time")
+        XCTAssertFalse(rain.isSelected, "the map never selects two weather overlays at once")
+        XCTAssertFalse(sevenDays.exists, "the rain-period picker closes when rainfall is not active")
+    }
+
     func testLayersSheetSwitchesFlip() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "dark", "-SaryDrive", "0",
