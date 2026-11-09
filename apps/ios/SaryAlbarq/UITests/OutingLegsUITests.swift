@@ -145,6 +145,30 @@ final class OutingLegsUITests: XCTestCase {
         XCTAssertFalse(el(app, "search.field").exists, "the old coordinate search screen is no longer used here")
     }
 
+    func testAfterArrivalCanChooseAndStartAnotherDestination() {
+        let app = launch([])
+        tap(app, "flow.cta.startOuting")
+        XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
+
+        pick(app, "محطة الوقود")
+        tap(app, "flow.cta.startLeg")
+        XCTAssertTrue(waitLine(app, contains: "في الطريق إلى محطة الوقود"), line(app))
+        tap(app, "flow.cta.arrived")
+        XCTAssertTrue(waitLine(app, contains: "واقفين عند محطة الوقود"), line(app))
+
+        /* Reusing the large map CTA after arrival must open the picker, then the next
+           selection becomes the one destination offered to the group when started. */
+        tap(app, "flow.cta.whereTo")
+        XCTAssertTrue(el(app, "whereTo.sheet").waitForExistence(timeout: 6))
+        let next = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "مخيم النفود")).firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        next.tap()
+        XCTAssertTrue(waitLine(app, contains: "الوجهة مخيم النفود"), line(app))
+        XCTAssertTrue(el(app, "flow.cta.startLeg").isHittable, "the next destination has its own start action")
+        tap(app, "flow.cta.startLeg")
+        XCTAssertTrue(waitLine(app, contains: "في الطريق إلى مخيم النفود"), line(app))
+    }
+
     /// Driving: the walkie-talkie is the big button, «وصلنا» is compact.
     func testOnALegWhileDriving() {
         let app = launch(["-SaryDrive", "1"])

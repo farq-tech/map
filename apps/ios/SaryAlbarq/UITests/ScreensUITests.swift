@@ -32,6 +32,29 @@ final class ScreensUITests: XCTestCase {
         XCTAssertTrue(app.textFields["paste.field"].waitForExistence(timeout: 5))
     }
 
+    func testHomeSheetContentScrollDoesNotCollapseSheet() {
+        let app = launch(["-demo", "-SaryScreen", "home"])
+        let handle = app.descendants(matching: .any)["home.sheet.handle"]
+        XCTAssertTrue(handle.waitForExistence(timeout: 10))
+        let availableWidth = app.windows.firstMatch.frame.width
+        XCTAssertLessThanOrEqual(handle.frame.width, min(availableWidth, 560) + 1,
+                                  "the map sheet stays comfortably narrow on iPad and fits iPhone")
+        handle.tap()
+
+        let expanded = app.descendants(matching: .any)["home.sheet.expanded"]
+        let content = app.scrollViews["home.sheet.content"]
+        XCTAssertTrue(expanded.waitForExistence(timeout: 5))
+        XCTAssertTrue(content.waitForExistence(timeout: 5))
+        content.swipeUp()
+        XCTAssertTrue(expanded.exists, "scrolling the categories and recent places must not resize the sheet")
+        content.swipeDown()
+        XCTAssertTrue(expanded.exists, "scrolling back to the top must leave the sheet expanded")
+
+        handle.swipeDown()
+        XCTAssertTrue(app.descendants(matching: .any)["home.sheet"].waitForExistence(timeout: 5),
+                      "the dedicated handle still collapses the sheet")
+    }
+
     func testSettingsReachEveryPage() {
         let app = launch(["-demo", "-SaryScreen", "settings"])
         for (row, title) in [("settings.appearance", "المظهر"), ("settings.privacy", "الخصوصية"), ("settings.notifications", "التنبيهات"), ("settings.about", "حول سَرى البارق")] {

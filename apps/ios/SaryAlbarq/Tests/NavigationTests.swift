@@ -1,5 +1,6 @@
 import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
+import CoreMedia
 import UIKit
 import XCTest
 @testable import SaryAlbarq
@@ -74,6 +75,25 @@ final class NavOptionMappingTests: XCTestCase {
         XCTAssertEqual(NavRouteChoice.order([b, a], options: .init(fastest: true)).map(\.id), ["a", "b"])
         XCTAssertEqual(NavRouteChoice.order([a, b], options: .init(fastest: false)).map(\.id), ["b", "a"])
         XCTAssertEqual(NavRouteChoice.delta(b, best: a), "أبطأ ٤ د")
+    }
+}
+
+final class NavPiPFrameTimingTests: XCTestCase {
+    func testFirstHostClockFrameIsAccepted() {
+        let now = CMTime(seconds: 100, preferredTimescale: 600)
+        XCTAssertEqual(NavPiPFrameTiming.next(current: now, after: .invalid), now)
+    }
+
+    func testFramesAreRateLimitedAndMonotonic() {
+        let previous = CMTime(seconds: 100, preferredTimescale: 600)
+        XCTAssertNil(NavPiPFrameTiming.next(current: CMTime(seconds: 100.5, preferredTimescale: 600), after: previous))
+        XCTAssertNil(NavPiPFrameTiming.next(current: CMTime(seconds: 99, preferredTimescale: 600), after: previous))
+        XCTAssertEqual(NavPiPFrameTiming.next(current: CMTime(seconds: 101, preferredTimescale: 600), after: previous),
+                       CMTime(seconds: 101, preferredTimescale: 600))
+    }
+
+    func testInvalidCurrentFrameTimeIsRejected() {
+        XCTAssertNil(NavPiPFrameTiming.next(current: .invalid, after: .invalid))
     }
 }
 

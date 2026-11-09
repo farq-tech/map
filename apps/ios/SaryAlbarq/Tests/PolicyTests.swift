@@ -140,6 +140,8 @@ final class LocationTuningTests: XCTestCase {
 
     func testAccuracyFollowsModeAndMotion() {
         XCTAssertEqual(LocationTuning.settings(mode: .precise, speedMps: 30).desiredAccuracy, kCLLocationAccuracyBestForNavigation)
+        XCTAssertEqual(LocationTuning.settings(mode: .precise, speedMps: 0).desiredAccuracy, kCLLocationAccuracyNearestTenMeters,
+                       "a parked phone keeps its last precise fix without continuously requesting navigation-grade GPS")
         XCTAssertEqual(LocationTuning.settings(mode: .balanced, speedMps: 10).desiredAccuracy, kCLLocationAccuracyBest)
         XCTAssertEqual(LocationTuning.settings(mode: .balanced, speedMps: 0).desiredAccuracy, kCLLocationAccuracyNearestTenMeters)
         XCTAssertEqual(LocationTuning.settings(mode: .saver, speedMps: 0).desiredAccuracy, kCLLocationAccuracyHundredMeters)

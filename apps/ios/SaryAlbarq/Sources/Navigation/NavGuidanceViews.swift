@@ -162,12 +162,13 @@ struct NavManeuverBanner: View {
             .buttonStyle(SaryPressStyle())
             .disabled(!pip.supported)
             .accessibilityLabel(Text("نافذة الملاحة العائمة"))
+            .accessibilityValue(Text(pip.active ? "مفتوحة" : "مغلقة"))
             .accessibilityIdentifier("nav.pip")
             .padding(8)
         }
         .background(alignment: .bottomTrailing) {
             NavPiPLayerHost(displayLayer: pip.displayLayer)
-                .frame(width: 2, height: 2)
+                .frame(width: 160, height: 90)
                 .opacity(0.01)
                 .accessibilityHidden(true)
         }

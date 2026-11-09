@@ -88,14 +88,14 @@ final class OutingLegsCenter: ObservableObject {
     func listen(_ events: PassthroughSubject<LiveEvent, Never>) {
         events.receive(on: DispatchQueue.main).sink { [weak self] e in
             switch e {
-            case .planUpdated, .outingStatus: Task { await self?.refresh() }
+            case .planUpdated, .legUpdated, .outingStatus: Task { await self?.refresh() }
             default: break
             }
         }.store(in: &bag)
     }
 
-    /// The leader's «وصلنا» reaches the others as `leg_updated`, a frame older builds' decoder
-    /// does not know; a light poll keeps «سجل الطلعة» right without touching the live channel.
+    /// The event refreshes legs immediately; a light poll remains a recovery path for dropped
+    /// events and keeps «سجل الطلعة» current without depending on the live channel.
     func poll(every s: TimeInterval = 30, while active: @escaping () -> Bool) {
         Timer.publish(every: s, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             guard active() else { return }

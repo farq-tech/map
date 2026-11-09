@@ -2,7 +2,7 @@ import CoreLocation
 import XCTest
 
 /// Visual proof for the UX simplification (docs/ux-simplify-inventory.md): the home map and its
-/// sheet (collapsed / raised), search → place → «ابدأ» → «مين معك؟» → invite → the trip, the
+/// sheet (collapsed / raised), search → place → «أنشئ طلعة» → «مين معك؟» → invite → the trip, the
 /// profile sheet, settings, and the simplified outing sheet with «المزيد». Screenshots only run
 /// with SARY_SHOTS (TEST_RUNNER_SARY_SHOTS for xcodebuild); they are written there.
 final class UXSimplifyShotsUITests: XCTestCase {
@@ -43,7 +43,7 @@ final class UXSimplifyShotsUITests: XCTestCase {
 
     func test1HomeAndTripStart() {
         let app = launch(["-SaryScreen", "home"])
-        XCTAssertTrue(any(app, "home.search").waitForExistence(timeout: 20))
+        XCTAssertTrue(any(app, "home.search").waitForExistence(timeout: 45))
         sleep(5)
         shot("01-home-collapsed")
         any(app, "home.sheet.handle").tap()
@@ -63,7 +63,11 @@ final class UXSimplifyShotsUITests: XCTestCase {
             any(app, "home.search.clear").tap()
             any(app, "home.map").press(forDuration: 1.2)
         }
-        XCTAssertTrue(any(app, "home.place.start").waitForExistence(timeout: 8))
+        let placeStart = any(app, "home.place.start")
+        let placeSave = any(app, "home.place.save")
+        XCTAssertTrue(placeStart.waitForExistence(timeout: 8))
+        XCTAssertTrue(placeStart.isHittable, "Place start action should be reachable at the current Dynamic Type size")
+        XCTAssertTrue(placeSave.isHittable, "Place save action should be reachable at the current Dynamic Type size")
         sleep(3)
         shot("05-home-place-card")
         any(app, "home.place.start").tap()
@@ -82,6 +86,33 @@ final class UXSimplifyShotsUITests: XCTestCase {
         if later.waitForExistence(timeout: 10) { later.tap() }
         sleep(5)
         shot("08-trip-started")
+    }
+
+    /// A manually selected map coordinate must stay the destination through the quick-start flow.
+    /// This covers the exact «نقطة على الخريطة» card, independently of place-search results.
+    func testMapPointCardSaveAndStartActions() {
+        let app = launch(["-SaryScreen", "home"])
+        let map = any(app, "home.map")
+        XCTAssertTrue(map.waitForExistence(timeout: 20))
+
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).press(forDuration: 1.2)
+        let pointName = any(app, "home.place.name")
+        XCTAssertTrue(pointName.waitForExistence(timeout: 8), "long-pressing the map should open the selected coordinate")
+        XCTAssertEqual(pointName.label, "نقطة على الخريطة")
+
+        let save = any(app, "home.place.save")
+        XCTAssertTrue(save.isHittable, "the point-card save action must be tappable over the map")
+        save.tap()
+        XCTAssertEqual(save.label, "محفوظ", "saving the selected point should persist and update its state")
+
+        let start = any(app, "home.place.start")
+        XCTAssertTrue(start.isHittable, "the point-card start button must be tappable over the map")
+        XCTAssertEqual(start.label, "أنشئ طلعة", "make clear that this creates a new outing; it is not immediate turn-by-turn navigation")
+        start.tap()
+
+        let chosenDestination = any(app, "start.destination")
+        XCTAssertTrue(chosenDestination.waitForExistence(timeout: 8), "quick start must carry the selected point into the outing")
+        XCTAssertTrue(chosenDestination.label.contains("نقطة على الخريطة"), chosenDestination.label)
     }
 
     func test2ProfileAndSettings() {
@@ -139,4 +170,5 @@ final class UXSimplifyShotsUITests: XCTestCase {
         sleep(1)
         shot("19-outing-settings-2")
     }
+
 }

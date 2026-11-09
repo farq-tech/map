@@ -46,7 +46,9 @@ extension LiveOutingController {
 
     /// The trip's guidance reached the leg's destination: that is the leg's arrival too.
     func legNavArrived(_ t: NavTarget) {
-        guard t.source == .destination, legs.current != nil else { return }
+        guard t.source == .destination, legs.current != nil,
+              let current = tripDestination,
+              Vehicle.distanceMeters(t.position, LngLat(lng: current.lng, lat: current.lat)) <= 50 else { return }
         closeArrivalCardSoon()
         if !trip.record.me.arrived { trip.markArrived(myId: session.displayView?.myId ?? session.myUserId) }
     }
@@ -115,6 +117,10 @@ extension LiveOutingController {
         }
     }
 
+    func refreshWaitingStatus() {
+        Task { await session.refreshWaitingStatus() }
+    }
+
     /// «ابدأ الطلعة»: an outing needs no destination (a leg does). With one already chosen,
     /// its first leg starts with it, and the leader is offered guidance for everyone.
     func startOutingFlow() {
@@ -138,6 +144,16 @@ extension LiveOutingController {
         if session.view?.iLead == true, let plan = planModel {
             Task { _ = await plan.setDestination(d) }
         }
+        objectWillChange.send()
+    }
+
+    /// A point selected from the home map is an explicit «go there» action: open the existing
+    /// outing, then start the shared leg as leader or a personal leg as a member.
+    func startLegFromMap(_ d: OutingDestination) {
+        modal = nil
+        RecentPlaces.add(d)
+        legs.picked = d
+        Task { await beginLeg(to: d) }
         objectWillChange.send()
     }
 

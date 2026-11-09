@@ -7,6 +7,25 @@ import UIKit
 @MainActor
 final class MapOverlayModel: ObservableObject {
     @Published var projection = MapProjection(points: [:], rally: nil, bearing: 0, size: .zero)
+    private var pendingProjection: MapProjection?
+    private var projectionPublishScheduled = false
+
+    /// The Mapbox display link reports projections at camera-frame frequency. Coalesce them
+    /// before publishing to keep this overlay model from invalidating SwiftUI at display rate.
+    func enqueueProjection(_ next: MapProjection) {
+        pendingProjection = next
+        guard !projectionPublishScheduled else { return }
+        projectionPublishScheduled = true
+        /* Limit updates to 10 Hz and expose only the latest projection. This is a performance
+         * throttle; runtime testing still needs to confirm whether it affects SwiftUI warnings. */
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            self.projectionPublishScheduled = false
+            guard let latest = self.pendingProjection else { return }
+            self.pendingProjection = nil
+            if self.projection != latest { self.projection = latest }
+        }
+    }
 }
 
 /// Which modal is up over the live sheet.

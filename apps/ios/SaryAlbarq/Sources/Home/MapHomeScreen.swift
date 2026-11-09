@@ -3,7 +3,7 @@ import SwiftUI
 /// The first screen: a map, the category chips floating over it, and ONE bottom sheet —
 /// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
-/// The flow (after Hudhud's, not its look): search → pick → «ابدأ» → «مين معك؟» → the trip.
+/// The flow: search → pick → continue the active outing or create a new one when no outing is active.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
     /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking
@@ -14,6 +14,7 @@ struct MapHomeScreen: View {
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
@@ -63,7 +64,7 @@ struct MapHomeScreen: View {
             let screen = g.size.height + g.safeAreaInsets.top + g.safeAreaInsets.bottom
             let sheetH = sheetHeight(screen: screen)
             ZStack(alignment: .bottom) {
-                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, showsUser: true,
+                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, userLocation: myPoint,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) },
                             desert: desertOverlay,
@@ -161,13 +162,17 @@ struct MapHomeScreen: View {
     private func sheetHeight(screen: CGFloat) -> CGFloat {
         let base: CGFloat
         if selected != nil {
-            base = 200
+            // The picked-point card has only its title, coordinates, and two actions.
+            // 200pt left a large empty area below the buttons; keep enough room for
+            // a two-line place name while letting the map remain visible. At accessibility
+            // sizes, give the card room to grow; its content remains scrollable as a fallback.
+            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 168
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
         }
-        return min(screen - 60, max(160, base - drag))
+        return min(min(screen - 60, 760), max(160, base - drag))
     }
 
     private func sheet(height: CGFloat) -> some View {
@@ -175,17 +180,32 @@ struct MapHomeScreen: View {
         let shape = UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
         return VStack(spacing: 0) {
             Capsule().fill(p.textTertiary.opacity(0.6)).frame(width: 40, height: 5)
-                .padding(.top, 8).padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
+                .frame(height: 44)
                 .contentShape(Rectangle())
                 .onTapGesture { setExpanded(!expanded) }
+                /* The sheet itself contains a vertical ScrollView. Keep its pan gesture out of
+                 * that scroll view so dragging the categories/recent places cannot collapse the
+                 * sheet or pan the map; only the dedicated handle resizes it. */
+                .gesture(DragGesture(minimumDistance: 12)
+                    .onChanged { v in drag = v.translation.height }
+                    .onEnded { v in
+                        let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
+                                                         velocity: Double(v.predictedEndTranslation.height - v.translation.height))
+                        drag = 0
+                        setExpanded(next)
+                    })
                 .accessibilityElement()
                 .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى للتصنيفات"))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { setExpanded(!expanded) }
                 .accessibilityIdentifier("home.sheet.handle")
             if let s = selected {
-                placeCard(s)
+                ScrollView {
+                    placeCard(s)
+                }
+                .scrollIndicators(.hidden)
+                .accessibilityIdentifier("home.place.scroll")
             } else {
                 searchBar
                 ScrollView {
@@ -206,20 +226,14 @@ struct MapHomeScreen: View {
                 }
                 .scrollDisabled(!expanded && !showingResults)
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("home.sheet.content")
             }
         }
         .frame(height: height, alignment: .top)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 560)
         .background(shape.fill(p.background).shadow(color: .black.opacity(0.18), radius: 12, y: -2))
         .clipShape(shape)
-        .gesture(DragGesture(minimumDistance: 12)
-            .onChanged { v in drag = v.translation.height }
-            .onEnded { v in
-                let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
-                                                 velocity: Double(v.predictedEndTranslation.height - v.translation.height))
-                drag = 0
-                setExpanded(next)
-            })
+        .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
         .accessibilityElement(children: .contain)
@@ -534,19 +548,31 @@ struct MapHomeScreen: View {
             HStack(alignment: .top, spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: s.icon, color: p.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                         .accessibilityIdentifier("home.place.name")
-                    HStack(spacing: 6) {
-                        if let me = myPoint {
-                            Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
                         }
-                        if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                    } else {
+                        HStack(spacing: 6) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 Button { closePlace() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textPrimary)
-                        .frame(width: 34, height: 34).background(Circle().fill(p.sunken))
+                        .frame(width: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34,
+                               height: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34)
+                        .background(Circle().fill(p.sunken))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إغلاق"))
@@ -561,9 +587,21 @@ struct MapHomeScreen: View {
                 } label: { SaryButtonLabel(title: "احفظه كـ\(a.label)", systemImage: a.systemImage) }
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("home.place.assign")
+            } else if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: theme.space(.s)) {
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
+                        .buttonStyle(.sary(.primary))
+                        .accessibilityIdentifier("home.place.start")
+                    Button {
+                        if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
+                    } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
+                        .buttonStyle(.sary(.secondary))
+                        .disabled(isSaved)
+                        .accessibilityIdentifier("home.place.save")
+                }
             } else {
                 HStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {
@@ -685,11 +723,20 @@ struct MapHomeScreen: View {
         desertPicked = nil
     }
 
-    /// «ابدأ» → «مين معك؟» (the quick «طلعة»: this place, leaving now).
+    /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
     private func start(_ d: OutingDestination) {
         RecentPlaces.add(d)
         recent = RecentPlaces.load()
+        if let outing = activeOuting {
+            DispatchQueue.main.async { model.open(outing.id, mapDestination: d) }
+            return
+        }
         startFor = StartTarget(destination: d)
+    }
+
+    private var placeStartTitle: String {
+        guard let outing = activeOuting else { return "أنشئ طلعة" }
+        return outing.role == "owner" ? "وجّه القافلة إلى هنا" : "ابدأ مشوارًا لنفسي"
     }
 
     private func schedule(_ q: String, now: Bool = false) {

@@ -95,8 +95,8 @@ final class PersonalInvitesUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "invite.status.sent").count, 2, "the new invite is «أُرسلت»")
     }
 
-    /// Typing a person by hand: a bad number is refused before anything is sent.
-    func testManualInviteChecksTheNumber() {
+    /// Typing a person by hand: bad numbers are refused, and a name-only invite can still be created.
+    func testManualInviteValidatesOptionalNumberAndAllowsNameOnly() {
         let app = launchLive()
         any(app, "outing-sheet-summary").tap()
         let invite = any(app, "sheet.invite")
@@ -117,6 +117,19 @@ final class PersonalInvitesUITests: XCTestCase {
         XCTAssertFalse(app.buttons["invite.add.create"].isEnabled, "1234567890 is not a Saudi mobile")
         phone.clearAndType("0551234567")
         XCTAssertTrue(app.buttons["invite.add.create"].isEnabled)
+
+        /* Contacts are optional. A name-only single-use link can be shared directly. */
+        phone.clearAndType("")
+        XCTAssertTrue(app.buttons["invite.add.create"].isEnabled, "a phone number is optional for a person outside Contacts")
+        app.buttons["invite.add.create"].tap()
+        let send = app.buttons["invite.send.share"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10), "the name-only invite should open its send options")
+        XCTAssertFalse(app.buttons["invite.send.sms"].exists, "SMS needs a phone number")
+        XCTAssertTrue(app.buttons["invite.send.whatsapp"].exists, "WhatsApp can open its recipient picker")
+        XCTAssertTrue(app.buttons["invite.send.copy"].exists, "copy or share the one-time link manually")
+        let message = app.staticTexts["invite.send.message"]
+        XCTAssertTrue(message.label.contains("ناصر"), message.label)
+        XCTAssertTrue(message.label.contains("https://"), message.label)
     }
 
     private func launchScreen(_ screen: String) -> XCUIApplication {

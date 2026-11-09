@@ -4,6 +4,18 @@ import CoreVideo
 import SwiftUI
 import UIKit
 
+enum NavPiPFrameTiming {
+    static let minimumInterval: Double = 0.95
+
+    /// Accepts monotonic host-clock timestamps only, with at most one frame per second.
+    static func next(current: CMTime, after last: CMTime) -> CMTime? {
+        guard current.isValid, current.isNumeric else { return nil }
+        if last.isValid, last.isNumeric,
+           CMTimeGetSeconds(CMTimeSubtract(current, last)) < minimumInterval { return nil }
+        return current
+    }
+}
+
 /// The compact, live navigation card streamed to iOS Picture in Picture.
 struct NavPiPSnapshot: Equatable {
     var target: String
@@ -44,14 +56,29 @@ final class NavPictureInPicture: NSObject, ObservableObject {
     let displayLayer = AVSampleBufferDisplayLayer()
     private var controller: AVPictureInPictureController?
     private var snapshot: NavPiPSnapshot?
+    private var displayTimebase: CMTimebase?
     private var timer: Timer?
     private var startTask: Task<Void, Never>?
-    private var frame = 0
+    private var lastFrameTime = CMTime.invalid
     private var automatic = false
 
     override init() {
         super.init()
         displayLayer.videoGravity = .resizeAspect
+        /* Sample-buffer PiP needs frames timestamped against a running clock. Counting from
+         * PTS=1 made the first frame look ancient to the host clock, so iOS opened a black PiP
+         * surface while still showing its playback controls. */
+        let hostClock = CMClockGetHostTimeClock()
+        var timebase: CMTimebase?
+        if CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault,
+                                           sourceClock: hostClock,
+                                           timebaseOut: &timebase) == noErr,
+           let timebase {
+            displayTimebase = timebase
+            CMTimebaseSetTime(timebase, time: CMClockGetTime(hostClock))
+            CMTimebaseSetRate(timebase, rate: 1)
+            displayLayer.controlTimebase = timebase
+        }
         guard supported else { return }
         let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: displayLayer,
                                                                  playbackDelegate: self)
@@ -85,7 +112,8 @@ final class NavPictureInPicture: NSObject, ObservableObject {
              * briefly instead of silently dropping the user's tap. */
             for _ in 0..<20 {
                 guard let self, !Task.isCancelled, self.automatic, self.snapshot != nil else { return }
-                if self.controller?.isPictureInPicturePossible == true {
+                if self.controller?.isPictureInPicturePossible == true,
+                   self.hasRenderableFrame {
                     self.controller?.startPictureInPicture()
                     self.startTask = nil
                     return
@@ -115,6 +143,11 @@ final class NavPictureInPicture: NSObject, ObservableObject {
         }
     }
 
+    private var hasRenderableFrame: Bool {
+        if #available(iOS 17.4, *) { return displayLayer.isReadyForDisplay }
+        return displayLayer.status != .failed && displayLayer.isReadyForMoreMediaData
+    }
+
     private func stopFrames() {
         timer?.invalidate()
         timer = nil
@@ -122,31 +155,41 @@ final class NavPictureInPicture: NSObject, ObservableObject {
 
     private func enqueueFrame() {
         guard let snapshot, let image = Self.render(snapshot), let cgImage = image.cgImage else { return }
+        if displayLayer.status == .failed { displayLayer.flush() }
+        guard displayLayer.isReadyForMoreMediaData else { return }
+        let now = displayTimebase.map(CMTimebaseGetTime) ?? CMClockGetTime(CMClockGetHostTimeClock())
+        guard let presentationTime = NavPiPFrameTiming.next(current: now, after: lastFrameTime) else { return }
         let width = cgImage.width, height = cgImage.height
         var pixelBuffer: CVPixelBuffer?
+        /* PiP's sample-buffer renderer consumes the frames through IOSurface. A CPU-only
+         * CVPixelBuffer can be accepted by enqueue() but remain black in the system PiP window. */
         let attributes: [CFString: Any] = [kCVPixelBufferCGImageCompatibilityKey: true,
-                                           kCVPixelBufferCGBitmapContextCompatibilityKey: true]
+                                           kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+                                           kCVPixelBufferIOSurfacePropertiesKey: [:],
+                                           kCVPixelBufferMetalCompatibilityKey: true]
         guard CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
                                   attributes as CFDictionary, &pixelBuffer) == kCVReturnSuccess,
               let pixelBuffer,
               CVPixelBufferLockBaseAddress(pixelBuffer, []) == kCVReturnSuccess else { return }
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
         guard let base = CVPixelBufferGetBaseAddress(pixelBuffer),
               let context = CGContext(data: base, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer),
                                       space: CGColorSpaceCreateDeviceRGB(),
                                       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-                                          | CGBitmapInfo.byteOrder32Little.rawValue) else { return }
+                                          | CGBitmapInfo.byteOrder32Little.rawValue) else {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+            return
+        }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
 
         var format: CMVideoFormatDescription?
         guard CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault,
                                                             imageBuffer: pixelBuffer,
                                                             formatDescriptionOut: &format) == noErr,
               let format else { return }
-        frame += 1
-        var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: 1),
-                                        presentationTimeStamp: CMTime(value: Int64(frame), timescale: 1),
+        var timing = CMSampleTimingInfo(duration: CMTime(value: 9, timescale: 10),
+                                        presentationTimeStamp: presentationTime,
                                         decodeTimeStamp: .invalid)
         var sample: CMSampleBuffer?
         guard CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault,
@@ -156,6 +199,7 @@ final class NavPictureInPicture: NSObject, ObservableObject {
                                                         sampleBufferOut: &sample) == noErr,
               let sample else { return }
         displayLayer.enqueue(sample)
+        lastFrameTime = presentationTime
     }
 
     private static func render(_ snapshot: NavPiPSnapshot) -> UIImage? {

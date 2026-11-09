@@ -62,7 +62,7 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onEmptyTap: { controller.mapTappedEmpty($0, name: $1) },
-                    onProjection: { controller.overlay.projection = $0 },
+                    onProjection: { controller.overlay.enqueueProjection($0) },
                     onUserGesture: {
                         controller.cameraUserMoved()
                         controller.userPannedMap = true
@@ -233,6 +233,8 @@ struct LiveOutingScreen: View {
                 }
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.horizontal, 12)
             .padding(.top, 4)
 
@@ -358,6 +360,8 @@ struct LiveOutingScreen: View {
                     }
                 }
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity, alignment: .bottom)
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: controller.tripEnded)

@@ -38,13 +38,18 @@ struct OutingPrimaryCTA: View {
                         .contentShape(Capsule())
                     }
                     .buttonStyle(SaryPressStyle())
+                    .contentShape(Capsule())
+                    .accessibilityIdentifier(c.id)
                 } else {
                     Button { tapped(c) } label: {
                         SaryButtonLabel(title: c.title, systemImage: c.systemImage)
                             .font(.sary(18, .heavy))
-                            .frame(minHeight: 30)
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.saryPrimary)
+                    .contentShape(Capsule())
+                    .accessibilityIdentifier(c.id)
                 }
             }
             .accessibilityIdentifier(c.id)

@@ -84,7 +84,7 @@ final class OutingWeather: ObservableObject {
         /* The outing's area: the group's centre when anyone else is known, else mine. */
         let c = WeatherChipSource.areaCenter(others: pts, me: mine)
         let oldCell = center.map { WeatherArea(around: $0.lat, lng: $0.lng) }
-        center = c
+        if center != c { center = c }
         updateSource()
         points = pts + (me.map { [$0.coordinate] } ?? []) + WadiProximity.densify(route)
         if let c, WeatherArea(around: c.lat, lng: c.lng) != oldCell {

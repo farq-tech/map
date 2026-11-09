@@ -285,8 +285,20 @@ struct InviteJoinSheet: View {
         case .askingLocation:
             Task {
                 /* Right after the pre-prompt: When In Use. Already answered → what iOS says now. */
-                _ = await location.requestWhenInUse()
-                send(.permission(currentPermission))
+                let status = await location.requestWhenInUse()
+                /* Use Core Location's completed answer, then refresh the manager snapshot. This
+                 * avoids leaving the join spinner up if the published authorization update races
+                 * the async permission continuation. */
+                location.refreshAuthorization()
+                var permission = JoinPermission.from(status, location.accuracyAuthorization)
+                #if DEBUG
+                /* iOS Simulator cannot switch full/reduced accuracy on demand; only the
+                 * precise-location follow-up is substituted by this focused UI-test hook. */
+                if JoinDebug.reduced != nil, permission == .granted, !debugPreciseGranted {
+                    permission = .reduced
+                }
+                #endif
+                send(.permission(permission))
             }
         case .askingPrecise:
             Task {
