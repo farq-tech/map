@@ -28,6 +28,7 @@ final class WeatherOverlay {
     private var cancelables = Set<AnyCancelable>()
     private var bag = Set<AnyCancellable>()
     private var styleReady = false
+    private var applyScheduled = false
     /// What is drawn now (to skip identical re-installs).
     private var drawn: Drawn?
     private var frames: [CloudFramesResponse.Frame] = []
@@ -45,9 +46,9 @@ final class WeatherOverlay {
     }
 
     private static var key: UInt8 = 0
-    static func of(_ map: MapView, layers: WeatherLayers = .shared) -> WeatherOverlay {
+    static func of(_ map: MapView, layers: WeatherLayers? = nil) -> WeatherOverlay {
         if let c = objc_getAssociatedObject(map, &key) as? WeatherOverlay { return c }
-        let c = WeatherOverlay(map: map, layers: layers)
+        let c = WeatherOverlay(map: map, layers: layers ?? .shared)
         objc_setAssociatedObject(map, &key, c, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return c
     }
@@ -89,7 +90,23 @@ final class WeatherOverlay {
         guard r != request else { return }
         let chromeOnly = r.active == request.active
         request = r
-        if chromeOnly { layoutLegend() } else { apply() }
+        if chromeOnly {
+            layoutLegend()
+        } else {
+            scheduleApply()
+        }
+    }
+
+    /// `update(_:)` is called by `UIViewRepresentable.updateUIView`. Applying the overlay
+    /// also publishes legend state, so defer that work until SwiftUI has finished updating.
+    private func scheduleApply() {
+        guard !applyScheduled else { return }
+        applyScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyScheduled = false
+            self.apply()
+        }
     }
 
     /// The kind actually drawn: none outside exploration.
