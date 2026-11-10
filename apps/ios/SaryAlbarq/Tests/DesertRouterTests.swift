@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import SaryAlbarq
 
@@ -290,6 +291,329 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertFalse(options.isEmpty, "the measured grid contains a costed route from a mapped road to this pin")
     }
 }
+
+/// National tiles: names, corridor boxes, stitching, the tile store and the provider wiring
+/// (mirrors scripts/camp-sites/tests/test_tiles.py for the tile math).
+final class DesertTilesTests: XCTestCase {
+    private let cell = 1.0 / 1200  // one 3″ lattice step
+
+    // MARK: tile math
+
+    func testTileNamesAreTheSouthWestCorner() {
+        XCTAssertEqual(DesertTiles.TileID("t25_46"), DesertTiles.TileID(lat: 25, lng: 46))
+        XCTAssertEqual(DesertTiles.TileID(lat: 16, lng: 42).name, "t16_42")
+        for bad in ["thumamah", "t25", "t25_46_1", "t_46", "t25_", "t+5_46", "t25_46.bin", "T25_46", "t2500_46"] {
+            XCTAssertNil(DesertTiles.TileID(bad), bad)
+        }
+        XCTAssertEqual(DesertTiles.tile(containing: LngLat(lng: 46.7, lat: 25.3)).name, "t25_46")
+        XCTAssertEqual(DesertTiles.tile(containing: LngLat(lng: 46.0, lat: 25.0)).name, "t25_46")
+        XCTAssertEqual(DesertTiles.tile(containing: LngLat(lng: 45.999, lat: 24.999)).name, "t24_45")
+        XCTAssertEqual(DesertTiles.TileID(lat: 25, lng: 46).bbox, DesertGrid.BBox(s: 25, w: 46, n: 26, e: 47))
+    }
+
+    func testTilesCoveringABox() {
+        XCTAssertEqual(DesertTiles.tiles(covering: DesertGrid.BBox(s: 25.2, w: 46.3, n: 25.8, e: 46.9)).map(\.name), ["t25_46"])
+        // An edge on a whole degree does not pull in the neighbour.
+        XCTAssertEqual(DesertTiles.tiles(covering: DesertGrid.BBox(s: 25, w: 46, n: 26, e: 47)).map(\.name), ["t25_46"])
+        XCTAssertEqual(Set(DesertTiles.tiles(covering: DesertGrid.BBox(s: 24.5, w: 45.5, n: 25.5, e: 46.5)).map(\.name)),
+                       ["t24_45", "t24_46", "t25_45", "t25_46"])
+        XCTAssertTrue(DesertTiles.tiles(covering: DesertGrid.BBox(s: 25, w: 46, n: 25, e: 47)).isEmpty)
+    }
+
+    func testCorridorBoxes() throws {
+        let target = LngLat(lng: 46.5, lat: 25.5)
+        let alone = try XCTUnwrap(DesertTiles.corridor(from: nil, to: target))
+        XCTAssertEqual(alone.n - alone.s, 2 * DesertTiles.aroundTargetDeg, accuracy: 1e-9)
+        XCTAssertTrue(alone.contains(target))
+
+        let near = LngLat(lng: 46.9, lat: 25.1)
+        let withNear = try XCTUnwrap(DesertTiles.corridor(from: near, to: target))
+        XCTAssertTrue(withNear.contains(near) && withNear.contains(target))
+
+        // A far road end: cut to the maximum on its side, the target keeps its margin.
+        let far = LngLat(lng: 44.0, lat: 23.0)
+        let cut = try XCTUnwrap(DesertTiles.corridor(from: far, to: target))
+        XCTAssertEqual(cut.n - cut.s, DesertTiles.maxSpanDeg, accuracy: 1e-9)
+        XCTAssertEqual(cut.e - cut.w, DesertTiles.maxSpanDeg, accuracy: 1e-9)
+        XCTAssertEqual(cut.n, target.lat + DesertTiles.aroundTargetDeg, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(DesertTiles.tiles(covering: cut).count, 9)
+
+        XCTAssertNil(DesertTiles.corridor(from: nil, to: LngLat(lng: 30, lat: 30)), "outside the Kingdom")
+        XCTAssertNotNil(DesertTiles.corridor(spanning: LngLat(lng: 46.0, lat: 25.0), LngLat(lng: 46.8, lat: 25.6)))
+        XCTAssertNil(DesertTiles.corridor(spanning: LngLat(lng: 46.0, lat: 25.0), LngLat(lng: 47.5, lat: 25.6)), "too far apart")
+    }
+
+    // MARK: stitching
+
+    func testStitchPlacesNeighboursOnTheLatticeAndFillsGapsWithForbidden() throws {
+        var a = DesertGrid(rows: 4, cols: 4, ground: .firm, south: 25, west: 46)
+        a.elev = (0..<16).map { Float($0) }
+        let b = DesertGrid(rows: 4, cols: 4, ground: .sand, south: 25, west: 46 + 4 * cell)
+        // One extra column east that nobody covers.
+        let box = DesertGrid.BBox(s: 25, w: 46, n: 25 + 4 * cell, e: 46 + 9 * cell)
+        let g = try XCTUnwrap(DesertGrid.stitch([a, b], bbox: box))
+        XCTAssertEqual(g.rows, 4)
+        XCTAssertEqual(g.cols, 9)
+        XCTAssertEqual(g.header.south, 25, accuracy: 1e-9)
+        XCTAssertEqual(g.header.east, 46 + 9 * cell, accuracy: 1e-9)
+        for r in 0..<4 {
+            for c in 0..<9 {
+                let expected: DesertGrid.Ground = c < 4 ? .firm : c < 8 ? .sand : .forbidden
+                XCTAssertEqual(g.ground(r * 9 + c), expected, "r\(r) c\(c)")
+            }
+            for c in 0..<4 { XCTAssertEqual(g.elev[r * 9 + c], Float(r * 4 + c)) }
+        }
+        // Same lattice point, same place: a cell centre maps back to its source cell.
+        XCTAssertEqual(g.point(2 * 9 + 5).lat, b.point(2 * 4 + 1).lat, accuracy: 1e-9)
+        XCTAssertEqual(g.point(2 * 9 + 5).lng, b.point(2 * 4 + 1).lng, accuracy: 1e-9)
+    }
+
+    func testStitchCropsAndTheFirstSourceWins() throws {
+        let big = DesertGrid(rows: 10, cols: 10, ground: .firm, south: 25, west: 46)
+        let crest = DesertGrid(rows: 2, cols: 2, ground: .crest, south: 25 + 4 * cell, west: 46 + 4 * cell)
+        // A box inside `big`, not on cell edges: snapped outward to whole cells.
+        let box = DesertGrid.BBox(s: 25 + 3.5 * cell, w: 46 + 3.5 * cell, n: 25 + 6.5 * cell, e: 46 + 6.5 * cell)
+        let crestFirst = try XCTUnwrap(DesertGrid.stitch([crest, big], bbox: box))
+        XCTAssertEqual(crestFirst.rows, 4)
+        XCTAssertEqual(crestFirst.cols, 4)
+        XCTAssertEqual(crestFirst.cell.filter { $0 == DesertGrid.Ground.crest.rawValue }.count, 4)
+        let bigFirst = try XCTUnwrap(DesertGrid.stitch([big, crest], bbox: box))
+        XCTAssertFalse(bigFirst.cell.contains(DesertGrid.Ground.crest.rawValue))
+    }
+
+    func testStitchRefusesOffLatticeTooBigOrEmpty() {
+        let off = DesertGrid(rows: 4, cols: 4, south: 25 + cell / 3, west: 46)
+        let box = DesertGrid.BBox(s: 25, w: 46, n: 25 + 4 * cell, e: 46 + 4 * cell)
+        XCTAssertNil(DesertGrid.stitch([off], bbox: box), "a source off the lattice is skipped; nothing left")
+        XCTAssertNil(DesertGrid.stitch([DesertGrid(rows: 4, cols: 4, south: 25, west: 46)], bbox: box, maxCells: 15))
+        XCTAssertNil(DesertGrid.stitch([], bbox: box))
+    }
+
+    func testStitchedGridRoutesAcrossTheSeam() throws {
+        var left = DesertGrid(rows: 20, cols: 20, ground: .sand, south: 25, west: 46)
+        var right = DesertGrid(rows: 20, cols: 20, ground: .sand, south: 25, west: 46 + 20 * cell)
+        for c in 0..<20 { left.cell[10 * 20 + c] = DesertGrid.Ground.firm.rawValue | DesertGrid.track }
+        for c in 0..<20 { right.cell[10 * 20 + c] = DesertGrid.Ground.firm.rawValue | DesertGrid.track }
+        let g = try XCTUnwrap(DesertGrid.stitch([left, right], bbox: DesertGrid.BBox(s: 25, w: 46, n: 25 + 20 * cell, e: 46 + 40 * cell)))
+        let opts = DesertRouter.options(g, from: left.point(10 * 20 + 1), to: right.point(10 * 20 + 18), rain: false)
+        let easy = try XCTUnwrap(opts.first { $0.mode == .easy })
+        XCTAssertGreaterThan(easy.trackPercent, 90, "the track continues across the tile edge")
+    }
+
+    // MARK: tile store
+
+    /// A real-format tile file (zlib SARYRT1, as routes.py writes it), every cell `ground`.
+    private static func tileData(_ id: DesertTiles.TileID, ground: DesertGrid.Ground) -> Data {
+        let n = 1200
+        let header = "{\"region\":\"\(id.name)\",\"rows\":\(n),\"cols\":\(n),\"south\":\(id.lat),\"west\":\(id.lng)," +
+            "\"north\":\(id.lat + 1),\"east\":\(id.lng + 1),\"arcsec\":3,\"z0\":500,\"version\":1}"
+        let h = Data(header.utf8)
+        var raw = Data("SARYRT1\0".utf8)
+        let len = UInt32(h.count)
+        raw.append(contentsOf: [UInt8(len & 0xFF), UInt8(len >> 8 & 0xFF), UInt8(len >> 16 & 0xFF), UInt8(len >> 24)])
+        raw.append(h)
+        var cells = [UInt8](repeating: 0, count: n * n * 4)
+        for i in stride(from: 0, to: cells.count, by: 4) {
+            cells[i] = ground.rawValue
+            cells[i + 1] = 255
+        }
+        raw.append(contentsOf: cells)
+        // NSData's .zlib is raw DEFLATE; DesertGrid.load skips a 2-byte header and a 4-byte trailer.
+        let deflated = (try? (raw as NSData).compressed(using: .zlib) as Data) ?? Data()
+        return Data([0x78, 0xDA]) + deflated + Data([0, 0, 0, 0])
+    }
+
+    private static let west = tileData(DesertTiles.TileID(lat: 25, lng: 46), ground: .firm)
+    private static let east = tileData(DesertTiles.TileID(lat: 25, lng: 47), ground: .sand)
+
+    private static func manifest(_ tiles: [(String, Data)], sha: (Data) -> String = DesertTileStore.sha256Hex) -> Data {
+        let entries = tiles.map { "{\"id\":\"\($0.0)\",\"bytes\":\($0.1.count),\"sha256\":\"\(sha($0.1))\",\"bbox\":[0,0,0,0]}" }
+        return Data("{\"format\":\"SARYRT1\",\"version\":\"test\",\"arcsec\":3,\"tiles\":[\(entries.joined(separator: ","))]}".utf8)
+    }
+
+    private func tempDir() -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("desert-tiles-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: d) }
+        return d
+    }
+
+    private let base = URL(string: "https://tiles.example/desert/")!
+    /// Across the seam between t25_46 and t25_47.
+    private let seamBox = DesertGrid.BBox(s: 25.3, w: 46.8, n: 25.5, e: 47.2)
+
+    func testStoreDownloadsVerifiesCachesAndStitches() async throws {
+        let server = FakeTileServer(files: ["manifest.json": Self.manifest([("t25_46", Self.west), ("t25_47", Self.east)]),
+                                            "tiles/t25_46.bin": Self.west, "tiles/t25_47.bin": Self.east])
+        let dir = tempDir()
+        let store = DesertTileStore(baseURL: base, cacheDir: dir, fetch: server.fetch, seeds: { _ in [] })
+        let first = await store.corridor(seamBox)
+        let g = try XCTUnwrap(first)
+        XCTAssertEqual(g.rows, 240)
+        XCTAssertEqual(g.cols, 480)
+        XCTAssertEqual(g.ground(g.index(LngLat(lng: 46.9, lat: 25.4))), .firm)
+        XCTAssertEqual(g.ground(g.index(LngLat(lng: 47.1, lat: 25.4))), .sand)
+        XCTAssertEqual(server.paths.sorted(), ["manifest.json", "tiles/t25_46.bin", "tiles/t25_47.bin"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("routes-t25_46.bin").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("manifest.json").path))
+
+        // Again: memory, no request.
+        let second = await store.corridor(seamBox)
+        XCTAssertNotNil(second)
+        XCTAssertEqual(server.paths.count, 3)
+
+        // A new store (next launch) with no network: the disk cache and saved manifest are enough.
+        let offline = FakeTileServer(files: [:], offline: true)
+        let later = DesertTileStore(baseURL: base, cacheDir: dir, fetch: offline.fetch, seeds: { _ in [] })
+        let third = await later.corridor(seamBox)
+        let again = try XCTUnwrap(third)
+        XCTAssertEqual(again.cell, g.cell)
+
+        // A memory warning drops the decoded tiles.
+        XCTAssertFalse(store.memoryTileNames.isEmpty)
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        XCTAssertTrue(store.memoryTileNames.isEmpty)
+    }
+
+    func testStoreRefusesATileWhoseChecksumDiffers() async {
+        let server = FakeTileServer(files: ["manifest.json": Self.manifest([("t25_46", Self.west), ("t25_47", Self.east)], sha: { _ in String(repeating: "0", count: 64) }),
+                                            "tiles/t25_46.bin": Self.west, "tiles/t25_47.bin": Self.east])
+        let dir = tempDir()
+        let store = DesertTileStore(baseURL: base, cacheDir: dir, fetch: server.fetch, seeds: { _ in [] })
+        let g = await store.corridor(seamBox)
+        XCTAssertNil(g, "an unverified tile is never routed on")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("routes-t25_46.bin").path))
+    }
+
+    func testTileOutsideTheNationalSetIsForbiddenGround() async throws {
+        let server = FakeTileServer(files: ["manifest.json": Self.manifest([("t25_46", Self.west)]), "tiles/t25_46.bin": Self.west])
+        let store = DesertTileStore(baseURL: base, cacheDir: tempDir(), fetch: server.fetch, seeds: { _ in [] })
+        let fetched = await store.corridor(seamBox)
+        let g = try XCTUnwrap(fetched)
+        XCTAssertEqual(g.ground(g.index(LngLat(lng: 46.9, lat: 25.4))), .firm)
+        XCTAssertEqual(g.ground(g.index(LngLat(lng: 47.1, lat: 25.4))), .forbidden)
+        XCTAssertFalse(server.paths.contains("tiles/t25_47.bin"))
+    }
+
+    func testStoreWithoutServerOrCacheGivesNothing() async {
+        let store = DesertTileStore(baseURL: nil, cacheDir: tempDir(), fetch: FakeTileServer(files: [:]).fetch, seeds: { _ in [] })
+        let g = await store.corridor(seamBox)
+        XCTAssertNil(g)
+        let tooBig = await store.corridor(DesertGrid.BBox(s: 24, w: 45, n: 26, e: 47))
+        XCTAssertNil(tooBig)
+    }
+
+    func testPilotSeedCoversWithoutAnyDownload() async throws {
+        let pilot = DesertGrid(rows: 120, cols: 120, ground: .sand, south: 25.1, west: 46.1)
+        let server = FakeTileServer(files: [:])
+        let store = DesertTileStore(baseURL: base, cacheDir: tempDir(), fetch: server.fetch, seeds: { _ in [pilot] })
+        let box = DesertGrid.BBox(s: 25.12, w: 46.12, n: 25.18, e: 46.18)
+        let fetched = await store.corridor(box)
+        let g = try XCTUnwrap(fetched)
+        XCTAssertTrue(server.paths.isEmpty)
+        XCTAssertTrue(g.cell.allSatisfy { $0 == DesertGrid.Ground.sand.rawValue })
+    }
+
+    func testConfiguredBaseURLSitsNextToTheTileJSON() {
+        // Derivation only (Info.plist may or may not carry FarqTilesURL in the test host).
+        let u = URL(string: "https://tiles.example.sa/farq.json")!.deletingLastPathComponent()
+            .appendingPathComponent("desert", isDirectory: true).appendingPathComponent("manifest.json")
+        XCTAssertEqual(u.absoluteString, "https://tiles.example.sa/desert/manifest.json")
+    }
+
+    // MARK: provider
+
+    func testProviderUsesTileCorridorOutsideThePilots() async throws {
+        var grid = DesertGrid(rows: 60, cols: 60)
+        for r in 18..<42 { grid.cell[r * 60 + 30] = DesertGrid.Ground.firm.rawValue | DesertGrid.track }
+        let target = grid.point(42 * grid.cols + 30)
+        let origin = LngLat(lng: 45.9, lat: 24.7)
+        let base = TestDesertRoadProvider { request in
+            if request.target.name != "مدخل درب البر" { throw NavRoutingError.noRoute }
+            let end = request.target.position
+            return NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, end],
+                                                   distanceM: Vehicle.distanceMeters(origin, end), durationS: 600, steps: [])])
+        }
+        let asked = BoxLog()
+        let provider = DesertAwareRouteProvider(base: base, regionForPoint: { _ in nil },
+                                                corridorGrid: { box in asked.add(box); return grid },
+                                                rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "destination", position: target),
+                                      options: NavRouteOptions())
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first)
+        XCTAssertTrue(route.via?.contains("درب بري محسوب") == true)
+        XCTAssertTrue(asked.boxes.contains { $0.contains(target) }, "the tile store was asked for a box around the pin")
+        XCTAssertTrue(asked.boxes.allSatisfy { $0.n - $0.s <= DesertTiles.maxSpanDeg + 1e-9 && $0.e - $0.w <= DesertTiles.maxSpanDeg + 1e-9 })
+    }
+
+    func testProviderKeepsTheRoadRouteWhenTilesAreMissing() async throws {
+        let target = LngLat(lng: 46.5, lat: 25.5)
+        let roadEnd = LngLat(lng: 46.48, lat: 25.48)  // ~3 km short: an off-road last leg
+        let origin = LngLat(lng: 46.6, lat: 24.7)
+        let base = TestDesertRoadProvider { _ in
+            NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, roadEnd], distanceM: 90_000, durationS: 3_600, steps: [])])
+        }
+        let asked = BoxLog()
+        let provider = DesertAwareRouteProvider(base: base, regionForPoint: { _ in nil },
+                                                corridorGrid: { box in asked.add(box); return nil },
+                                                rainMayBePresent: { false })
+        let plan = try await provider.routes(NavRouteRequest(origin: origin, heading: nil,
+                                                             target: NavTarget(source: .point, name: "d", position: target),
+                                                             options: NavRouteOptions()))
+        XCTAssertEqual(plan.routes.map(\.id), ["street"], "offline / missing tiles: the road route and its final bearing stay")
+        XCTAssertEqual(asked.boxes.count, 1)
+        XCTAssertTrue(asked.boxes[0].contains(roadEnd) && asked.boxes[0].contains(target))
+    }
+
+    func testCityRouteThatReachesThePinNeverAsksForTiles() async throws {
+        let target = LngLat(lng: 46.68, lat: 24.71)
+        let origin = LngLat(lng: 46.6, lat: 24.7)
+        let base = TestDesertRoadProvider { _ in
+            NavRoutePlan(routes: [NavRoute(id: "city", coordinates: [origin, target], distanceM: 9_000, durationS: 900, steps: [])])
+        }
+        let asked = BoxLog()
+        let provider = DesertAwareRouteProvider(base: base, regionForPoint: { _ in nil },
+                                                corridorGrid: { box in asked.add(box); return nil }, rainMayBePresent: { false })
+        let plan = try await provider.routes(NavRouteRequest(origin: origin, heading: nil,
+                                                             target: NavTarget(source: .point, name: "مطعم", position: target),
+                                                             options: NavRouteOptions()))
+        XCTAssertEqual(plan.routes.map(\.id), ["city"])
+        XCTAssertTrue(asked.boxes.isEmpty)
+    }
+}
+
+/// Serves fixed files by path under the test base URL; records what was asked.
+private final class FakeTileServer: @unchecked Sendable {
+    private let files: [String: Data]
+    private let offline: Bool
+    private let lock = NSLock()
+    private var asked: [String] = []
+    var paths: [String] { lock.lock(); defer { lock.unlock() }; return asked }
+
+    init(files: [String: Data], offline: Bool = false) {
+        self.files = files
+        self.offline = offline
+    }
+
+    var fetch: DesertTileStore.Fetch {
+        { [self] url in
+            if offline { throw URLError(.notConnectedToInternet) }
+            let path = url.absoluteString.replacingOccurrences(of: "https://tiles.example/desert/", with: "")
+            lock.lock(); asked.append(path); lock.unlock()
+            guard let d = files[path] else { return (Data("{}".utf8), 404) }
+            return (d, 200)
+        }
+    }
+}
+
+private final class BoxLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var all: [DesertGrid.BBox] = []
+    var boxes: [DesertGrid.BBox] { lock.lock(); defer { lock.unlock() }; return all }
+    func add(_ b: DesertGrid.BBox) { lock.lock(); all.append(b); lock.unlock() }
+}
+
 
 /// The access-point street requests run concurrently, so the bookkeeping is actor-isolated.
 private actor RequestedAccessBook {

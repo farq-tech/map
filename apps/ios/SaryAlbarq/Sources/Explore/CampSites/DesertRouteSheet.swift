@@ -49,8 +49,8 @@ struct DesertRouteSheet: View {
             case .noFix:
                 SaryStateView(kind: .empty(title: "ننتظر موقعك", message: nil, systemImage: "location")).sarySurface(radius: SaryRadius.l)
             case .outside:
-                SaryStateView(kind: .empty(title: "دروب البر متاحة في الثمامة والدهناء والنفود",
-                                           message: "أنت والوجهة لازم تكونون داخل نفس المنطقة. استخدم «اتجه» للتوجيه العادي.",
+                SaryStateView(kind: .empty(title: "الوجهة بعيدة على دروب البر",
+                                           message: "دروب البر تنحسب داخل المملكة لمسافة نحو ١٠٠ كم بينك وبين الوجهة. استخدم «اتجه» للتوجيه العادي.",
                                            systemImage: "map"))
                     .sarySurface(radius: SaryRadius.l)
                     .accessibilityIdentifier("routes.outside")
@@ -79,10 +79,21 @@ struct DesertRouteSheet: View {
         }
         #endif
         guard let me else { phase = .noFix; return }
-        guard let region = DesertGrid.covering(me, target) else { phase = .outside; return }
+        // A bundled pilot region first (offline); elsewhere in the Kingdom a corridor of national tiles.
+        let region = DesertGrid.covering(me, target)
+        let corridor = region == nil ? DesertTiles.corridor(spanning: me, target) : nil
+        guard region != nil || corridor != nil else { phase = .outside; return }
         let target = self.target, rain = self.rain || !weatherAvailable
         let opts = await Task.detached(priority: .userInitiated) { () -> [DesertRouter.Option] in
-            guard let g = DesertGrid.bundled(region) else { return [] }
+            let grid: DesertGrid?
+            if let region {
+                grid = DesertGrid.bundled(region)
+            } else if let corridor {
+                grid = await DesertTileStore.shared.corridor(corridor)
+            } else {
+                grid = nil
+            }
+            guard let g = grid else { return [] }
             return DesertRouter.options(g, from: me, to: target, rain: rain)
         }.value
         hub.options = opts

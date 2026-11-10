@@ -3,8 +3,12 @@
     GET /farq.json                TileJSON (what the Mapbox SDK reads: tile URL, zooms, bounds, layers, attribution)
     GET /tiles/{z}/{x}/{y}.mvt    one vector tile (gzip, as stored); 204 where the archive has none
     GET /healthz                  200 once an archive is loaded, with when it was built
+    GET /desert/manifest.json     «دروب البر» national route tiles: the manifest (scripts/camp-sites/tiles.py)
+    GET /desert/tiles/{id}.bin    one route tile (SARYRT1, zlib, as built), id like t25_46; 404 where there is none
 
 Environment:
+    DESERT_DATA_DIR     where manifest.json and routes-t*.bin live (read-only)    default $TILES_DATA_DIR/desert
+    DESERT_PUBLIC_BASE  if set (https://bucket-host/desert), the desert endpoints redirect there instead
     TILES_DATA_DIR      where farq.pmtiles lives (a persistent volume)          default /data
     PUBLIC_URL          the URL the apps reach this service at (for TileJSON)    default http://localhost:$PORT
     PORT                                                                          default 8080
@@ -34,6 +38,26 @@ PUBLIC_URL = os.environ.get('PUBLIC_URL', f'http://localhost:{PORT}').rstrip('/'
 REBUILD_HOURS = float(os.environ.get('REBUILD_HOURS', '168'))
 HERE = os.path.dirname(os.path.abspath(__file__))
 TILE = re.compile(r'^/tiles/(\d{1,2})/(\d+)/(\d+)\.(?:mvt|pbf)$')
+DESERT_DIR = os.environ.get('DESERT_DATA_DIR', os.path.join(DATA, 'desert'))
+DESERT_PUBLIC_BASE = os.environ.get('DESERT_PUBLIC_BASE', '').rstrip('/')
+DESERT_TILE = re.compile(r'^/desert/tiles/(t\d{1,2}_\d{1,3})\.bin$')
+
+
+def desert_file(path: str, directory: str | None = None):
+    """(file path, cache seconds) for a desert request path, or None. Only the manifest and well-formed
+    tile names map to files: no other path can reach the disk."""
+    directory = directory or DESERT_DIR
+    if path == '/desert/manifest.json':
+        return os.path.join(directory, 'manifest.json'), 300
+    m = DESERT_TILE.match(path)
+    if m:
+        return os.path.join(directory, f'routes-{m.group(1)}.bin'), 86400
+    return None
+
+
+def desert_etag(file: str) -> str:
+    st = os.stat(file)
+    return f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
 
 
 class Archive:
@@ -103,8 +127,34 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def desert(self, path):
+        """The «دروب البر» manifest and tiles, read-only, independent of the vector archive."""
+        found = desert_file(path)
+        if not found:
+            return self.send(404, b'{"error":"NOT_FOUND"}')
+        file, max_age = found
+        if DESERT_PUBLIC_BASE:
+            return self.send(302, headers={'Location': DESERT_PUBLIC_BASE + '/' + os.path.basename(file),
+                                           'Cache-Control': f'public, max-age={max_age}'})
+        try:
+            etag = desert_etag(file)
+            with open(file, 'rb') as f:
+                body = f.read()
+        except FileNotFoundError:
+            return self.send(404, b'{"error":"NOT_FOUND"}', headers={'Cache-Control': 'public, max-age=300'})
+        # The manifest is short-lived (a rebuild replaces it). A tile is checked against the manifest's sha256 by
+        # the app, so a day of caching never makes it use a stale tile unknowingly.
+        swr = ', stale-while-revalidate=604800' if max_age > 300 else ''
+        cache = {'Cache-Control': f'public, max-age={max_age}{swr}', 'ETag': etag}
+        if self.headers.get('If-None-Match') == etag:
+            return self.send(304, headers=cache)
+        ctype = 'application/json' if file.endswith('.json') else 'application/octet-stream'
+        return self.send(200, body, ctype, cache)
+
     def do_GET(self):
         path = self.path.split('?', 1)[0]
+        if path.startswith('/desert/'):
+            return self.desert(path)
         arch = ARCH.current()
         if path == '/healthz':
             if not arch:

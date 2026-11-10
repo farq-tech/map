@@ -35,6 +35,12 @@ python3 -m unittest test_build_tiles     # needs requirements-test.txt
 - `GET /farq.json`: TileJSON.
 - `GET /tiles/{z}/{x}/{y}.mvt`: one tile; 204 when the tile is empty.
 - `GET /healthz`
+- `GET /desert/manifest.json` and `GET /desert/tiles/t{lat}_{lng}.bin`: the national «دروب البر» route
+  tiles (built by `scripts/camp-sites/national.sh`), read-only from `DESERT_DATA_DIR` (default
+  `/data/desert`), or redirected to `DESERT_PUBLIC_BASE` when set. Manifest cached 5 min, tiles 1 day
+  (the app checks each tile's sha256 against the manifest). Independent of the vector archive.
+
+`python3 -m unittest test_serve_desert` tests these endpoints.
 
 It rebuilds every `REBUILD_HOURS` (default 168) with `build.sh`, which downloads a fresh extract. A rebuild writes a new file and swaps it in only when complete; a failed rebuild keeps the previous archive live.
 
