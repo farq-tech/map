@@ -307,7 +307,8 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return NavRoute(id: "\(idPrefix)-desert-\(option.mode.rawValue)", coordinates: coordinates,
                         distanceM: total, durationS: duration, steps: steps,
                         hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile,
-                        surfaceRuns: streetSurfaces + desertSurfaces)
+                        surfaceRuns: streetSurfaces + desertSurfaces,
+                        roadEnd: prefix.count >= 2 ? ReturnRoute.pavedEnd(streetSurfaces, fallback: prefix.last) : nil)
     }
 
     private static func surfaceRuns(_ points: [LngLat], grid: DesertGrid) -> [NavSurfaceRun] {

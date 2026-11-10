@@ -122,6 +122,9 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(route.coordinates.count, 3)
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
         XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
+        /* «طريق الرجعة» keeps where the street part ended (the city ↔ desert junction). */
+        XCTAssertEqual(route.roadEnd, route.coordinates[1])
+        XCTAssertEqual(ReturnRoute.roadEnd(of: route), route.coordinates[1])
     }
 
     func testDesertAwareProviderKeepsHybridRouteWhenStreetRouterSnapsNearEntry() async throws {

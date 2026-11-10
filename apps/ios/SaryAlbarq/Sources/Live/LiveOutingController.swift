@@ -252,6 +252,10 @@ final class LiveOutingController: ObservableObject {
     /// «طريق العودة»: a frozen copy of my trail being retraced (nil when off).
     @Published private(set) var backTrack: BackTrack?
     @Published private(set) var backTrackStatus: BackTrackStatus?
+    /// A return trip's guidance: the desert leg on the outbound trail, then the road (`ReturnGuide`).
+    var returnGuide = ReturnGuide()
+    /// The road end last saved for this outing's guidance (`OutboundJunctionStore`), so it is written once.
+    var savedRoadJunction: LngLat?
     /// «اسلك هذا المسار» (build 10): following any saved track, off-road (nil when off).
     @Published var trackFollow: TrackFollowModel?
     /// My trail as drawn (`TrackDisplay`), rebuilt only when the trail changes.
@@ -736,6 +740,8 @@ final class LiveOutingController: ObservableObject {
     func stopBackTrack() {
         backTrack = nil
         backTrackStatus = nil
+        /* A return trip's desert leg stopped by the person: the trip's road guidance from here. */
+        returnGuide.cancel()
         followCamGuidanceCheck()
     }
 
@@ -748,6 +754,11 @@ final class LiveOutingController: ObservableObject {
         }
         let st = bt.update(LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy, atMs: f.atMs)
         if bt != backTrack { backTrack = bt }
+        /* A return trip's desert leg reached the city ↔ desert junction: the fastest road from here. */
+        if returnGuide.backTrackUpdate(st) {
+            handOverReturnToRoad()
+            return
+        }
         if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
         if st != backTrackStatus { backTrackStatus = st }
     }

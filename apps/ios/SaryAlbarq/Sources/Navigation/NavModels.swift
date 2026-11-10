@@ -175,6 +175,9 @@ struct NavRoute: Equatable, Identifiable {
     var timingProfile: [NavRouteTimingLeg]? = nil
     /// Segment geometry and surface source where the provider can establish it.
     var surfaceRuns: [NavSurfaceRun] = []
+    /// A hybrid road + desert route: where its street part stops being paved (the city ↔
+    /// desert junction; `ReturnRoute.roadEnd`). Nil elsewhere. Not part of equality.
+    var roadEnd: LngLat? = nil
 
     var end: LngLat? { coordinates.last }
     var start: LngLat? { coordinates.first }
