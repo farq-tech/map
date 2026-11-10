@@ -164,9 +164,16 @@ final class DesertRouterTests: XCTestCase {
         let base = TestDesertRoadProvider { request in
             if request.target.name != "مدخل درب البر" { throw NavRoutingError.noRoute }
             let entry = request.target.position
+            let streetDistance = Vehicle.distanceMeters(origin, entry)
             return NavRoutePlan(routes: [NavRoute(id: "street", coordinates: [origin, entry],
-                                                   distanceM: Vehicle.distanceMeters(origin, entry),
-                                                   durationS: 1_200, steps: [], via: "street network")])
+                                                   distanceM: streetDistance,
+                                                   durationS: 1_200,
+                                                   steps: [
+                                                    NavStep(maneuver: .init(kind: .depart, direction: nil), roadName: "طريق المدينة",
+                                                            location: origin, distanceM: streetDistance, durationS: 1_200),
+                                                    NavStep(maneuver: .init(kind: .arrive, direction: nil), roadName: "مدخل البر",
+                                                            location: entry, distanceM: 0, durationS: 0)
+                                                   ], via: "street network")])
         }
         let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
                                                 regionForPoint: { DesertAwareRouteProvider.regionName(containing: $0) },
@@ -183,6 +190,10 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
         XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
+        XCTAssertEqual(route.steps.first?.roadName, "طريق المدينة",
+                       "hybrid guidance must preserve real street instructions before the desert leg")
+        XCTAssertEqual(route.steps.last?.maneuver.kind, .arrive,
+                       "the hybrid route must end with its desert destination arrival")
 
         let options = DesertRouter.options(grid, from: try XCTUnwrap(base.lastAccessPoint), to: target, rain: false)
         let desertOption = try XCTUnwrap(options.first { route.id.hasSuffix($0.mode.rawValue) })

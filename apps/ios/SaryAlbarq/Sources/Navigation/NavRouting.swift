@@ -212,7 +212,22 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
 
         let cumulative = cumulativeMeters(coordinates)
         let total = cumulative.last ?? 0
-        let steps = desertSteps(coordinates, cumulative: cumulative, targetName: "نهاية الدرب المحسوب")
+        let desertRouteSteps = desertSteps(coordinates, cumulative: cumulative, targetName: "نهاية الدرب المحسوب")
+        let steps: [NavStep]
+        if let road {
+            // Hybrid routes are guided locally (the road router's native route ends at the
+            // access point). Preserve its actual street maneuvers, then continue with the
+            // raster-derived desert turns and arrival. Dropping these steps made the route
+            // line correct while city guidance silently became a generic bearing.
+            let streetSteps = road.steps.filter { $0.maneuver.kind != .arrive }
+            let desertContinuation = desertRouteSteps.filter {
+                $0.maneuver.kind != .depart && $0.maneuver.kind != .arrive
+            }
+            let arrival = desertRouteSteps.last(where: { $0.maneuver.kind == .arrive })
+            steps = streetSteps + desertContinuation + (arrival.map { [$0] } ?? [])
+        } else {
+            steps = desertRouteSteps
+        }
         let prefixDistance = prefix.count >= 2 ? roadDistance(prefix) : 0
         let streetDuration = road.map { Self.durationAlongRoad($0, distanceM: prefixDistance) } ?? 0
         let desertDuration = option.minutes * 60
