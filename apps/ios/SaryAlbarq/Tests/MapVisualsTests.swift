@@ -5,6 +5,28 @@ import XCTest
 final class MapVisualsTests: XCTestCase {
     private func utc(_ s: String) -> Date { ISO8601DateFormatter().date(from: s)! }
 
+    func testMapAttachmentPublishesOutsideRepresentableCreation() {
+        let hub = MapVisualsHub.shared
+        let previous = hub.director
+        let director = MapVisualsDirector()
+        let finished = expectation(description: "map attachment state is published on the next main-loop turn")
+        hub.director = nil
+        DispatchQueue.main.async {
+            XCTAssertFalse(hub.mapAttached)
+            hub.director = director
+            XCTAssertFalse(hub.mapAttached, "the representable creation call must not publish synchronously")
+            DispatchQueue.main.async {
+                XCTAssertTrue(hub.mapAttached)
+                hub.director = previous
+                DispatchQueue.main.async {
+                    XCTAssertEqual(hub.mapAttached, previous != nil)
+                    finished.fulfill()
+                }
+            }
+        }
+        wait(for: [finished], timeout: 2)
+    }
+
     // MARK: sun
 
     func testSunNoonOverRiyadhAtTheSummerSolstice() {
