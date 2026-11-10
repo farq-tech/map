@@ -277,3 +277,32 @@ enum NavTraffic {
         return out.isEmpty ? nil : out
     }
 }
+
+enum NavSurface {
+    /// The surface runs from `done` metres along the route on (runs follow the route in order):
+    /// the travelled part is dropped and the run under the car is cut where it is, as
+    /// `NavTraffic.runs` does for traffic.
+    static func remaining(_ runs: [NavSurfaceRun], from done: Double) -> [NavSurfaceRun] {
+        guard done > 0 else { return runs }
+        var out: [NavSurfaceRun] = []
+        var acc = 0.0
+        for run in runs where run.coordinates.count >= 2 {
+            if acc >= done { out.append(run); continue }
+            var cut: [LngLat] = []
+            for (a, b) in zip(run.coordinates, run.coordinates.dropFirst()) {
+                let seg = Vehicle.distanceMeters(a, b)
+                defer { acc += seg }
+                if !cut.isEmpty { cut.append(b); continue }
+                if acc + seg <= done { continue }
+                var from = a
+                if acc < done, seg > 0 {
+                    let u = (done - acc) / seg
+                    from = LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
+                }
+                cut = [from, b]
+            }
+            if cut.count >= 2 { out.append(NavSurfaceRun(kind: run.kind, coordinates: cut)) }
+        }
+        return out
+    }
+}
