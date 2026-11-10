@@ -12,6 +12,19 @@ final class PlaceNamerTests: XCTestCase {
         }
     }
 
+    /// Counts lookups (a failure cooldown / «no name» cache must stop repeats).
+    final class CountingGeocoder: ReverseGeocoding, @unchecked Sendable {
+        let answer: GeocodeAnswer
+        private let lock = NSLock()
+        private var n = 0
+        var calls: Int { lock.lock(); defer { lock.unlock() }; return n }
+        init(answer: GeocodeAnswer) { self.answer = answer }
+        func lookup(_ p: LngLat) async -> GeocodeAnswer {
+            lock.lock(); n += 1; lock.unlock()
+            return answer
+        }
+    }
+
     let thumama = Gazetteer.Entry(name: "الثمامة", point: LngLat(lng: 46.70, lat: 25.10))
     let riyadh = Gazetteer.Entry(name: "الرياض", point: LngLat(lng: 46.6753, lat: 24.7136))
     var gz: Gazetteer { Gazetteer(entries: [thumama, riyadh]) }
@@ -91,6 +104,35 @@ final class PlaceNamerTests: XCTestCase {
         XCTAssertEqual(cache.get(p), "الثمامة، الرياض")
         let again = await PlaceNameResolver(geocoder: FakeGeocoder(answer: .failed), cache: cache, gazetteer: gz).name(for: p)
         XCTAssertEqual(again, "الثمامة، الرياض", "cached")
+    }
+
+    func testNamelessPointIsNotGeocodedAgainUntilItExpires() async {
+        let cache = PlaceNameCache(defaults: defaults)
+        let far = LngLat(lng: 47.5, lat: 22.0)
+        let g = CountingGeocoder(answer: .nothing)
+        let r = PlaceNameResolver(geocoder: g, cache: cache, gazetteer: gz)
+        let first = await r.name(for: far)
+        let second = await r.name(for: far)
+        XCTAssertEqual(first, PlaceLabel.mapPoint)
+        XCTAssertEqual(second, PlaceLabel.mapPoint)
+        XCTAssertEqual(g.calls, 1, "«no name here» is remembered")
+        XCTAssertNil(cache.get(far), "…but not as a name")
+        XCTAssertTrue(cache.isNameless(far))
+        XCTAssertFalse(cache.isNameless(far, now: Date().addingTimeInterval(PlaceNameCache.namelessTTL + 60)), "it expires")
+        cache.set(far, "ليلى")
+        XCTAssertEqual(cache.get(far), "ليلى", "a real name replaces it")
+        XCTAssertFalse(cache.isNameless(far))
+    }
+
+    func testFailedLookupCoolsDownInsteadOfRetryingEveryTime() async {
+        let p = north(thumama.point, km: 12)
+        let g = CountingGeocoder(answer: .failed)
+        let r = PlaceNameResolver(geocoder: g, cache: PlaceNameCache(defaults: defaults), gazetteer: gz)
+        let first = await r.name(for: p)
+        let second = await r.name(for: p)
+        XCTAssertEqual(first, "شمال الثمامة بـ ١٢ كم")
+        XCTAssertEqual(second, "شمال الثمامة بـ ١٢ كم", "offline: the bundled places still answer")
+        XCTAssertEqual(g.calls, 1)
     }
 
     func testSlowGeocoderFallsBackInTime() async {

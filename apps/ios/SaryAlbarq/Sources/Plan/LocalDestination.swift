@@ -37,17 +37,27 @@ enum RecentPlaces {
     static let key = "sary.create.recentPlaces.v1"
     static let max = 6
 
+    /// Side-effect free: views call it from `body` / `@State` initialisers. Naming runs from
+    /// `nameOncePerLaunch()` and `add(_:)` only.
     static func load(defaults: UserDefaults = .standard) -> [OutingDestination] {
         guard let d = defaults.data(forKey: key) else { return [] }
-        let all = (try? JSONDecoder().decode([OutingDestination].self, from: d)) ?? []
-        /* Older bare «نقطة على الخريطة» entries are named in the background; the next load shows the names. */
-        if defaults === UserDefaults.standard, all.contains(where: { PlaceLabel.isGeneric($0.name) }) { nameInBackground() }
-        return all
+        return (try? JSONDecoder().decode([OutingDestination].self, from: d)) ?? []
     }
 
     /// One background naming pass at a time (`PlaceNamer`).
     private static var naming = false
+    private static var namedThisLaunch = false
     private static let namingLock = NSLock()
+
+    /// Older bare «نقطة على الخريطة» entries are named in the background once per app launch;
+    /// `.saryRecentPlacesChanged` tells open screens to reload.
+    static func nameOncePerLaunch() {
+        namingLock.lock()
+        let first = !namedThisLaunch
+        namedThisLaunch = true
+        namingLock.unlock()
+        if first { nameInBackground() }
+    }
 
     static func nameInBackground() {
         namingLock.lock()

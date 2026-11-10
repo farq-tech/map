@@ -36,10 +36,11 @@ struct MapHomeScreen: View {
     @State private var selectedPointNameTask: Task<Void, Never>?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
-    @State private var shortcuts = HomeShortcutStore.load()
+    /* Loaded in onAppear: a @State initialiser runs on every re-init of this struct (each parent re-render). */
+    @State private var shortcuts: [HomeShortcut: OutingDestination] = [:]
     /// Choosing a place for «البيت» / «الشغل» (the next pick is saved there).
     @State private var assigning: HomeShortcut?
-    @State private var recent = RecentPlaces.load()
+    @State private var recent: [OutingDestination] = []
     @State private var profileOpen = false
     @State private var startFor: StartTarget?
     @State private var creating = false

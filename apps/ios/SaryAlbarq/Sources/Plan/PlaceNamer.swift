@@ -147,13 +147,16 @@ enum PlaceNamer {
 }
 
 /// Races an async lookup against a timeout without making the caller wait for a non-cooperative child.
+/// The fallback is computed only when the timer (or cancellation) wins.
 private actor PlaceNameTimeoutRace {
     private var continuation: CheckedContinuation<String, Never>?
     private var lookupTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
+    private var fallback: (@Sendable () -> String)?
 
-    func wait(seconds: Double, fallback: String, lookup: @escaping @Sendable () async -> String) async -> String {
-        await withTaskCancellationHandler {
+    func wait(seconds: Double, fallback: @escaping @Sendable () -> String, lookup: @escaping @Sendable () async -> String) async -> String {
+        self.fallback = fallback
+        return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 self.continuation = continuation
                 lookupTask = Task {
@@ -163,12 +166,17 @@ private actor PlaceNameTimeoutRace {
                 timerTask = Task {
                     let delay = seconds.isFinite ? min(60, max(0, seconds)) : 0
                     try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                    await self.finish(fallback)
+                    await self.finishWithFallback()
                 }
             }
         } onCancel: {
-            Task { await self.finish(fallback) }
+            Task { await self.finishWithFallback() }
         }
+    }
+
+    private func finishWithFallback() {
+        guard continuation != nil, let fallback else { return }
+        finish(fallback())
     }
 
     private func finish(_ value: String) {
@@ -179,13 +187,20 @@ private actor PlaceNameTimeoutRace {
         timerTask?.cancel()
         lookupTask = nil
         timerTask = nil
+        fallback = nil
     }
 }
 
 /// Names already found, per ≈ 11 m cell (this phone only; wiped with the account).
+///
+/// Rows are `[cell, name]`. A cell the geocoder said has no name is remembered for `namelessTTL` as
+/// `[cell, "", expiresAt]` (seconds since 1970): older builds read only 2-element rows, so they
+/// ignore these.
 final class PlaceNameCache: @unchecked Sendable {
     static let key = "sary.placeNames.v1"
     static let max = 300
+    /// How long «no name here» is believed before asking the geocoder again.
+    static let namelessTTL: TimeInterval = 24 * 3600
 
     private let defaults: UserDefaults
     private let lock = NSLock()
@@ -203,10 +218,34 @@ final class PlaceNameCache: @unchecked Sendable {
     }
 
     func set(_ p: LngLat, _ name: String) {
+        write(p, [Self.cell(p), name])
+    }
+
+    /// True while a «no name here» answer for `p` has not expired.
+    func isNameless(_ p: LngLat, now: Date = Date()) -> Bool {
         lock.lock(); defer { lock.unlock() }
         let c = Self.cell(p)
-        var all = rows.filter { $0.count == 2 && $0[0] != c }
-        all.append([c, name])
+        guard let row = rows.last(where: { ($0.count == 2 || $0.count == 3) && $0[0] == c }), row.count == 3,
+              let until = TimeInterval(row[2]) else { return false }
+        return now.timeIntervalSince1970 < until
+    }
+
+    /// Remembers that `p` has no name, until `now + namelessTTL`.
+    func setNameless(_ p: LngLat, now: Date = Date()) {
+        write(p, [Self.cell(p), "", String(Int(now.timeIntervalSince1970 + Self.namelessTTL))], now: now)
+    }
+
+    /// Replaces the cell's row, drops expired «no name» rows, keeps the newest `max`.
+    private func write(_ p: LngLat, _ row: [String], now: Date = Date()) {
+        lock.lock(); defer { lock.unlock() }
+        let c = Self.cell(p)
+        let t = now.timeIntervalSince1970
+        var all = rows.filter { r in
+            if r.count == 2 { return r[0] != c }
+            if r.count == 3 { return r[0] != c && (TimeInterval(r[2]).map { t < $0 } ?? false) }
+            return false
+        }
+        all.append(row)
         defaults.set(Array(all.suffix(Self.max)), forKey: Self.key)
     }
 
@@ -216,33 +255,66 @@ final class PlaceNameCache: @unchecked Sendable {
 /// Looks a point's name up once: the cache, else the geocoder plus the bundled places.
 final class PlaceNameResolver: @unchecked Sendable {
     static let shared = PlaceNameResolver()
+    /// After a failed lookup (offline, rate-limited) the same cell is not asked again for this long.
+    static let failedCooldown: TimeInterval = 10 * 60
 
     let geocoder: ReverseGeocoding
     let cache: PlaceNameCache
-    let gazetteer: Gazetteer
+    private let injectedGazetteer: Gazetteer?
+    /// Failed cells → when they may be asked again (this process only: a failure is transient).
+    private var failedUntil: [String: Date] = [:]
+    private let lock = NSLock()
 
-    init(geocoder: ReverseGeocoding = AppleReverseLookup(), cache: PlaceNameCache = PlaceNameCache(), gazetteer: Gazetteer = .shared) {
+    /// The bundled places; `Gazetteer.shared` (a large decode) is touched only on first use.
+    var gazetteer: Gazetteer { injectedGazetteer ?? Gazetteer.shared }
+
+    init(geocoder: ReverseGeocoding = AppleReverseLookup(), cache: PlaceNameCache = PlaceNameCache(), gazetteer: Gazetteer? = nil) {
         self.geocoder = geocoder
         self.cache = cache
-        self.gazetteer = gazetteer
+        self.injectedGazetteer = gazetteer
     }
 
-    /// The name for `p`; offline it still answers from the bundled places (and asks again next time).
+    /// The name for `p`; offline it still answers from the bundled places (and asks again after a cooldown).
     func name(for p: LngLat) async -> String {
         if let c = cache.get(p) { return c }
+        if cache.isNameless(p) || coolingDown(p) {
+            return PlaceNamer.compose(nil, at: p, gazetteer: gazetteer) ?? PlaceLabel.mapPoint
+        }
         let answer = await geocoder.lookup(p)
         var parts: GeocodeParts?
         if case let .found(g) = answer { parts = g }
         let text = PlaceNamer.compose(parts, at: p, gazetteer: gazetteer) ?? PlaceLabel.mapPoint
-        if answer != .failed, text != PlaceLabel.mapPoint { cache.set(p, text) }
+        if answer == .failed {
+            markFailed(p)
+        } else if text != PlaceLabel.mapPoint {
+            cache.set(p, text)
+        } else {
+            cache.setNameless(p)
+        }
         return text
     }
 
     /// The same, but never longer than `seconds` (a slow network falls back to the bundled places).
     func name(for p: LngLat, within seconds: Double) async -> String {
         if let c = cache.get(p) { return c }
-        let fallback = PlaceNamer.compose(nil, at: p, gazetteer: gazetteer) ?? PlaceLabel.mapPoint
-        return await PlaceNameTimeoutRace().wait(seconds: seconds, fallback: fallback) { await self.name(for: p) }
+        /* The fallback (a scan of the bundled places) is composed only if the timeout wins. */
+        return await PlaceNameTimeoutRace().wait(seconds: seconds,
+                                                 fallback: { PlaceNamer.compose(nil, at: p, gazetteer: self.gazetteer) ?? PlaceLabel.mapPoint },
+                                                 lookup: { await self.name(for: p) })
+    }
+
+    private func coolingDown(_ p: LngLat, now: Date = Date()) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let c = PlaceNameCache.cell(p)
+        guard let until = failedUntil[c] else { return false }
+        if now < until { return true }
+        failedUntil[c] = nil
+        return false
+    }
+
+    private func markFailed(_ p: LngLat, now: Date = Date()) {
+        lock.lock(); defer { lock.unlock() }
+        failedUntil[PlaceNameCache.cell(p)] = now.addingTimeInterval(Self.failedCooldown)
     }
 }
 
