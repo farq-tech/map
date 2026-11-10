@@ -85,6 +85,16 @@ enum HomeSheetRules {
     /// Raised: most of the screen, the map still peeks above.
     static func expandedHeight(screen: Double) -> Double { max(collapsedHeight, screen * 0.82) }
 
+    /// Clamp a GeometryReader's first (sometimes zero) measurement before it reaches `.frame`.
+    /// SwiftUI may lay out the home screen once before safe-area insets are available.
+    static func frameHeight(screen: Double, preferred: Double, drag: Double) -> Double {
+        let measured = screen.isFinite ? max(0, screen) : 0
+        let desired = preferred.isFinite ? preferred : collapsedHeight
+        let offset = drag.isFinite ? drag : 0
+        let available = max(160, min(760, measured - 60))
+        return min(available, max(160, desired - offset))
+    }
+
     /// Where the sheet settles after a drag: `translation` > 0 is downwards.
     static func settle(expanded: Bool, translation: Double, velocity: Double) -> Bool {
         let push = translation + velocity * 0.15
