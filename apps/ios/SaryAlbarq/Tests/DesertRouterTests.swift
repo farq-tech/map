@@ -155,7 +155,7 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertTrue(DesertRouter.options(grid, from: outside, to: grid.point(55), rain: false).isEmpty)
     }
 
-    func testProvidedThumamahPinGetsStreetPrefixAndRasterRoute() async throws {
+    @MainActor func testProvidedThumamahPinGetsStreetPrefixAndRasterRoute() async throws {
         let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
         let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
@@ -183,6 +183,18 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
         XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
+
+        let options = DesertRouter.options(grid, from: try XCTUnwrap(base.lastAccessPoint), to: target, rain: false)
+        let desertOption = try XCTUnwrap(options.first { route.id.hasSuffix($0.mode.rawValue) })
+        XCTAssertEqual(route.durationS, 1_200 + desertOption.minutes * 60, accuracy: 1,
+                       "hybrid ETA must add the street provider ETA to the modeled desert ETA")
+        let timing = try XCTUnwrap(route.timingProfile)
+        XCTAssertEqual(timing.first?.durationS ?? 0, 1_200, accuracy: 1,
+                       "the approach uses the street provider's real ETA, not distance / 8 m/s")
+        let halfwayThroughStreets = timing[0].distanceM / 2
+        let progress = LocalGuidanceEngine.progress(route: route, stepAlong: [], total: route.distanceM, at: halfwayThroughStreets)
+        XCTAssertEqual(progress.durationRemainingS, 600 + desertOption.minutes * 60, accuracy: 1,
+                       "remaining ETA keeps the full desert time while half the street leg remains")
     }
 }
 

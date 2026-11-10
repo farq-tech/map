@@ -176,7 +176,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         guard Self.contains(grid, a), Self.contains(grid, b) else { return nil }
         let options = DesertRouter.options(grid, from: a, to: b, rain: rainMayBePresent())
         guard !options.isEmpty else { return nil }
-        return options.map { makeRoute($0, prefix: [], start: a, target: b, idPrefix: "desert") }
+        return options.map { makeRoute($0, prefix: [], start: a, target: b, idPrefix: "desert", road: nil) }
     }
 
     private func hybridRoutes(road: NavRoute, target: LngLat, region: String, grid: DesertGrid) -> [NavRoute]? {
@@ -189,10 +189,11 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         // supported cell, keep the road route and let the UI show a bearing from that endpoint.
         guard let first = options.first?.points.first,
               Vehicle.distanceMeters(join, first) <= max(60, hypot(grid.dx, grid.dy) * 0.75) else { return nil }
-        return options.map { makeRoute($0, prefix: prefix, start: road.start ?? join, target: target, idPrefix: road.id) }
+        return options.map { makeRoute($0, prefix: prefix, start: road.start ?? join, target: target, idPrefix: road.id, road: road) }
     }
 
-    private func makeRoute(_ option: DesertRouter.Option, prefix: [LngLat], start: LngLat, target: LngLat, idPrefix: String) -> NavRoute {
+    private func makeRoute(_ option: DesertRouter.Option, prefix: [LngLat], start: LngLat, target: LngLat, idPrefix: String,
+                           road: NavRoute?) -> NavRoute {
         var coordinates = prefix
         let routePoints = option.points
         if coordinates.isEmpty { coordinates.append(start) }
@@ -213,10 +214,45 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         let total = cumulative.last ?? 0
         let steps = desertSteps(coordinates, cumulative: cumulative, targetName: "نهاية الدرب المحسوب")
         let prefixDistance = prefix.count >= 2 ? roadDistance(prefix) : 0
+        let streetDuration = road.map { Self.durationAlongRoad($0, distanceM: prefixDistance) } ?? 0
         let desertDuration = option.minutes * 60
+        let duration = max(60, streetDuration + desertDuration)
+        var timingProfile: [NavRouteTimingLeg] = []
+        if prefixDistance > 0, streetDuration > 0 {
+            timingProfile.append(NavRouteTimingLeg(distanceM: min(total, prefixDistance), durationS: streetDuration))
+        }
+        let desertDistance = max(0, total - timingProfile.reduce(0) { $0 + $1.distanceM })
+        if desertDistance > 0, desertDuration > 0 {
+            timingProfile.append(NavRouteTimingLeg(distanceM: desertDistance, durationS: desertDuration))
+        }
+        if let last = timingProfile.indices.last {
+            let profileDuration = timingProfile.reduce(0) { $0 + $1.durationS }
+            timingProfile[last].durationS += max(0, duration - profileDuration)
+        }
         return NavRoute(id: "\(idPrefix)-desert-\(option.mode.rawValue)", coordinates: coordinates,
-                        distanceM: total, durationS: max(60, desertDuration + prefixDistance / 8.0), steps: steps,
-                        hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)")
+                        distanceM: total, durationS: duration, steps: steps,
+                        hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile)
+    }
+
+    /// Estimates the traversed street prefix from the street router's actual ETA. Use its
+    /// maneuver legs when available (including traffic weighting); fall back to proportional
+    /// distance only for providers that do not return step timings.
+    private static func durationAlongRoad(_ route: NavRoute, distanceM: Double) -> Double {
+        guard route.distanceM > 0, route.durationS > 0 else { return 0 }
+        let fraction = min(1, max(0, distanceM / route.distanceM))
+        let steps = route.steps.filter { $0.distanceM > 0 && $0.durationS > 0 }
+        let stepDistance = steps.reduce(0) { $0 + $1.distanceM }
+        let stepDuration = steps.reduce(0) { $0 + $1.durationS }
+        guard stepDistance > 0, stepDuration > 0 else { return route.durationS * fraction }
+
+        var distanceLeft = stepDistance * fraction
+        var estimate = 0.0
+        for step in steps where distanceLeft > 0 {
+            let used = min(step.distanceM, distanceLeft)
+            estimate += step.durationS * used / step.distanceM
+            distanceLeft -= used
+        }
+        return estimate * (route.durationS / stepDuration)
     }
 
     private func roadDistance(_ points: [LngLat]) -> Double { cumulativeMeters(points).last ?? 0 }
