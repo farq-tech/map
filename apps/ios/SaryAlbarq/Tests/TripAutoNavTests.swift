@@ -411,6 +411,58 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertFalse(n.auto)
     }
 
+    func testArbitraryPointStartsPersonalGuidanceImmediately() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+
+        XCTAssertEqual(n.phase, .planning)
+        await wait("personal guidance starts") { n.phase == .guiding }
+        XCTAssertFalse(n.auto, "a point selected on the map must not start group auto-guidance")
+        XCTAssertEqual(n.target, point)
+        XCTAssertEqual(n.active?.id, "r1")
+    }
+
+    func testArbitraryPointStillStartsWithHonestBearingWhenNoRouteExists() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.noRoute)])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+
+        await wait("direct guidance starts") { n.phase == .offRoad }
+        XCTAssertFalse(n.auto)
+        XCTAssertTrue(n.direct)
+        XCTAssertEqual(n.fallback, .noRoad)
+        XCTAssertEqual(n.offRoad?.from, olaya)
+        XCTAssertEqual(n.offRoad?.to, campPos)
+    }
+
+    func testImmediatePointRetriesTheRoadRouteWhenConnectivityReturns() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.offline), .success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+        await wait("temporary bearing guidance") { n.phase == .offRoad }
+        XCTAssertEqual(n.fallback, .offline)
+
+        let finished = await n.retryRoute()
+        XCTAssertTrue(finished)
+        XCTAssertEqual(n.phase, .guiding)
+        XCTAssertFalse(n.auto)
+        XCTAssertNil(n.fallback)
+        XCTAssertEqual(router.calls, 2)
+    }
+
     func testOffRoadDestinationRoadsThenBearing() async {
         /* The router snaps the desert camp to the nearest road ~4 km short of it. */
         let roadEnd = LngLat(lng: olaya.lng + (campPos.lng - olaya.lng) * 0.6, lat: olaya.lat + (campPos.lat - olaya.lat) * 0.6)

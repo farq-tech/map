@@ -12,6 +12,8 @@ struct MapNavDrawing: Equatable {
         var selected: Bool
         /// The remaining route in traffic bands (nil: one plain colour).
         var traffic: [NavTrafficRun]? = nil
+        /// Known asphalt / unpaved / predicted terrain runs, when the provider can distinguish them.
+        var surfaces: [NavSurfaceRun] = []
     }
 
     struct Label: Equatable {
@@ -107,7 +109,8 @@ final class NavMapDrawer {
              "paint": ["line-color": "#ffffff", "line-width": width(12), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": sel, "layout": round,
              /* Still visible behind 3D buildings (Olaya towers would hide the turn otherwise). */
-             "paint": ["line-color": ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue] as [Any],
+             "paint": ["line-color": ["match", ["get", "k"], "unpaved", "#E6A430", "terrain", "#F5B83D",
+                                        ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue]] as [Any],
                        "line-width": width(8), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
             /* The off-road remainder: dashed, amber, thin — visibly NOT a road. */
             ["id": "sary-nav-off-casing", "type": "line", "source": Self.offSource, "layout": ["line-cap": "round"],
@@ -125,6 +128,14 @@ final class NavMapDrawer {
         var feats: [Feature] = []
         /* Alternatives first, the chosen route last (drawn on top by its own layer anyway). */
         for r in drawing.routes.sorted(by: { !$0.selected && $1.selected }) where r.coordinates.count >= 2 {
+            if r.selected, !r.surfaces.isEmpty, r.traffic?.isEmpty != false {
+                for run in r.surfaces where run.coordinates.count >= 2 {
+                    var f = Feature(geometry: .lineString(LineString(run.coordinates.map(\.coordinate))))
+                    f.properties = ["s": .number(1), "id": .string(r.id), "k": .string(run.kind.rawValue)]
+                    feats.append(f)
+                }
+                continue
+            }
             if r.selected, let runs = r.traffic, !runs.isEmpty {
                 /* One feature per traffic band («c»); the casing still sees one continuous line. */
                 for run in runs where run.coordinates.count >= 2 {

@@ -110,6 +110,29 @@ struct DesertGrid {
         return LngLat(lng: h.west + (Double(c) + 0.5) * (h.east - h.west) / Double(cols),
                       lat: h.north - (Double(r) + 0.5) * (h.north - h.south) / Double(rows))
     }
+
+    /// Data-backed entry candidates on mapped OSM roads/tracks. Sorted by distance from the
+    /// destination and spatially spread so the road router can try distinct approaches.
+    func accessPoints(near target: LngLat, limit: Int = 4) -> [LngLat] {
+        guard rows > 0, cols > 0, limit > 0 else { return [] }
+        let candidates = cell.indices.compactMap { i -> (LngLat, Double)? in
+            let flags = cell[i] & 0xF0
+            guard flags & (Self.road | Self.track) != 0,
+                  ground(i) != .forbidden else { return nil }
+            let p = point(i)
+            let d = Vehicle.distanceMeters(p, target)
+            return d <= 30_000 ? (p, d) : nil
+        }.sorted { $0.1 < $1.1 }
+
+        var chosen: [LngLat] = []
+        let spacing = max(180.0, hypot(dx, dy) * 3)
+        for (point, _) in candidates {
+            guard chosen.allSatisfy({ Vehicle.distanceMeters($0, point) >= spacing }) else { continue }
+            chosen.append(point)
+            if chosen.count == limit { break }
+        }
+        return chosen
+    }
 }
 
 /// Why a stretch is hard (its Najdi words on the map and the card).
@@ -332,6 +355,10 @@ enum DesertRouter {
 
     /// The three options (fewer when two coincide or one finds no way).
     static func options(_ g: DesertGrid, from a: LngLat, to b: LngLat, rain: Bool) -> [Option] {
+        guard a.lat >= g.header.south, a.lat <= g.header.north,
+              a.lng >= g.header.west, a.lng <= g.header.east,
+              b.lat >= g.header.south, b.lat <= g.header.north,
+              b.lng >= g.header.west, b.lng <= g.header.east else { return [] }
         let ia = g.index(a), ib = g.index(b)
         var out: [Option] = []
         for m in Mode.allCases {

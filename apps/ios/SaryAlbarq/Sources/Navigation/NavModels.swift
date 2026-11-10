@@ -138,6 +138,24 @@ struct NavStep: Equatable {
     var speedLimitKmh: Int? = nil
 }
 
+/// A distance/time leg in a route whose segments have different expected speeds.
+struct NavRouteTimingLeg: Equatable {
+    var distanceM: Double
+    var durationS: Double
+}
+
+enum NavSurfaceKind: String, Equatable {
+    case paved
+    case unpaved
+    /// A cost-grid path through terrain, not a mapped road or track.
+    case terrain
+}
+
+struct NavSurfaceRun: Equatable {
+    var kind: NavSurfaceKind
+    var coordinates: [LngLat]
+}
+
 /// A route between me and a target, provider-agnostic.
 struct NavRoute: Equatable, Identifiable {
     var id: String
@@ -153,12 +171,17 @@ struct NavRoute: Equatable, Identifiable {
     /// Traffic on each segment (`coordinates[i]`→`coordinates[i+1]`), from Mapbox `driving-traffic`
     /// congestion annotations. Nil off the traffic profile (Valhalla, the desert): one colour.
     var congestion: [NavCongestion]? = nil
+    /// Optional piecewise travel-time model; nil keeps the route-wide average.
+    var timingProfile: [NavRouteTimingLeg]? = nil
+    /// Segment geometry and surface source where the provider can establish it.
+    var surfaceRuns: [NavSurfaceRun] = []
 
     var end: LngLat? { coordinates.last }
     var start: LngLat? { coordinates.first }
 
     static func == (a: NavRoute, b: NavRoute) -> Bool {
-        a.id == b.id && a.distanceM == b.distanceM && a.durationS == b.durationS && a.coordinates.count == b.coordinates.count
+        a.id == b.id && a.distanceM == b.distanceM && a.durationS == b.durationS &&
+        a.coordinates.count == b.coordinates.count && a.timingProfile == b.timingProfile && a.surfaceRuns == b.surfaceRuns
     }
 }
 
