@@ -1,4 +1,12 @@
-# حالة سَرى البارق — آخر تحديث 2026-11-11 00:30 (Asia/Riyadh)
+# حالة سَرى البارق — آخر تحديث 2026-11-11 01:51 (Asia/Riyadh)
+
+## اختبار المجموعة وإصلاح نشر الطقس — 2026-11-11 01:51
+
+- شُغّلت المجموعة الكاملة على محاكي iPhone 18 Pro / iOS 27.2 عند رأس PR #144 `f75470ffef68c1146ab5c0a6bed3ce34dcb83df5`: **1542 ناجحًا، 17 فاشلًا، 30 متجاوزًا من 1589**، مع **70 runtime warnings**. الإخفاقات: `ChatUITests.testGroupTabEntryBadgeSendAndReceive`, `DesertGazetteerUITests.testNufudChipListsRealPlacesAndStartsATrip`, `NavigationUITests.testActiveGuidance`, `OutingLegsUITests.testMemberWaitsForTheLeader`, `ReachabilityUITests.testQiblaDeniedLocationOffersSettingsAndFailureCanRetry`, خمس حالات `SaryAlbarqUITests` لاستعادة الموقع/الدعوات، أربع حالات `VisualsUITests` (الميلان، زر الدرون، لقطة الدرون، غبار النفود)، وثلاث حالات `WaypointsUITests` (Convoy Dark/Drive/Light). اختبارات القافلة الثلاثة فشلت على شرط «ماجد خلف ذيل القافلة بأكثر من الفجوة». هذه المجموعة أُجريت قبل إصلاح WeatherOverlay أدناه؛ لم تُعد المجموعة كاملة بعد الإصلاح.
+- تحذيرات المجموعة تضمنت نشر SwiftUI داخل تحديث العرض، تفعيل AVAudioSession المتزامن على المسار الرئيسي، وانتظار QoS أدنى. أثبت backtrace أن `WeatherOverlay.update(_:)` كان يصل إلى `apply()` وينشر حالة `WeatherLegendModel` تزامنيًا من `OutingMapboxView.updateUIView`. عُدّل ليجدول تطبيق الطبقة على دورة main التالية مع دمج التحديثات، وأُزيل default argument الذي كان يولّد تحذير عزل actor.
+- على الكود النهائي نفسه الذي دُفع في commit `8897f14c2452cff480745735c28082c2e96dddb7`، أعادت اختبارات `WeatherLayersTests` واختبار `ExploreUITests.testWeatherRainLayerAndPeriodControls` **6/6 ناجحة، 0 فشل، 0 تخطٍ، و0 runtime warnings** على المحاكي. مراقبة سجل النظام خلال اختبار واجهة المطر لم ترصد تحذير `Publishing changes from within view updates`. هذا إثبات مركز لإصلاح الطقس، ولا يعالج تحذيرات الصوت/QoS أو فشل الاختبارات الـ17 ولا يعادل اختبار جهاز حقيقي.
+- PR #144 محدث إلى الرأس `8897f14`; Vercel Preview ما زال قيد النشر عند آخر تحقق، وCI run `42918267118` انتهى بفشل قبل أي خطوة (`steps: []`)، فلا توجد نتيجة CI للشيفرة. لا يوجد Build/TestFlight لهذا الرأس. PR #141 محدث على الفرع `docs/status-2026-11-09` لتسجيل هذه الأدلة.
+- الإجراء: Codex، 2026-11-12: تتبع إخفاقات المجموعة الـ17 كلٌّ على حدة، وخصوصًا convoy والبحث/الدعوات والوصول؛ تتبع تحذيرات الصوت وQoS من backtrace. أعد المجموعة بعد إصلاح المسببات، ثم تحقق من Preview/CI؛ لا ترفع TestFlight قبل اجتياز بوابة الإصدار.
 
 ## حالة التوثيق والبوابات — 2026-11-11 00:30
 
