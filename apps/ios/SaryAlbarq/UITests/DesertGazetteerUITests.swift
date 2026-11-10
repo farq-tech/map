@@ -10,7 +10,7 @@ final class DesertGazetteerUITests: XCTestCase {
 
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
+        app.launchArguments = ["-resetState", "-demo", "-demoEmpty", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
                                "-SaryScreen", "home", "-SaryRainGreenOff"]
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح", "OK", "حسنًا"] where alert.buttons[label].exists {
