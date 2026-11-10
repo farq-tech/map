@@ -124,6 +124,33 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
     }
 
+    func testDesertAwareProviderKeepsHybridRouteWhenStreetRouterSnapsNearEntry() async throws {
+        var grid = DesertGrid(rows: 60, cols: 60)
+        set(&grid, rows: 18..<42, cols: 30..<31, .firm, flags: DesertGrid.track)
+        let target = grid.point(42 * grid.cols + 30)
+        let origin = LngLat(lng: 45.9, lat: 24.7)
+        let base = TestDesertRoadProvider { request in
+            guard request.target.name == "مدخل درب البر" else { throw NavRoutingError.noRoute }
+            let access = request.target.position
+            let snappedEnd = LngLat(lng: access.lng + 0.002, lat: access.lat)
+            return NavRoutePlan(routes: [NavRoute(id: "street-snapped", coordinates: [origin, snappedEnd],
+                                                   distanceM: Vehicle.distanceMeters(origin, snappedEnd),
+                                                   durationS: 600, steps: [])])
+        }
+        let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
+                                                regionForPoint: { _ in "test" }, rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "نقطة برية", position: target),
+                                      options: NavRouteOptions())
+
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first)
+        XCTAssertTrue(route.via?.contains("درب بري محسوب") == true,
+                      "a nearby router snap must not degrade to a street-only route")
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved })
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain })
+    }
+
     func testDesertAwareProviderPreservesStreetRouteIfGridCannotComplete() async throws {
         var grid = DesertGrid(rows: 30, cols: 30)
         set(&grid, rows: 10..<20, cols: 4..<5, .sand, flags: DesertGrid.track)
@@ -206,6 +233,18 @@ final class DesertRouterTests: XCTestCase {
         let progress = LocalGuidanceEngine.progress(route: route, stepAlong: [], total: route.distanceM, at: halfwayThroughStreets)
         XCTAssertEqual(progress.durationRemainingS, 600 + desertOption.minutes * 60, accuracy: 1,
                        "remaining ETA keeps the full desert time while half the street leg remains")
+    }
+
+    @MainActor func testUserReportedThumamahPointCanBeReachedFromBundledMappedAccess() throws {
+        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
+        let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
+        let target = LngLat(lng: 46.62866, lat: 25.15844)
+        let access = try XCTUnwrap(grid.accessPoints(near: target).first)
+
+        let options = DesertRouter.options(grid, from: access, to: target, rain: false)
+
+        XCTAssertFalse(options.isEmpty, "the measured grid contains a costed route from a mapped road to this pin")
     }
 }
 

@@ -133,7 +133,11 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
             for route in road.routes {
                 guard let end = route.end else { continue }
                 let gap = Vehicle.distanceMeters(end, access)
-                if gap <= max(100, hypot(grid.dx, grid.dy)) {
+                /* Cell centers and Directions' snapped road endpoint may differ by roughly a
+                 * raster cell. Previously a valid street route that snapped 120–200 m away
+                 * from the marked access was discarded, even though the cost grid could
+                 * connect from the actual route endpoint to the destination. */
+                if gap <= max(180, hypot(grid.dx, grid.dy) * 2) {
                     combined.append(contentsOf: hybridRoutes(road: route, target: request.target.position, region: region, grid: grid) ?? [])
                 }
                 // Even if the router cannot reach the requested mapped cell precisely, its
@@ -176,7 +180,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         guard Self.contains(grid, a), Self.contains(grid, b) else { return nil }
         let options = DesertRouter.options(grid, from: a, to: b, rain: rainMayBePresent())
         guard !options.isEmpty else { return nil }
-        return options.map { makeRoute($0, prefix: [], start: a, target: b, idPrefix: "desert", road: nil) }
+        return options.map { makeRoute($0, prefix: [], start: a, target: b, idPrefix: "desert", road: nil, grid: grid) }
     }
 
     private func hybridRoutes(road: NavRoute, target: LngLat, region: String, grid: DesertGrid) -> [NavRoute]? {
@@ -189,11 +193,11 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         // supported cell, keep the road route and let the UI show a bearing from that endpoint.
         guard let first = options.first?.points.first,
               Vehicle.distanceMeters(join, first) <= max(60, hypot(grid.dx, grid.dy) * 0.75) else { return nil }
-        return options.map { makeRoute($0, prefix: prefix, start: road.start ?? join, target: target, idPrefix: road.id, road: road) }
+        return options.map { makeRoute($0, prefix: prefix, start: road.start ?? join, target: target, idPrefix: road.id, road: road, grid: grid) }
     }
 
     private func makeRoute(_ option: DesertRouter.Option, prefix: [LngLat], start: LngLat, target: LngLat, idPrefix: String,
-                           road: NavRoute?) -> NavRoute {
+                           road: NavRoute?, grid: DesertGrid) -> NavRoute {
         var coordinates = prefix
         let routePoints = option.points
         if coordinates.isEmpty { coordinates.append(start) }
@@ -244,9 +248,63 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
             let profileDuration = timingProfile.reduce(0) { $0 + $1.durationS }
             timingProfile[last].durationS += max(0, duration - profileDuration)
         }
+        let streetSurfaces: [NavSurfaceRun]
+        if let road, prefixDistance > 0 {
+            if road.surfaceRuns.isEmpty {
+                streetSurfaces = [NavSurfaceRun(kind: road.hasUnpaved ? .unpaved : .paved, coordinates: prefix)]
+            } else {
+                streetSurfaces = Self.clip(road.surfaceRuns, to: prefixDistance)
+            }
+        } else {
+            streetSurfaces = []
+        }
+        let desertSurfaces = Self.surfaceRuns(routePoints, grid: grid)
         return NavRoute(id: "\(idPrefix)-desert-\(option.mode.rawValue)", coordinates: coordinates,
                         distanceM: total, durationS: duration, steps: steps,
-                        hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile)
+                        hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile,
+                        surfaceRuns: streetSurfaces + desertSurfaces)
+    }
+
+    private static func surfaceRuns(_ points: [LngLat], grid: DesertGrid) -> [NavSurfaceRun] {
+        guard points.count >= 2 else { return [] }
+        var runs: [NavSurfaceRun] = []
+        for (a, b) in zip(points, points.dropFirst()) {
+            let mid = LngLat(lng: (a.lng + b.lng) / 2, lat: (a.lat + b.lat) / 2)
+            let flags = grid.cell[grid.index(mid)] & 0xF0
+            let kind: NavSurfaceKind = flags & DesertGrid.road != 0 ? .paved
+                : flags & DesertGrid.track != 0 ? .unpaved : .terrain
+            if runs.last?.kind == kind {
+                runs[runs.count - 1].coordinates.append(b)
+            } else {
+                runs.append(NavSurfaceRun(kind: kind, coordinates: [a, b]))
+            }
+        }
+        return runs
+    }
+
+    private static func clip(_ runs: [NavSurfaceRun], to distance: Double) -> [NavSurfaceRun] {
+        guard distance > 0 else { return [] }
+        var remaining = distance
+        var out: [NavSurfaceRun] = []
+        for run in runs where run.coordinates.count >= 2 && remaining > 0 {
+            var coordinates = [run.coordinates[0]]
+            for (a, b) in zip(run.coordinates, run.coordinates.dropFirst()) {
+                let segment = Vehicle.distanceMeters(a, b)
+                guard segment > 0 else { continue }
+                if segment <= remaining {
+                    coordinates.append(b)
+                    remaining -= segment
+                } else {
+                    let f = remaining / segment
+                    coordinates.append(LngLat(lng: a.lng + (b.lng - a.lng) * f,
+                                              lat: a.lat + (b.lat - a.lat) * f))
+                    remaining = 0
+                    break
+                }
+            }
+            if coordinates.count >= 2 { out.append(NavSurfaceRun(kind: run.kind, coordinates: coordinates)) }
+        }
+        return out
     }
 
     /// Estimates the traversed street prefix from the street router's actual ETA. Use its

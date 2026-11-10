@@ -12,6 +12,8 @@ struct NavFixWait: Equatable {
         case navigate(NavTarget)
         /// «اتجه» on a card.
         case directions(NavTarget)
+        /// A map point: start guidance as soon as a fresh fix arrives.
+        case immediate(NavTarget)
     }
 
     var pending: Pending
@@ -63,6 +65,10 @@ extension LiveOutingController {
             guard hasFreshFix else { return }
             fixWait = nil
             directions(.success(t))
+        case let .immediate(t):
+            guard hasFreshFix else { return }
+            fixWait = nil
+            navLongPressed(t.position, name: t.name)
         }
     }
 

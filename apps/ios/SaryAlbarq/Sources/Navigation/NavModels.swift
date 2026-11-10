@@ -144,6 +144,18 @@ struct NavRouteTimingLeg: Equatable {
     var durationS: Double
 }
 
+enum NavSurfaceKind: String, Equatable {
+    case paved
+    case unpaved
+    /// A cost-grid path through terrain, not a mapped road or track.
+    case terrain
+}
+
+struct NavSurfaceRun: Equatable {
+    var kind: NavSurfaceKind
+    var coordinates: [LngLat]
+}
+
 /// A route between me and a target, provider-agnostic.
 struct NavRoute: Equatable, Identifiable {
     var id: String
@@ -161,13 +173,15 @@ struct NavRoute: Equatable, Identifiable {
     var congestion: [NavCongestion]? = nil
     /// Optional piecewise travel-time model; nil keeps the route-wide average.
     var timingProfile: [NavRouteTimingLeg]? = nil
+    /// Segment geometry and surface source where the provider can establish it.
+    var surfaceRuns: [NavSurfaceRun] = []
 
     var end: LngLat? { coordinates.last }
     var start: LngLat? { coordinates.first }
 
     static func == (a: NavRoute, b: NavRoute) -> Bool {
         a.id == b.id && a.distanceM == b.distanceM && a.durationS == b.durationS &&
-        a.coordinates.count == b.coordinates.count && a.timingProfile == b.timingProfile
+        a.coordinates.count == b.coordinates.count && a.timingProfile == b.timingProfile && a.surfaceRuns == b.surfaceRuns
     }
 }
 
