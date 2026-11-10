@@ -246,6 +246,31 @@ final class DesertRouterTests: XCTestCase {
 
         XCTAssertFalse(options.isEmpty, "the measured grid contains a costed route from a mapped road to this pin")
     }
+
+    @MainActor func testLiveMapboxSnapEndpointsConnectToBothReportedThumamahPins() throws {
+        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
+        let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
+        // These are the actual final coordinates returned by Mapbox Directions for the
+        // city-origin test on 2026-11-10. Mapbox snapped to a nearby road; the offline grid
+        // must continue from that endpoint instead of treating it as the destination.
+        let cases: [(name: String, roadEnd: LngLat, target: LngLat)] = [
+            ("25.26679,46.53676",
+             LngLat(lng: 46.55734, lat: 25.27551),
+             LngLat(lng: 46.53676, lat: 25.26679)),
+            ("25.15844,46.62866",
+             LngLat(lng: 46.636295, lat: 25.165019),
+             LngLat(lng: 46.62866, lat: 25.15844))
+        ]
+
+        for item in cases {
+            let options = DesertRouter.options(grid, from: item.roadEnd, to: item.target, rain: false)
+            let route = try XCTUnwrap(options.first, "the bundled desert grid must connect Mapbox's snapped road endpoint to \(item.name)")
+            XCTAssertGreaterThan(route.distanceM, 0)
+            XCTAssertGreaterThanOrEqual(route.points.count, 2)
+            XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.points.last!, item.target), max(130, hypot(grid.dx, grid.dy) * 1.5))
+        }
+    }
 }
 
 private final class TestDesertRoadProvider: NavRoutingProvider {
