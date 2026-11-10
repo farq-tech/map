@@ -88,6 +88,16 @@ final class SaryAlbarqUITests: XCTestCase {
         let destination = NSPredicate(format: "label CONTAINS %@", selectedName)
         expectation(for: destination, evaluatedWith: line)
         waitForExpectations(timeout: 15)
+
+        /* The route picker must use the active map-picked leg, not the previous plan target. */
+        app.buttons["outing-actions"].tap()
+        let navigate = app.buttons["outing-navigate"]
+        XCTAssertTrue(navigate.waitForExistence(timeout: 5))
+        navigate.tap()
+        let pickerDestination = app.buttons["nav.pick.destination"]
+        XCTAssertTrue(pickerDestination.waitForExistence(timeout: 5))
+        XCTAssertTrue(pickerDestination.label.contains(selectedName), "picker should follow the active leg: \(pickerDestination.label)")
+        XCTAssertFalse(pickerDestination.label.contains("وجهة الخطة القديمة"), "picker must not fall back to the previous plan target")
     }
 
     private func attach(_ app: XCUIApplication, _ name: String) {
