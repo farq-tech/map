@@ -5,7 +5,7 @@
 ## تحديث موثق — 2026-11-10 23:10
 
 - راجعت PR #145 على الرأس `32d0011c697330f9644f6f9437de73ffc535e9f6`، بعد إدراج ميزات «طريق الرجعة» وتوثيق الشاشات ثم إصلاحين: `NavRoute.geometryRevision` يبطل لقطة PiP عند إنشاء مسار جديد حتى إذا تساوى عدد نقاطه ونهايتاه، وأصبحت أدوات قياس التوازي في `DesertRouterTests` actor-isolated بدل `NSLock` في async. أعدت سبع مجموعات على محاكي iPhone 18 Pro / iOS 27.2: `NavPiPSnapshotTests`, `DesertRouterTests`, `PlaceNamerTests`, `NavSessionAutoTests`, `TrailSessionTests`, `TripAutoNavStopTests`, `ReturnTripHybridTests`: **72/72 ناجحة، 0 فشل، 0 تخطٍّ**. حزمة Xcode المؤقتة حُذفت بعد تسجيل النتيجة. لا يثبت هذا المجموعة الكاملة أو واجهة PiP الفعلية أو جهازًا حقيقيًا أو تحسن الأداء بقياس.
-- PR #145 ما زال Draft ومفتوحًا. CI run `42892320171` لم يبدأ بسبب قفل الفوترة (مؤكد في annotation)، لا بسبب نتيجة الكود. Vercel Preview كان قيد الانتظار عند الفحص الأول؛ أعد التحقق قبل الدمج. التغييرات غير موجودة في Build 36.
+- PR #145 ما زال Draft ومفتوحًا. CI run `42892320171` لم يبدأ بسبب قفل الفوترة (مؤكد في annotation)، لا بسبب نتيجة الكود. Vercel Preview اكتمل بنجاح بعد الفحص الأول: https://vercel.com/farq/farq-map-investor/E7KgaccRXZuLWNL5XnwU3esN84Fd. التغييرات غير موجودة في Build 36.
 - بعد الإصلاح بقيت تحذيرات Swift غير مرتبطة في نطاقات أخرى بالاختبار (مثل `WeatherTests` واستخدام `Timer` عبر actor isolation)؛ لا تُعرض كأنها أُصلحت. أعد المجموعة الكاملة وواجهة PiP وقياسات الأداء والجهاز الفعلي قبل اعتبار الإصدار متحققًا.
 - حالة TestFlight أعيد فحصها من لقطة GitHub/ASC الموثقة: Build 36 صالح للاختبار الداخلي مع تفعيل الإتاحة التلقائية للمجموعتين؛ لم يثبت ظهور التحديث على جهاز المستخدم بعينه.
 
