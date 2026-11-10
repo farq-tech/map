@@ -30,6 +30,13 @@
 	<!-- Mapbox public token, from Config/Secrets.xcconfig (gitignored). -->
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>itfHuwiyaArabic-Regular.otf</string>
+		<string>itfHuwiyaArabic-Medium.otf</string>
+		<string>itfHuwiyaArabic-Bold.otf</string>
+		<string>itfHuwiyaArabic-Black.otf</string>
+	</array>
 	<!-- Farq map tiles TileJSON (apps/tiles), from FARQ_TILES_URL in Config/*.xcconfig. Empty = Mapbox roads as before. -->
 	<key>FarqTilesURL</key>
 	<string>$(FARQ_TILES_URL)</string>

@@ -20,9 +20,13 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<!-- Tajawal, the app's typeface (OFL), bundled in the extension too. -->
+	<!-- Huwiya, the app's Arabic typeface, bundled in the extension too. -->
 	<key>UIAppFonts</key>
 	<array>
+		<string>itfHuwiyaArabic-Regular.otf</string>
+		<string>itfHuwiyaArabic-Medium.otf</string>
+		<string>itfHuwiyaArabic-Bold.otf</string>
+		<string>itfHuwiyaArabic-Black.otf</string>
 		<string>Tajawal-Regular.ttf</string>
 		<string>Tajawal-Medium.ttf</string>
 		<string>Tajawal-Bold.ttf</string>

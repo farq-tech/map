@@ -51,6 +51,16 @@ final class QiblaTests: XCTestCase {
         XCTAssertEqual(Qibla.calibration(accuracy: 35), .poor)
     }
 
+    func testLocationAuthorizationAndFailuresLeaveTheWaitingState() {
+        XCTAssertEqual(QiblaLocationState.authorization(.notDetermined), .locating)
+        XCTAssertEqual(QiblaLocationState.authorization(.authorizedWhenInUse), .locating)
+        XCTAssertEqual(QiblaLocationState.authorization(.authorizedAlways), .locating)
+        XCTAssertEqual(QiblaLocationState.authorization(.denied), .denied)
+        XCTAssertEqual(QiblaLocationState.authorization(.restricted), .denied)
+        XCTAssertEqual(QiblaLocationState.failure(CLError(.denied)), .denied)
+        XCTAssertEqual(QiblaLocationState.failure(CLError(.locationUnknown)), .failed)
+    }
+
     func testQiblaIsOneEntryInTheToolsGrid() {
         let groups = LiveActionCatalog.groups(.init())
         let children = groups.flatMap(\.items).flatMap(\.children).map(\.id)
