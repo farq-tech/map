@@ -18,6 +18,8 @@ struct SaryAlbarqApp: App {
                 .task { await FarqTiles.check() }
                 /* Older bare «نقطة على الخريطة» recent places get their names once per launch (`PlaceNamer`). */
                 .task { RecentPlaces.nameOncePerLaunch() }
+                /* «دليل البر» (a large bundled file): read off the main thread soon after launch. */
+                .task { DesertGazetteer.prewarm() }
                 .environmentObject(model)
                 .environmentObject(model.location)
                 .environment(\.layoutDirection, .rightToLeft)

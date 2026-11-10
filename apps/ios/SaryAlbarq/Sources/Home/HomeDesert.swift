@@ -77,11 +77,13 @@ enum HomeDesertRules {
     static func merge(desert: [PlaceSearch.Place], places: [PlaceSearch.Place], limit: Int = PlaceSearch.maxResults,
                       desertOnly: Bool = false) -> [PlaceSearch.Place] {
         if desertOnly { return Array(desert.prefix(limit)) }
-        let names = Set(desert.map { DesertName.normalize($0.name) })
+        /* Each gazetteer row's name normalized once, not once per place-search row. */
+        let desertNames = desert.map { (point: $0.point, name: DesertName.normalize($0.name)) }
+        let names = Set(desertNames.map { $0.name })
         let rest = places.filter { p in
             let n = DesertName.normalize(p.name)
             if names.contains(n) { return false }
-            return !desert.contains { PlanGeo.meters($0.point, p.point) < 2000 && DesertName.normalize($0.name).contains(n) }
+            return !desertNames.contains { PlanGeo.meters($0.point, p.point) < 2000 && $0.name.contains(n) }
         }
         return Array((desert + rest).prefix(limit))
     }
