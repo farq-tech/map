@@ -26,16 +26,17 @@ struct NavPiPSnapshot: Equatable {
     var distanceRemaining: String
     var timeRemaining: String
     var route: [LngLat]
+    var routeRevision: UUID? = nil
     var progress: Double
 
     /// SwiftUI compares a fresh snapshot on every body evaluation. Comparing the whole coordinate
-    /// array there is O(route); the count and endpoints identify a route change cheaply (a new
-    /// route, reroute or cleared route always changes at least one of them in practice).
+    /// array there is O(route); a route revision changes when route geometry is newly constructed,
+    /// while remaining stable for progress-only snapshot updates.
     static func == (a: NavPiPSnapshot, b: NavPiPSnapshot) -> Bool {
         a.target == b.target && a.road == b.road && a.instruction == b.instruction && a.symbol == b.symbol
             && a.distanceToTurn == b.distanceToTurn && a.distanceRemaining == b.distanceRemaining
             && a.timeRemaining == b.timeRemaining && a.progress == b.progress
-            && a.route.count == b.route.count && a.route.first == b.route.first && a.route.last == b.route.last
+            && a.routeRevision == b.routeRevision
     }
 
     @MainActor static func make(nav: NavSession) -> NavPiPSnapshot? {
@@ -48,6 +49,7 @@ struct NavPiPSnapshot: Equatable {
                               distanceRemaining: nav.remainingMeters.map(SaryFormat.distance(meters:)) ?? "",
                               timeRemaining: nav.remainingSeconds.map(NavText.remaining(seconds:)) ?? "",
                               route: nav.active?.coordinates ?? [],
+                              routeRevision: nav.active?.geometryRevision,
                               progress: nav.active.map { route in
                                   guard route.distanceM > 0 else { return 0 }
                                   return min(1, max(0, 1 - (nav.remainingMeters ?? route.distanceM) / route.distanceM))

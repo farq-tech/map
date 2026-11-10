@@ -160,6 +160,10 @@ struct NavSurfaceRun: Equatable {
 struct NavRoute: Equatable, Identifiable {
     var id: String
     var coordinates: [LngLat]
+    /// Stable for copies of this route value; a newly constructed route gets a new token. Consumers
+    /// that need a cheap geometry-change signal (for example PiP snapshot equality) must not scan
+    /// the entire polyline on every SwiftUI body evaluation.
+    let geometryRevision = UUID()
     var distanceM: Double
     var durationS: Double
     var steps: [NavStep]

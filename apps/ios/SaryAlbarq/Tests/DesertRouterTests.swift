@@ -121,7 +121,8 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertTrue(route.via?.contains("درب بري محسوب") == true)
         XCTAssertGreaterThanOrEqual(route.coordinates.count, 3)
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
-        XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
+        let requestedAccessPoints = await base.requestedAccessPoints
+        XCTAssertGreaterThanOrEqual(requestedAccessPoints, 1)
         /* «طريق الرجعة» keeps where the street part ended (the city ↔ desert junction). */
         XCTAssertEqual(route.roadEnd, route.coordinates[1])
         XCTAssertEqual(ReturnRoute.roadEnd(of: route), route.coordinates[1])
@@ -207,7 +208,8 @@ final class DesertRouterTests: XCTestCase {
         // The street leg is [origin, access] and the origin is outside the raster, so the second
         // coordinate is the access the hybrid route was built from.
         XCTAssertEqual(route.coordinates.dropFirst().first, preferred, "the nearest connecting access wins")
-        XCTAssertGreaterThan(base.peakConcurrent, 1, "the street requests overlap instead of running one by one")
+        let peakConcurrent = await base.peakConcurrent
+        XCTAssertGreaterThan(peakConcurrent, 1, "the street requests overlap instead of running one by one")
     }
 
     func testDesertRouterDoesNotClampOutsidePointsToRasterEdge() {
@@ -248,7 +250,8 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertEqual(route.start, origin)
         XCTAssertTrue(route.hasUnpaved)
         XCTAssertTrue(route.via?.contains("درب بري محسوب") == true)
-        XCTAssertGreaterThanOrEqual(base.requestedAccessPoints, 1)
+        let requestedAccessPoints = await base.requestedAccessPoints
+        XCTAssertGreaterThanOrEqual(requestedAccessPoints, 1)
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), 130)
         XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
         XCTAssertEqual(route.steps.first?.roadName, "طريق المدينة",
@@ -260,7 +263,8 @@ final class DesertRouterTests: XCTestCase {
         // street leg is [origin, entry] with the origin outside the raster: the second coordinate
         // is the access the hybrid route was built from.
         let joined = try XCTUnwrap(route.coordinates.dropFirst().first)
-        let usedAccess = try XCTUnwrap(base.requestedAccess.first { $0 == joined })
+        let requestedAccess = await base.requestedAccess
+        let usedAccess = try XCTUnwrap(requestedAccess.first { $0 == joined })
         let options = DesertRouter.options(grid, from: usedAccess, to: target, rain: false)
         let desertOption = try XCTUnwrap(options.first { route.id.hasSuffix($0.mode.rawValue) })
         XCTAssertEqual(route.durationS, 1_200 + desertOption.minutes * 60, accuracy: 1,
@@ -287,43 +291,58 @@ final class DesertRouterTests: XCTestCase {
     }
 }
 
-/// The access-point street requests run concurrently, so the bookkeeping is locked.
+/// The access-point street requests run concurrently, so the bookkeeping is actor-isolated.
+private actor RequestedAccessBook {
+    private(set) var points: [LngLat] = []
+
+    func append(_ point: LngLat) { points.append(point) }
+    func count() -> Int { points.count }
+    func all() -> [LngLat] { points }
+}
+
 private final class TestDesertRoadProvider: NavRoutingProvider {
     var name = "test streets"
-    private let lock = NSLock()
-    private var accessPoints: [LngLat] = []
-    var requestedAccessPoints: Int { lock.lock(); defer { lock.unlock() }; return accessPoints.count }
+    private let accessBook = RequestedAccessBook()
+    var requestedAccessPoints: Int { get async { await accessBook.count() } }
     /// Every access point the street router was asked for, in arrival order.
-    var requestedAccess: [LngLat] { lock.lock(); defer { lock.unlock() }; return accessPoints }
+    var requestedAccess: [LngLat] { get async { await accessBook.all() } }
     let handler: (NavRouteRequest) async throws -> NavRoutePlan
 
     init(handler: @escaping (NavRouteRequest) async throws -> NavRoutePlan) { self.handler = handler }
 
     func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
         if request.target.name == "مدخل درب البر" {
-            lock.lock()
-            accessPoints.append(request.target.position)
-            lock.unlock()
+            await accessBook.append(request.target.position)
         }
         return try await handler(request)
     }
 }
 
 /// Counts concurrent calls to show the access requests overlap (each answer waits a little).
+private actor ConcurrencyProbe {
+    private var inFlight = 0
+    private(set) var peak = 0
+
+    func enter() {
+        inFlight += 1
+        peak = max(peak, inFlight)
+    }
+
+    func leave() { inFlight -= 1 }
+}
+
 private final class ConcurrencyProbeProvider: NavRoutingProvider {
     var name = "probe streets"
-    private let lock = NSLock()
-    private var inFlight = 0
-    private var peak = 0
-    var peakConcurrent: Int { lock.lock(); defer { lock.unlock() }; return peak }
+    private let probe = ConcurrencyProbe()
+    var peakConcurrent: Int { get async { await probe.peak } }
     let handler: (NavRouteRequest) throws -> NavRoutePlan
 
     init(handler: @escaping (NavRouteRequest) throws -> NavRoutePlan) { self.handler = handler }
 
     func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
-        lock.lock(); inFlight += 1; peak = max(peak, inFlight); lock.unlock()
+        await probe.enter()
         try? await Task.sleep(nanoseconds: 100_000_000)
-        lock.lock(); inFlight -= 1; lock.unlock()
+        await probe.leave()
         return try handler(request)
     }
 }
