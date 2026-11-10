@@ -1,4 +1,4 @@
-# حالة سَرى البارق — آخر تحديث 2026-11-10 16:08 (Asia/Riyadh)
+# حالة سَرى البارق — آخر تحديث 2026-11-10 16:24 (Asia/Riyadh)
 
 هذا سجل العمل المشترك. اقرأه قبل أي تغيير، وحدّث البند عند ظهور دليل جديد. الحالة أدناه مبنية على فحص GitHub وApp Store Connect والاختبارات المحلية في 2026-11-10؛ الفروع المفتوحة ليست جزءًا من التطبيق المنشور حتى تندمج وتُختبر.
 
@@ -6,6 +6,12 @@
 
 - أُعيدت اختبارات تسمية الأماكن على رأس PR #139 الحالي `1554518`: `PlaceNamerTests` **14/14** (`/tmp/Sary-PlaceNamer-1554518.xcresult`) واختبار رحلة الواجهة `ExploreUITests.testSavePlaceAndListIt` **1/1** (`/tmp/Sary-PlaceNamer-UI-1554518.xcresult`) على محاكي iPhone 18 Pro / iOS 27.2. أثناء اختبار الواجهة ظهر تحذير SwiftUI: `Publishing changes from within view updates is not allowed`. سجله يظهر عند انتظار شاشة الاستكشاف، قبل أول لمسة، والاختبار يبدأ بـ`-resetState`؛ لا يحدد Xcode الملف/السطر، لذلك لا ننسبه إلى حفظ المكان أو نصلحه بتأجيل عشوائي. لا يثبت الاختبار عمل Apple Geocoder حيًا أو الجهاز الفعلي.
 - PR #139 لا يزال مفتوحًا كمسودة و`UNSTABLE`؛ آخر فحص GitHub المسجل (`42608864272`، 2026-11-09) لم يبدأ بسبب قفل الفوترة، لذلك الاختبارات المحلية أعلاه هي الدليل المتاح على رأسه.
+
+## تحديث موثق — 2026-11-10 16:24
+
+- جولة `xcodebuild test` على PR #143 (`0d5818a`) على محاكي iPhone 18 Pro / iOS 27.2 وصلت إلى **1,389 ناجحًا، 1 فاشل، 2 متخطّيين** قبل أن أوقفها عند بدء UI suite؛ بقي على القرص نحو **416 ميغابايت**. سجل النتائج `/tmp/Sary-PR143-Full-AfterCacheCleanup.xcresult`، والملخص `/tmp/Sary-PR143-Full-AfterCacheCleanup-summary.json`. الاختبار الفاشل `AccountDeletionTests.testLocalWipeKeepsAppearanceAndOfflineAreas` وقع عند السطر 108 على `XCTAssertNotNil(IdentityStore.load())`، أي قبل تنفيذ مسح البيانات: الاختبار اعتمد على Keychain النظام ولم يثبت نجاح `IdentityStore.save`. أضفت في شجرة عمل PR #143 عزلًا لهذا الاختبار بـFakeKeychain والتحقق من نجاح الحفظ؛ التعديل **غير مختبر بعد** لأن المتاح انخفض إلى نحو 315 ميغابايت. اختبار UI الذي بدأ (`BackTrackUITests.testEnterAndLeaveFromTheControlCluster`) أُلغي بإيقاف الجولة، ولا يُحسب نجاحًا أو عيبًا في التطبيق. لذا لا تُسجل هذه الجولة كنجاح كامل.
+- لا توجد عملية `xcodebuild` عاملة عند الفحص. تحذيرات وقت التشغيل تضمنت تحذيرات SwiftUI غير محددة المصدر وتحذيرات AVAudioSession من ملفات اختبارات الصوت؛ لا ننسبها إلى التطبيق دون تتبع.
+- تحققت من فحص GitHub الخاص بـPR #143 (`42814375117`): لم يبدأ أي خطوة (`steps: []`) بسبب قفل الحساب المالي، بنص annotation: `The job was not started because your account is locked due to a billing issue.` هذا حاجز خارجي وليس نتيجة اختبار للكود. PR #143 ما زال مفتوحًا كمسودة، ولم ينتج عنه بناء جديد.
 
 ## تحديث موثق — 2026-11-10 16:01
 
