@@ -92,6 +92,7 @@ final class AppModel: ObservableObject {
             LocalDestinationStore.forgetAll()
             OutingLegStore.forgetAll()
             RecentPlaces.forget()
+            PlaceNameCache().forget()
             /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
             LocalAccountData.wipe()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,

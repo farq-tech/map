@@ -33,6 +33,7 @@ struct MapHomeScreen: View {
     @State private var desertPicked: DesertCategoryItem?
     private let desertService: DesertCategoryService = DesertCategoryRouter()
     @State private var selected: SelectedPlace?
+    @State private var selectedPointNameTask: Task<Void, Never>?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
     @State private var shortcuts = HomeShortcutStore.load()
@@ -95,6 +96,9 @@ struct MapHomeScreen: View {
                 setExpanded(true)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
+            recent = RecentPlaces.load()
         }
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
@@ -644,6 +648,8 @@ struct MapHomeScreen: View {
     }
 
     private func beginAssign(_ s: HomeShortcut) {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         assigning = s
         selected = nil
         setExpanded(true)
@@ -652,6 +658,8 @@ struct MapHomeScreen: View {
 
     private func runCategory(_ c: HomeCategory) {
         if category == c { clearSearch(); return }
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         category = c
         selected = nil
         desertPicked = nil
@@ -712,26 +720,48 @@ struct MapHomeScreen: View {
             return
         }
         searchFocused = false
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = s
         expanded = false
         cameraSeq += 1
-        camera = PlanCamera(kind: .point(LngLat(lng: s.destination.lng, lat: s.destination.lat), zoom: 14), id: cameraSeq)
+        let point = LngLat(lng: s.destination.lng, lat: s.destination.lat)
+        camera = PlanCamera(kind: .point(point, zoom: 14), id: cameraSeq)
+        guard PlaceLabel.isGeneric(s.destination.name) else { return }
+        selectedPointNameTask = Task {
+            let name = await PlaceNameResolver.shared.name(for: point, within: 3)
+            guard !Task.isCancelled, !PlaceLabel.isGeneric(name),
+                  var current = selected,
+                  PlaceLabel.isGeneric(current.destination.name),
+                  PlanGeo.meters(LngLat(lng: current.destination.lng, lat: current.destination.lat), point) < 2 else { return }
+            current.destination.name = name
+            selected = current
+        }
     }
 
     private func closePlace() {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = nil
         desertPicked = nil
     }
 
     /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
     private func start(_ d: OutingDestination) {
-        RecentPlaces.add(d)
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
+        let destination = selected.map(\.destination).flatMap { picked in
+            let a = LngLat(lng: picked.lng, lat: picked.lat)
+            let b = LngLat(lng: d.lng, lat: d.lat)
+            return PlanGeo.meters(a, b) < 2 ? picked : nil
+        } ?? d
+        RecentPlaces.add(destination)
         recent = RecentPlaces.load()
         if let outing = activeOuting {
-            DispatchQueue.main.async { model.open(outing.id, mapDestination: d) }
+            DispatchQueue.main.async { model.open(outing.id, mapDestination: destination) }
             return
         }
-        startFor = StartTarget(destination: d)
+        startFor = StartTarget(destination: destination)
     }
 
     private var placeStartTitle: String {

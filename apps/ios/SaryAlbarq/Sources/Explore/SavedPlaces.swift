@@ -72,6 +72,8 @@ final class SavedPlacesStore: ObservableObject {
 
     @Published private(set) var places: [SavedPlace] = []
     private let url: URL?
+    /// Names places saved without one (tests inject their own).
+    var namer: PlaceNameResolver = .shared
 
     init(fileName: String = "saved-places-v1.json") {
         url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent(fileName)
@@ -84,6 +86,22 @@ final class SavedPlacesStore: ObservableObject {
         dec.dateDecodingStrategy = .iso8601
         let list = (try? dec.decode([SavedPlace].self, from: d)) ?? []
         places = SavedPlaceRules.sorted(list.filter { SavedPlaceRules.valid($0.position) })
+        nameBarePlaces()
+    }
+
+    /// «مكان محفوظ» / «نقطة على الخريطة» get the place's real name (`PlaceNamer`), unless renamed meanwhile.
+    func nameBarePlaces(resolver: PlaceNameResolver? = nil) {
+        let resolver = resolver ?? namer
+        let bare = places.filter { PlaceLabel.isGeneric($0.name) }
+        guard !bare.isEmpty else { return }
+        Task { @MainActor in
+            for b in bare {
+                let n = await resolver.name(for: b.position, within: 5)
+                guard !PlaceLabel.isGeneric(n), let i = places.firstIndex(where: { $0.id == b.id }), PlaceLabel.isGeneric(places[i].name) else { continue }
+                places[i].name = SavedPlaceRules.cleanName(n)
+                save()
+            }
+        }
     }
 
     private func save() {
@@ -100,6 +118,7 @@ final class SavedPlacesStore: ObservableObject {
         let place = SavedPlace(id: UUID().uuidString, name: SavedPlaceRules.cleanName(name), icon: icon, lat: p.lat, lng: p.lng, createdAt: now)
         places = SavedPlaceRules.sorted(places + [place])
         save()
+        nameBarePlaces()
         return place
     }
 
