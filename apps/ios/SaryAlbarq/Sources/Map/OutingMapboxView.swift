@@ -158,6 +158,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var onCenter: (MapCenterReading) -> Void = { _ in }
     /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
     var hiRes = HiResRequest.off
+    /// Fresh device location for the always-on map direction to the Kaaba (nil hides it).
+    var qiblaOrigin: LngLat?
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -228,6 +230,7 @@ struct OutingMapboxView: UIViewRepresentable {
         HiResImagery.of(map).update(hiRes)
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
         WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome))
+        QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
