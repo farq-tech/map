@@ -124,11 +124,16 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     }
 
     private func routesViaMappedAccess(_ request: NavRouteRequest, region: String, grid: DesertGrid) async -> MappedAccessResult? {
+        let accesses = accessPoints(grid, region: region, near: request.target.position)
+        guard !accesses.isEmpty else { return nil }
+        // The street requests are independent network calls: send them together instead of one
+        // after another (up to 4 round trips per route and reroute). The answers are then
+        // evaluated in the original preference order, and the raster legs (3 A* each) only until
+        // the first access that connects, exactly as the sequential loop did.
+        let roads = await streetRoutes(request, to: accesses)
         var result = MappedAccessResult()
-        for access in grid.accessPoints(near: request.target.position) {
-            var accessRequest = request
-            accessRequest.target = NavTarget(source: .point, name: "مدخل درب البر", position: access)
-            guard let road = try? await base.routes(accessRequest), !road.routes.isEmpty else { continue }
+        for (access, fetched) in zip(accesses, roads) {
+            guard let road = fetched, !road.routes.isEmpty else { continue }
             var combined: [NavRoute] = []
             for route in road.routes {
                 guard let end = route.end else { continue }
@@ -160,6 +165,46 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return result
     }
 
+
+    /// One street route request per access point, all in flight at once. Answers come back in
+    /// the accesses' order; a failed request is nil (as `try?` was in the sequential loop).
+    private func streetRoutes(_ request: NavRouteRequest, to accesses: [LngLat]) async -> [NavRoutePlan?] {
+        let base = UncheckedSendable(self.base)
+        return await withTaskGroup(of: UncheckedSendable<(Int, NavRoutePlan?)>.self) { group in
+            for (i, access) in accesses.enumerated() {
+                var accessRequest = request
+                accessRequest.target = NavTarget(source: .point, name: "مدخل درب البر", position: access)
+                let job = UncheckedSendable(accessRequest)
+                group.addTask {
+                    let plan = try? await base.value.routes(job.value)
+                    return UncheckedSendable((i, plan))
+                }
+            }
+            var out = [NavRoutePlan?](repeating: nil, count: accesses.count)
+            for await answer in group { out[answer.value.0] = answer.value.1 }
+            return out
+        }
+    }
+
+    /// `DesertGrid.accessPoints` scans every cell of the raster. A reroute asks again for the
+    /// same destination, so keep the last few answers on this provider (whose `gridForRegion`
+    /// gives the same grid for a region).
+    private let accessLock = NSLock()
+    private var accessCache: [String: [LngLat]] = [:]
+
+    private func accessPoints(_ grid: DesertGrid, region: String, near target: LngLat) -> [LngLat] {
+        let key = "\(region)|\(grid.rows)x\(grid.cols)|\(target.lat)|\(target.lng)"
+        accessLock.lock()
+        let cached = accessCache[key]
+        accessLock.unlock()
+        if let cached { return cached }
+        let points = grid.accessPoints(near: target)
+        accessLock.lock()
+        if accessCache.count >= 16 { accessCache.removeAll() }
+        accessCache[key] = points
+        accessLock.unlock()
+        return points
+    }
 
     static func regionName(containing point: LngLat) -> String? {
         DesertGrid.bboxes.first { $0.value.contains(point) }?.key
@@ -377,6 +422,13 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
 }
 
 
+
+/// Carries a value the compiler cannot prove `Sendable` (a provider, a plan with its native
+/// SDK object) into or out of a child task. Each value goes to exactly one task.
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
 
 /// Provider-neutral request parameters, from the options sheet.
 /// Mapbox: `profile`, `exclude`, `language`, `voice_units`; Valhalla: costing + `exclude_unpaved` / `use_tolls`.

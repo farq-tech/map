@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // «مخطط دروب البر»: the easiest / shortest / balanced way across the desert to a point, on the
 // phone and offline, over a bundled cost grid (~90 m) built from open data by
@@ -76,10 +77,15 @@ struct DesertGrid {
         try? (d as NSData).decompressed(using: .zlib) as Data
     }
 
+    /// The bundled grid for `region`, read and inflated once and then kept in memory (routing,
+    /// reroutes and the planner sheet all ask for it; parsing costs a 0.4–1.5 MB read and a full
+    /// inflate each time). Thread-safe: callers run off the main thread. A memory warning drops it.
     static func bundled(_ region: String) -> DesertGrid? {
-        guard let url = Bundle.main.url(forResource: "routes-\(region)", withExtension: "bin"),
-              let data = try? Data(contentsOf: url) else { return nil }
-        return load(data)
+        BundledGridCache.grid(region) {
+            guard let url = Bundle.main.url(forResource: "routes-\(region)", withExtension: "bin"),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return load(data)
+        }
     }
 
     /// The bundled region that holds both points.
@@ -132,6 +138,36 @@ struct DesertGrid {
             if chosen.count == limit { break }
         }
         return chosen
+    }
+}
+
+/// Per-region cache behind `DesertGrid.bundled`. The arrays are copy-on-write, so handing out
+/// the cached struct shares its storage instead of copying megabytes.
+private enum BundledGridCache {
+    private static let lock = NSLock()
+    private static var grids: [String: DesertGrid] = [:]
+    private static let memoryWarning: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+    ) { _ in
+        BundledGridCache.clear()
+    }
+
+    static func grid(_ region: String, load: () -> DesertGrid?) -> DesertGrid? {
+        _ = memoryWarning
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = grids[region] { return cached }
+        // Loaded under the lock so two concurrent first requests do not both parse the file.
+        // A missing grid is not cached (cheap to look up, and never expected in a release build).
+        guard let grid = load() else { return nil }
+        grids[region] = grid
+        return grid
+    }
+
+    static func clear() {
+        lock.lock()
+        grids.removeAll()
+        lock.unlock()
     }
 }
 

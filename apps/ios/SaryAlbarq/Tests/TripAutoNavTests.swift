@@ -585,6 +585,17 @@ final class NavSessionAutoTests: XCTestCase {
         n.end()
     }
 
+    /// A long stretch without signal must not re-run the whole routing chain every 20 s.
+    func testOfflineRetryBacksOffExponentiallyUpToFiveMinutes() {
+        XCTAssertEqual(NavSession.retryDelay(attempt: 0, base: 20), 20)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1, base: 20), 40)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 2, base: 20), 80)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 4, base: 20), 300, "capped at five minutes")
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1_000, base: 20), 300)
+        XCTAssertEqual(NavSession.retryDelay(attempt: 3, base: 600), 600, "a longer configured interval is kept")
+        XCTAssertEqual(NavSession.retryDelay(attempt: 1, base: 0.05), 0.1, accuracy: 1e-9)
+    }
+
     func testAPersonsOwnPlanningIsNotAuto() async {
         let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
         let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
