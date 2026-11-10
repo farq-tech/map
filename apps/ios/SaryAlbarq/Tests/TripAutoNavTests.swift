@@ -361,6 +361,25 @@ final class ScriptedRouter: NavRoutingProvider {
     }
 }
 
+/// An engine whose start takes a while (like the Mapbox one resolving its routes first).
+@MainActor
+final class SlowStartEngine: NavGuidanceEngine {
+    var onEvent: (NavGuidanceEvent) -> Void = { _ in }
+    private(set) var startCalled = false
+    private(set) var startFinished = false
+    private(set) var running = false
+
+    func start(route: NavRoute, plan: NavRoutePlan, target: NavTarget) async throws {
+        startCalled = true
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        running = true
+        startFinished = true
+    }
+
+    func stop() { running = false }
+    func ingest(_ fix: DeviceFix) {}
+}
+
 @MainActor
 final class NavSessionAutoTests: XCTestCase {
     private var mutedBefore: Any?
@@ -461,6 +480,47 @@ final class NavSessionAutoTests: XCTestCase {
         XCTAssertFalse(n.auto)
         XCTAssertNil(n.fallback)
         XCTAssertEqual(router.calls, 2)
+    }
+
+    /// Build 36 field bug: the blue location arrow stayed after «أنهِ الطلعة». Ending a person's own
+    /// guidance (a map point, offline → bearing) stops its GPS and its road-route retries for good.
+    func testEndingPersonalGuidanceStopsItsGPSAndRetries() async {
+        let point = NavTarget(source: .point, name: "نقطة برية", position: campPos)
+        let router = ScriptedRouter([.failure(.offline)])
+        let n = NavSession(provider: router, makeEngine: { _ in LocalGuidanceEngine() })
+        n.muted = true
+        n.retryInterval = 0.05
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: point)
+        await wait("temporary bearing guidance") { n.phase == .offRoad }
+        XCTAssertTrue(n.isLocating, "the bearing leg runs on its own location stream")
+
+        n.end()
+        XCTAssertFalse(n.isLocating)
+        XCTAssertEqual(n.phase, .idle)
+        let calls = router.calls
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(router.calls, calls, "no road-route retry after the end")
+        XCTAssertEqual(n.phase, .idle)
+        XCTAssertFalse(n.isLocating)
+    }
+
+    /// «إنهاء» while the engine is still starting (the Mapbox engine awaits before it starts its
+    /// trip): the engine must not be left running behind the ended guidance.
+    func testEndWhileTheEngineIsStartingLeavesNothingRunning() async {
+        let engine = SlowStartEngine()
+        let router = ScriptedRouter([.success(NavRoutePlan(routes: [road(to: campPos)]))])
+        let n = NavSession(provider: router, makeEngine: { _ in engine })
+        n.muted = true
+        n.myFix = { fix(olaya) }
+
+        n.startImmediately(to: NavTarget(source: .point, name: "نقطة", position: campPos))
+        await wait("the engine is starting") { engine.startCalled }
+        n.end()
+        await wait("the engine finished starting", timeout: 3) { engine.startFinished }
+        await wait("and was stopped again") { !engine.running }
+        XCTAssertEqual(n.phase, .idle)
     }
 
     func testOffRoadDestinationRoadsThenBearing() async {

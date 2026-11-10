@@ -612,6 +612,7 @@ final class NavSession: ObservableObject {
         attach(e)
         Task { [weak self] in
             guard let self else { return }
+            var started: NavGuidanceEngine = e
             do {
                 try await e.start(route: r, plan: self.plan, target: t)
             } catch {
@@ -621,10 +622,15 @@ final class NavSession: ObservableObject {
                 /* The SDK could not take this route (e.g. a custom route it cannot parse):
                  * follow it ourselves rather than give up. */
                 e.stop()
+                guard self.engine === e else { return }
                 let local = LocalGuidanceEngine()
                 self.attach(local)
+                started = local
                 try? await local.start(route: r, plan: self.plan, target: t)
             }
+            /* «إنهاء» (or the trip's end) came while the engine was still starting: `end()` stopped it
+             * before it ran, so stop it again now — never a Mapbox trip and its GPS left behind. */
+            guard self.engine === started else { started.stop(); return }
             let opening = self.openingWithETA(intro)
             self.openingVoicePending = false
             if r.steps.count > 1, let line = self.guidanceLine(stepIndex: 1, distanceM: r.steps.first?.distanceM ?? 0, opening: true) {
@@ -778,6 +784,9 @@ final class NavSession: ObservableObject {
             break
         }
     }
+
+    /// Our own location stream (`NavLocator`) is running (tests: it must stop with the guidance).
+    var isLocating: Bool { locator.running }
 
     func end() {
         fetchTask?.cancel()

@@ -304,6 +304,9 @@ final class LiveOutingController: ObservableObject {
     /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
     /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
     var closeHandled = false
+    /// The trip ended (or I left / was removed) and this screen's guidance was stopped ONCE
+    /// (`stopGuidanceWhenTripOver`); guidance the person starts afterwards is theirs.
+    var tripEndHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -551,6 +554,7 @@ final class LiveOutingController: ObservableObject {
         updateSpeed()
         updateTrip()
         autoNavSessionChanged()
+        stopGuidanceWhenTripOver()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -989,7 +993,8 @@ final class LiveOutingController: ObservableObject {
                 guard let self, let st = self.session.view?.status else { return }
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
             },
-            endOuting: { [weak self] in Task { await self?.session.setStatus("end") } },
+            /* The same path as the trip strip's «أنهِ الطلعة»: the guidance (and its own GPS) ends too. */
+            endOuting: { [weak self] in self?.endTrip() },
             leaveOuting: { [weak self] in self?.leaveOuting() }
         )
         return a

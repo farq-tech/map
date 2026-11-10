@@ -107,6 +107,24 @@ extension LiveOutingController {
         Task { await session.setStatus("end") }
     }
 
+    /// The trip is over on this phone (ended here or by the leader's phone, or I left / was
+    /// removed): every guidance of this screen stops, once. `TripAutoNav` stops only the trip's own
+    /// guidance; a person's own («روح له», a map point via `NavSession.startImmediately`) used to
+    /// keep its GPS (`NavLocator` / the Mapbox trip), its offline retries and the blue location
+    /// arrow running after the trip ended.
+    func stopGuidanceWhenTripOver() {
+        guard !tripEndHandled, session.closedReason != nil || session.view?.status == .ended else { return }
+        tripEndHandled = true
+        if nav.isActive || nav.phase == .planning { nav.end() }
+        stopAutoFollow()
+        if backTrack != nil { stopBackTrack() }
+        if fixWait != nil {
+            fixWait = nil
+            location.endFreshFixRequest()
+        }
+        if modal == .navOptions || modal == .navSteps { modal = nil }
+    }
+
     /// Return trip: guide back along the trail of the outing it came back from.
     func followOldTrail() {
         guard let old = returnOrigin, let t = TrailStore.load(old), t.points.count >= 2 else {
