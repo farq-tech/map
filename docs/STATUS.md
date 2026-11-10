@@ -1,4 +1,4 @@
-# حالة سَرى البارق — آخر تحديث 2026-11-11 01:56 (Asia/Riyadh)
+# حالة سَرى البارق — آخر تحديث 2026-11-11 01:58 (Asia/Riyadh)
 
 ## اختبار المجموعة وإصلاح نشر الطقس — 2026-11-11 01:51
 
@@ -6,12 +6,12 @@
 - تحذيرات المجموعة تضمنت نشر SwiftUI داخل تحديث العرض، تفعيل AVAudioSession المتزامن على المسار الرئيسي، وانتظار QoS أدنى. أثبت backtrace أن `WeatherOverlay.update(_:)` كان يصل إلى `apply()` وينشر حالة `WeatherLegendModel` تزامنيًا من `OutingMapboxView.updateUIView`. عُدّل ليجدول تطبيق الطبقة على دورة main التالية مع دمج التحديثات، وأُزيل default argument الذي كان يولّد تحذير عزل actor.
 - عُزل إخفاق `DesertGazetteerUITests.testNufudChipListsRealPlacesAndStartsATrip`: سجل إمكانية الوصول النهائي أثبت أن إعداد `-demo` زرع طلعة نشطة، فحوّل الضغط إلى الطلعة الحالية بينما الاختبار كان ينتظر إنشاء طلعة جديدة. أُضيف `-demoEmpty` لإزالة الطلعات المزروعة فقط لهذا السيناريو؛ الاختبار المعاد **1/1 ناجح، بلا runtime warnings**. هذا إصلاح لشرط الاختبار، لا تغيير لسلوك التطبيق مع طلعة نشطة.
 - على الكود بعد إصلاح الطقس (`WeatherLayersTests` + `ExploreUITests.testWeatherRainLayerAndPeriodControls`) **6/6 ناجحة، 0 فشل، 0 تخطٍ، و0 runtime warnings** على المحاكي. مراقبة سجل النظام خلال اختبار واجهة المطر لم ترصد تحذير `Publishing changes from within view updates`. هذا إثبات مركز لإصلاح الطقس، ولا يعالج تحذيرات الصوت/QoS أو بقية إخفاقات المجموعة ولا يعادل اختبار جهاز حقيقي.
-- PR #144 محدث إلى الرأس `227da06cbef25cc5cd7e8147f0c411bc7bcd9f5d`; CI run `42918958167` في حالة queued، وVercel Preview قيد النشر عند آخر تحقق. الرؤوس السابقة فشلت في CI دون خطوات تنفيذ؛ لا توجد نتيجة CI للشيفرة. لا يوجد Build/TestFlight لهذا الرأس. PR #141 محدث على الفرع `docs/status-2026-11-09` لتسجيل هذه الأدلة.
+- PR #144 محدث إلى الرأس `227da06cbef25cc5cd7e8147f0c411bc7bcd9f5d`; Vercel Preview ناجح، وCI run `42918958167` فشل قبل أي خطوة. GitHub annotation: “The job was not started because your account is locked due to a billing issue.” لا توجد نتيجة CI للشيفرة. لا يوجد Build/TestFlight لهذا الرأس. PR #141 محدث على الفرع `docs/status-2026-11-09` لتسجيل هذه الأدلة.
 - الإجراء: Codex، 2026-11-12: تتبع إخفاقات المجموعة الـ17 كلٌّ على حدة، وخصوصًا convoy والبحث/الدعوات والوصول؛ تتبع تحذيرات الصوت وQoS من backtrace. أعد المجموعة بعد إصلاح المسببات، ثم تحقق من Preview/CI؛ لا ترفع TestFlight قبل اجتياز بوابة الإصدار.
 
-## حالة التوثيق والبوابات — 2026-11-11 00:30
+## حالة التوثيق والبوابات — 2026-11-11 01:58
 
-- PR #141 عند الرأس الحالي `2f85442dd24ca913a51580e14b57adc195ce4814` ما زال Draft ومفتوحًا؛ Vercel Preview ناجح. CI run `42905511011` فشل قبل الخطوات، وannotation تؤكد قفل الحساب بسبب مشكلة فوترة GitHub Actions؛ لا توجد نتيجة CI للشيفرة.
+- PR #141 عند الرأس الحالي `a3f9166287938d58ff2535ba76f405cba5d6a17b` ما زال Draft ومفتوحًا؛ Vercel Preview قيد النشر عند آخر تحقق. CI run `42919065883` فشل قبل الخطوات، وannotation تؤكد قفل الحساب بسبب مشكلة فوترة GitHub Actions؛ لا توجد نتيجة CI للشيفرة.
 - نتائج التحقق على رأس PR #145 `eb89ee52d7e634712b05d0cb215fb6aadb7c5d7f`: اختبارات البلاطات Python 7/7، خادم tiles 5/5، واختبارات DesertRouter iOS 15/15. لا تشمل بناء dataset وطني أو endpoint إنتاجي ناجح؛ manifest الإنتاج ما زال 404 كما هو موثق أدناه.
 
 ## إصلاح تحذيرات SwiftUI — 2026-11-11 00:28
