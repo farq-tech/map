@@ -379,3 +379,51 @@ struct FollowCameraSmoother: Equatable {
         return (out, settling)
     }
 }
+
+// MARK: - One-shot camera moves
+
+/// The map's one-shot camera moves (fit the group / a route, go to a member or a point,
+/// recenter on me) share these lengths, so every map in the app eases the same way:
+/// a nearby hop is quick, a long one has time to be followed, and under Reduce Motion
+/// the camera cuts straight to the result (no travel to follow). Pure (`FollowCameraTests`).
+enum MapCameraMotion: Equatable {
+    /// «موقعي» / recenter: the camera is usually close already.
+    case recenter
+    /// Go to a member, the rally point, a station, a planned point.
+    case focus
+    /// Frame several points (the group, a route, a trail).
+    case fit
+    /// A camera setting changes in place (the 3D terrain tilt).
+    case tilt
+
+    var duration: TimeInterval {
+        switch self {
+        case .recenter: return 0.6
+        case .focus: return 0.8
+        case .fit: return 0.9
+        case .tilt: return 0.8
+        }
+    }
+
+    /// A small hop (the target is nearly on screen already) takes this instead.
+    static let nudge: TimeInterval = 0.35
+    static let nudgeShiftPt = 48.0
+    static let nudgeZoom = 0.35
+
+    /// The ease length. `shiftPt` is how far the centre travels on screen, when known.
+    func duration(reduceMotion: Bool, shiftPt: Double? = nil, zoomDelta: Double = 0) -> TimeInterval {
+        if reduceMotion { return 0 }
+        if let s = shiftPt, s < Self.nudgeShiftPt, abs(zoomDelta) < Self.nudgeZoom { return min(duration, Self.nudge) }
+        return duration
+    }
+
+    /// Reduce Motion as the app resolves it (same rule as `SaryTheme.resolve`): the app's own
+    /// «أقل حركة» / «كاملة» wins over the system switch.
+    static func reduce(preference: SaryMotionPreference, system: Bool) -> Bool {
+        switch preference {
+        case .system: return system
+        case .reduced: return true
+        case .full: return false
+        }
+    }
+}

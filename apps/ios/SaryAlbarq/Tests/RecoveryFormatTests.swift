@@ -32,4 +32,21 @@ final class RecoveryFormatTests: XCTestCase {
         XCTAssertTrue(url!.hasPrefix("data:image/jpeg;base64,"))
         XCTAssertNotNil(AvatarCodec.image(from: url))
     }
+
+    /// The decoded avatar is cached by its data URL: redraws reuse the same image, not a new decode.
+    func testAvatarDecodeIsCachedPerDataURL() {
+        let small = UIGraphicsImageRenderer(size: CGSize(width: 300, height: 300)).image { c in
+            UIColor.orange.setFill()
+            c.fill(CGRect(x: 0, y: 0, width: 300, height: 300))
+        }
+        let url = AvatarCodec.dataURL(from: small)
+        XCTAssertNotNil(url)
+        let a = AvatarCodec.image(from: url)
+        let b = AvatarCodec.image(from: url)
+        XCTAssertNotNil(a)
+        XCTAssertTrue(a === b)
+        XCTAssertNil(AvatarCodec.image(from: nil))
+        XCTAssertNil(AvatarCodec.image(from: "https://example.com/a.jpg"))
+        XCTAssertNil(AvatarCodec.image(from: "data:image/jpeg;base64,!!!not-base64!!!"))
+    }
 }

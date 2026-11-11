@@ -65,7 +65,7 @@ struct WaypointsSection: View {
     }
 
     private var footer: String {
-        "تظهر لكل الربع، وتبقى بعد نهاية الطلعة. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
+        "تظهر لكل الأصدقاء، وتبقى بعد نهاية الطلعة. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
     }
 
     private var myPoint: Geo.LatLng? {
@@ -97,7 +97,7 @@ struct WaypointRow: View {
                     let to = Geo.LatLng(lat: waypoint.lat, lng: waypoint.lng)
                     HStack(spacing: 4) {
                         Image(systemName: "location.north.fill")
-                            .font(.system(size: 11, weight: .bold))
+                            .saryGlyph(11, weight: .bold)
                             .rotationEffect(.degrees(LiveOutingPresenter.relative(Geo.bearingDeg(from, to), mapBearing: mapBearing)))
                             .environment(\.layoutDirection, .leftToRight)
                         Text(SaryFormat.distance(meters: Geo.haversineMeters(from, to))).saryNumber(.footnote, weight: .bold)
@@ -121,6 +121,9 @@ struct WaypointRow: View {
 struct ConvoySection: View {
     @ObservedObject var controller: LiveOutingController
     @ObservedObject var features: OutingFeaturesModel
+    /// The sheet's participants for this render: the lead and tail rows read their presence from
+    /// it instead of each running a participants pass of their own.
+    var participants: [ParticipantUI]
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -163,19 +166,18 @@ struct ConvoySection: View {
     private func roleRow(_ r: ConvoyRole, _ uid: String?, _ v: OutingView) -> some View {
         let p = theme.palette
         let m = uid.flatMap { v.members[$0] }
-        let parts = Dictionary(LiveOutingPresenter.participants(controller.input).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let live = uid.flatMap { parts[$0] }?.presence.isLive ?? false
+        let live = uid.flatMap { id in participants.first { $0.id == id } }?.presence.isLive ?? false
         return HStack(spacing: theme.space(.m)) {
             Label(r.label, systemImage: ConvoyBadgeUI(r).symbol)
                 .saryText(.footnote, weight: .bold)
                 .foregroundStyle(p.onAccent)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(p.accent))
-            Text(m.map { $0.user_id == v.myId ? "أنت" : $0.display_name } ?? "لم تُحدَّد")
+            Text(m.map { $0.user_id == v.myId ? "أنت" : $0.display_name } ?? "ما تحدد")
                 .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
             Spacer()
             if m != nil {
-                Text(live ? "مباشر" : "موقعه قديم").saryText(.caption, weight: .bold).foregroundStyle(live ? p.liveText : p.textTertiary)
+                Text(live ? "مباشر" : "موقعه قديم").saryText(.caption, weight: .bold).foregroundStyle(live ? p.liveText : p.textSecondary)
             }
         }
         .frame(minHeight: theme.minTarget)
@@ -303,7 +305,7 @@ struct WaypointComposer: View {
                     .buttonStyle(.saryPrimary)
                     .disabled(ServerRules.cleanText(title, max: WaypointRules.titleMax) == nil || features.saving || photoBusy)
                     .accessibilityIdentifier("waypoint.save")
-                Text("تظهر النقطة واسمك لربع الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                Text("تظهر النقطة واسمك لأصدقاء الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.l))
         }
@@ -464,7 +466,7 @@ struct WaypointCard: View {
         .confirmationDialog("تحذف «\(w.title)»؟", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("احذفها للجميع", role: .destructive) { Task { await features.delete(w.id) } }
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("تختفي النقطة من خريطة كل الربع.") }
+        } message: { Text("تختفي النقطة من خريطة كل الأصدقاء.") }
     }
 
     private func subtitle(_ w: Waypoint) -> String {

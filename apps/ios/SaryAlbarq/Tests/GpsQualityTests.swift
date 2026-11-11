@@ -284,3 +284,194 @@ final class GpsQualityTests: XCTestCase {
         XCTAssertEqual(LiveOutingPresenter.sharing(i), .starting, "a stale fix is not shown as live")
     }
 }
+
+// MARK: - «أداء التطبيق» (MetricKit summaries, docs/METRICS.md)
+
+/// The MetricKit summary is parsed from `jsonRepresentation()` dictionaries (never `MX*` objects),
+/// kept in a 14-entry ring buffer, and round-trips through its JSON file.
+final class MetricsSummaryTests: XCTestCase {
+    private func dict(_ json: String) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+    }
+
+    static let daily = """
+    {
+      "appVersion": "1.4",
+      "timeStampBegin": "2026-11-09 21:00:00 +0000",
+      "timeStampEnd": "2026-11-10 20:59:00 +0000",
+      "metaData": {"appBuildVersion": "41", "osVersion": "iPhone OS 18.1 (22B83)", "regionFormat": "SA", "deviceType": "iPhone15,2"},
+      "applicationLaunchMetrics": {
+        "histogrammedTimeToFirstDrawKey": {"histogramNumBuckets": 3, "histogramValue": {
+          "0": {"bucketStart": "100 ms", "bucketEnd": "120 ms", "bucketCount": 10},
+          "1": {"bucketStart": "300 ms", "bucketEnd": "320 ms", "bucketCount": 5},
+          "2": {"bucketStart": "1000 ms", "bucketEnd": "1020 ms", "bucketCount": 5}}},
+        "histogrammedOptimizedTimeToFirstDrawKey": {"histogramNumBuckets": 1, "histogramValue": {
+          "0": {"bucketStart": "50 ms", "bucketEnd": "60 ms", "bucketCount": 9}}},
+        "histogrammedResumeTime": {"histogramNumBuckets": 1, "histogramValue": {
+          "0": {"bucketStart": "200 ms", "bucketEnd": "220 ms", "bucketCount": 3}}}
+      },
+      "applicationTimeMetrics": {"cumulativeForegroundTime": "7200 sec", "cumulativeBackgroundTime": "600 sec", "cumulativeBackgroundLocationTime": "300 sec"},
+      "applicationResponsivenessMetrics": {"histogrammedAppHangTime": {"histogramNumBuckets": 2, "histogramValue": {
+        "0": {"bucketStart": "0 ms", "bucketEnd": "500 ms", "bucketCount": 4},
+        "1": {"bucketStart": "1000 ms", "bucketEnd": "2000 ms", "bucketCount": 2}}}},
+      "cpuMetrics": {"cumulativeCPUTime": "100 sec", "cumulativeCPUInstructions": "100 kiloinstructions"},
+      "gpuMetrics": {"cumulativeGPUTime": "20 sec"},
+      "memoryMetrics": {"peakMemoryUsage": "204800 kB", "averageSuspendedMemory": {"averageValue": "100000 kB", "standardDeviation": 0, "sampleCount": 500}},
+      "locationActivityMetrics": {"cumulativeBestAccuracyForNavigationTime": "600 sec", "cumulativeHundredMetersAccuracyTime": "60 sec"},
+      "displayMetrics": {"averagePixelLuminance": {"averageValue": "50 apl", "standardDeviation": 0, "sampleCount": 500}},
+      "cellularConditionMetrics": {"cellConditionTime": {"histogramNumBuckets": 2, "histogramValue": {
+        "0": {"bucketStart": "1 bars", "bucketEnd": "1 bars", "bucketCount": 20},
+        "1": {"bucketStart": "3 bars", "bucketEnd": "3 bars", "bucketCount": 5}}}},
+      "networkTransferMetrics": {"cumulativeCellularDownload": "51200 kB", "cumulativeCellularUpload": "1024 kB", "cumulativeWifiDownload": "0 kB", "cumulativeWifiUpload": "0 kB"},
+      "diskIOMetrics": {"cumulativeLogicalWrites": "2048 kB"},
+      "applicationExitMetrics": {
+        "foregroundExitData": {"cumulativeAbnormalExitCount": 2, "cumulativeNormalAppExitCount": 0},
+        "backgroundExitData": {"cumulativeMemoryPressureExitCount": 1, "cumulativeAppWatchdogExitCount": 0}
+      },
+      "animationMetrics": {"scrollHitchTimeRatio": "3.5 ms per s"},
+      "signpostMetrics": [
+        {"signpostName": "search", "signpostCategory": "sary", "totalSignpostCount": 7,
+         "signpostIntervalData": {"histogrammedSignpostDurations": {"histogramNumBuckets": 1, "histogramValue": {
+           "0": {"bucketStart": "400 ms", "bucketEnd": "420 ms", "bucketCount": 7}}},
+           "signpostCumulativeCPUTime": "30 ms"}}
+      ]
+    }
+    """
+
+    func testDailyExtraction() throws {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let s = MetricsExtract.daily(try dict(Self.daily), receivedAt: at)
+        XCTAssertEqual(s.kind, .daily)
+        XCTAssertEqual(s.appVersion, "1.4")
+        XCTAssertEqual(s.appBuild, "41")
+        XCTAssertEqual(s.periodEnd, "2026-11-10 20:59:00 +0000")
+        // Launch: the plain first-draw histogram, not the "Optimized" twin.
+        XCTAssertEqual(s.firstDrawMedianMs, 110)
+        XCTAssertEqual(s.firstDrawP90Ms, 1010)
+        XCTAssertEqual(s.launchSamples, 20)
+        XCTAssertEqual(s.resumeMedianMs, 210)
+        // Hangs: 4 × 0.25 s + 2 × 1.5 s = 4 s over 2 foreground hours.
+        XCTAssertEqual(try XCTUnwrap(s.hangSeconds), 4, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(s.hangSecondsPerHour), 2, accuracy: 1e-9)
+        XCTAssertEqual(s.hangCount, 6)
+        XCTAssertEqual(s.cpuSeconds, 100)
+        XCTAssertEqual(s.gpuSeconds, 20)
+        XCTAssertEqual(s.peakMemoryMB, 200)
+        XCTAssertEqual(s.foregroundSeconds, 7200)
+        XCTAssertEqual(s.backgroundLocationSeconds, 300)
+        XCTAssertEqual(s.locationSeconds?["BestAccuracyForNavigationTime"], 600)
+        XCTAssertEqual(s.displayAverageLuminance, 50)
+        XCTAssertEqual(s.cellularBars, ["1 bars": 20, "3 bars": 5])
+        XCTAssertEqual(s.cellularDownloadMB, 50)
+        XCTAssertEqual(s.cellularUploadMB, 1)
+        XCTAssertEqual(s.diskWritesMB, 2)
+        // Exits: zero counts dropped.
+        XCTAssertEqual(s.exits, ["foreground.abnormal": 2, "background.memoryPressure": 1])
+        XCTAssertEqual(s.scrollHitchMsPerS, 3.5)
+        XCTAssertEqual(s.signposts, [.init(name: "search", category: "sary", count: 7, medianMs: 410, p90Ms: 410)])
+    }
+
+    func testSummaryCarriesNoDeviceOrRegion() throws {
+        let s = MetricsExtract.daily(try dict(Self.daily))
+        let json = String(decoding: try MetricsStore.encoder.encode([s]), as: UTF8.self)
+        XCTAssertFalse(json.contains("iPhone15,2"))
+        XCTAssertFalse(json.contains("regionFormat"))
+        XCTAssertFalse(json.contains("\"SA\""))
+    }
+
+    func testEmptyPayloadIsHarmless() throws {
+        let s = MetricsExtract.daily(try dict("{}"))
+        XCTAssertNil(s.firstDrawMedianMs)
+        XCTAssertNil(s.exits)
+        XCTAssertFalse(MetricsLabels.lines(s).isEmpty)
+    }
+
+    private func frame(_ bin: String, _ off: Int, _ n: Int, _ sub: [[String: Any]] = []) -> [String: Any] {
+        ["binaryName": bin, "binaryUUID": "00000000-0000-0000-0000-000000000000", "address": 1234,
+         "offsetIntoBinaryTextSegment": off, "sampleCount": n, "subFrames": sub]
+    }
+
+    func testDiagnosticExtraction() throws {
+        let mainThread: [String: Any] = ["threadAttributed": true, "callStackRootFrames": [
+            frame("SaryAlbarq", 10, 30, [frame("UIKitCore", 5, 10), frame("MapboxMaps", 7, 20)]),
+            frame("libsystem", 1, 5),
+        ]]
+        let other: [String: Any] = ["threadAttributed": false, "callStackRootFrames": [frame("Other", 1, 100)]]
+        let hang: [String: Any] = [
+            "callStackTree": ["callStackPerThread": true, "callStacks": [other, mainThread]] as [String: Any],
+            "diagnosticMetaData": ["hangDuration": "2.5 sec", "appVersion": "1.4", "appBuildVersion": "41", "osVersion": "iPhone OS 18.1"],
+        ]
+        let crash: [String: Any] = [
+            "callStackTree": ["callStackPerThread": true, "callStacks": [mainThread]] as [String: Any],
+            "diagnosticMetaData": ["signal": 11, "exceptionType": 1, "terminationReason": "Namespace SIGNAL, Code 0xb"] as [String: Any],
+        ]
+        let payload: [String: Any] = [
+            "timeStampBegin": "2026-11-10 00:00:00 +0000", "timeStampEnd": "2026-11-10 23:59:00 +0000",
+            "hangDiagnostics": Array(repeating: hang, count: 5),
+            "crashDiagnostics": [crash],
+        ]
+        let s = MetricsExtract.diagnostic(payload)
+        XCTAssertEqual(s.kind, .diagnostic)
+        XCTAssertEqual(s.appVersion, "1.4")
+        let d = s.diagnostics ?? []
+        XCTAssertEqual(d.filter { $0.type == "hang" }.count, MetricsExtract.maxPerType)
+        XCTAssertEqual(d.first?.stack, ["SaryAlbarq +10 (30)", "MapboxMaps +7 (20)"])
+        XCTAssertEqual(d.first?.detail, "مدة التعليق 2.5 sec")
+        let c = try XCTUnwrap(d.first(where: { $0.type == "crash" }))
+        XCTAssertTrue(c.detail?.contains("signal 11") == true)
+        XCTAssertTrue(c.detail?.contains("Namespace SIGNAL") == true)
+    }
+
+    func testDiagnosticStackIsTruncated() {
+        var deep = frame("leaf", 0, 1)
+        for i in 0..<30 { deep = frame("f\(i)", i, 1, [deep]) }
+        let tree: [String: Any] = ["callStacks": [["threadAttributed": true, "callStackRootFrames": [deep]] as [String: Any]]]
+        XCTAssertEqual(MetricsExtract.heaviestPath(tree).count, MetricsExtract.maxFrames)
+        XCTAssertEqual(MetricsExtract.heaviestPath(nil), [])
+    }
+
+    func testUnitsAndExitNames() {
+        XCTAssertEqual(MetricsExtract.seconds("250 ms"), 0.25)
+        XCTAssertEqual(MetricsExtract.seconds("2 min"), 120)
+        XCTAssertEqual(MetricsExtract.seconds("1,200 sec"), 1200)
+        XCTAssertEqual(MetricsExtract.megabytes("1 GB"), 1024)
+        XCTAssertNil(MetricsExtract.seconds("12 kB"))
+        XCTAssertEqual(MetricsExtract.exitReason("cumulativeAppWatchdogExitCount"), "appWatchdog")
+        XCTAssertEqual(MetricsExtract.exitReason("cumulativeNormalAppExitCount"), "normalApp")
+        XCTAssertEqual(MetricsLabels.exitLabel("foreground.appWatchdog"), "بالواجهة · تعليق طويل (watchdog)")
+    }
+
+    private func summary(_ i: Int) -> MetricsSummary {
+        MetricsSummary(id: "s\(i)", kind: .daily, receivedAt: Date(timeIntervalSince1970: TimeInterval(1_800_000_000 + i)),
+                       periodStart: nil, periodEnd: nil, appVersion: "1.4", appBuild: "\(i)", osVersion: nil)
+    }
+
+    func testRingBufferKeepsTheNewest14() {
+        XCTAssertEqual(MetricsRing.limit, 14)
+        let many = MetricsRing.appending((0..<20).map(summary), to: [])
+        XCTAssertEqual(many.map(\.id), (6..<20).map { "s\($0)" })
+        let full = MetricsRing.appending([summary(100), summary(101)], to: (0..<13).map(summary))
+        XCTAssertEqual(full.count, 14)
+        XCTAssertEqual(full.first?.id, "s1")
+        XCTAssertEqual(full.last?.id, "s101")
+        XCTAssertEqual(MetricsRing.appending([summary(1)], to: []).count, 1)
+    }
+
+    func testStoreRoundTrip() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("metrics-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = MetricsStore(directory: dir, limit: 3)
+        XCTAssertEqual(store.load(), [])
+        var parsed = MetricsExtract.daily(try dict(Self.daily), receivedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        parsed.id = "daily"
+        store.append([parsed])
+        XCTAssertEqual(store.load(), [parsed])
+        store.append([summary(1), summary(2), summary(3)])
+        XCTAssertEqual(store.load().map(\.id), ["s1", "s2", "s3"])
+        // A damaged file reads as empty, and the next payload starts it again.
+        try Data("not json".utf8).write(to: store.file)
+        XCTAssertEqual(store.load(), [])
+        store.append([summary(4)])
+        XCTAssertEqual(store.load().map(\.id), ["s4"])
+    }
+}

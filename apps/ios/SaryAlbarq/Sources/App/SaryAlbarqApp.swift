@@ -86,6 +86,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        /* «أداء التطبيق» (docs/METRICS.md): only the MetricKit registration and one signpost here;
+         * payloads are parsed and saved on the collector's own queue when iOS delivers them. */
+        MetricsCollector.shared.start()
+        /* A background relaunch (location) has no map until the person opens the app: not a launch. */
+        if MainActor.assumeIsolated({ application.applicationState != .background }) { PerfSignpost.begin(.launchToMap) }
         /* Arabic first: UIKit-hosted pieces (sheets, the map's own controls) lay out RTL too. */
         UIView.appearance().semanticContentAttribute = .forceRightToLeft
         /* Relaunched by iOS in the background for location (significant change / region exit
@@ -95,6 +100,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 let m = AppBoot.model
                 Self.model = m
             }
+        } else {
+            /* The Arabic satellite style every first map loads: read and graded off the main thread
+             * now, before SwiftUI builds the first screen (no map, no UI work here). */
+            ArabicBasemap.prewarm()
         }
         return true
     }

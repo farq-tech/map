@@ -31,6 +31,8 @@ struct PlanMapView: UIViewRepresentable {
     var desert: DesertOverlay? = nil
     /// A desert marker tapped (its id).
     var onDesertTap: (String) -> Void = { _ in }
+    /// Fresh location for the optional always-visible Qibla ray (used on the home map).
+    var qiblaOrigin: LngLat? = nil
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -60,6 +62,7 @@ struct PlanMapView: UIViewRepresentable {
 
     static func dismantleUIView(_ map: MapView, coordinator: Coordinator) { coordinator.detach() }
 
+    @MainActor
     final class Coordinator {
         private weak var map: MapView?
         private var parent: PlanMapView?
@@ -78,16 +81,32 @@ struct PlanMapView: UIViewRepresentable {
         private let destination = PinSlot<PlanDestinationPin>()
         private let picked = PinSlot<PlanPickedPin>()
         private let user = PinSlot<PlanUserLocationPin>()
+        /// `onCenter` writes the host's SwiftUI state («اختر من الخريطة»'s readout): at most ~30 times
+        /// a second instead of every camera frame, and the latest centre always lands (trailing report).
+        private var centerThrottle = ReportThrottle(interval: 1.0 / 30)
+        private var centerPending = false
+
+        private func reportCenter() {
+            guard let map, let report = parent?.onCenter else { return }
+            let now = CACurrentMediaTime()
+            guard centerThrottle.take(now) else {
+                guard !centerPending else { return }
+                centerPending = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + centerThrottle.wait(now)) { [weak self] in
+                    self?.centerPending = false
+                    self?.reportCenter()
+                }
+                return
+            }
+            let c = map.mapboxMap.cameraState.center
+            report(LngLat(lng: c.longitude, lat: c.latitude))
+        }
 
         func attach(_ map: MapView, parent: PlanMapView) {
             self.map = map
             self.parent = parent
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &bag)
-            map.mapboxMap.onCameraChanged.observe { [weak self, weak map] _ in
-                guard let map, let report = self?.parent?.onCenter else { return }
-                let c = map.mapboxMap.cameraState.center
-                report(LngLat(lng: c.longitude, lat: c.latitude))
-            }.store(in: &bag)
+            map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.reportCenter() }.store(in: &bag)
             guard parent.interactive else { return }
             map.gestures.onLayerTap(DesertGazetteerMapLayer.marker) { [weak self] feature, _ in
                 guard let v = feature.feature.properties?["id"], case let .string(id)? = v else { return false }
@@ -115,6 +134,8 @@ struct PlanMapView: UIViewRepresentable {
         private func styleLoaded() {
             guard let map, let m = map.mapboxMap else { return }
             styleReady = true
+            /* «أداء التطبيق»: the launch interval ends at the first map (a no-op after that). */
+            PerfSignpost.end(.launchToMap)
             for (k, v) in [("show3dObjects", false), ("showPointOfInterestLabels", true), ("showTransitLabels", false), ("showRoadLabels", true)] as [(String, Bool)] {
                 try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
             }
@@ -137,6 +158,7 @@ struct PlanMapView: UIViewRepresentable {
         func update(_ p: PlanMapView) {
             parent = p
             guard let map else { return }
+            QiblaMapOverlay.of(map).update(origin: p.qiblaOrigin)
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)
                 drawnRoute = p.route
@@ -195,16 +217,20 @@ struct PlanMapView: UIViewRepresentable {
 
         private func move(_ c: PlanCamera, on map: MapView) {
             let pad = UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40)
+            let reduce = parent?.theme.reduceMotion ?? MapCameraMotion.reduceMotionNow
             switch c.kind {
             case let .point(p, zoom):
-                map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: zoom), duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.6)
+                let a = map.mapboxMap.point(for: p.coordinate)
+                let shift: Double? = (a.x >= 0 && a.y >= 0) ? Double(hypot(a.x - map.bounds.midX, a.y - map.bounds.midY)) : nil
+                let d = MapCameraMotion.focus.duration(reduceMotion: reduce, shiftPt: shift, zoomDelta: zoom - Double(map.mapboxMap.cameraState.zoom))
+                map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: zoom), duration: d)
             case let .fit(pts):
                 guard pts.count >= 2, map.bounds.height > 0 else {
                     if let p = pts.first { map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: 13), duration: 0) }
                     return
                 }
                 if let cam = try? map.mapboxMap.camera(for: pts.map(\.coordinate), camera: CameraOptions(), coordinatesPadding: pad, maxZoom: 15, offset: nil) {
-                    map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.6)
+                    map.camera.ease(to: cam, duration: MapCameraMotion.fit.duration(reduceMotion: reduce))
                 }
             }
         }
@@ -228,4 +254,23 @@ struct PlanCamera: Equatable {
         if let d = destination { return LngLat(lng: d.lng, lat: d.lat) }
         return LngLat(lng: 46.6753, lat: 24.7136)
     }
+}
+
+/// At most one report per `interval` seconds. A report asked for sooner is refused, and is
+/// due again after `wait(now)` (the caller schedules that trailing report).
+struct ReportThrottle {
+    let interval: Double
+    private(set) var last = -Double.infinity
+
+    init(interval: Double) { self.interval = interval }
+
+    /// True (and the report counted) when `interval` has passed since the last one.
+    mutating func take(_ now: Double) -> Bool {
+        guard now - last >= interval else { return false }
+        last = now
+        return true
+    }
+
+    /// Seconds until a report is allowed again (0 when it already is).
+    func wait(_ now: Double) -> Double { max(0, interval - (now - last)) }
 }

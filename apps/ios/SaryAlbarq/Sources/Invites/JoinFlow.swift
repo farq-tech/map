@@ -162,20 +162,20 @@ enum JoinMachine {
 enum JoinCopy {
     static let button = "انضم للطلعة"
     /// The honest line under the button (also on the creator's last step and «انضم برابط»).
-    static let statement = "بانضمامك يشوف ربع الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
+    static let statement = "بانضمامك يشوف أصدقاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
 
     /// The Najdi pre-prompt, right above «انضم للطلعة» while iOS has not asked yet.
-    static let prePromptTitle = "عشان الربع يشوفونك وتوصلهم الطوارئ"
+    static let prePromptTitle = "عشان الأصدقاء يشوفونك وتوصلهم الطوارئ"
     static let prePromptDetail = "بعد «انضم» يسألك الآيفون عن موقعك: اختر «السماح أثناء استخدام التطبيق» وخلّ «الموقع الدقيق» شغّال."
 
     static func needsTitle(_ p: JoinPermission) -> String {
-        p == .reduced ? "موقعك تقريبي بالكيلومترات" : "موقعك مقفل، والربع ما راح يشوفونك"
+        p == .reduced ? "موقعك تقريبي بالكيلومترات" : "موقعك مقفل، والأصدقاء ما راح يشوفونك"
     }
 
     static func needsMessage(_ p: JoinPermission) -> String {
         switch p {
         case .reduced:
-            return "«الموقع الدقيق» مقفل، فما يقدر الربع يلقونك ولا توصلهم الطوارئ. افتح الإعدادات ← الموقع وشغّل «الموقع الدقيق»، وترجع للطلعة على طول."
+            return "«الموقع الدقيق» مقفل، فما يقدر الأصدقاء يلقونك ولا توصلهم الطوارئ. افتح الإعدادات ← الموقع وشغّل «الموقع الدقيق»، وترجع للطلعة على طول."
         default:
             return "افتح الإعدادات ← الموقع واختر «أثناء استخدام التطبيق» مع «الموقع الدقيق»، وترجع للطلعة على طول."
         }
@@ -185,7 +185,7 @@ enum JoinCopy {
     static let cancel = "إلغاء"
 
     /// On the map while my position is not reaching the group (refused, or approximate only).
-    static let hiddenTitle = "موقعك مو ظاهر للربع"
+    static let hiddenTitle = "موقعك مو ظاهر للأصدقاء"
     static func hiddenDetail(_ p: JoinPermission) -> String {
         p == .reduced ? "«الموقع الدقيق» مقفل" : "إذن الموقع مقفل"
     }

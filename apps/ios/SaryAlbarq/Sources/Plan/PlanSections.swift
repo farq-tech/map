@@ -30,12 +30,12 @@ struct PlanDetailsSections: View {
     @ViewBuilder
     private var planSection: some View {
         let p = theme.palette
-        SarySection(title: "خطة الطلعة", footer: iLead ? "أنت تقدر ترسم المسار وتحدد الوجهة. يشوفها كل الربع." : "يرسمها أمير الطلعة أو نائبه.") {
+        SarySection(title: "خطة الطلعة", footer: iLead ? "أنت تقدر ترسم المسار وتحدد الوجهة. يشوفها كل الأصدقاء." : "يرسمها أمير الطلعة أو نائبه.") {
             switch plan.planPhase {
             case .loading:
                 SarySkeletonRow().padding(.vertical, theme.space(.s))
             case .unavailable:
-                unavailable("تخطيط الطلعة غير متاح بعد", "الخادم لم يُحدَّث لهذه الميزة. جرّب لاحقًا.")
+                unavailable("تخطيط الطلعة غير متاح بعد", "الخادم ما يدعمها للحين. جرّب بعدين.")
             case .failed(let m):
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     SaryInlineMessage(text: m, tone: .error)
@@ -49,7 +49,7 @@ struct PlanDetailsSections: View {
                         PlanMapView(route: tp.points, destination: tp.destination, interactive: false,
                                     camera: PlanCamera(kind: .fit(tp.points + (tp.destination.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])), id: tp.points.count &+ (tp.updated_at?.hashValue ?? 0)),
                                     theme: theme)
-                            .frame(height: 170)
+                            .saryFitHeight(170)
                             .clipShape(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
                             .allowsHitTesting(false)
                             .accessibilityIdentifier("details.planMap")
@@ -63,6 +63,8 @@ struct PlanDetailsSections: View {
                     }
                     if let d = tp.destination {
                         DestinationRow(destination: d, myFix: location.lastFix)
+                        DesertReadinessRow(destination: LngLat(lng: d.lng, lat: d.lat))
+                            .transition(SaryTransition.appear(theme))
                     }
                     if !tp.notes.isEmpty {
                         Text(tp.notes).saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -111,6 +113,39 @@ struct PlanDetailsSections: View {
             Text(k).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// «جاهز للبر»: before leaving coverage, whether the destination's offline map, its desert grid
+/// and the trail recording for «طريق الرجعة» are on this phone (`DesertReadiness`).
+struct DesertReadinessRow: View {
+    let destination: LngLat
+    @ObservedObject private var offline = OfflineMaps.shared
+    @Environment(\.sary) private var theme
+
+    private var readiness: DesertReadiness {
+        DesertReadiness.make(destination: destination,
+                             savedAreas: offline.areas.filter(\.isComplete).compactMap(\.box),
+                             trailsOnPhone: DesertTiles.onPhone(around: destination, saved: { DesertTileStore.shared.hasTileOnDisk($0) }),
+                             trailRecording: TrailPrefs.record())
+    }
+
+    var body: some View {
+        let r = readiness
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: 2) {
+            Label(r.line, systemImage: r.ready ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .saryText(.footnote, weight: .bold)
+                .foregroundStyle(r.ready ? p.liveText : p.warningText)
+                .fixedSize(horizontal: false, vertical: true)
+            if let h = r.hint {
+                Text(h).saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .saryAnimation(.smooth, value: r)
+        .onAppear { if !offline.loaded { offline.reload() } }
     }
 }
 
@@ -187,7 +222,7 @@ struct ChecklistSection: View {
                     SaryRowIcon(systemImage: "clock.badge.questionmark")
                     VStack(alignment: .leading, spacing: 2) {
                         Text("قائمة التجهيز غير متاحة بعد").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                        Text("الخادم لم يُحدَّث لهذه الميزة. جرّب لاحقًا.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                        Text("الخادم ما يدعمها للحين. جرّب بعدين.").saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                 }
                 .padding(.vertical, theme.space(.s))
@@ -203,6 +238,7 @@ struct ChecklistSection: View {
                     if s.total > 0 {
                         HStack {
                             Text(s.progressLabel).saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                                .contentTransition(SaryTransition.number(Double(s.doneCount), theme))
                                 .accessibilityIdentifier("checklist.progress")
                             Text("جاهز").saryText(.subhead).foregroundStyle(p.textSecondary)
                             Spacer()
@@ -217,6 +253,7 @@ struct ChecklistSection: View {
                                      toggle: { Task { await plan.toggle(item.id) } },
                                      assign: { u in Task { await plan.assign(item.id, to: u) } },
                                      delete: { Task { await plan.delete(item.id) } })
+                            .transition(SaryTransition.appear(theme))
                     }
                     SaryDivider()
                     HStack(spacing: theme.space(.s)) {
@@ -248,6 +285,10 @@ struct ChecklistSection: View {
                     }
                 }
                 .padding(.vertical, theme.space(.s))
+                /* A ticked item slides to its new place (stable ids), added / removed ones fade,
+                   the bar and the count follow. */
+                .saryAnimation(.smooth, value: s.ordered.map(\.id))
+                .saryAnimation(.smooth, value: s.doneCount)
             }
         }
         .alert("تنبيه", isPresented: Binding(get: { plan.errorText != nil }, set: { if !$0 { plan.errorText = nil } })) {
@@ -283,7 +324,7 @@ struct ChecklistRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(item.done ? "تم: \(item.title)" : "لم يتم: \(item.title)")
+            .accessibilityLabel(item.done ? "خلص: \(item.title)" : "باقي: \(item.title)")
             .accessibilityIdentifier("checklist.toggle")
             Text(item.title)
                 .saryText(.body, weight: .medium)

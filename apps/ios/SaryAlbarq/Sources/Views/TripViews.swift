@@ -91,7 +91,7 @@ struct TripPeekStrip: View {
     private var line: String {
         switch ui.phase {
         case let .needsDestination(canSet): return canSet ? "حدّد الوجهة قبل ما تبدأ" : "بانتظار الوجهة"
-        case .notStarted: return "إلى \(ui.destinationName) · لم تبدأ"
+        case .notStarted: return "إلى \(ui.destinationName) · ما بدأت"
         case .waitingFix: return "بدأت الطلعة · ننتظر موقعك"
         case .arrived: return "وصلت \(ui.destinationName) 🎉"
         case .ended: return "انتهت الطلعة"
@@ -158,6 +158,8 @@ struct TripCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if ui.phase == .underway, let pc = ui.percent {
                 Text(SaryFormat.percent(pc)).saryNumber(theme.drive ? .display : .title, weight: .heavy).foregroundStyle(p.accentText)
+                    .contentTransition(SaryTransition.number(Double(pc), theme))
+                    .animation(theme.animation(.smooth), value: pc)
                     .accessibilityIdentifier("trip.percent")
             }
         }
@@ -227,7 +229,7 @@ struct TripCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         if let g = ui.groupStartMeters, g > 200, !theme.drive {
-            Text("نقطة انطلاق الربع على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textTertiary)
+            Text("نقطة انطلاق الأصدقاء على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textSecondary)
         }
         HStack(spacing: theme.space(.s)) {
             if ui.isReturnTrip {
@@ -269,10 +271,10 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الربع كلهم. إذا خلصت الطلعة، أنهِها من «المزيد» ← «الطلعة».").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الأصدقاء كلهم. إذا خلصت الطلعة، أنهِها من «المزيد» ← «الطلعة».").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
         } else {
-            Text("أمير الطلعة ينهيها لما يوصل الربع.").saryText(.footnote).foregroundStyle(p.textSecondary)
+            Text("أمير الطلعة ينهيها لما يوصل الأصدقاء.").saryText(.footnote).foregroundStyle(p.textSecondary)
         }
     }
 
@@ -294,7 +296,11 @@ struct TripCard: View {
         return VStack(alignment: .leading, spacing: 2) {
             Text(k).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1)
             Text(v).saryNumber(big ? .title : .headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.6)
-            if let note { Text(note).saryText(.micro).foregroundStyle(p.textTertiary).lineLimit(1).minimumScaleFactor(0.8) }
+                /* The trip's numbers roll as they update and into the arrival / end summary. */
+                .contentTransition(theme.reduceMotion ? .opacity : .numericText())
+                .animation(theme.animation(.smooth), value: v)
+            /* 11 pt under the number (the tile is tight): secondary, not tertiary, so it reads at night. */
+            if let note { Text(note).saryText(.micro).foregroundStyle(p.textSecondary).lineLimit(1).minimumScaleFactor(0.8) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(theme.space(.s))

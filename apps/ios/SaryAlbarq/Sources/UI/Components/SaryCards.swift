@@ -8,13 +8,15 @@ struct SaryRallyCard: View {
     var actions: ParticipantsTabActions = .init()
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.saryWidthClass) private var widthClass
     @State private var confirmRemove = false
 
     var body: some View {
         let p = theme.palette
         let ax = typeSize.isAccessibilitySize
         let row = ax ? AnyLayout(VStackLayout(alignment: .leading, spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.m)))
-        let buttons = ax ? AnyLayout(VStackLayout(spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.s)))
+        /* «اتجه» + «أظهرها» + the menu need ~300 pt: stacked on a 320 pt screen (Display Zoom) too. */
+        let buttons = ax || widthClass == .narrow ? AnyLayout(VStackLayout(spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.s)))
         Group {
             if let rally {
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
@@ -75,12 +77,14 @@ struct SaryRallyCard: View {
             }
         }
         .padding(theme.space(.l))
+        /* Setting / removing the point morphs the card in place. */
+        .saryAnimation(.smooth, value: rally == nil)
         .sarySurface(radius: SaryRadius.l)
         .confirmationDialog("إزالة نقطة التجمع؟", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("أزلها", role: .destructive, action: actions.rallyRemove)
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("بتختفي النقطة عند كل الربع")
+            Text("بتختفي النقطة عند كل الأصدقاء")
         }
     }
 
@@ -94,6 +98,7 @@ struct SaryRallyCard: View {
                 Spacer()
                 if r.arrivedCount == r.totalCount && r.totalCount > 0 {
                     Label("الكل وصل", systemImage: SaryIcon.checkCircle).saryText(.footnote, weight: .bold).foregroundStyle(p.liveText)
+                        .transition(SaryTransition.chipPop(theme))
                 }
             }
             GeometryReader { g in
@@ -104,6 +109,8 @@ struct SaryRallyCard: View {
             }
             .frame(height: 6)
         }
+        /* Each arrival fills the bar toward the point; the last one settles with `celebrate`. */
+        .saryAnimation(r.arrivedCount == r.totalCount && r.totalCount > 0 ? .celebrate : .smooth, value: r.arrivedCount)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("وصل \(SaryFormat.number(r.arrivedCount)) من \(SaryFormat.number(r.totalCount))"))
     }

@@ -22,7 +22,7 @@ final class ScreensUITests: XCTestCase {
         }
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "جارية")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["متوقفة مؤقتًا"].exists)
-        XCTAssertTrue(app.staticTexts["لم تبدأ"].exists)
+        XCTAssertTrue(app.staticTexts["ما بدأت"].exists)
         app.buttons["list.create"].tap()
         XCTAssertTrue(app.textFields["create.dest.field"].waitForExistence(timeout: 5), "«طلعة جديدة» starts with «وين رايحين؟»")
         app.buttons["page-close"].tap()
@@ -53,6 +53,17 @@ final class ScreensUITests: XCTestCase {
         handle.swipeDown()
         XCTAssertTrue(app.descendants(matching: .any)["home.sheet"].waitForExistence(timeout: 5),
                       "the dedicated handle still collapses the sheet")
+    }
+
+    func testHomeQiblaDirectionCanBeHiddenAndRestored() {
+        let app = launch(["-demo", "-SaryScreen", "home"])
+        let toggle = app.buttons["home.qibla.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "إظهار اتجاه القبلة على الخريطة")
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
     }
 
     func testSettingsReachEveryPage() {
@@ -234,5 +245,75 @@ final class StandaloneNavRestartUITests: XCTestCase {
         a.name = "standalone-after-reset"; a.lifetime = .keepAlways; add(a)
         let status = any("standaloneNav.status")
         XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
+    }
+}
+
+/// Owner, Build 40 (7:10 pm): in «استكشف الخريطة» inside the trip «the buttons cannot be pressed».
+/// Taps every control of the explore header and side, each must answer.
+final class ExploreTapsUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = true }
+
+    private func shot(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name; a.lifetime = .keepAlways; add(a)
+    }
+
+    func testExploreControlsAnswer() {
+        let app = XCUIApplication()
+        let extra = (ProcessInfo.processInfo.environment["SARY_EXPLORE_ARGS"] ?? "").split(separator: " ").map(String.init)
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
+                               "-SaryContext", "stopped", "-SaryExplore"] + extra
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("explore.header").waitForExistence(timeout: 30))
+        sleep(3)
+        shot("explore-open")
+        /* The layer bar. */
+        let topo = any("explore.layer.topo")
+        XCTAssertTrue(topo.isHittable, "«طبوغرافي» hittable")
+        topo.tap()
+        XCTAssertTrue(NSPredicate(format: "isSelected == true").evaluate(with: topo) || topo.isSelected, "«طبوغرافي» selected after the tap")
+        sleep(3)
+        shot("explore-topo")
+        any("explore.layer.satellite").tap()
+        /* «الكشتة» opens its sheet. */
+        let camp = any("explore.camp")
+        XCTAssertTrue(camp.isHittable, "«الكشتة» hittable")
+        camp.tap()
+        sleep(3)
+        shot("explore-after-camp")
+        let opened = app.sheets.count > 0 || any("camp.suggest").exists || app.otherElements["camp.sheet"].exists
+            || app.buttons["page-close"].exists || app.buttons["sheet-close"].exists
+        XCTAssertTrue(opened, "«الكشتة» answered")
+        if app.buttons["page-close"].exists { app.buttons["page-close"].tap() } else { app.swipeDown() }
+        sleep(2)
+        /* The side buttons. */
+        for id in ["explore-drone", "explore-realistic", "explore-layers"] {
+            let b = any(id)
+            XCTAssertTrue(b.exists && b.isHittable, "\(id) hittable")
+        }
+        /* The peek sheet under the map in explore: what it holds. */
+        shot("explore-sheet")
+    }
+}
+
+/// The road-type window (owner): it can be put away and brought back; the total stays visible.
+final class SurfaceLegendToggleUITests: XCTestCase {
+    func testHideAndShowTheRoadTypeWindow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "route-surfaces", "-SaryScheme", "light"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("nav.surfaceLegend").waitForExistence(timeout: 20))
+        let toggle = app.buttons["nav.surfaceLegend.toggle"]
+        XCTAssertTrue(toggle.isHittable, "the hide button can be pressed")
+        /* The choice is kept on the phone: start from the shown state whatever an earlier run left. */
+        if !any("nav.surfaceLegend.total").exists { toggle.tap() }
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForExistence(timeout: 3), "the total under the surfaces")
+        toggle.tap()
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForNonExistence(timeout: 3), "hidden: the rows and the total row are gone")
+        XCTAssertTrue(any("nav.surfaceLegend").exists, "the window itself stays, folded")
+        toggle.tap()
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForExistence(timeout: 3), "shown again")
     }
 }

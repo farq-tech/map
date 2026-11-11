@@ -86,7 +86,16 @@ final class SOSOverlayWindow: UIWindow {
 
     deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
-    private func applyVisibility() { isHidden = !wanted || keyboardUp }
+    private func applyVisibility() {
+        let hide = !wanted || keyboardUp
+        let appearing = isHidden && !hide
+        isHidden = hide
+        /* The floating copy takes over from the map's SOS as a sheet covers it: a quick fade-in
+         * (`SaryMotion.urgent`'s duration) so it does not pop; at once under Reduce Motion. */
+        guard appearing, !UIAccessibility.isReduceMotionEnabled else { alpha = 1; return }
+        alpha = 0
+        UIView.animate(withDuration: SaryMotion.urgent.duration, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.alpha = 1 }
+    }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -97,7 +106,10 @@ final class SOSOverlayWindow: UIWindow {
         let disc = m.size ?? m.theme.bigButton
         let side = disc + 16
         let screen = windowScene?.coordinateSpace.bounds ?? UIScreen.main.bounds
-        let safeBottom = windowScene?.windows.first(where: { $0 !== self && $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
+        /* The app window's real inset (0 on an iPhone SE, 34 with a home indicator); was a fixed
+         * 34 pt whenever no key window was found, which floated the disc 34 pt high on an SE. */
+        let others = windowScene?.windows.filter { $0 !== self } ?? []
+        let safeBottom = (others.first(where: \.isKeyWindow) ?? others.first)?.safeAreaInsets.bottom ?? safeAreaInsets.bottom
         /* Over a full sheet the map's spot (top left, under the header) is where sheets put their
          * search field and first row (QA: it covered «ابحث أو أدخل إحداثية»): the copy sits in the
          * bottom-left corner instead, the least used part of a sheet. On the map itself the real
@@ -113,6 +125,25 @@ final class SOSOverlayWindow: UIWindow {
         )
         wanted = m.visible
         applyVisibility()
+    }
+}
+
+/// A friend's SOS arriving: urgent but controlled (`SaryMotion.urgent`): it settles from a touch
+/// larger and half faded, once per alert (the window's root carries the alert's id). It never
+/// starts fully transparent, so VoiceOver finds it at once; under Reduce Motion it is just there.
+private struct SOSUrgentEntrance: ViewModifier {
+    @Environment(\.sary) private var theme
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let settled = shown || theme.reduceMotion
+        content
+            .opacity(settled ? 1 : 0.4)
+            .scaleEffect(settled ? 1 : 1.04)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(theme.animation(.urgent)) { shown = true }
+            }
     }
 }
 
@@ -196,6 +227,7 @@ final class FriendSOSAlertWindow: UIWindow {
         let id = a.id
         host.rootView = AnyView(
             SaryFriendSOSAlert(alert: a, now: Date(), show: { m.show(id) }, call: { m.call(id) })
+                .modifier(SOSUrgentEntrance())
                 .id(id)
                 .accessibilityIdentifier("friend-sos-alert")
                 .saryTheme(m.theme)

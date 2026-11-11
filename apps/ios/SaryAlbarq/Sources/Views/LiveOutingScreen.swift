@@ -25,6 +25,7 @@ struct LiveOutingScreen: View {
     @StateObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @Environment(\.dynamicTypeSize) private var typeSize
     @EnvironmentObject private var app: AppModel
     @State private var frames: [String: CGRect] = [:]
     @State private var sheetTop: CGFloat = 0
@@ -40,6 +41,7 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
+    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
 
@@ -90,7 +92,8 @@ struct LiveOutingScreen: View {
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
-                    hiRes: controller.hiResRequest(ui, exploring: exploring)
+                    hiRes: controller.hiResRequest(ui, exploring: exploring),
+                    qiblaOrigin: qiblaMapOrigin
                 )
                 }
                 .ignoresSafeArea()
@@ -127,7 +130,8 @@ struct LiveOutingScreen: View {
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
                                        show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
         .sheet(isPresented: .constant(true)) {
-            LiveSheet(controller: controller)
+            /* The presenter state this render already built: the sheet does not run it again. */
+            LiveSheet(controller: controller, ui: ui)
                 .realisticCover($realistic)
                 .background {
                     /* The sheet's real top edge on screen (its content height leaves out the home-indicator area). */
@@ -158,7 +162,8 @@ struct LiveOutingScreen: View {
         touching = down
         controller.cameraTouch(down: down)
         if down {
-            if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+            /* `ui.alerts` is the controller's `alerts` as is: no presenter pass for one touch. */
+            if frozenAlerts == nil { frozenAlerts = controller.alerts }
             if frozenSheetShape == nil { frozenSheetShape = controller.sheetShape(drive: theme.drive) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -178,6 +183,14 @@ struct LiveOutingScreen: View {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
         return max(measured, sheetShape.peekHeight)
+    }
+
+    /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
+    private var qiblaMapOrigin: LngLat? {
+        guard showQiblaOnMap, let fix = controller.location.lastFix else { return nil }
+        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
+        guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
+        return LngLat(lng: fix.lng, lat: fix.lat)
     }
 
     private var topChromeBottom: CGFloat {
@@ -222,34 +235,37 @@ struct LiveOutingScreen: View {
         let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
+            && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
+        /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
+        let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height)
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
              * with SOS on its left, then «تتبعني» / «أدوات» on the right. */
             VStack(spacing: theme.space(.s)) {
                 if exploring {
                     ExploreTopBar(controller: controller, layers: { controller.modal = .layers }, exit: { controller.exitExplore() })
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(SaryTransition.banner(theme))
                 }
                 if ended {
                     EndedTripBanner(summary: controller.openSummary, home: controller.onExit, more: { controller.modal = .actions },
                                     subtitle: endedSubtitle(ui))
                         .opacity(controller.sheetDetent == .full ? 0 : 1)
                         .allowsHitTesting(controller.sheetDetent != .full)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(SaryTransition.banner(theme))
                 }
                 LiveTopStack(controller: controller, ui: ui, alerts: frozenAlerts ?? ui.alerts, driving: driving, exploring: exploring, rowMode: rowMode,
-                             maxListHeight: max(220, full.height * 0.42), weather: controller.weather,
+                             maxListHeight: LiveFit.alertListMaxHeight(screenHeight: full.height), width: full.width, weather: controller.weather,
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
                              sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger)),
                              /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
-                             side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: !guidingHUD).chromeFrame("cluster")) : nil)
+                             side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
                 if let title = controller.recenterTitle, !exploring, controller.sheetDetent != .full {
                     /* «رجّعني للتوجيه»: the pan left «باتجاهي»; one big tap brings it back. */
                     RecenterPill(title: title, action: controller.recenterCamera)
                         .chromeFrame("recenter")
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(SaryTransition.banner(theme))
                 }
                 if controller.picking.active {
                     PickingBanner(moving: controller.picking.moving, cancel: controller.cancelPicking)
@@ -259,6 +275,10 @@ struct LiveOutingScreen: View {
                  * over a city it opens at the map's camera (`exploreSide`, `controlTapped`). */
                 Spacer(minLength: 0)
             }
+            /* Map chrome: the text grows with Dynamic Type up to the cap the header, the alert lane and
+             * the status details already use (pieces from other modules — strips, banners, the end card,
+             * «رجّعني للتوجيه» — had none and grew until they covered the map and the dock). */
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .frame(maxWidth: 680)
             .frame(maxWidth: .infinity, alignment: .top)
             .padding(.horizontal, 12)
@@ -274,7 +294,7 @@ struct LiveOutingScreen: View {
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
                             Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
-                                .font(.sary(12, .regular))
+                                .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: 200)
@@ -289,6 +309,7 @@ struct LiveOutingScreen: View {
                                     .chromeFrame("ptt")
                             }
                         }
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                         .padding(.horizontal, 16)
                         .padding(.bottom, lift + theme.space(.m))
                     }
@@ -308,7 +329,7 @@ struct LiveOutingScreen: View {
                     /* ONE big button at a time (ux/الطلعة-والمشوار.md): stopped — the outing's primary action
                      * («ابدأ الطلعة» / «وين رايحين؟» / «ابدأ المشوار») is big and the walkie-talkie is a round
                      * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
-                    let flow = controller.flowUI
+                    let flow = controller.flowUI(ui: ui)
                     /* My SOS on (focused mode): the CTA steps aside; the SOS strip has «أنا بخير». */
                     /* «طريق الرجعة» running: its panel is the one action (UI-AUDIT, device test of PR #149). */
                     let hasCTA = flow.primary != nil && !controller.sosFocused && controller.backTrack == nil
@@ -316,9 +337,36 @@ struct LiveOutingScreen: View {
                      * the sheet raised also shrinks it so it never covers the cars above the sheet. */
                     let ctaCompact = LiveScreenRules.primaryCompact(sheetRaised: controller.sheetDetent != .peek, driving: driving)
                     let pttBig = driving && (ctaCompact || !hasCTA)
+                    let pttPill = pttBig || !hasCTA
+                    let showsSpeedBubble = driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD
+                    /* The row's room on this phone (`LiveFit.dock`): at 375 pt the speed, the 200 pt pill and
+                     * a compact primary (or the guiding speed cluster) were wider than the screen — the
+                     * pill narrows first, then the primary takes its own row just above. */
+                    let dockFit = LiveFit.dock(
+                        width: min(full.width, 680) - 32,
+                        ptt: pttPill ? (pttBig ? LiveFit.bigPTTWidth : LiveFit.pillPTTWidth) : 0,
+                        speed: showsSpeedBubble ? LiveFit.speedBubbleWidth : 0,
+                        cta: pttPill && hasCTA && ctaCompact ? flow.primary.map { LiveFit.compactCTAWidth(title: $0.title, textScale: LiveFit.textScale(typeSize)) } : nil,
+                        cluster: guidingHUD && controller.speed.everRead
+                            ? LiveFit.navSpeedClusterWidth(drive: theme.drive, limit: controller.nav.progress?.speedLimitKmh != nil) : 0,
+                        spacing: theme.space(.s))
+                    let ctaOwnRow = dockFit.ctaOwnRow && hasCTA && ctaCompact
+                    if ctaOwnRow {
+                        HStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            OutingPrimaryCTA(ui: flow, compact: true, tapped: controller.flowTapped)
+                                .fixedSize()
+                                .chromeFrame("flow")
+                        }
+                        .padding(.horizontal, 16)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                        .opacity(controller.sheetDetent == .full ? 0 : 1)
+                        .allowsHitTesting(controller.sheetDetent != .full)
+                        .transition(.opacity)
+                    }
                     HStack(alignment: .center, spacing: theme.space(.s)) {
                         /* UX ٢١: no empty «—» bubble — only with a real reading. Guiding (v2) uses NavSpeedCluster. */
-                        if driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD {
+                        if showsSpeedBubble {
                             LovableSpeedBubble(ui: controller.speedometerUI)
                                 .chromeFrame("speed")
                                 .transition(.opacity)
@@ -330,15 +378,18 @@ struct LiveOutingScreen: View {
                             Spacer()
                         }
                         /* Round beside the big primary: no caption under it (its label is spoken by VoiceOver). */
-                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttBig || !hasCTA, level: controller.pttLevel, pill: pttBig || !hasCTA, big: pttBig,
+                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttPill, level: controller.pttLevel, pill: pttPill, big: pttBig,
                                       channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
-                                      openChannels: { controller.modal = .pttChannels })
+                                      openChannels: { controller.modal = .pttChannels },
+                                      pillMinWidth: pttPill ? dockFit.pttMinWidth : nil)
                             .chromeFrame("ptt")
-                        if ctaCompact && hasCTA {
+                        if ctaCompact && hasCTA && !ctaOwnRow {
                             Spacer(minLength: 0)
+                            /* Its whole label always: the talk pill is the one that gives way. */
                             OutingPrimaryCTA(ui: flow, compact: true, tapped: controller.flowTapped)
+                                .fixedSize()
                                 .chromeFrame("flow")
-                        } else if driving && !hasCTA {
+                        } else if (driving && !hasCTA) || ctaOwnRow {
                             Spacer()
                         }
                         /* UI-AUDIT م3: no red «أنهِ الطلعة» flag on the map. Ending is in «المزيد» → «الطلعة»
@@ -357,9 +408,14 @@ struct LiveOutingScreen: View {
                             NavSpeedLimitSign(kmh: k)
                                 .chromeFrame("speedlimit")
                                 .alignmentGuide(.top) { $0[.bottom] + 8 }
-                                .transition(.scale.combined(with: .opacity))
+                                .transition(SaryTransition.chipPop(theme))
                         }
                     }
+                    /* The primary morphs between states («ابدأ الطلعة» → «وين رايحين؟» → «وصلنا»): the dock
+                     * re-lays out in the same transaction, so the talk pill gives way smoothly. */
+                    .animation(theme.animation(LiveMotion.primaryMorph(drive: driving)), value: flow.primary)
+                    /* The dock's widths are budgeted at this cap (the talk pill already had it). */
+                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                     .chromeFrame("dock")
                     .padding(.horizontal, 16)
                     .padding(.bottom, lift + theme.space(.s))
@@ -375,6 +431,8 @@ struct LiveOutingScreen: View {
                     }
                 }
             }
+            /* The rest of the bottom chrome (the voice-note bar, the convoy line): the map chrome's cap. */
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .frame(maxWidth: 680)
             .frame(maxWidth: .infinity, alignment: .bottom)
         }
@@ -491,6 +549,8 @@ private struct LiveTopStack: View {
     var exploring = false
     var rowMode: Bool
     var maxListHeight: CGFloat
+    /// The live screen's real width (not `UIScreen.main`): what the header can fit.
+    var width: CGFloat = 0
     @ObservedObject var weather: OutingWeather
     @ObservedObject var plan: PlanModel
     @ObservedObject var media: MediaCenter
@@ -500,6 +560,7 @@ private struct LiveTopStack: View {
     var side: AnyView? = nil
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// The radio's bar shows a few seconds when the track changes («تخفيف الزحمة» ٢).
     @State private var radioFlash: String?
 
@@ -511,6 +572,7 @@ private struct LiveTopStack: View {
         let card = rowMode || controller.bellOpen ? nil : AlertQueue.card(alerts, driving: driving)
         let mediaQueued = media.notice != nil && (driving || card != nil || rowMode)
         let bell = AlertQueue.ordered(alerts).count - (card == nil ? 0 : 1) + (mediaQueued ? 1 : 0)
+        let toast = AlertQueue.toast(alerts)
         VStack(spacing: theme.space(.s)) {
             if case let .active(since) = ui.sos.mine {
                 SaryMySOSStrip(since: since, now: ui.now, imOK: controller.actions.sos.imOK,
@@ -532,7 +594,7 @@ private struct LiveTopStack: View {
                 if controller.statusExpanded {
                     TripStatusDetails(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings, nearbyCars: ui.nearbyCars,
                                       warningTapped: controller.actions.warningTapped)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(SaryTransition.banner(theme))
                 }
             }
             navTop
@@ -548,7 +610,7 @@ private struct LiveTopStack: View {
             if !exploring, let prompt = controller.guidancePrompt {
                 /* The trip runs without guidance on this phone: one tap, for me only. */
                 GuidancePromptRow(prompt: prompt, leaderName: controller.leaderName, start: controller.startGuidanceForMe)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(SaryTransition.banner(theme))
             }
             /* «إذاعة الطلعة»: a ♪ in the header; its small control under it when opened from the ♪ or
              * for a few seconds when the track changes. Never the wide bar while driving. */
@@ -557,12 +619,12 @@ private struct LiveTopStack: View {
             }
             if let bt = controller.backTrackUI {
                 BackTrackPanel(ui: bt, exit: controller.stopBackTrack)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(SaryTransition.banner(theme))
             }
             /* «اسلك هذا المسار»; while «الملاحة» guides me to the track, its banner is the one header. */
             if !guidance, let f = controller.followUI {
                 FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.stopFollow, approach: controller.approachFollow)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(SaryTransition.banner(theme))
             }
             /* The alert row (Lovable): the alert (or the list) on the right, SOS on the left; the side
              * buttons under the alert. */
@@ -588,7 +650,7 @@ private struct LiveTopStack: View {
                                 .frame(maxHeight: maxListHeight)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("alerts.list")
-                                .transition(.move(edge: .top).combined(with: .opacity))
+                                .transition(SaryTransition.banner(theme))
                             } else if let card {
                                 HStack(alignment: .center, spacing: theme.space(.s)) {
                                     SaryAlertLane(alerts: [card], limit: 1, tapped: controller.actions.alertTapped,
@@ -599,6 +661,9 @@ private struct LiveTopStack: View {
                                         AlertHistoryButton(open: controller.bellOpen) { controller.statusExpanded = false; controller.bellOpen.toggle() }
                                     }
                                 }
+                                /* The first card comes down from the top and the last one leaves in place (the lane
+                                 * itself swaps one card for the next). */
+                                .transition(SaryTransition.banner(theme))
                             } else if bannerOnly && (bell > 0 || !controller.alertHistory.isEmpty) {
                                 HStack {
                                     Spacer()
@@ -617,12 +682,17 @@ private struct LiveTopStack: View {
                     sos.padding(.top, !driving && card != nil && !controller.bellOpen ? 60 : 0)
                 }
             }
-            if let t = AlertQueue.toast(alerts), !(driving && card != nil) {
+            if let t = toast, !(driving && card != nil) {
                 /* Driving: one alert at a time; the toast waits behind the card (it is in the history). */
                 SaryAlertCard(alert: t)
-                    .transition(.opacity)
+                    /* Outside the lane (which caps its cards): the same cap. */
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                    /* A small rise and fade; only a fade in drive mode (peripheral). */
+                    .id(t.id)
+                    .transition(SaryTransition.toast(theme))
             }
         }
+        .animation(theme.animation(.snappy), value: toast?.id)
         .animation(theme.animation(.smooth), value: controller.bellOpen)
         .animation(theme.animation(.smooth), value: controller.radioBarOpen)
         .animation(theme.animation(.smooth), value: radioFlash)
@@ -633,7 +703,8 @@ private struct LiveTopStack: View {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             if !Task.isCancelled, radioFlash == id { radioFlash = nil }
         }
-        .animation(theme.animation(.enter), value: card?.id)
+        /* Shorter while driving. */
+        .animation(theme.animation(theme.drive ? .snappy : .enter), value: card?.id)
     }
 
     private func header(bell: Int) -> some View {
@@ -642,16 +713,17 @@ private struct LiveTopStack: View {
             let follow = plan.following && plan.plan.hasRoute ? TripHeaderPresenter.follow(plan.followStatus(fix: location.lastFix, now: ctx.date)) : nil
             let h = TripHeaderUI(title: TripHeaderPresenter.title(outingName: ui.outingName, trip: trip, ended: controller.tripEnded),
                                  /* «الطلعة» و«المشوار»: the state, unmistakable (ux/الطلعة-والمشوار.md). */
-                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI.line
+                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI(ui: ui).line
                                      : TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars)),
                                  level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
                                  bell: bell)
             /* «تخفيف الزحمة» ٤–٥: the weather while stopped only (dangerous weather comes as an alert);
              * no binoculars here («أدوات» → «استكشاف وطبقات»); nothing live after the end. */
             let ended = controller.tripEnded
-            /* A small phone (iPhone SE): the state line needs the width more than the weather pill
-             * (the weather stays in the sheet and its own alerts). */
-            TripHeader(ui: h, weather: driving || ended || UIScreen.main.bounds.width < 380 ? nil : weather.chip(now: ctx.date),
+            /* A narrow phone (SE, mini) or large text: the state line needs the width more than the
+             * weather pill (the weather stays in the sheet and its own alerts). `LiveFit`. */
+            let roomForWeather = LiveFit.showsHeaderWeather(width: width, largeText: typeSize >= .xxLarge)
+            TripHeader(ui: h, weather: driving || ended || !roomForWeather ? nil : weather.chip(now: ctx.date),
                        accessibility: [ui.outingName, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line,
                                        trip?.phase == .underway ? trip?.remainingLine : nil, ui.connection.label].compactMap { $0 }.joined(separator: "، "),
                        back: controller.actions.back,
@@ -682,7 +754,7 @@ private struct LiveTopStack: View {
         switch nav.phase {
         case .guiding:
             NavManeuverBanner(nav: nav)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(SaryTransition.banner(theme))
             if let moved = controller.navMemberMovedMeters, let t = nav.target {
                 Button { controller.navigateToMember(t.memberId ?? "") } label: {
                     SaryButtonLabel(title: "\(t.name) تحرّك \(SaryFormat.distance(meters: moved)) · حدّث الطريق", systemImage: SaryIcon.retry)
@@ -694,14 +766,14 @@ private struct LiveTopStack: View {
             if controller.autoNavFollowId != nil, let f = controller.followUI {
                 /* The trip's off-road leg along the plan's drawn route: the track panel is the one header. */
                 FollowTrackPanel(ui: f, reverse: controller.reverseFollow, exit: controller.stopGuidanceTapped, approach: controller.approachFollow)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(SaryTransition.banner(theme))
             } else {
                 NavOffRoadPanel(nav: nav, reference: controller.navReferenceBearing)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(SaryTransition.banner(theme))
             }
         case .arrived:
             NavArrivalCard(nav: nav, end: controller.endNav)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(SaryTransition.banner(theme))
         default:
             EmptyView()
         }
@@ -714,6 +786,8 @@ struct BackTrackPanel: View {
     var ui: BackTrackUI
     var exit: () -> Void
     @Environment(\.sary) private var theme
+    /// «طريق الرجعة» just started: the arrow disc settles in once (the panel itself comes down as a banner).
+    @State private var settled = false
 
     var body: some View {
         let p = theme.palette
@@ -743,6 +817,11 @@ struct BackTrackPanel: View {
             .environment(\.layoutDirection, .leftToRight)
             .overlay(Circle().stroke(Color.white, lineWidth: 3))
             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+            .scaleEffect(settled || theme.reduceMotion || theme.drive ? 1 : 0.7)
+            .onAppear {
+                guard !settled else { return }
+                withAnimation(theme.animation(.appear)) { settled = true }
+            }
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -780,8 +859,8 @@ struct BackTrackPanel: View {
         .overlay {
             if off { RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.emergency, lineWidth: 3) }
         }
-        .sensoryFeedback(.warning, trigger: off) { was, now in now && !was }
-        .sensoryFeedback(.success, trigger: arrived) { was, now in now && !was }
+        .saryHaptic(.warning, trigger: off) { was, now in now && !was }
+        .saryHaptic(.arrival, trigger: arrived) { was, now in now && !was }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("backtrack.panel")
     }
@@ -982,7 +1061,8 @@ struct RecenterPill: View {
             .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
         }
         .buttonStyle(SaryPressStyle())
-        .sensoryFeedback(.impact, trigger: title)
+        /* Silent in drive mode (`SaryHaptics.allows`). */
+        .saryHaptic(.selection, trigger: title)
         .accessibilityLabel(Text(title))
         .accessibilityHint(Text("يرجّع الخريطة خلف سيارتك وباتجاه سيرك"))
         .accessibilityIdentifier("camera.recenter")

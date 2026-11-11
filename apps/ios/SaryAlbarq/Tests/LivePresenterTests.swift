@@ -160,6 +160,23 @@ final class LivePresenterTests: XCTestCase {
         XCTAssertEqual(LiveOutingPresenter.relative(10, mapBearing: 30), 340)
         XCTAssertEqual(LiveOutingPresenter.relative(90, mapBearing: 0), 90)
     }
+
+    /// `mySOS` is exactly the presenter's `sos(_:).mine` (the settings header reads it on its own).
+    func testMySOSMatchesThePresenter() {
+        let mine = SosInfo(at: iso(30), fix: nil)
+        for sos in [nil, mine] {
+            let v = view(members: [member("me", "أنا", role: "owner", joined: 0, sos: sos), member("a", "فهد", joined: 1)], positions: [])
+            for sending in [false, true] {
+                var i = base(v)
+                i.sosSending = sending
+                XCTAssertEqual(LiveOutingPresenter.mySOS(view: v, sending: sending, now: now), LiveOutingPresenter.sos(i).mine)
+            }
+        }
+        var noView = LivePresenterInput()
+        noView.sosSending = true
+        XCTAssertEqual(LiveOutingPresenter.mySOS(view: nil, sending: true, now: now), LiveOutingPresenter.sos(noView).mine)
+        XCTAssertEqual(LiveOutingPresenter.mySOS(view: nil, sending: true, now: now), .none)
+    }
 }
 
 final class EdgeArrowTests: XCTestCase {

@@ -33,6 +33,18 @@ final class QiblaTests: XCTestCase {
         XCTAssertEqual(Qibla.distanceKm(from: Qibla.kaaba), 0, accuracy: 1e-6)
     }
 
+    func testMapRayUsesGreatCircleAndEndsAtKaaba() {
+        let origin = c(24.7136, 46.6753)
+        let points = Qibla.greatCirclePoints(from: origin)
+        XCTAssertEqual(points.count, 49)
+        XCTAssertEqual(points.first?.latitude ?? 0, origin.latitude, accuracy: 1e-9)
+        XCTAssertEqual(points.first?.longitude ?? 0, origin.longitude, accuracy: 1e-9)
+        XCTAssertEqual(points.last?.latitude ?? 0, Qibla.kaaba.latitude, accuracy: 1e-9)
+        XCTAssertEqual(points.last?.longitude ?? 0, Qibla.kaaba.longitude, accuracy: 1e-9)
+        let firstSegmentBearing = Qibla.bearing(from: points[0], to: points[1])
+        XCTAssertEqual(firstSegmentBearing, Qibla.bearing(from: origin), accuracy: 0.1)
+    }
+
     func testTurnAndHints() {
         XCTAssertEqual(Qibla.turn(qibla: 244, heading: 240), 4, accuracy: 1e-9)
         XCTAssertEqual(Qibla.turn(qibla: 10, heading: 350), 20, accuracy: 1e-9)
@@ -69,5 +81,46 @@ final class QiblaTests: XCTestCase {
         /* It still makes sense after the trip ends. */
         let endedChildren = LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).flatMap(\.children)
         XCTAssertTrue(endedChildren.contains { $0.id == "qibla" })
+    }
+
+    // MARK: screen fit
+
+    func testCompassKeepsItsSizeOnStandardAndLargePhones() {
+        // Sheet content areas (pt) of a 393×852 phone and a 440×956 Pro Max.
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 393, height: 780)), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 440, height: 890)), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 375, height: 745)), 1, "mini keeps the full compass")
+    }
+
+    func testCompassShrinksOnAnSE() {
+        let s = Qibla.compassScale(page: CGSize(width: 375, height: 620))
+        XCTAssertLessThan(s, 1)
+        XCTAssertEqual(s, (620 - 340) / 320, accuracy: 0.0001)
+        // Compass + header/degrees/hint fit the page.
+        XCTAssertLessThanOrEqual(Qibla.compassDesign.height * s + 340, 620.5)
+    }
+
+    func testCompassScaleIsBounded() {
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 200, height: 300)), 0.72)
+        XCTAssertEqual(Qibla.compassScale(page: .zero), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 320, height: 900)), (320 - 40) / 300, accuracy: 0.0001)
+    }
+
+    func testDialTurnsTheShortWayAcrossNorth() {
+        XCTAssertEqual(Qibla.unwrap(previous: nil, next: 370), 10, accuracy: 1e-9)
+        XCTAssertEqual(Qibla.unwrap(previous: 359, next: 1), 361, accuracy: 1e-9, "+2°, not −358°")
+        XCTAssertEqual(Qibla.unwrap(previous: 361, next: 355), 355, accuracy: 1e-9)
+        XCTAssertEqual(Qibla.unwrap(previous: 2, next: 358), -2, accuracy: 1e-9)
+        var d: Double? = nil
+        for h in [350.0, 355, 0, 5, 10, 5, 0, 355] { d = Qibla.unwrap(previous: d, next: h) }
+        XCTAssertEqual(d ?? 0, 355, accuracy: 1e-9, "a sweep back and forth over north stays continuous")
+    }
+
+    func testAlignedHasHysteresisSoTheHapticPlaysOnce() {
+        XCTAssertTrue(Qibla.aligned(turn: 4, was: false))
+        XCTAssertFalse(Qibla.aligned(turn: 6, was: false), "not in yet")
+        XCTAssertTrue(Qibla.aligned(turn: 6, was: true), "a tremble at the edge keeps it")
+        XCTAssertTrue(Qibla.aligned(turn: -7.9, was: true))
+        XCTAssertFalse(Qibla.aligned(turn: 9, was: true), "really turned away")
     }
 }

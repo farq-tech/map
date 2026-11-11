@@ -158,6 +158,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var onCenter: (MapCenterReading) -> Void = { _ in }
     /// «صور عالية الوضوح» gating input (Sources/Map/AIEnhance; original imagery when `.off`).
     var hiRes = HiResRequest.off
+    /// Fresh device location for the always-on map direction to the Kaaba (nil hides it).
+    var qiblaOrigin: LngLat?
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -214,6 +216,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.syncIfChanged(members)
         #endif
         c.setRally(rally)
+        c.updatePulse()
         c.setWaypoints(waypoints)
         c.setTrails(trails)
         c.setPlan(plan)
@@ -228,6 +231,7 @@ struct OutingMapboxView: UIViewRepresentable {
         HiResImagery.of(map).update(hiRes)
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
         WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome))
+        QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -277,6 +281,9 @@ struct OutingMapboxView: UIViewRepresentable {
         /// A road query already ran when the map went idle at `roadsCamera` (tiles there are loaded).
         private var idleQueried = false
         private var roadQuery: Cancelable?
+        /// Latest road / waterway query: an older result converted off the main thread is dropped.
+        private var roadGen = QueryGeneration()
+        private var waterGen = QueryGeneration()
         private var tapInteraction: Cancelable?
         let waypointPins = WaypointPins()
         private var lastWaypoints: [MapWaypoint] = []
@@ -323,6 +330,11 @@ struct OutingMapboxView: UIViewRepresentable {
         var theme: SaryTheme = .default
         var lastCamera = -1
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
+        /// The live breath (`LivePulse`): one slow timer, only while something live is on the map.
+        private var pulseTimer: Timer?
+        private var pulseBeat = 0
+        private var foreground = true
+        private var appObservers: [NSObjectProtocol] = []
         private var trails = MapTrails()
         private var trailLayerKey: String?
         /// The friends' lines last sent to `trailFriends` (nil: send again).
@@ -344,6 +356,8 @@ struct OutingMapboxView: UIViewRepresentable {
         /// Members the person spread out (their group tapped while parked together).
         private var expandedGroups = Set<String>()
         private var lastLayout: ChipLayout.Result?
+        /// The leader lines' stroke colours, converted for `theme`.
+        private var leaderColors: (theme: SaryTheme, stroke: CGColor, halo: CGColor)?
         private var ornamentSpot: String?
         private var ornamentCheckedAt: CFTimeInterval = 0
         /// "Keep everyone on screen": on by default, off once you move the map yourself, back on with the group button.
@@ -370,6 +384,8 @@ struct OutingMapboxView: UIViewRepresentable {
             /// The vehicle layer is the 2D icon (symbol), not the 3D model.
             var icon = false
             var layersReady = false
+            /// Just joined: its first layers are drawn at zero and fade in (`MemberFade`).
+            var appearing = false
             /// The position and heading last sent to the car's source / layer, and the presence its
             /// opacity was set for (nil: send again). Every member's fix re-syncs every car, and most
             /// of them have not moved or changed state.
@@ -459,6 +475,20 @@ struct OutingMapboxView: UIViewRepresentable {
                 return true
             })
             MapTerrainProbe.source = self
+            /* The live breath stops in the background and in Low Power Mode. */
+            foreground = UIApplication.shared.applicationState != .background
+            let nc = NotificationCenter.default
+            appObservers.append(nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.foreground = false
+                self?.updatePulse()
+            })
+            appObservers.append(nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.foreground = true
+                self?.updatePulse()
+            })
+            appObservers.append(nc.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
+                self?.updatePulse()
+            })
             waypointPins.onClusterTap = { [weak self] pts in
                 guard let self else { return }
                 self.keepGroup = false
@@ -505,6 +535,10 @@ struct OutingMapboxView: UIViewRepresentable {
             planDrawing.longPress?.cancel()
             link?.invalidate()
             link = nil
+            pulseTimer?.invalidate()
+            pulseTimer = nil
+            appObservers.forEach(NotificationCenter.default.removeObserver)
+            appObservers = []
             roadQuery?.cancel()
             waterQuery?.cancel()
             tapInteraction?.cancel()
@@ -536,6 +570,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private func styleLoaded() {
             guard let map else { return }
             styleReady = true
+            /* «أداء التطبيق»: the launch interval ends at the first map (a no-op after that). */
+            PerfSignpost.end(.launchToMap)
             addedModels.removeAll()
             /* A new style: query its roads again even if the camera did not move. */
             roadsCamera = nil
@@ -647,7 +683,7 @@ struct OutingMapboxView: UIViewRepresentable {
             terrain3D = on
             if styleReady { try? map.mapboxMap.setTerrain(properties: ["source": "mapbox-dem", "exaggeration": terrainExaggeration]) }
             let cam = CameraOptions(pitch: on ? 62 : 0)
-            map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.8)
+            ease(map, to: cam, .tilt)
         }
 
         func setExplore(_ e: MapExplore) {
@@ -713,27 +749,19 @@ struct OutingMapboxView: UIViewRepresentable {
         private func refreshWaterways() {
             guard styleReady, let m = map?.mapboxMap else { return }
             waterQuery?.cancel()
+            let gen = waterGen.next()
             waterQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["waterway"], filter: WadiProximity.filter)) { [weak self] result in
-                guard let self, case let .success(feats) = result else { return }
-                var lines: [WaterwayLine] = []
-                for q in feats {
-                    let f = q.queriedFeature.feature
-                    let props = f.properties ?? [:]
-                    func str(_ k: String) -> String? {
-                        if case let .string(s)?? = props[k] { return s }
-                        return nil
-                    }
-                    let cls = str("class") ?? str("type") ?? ""
-                    guard WadiProximity.isWatercourse(cls) || str("type") == "wadi" else { continue }
-                    let name = str("name_ar") ?? str("name")
-                    switch f.geometry {
-                    case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
-                    case let .multiLineString(ml)?:
-                        for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
-                    default: break
+                guard let self, case let .success(feats) = result, self.waterGen.isCurrent(gen) else { return }
+                /* Only plain Turf values leave the main thread; converting every line of the loaded
+                 * tiles runs on the conversion queue. */
+                let features = feats.map { $0.queriedFeature.feature }
+                Self.conversionQueue.async {
+                    let lines = Self.waterwayLines(features)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.waterGen.isCurrent(gen) else { return }
+                        self.onWaterways(lines)
                     }
                 }
-                DispatchQueue.main.async { self.onWaterways(lines) }
             }
         }
 
@@ -743,41 +771,86 @@ struct OutingMapboxView: UIViewRepresentable {
             if roadsCameraMoved() { idleQueried = false }
             if idle { idleQueried = true }
             roadsCamera = (m.cameraState.center, m.cameraState.zoom)
+            let gen = roadGen.next()
             let probe = FarqTiles.probe
             roadQuery = m.querySourceFeatures(for: probe.source, options: SourceQueryOptions(sourceLayerIds: [probe.sourceLayer], filter: probe.filter)) { [weak self] result in
-                guard let self, case let .success(feats) = result else { return }
-                var lines: [RoadSnap.RoadLine] = []
-                for q in feats {
-                    let f = q.queriedFeature.feature
-                    let props = f.properties ?? [:]
-                    func str(_ k: String) -> String {
-                        if case let .string(s)?? = props[k] { return s }
-                        return ""
-                    }
-                    /* A road cut at a tile edge comes back as two features with the same id. */
-                    let key: String
-                    switch f.identifier {
-                    case let .string(s)?: key = "id:\(s)"
-                    case let .number(n)?: key = "id:\(n)"
-                    default:
-                        let name = [str("name"), str("name_ar"), str("ref")].first { !$0.isEmpty } ?? ""
-                        key = "\(str("class")):\(name)"
-                    }
-                    switch f.geometry {
-                    case let .lineString(l)?: lines.append(.init(key: key, coords: l.coordinates.map { [$0.longitude, $0.latitude] }))
-                    case let .multiLineString(ml)?: for l in ml.coordinates { lines.append(.init(key: key, coords: l.map { [$0.longitude, $0.latitude] })) }
-                    default: break
+                guard let self, case let .success(feats) = result, self.roadGen.isCurrent(gen) else { return }
+                /* Converting (and comparing) every road of the loaded tiles took the main thread every
+                 * few seconds while following a car in a city. Only plain Turf values and the current
+                 * set (copy-on-write) leave the main thread; the result comes back to it. */
+                let features = feats.map { $0.queriedFeature.feature }
+                let before = self.roads
+                let beforeVersion = self.roadsVersion
+                Self.conversionQueue.async {
+                    let lines = Self.roadLines(features)
+                    let update = RoadSnap.RoadSetUpdate.between(old: before, new: lines)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.roadGen.isCurrent(gen) else { return }
+                        /* The diff is against the set it was computed from; recompute if another landed since. */
+                        let u = self.roadsVersion == beforeVersion ? update : RoadSnap.RoadSetUpdate.between(old: self.roads, new: lines)
+                        self.applyRoads(lines, u)
                     }
                 }
-                let changed = lines.count != self.roads.count || lines.first?.coords != self.roads.first?.coords
-                if lines != self.roads { self.roads = lines }
-                guard changed else { return }
-                /* A car drawn before its street loaded gets matched now. */
-                for r in self.recs.values where r.matcher.road == nil && !r.matcher.offRoad {
-                    r.matcher.reset()
-                }
-                self.sync(self.lastCars)
             }
+        }
+
+        private func applyRoads(_ lines: [RoadSnap.RoadLine], _ u: RoadSnap.RoadSetUpdate) {
+            if u.replace { roads = lines }
+            guard u.changed else { return }
+            /* A car drawn before its street loaded gets matched now. */
+            for r in recs.values where r.matcher.road == nil && !r.matcher.offRoad {
+                r.matcher.reset()
+            }
+            sync(lastCars)
+        }
+
+        /// Road and waterway query results are converted here, off the main thread (plain values only).
+        private static let conversionQueue = DispatchQueue(label: "sary.map.features", qos: .utility)
+
+        /// The street lines cars are matched to, from the probe's queried features. Pure: any thread.
+        static func roadLines(_ features: [Feature]) -> [RoadSnap.RoadLine] {
+            var lines: [RoadSnap.RoadLine] = []
+            for f in features {
+                let props = f.properties ?? [:]
+                func str(_ k: String) -> String {
+                    if case let .string(s)?? = props[k] { return s }
+                    return ""
+                }
+                /* A road cut at a tile edge comes back as two features with the same id. */
+                let key: String
+                switch f.identifier {
+                case let .string(s)?: key = "id:\(s)"
+                case let .number(n)?: key = "id:\(n)"
+                default: key = RoadSnap.nameKey(cls: str("class"), name: str("name"), nameAr: str("name_ar"), ref: str("ref"))
+                }
+                switch f.geometry {
+                case let .lineString(l)?: lines.append(.init(key: key, coords: l.coordinates.map { [$0.longitude, $0.latitude] }))
+                case let .multiLineString(ml)?: for l in ml.coordinates { lines.append(.init(key: key, coords: l.map { [$0.longitude, $0.latitude] })) }
+                default: break
+                }
+            }
+            return lines
+        }
+
+        /// Watercourse lines (the wadi hint) from the waterway probe's queried features. Pure: any thread.
+        static func waterwayLines(_ features: [Feature]) -> [WaterwayLine] {
+            var lines: [WaterwayLine] = []
+            for f in features {
+                let props = f.properties ?? [:]
+                func str(_ k: String) -> String? {
+                    if case let .string(s)?? = props[k] { return s }
+                    return nil
+                }
+                guard let cls = WadiProximity.watercourseClass(cls: str("class"), type: str("type")) else { continue }
+                let name = str("name_ar") ?? str("name")
+                switch f.geometry {
+                case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
+                case let .multiLineString(ml)?:
+                    for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
+                default: break
+                }
+            }
+            return lines
         }
 
         /// True before the first query, or when the camera moved ≥ 30 m or zoomed since the last query.
@@ -852,7 +925,11 @@ struct OutingMapboxView: UIViewRepresentable {
                     if matched?.key == nil { matched = nil }
                 }
                 let target = matched?.point ?? raw
-                if existing == nil { recs[v.id] = rec }
+                if existing == nil {
+                    recs[v.id] = rec
+                    /* A member joining fades in (instant under Reduce Motion). */
+                    rec.appearing = styleReady && !theme.reduceMotion
+                }
                 rec.to = target
                 rec.lastAt = v.atMs
                 /* Direction: the reported course, else real movement ≥ 12 m; kept while parked. */
@@ -878,14 +955,78 @@ struct OutingMapboxView: UIViewRepresentable {
                 drawChip(rec, on: map)
             }
             for (id, rec) in recs where !seen.contains(id) {
-                remove(rec, on: map)
                 recs[id] = nil
+                /* A member leaving fades out where it was, then its layers go. */
+                if styleReady, rec.layersReady, !theme.reduceMotion { fadeOut(rec, id: id, on: map) } else { remove(rec, on: map) }
             }
             fx.keep(seen)
             startLink()
             frameGroupIfNeeded(cars)
             layoutChips()
             project()
+            updatePulse()
+        }
+
+        /// Fade a leaving car out (Mapbox paint transitions, see `MemberFade`), then remove its
+        /// layers, unless the member came back meanwhile (their new car took the same layer ids).
+        private func fadeOut(_ r: Rec, id: String, on map: MapView) {
+            remove(chipsOf: r)
+            let m: MapboxMap = map.mapboxMap!
+            let ids = Vehicle.ids(r.key)
+            if r.model, m.layerExists(withId: ids.layer) {
+                try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity", value: 0)
+            }
+            if m.layerExists(withId: ids.spot) {
+                try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: 0)
+                try? m.setLayerProperty(for: ids.spot, property: "circle-radius", value: 0)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + MemberFade.seconds) { [weak self, weak map] in
+                guard let self, let map, self.recs[id] == nil, self.styleReady else { return }
+                self.removeLayers(r, on: map)
+            }
+        }
+
+        // MARK: live breath (my position, the rally flag)
+
+        /// My fix is live and precise (an approximate spot is never animated).
+        private var myLive: Bool { !tripEnded && lastCars.contains { $0.isMe && $0.presence == .live && !$0.approximate } }
+        private var rallyLive: Bool { !tripEnded && rallyPin != nil }
+
+        /// Start or stop the beat timer (`LivePulse.shouldRun`); stopping puts the halo back at rest.
+        func updatePulse() {
+            let run = LivePulse.shouldRun(live: myLive || rallyLive, foreground: foreground, reduceMotion: theme.reduceMotion,
+                                          drive: theme.drive, lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+            if run {
+                guard pulseTimer == nil else { return }
+                let t = Timer(timeInterval: LivePulse.beat, repeats: true) { [weak self] _ in self?.pulseTick() }
+                t.tolerance = 0.15
+                RunLoop.main.add(t, forMode: .common)
+                pulseTimer = t
+            } else if let t = pulseTimer {
+                t.invalidate()
+                pulseTimer = nil
+                pulseBeat = 0
+                applyHaloRing(.hold)
+            }
+        }
+
+        private func pulseTick() {
+            pulseBeat &+= 1
+            let phase = LivePulse.phase(pulseBeat)
+            applyHaloRing(myLive ? phase : .hold)
+            /* The flag breathes once per breath: one SwiftUI phase cycle, no loop. */
+            if phase == .inhale, rallyLive, let rp = rallyPin {
+                rp.host.rootView = rallyView(rp.point, beat: pulseBeat)
+            }
+        }
+
+        private func applyHaloRing(_ phase: LivePulse.Phase) {
+            guard styleReady, let m = map?.mapboxMap else { return }
+            let id = Vehicle.haloId(Vehicle.ids("").spot)
+            guard m.layerExists(withId: id) else { return }
+            let ring = LivePulse.haloRing(phase)
+            try? m.setLayerProperty(for: id, property: "circle-stroke-width", value: ring.width)
+            try? m.setLayerProperty(for: id, property: "circle-stroke-opacity", value: ring.opacity)
         }
 
         // MARK: «تتبعني» / «باتجاهي»
@@ -1003,6 +1144,11 @@ struct OutingMapboxView: UIViewRepresentable {
             let wantModel = !r.item.approximate
             if !r.layersReady || r.model != wantModel {
                 removeLayers(r, on: map)
+                /* Joining: the first layers start at zero and ease to their presence opacity
+                   (the spot also grows from nothing). The same transition softens later changes
+                   of presence (live → last known → lost). */
+                let fadeIn = r.appearing
+                let spotRadius: Double = r.item.approximate ? 9 : 6
                 var src = GeoJSONSource(id: ids.source)
                 src.data = .geometry(.point(Point(r.shown.coordinate)))
                 try? m.addSource(src)
@@ -1015,9 +1161,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 try? m.addLayer(with: [
                     "id": ids.spot, "type": "circle", "source": ids.source,
                     "paint": [
-                        "circle-radius": r.item.approximate ? 9 : 6, "circle-color": "#" + Vehicle.hex(spot),
+                        "circle-radius": fadeIn ? 0 : spotRadius, "circle-color": "#" + Vehicle.hex(spot),
                         "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5,
                         "circle-pitch-alignment": "map", "circle-emissive-strength": 1,
+                        "circle-opacity": fadeIn ? 0 : 1,
+                        "circle-opacity-transition": MemberFade.transition, "circle-radius-transition": MemberFade.transition,
                     ] as [String: Any],
                 ], layerPosition: nil)
                 if wantModel, Vehicle.marker == .icon, ensureIcon(r.item.color, on: m) {
@@ -1029,7 +1177,8 @@ struct OutingMapboxView: UIViewRepresentable {
                             "icon-rotate": CarIcon.rotate(r.heading), "icon-rotation-alignment": "map", "icon-pitch-alignment": "map", "icon-keep-upright": false,
                             "icon-allow-overlap": true, "icon-ignore-placement": true,
                         ] as [String: Any],
-                        "paint": ["icon-opacity": 1, "icon-emissive-strength": 1] as [String: Any],
+                        "paint": ["icon-opacity": fadeIn ? 0 : 1, "icon-opacity-transition": MemberFade.transition,
+                                  "icon-emissive-strength": 1] as [String: Any],
                     ], layerPosition: nil)
                     r.model = true
                     r.icon = true
@@ -1040,7 +1189,8 @@ struct OutingMapboxView: UIViewRepresentable {
                         "paint": [
                             "model-type": "common-3d", "model-scale": Vehicle.scaleExpression,
                             "model-rotation": Vehicle.rotation(r.heading), "model-cast-shadows": true,
-                            "model-receive-shadows": true, "model-emissive-strength": 0.6, "model-opacity": 1,
+                            "model-receive-shadows": true, "model-emissive-strength": 0.6, "model-opacity": fadeIn ? 0 : 1,
+                            "model-opacity-transition": MemberFade.transition,
                         ] as [String: Any],
                     ], layerPosition: nil)
                     r.model = true
@@ -1050,12 +1200,23 @@ struct OutingMapboxView: UIViewRepresentable {
                     r.icon = false
                 }
                 r.layersReady = true
+                /* «أداء التطبيق»: the live screen's first car is on the map (a no-op after that). */
+                PerfSignpost.end(.liveFirstCar)
                 r.greyed = false // fresh layers are drawn in the car's own colour
                 r.sent = nil
                 r.sentPresence = nil
+                if fadeIn {
+                    /* After the zero state has been drawn once, ease to the real values. */
+                    DispatchQueue.main.asyncAfter(deadline: .now() + MemberFade.revealDelay) { [weak self, weak r] in
+                        guard let self, let r, r.appearing, let map = self.map, self.styleReady else { return }
+                        r.appearing = false
+                        try? map.mapboxMap.setLayerProperty(for: ids.spot, property: "circle-radius", value: spotRadius)
+                        self.drawCar(r, on: map)
+                    }
+                }
             }
             setPosition(r, on: m)
-            if r.sentPresence != r.item.presence {
+            if r.sentPresence != r.item.presence, !r.appearing {
                 r.sentPresence = r.item.presence
                 if r.model {
                     try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
@@ -1149,6 +1310,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     let box = HostBox(view)
                     overlay.addSubview(box)
                     r.chipBox = box
+                    box.pop(theme)
                 }
             } else {
                 r.chipBox?.removeFromSuperview()
@@ -1165,6 +1327,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     let box = HostBox(view)
                     overlay.addSubview(box)
                     r.noteBox = box
+                    box.pop(theme)
                 }
             } else {
                 r.noteBox?.removeFromSuperview()
@@ -1258,6 +1421,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     box = HostBox(view)
                     overlay.addSubview(box)
                     groupBoxes[g.key] = box
+                    box.pop(theme)
                 }
                 box.frame = CGRect(x: g.frame.midX - box.ideal.width / 2, y: g.frame.maxY - box.ideal.height, width: box.ideal.width, height: box.ideal.height)
                 for id in g.ids {
@@ -1276,10 +1440,14 @@ struct OutingMapboxView: UIViewRepresentable {
                 if let b = me.noteBox, !b.isHidden { overlay.bringSubviewToFront(b) }
                 if let b = me.chipBox { overlay.bringSubviewToFront(b) }
             }
+            /* The palette is fixed RGB per theme: convert the SwiftUI colours once per theme, not every frame. */
+            if leaderColors?.theme != theme {
+                leaderColors = (theme, UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor, UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor)
+            }
             overlay.leaders.path = leaders
-            overlay.leaders.strokeColor = UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor
+            overlay.leaders.strokeColor = leaderColors?.stroke
             overlay.leaderHalo.path = leaders
-            overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
+            overlay.leaderHalo.strokeColor = leaderColors?.halo
             /* Waypoint pins fit around what the cars' chips took. */
             var taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
             /* «نقطة البداية»: its label folds away (icon only) where a chip would cover it or it would
@@ -1397,8 +1565,11 @@ struct OutingMapboxView: UIViewRepresentable {
             if rally == rallyPin?.point { return }
             rallyPin?.annotation.remove()
             rallyPin = nil
-            guard let rally else { return }
-            let host = UIHostingController(rootView: RallyPin(label: rally.label, theme: theme) { [weak self] in self?.onRallyTap() })
+            guard let rally else {
+                updatePulse()
+                return
+            }
+            let host = UIHostingController(rootView: rallyView(rally, beat: 0))
             host.view.backgroundColor = .clear
             let size = host.sizeThatFits(in: CGSize(width: 200, height: 120))
             host.view.frame = CGRect(origin: .zero, size: size)
@@ -1409,6 +1580,11 @@ struct OutingMapboxView: UIViewRepresentable {
             map.viewAnnotations.add(a)
             rallyPin = (rally, a, host)
             project()
+            updatePulse()
+        }
+
+        private func rallyView(_ rally: MapRallyPoint, beat: Int) -> RallyPin {
+            RallyPin(label: rally.label, theme: theme, beat: beat) { [weak self] in self?.onRallyTap() }
         }
 
         // MARK: «مساري» (on-device trail) and friends' recent trails
@@ -1624,16 +1800,45 @@ struct OutingMapboxView: UIViewRepresentable {
         func centerOnMe() {
             guard let me = lastCars.first(where: \.isMe) else { return }
             keepGroup = false
-            center(me.position, zoom: max(map?.mapboxMap.cameraState.zoom ?? 15, 15))
+            /* Where my car is drawn right now (its glide), so the move lands on it without a hop. */
+            let at = recs[me.id]?.shown ?? me.position
+            center(at, zoom: max(map?.mapboxMap.cameraState.zoom ?? 15, 15), motion: .recenter)
         }
 
         /// Centre a point inside the area our chrome leaves clear.
-        func center(_ p: LngLat, zoom: Double? = nil) {
+        func center(_ p: LngLat, zoom: Double? = nil, motion: MapCameraMotion = .focus) {
             guard let map else { return }
             keepGroup = false
             let pad = UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0)
-            let cam = CameraOptions(center: p.coordinate, padding: pad, zoom: zoom ?? max(map.mapboxMap.cameraState.zoom, 14))
-            map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.8)
+            let z: Double = zoom ?? Double(max(map.mapboxMap.cameraState.zoom, 14))
+            let cam = CameraOptions(center: p.coordinate, padding: pad, zoom: CGFloat(z))
+            ease(map, to: cam, motion, target: p, zoom: z)
+        }
+
+        /// Every one-shot move eases the same way (`MapCameraMotion`): a running ease is replaced,
+        /// never stacked, a nearby hop is short, and Reduce Motion cuts straight to the result.
+        private func ease(_ map: MapView, to cam: CameraOptions, _ motion: MapCameraMotion, target: LngLat? = nil, zoom: Double? = nil,
+                          completion: (() -> Void)? = nil) {
+            let st = map.mapboxMap.cameraState
+            var shift: Double?
+            if let target, map.bounds.width > 0 {
+                let a = map.mapboxMap.point(for: target.coordinate)
+                /* Off-screen answers (-1, -1): a long move, keep the full length. */
+                if a.x >= 0, a.y >= 0 {
+                    let clear = map.bounds.inset(by: UIEdgeInsets(top: chrome.top, left: 0, bottom: chrome.bottom, right: 0))
+                    shift = Double(hypot(a.x - clear.midX, a.y - clear.midY))
+                }
+            }
+            let d = motion.duration(reduceMotion: theme.reduceMotion, shiftPt: shift,
+                                    zoomDelta: zoom.map { $0 - Double(st.zoom) } ?? 0)
+            /* A tilt only touches the pitch: it may run alongside another move. */
+            if motion != .tilt { map.camera.cancelAnimations() }
+            if d == 0 {
+                map.mapboxMap.setCamera(to: cam)
+                completion?()
+            } else {
+                map.camera.ease(to: cam, duration: d) { _ in completion?() }
+            }
         }
 
         /// Frame arbitrary points (my trail and me).
@@ -1650,7 +1855,7 @@ struct OutingMapboxView: UIViewRepresentable {
                                                        coordinatesPadding: framePadding, maxZoom: maxZoom, offset: nil) else { return }
             cam.padding = nil
             fitting = true
-            map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.9) { [weak self] _ in self?.fitting = false }
+            ease(map, to: cam, .fit) { [weak self] in self?.fitting = false }
         }
 
         private func keepGroupInView(newcomers: Set<String>) {
@@ -1783,6 +1988,29 @@ final class HostBox<Content: View & Equatable>: UIView {
         super.layoutSubviews()
         host.view.frame = bounds
     }
+
+    /// Pop in once, on insertion (the SwiftUI `SaryTransition.chipPop` cannot show for a UIKit
+    /// box). Core Animation on the hosted layer: the model values (frame, alpha) the per-frame
+    /// declutter layout sets stay untouched, and the render server runs it, not our frames.
+    /// A plain fade when travel is not allowed (Reduce Motion, or drive mode: peripheral).
+    func pop(_ theme: SaryTheme) {
+        let layer = host.view.layer
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = theme.reduceMotion ? SaryMotion.reducedDuration : SaryMotion.appear.duration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "sary.pop.fade")
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: true) else { return }
+        let scale = CASpringAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.6
+        scale.toValue = 1
+        scale.damping = 18
+        scale.stiffness = 260
+        scale.mass = 1
+        scale.duration = min(scale.settlingDuration, 0.5)
+        layer.add(scale, forKey: "sary.pop.scale")
+    }
 }
 
 extension HostBox where Content == MapChip {
@@ -1866,11 +2094,29 @@ struct MapGroupChip: View, Equatable {
 struct RallyPin: View {
     let label: String
     let theme: SaryTheme
+    /// Each new beat (`LivePulse`, only while the outing is live) breathes one ring out from
+    /// the flag's foot: one phase cycle, then still. 0 = no breath yet.
+    var beat = 0
     var onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             SaryRallyFlag(marker: .init(label: label.isEmpty ? "نقطة التجمع" : label))
+                .overlay(alignment: .bottom) {
+                    /* Overlay: never part of the layout or the tap target. At rest (phase false) invisible. */
+                    Ellipse()
+                        .stroke(theme.palette.accent, lineWidth: 2)
+                        .frame(width: 18, height: 6)
+                        .phaseAnimator([false, true], trigger: beat) { ring, out in
+                            ring.scaleEffect(out ? 2.6 : 1).opacity(out ? 0.55 : 0)
+                        } animation: { _ in
+                            /* One half-breath each way; beats only come when the loop policy allows. */
+                            theme.animation(.livePulse)
+                        }
+                        .padding(.bottom, 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
         }
         .buttonStyle(.plain)
         .saryTheme(theme)
@@ -2000,12 +2246,36 @@ enum ArabicBasemap {
 
     static func cached(_ layer: MapLayer) -> String? {
         if let c = cache[layer] { return c }
+        guard let s = readDisk(layer) else { return nil }
+        cache[layer] = s
+        return s
+    }
+
+    /// The disk copy, tuned and graded as this build draws it (nil: none, or not Arabic).
+    /// Touches no shared state: safe on any thread.
+    private static func readDisk(_ layer: MapLayer) -> String? {
         guard let u = fileURL(layer), let raw = try? String(contentsOf: u, encoding: .utf8), raw.contains("name_ar") else { return nil }
         var s = tune(raw)
         /* A copy saved by an older build has another grade: grade it as this build does (idempotent). */
         if layer == .satellite { s = gradeSatellite(s) }
-        cache[layer] = s
         return s
+    }
+
+    /// Reads and writes of the disk copies, in order, off the main thread.
+    private static let disk = DispatchQueue(label: "sary.basemap.disk", qos: .userInitiated)
+
+    /// Launch (main thread): read and grade the disk copy off the main thread. Grading is a full
+    /// JSON parse and re-encode of the style; done in `cached` it ran on the main thread while
+    /// the first map was being created. A map created before this lands reads it itself, as before.
+    static func prewarm(_ layer: MapLayer = .satellite) {
+        guard cache[layer] == nil else { return }
+        disk.async {
+            guard let s = readDisk(layer) else { return }
+            DispatchQueue.main.async {
+                /* A fresher copy (fetched, or read by a map meanwhile) wins. */
+                if cache[layer] == nil { cache[layer] = s }
+            }
+        }
     }
 
     private static func fileURL(_ layer: MapLayer) -> URL? {
@@ -2065,8 +2335,11 @@ enum ArabicBasemap {
         if let json, json != cached(layer) {
             cache[layer] = json
             if let u = fileURL(layer) {
-                try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? json.write(to: u, atomically: true, encoding: .utf8)
+                /* The memory copy above is what this launch draws; the disk copy (the next launch's) is written off main. */
+                disk.async {
+                    try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try? json.write(to: u, atomically: true, encoding: .utf8)
+                }
             }
         } else if json != nil {
             /* Same style as the one already drawn: nothing to reload. */
@@ -2134,4 +2407,14 @@ extension OutingMapboxView.Coordinator: TerrainSampling {
 /// «تخفيف الزحمة» ٩: how long a note bubble stays open over a car before it folds to the chip's dot.
 enum NoteFold {
     static let seconds: CFTimeInterval = 10
+}
+
+extension MapCameraMotion {
+    /// Reduce Motion as the app resolves it, for map code that has no `SaryTheme` at hand.
+    /// Reads the stored preference (a few bytes): for one-shot moves and slow timers, never per frame.
+    static var reduceMotionNow: Bool {
+        let stored = UserDefaults.standard.data(forKey: AppearanceSettings.storageKey)
+            .flatMap { try? JSONDecoder().decode(AppearancePreferences.self, from: $0) }
+        return reduce(preference: stored?.motion ?? .system, system: UIAccessibility.isReduceMotionEnabled)
+    }
 }

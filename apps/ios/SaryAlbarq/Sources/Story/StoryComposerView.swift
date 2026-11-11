@@ -28,11 +28,11 @@ struct StoryComposerView: View {
             previewCard
             SarySegmented(options: StoryFormat.allCases, selection: $options.format, label: \.label,
                           systemImage: { $0 == .vertical ? "rectangle.portrait" : "square" }, id: "story.format")
-            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد الربع بدل أسمائهم.") {
+            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد الأصدقاء بدل أسمائهم.") {
                 SaryToggleRow(title: "أظهر نقطة البداية", subtitle: "يظهر المسار كاملًا من أول نقطة لآخر نقطة",
                               systemImage: "mappin.and.ellipse", isOn: $options.showStartEnd, id: "story.showStart")
                 SaryDivider()
-                SaryToggleRow(title: "أظهر أسماء الربع", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
+                SaryToggleRow(title: "أظهر أسماء الأصدقاء", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
                               systemImage: "person.2.fill", isOn: $options.showNames, id: "story.showNames")
             }
             SarySection(title: "صور من الطلعة", footer: "حتى ٣ صور التُقطت وقت الطلعة. تُرسم داخل القصة فقط وتبقى على جوالك، ولا يدخل القصة موقع الصورة ولا بياناتها.") {
@@ -87,6 +87,7 @@ struct StoryComposerView: View {
 
     private var previewCard: some View {
         let ratio = options.format.pixelSize.width / options.format.pixelSize.height
+        let maxWidth: CGFloat = options.format == .vertical ? 300 : 360
         return ZStack {
             RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(theme.palette.sunken)
             if let preview {
@@ -99,7 +100,10 @@ struct StoryComposerView: View {
             }
         }
         .aspectRatio(ratio, contentMode: .fit)
-        .frame(maxWidth: options.format == .vertical ? 300 : 360)
+        .frame(maxWidth: maxWidth)
+        /* The 9:16 preview is 533 pt tall: on a 375×667 SE it filled the whole screen and pushed
+           every control below the fold. Same size on standard phones (cover ≈ 669 pt), smaller there. */
+        .saryFitHeight(maxWidth / ratio, reference: 660)
         .frame(maxWidth: .infinity)
         .saryShadow(.raised, theme)
         .accessibilityIdentifier("story.preview")

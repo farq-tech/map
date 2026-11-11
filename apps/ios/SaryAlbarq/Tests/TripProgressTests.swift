@@ -423,6 +423,28 @@ final class TripProgressTests: XCTestCase {
         XCTAssertEqual(CarPlayPresenter.tripLine(i), "وصلنا الوجهة")
         XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم · وصلنا")
     }
+
+    /// The driven distance is walked once per trail and start, and a precomputed value is what the
+    /// panel shows (the live controller memoizes it across the screen's several panel reads).
+    func testDrivenMetersMemoWalksOncePerTrail() {
+        var trail = (0..<7).map { k in TrailPoint(lat: south(10_000 - Double(k) * 1000).lat, lng: dest.lng, t: t0 + Double(k) * 60_000) }
+        var memo = DrivenMetersMemo()
+        let a = memo.value(trail: trail, sinceMs: t0)
+        XCTAssertEqual(a, TripMath.drivenMeters(trail: trail, sinceMs: t0))
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0), a)
+        XCTAssertEqual(memo.computeCount, 1)
+        /* A later start, then a changed trail: walked again, never a stale number. */
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
+        XCTAssertEqual(memo.computeCount, 2)
+        trail[3].lng += 0.01
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
+        XCTAssertEqual(memo.computeCount, 3)
+
+        var i = input(fixAt: south(4000), trail: trail)
+        let plain = TripPresenter.panel(i)
+        i.drivenMeters = memo.value(trail: trail, sinceMs: t0)
+        XCTAssertEqual(TripPresenter.panel(i), plain)
+    }
 }
 
 /// `StoredBytesMemo`: the stored trip logs are decoded again only when their bytes change.
@@ -469,5 +491,169 @@ final class StoredBytesMemoTests: XCTestCase {
         XCTAssertEqual(read()?.distanceM, 300)
         XCTAssertEqual(memo.decodeCount, 3)
         defaults.removePersistentDomain(forName: suite)
+    }
+}
+
+/// «طريق الرجعة» with no server trip: online/offline × outing active/ended × junction known/unknown
+/// (`ReturnRoute.mode`, `phonePlan`, `cityLeg`, `ReturnGuide.beginOnPhone`). The desert part is
+/// always the same retrace as a server return trip's; only the city part changes.
+final class ReturnOnPhoneTests: XCTestCase {
+    /// 41 points, 100 m apart, due north from the city (index 0) to the desert camp (index 40).
+    private let home = LngLat(lng: 46.70, lat: 24.90)
+    private func at(_ northM: Double, _ eastM: Double = 0) -> LngLat { TrailGeo.lngLat(eastM, northM, ref: home) }
+    private var outbound: [TrailPoint] {
+        (0...40).map { i in let p = at(Double(i) * 100); return TrailPoint(lat: p.lat, lng: p.lng, t: 1_800_000_000_000 + Double(i) * 10_000) }
+    }
+    private let known = ReturnRoute.Split(junction: 20, source: .savedRoute)
+    private let unknown = ReturnRoute.Split(junction: 0, source: .none)
+
+    private func plan(_ m: ReturnRoute.Mode) -> ReturnRoute.PhonePlan? {
+        if case let .onPhone(p) = m { return p }
+        return nil
+    }
+
+    func testOnlineAfterTheEndIsTheServersReturnTrip() {
+        let pts = outbound
+        XCTAssertEqual(ReturnRoute.mode(online: true, outingEnded: true, trail: pts, split: known, me: at(4_000)), .newTrip)
+        XCTAssertEqual(ReturnRoute.mode(online: true, outingEnded: true, trail: pts, split: unknown, me: at(4_000)), .newTrip)
+    }
+
+    func testOfflineEndedJunctionKnownRetracesTheDesertThenTheCityTrail() throws {
+        let pts = outbound
+        let p = try XCTUnwrap(plan(ReturnRoute.mode(online: false, outingEnded: true, trail: pts, split: known, me: at(4_000))))
+        /* The desert part: exactly the leg a server return trip retraces. */
+        XCTAssertEqual(p.desertLeg, ReturnRoute.desertLeg(pts, split: known))
+        XCTAssertEqual(p.desertLeg.first?.position, pts[20].position)
+        XCTAssertTrue(p.junctionKnown)
+        XCTAssertEqual(p.home, pts[0].position)
+        /* No road route offline: the outbound city part, start first, up to the junction. */
+        guard case let .outboundTrail(city) = ReturnRoute.cityLeg(p, roadRouting: ReturnRoute.roadRouting(online: false)) else {
+            return XCTFail("the outbound city part expected")
+        }
+        XCTAssertEqual(city.map(\.position), pts[...20].map(\.position))
+        let bt = try XCTUnwrap(BackTrack(path: city))
+        XCTAssertEqual(bt.startPoint, pts[0].position, "BackTrack ends the city leg at the trip's start")
+        XCTAssertEqual(ReturnRoute.cityNote(.outboundTrail(city)), ReturnRoute.cityTrailNote)
+        XCTAssertTrue(ReturnRoute.cityTrailNote.contains("مو أسرع طريق"), "said plainly: the road we came by, not the fastest")
+        /* The network came back by the junction (or a road graph on the phone): the fastest road. */
+        XCTAssertEqual(ReturnRoute.cityLeg(p, roadRouting: true), .fastestRoad(to: pts[0].position))
+        XCTAssertTrue(ReturnRoute.roadRouting(online: false, offlineRoadGraph: true))
+    }
+
+    func testOfflineEndedJunctionUnknownRetracesTheWholeTrail() throws {
+        let pts = outbound
+        let p = try XCTUnwrap(plan(ReturnRoute.mode(online: false, outingEnded: true, trail: pts, split: unknown, me: at(4_000))))
+        XCTAssertEqual(p.desertLeg.map(\.position), pts.map(\.position), "nothing tells the city from the desert: all of it")
+        XCTAssertFalse(p.junctionKnown)
+        XCTAssertEqual(ReturnRoute.cityLeg(p, roadRouting: false), .none, "the desert leg already ends at the start")
+        XCTAssertEqual(ReturnRoute.cityLeg(p, roadRouting: true), .none)
+        XCTAssertTrue(ReturnRoute.desertNote(p, roadRouting: false).contains("طريق رحتك"))
+    }
+
+    func testActiveOutingIsGuidedOnThePhoneOnlineOrNot() throws {
+        let pts = outbound
+        for online in [true, false] {
+            let k = try XCTUnwrap(plan(ReturnRoute.mode(online: online, outingEnded: false, trail: pts, split: known, me: at(4_000))))
+            XCTAssertEqual(k.desertLeg, ReturnRoute.desertLeg(pts, split: known))
+            XCTAssertEqual(ReturnRoute.cityLeg(k, roadRouting: ReturnRoute.roadRouting(online: online)),
+                           online ? .fastestRoad(to: pts[0].position) : .outboundTrail(Array(pts[...20])))
+            let u = try XCTUnwrap(plan(ReturnRoute.mode(online: online, outingEnded: false, trail: pts, split: unknown, me: at(4_000))))
+            XCTAssertEqual(u.desertLeg.count, pts.count)
+            XCTAssertEqual(ReturnRoute.cityLeg(u, roadRouting: online), .none)
+        }
+    }
+
+    func testFromTheCitySideTheCityLegStartsAtOnce() {
+        let pts = outbound
+        let city = ReturnRoute.phonePlan(trail: pts, split: known, me: at(1_000, 30))
+        XCTAssertTrue(city.desertLeg.isEmpty, "already on the city side of the junction")
+        XCTAssertEqual(ReturnRoute.cityLeg(city, roadRouting: false), .outboundTrail(pts), "BackTrack re-acquires the city part")
+        XCTAssertEqual(ReturnRoute.cityLeg(city, roadRouting: true), .fastestRoad(to: pts[0].position))
+        /* Junction unknown: the same spot is still «on the trail», so the whole trail (the safe choice). */
+        XCTAssertEqual(ReturnRoute.phonePlan(trail: pts, split: unknown, me: at(1_000, 30)).desertLeg.count, pts.count)
+        /* Far from the trail (8 km off): no desert leg; offline the trail leads back to it. */
+        let far = ReturnRoute.phonePlan(trail: pts, split: known, me: at(3_500, 8_000))
+        XCTAssertTrue(far.desertLeg.isEmpty)
+        XCTAssertEqual(ReturnRoute.cityLeg(far, roadRouting: false), .outboundTrail(pts))
+        /* No trail: nothing to guide on. */
+        XCTAssertEqual(ReturnRoute.cityLeg(ReturnRoute.phonePlan(trail: [], split: unknown, me: home), roadRouting: true), .none)
+    }
+
+    func testGuideRetracesTheDesertThenHoldsTheRoadOnTheCityTrail() throws {
+        let pts = outbound
+        let p = ReturnRoute.phonePlan(trail: pts, split: known, me: at(4_000))
+        var guide = ReturnGuide()
+        XCTAssertTrue(guide.beginOnPhone(p))
+        XCTAssertEqual(guide.phase, .desert)
+        XCTAssertTrue(guide.holdsRoadGuidance)
+        var bt = try XCTUnwrap(BackTrack(path: p.desertLeg))
+        XCTAssertFalse(guide.backTrackUpdate(bt.update(at(3_000))))
+        XCTAssertTrue(guide.backTrackUpdate(bt.update(at(2_005))), "the junction reached")
+        /* Offline at the junction: the outbound city part, and still no road guidance of the trip. */
+        guard case .outboundTrail = guide.cityLeg(roadRouting: false) else { return XCTFail("city trail expected") }
+        XCTAssertEqual(guide.phase, .cityTrail)
+        XCTAssertTrue(guide.holdsRoadGuidance)
+        XCTAssertFalse(guide.backTrackUpdate(bt.update(at(2_005))), "the city trail's arrival is not another hand-over")
+        guide.cancel()
+        XCTAssertEqual(guide.phase, .road)
+        XCTAssertFalse(guide.holdsRoadGuidance)
+
+        /* Online at the junction: the fastest road; a city-side start skips the desert leg. */
+        var online = ReturnGuide()
+        online.beginOnPhone(p)
+        var bt2 = try XCTUnwrap(BackTrack(path: p.desertLeg))
+        XCTAssertTrue(online.backTrackUpdate(bt2.update(at(2_005))))
+        XCTAssertEqual(online.cityLeg(roadRouting: true), .fastestRoad(to: pts[0].position))
+        XCTAssertEqual(online.phase, .road)
+        var city = ReturnGuide()
+        XCTAssertFalse(city.beginOnPhone(ReturnRoute.phonePlan(trail: pts, split: known, me: at(1_000, 30))))
+        XCTAssertEqual(city.phase, .road)
+    }
+
+    // MARK: «جاهز للبر»
+
+    func testDesertReadinessFromTheStores() {
+        let camp = LngLat(lng: 45.20, lat: 24.30)
+        let area = OfflinePlan.Box(west: 45.0, south: 24.1, east: 45.4, north: 24.5)
+        let elsewhere = OfflinePlan.Box(west: 46.0, south: 24.1, east: 46.4, north: 24.5)
+        let all = DesertReadiness.make(destination: camp, savedAreas: [elsewhere, area], trailsOnPhone: true, trailRecording: true)
+        XCTAssertTrue(all.ready)
+        XCTAssertEqual(all.line, "جاهز للبر: الخريطة ✓ الدروب ✓ طريق الرجعة ✓")
+        XCTAssertNil(all.hint)
+
+        let noMap = DesertReadiness.make(destination: camp, savedAreas: [elsewhere], trailsOnPhone: false, trailRecording: true)
+        XCTAssertFalse(noMap.ready)
+        XCTAssertEqual(noMap.line, "جاهزية البر: الخريطة ✗ الدروب ✗ طريق الرجعة ✓")
+        XCTAssertTrue(noMap.hint?.contains("احفظ خريطة المنطقة") == true, "the first thing to do, while on network")
+
+        let noTrails = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: false, trailRecording: true)
+        XCTAssertTrue(noTrails.hint?.contains("الدروب") == true)
+        let noRecording = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: true, trailRecording: false)
+        XCTAssertFalse(noRecording.ready)
+        XCTAssertTrue(noRecording.hint?.contains("سجّل مساري") == true)
+
+        /* Outside the Kingdom there is no desert routing: not asked, not held against readiness. */
+        let abroad = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: nil, trailRecording: true)
+        XCTAssertTrue(abroad.ready)
+        XCTAssertEqual(abroad.line, "جاهز للبر: الخريطة ✓ طريق الرجعة ✓")
+    }
+
+    func testDesertTilesOnThePhone() {
+        let camp = LngLat(lng: 45.20, lat: 24.30)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { _ in true }), true)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { _ in false }), false)
+        /* One tile of the corridor missing is not ready. */
+        let missing = DesertTiles.tile(containing: camp)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { $0 != missing }), false)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in "thumamah" }, saved: { _ in false }), true, "a bundled pilot region")
+        XCTAssertNil(DesertTiles.onPhone(around: LngLat(lng: 10, lat: 50), saved: { _ in true }), "outside the Kingdom")
+    }
+
+    func testServerReturnTripHasNoPhoneCityLeg() {
+        var g = ReturnGuide()
+        g.begin(.desertTrail(outbound))
+        XCTAssertNil(g.phone)
+        XCTAssertEqual(g.cityLeg(roadRouting: false), .none, "its own trip guidance takes the city part")
+        XCTAssertEqual(g.phase, .desert)
     }
 }

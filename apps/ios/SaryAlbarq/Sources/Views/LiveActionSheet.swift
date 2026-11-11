@@ -31,7 +31,7 @@ enum LivePanel: String, Identifiable, Equatable {
     case safety
     /// «نقطة التجمع».
     case rally
-    /// «ادعُ ربعك»: personal invites / the open link and its QR.
+    /// «ادعُ أصدقاءك»: personal invites / the open link and its QR.
     case invite
     /// «رقم جوالي» (moved out of the trip tab).
     case phone
@@ -43,7 +43,7 @@ enum LivePanel: String, Identifiable, Equatable {
         case .route: return "الوجهة والخطة"
         case .safety: return "السلامة"
         case .rally: return "نقطة التجمع"
-        case .invite: return "ادعُ ربعك"
+        case .invite: return "ادعُ أصدقاءك"
         case .phone: return "رقم جوالي"
         }
     }
@@ -87,7 +87,7 @@ enum LiveActionCatalog {
                 /* «ملاحة» (to a friend, the rally point, back) is a tile now: the quick row's accent button
                  * is gone (one primary per state — the CTA). «وجّه الكل» is offered after «ابدأ الطلعة». */
                 LiveActionItem(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
-                               subtitle: "لواحد من الربع، للوجهة أو لنقطة التجمع"),
+                               subtitle: "لواحد من الأصدقاء، للوجهة أو لنقطة التجمع"),
                 .init(id: "route", title: "الوجهة والخطة", systemImage: "map", accessibilityID: "outing-route",
                       subtitle: s.following ? "تتبع الخطة الآن" : "سجل الطلعة، الخطة، اتبع المسار", isActive: s.following),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
@@ -96,15 +96,15 @@ enum LiveActionCatalog {
                 LiveActionItem(id: "backtrack", title: "طريق الرجعة", systemImage: SaryIcon.backTrack, accessibilityID: "trail.backtrack",
                                subtitle: "ترجع على مسارك لين نقطة البداية · بدون إنترنت"),
             ])),
-            LiveActionGroup(title: "الربع", items: (s.channels ? [
+            LiveActionGroup(title: "الأصدقاء", items: (s.channels ? [
                 LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
             ] : []) + [
-                .init(id: "invite", title: "ادعُ ربعك", systemImage: "person.badge.plus", accessibilityID: "outing-invite"),
+                .init(id: "invite", title: "ادعُ أصدقاءك", systemImage: "person.badge.plus", accessibilityID: "outing-invite"),
                 .init(id: "convoy", title: "القافلة", systemImage: "box.truck", accessibilityID: "outing-convoy", subtitle: "تنبيهات القافلة"),
                 .init(id: "note", title: "رسالة فوق سيارتي", systemImage: SaryIcon.note, accessibilityID: "outing-note-open"),
             ] + (s.canHide ? [
                 LiveActionItem(id: "hide", title: s.hidden ? HideText.shownButton : HideText.hideButton, systemImage: s.hidden ? "eye" : "eye.slash",
-                               accessibilityID: "live.hideLocation", subtitle: s.hidden ? "يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل",
+                               accessibilityID: "live.hideLocation", subtitle: s.hidden ? "يرجع موقعك يوصل للأصدقاء" : "تبقى في الطلعة بس موقعك ما يوصل",
                                isActive: s.hidden),
             ] : [])),
             LiveActionGroup(title: "السلامة", items: [
@@ -330,14 +330,16 @@ struct LiveActionSheet: View {
                     .frame(width: 34, height: 30)
                     .background { if item.isActive { Circle().fill(red ? p.emergency : p.accent).frame(width: 34, height: 34) } }
                 VStack(spacing: 0) {
+                    /* Four columns: the title stays 11 pt, medium weight for sun. */
                     Text(item.title)
-                        .font(.sary(11, .regular))
+                        .saryText(.micro, weight: .medium)
                         .foregroundStyle(p.textPrimary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.85)
                     if item.id == "youtube", let sub = item.subtitle {
-                        Text(sub).font(.sary(9, .regular)).foregroundStyle(p.textTertiary)
+                        Text(sub).saryText(.micro, weight: .regular).foregroundStyle(p.textSecondary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)

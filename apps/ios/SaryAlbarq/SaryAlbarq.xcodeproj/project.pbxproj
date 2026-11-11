@@ -156,6 +156,7 @@
 		42509F9DD8D5B3058755BF87 /* openmeteo-air-riyadh.json in Resources */ = {isa = PBXBuildFile; fileRef = EF09C4AABF9811DD61A64B35 /* openmeteo-air-riyadh.json */; };
 		429B511AFE846789D7E089D1 /* VoiceNoteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1CF12223A92BA82C5D9F2F /* VoiceNoteViews.swift */; };
 		42EAA13E620563DD972207F2 /* Qibla.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */; };
+		DD66594202DA4167B75E7B3E /* QiblaMapOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A26B1CB4F10249A9801F7201 /* QiblaMapOverlay.swift */; };
 		44413C11D673845BD6EEFEE0 /* SaryTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D3B6FF13946A342A7CAEF7 /* SaryTheme.swift */; };
 		453600FDFF719FC086526D11 /* PlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B691EE90902AA118435E198F /* PlanTests.swift */; };
 		45B41E2FCCB4BCFE643BDCD0 /* BilingualSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD953F3EF9949FE956D773AA /* BilingualSearchTests.swift */; };
@@ -304,6 +305,7 @@
 		8872D7079BDC54E7EBBF6F2F /* OutingFeaturesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 319F5D6B850C453345A0118C /* OutingFeaturesModel.swift */; };
 		889A50A4C661CBFC2C9DAD3A /* PlanSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0D1E5F0D1A288C3E1D4AD1 /* PlanSections.swift */; };
 		88F6B664A274BA2C5862D120 /* OfflineFixQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26396E337F5BA2511BCFB2F2 /* OfflineFixQueue.swift */; };
+		A173C0DE0000000000000B01 /* PendingActionQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A173C0DE0000000000000F01 /* PendingActionQueue.swift */; };
 		898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = E17779DA7C0843F8AA3E9C94 /* PushRegistrar.swift */; };
 		8B12C57E80FE1B7980C891A4 /* SaryVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFCE098B3D9D73601DF1B926 /* SaryVoice.swift */; };
 		8B531A50B19D4227914CD5F7 /* SkyAtmosphere.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58ECEA491A4CF6FE67BAB7D7 /* SkyAtmosphere.swift */; };
@@ -537,6 +539,9 @@
 		6958AF0760D56E9A42498EFD /* itfHuwiyaArabic-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = 1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */; };
 		BD744CBC9883E2DF048B6405 /* itfHuwiyaArabic-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */; };
 		8E4767056282B09A468B40B0 /* itfHuwiyaArabic-Black.otf in Resources */ = {isa = PBXBuildFile; fileRef = C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */; };
+		259ECD9E9BB0E90613F00BEE /* MetricsSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */; };
+		D82B3414D7AD4571B035A210 /* MetricsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */; };
+		DBBB213691D2D126C2D9C7DC /* MetricsDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D11C5906D436B2B841C2F1A /* MetricsDiagnosticsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -653,6 +658,7 @@
 		24F7E9777207753A1040C308 /* VisualsDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualsDemo.swift; sourceTree = "<group>"; };
 		256A626ED91D55969B38573E /* LiveCalmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCalmTests.swift; sourceTree = "<group>"; };
 		26396E337F5BA2511BCFB2F2 /* OfflineFixQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineFixQueue.swift; sourceTree = "<group>"; };
+		A173C0DE0000000000000F01 /* PendingActionQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingActionQueue.swift; sourceTree = "<group>"; };
 		26412D7E37DB5FDC4068D007 /* OffroadTracks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OffroadTracks.swift; sourceTree = "<group>"; };
 		26444FB642192D73393CFABD /* NavGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavGuidance.swift; sourceTree = "<group>"; };
 		26A2D5E7719A828DE7D7A254 /* RadioSoundsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioSoundsTests.swift; sourceTree = "<group>"; };
@@ -899,6 +905,7 @@
 		999239D1ACA6CBBA7C94177D /* PTTCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTTCodec.swift; sourceTree = "<group>"; };
 		9A2CAC0E07467471E378E1CA /* ChipDeclutterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipDeclutterUITests.swift; sourceTree = "<group>"; };
 		9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qibla.swift; sourceTree = "<group>"; };
+		A26B1CB4F10249A9801F7201 /* QiblaMapOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QiblaMapOverlay.swift; sourceTree = "<group>"; };
 		9C3B037894673EFCBDD08445 /* FarqTiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FarqTiles.swift; sourceTree = "<group>"; };
 		9C955FB296901E5F5AA3ED3A /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
 		9CAF059F25F880DEEA683E7A /* WeatherModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherModels.swift; sourceTree = "<group>"; };
@@ -1117,6 +1124,9 @@
 		1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Medium.otf"; sourceTree = "<group>"; };
 		6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Bold.otf"; sourceTree = "<group>"; };
 		C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Black.otf"; sourceTree = "<group>"; };
+		2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsSummary.swift; sourceTree = "<group>"; };
+		C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsCollector.swift; sourceTree = "<group>"; };
+		6D11C5906D436B2B841C2F1A /* MetricsDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsDiagnosticsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1597,6 +1607,7 @@
 				7087625DE9A0A4783B82C03B /* LiveCalmChrome.swift */,
 				369B5E58B40EA041282A0DC4 /* LiveOutingScreen.swift */,
 				0748C9C7570B67E10FF2911E /* LiveSettingsPage.swift */,
+				6D11C5906D436B2B841C2F1A /* MetricsDiagnosticsView.swift */,
 				ECB0BE98A691B2B9C3815B50 /* LiveSheet.swift */,
 				404C988586C5306ED5E77568 /* OutingFlowViews.swift */,
 				E1EB5A63D0A8DAA5F932FD3A /* PTTChannelViews.swift */,
@@ -2041,10 +2052,13 @@
 				C0BA2EAA55F3208B7380B12C /* OutingDestination.swift */,
 				CBBEE7040C376B85D80515A1 /* OutingFlow.swift */,
 				30AC37E1EA85F7EC642D4ACE /* OutingState.swift */,
+				A173C0DE0000000000000F01 /* PendingActionQueue.swift */,
 				376AED911A9C2A29F5F4EFD0 /* Policy.swift */,
 				FD9FA98B1A53C6183E33883C /* SendGate.swift */,
 				EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */,
 				49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */,
+				C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */,
+				2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */,
 				000D919D5EA50F43C9AB2C28 /* TrackDisplay.swift */,
 				AA1C5098C72208D681996BC6 /* TrackFollow.swift */,
 				71FA16F086DA2E158BD914C1 /* Trail.swift */,
@@ -2103,6 +2117,7 @@
 			isa = PBXGroup;
 			children = (
 				9BB8DDC21C2DEE9CE14CA999 /* Qibla.swift */,
+				A26B1CB4F10249A9801F7201 /* QiblaMapOverlay.swift */,
 			);
 			path = Qibla;
 			sourceTree = "<group>";
@@ -2667,6 +2682,7 @@
 				0DE0211F7641DC919CDE20EC /* LivePlaceBrief.swift in Sources */,
 				50443BC7D769962FC54573B3 /* LivePlan.swift in Sources */,
 				2F53B1048F428082EF87169C /* LiveSettingsPage.swift in Sources */,
+				DBBB213691D2D126C2D9C7DC /* MetricsDiagnosticsView.swift in Sources */,
 				7106AAFF960B91D1859F66A7 /* LiveSheet.swift in Sources */,
 				5040FC0B563E355095FD42A8 /* LiveSilence.swift in Sources */,
 				1918FDC15D475DEA5AF47FE1 /* LocalDestination.swift in Sources */,
@@ -2709,6 +2725,7 @@
 				D4541F556F2ABB8010C6D705 /* NavigationSessionProviding.swift in Sources */,
 				997F43BC613C7888B7DAD066 /* NearbyMesh.swift in Sources */,
 				88F6B664A274BA2C5862D120 /* OfflineFixQueue.swift in Sources */,
+				A173C0DE0000000000000B01 /* PendingActionQueue.swift in Sources */,
 				86B80A0CAF9A0FECB38A6F8D /* OfflineMaps.swift in Sources */,
 				33F4F4423348F7788A65F9CF /* OfflineMapsView.swift in Sources */,
 				BA1DC1880B708021B3A6BF02 /* OffroadTracks.swift in Sources */,
@@ -2761,6 +2778,7 @@
 				5D025BA6900E695BD9FA233A /* ProfileSheet.swift in Sources */,
 				898ED523A944F35E4094E013 /* PushRegistrar.swift in Sources */,
 				42EAA13E620563DD972207F2 /* Qibla.swift in Sources */,
+				DD66594202DA4167B75E7B3E /* QiblaMapOverlay.swift in Sources */,
 				9FF77483E3A55368DC947B4A /* RealisticEntry.swift in Sources */,
 				754EC8B7CBF2869C441F228F /* RealisticMapView.swift in Sources */,
 				D0017E84AD574077A510D521 /* RealisticRules.swift in Sources */,
@@ -2811,6 +2829,8 @@
 				8B531A50B19D4227914CD5F7 /* SkyAtmosphere.swift in Sources */,
 				0FC046786700F5D30ADE0A43 /* SlopeProfile.swift in Sources */,
 				B20BBCBCD2257C003224C512 /* Speed.swift in Sources */,
+				D82B3414D7AD4571B035A210 /* MetricsCollector.swift in Sources */,
+				259ECD9E9BB0E90613F00BEE /* MetricsSummary.swift in Sources */,
 				873355BA15A8FE6ECC910CC5 /* SpeedModel.swift in Sources */,
 				90E9904DE376425B0849683F /* SpeedSettingsSection.swift in Sources */,
 				9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */,
@@ -2965,7 +2985,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -3068,7 +3088,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 40;
+				CURRENT_PROJECT_VERSION = 41;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = MH7J92HV9N;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

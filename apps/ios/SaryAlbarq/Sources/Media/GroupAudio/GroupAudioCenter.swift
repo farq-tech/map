@@ -441,7 +441,7 @@ enum GroupAudioCenters {
         let member = args.contains("-SaryRadioMember")
         let iLead = { [weak session] in member ? false : session?.view?.iLead == true }
         let backend: GroupAudioBackend
-        if session.isDemo {
+        if session.isLocal {
             backend = GroupAudioLocalBackend(me: session.myUserId, iLead: !member && session.view?.iLead != false, shared: true)
         } else {
             backend = GroupAudioHTTPBackend(outingId: session.id)

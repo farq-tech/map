@@ -19,7 +19,7 @@ struct ConvoyAlertSettingsView: View {
                 slider("المهلة قبل التنبيه", value: s.separationGraceS, range: ConvoyAlertSettings.separationGraceRange, step: 15,
                        text: seconds(prefs.settings.separationGraceS), id: "rules.separation.grace")
             }
-            rule(title: "وقف فجأة", detail: "سيارة كانت تمشي فوق ٢٠ كم/س ثم وقفت والربع يتحركون، بعيدًا عن الوجهة ونقطة التجمع والنقاط المعروفة.",
+            rule(title: "وقف فجأة", detail: "سيارة كانت تمشي فوق ٢٠ كم/س ثم وقفت والأصدقاء يتحركون، بعيدًا عن الوجهة ونقطة التجمع والنقاط المعروفة.",
                  icon: "exclamationmark.octagon.fill", isOn: s.stopOn, id: "rules.stop") {
                 slider("مدة الوقوف", value: s.stopMinutes, range: ConvoyAlertSettings.stopMinutesRange, step: 1,
                        text: "\(SaryFormat.number(Int(prefs.settings.stopMinutes))) د", id: "rules.stop.minutes")

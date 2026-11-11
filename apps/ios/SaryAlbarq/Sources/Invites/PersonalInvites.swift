@@ -139,7 +139,7 @@ enum PersonalInviteBook {
     }
 }
 
-// MARK: - The model behind the «ادعُ ربعك» section
+// MARK: - The model behind the «ادعُ أصدقاءك» section
 
 /// A ready-to-send invite: who, the link, the text, and how to reach them.
 struct InviteDraft: Identifiable, Equatable {

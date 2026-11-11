@@ -36,10 +36,14 @@ struct SarySilentCard: View {
     var dismiss: () -> Void = {}
     var actions: SilentAlertActions = .init()
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
 
     var body: some View {
         let p = theme.palette
         let shape = RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous)
+        /* On a 320 pt screen the three round buttons leave ~40 pt for the name: let it wrap there
+         * rather than shrink to «انقطع…». Standard iPhones keep the one compact line. */
+        let titleLines = widthClass == .narrow ? 2 : 1
         /* UX ٢١: one compact row (~56 pt) — it must not cover the map while driving. The actions
          * are round 44 pt buttons beside the text, not a second row of pills. */
         TimelineView(.periodic(from: .now, by: 30)) { ctx in
@@ -60,7 +64,7 @@ struct SarySilentCard: View {
                             Text(SilenceText.title(name: alert.name, since: alert.since, now: ctx.date))
                                 .saryText(.footnote, weight: .bold)
                                 .foregroundStyle(p.textPrimary)
-                                .lineLimit(1)
+                                .lineLimit(titleLines)
                                 .minimumScaleFactor(0.8)
                             Text(SilenceText.lastFix(alert.hasLast ? (alert.lastAt ?? alert.since) : nil, now: ctx.date))
                                 .saryNumber(.caption, weight: .medium)
@@ -143,7 +147,7 @@ struct SarySilentBadge: View {
     var body: some View {
         let p = theme.palette
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: compact ? 8 : 10, weight: .bold))
+            Image(systemName: icon).saryGlyph(compact ? 8 : 10, weight: .bold)
             Text(line)
                 .saryText(compact ? .micro : .caption, weight: .bold)
                 .lineLimit(1)

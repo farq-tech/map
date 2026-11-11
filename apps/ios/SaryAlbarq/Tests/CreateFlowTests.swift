@@ -437,3 +437,34 @@ final class CreateProgressTests: XCTestCase {
                      "no creation time: never guessed")
     }
 }
+
+/// The wizard's step slide: its direction follows the step change, RTL aware.
+final class CreateStepMotionTests: XCTestCase {
+    func testDirectionFollowsTheStepChange() {
+        var f = CreateFlowState(now: t0)
+        XCTAssertTrue(f.movedForward, "the first step counts as going on")
+        f.choose(thumama)
+        XCTAssertTrue(f.movedForward, "١ → ٢")
+        f.back()
+        XCTAssertFalse(f.movedForward, "٢ → ١ slides back")
+        f.choose(thumama)
+        XCTAssertTrue(f.movedForward)
+        XCTAssertTrue(CreateStepMotion.isForward(from: .weather, to: .invite))
+        XCTAssertFalse(CreateStepMotion.isForward(from: .invite, to: .destination))
+    }
+
+    func testForwardEntersFromTheLeftInArabic() {
+        XCTAssertEqual(CreateStepMotion.insertionEdge(forward: true), .trailing)
+        XCTAssertEqual(CreateStepMotion.insertionEdge(forward: false), .leading)
+        XCTAssertEqual(CreateStepMotion.enterSide(forward: true, rightToLeft: true), .left)
+        XCTAssertEqual(CreateStepMotion.enterSide(forward: false, rightToLeft: true), .right)
+        XCTAssertEqual(CreateStepMotion.enterSide(forward: true, rightToLeft: false), .right)
+        XCTAssertEqual(CreateStepMotion.enterSide(forward: false, rightToLeft: false), .left)
+    }
+
+    func testStartIsReadyOnlyOnceTheOutingExistsAndNothingIsPending() {
+        XCTAssertFalse(CreateStepMotion.startReady(outingId: nil, creating: false))
+        XCTAssertFalse(CreateStepMotion.startReady(outingId: "o1", creating: true))
+        XCTAssertTrue(CreateStepMotion.startReady(outingId: "o1", creating: false))
+    }
+}

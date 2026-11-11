@@ -133,7 +133,7 @@ struct SaryToggleRow: View {
         .tint(toggleTint ?? theme.palette.accent)
         .frame(minHeight: theme.minTarget)
         .padding(.vertical, theme.space(.xs))
-        .sensoryFeedback(.selection, trigger: isOn)
+        .saryHaptic(.selection, trigger: isOn)
         .modifier(OptionalIdentifier(id: id))
     }
 }
@@ -170,10 +170,13 @@ struct SarySegmented<Value: Hashable>: View {
 
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.saryWidthClass) private var widthClass
     @Namespace private var ns
 
     var body: some View {
         let p = theme.palette
+        /* Four or more segments on a 320 pt screen: the words matter more than the icons. */
+        let showIcons = !(widthClass == .narrow && options.count >= 4)
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 2))
             : AnyLayout(HStackLayout(spacing: 2))
@@ -184,7 +187,7 @@ struct SarySegmented<Value: Hashable>: View {
                     selection = option
                 } label: {
                     HStack(spacing: 5) {
-                        if let s = systemImage?(option) {
+                        if showIcons, let s = systemImage?(option) {
                             Image(systemName: s).font(.system(size: 13, weight: .semibold))
                         }
                         Text(label(option))
@@ -223,7 +226,7 @@ struct SarySegmented<Value: Hashable>: View {
         .padding(3)
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .animation(theme.animation(.snappy), value: selection)
-        .sensoryFeedback(.selection, trigger: selection)
+        .saryHaptic(.selection, trigger: selection)
         .accessibilityElement(children: .contain)
         .modifier(OptionalIdentifier(id: id))
     }

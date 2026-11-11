@@ -311,6 +311,18 @@ enum DesertTiles {
         return DesertGrid.BBox(s: s, w: w, n: n, e: e)
     }
 
+    /// «جاهز للبر»: the desert grid a trip to `target` routes on is on this phone — the target in a
+    /// bundled pilot region, or every national tile of its corridor (`corridor(from: nil, to:)`)
+    /// saved (`saved`). nil outside the Kingdom (no desert routing there: not asked).
+    static func onPhone(around target: LngLat, pilotRegion: (LngLat) -> String? = { DesertAwareRouteProvider.regionName(containing: $0) },
+                        saved: (TileID) -> Bool) -> Bool? {
+        guard let box = corridor(from: nil, to: target) else { return nil }
+        if pilotRegion(target) != nil { return true }
+        let ids = tiles(covering: box)
+        guard !ids.isEmpty else { return false }
+        return ids.allSatisfy(saved)
+    }
+
     /// A box holding both points (padded), or nil when they are too far apart for one grid.
     static func corridor(spanning a: LngLat, _ b: LngLat) -> DesertGrid.BBox? {
         guard inKingdom(a), inKingdom(b) else { return nil }
@@ -469,6 +481,20 @@ final class DesertTileStore: @unchecked Sendable {
             if case .loaded = await loadTile(id, manifest: manifest) { ready += 1 }
         }
         return ready
+    }
+
+    /// The tile is usable with no signal: in memory, in the disk cache, or known not to exist (the
+    /// manifest held has no entry: sea, abroad). A file check only, no decoding: cheap enough
+    /// for a readiness row («جاهز للبر»).
+    func hasTileOnDisk(_ id: DesertTiles.TileID) -> Bool {
+        lock.lock()
+        let inMemory = memory[id] != nil
+        let held = manifest
+        lock.unlock()
+        if inMemory { return true }
+        if let held, held.entry(id) == nil { return true }
+        guard let file = cacheDir?.appendingPathComponent("routes-\(id.name).bin") else { return false }
+        return FileManager.default.fileExists(atPath: file.path)
     }
 
     enum TileState { case loaded(DesertGrid), absent, unavailable }

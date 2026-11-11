@@ -297,7 +297,7 @@ final class SafetyController: ObservableObject {
             try await backend?.reportStuck(outingId, note: clean)
             stuckAvailability = .available
             stuck[myId] = StuckReport(userId: myId, at: now(), note: clean)
-            toast(isSharingNow() ? "وصل للربع إنك غرّزت، ويشوفون مكانك" : "وصل للربع إنك غرّزت · موقعك غير مُشارَك")
+            toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
         } catch let e as OutingAPIError where e.isNotDeployed {
             stuckAvailability = .notDeployed
             toast("«غرّزت» غير متاح بعد")

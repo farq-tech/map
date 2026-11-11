@@ -29,6 +29,10 @@ struct RootView: View {
                 SplashView().transition(.opacity)
             } else if model.identity == nil || needsOnboarding {
                 OnboardingFlow(start: model.identity == nil ? .intro : .locationExplainer)
+                    /* iPad: one centred form column instead of «ابدأ» stretched across 1000+ pt.
+                     * Every iPhone is narrower than the cap, so nothing changes there. */
+                    .saryReadableWidth(SaryLayout.formWidth)
+                    .background(theme.palette.background.ignoresSafeArea())
                     .transition(.opacity)
                     .alert(model.accountNotice?.notice?.title ?? "", isPresented: Binding(get: { model.accountNotice?.notice != nil }, set: { if !$0 { model.accountNotice = nil } })) {
                         Button("حسنًا", role: .cancel) {}
@@ -42,6 +46,18 @@ struct RootView: View {
             }
         }
         .animation(theme.animation(.smooth), value: model.launching)
+        /* #173: I left (or changed something) on this phone and the server has not heard yet. The
+         * live screen says it with a toast; outside it, this one quiet line until it went through. */
+        .overlay(alignment: .top) {
+            if !model.launching, model.session == nil, let notice = model.outboxNotice {
+                SaryBanner(text: notice, tone: .info, systemImage: "wifi.slash")
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
+                    .padding(.horizontal, theme.space(.m))
+                    .padding(.top, theme.space(.xs))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
         .onReceive(model.location.$authorization.removeDuplicates()) { locationAuthorization = $0 }
         /* During a trip the live sheet is always presented: the invite is shown from inside it
          * (`LiveSheet`), never from here, where a second sheet would silently not appear. */
@@ -73,7 +89,7 @@ extension LiveOutingHost {
         /* The destination is saved with the outing; wait until the plan has it (never start without one). */
         guard controller.tripDestination != nil || v.status != .created else { return }
         model.pendingStart = nil
-        if v.status == .created, !controller.session.isDemo { controller.startOuting() }
+        if v.status == .created, !controller.session.isLocal { controller.startOuting() }
     }
 
     fileprivate func startPendingMapDestination() {
@@ -133,7 +149,7 @@ struct LiveOutingHost: View {
                 guard let model else { return }
                 Task {
                     let ok = await model.updateProfile(name: model.identity?.user.display_name ?? "", phone: phone ?? "")
-                    if ok { c?.toast("تم حفظ رقمك") }
+                    if ok { c?.toast("حفظنا رقمك") }
                 }
             }
             return c
@@ -161,6 +177,8 @@ struct LiveOutingHost: View {
                 }
             }
             .onAppear {
+                /* «أداء التطبيق»: live screen shown → first car drawn (OutingMapboxView.drawCar). */
+                PerfSignpost.begin(.liveFirstCar)
                 DispatchQueue.main.async {
                     startIfAsked()
                     startPendingMapDestination()

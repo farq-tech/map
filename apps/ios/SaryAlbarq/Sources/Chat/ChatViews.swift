@@ -145,7 +145,7 @@ struct ChatHomeView: View {
                 SaryInlineMessage(text: retentionText, tone: .info).accessibilityIdentifier("chat.retention")
             }
             VStack(spacing: 0) {
-                row(.group, title: "محادثة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل الربع")
+                row(.group, title: "محادثة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل الأصدقاء")
             }
             .sarySurface(radius: SaryRadius.l)
             if !others.isEmpty || !former.isEmpty {
@@ -176,10 +176,7 @@ struct ChatHomeView: View {
 
     private var retentionText: String {
         if let d = ISODate.parse(chat.purgeAt) {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "ar")
-            f.dateStyle = .medium
-            return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا في \(f.string(from: d))."
+            return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا في \(SaryFormat.day(d))."
         }
         return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا بعد ٣٠ يومًا من نهايتها."
     }
@@ -224,9 +221,25 @@ struct ChatThreadView: View {
     @State private var draft = ""
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppearanceSettings.self) private var appearance
+    /// The thread has settled on screen: from here new messages animate in (`ChatMotion`).
+    @State private var settled = false
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
+    private var liveThread: Bool { ChatMotion.animatesArrivals(loaded: thread.loaded, settled: settled) }
+
+    private func settleSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + ChatMotion.settleDelay) { settled = true }
+    }
+
+    /// A short slide from the bubble's own side plus a fade; a fade only where travel is not allowed.
+    private func bubbleTransition(mine: Bool) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        let x = ChatMotion.entryOffsetX(mine: mine, rightToLeft: layoutDirection == .rightToLeft)
+        return .asymmetric(insertion: .offset(x: x).combined(with: .opacity).combined(with: .scale(scale: 0.96)),
+                           removal: .opacity)
+    }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
     private var others: Int {
         with.isGroup ? max(0, context.members.filter { $0.user_id != context.me }.count) : 1
@@ -256,16 +269,32 @@ struct ChatThreadView: View {
                         }
                         ForEach(thread.messages, id: \.key) { m in
                             bubble(m).id(m.key)
+                                /* A new message arrives from its own side: mine from the trailing
+                                   edge (the left in Arabic), theirs from the leading edge. */
+                                .transition(bubbleTransition(mine: m.sender_id == context.me))
                         }
                         if let t = chat.typing[with] {
-                            Text("\(context.name(t)) يكتب…").saryText(.footnote).foregroundStyle(p.textTertiary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityIdentifier("chat.typing")
+                            HStack(spacing: 4) {
+                                Text("\(context.name(t)) يكتب").saryText(.footnote).foregroundStyle(p.textTertiary)
+                                /* Breathes only while someone types (the sanctioned loop: off under
+                                   Reduce Motion, in drive mode and off screen). */
+                                Image(systemName: "ellipsis").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                                    .saryPulse(.live, style: .dim)
+                                    .accessibilityHidden(true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(SaryTransition.appear(theme))
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(Text("\(context.name(t)) يكتب…"))
+                            .accessibilityIdentifier("chat.typing")
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.horizontal, theme.space(.l))
                     .padding(.vertical, theme.space(.s))
+                    /* Only a message at the end animates (not the first load, not older pages). */
+                    .animation(liveThread ? theme.animation(.appear) : nil, value: thread.messages.last?.key)
+                    .animation(theme.animation(.appear), value: chat.typing[with] != nil)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .defaultScrollAnchor(.bottom)
@@ -281,8 +310,16 @@ struct ChatThreadView: View {
         }
         .background(p.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { chat.open(with) }
-        .onDisappear { chat.close(with) }
+        .onAppear {
+            chat.open(with)
+            /* The first page lands without animation; arrivals after it slide in. */
+            if thread.loaded { settleSoon() }
+        }
+        .onChange(of: thread.loaded) { _, loaded in if loaded { settleSoon() } }
+        .onDisappear {
+            chat.close(with)
+            settled = false
+        }
         .onChange(of: context.moving) { _, moving in if moving { focused = false } }
         .accessibilityIdentifier("chat.thread")
     }
@@ -325,7 +362,8 @@ struct ChatThreadView: View {
                 }
                 content(m)
                 HStack(spacing: 4) {
-                    Text(time(m.created_at)).saryNumber(.micro).foregroundStyle(p.textTertiary)
+                    /* 12 pt secondary (was 11 pt tertiary): the bubble grows to fit. */
+                    Text(time(m.created_at)).saryNumber(.caption, weight: .medium).foregroundStyle(p.textSecondary)
                     if let r = ChatRules.receipt(m, me: context.me, reads: thread.reads, others: others) { receipt(r) }
                 }
             }
@@ -391,11 +429,12 @@ struct ChatThreadView: View {
     private func receipt(_ r: ChatRules.Receipt) -> some View {
         let p = theme.palette
         switch r {
-        case .sending: Image(systemName: "clock").font(.system(size: 10)).foregroundStyle(p.textTertiary).accessibilityIdentifier("chat.receipt.sending")
-        case .retrying: Image(systemName: "arrow.clockwise").font(.system(size: 10)).foregroundStyle(p.warningText).accessibilityIdentifier("chat.receipt.retrying")
-        case .failed: Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11)).foregroundStyle(p.emergency).accessibilityIdentifier("chat.receipt.failed")
-        case .sent: Text("✓").saryText(.micro, weight: .bold).foregroundStyle(p.textTertiary).accessibilityIdentifier("chat.receipt.sent")
-        case .read: Text("✓✓").saryText(.micro, weight: .bold).foregroundStyle(p.accentText).accessibilityIdentifier("chat.receipt.read")
+        /* Ticks beside the 12 pt time: the same size, secondary (not tertiary) so «وصلت» reads at night. */
+        case .sending: Image(systemName: "clock").saryGlyph(10, weight: .semibold).foregroundStyle(p.textSecondary).accessibilityIdentifier("chat.receipt.sending")
+        case .retrying: Image(systemName: "arrow.clockwise").saryGlyph(10, weight: .semibold).foregroundStyle(p.warningText).accessibilityIdentifier("chat.receipt.retrying")
+        case .failed: Image(systemName: "exclamationmark.circle.fill").saryGlyph(11).foregroundStyle(p.emergency).accessibilityIdentifier("chat.receipt.failed")
+        case .sent: Text("✓").saryText(.caption, weight: .heavy).foregroundStyle(p.textSecondary).accessibilityIdentifier("chat.receipt.sent")
+        case .read: Text("✓✓").saryText(.caption, weight: .heavy).foregroundStyle(p.accentText).accessibilityIdentifier("chat.receipt.read")
         }
     }
 
@@ -441,10 +480,7 @@ struct ChatThreadView: View {
 
     private func time(_ iso: String) -> String {
         guard let d = ISODate.parse(iso) else { return "" }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ar")
-        f.dateFormat = "h:mm a"
-        return f.string(from: d)
+        return SaryFormat.timeOfDay(d)
     }
 
     // MARK: composer
@@ -482,6 +518,9 @@ struct ChatThreadView: View {
                             if chat.sendText(draft, to: with) { draft = "" }
                         } label: {
                             Image(systemName: "arrow.up.circle.fill").font(.system(size: 34)).foregroundStyle(over || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? p.textTertiary : p.accent)
+                                /* 34 pt glyph, 44 pt touch area. */
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .disabled(over || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityLabel("أرسل")

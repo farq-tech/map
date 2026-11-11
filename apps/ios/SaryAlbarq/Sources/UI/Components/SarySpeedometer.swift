@@ -26,7 +26,8 @@ struct SarySpeedometer: View {
             showingTrip.toggle()
         } label: {
             ZStack {
-                if let trip { tripFace(trip) } else { currentFace }
+                if let trip { tripFace(trip).transition(SaryTransition.appear(theme)) }
+                else { currentFace.transition(SaryTransition.appear(theme)) }
             }
             .frame(width: theme.drive ? 100 : 66, height: theme.drive ? 92 : 62)
             .background {
@@ -35,8 +36,14 @@ struct SarySpeedometer: View {
             }
             .saryGlass(shape, role: .control, interactive: true)
             .overlay {
-                if ui.overLimit { shape.stroke(p.emergency, lineWidth: theme.drive ? 3 : 2) }
+                if ui.overLimit {
+                    shape.stroke(p.emergency, lineWidth: theme.drive ? 3 : 2)
+                        .transition(.opacity)
+                }
             }
+            /* Crossing the limit: the ring fades in with one small beat, then stays still. */
+            .saryEmphasis(trigger: ui.overLimit, scale: 1.05, peripheral: true)
+            .saryAnimation(.snappy, value: ui.overLimit)
             .contentShape(shape)
         }
         .buttonStyle(SaryPressStyle())
@@ -61,11 +68,13 @@ struct SarySpeedometer: View {
                 .foregroundStyle(ui.current == .unknown ? p.textTertiary : (ui.overLimit ? p.emergencyText : p.textPrimary))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
+                /* Digits roll the way the speed moved (up rolls up); a fade under Reduce Motion. */
+                .contentTransition(SaryTransition.number(ui.current.kmh ?? 0, theme))
                 .animation(theme.animation(.snappy), value: ui.current.kmh.map { Int($0.rounded()) })
                 .accessibilityIdentifier("speedometer.value")
+            /* 12 pt outside drive mode (was 11): it fits under the number in the 62 pt face. */
             Text(SaryFormat.speedUnit)
-                .saryText(theme.drive ? .footnote : .micro, weight: .bold)
+                .saryText(theme.drive ? .footnote : .caption, weight: .bold)
                 .foregroundStyle(p.textSecondary)
                 .lineLimit(1)
         }
@@ -87,7 +96,8 @@ struct SarySpeedometer: View {
 
     private func row(_ k: String, _ v: Double?) -> some View {
         VStack(alignment: .leading, spacing: -2) {
-            Text(k).saryText(theme.drive ? .caption : .micro, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+            /* Two rows share the 62 pt face: the key stays 11 pt, at the heaviest weight. */
+            Text(k).saryText(theme.drive ? .caption : .micro, weight: .heavy).foregroundStyle(theme.palette.textSecondary)
             Text(SaryFormat.speedValue(kmh: v)).saryNumber(theme.drive ? .title2 : .subhead, weight: .heavy)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

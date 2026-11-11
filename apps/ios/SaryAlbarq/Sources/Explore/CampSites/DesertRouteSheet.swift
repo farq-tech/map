@@ -25,9 +25,9 @@ struct DesertToolsHost {
     var directions: @MainActor (Result<NavTarget, NavRefusal>) -> Void
     /// «دروب البر» to a point: target, name, rain tonight, weather known.
     var openRoutes: @MainActor (LngLat, String, Bool, Bool) -> Void
-    /// «امشِ عليه»: follow the picked desert route («اسلك هذا المسار»).
+    /// «اتجه» (was «امشِ عليه»): follow the picked desert route («اسلك هذا المسار»).
     var follow: @MainActor (FollowSubject) -> Void
-    /// Frame the routes on the host's map (the home map has none drawn: nothing to do).
+    /// Frame the routes on the host's map (the live map, or the home map that draws them too).
     var fitTrack: @MainActor ([LngLat]) -> Void = { _ in }
 
     /// Inside a live outing: the same modals and guidance as before (`LiveSheet`).
@@ -61,11 +61,14 @@ struct DesertRouteSheet: View {
     var weatherAvailable: Bool
     @ObservedObject private var hub = DesertRoutesHub.shared
     @State private var phase: Phase = .working
+    /// Bumped by a tap that picks another route (the selection tick).
+    @State private var pickTick = 0
     @Environment(\.sary) private var theme
 
     enum Phase: Equatable { case working, ready, outside, noFix, none }
 
     static let note = "مسار مقترح من صور الأقمار، تأكد بعينك. ما يغني عن خبرة الدليل"
+    static let attribution = "الدروب من بيانات مفتوحة · © OpenStreetMap contributors"
 
     init(host: DesertToolsHost, target: LngLat, name: String, rain: Bool, weatherAvailable: Bool) {
         self.host = host
@@ -107,18 +110,30 @@ struct DesertRouteSheet: View {
                               actionTitle: "اتجه", actionID: "routes.direct", actionIcon: SaryIcon.directions, action: direct)
                     .sarySurface(radius: SaryRadius.l)
             case .ready:
-                ForEach(hub.options) { o in card(o) }
+                ForEach(hub.options) { o in
+                    card(o).transition(SaryTransition.appear(theme))
+                }
             }
             Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("routes.note")
+            /* The grid's tracks come from OSM (ODbL): the credit shows with the lines. */
+            Text(Self.attribution).saryText(.caption).foregroundStyle(p.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await compute() }
+        /* The computed routes arrive with a soft entrance; picking one pops it (and a tick). */
+        .saryAnimation(.smooth, value: phase)
+        .saryAnimation(.snappy, value: hub.selected)
+        .saryHaptic(.selection, trigger: pickTick)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("routes.sheet")
     }
 
     private func compute() async {
+        /* «أداء التطبيق»: route asked → options (or none) shown. */
+        let perf = PerfSignpost.begin(.desertRoute)
+        defer { perf.end() }
         var me = host.myPoint()
         #if DEBUG
         let a = ProcessInfo.processInfo.arguments
@@ -163,7 +178,7 @@ struct DesertRouteSheet: View {
                 Spacer(minLength: 0)
                 Button {
                     go(o)
-                } label: { SaryButtonLabel(title: "امشِ عليه", systemImage: SaryIcon.directions) }
+                } label: { SaryButtonLabel(title: SaryCopy.go, systemImage: SaryIcon.directions) }
                     .buttonStyle(.sary(on ? .primary : .secondary, width: .hug, compact: true))
                     .accessibilityIdentifier("routes.go.\(o.mode.rawValue)")
             }
@@ -183,9 +198,15 @@ struct DesertRouteSheet: View {
         }
         .padding(theme.space(.m))
         .contentShape(Rectangle())
-        .onTapGesture { hub.selected = o.mode }
+        .onTapGesture {
+            guard hub.selected != o.mode else { return }
+            hub.selected = o.mode
+            pickTick &+= 1
+        }
         .sarySurface(radius: SaryRadius.l)
         .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(on ? Self.color(o.mode) : .clear, lineWidth: 2))
+        /* Visual only (no layout change): the picked card sits a hair forward. */
+        .scaleEffect(on ? 1 : 0.985)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("routes.card.\(o.mode.rawValue)")
     }
@@ -198,13 +219,7 @@ struct DesertRouteSheet: View {
         }
     }
 
-    static func hex(_ m: DesertRouter.Mode) -> String {
-        switch m {
-        case .easy: return "#2ecc71"
-        case .balanced: return "#3498db"
-        case .short: return "#e74c3c"
-        }
-    }
+    static func hex(_ m: DesertRouter.Mode) -> String { DesertRouteLayers.hex(m) }
 
     private func go(_ o: DesertRouter.Option) {
         guard let s = FollowSubject.desertRoute(points: o.points, name: "دروب البر: \(o.mode.label) إلى \(name)") else { return }

@@ -348,3 +348,59 @@ final class FollowCameraGestureTests: XCTestCase {
         XCTAssertFalse(FollowCameraState.negligibleGesture(shiftPt: 2, zoomDelta: 0, bearingDelta: 0, pitchDelta: 12), "a tilt")
     }
 }
+
+/// One-shot camera moves share their lengths; the live breath runs only for live things.
+final class MapMotionTests: XCTestCase {
+    func testCameraMovesHaveConsistentLengths() {
+        XCTAssertEqual(MapCameraMotion.recenter.duration(reduceMotion: false), 0.6)
+        XCTAssertEqual(MapCameraMotion.focus.duration(reduceMotion: false), 0.8)
+        XCTAssertEqual(MapCameraMotion.fit.duration(reduceMotion: false), 0.9)
+        XCTAssertLessThanOrEqual(MapCameraMotion.recenter.duration, MapCameraMotion.focus.duration)
+        XCTAssertLessThanOrEqual(MapCameraMotion.focus.duration, MapCameraMotion.fit.duration)
+    }
+
+    func testReduceMotionCutsStraightToTheResult() {
+        for m in [MapCameraMotion.recenter, .focus, .fit, .tilt] {
+            XCTAssertEqual(m.duration(reduceMotion: true), 0)
+            XCTAssertEqual(m.duration(reduceMotion: true, shiftPt: 500, zoomDelta: 3), 0)
+        }
+    }
+
+    func testANearbyHopIsShort() {
+        XCTAssertEqual(MapCameraMotion.focus.duration(reduceMotion: false, shiftPt: 20, zoomDelta: 0.1), MapCameraMotion.nudge)
+        XCTAssertEqual(MapCameraMotion.focus.duration(reduceMotion: false, shiftPt: 20, zoomDelta: 2), 0.8, "a zoom is not a nudge")
+        XCTAssertEqual(MapCameraMotion.fit.duration(reduceMotion: false, shiftPt: 300), 0.9)
+        XCTAssertEqual(MapCameraMotion.fit.duration(reduceMotion: false, shiftPt: nil), 0.9, "off screen: the full length")
+    }
+
+    func testAppMotionPreferenceWinsOverTheSystem() {
+        XCTAssertTrue(MapCameraMotion.reduce(preference: .system, system: true))
+        XCTAssertFalse(MapCameraMotion.reduce(preference: .system, system: false))
+        XCTAssertTrue(MapCameraMotion.reduce(preference: .reduced, system: false))
+        XCTAssertFalse(MapCameraMotion.reduce(preference: .full, system: true))
+    }
+
+    func testPulseRunsOnlyWhileLiveInTheForeground() {
+        XCTAssertTrue(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: false, lowPower: false))
+        XCTAssertFalse(LivePulse.shouldRun(live: false, foreground: true, reduceMotion: false, drive: false, lowPower: false), "nothing live")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: false, reduceMotion: false, drive: false, lowPower: false), "background")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: true, drive: false, lowPower: false), "reduce motion")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: true, lowPower: false), "drive mode")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: false, lowPower: true), "low power")
+    }
+
+    func testBreathIsInhaleExhaleHold() {
+        XCTAssertEqual((0..<6).map(LivePulse.phase), [.hold, .inhale, .exhale, .hold, .inhale, .exhale])
+        XCTAssertEqual(LivePulse.phase(-1), .exhale, "never traps on a wrapped counter")
+        XCTAssertEqual(LivePulse.haloRing(.hold).width, LivePulse.restRingWidth)
+        XCTAssertEqual(LivePulse.haloRing(.exhale).opacity, LivePulse.restRingOpacity, "the exhale returns to rest")
+        XCTAssertGreaterThan(LivePulse.haloRing(.inhale).width, LivePulse.restRingWidth)
+        XCTAssertEqual(LivePulse.beat * 2, SaryMotion.livePulsePeriod, accuracy: 0.001, "the map breathes like every live dot")
+        XCTAssertEqual(LivePulse.transitionMs, Int((SaryMotion.livePulsePeriod * 500).rounded()))
+    }
+
+    func testMemberFadeIsShortEnoughForUITests() {
+        XCTAssertLessThanOrEqual(MemberFade.seconds + MemberFade.revealDelay, 0.45) // 0.35 + 0.06 = 0.41
+        XCTAssertEqual(MemberFade.transition["duration"] as? Int, 350)
+    }
+}

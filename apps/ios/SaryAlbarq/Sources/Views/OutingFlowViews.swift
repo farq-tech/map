@@ -23,7 +23,7 @@ struct OutingPrimaryCTA: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(c.title).font(.sary(compact ? 14 : 16, .bold)).foregroundStyle(p.textPrimary)
                                     .lineLimit(1).minimumScaleFactor(0.8)
-                                /* Build 36 item 9: the leader's presence and «الربع» under the message
+                                /* Build 36 item 9: the leader's presence and «الأصدقاء» under the message
                                  * (stopped only; the compact pill keeps one line). */
                                 if !compact, let w = ui.waiting {
                                     HStack(spacing: 4) {
@@ -51,6 +51,7 @@ struct OutingPrimaryCTA: View {
                     Button { tapped(c) } label: {
                         HStack(spacing: 6) {
                             Image(systemName: c.systemImage).font(.system(size: 16, weight: .heavy))
+                                .contentTransition(.symbolEffect(.replace))
                             Text(c.title).font(.sary(15, .heavy)).lineLimit(1)
                         }
                         .foregroundStyle(p.onAccent)
@@ -75,8 +76,11 @@ struct OutingPrimaryCTA: View {
                 }
             }
             .accessibilityIdentifier(c.id)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            .animation(theme.animation(.snappy), value: ui)
+            /* A new state morphs the same button: the title cross-morphs and the width follows
+             * (the dock animates its layout on the same change, `LiveOutingScreen`). */
+            .contentTransition(theme.reduceMotion ? .opacity : .interpolate)
+            .transition(SaryTransition.appear(theme))
+            .animation(theme.animation(LiveMotion.primaryMorph(drive: theme.drive)), value: ui)
         }
     }
 }
@@ -139,7 +143,7 @@ struct WhereToSheet: View {
                         Image(systemName: r.1).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accentText).frame(width: 24)
                         Text(r.0.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                         Spacer()
-                        if let d = distance(r.0) { Text(d).saryNumber(.caption).foregroundStyle(p.textTertiary) }
+                        if let d = distance(r.0) { Text(d).saryNumber(.caption).foregroundStyle(p.textSecondary) }
                     }
                     .frame(minHeight: 48)
                     .contentShape(Rectangle())

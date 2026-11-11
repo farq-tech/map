@@ -124,7 +124,7 @@ struct PTTChannelSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("تم", action: close).accessibilityIdentifier("ptt-channels-done")
+                    Button("خلاص", action: close).accessibilityIdentifier("ptt-channels-done")
                 }
             }
             .sheet(item: $editing) { e in
@@ -267,7 +267,7 @@ struct PTTChannelKnob: View {
                             .background(Circle().fill(id == selection ? theme.palette.accent : theme.palette.textSecondary.opacity(0.14)))
                             .overlay(alignment: .topTrailing) {
                                 if busy.contains(id) {
-                                    Image(systemName: "waveform").font(.system(size: 9, weight: .bold))
+                                    Image(systemName: "waveform").saryGlyph(9, weight: .bold)
                                         .foregroundStyle(theme.palette.accentText)
                                         .accessibilityHidden(true)
                                 }
@@ -314,7 +314,7 @@ struct PTTPrivateChannelEditor: View {
                 }
                 Section {
                     if members.isEmpty {
-                        Text("ما فيه أحد ثاني من الربع في الطلعة بعد").foregroundStyle(.secondary)
+                        Text("ما فيه أحد ثاني من الأصدقاء في الطلعة بعد").foregroundStyle(.secondary)
                     }
                     ForEach(members) { p in
                         Button {

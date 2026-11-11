@@ -1,6 +1,7 @@
 import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
 import CoreMedia
+import SwiftUI
 import UIKit
 import XCTest
 @testable import SaryAlbarq
@@ -262,11 +263,17 @@ final class NavTextTests: XCTestCase {
 final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var routes: [String: (Int, Data)] = [:]
     nonisolated(unsafe) static var seen: [URLRequest] = []
+    /// Fail every request with this URL error instead of answering (e.g. `.notConnectedToInternet`).
+    nonisolated(unsafe) static var failWith: URLError.Code?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.seen.append(request)
+        if let e = Self.failWith {
+            client?.urlProtocol(self, didFailWithError: URLError(e))
+            return
+        }
         let (code, body) = Self.routes[request.url?.path ?? ""] ?? (404, Data("{\"error\":\"not_found\"}".utf8))
         let resp = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
@@ -299,6 +306,7 @@ final class NavRoutingProviderTests: XCTestCase {
         fixture = try Data(contentsOf: url)
         StubURLProtocol.routes = [:]
         StubURLProtocol.seen = []
+        StubURLProtocol.failWith = nil
     }
 
     private func farq() -> FarqValhallaRouteProvider {
@@ -356,6 +364,32 @@ final class NavRoutingProviderTests: XCTestCase {
             let p = try await sw.routes(req())
             XCTAssertEqual(p.routes.first?.id, "mapbox-0", code)
             XCTAssertEqual(sw.lastFallbackReason, code == "no_route" ? .noRoute : .unavailable)
+        }
+    }
+
+    /// «فرق» with no network: Valhalla is a server, but the Mapbox SDK routes on the phone from
+    /// downloaded routing tiles (hybrid), so the offline error must fall through to it (#180).
+    func testFarqOfflineFallsThroughToMapboxOnDeviceRouter() async throws {
+        StubURLProtocol.failWith = .notConnectedToInternet
+        let mb = FakeMapbox()
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+        let p = try await sw.routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0")
+        XCTAssertEqual(mb.calls, 1, "Mapbox asked even though Valhalla is offline")
+        XCTAssertEqual(sw.name, "Mapbox")
+    }
+
+    /// And when Mapbox has no downloaded routing tiles either, the offline error still surfaces.
+    func testFarqOfflineWithMapboxOfflineStillReportsOffline() async {
+        StubURLProtocol.failWith = .notConnectedToInternet
+        let mb = FakeMapbox()
+        mb.fail = .offline
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+        do {
+            _ = try await sw.routes(req())
+            XCTFail("expected .offline")
+        } catch {
+            XCTAssertEqual(error as? NavRoutingError, .offline)
         }
     }
 
@@ -1048,5 +1082,103 @@ final class NavRouteMetricsTests: XCTestCase {
         /* ~2 km at ~33 m a segment: about 60 segments, not the whole route. */
         let e0 = LocalGuidanceEngine.windowEnd(cum: cum, from: 0, lo: 0, hi: hi)
         XCTAssertTrue((55...70).contains(e0), "\(e0)")
+    }
+}
+
+/// Motion on the guidance banner: the maneuver key and the RTL-aware swap direction.
+final class NavMotionTests: XCTestCase {
+    func testStepKeyChangesWithStepAndRouteOnly() {
+        let a = UUID(), b = UUID()
+        XCTAssertEqual(NavMotion.stepKey(route: a, stepIndex: nil), NavMotion.stepKey(route: a, stepIndex: 1),
+                       "no progress yet shows step 1: the first progress does not swap the banner again")
+        XCTAssertNotEqual(NavMotion.stepKey(route: a, stepIndex: 1), NavMotion.stepKey(route: a, stepIndex: 2), "a new maneuver")
+        XCTAssertNotEqual(NavMotion.stepKey(route: a, stepIndex: 2), NavMotion.stepKey(route: b, stepIndex: 2), "a new route (reroute)")
+        XCTAssertEqual(NavMotion.stepKey(route: a, stepIndex: 3), NavMotion.stepKey(route: a, stepIndex: 3))
+    }
+
+    func testSwapComesFromTheTrailingSideAndFollowsRTL() {
+        let d = NavMotion.swapDistance
+        XCTAssertGreaterThan(d, 0)
+        XCTAssertLessThanOrEqual(d, 48, "a nudge, not a full slide across the banner")
+        /* Arabic: the next instruction comes in from the left, the old one leaves to the right. */
+        XCTAssertEqual(NavMotion.swapOffset(insertion: true, rtl: true), -d)
+        XCTAssertEqual(NavMotion.swapOffset(insertion: false, rtl: true), d)
+        /* LTR mirrors it. */
+        XCTAssertEqual(NavMotion.swapOffset(insertion: true, rtl: false), d)
+        XCTAssertEqual(NavMotion.swapOffset(insertion: false, rtl: false), -d)
+        XCTAssertTrue(NavMotion.swapTravels(reduceMotion: false))
+        XCTAssertFalse(NavMotion.swapTravels(reduceMotion: true), "Reduce Motion: a crossfade")
+    }
+}
+
+/// The guidance bar in the 70 pt peek and at 320 pt: when the compact row is used outright.
+final class NavBarLayoutTests: XCTestCase {
+    func testCompactOnNarrowOrAccessibilityText() {
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .narrow, typeSize: .large), "320 pt: «أوقف التوجيه» does not fit")
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .regular, typeSize: .accessibility1))
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .wide, typeSize: .accessibility5))
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .regular, typeSize: .large), "a standard phone: the full row")
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .regular, typeSize: .xxxLarge), "ViewThatFits decides below accessibility sizes")
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .wide, typeSize: .large))
+    }
+
+    func testChangeDestinationMovesToTheSheetOnlyWhenTheBarDropsIt() {
+        for w in [SaryWidthClass.narrow, .regular, .wide] {
+            for t in [DynamicTypeSize.large, .xxxLarge, .accessibility2] {
+                XCTAssertEqual(NavBarLayout.changeDestinationInSheet(width: w, typeSize: t), NavBarLayout.forcesCompact(width: w, typeSize: t),
+                               "«غيّر الوجهة» is always in exactly one place (\(w), \(t))")
+            }
+        }
+    }
+
+    func testPeekFitRules() {
+        XCTAssertFalse(NavBarLayout.showsStaleNote(peek: true), "no third line in the 70 pt peek")
+        XCTAssertTrue(NavBarLayout.showsStaleNote(peek: false))
+        XCTAssertEqual(NavBarLayout.numbersTypeCap, .xLarge)
+        XCTAssertEqual(NavBarLayout.stopCircle(drive: false), 52)
+        XCTAssertGreaterThanOrEqual(NavBarLayout.stopCircle(drive: true), 60, "the drive-mode target")
+    }
+}
+
+/// How a new route arrives on the map: fade-in on first show, quick fade + halo on a reroute.
+final class NavRouteRevealTests: XCTestCase {
+    func testKind() {
+        XCTAssertEqual(NavRouteReveal.kind(previous: nil, next: "a", wasGuiding: false, isGuiding: false), .reveal, "the options appear")
+        XCTAssertEqual(NavRouteReveal.kind(previous: nil, next: "a", wasGuiding: false, isGuiding: true), .reveal, "guidance with no preview")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "a", wasGuiding: true, isGuiding: true), .none,
+                       "the same route shrinking behind the car is not new")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: true, isGuiding: true), .reroute)
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: false, isGuiding: false), .none, "picking another option")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: false, isGuiding: true), .none, "starting on the preview")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: nil, wasGuiding: true, isGuiding: false), .none, "the route went away")
+    }
+
+    func testDurationsAndReduceMotion() {
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reveal, reduceMotion: false), 600, "about 0.6 s")
+        XCTAssertLessThan(NavRouteReveal.fadeMs(.reroute, reduceMotion: false), NavRouteReveal.fadeMs(.reveal, reduceMotion: false))
+        XCTAssertEqual(NavRouteReveal.fadeMs(.none, reduceMotion: false), 0)
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reveal, reduceMotion: true), 0)
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reroute, reduceMotion: true), 0)
+    }
+
+    func testManeuverArrowFadesOnlyForANewArrow() {
+        let a = [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.61, lat: 24.7)]
+        let b = [LngLat(lng: 46.7, lat: 24.7), LngLat(lng: 46.71, lat: 24.7)]
+        XCTAssertTrue(NavRouteReveal.maneuverFades(previous: nil, next: a, reduceMotion: false))
+        XCTAssertTrue(NavRouteReveal.maneuverFades(previous: a, next: b, reduceMotion: false))
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: a, reduceMotion: false))
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: nil, reduceMotion: false), "going away: no fade")
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: b, reduceMotion: true))
+    }
+
+    func testFadesCoverRealLayersAndRestAtTheirStyleValues() {
+        let ids = Set(NavMapDrawer.layerIds)
+        for f in NavMapDrawer.routeFades + NavMapDrawer.maneuverFades {
+            XCTAssertTrue(ids.contains(f.layer), f.layer)
+            XCTAssertTrue((0...1).contains(f.rest), f.layer)
+        }
+        XCTAssertFalse(NavMapDrawer.routeFades.contains { $0.layer.hasPrefix("sary-nav-alt") }, "alternatives never fade")
+        XCTAssertEqual(NavMapDrawer.routeFades.first { $0.layer == NavMapDrawer.haloLayer }?.rest, NavMapDrawer.haloOpacity)
+        XCTAssertGreaterThan(NavRouteReveal.rerouteHaloOpacity, NavMapDrawer.haloOpacity, "the reroute darkens the halo")
     }
 }

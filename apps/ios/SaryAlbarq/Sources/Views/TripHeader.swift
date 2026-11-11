@@ -23,7 +23,7 @@ enum TripHeaderPresenter {
         if let t = trip {
             switch t.phase {
             case let .needsDestination(canSet): return canSet ? "حدّد الوجهة" : "بانتظار الوجهة"
-            case .notStarted: return "لم تبدأ"
+            case .notStarted: return "ما بدأت"
             case .waitingFix: return "ننتظر موقعك"
             case .arrived: return t.destinationName.isEmpty ? "وصلت" : "وصلت \(t.destinationName)"
             case .ended: return "انتهت الطلعة"
@@ -36,7 +36,7 @@ enum TripHeaderPresenter {
         }
         if let n = LiveOutingPresenter.nearbyLabel(nearbyCars) { return n }
         if connection != .connected { return connection.label }
-        return status == .notStarted ? "لم تبدأ" : nil
+        return status == .notStarted ? "ما بدأت" : nil
     }
 
     /// «اتبع الخطة» status as the header's second line.
@@ -126,8 +126,9 @@ struct TripHeader: View {
                         .minimumScaleFactor(0.8)
                         .accessibilityIdentifier("outing-title")
                     if let line = ui.line {
+                        /* Drive mode: medium weight, so the state line holds up in sun. */
                         Text(line)
-                            .font(.sary(theme.drive ? 14 : 12, .regular))
+                            .font(.sary(theme.drive ? 14 : 12, theme.drive ? .medium : .regular))
                             .foregroundStyle(p.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
@@ -197,7 +198,8 @@ struct TripHeader: View {
                             .frame(width: hit, height: hit)
                         if ui.bell > 0 && !bellOpen {
                             Text(SaryFormat.number(ui.bell))
-                                .font(.sary(10, .heavy))
+                                .saryNumber(.micro, weight: .heavy)
+                                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                                 .foregroundStyle(p.onAccent)
                                 .padding(.horizontal, 4)
                                 .frame(minWidth: 16, minHeight: 16)
@@ -250,7 +252,7 @@ struct TripHeader: View {
 
     private var levelText: String {
         switch ui.level {
-        case .good: return "كل شيء تمام"
+        case .good: return "كل شي تمام"
         case .degraded: return "فيه تنبيه"
         case .bad: return "مشكلة في الاتصال أو الموقع"
         case .unknown: return "مشاركة موقعك متوقفة"

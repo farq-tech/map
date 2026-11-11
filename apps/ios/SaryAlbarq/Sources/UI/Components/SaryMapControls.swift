@@ -34,7 +34,7 @@ struct SaryMapControlButton: View {
                 .saryGlass(Circle(), role: .control, tint: item.isActive ? theme.palette.accent : nil, interactive: true)
         }
         .buttonStyle(SaryPressStyle())
-        .sensoryFeedback(.selection, trigger: item.isActive)
+        .saryHaptic(.selection, trigger: item.isActive)
         .accessibilityLabel(Text(item.label))
         .accessibilityHint(Text(item.hint ?? ""))
         .accessibilityValue(Text(item.value ?? ""))
@@ -57,8 +57,9 @@ struct SaryMapControlFace: View {
                 .symbolRenderingMode(.hierarchical)
                 .contentTransition(.symbolEffect(.replace))
             if showsLabel {
+                /* 12 pt (was 11): it fits under the glyph in the 48 pt disc; long labels still shrink. */
                 Text(item.label)
-                    .saryText(.micro)
+                    .saryText(.caption)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .dynamicTypeSize(...DynamicTypeSize.xLarge)
@@ -69,7 +70,7 @@ struct SaryMapControlFace: View {
         .overlay(alignment: .topTrailing) {
             if let badge = item.badge, badge > 0 {
                 Text(SaryFormat.number(badge))
-                    .saryNumber(.micro)
+                    .saryNumber(.caption)
                     .foregroundStyle(theme.palette.onAccent)
                     .padding(.horizontal, 5)
                     .frame(minWidth: 18, minHeight: 18)
@@ -148,7 +149,7 @@ private struct ControlAccessibility: ViewModifier {
             .accessibilityValue(Text(item.value ?? ""))
             .accessibilityAddTraits(item.isActive ? .isSelected : [])
             .accessibilityIdentifier(item.accessibilityID)
-            .sensoryFeedback(.selection, trigger: item.isActive)
+            .saryHaptic(.selection, trigger: item.isActive)
     }
 }
 

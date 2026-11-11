@@ -75,8 +75,12 @@ struct LivePlanModalView: View {
                 briefCard(p, name: name, plan: plan, close: close)
             case .me:
                 if let f = CoordinateShare.Fix(location.lastFix) {
-                    PointCard(subject: .me(f), actions: actions(plan), close: close)
-                        .presentationDetents([.height(460), .large])
+                    /* Scrolls when the card is taller than the detent (an SE, large text, every action). */
+                    ScrollView {
+                        PointCard(subject: .me(f), actions: actions(plan), close: close)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .presentationDetents([.height(460), .large])
                 } else {
                     SaryStateView(kind: .empty(title: "ما عندنا موقعك بعد", message: "فعّل الموقع وانتظر قليلًا.", systemImage: SaryIcon.gpsOff))
                         .presentationDetents([.medium])
@@ -256,9 +260,14 @@ struct LiveSearchSheet: View {
                     .onChange(of: query) { _, q in schedule(q) }
                     .accessibilityIdentifier("live.search.field")
                 if !query.isEmpty {
-                    Button { clear() } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary) }
+                    /* The 44 pt frame and its content shape go INSIDE the label: a frame on the
+                     * Button itself grows the layout but not the area a finger can hit. */
+                    Button { clear() } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
                         .buttonStyle(.plain)
-                        .frame(minWidth: 44, minHeight: 44)
                         .accessibilityLabel(Text("امسح"))
                         .accessibilityIdentifier("live.search.clear")
                 }
@@ -332,10 +341,13 @@ struct LiveSearchSheet: View {
                 let point = LngLat(lng: r.destination.lng, lat: r.destination.lat)
                 PlaceResultRow(icon: r.icon, name: r.title, secondaryName: r.secondaryName, detail: r.detail,
                                meters: r.meters ?? near.map { PlanGeo.meters($0, point) }, id: id) { pick(r.destination) }
+                    .transition(SaryTransition.appear(theme))
             }
         }
         .padding(.horizontal, theme.space(.m))
         .sarySurface(radius: SaryRadius.m)
+        /* Results refine as you type: rows keep their place (stable ids), new ones fade in. */
+        .saryAnimation(.snappy, value: rows.map(\.id))
     }
 
     private func clear() {
@@ -362,6 +374,9 @@ struct LiveSearchSheet: View {
         job = Task {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
+            /* «أداء التطبيق»: the search runs (after the typing pause) → results shown. */
+            let perf = PerfSignpost.begin(.search)
+            defer { perf.end() }
             let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
                 (HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near), HomeDesertRules.categoryKind(t) != nil)
             }.value

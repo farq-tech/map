@@ -15,6 +15,20 @@ enum IntroScene {
     static let logoRest = CGPoint(x: 220, y: 432)
     static let logoStart = CGPoint(x: 220, y: 700)
 
+    /// The part of the design space a `screen`-sized phone shows: centred and never scaled,
+    /// exactly like the launch image (`UILaunchScreen` draws `IntroLaunch` at its natural
+    /// size), so smaller phones crop the edges evenly instead of zooming.
+    static func visibleRect(screen: CGSize) -> CGRect {
+        let w = min(max(screen.width, 0), size.width), h = min(max(screen.height, 0), size.height)
+        return CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
+    }
+
+    /// Widest the name/tagline block may be on a `screenWidth` phone: the visible width minus
+    /// side margins, never more than on the design phone (so a 393 pt phone is unchanged).
+    static func titleMaxWidth(screenWidth: CGFloat, margin: CGFloat = 24) -> CGFloat {
+        max(120, min(screenWidth, size.width) - margin * 2)
+    }
+
     // MARK: timeline (seconds from the start of the animation)
 
     enum T {

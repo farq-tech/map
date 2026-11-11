@@ -2,7 +2,7 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// «طلعة جديدة» in three steps: ١ وين رايحين؟ → ٢ الجو هناك (يناسبنا الجو؟) → ٣ ادعُ ربعك.
+/// «طلعة جديدة» in three steps: ١ وين رايحين؟ → ٢ الجو هناك (يناسبنا الجو؟) → ٣ ادعُ أصدقاءك.
 /// The outing is created on the server only when the weather is approved; the
 /// destination is saved with it (on this phone first if the server cannot take it yet).
 struct CreateOutingWizard: View {
@@ -24,6 +24,8 @@ struct CreateOutingWizard: View {
     @State private var quickChangedPlace = false
     /// The outing ids on the list before the first create attempt (to recognise ours after a timeout).
     @State private var knownBefore: Set<String>?
+    /// Bumped when «ابدأ الطلعة» becomes ready: one emphasis (`saryEmphasis`).
+    @State private var startEmphasis = 0
 
     /// «مين معك؟» for a place picked on the home map, until the person goes back to change it.
     private var isQuick: Bool { quick != nil && !quickChangedPlace }
@@ -37,28 +39,19 @@ struct CreateOutingWizard: View {
         SaryPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
                  close: { finish(start: false) }) {
             if !isQuick { progress }
-            switch flow.step {
-            case .destination:
-                if isQuick {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 120)
-                } else {
-                    DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
-                                    choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
-                }
-            case .weather:
-                if isQuick {
-                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo, solo: solo,
-                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
-                } else {
-                    WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
-                }
-            case .invite:
-                InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly)
+            /* One step at a time, sliding the way the person moves: on → in from the reading end
+               (the left in Arabic), back → from the start. A ZStack so the two never stack during it. */
+            ZStack(alignment: .top) {
+                stepContent
+                    .id(flow.step)
+                    .transition(stepTransition)
             }
         }
         /* «ابدأ الطلعة» pinned at the bottom of step ٣: never under the fold (UI-AUDIT ١-هـ). */
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if flow.step == .invite { inviteBar }
+            if flow.step == .invite {
+                inviteBar.transition(SaryTransition.card(theme))
+            }
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(flow.creating)
@@ -72,6 +65,37 @@ struct CreateOutingWizard: View {
             }
         }
         .onChange(of: flow.destination) { _, d in weather.setDestination(d) }
+    }
+
+    /// Steps slide (RTL aware, `CreateStepMotion`); a cross-fade where travel is not allowed.
+    private var stepTransition: AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        let enter: Edge = CreateStepMotion.insertionEdge(forward: flow.movedForward) == .trailing ? .trailing : .leading
+        let leave: Edge = enter == .trailing ? .leading : .trailing
+        return .asymmetric(insertion: .move(edge: enter).combined(with: .opacity),
+                           removal: .move(edge: leave).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private var stepContent: some View {
+        switch flow.step {
+        case .destination:
+            if isQuick {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
+                                choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
+            }
+        case .weather:
+            if isQuick {
+                CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo, solo: solo,
+                               withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
+            } else {
+                WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
+            }
+        case .invite:
+            InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly)
+        }
     }
 
     /// Back / «غيّر المكان»: to step ١, keeping the name and the time; quick mode becomes the full steps.
@@ -93,6 +117,8 @@ struct CreateOutingWizard: View {
                 .accessibilityIdentifier("create.shareStatement")
             Button { finish(start: true) } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
                 .buttonStyle(.sary(.primary))
+                /* Ready (the outing exists, nothing pending): one settle-back emphasis, never a loop. */
+                .saryEmphasis(trigger: startEmphasis, scale: 1.04)
                 .accessibilityIdentifier("create.start")
             Button("لاحقًا") { finish(start: false) }
                 .buttonStyle(.sary(.plain, compact: true))
@@ -104,8 +130,20 @@ struct CreateOutingWizard: View {
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
         .background(p.background.shadow(color: .black.opacity(0.12), radius: 8, y: -2).ignoresSafeArea(edges: .bottom))
+        .onAppear { emphasizeStartIfReady(after: SaryMotion.enter.duration) }
+        .onChange(of: startReady) { _, ready in if ready { emphasizeStartIfReady(after: 0) } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("create.bar")
+    }
+
+    /// «ابدأ الطلعة» can go now (`finish(start:)` would open the trip).
+    private var startReady: Bool { CreateStepMotion.startReady(outingId: flow.outingId, creating: flow.creating) }
+
+    /// Once the bar has landed, and again each time it becomes ready.
+    private func emphasizeStartIfReady(after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            if startReady { startEmphasis &+= 1 }
+        }
     }
 
     private var progress: some View {
@@ -113,6 +151,7 @@ struct CreateOutingWizard: View {
         return VStack(alignment: .leading, spacing: theme.space(.xs)) {
             HStack {
                 Text("الخطوة \(flow.progressText)").saryNumber(.caption, weight: .bold).foregroundStyle(p.accentText)
+                    .contentTransition(SaryTransition.number(Double(flow.step.rawValue), theme))
                     .accessibilityIdentifier("create.progress")
                 Spacer()
             }
@@ -126,6 +165,8 @@ struct CreateOutingWizard: View {
             .environment(\.layoutDirection, .rightToLeft)
             .accessibilityHidden(true)
         }
+        /* The bar fills toward the next step, the step number rolls. */
+        .saryAnimation(.smooth, value: flow.progress)
     }
 
     /// Create the outing, saying at each call what we wait on (`CreateStage`), and never leaving the
@@ -507,7 +548,7 @@ private struct CompanionsStep: View {
         if !online { SaryOfflineStrip(text: CreateCopy.offline) }
         CreateProgressLine(flow: flow)
         Button(action: withFriends) {
-            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ ربعك",
+            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ أصدقاءك",
                             systemImage: flow.failure != nil && !solo ? SaryIcon.retry : "person.2.fill",
                             busy: flow.creating && !solo, busyTitle: "ننشئ الطلعة…")
         }
@@ -697,7 +738,7 @@ private struct WeatherStep: View {
     }
 }
 
-// MARK: - Step 3: ادعُ ربعك
+// MARK: - Step 3: ادعُ أصدقاءك
 
 private struct InviteStep: View {
     var flow: CreateFlowState
@@ -719,7 +760,7 @@ private struct InviteStep: View {
         }
         HStack(spacing: theme.space(.s)) {
             Image(systemName: SaryIcon.checkCircle).foregroundStyle(p.liveText)
-            Text(link == nil ? "أنشأنا «\(flow.trimmedName)». ادعُ ربعك واحدًا واحدًا." : "أنشأنا «\(flow.trimmedName)». أرسل الدعوة لربعك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
+            Text(link == nil ? "أنشأنا «\(flow.trimmedName)». ادعُ أصدقاءك واحدًا واحدًا." : "أنشأنا «\(flow.trimmedName)». أرسل الدعوة لأصدقائك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("create.created")

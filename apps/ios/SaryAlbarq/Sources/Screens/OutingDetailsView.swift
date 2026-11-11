@@ -180,7 +180,7 @@ struct TripSummaryView: View {
                 }
                 TripLegsSection(outingId: outingId)
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                SarySection(title: "ملخصات شاركها الربع", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
                     }
@@ -207,7 +207,7 @@ struct TripSummaryView: View {
                 } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
                     SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrailSketch(trail: trail, color: theme.palette.accent)
-                            .frame(height: 180)
+                            .saryFitHeight(180)
                             .padding(.vertical, theme.space(.s))
                             .accessibilityIdentifier("summary.trail")
                     }
@@ -284,24 +284,24 @@ struct TripSummaryView: View {
     @ViewBuilder
     private func mySummary(mine: TripShare?, local: TripTotals?, endedAt: Date?) -> some View {
         let open = endedAt.map { Date().timeIntervalSince($0) < 7 * 86400 } ?? false
-        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع ربع الطلعة (خلال أسبوع من نهايتها).") {
+        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع أصدقاء الطلعة (خلال أسبوع من نهايتها).") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 if mine != nil {
-                    Label("شاركت ملخصك مع الربع", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
+                    Label("شاركت ملخصك مع الأصدقاء", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
                     Button {
                         busy = true
                         Task { if await model.withdrawSummary(outingId) { await load() }; busy = false }
                     } label: { SaryButtonLabel(title: "اسحب ملخصي", busy: busy) }
                         .buttonStyle(.sary(.plainDestructive))
                 } else if local == nil {
-                    Text("ما شاركت موقعك في هذه الطلعة من هذا الجهاز، فلا يوجد ملخص لك.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                    Text("ما شاركت موقعك في هذه الطلعة من هذا الجوال، فما فيه ملخص لك.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
                 } else if !open {
                     Text("مضى أكثر من أسبوع على نهاية الطلعة؛ يبقى ملخصك على جوالك فقط.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
                 } else {
                     Button {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
-                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الربع", systemImage: "square.and.arrow.up.on.square", busy: busy) }
+                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الأصدقاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("summary.shareMine")
                 }
@@ -377,7 +377,7 @@ struct TrackSummaryCard: View {
                 .padding(theme.space(.s))
                 .accessibilityIdentifier("summary.trackOpen")
             }
-            .frame(height: 300)
+            .saryFitHeight(300)
             .contentShape(Rectangle())
             .onTapGesture(perform: open)
             TrackStatsCard(stats: subject.stats, speedLegend: subject.line.hasSpeeds, follow: follow)
@@ -512,7 +512,7 @@ struct TripSummarySection: View {
                         TrailSketch(trail: trail, color: p.accent)
                     }
                 }
-                .frame(height: 200)
+                .saryFitHeight(200)
                 .clipShape(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous))
                 .padding(.vertical, theme.space(.s))
                 .accessibilityIdentifier("summary.route")

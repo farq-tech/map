@@ -110,19 +110,22 @@ struct WeatherChipView: View {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: ui.symbol).symbolRenderingMode(.multicolor).font(.system(size: theme.drive ? 18 : 15, weight: .semibold))
+                        .contentTransition(.symbolEffect(.replace))
                 }
+                /* A new reading rolls its digits instead of snapping. */
                 Text(ui.temp).saryNumber(theme.drive ? .headline : .subhead, weight: .heavy).foregroundStyle(tint)
+                    .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                 Text(ui.place).saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
                     .frame(maxWidth: 110, alignment: .leading)
                 if let s = ui.staleText {
                     HStack(spacing: 2) {
-                        Image(systemName: ui.offline ? SaryIcon.offline : "clock").font(.system(size: 10, weight: .bold))
+                        Image(systemName: ui.offline ? SaryIcon.offline : "clock").saryGlyph(10, weight: .bold)
                         Text(s.replacingOccurrences(of: "آخر تحديث ", with: "")).saryNumber(.micro, weight: .bold).lineLimit(1)
                     }
                     .foregroundStyle(p.warningText)
                 }
                 if ui.alertLevel > 0 {
-                    Image(systemName: SaryIcon.warning).font(.system(size: 11, weight: .bold)).foregroundStyle(tint)
+                    Image(systemName: SaryIcon.warning).saryGlyph(11, weight: .bold).foregroundStyle(tint)
                 }
             }
             .padding(.horizontal, theme.space(.m))
@@ -133,6 +136,8 @@ struct WeatherChipView: View {
             }
         }
         .buttonStyle(SaryPressStyle())
+        .saryAnimation(.smooth, value: ui.temp)
+        .saryAnimation(.smooth, value: ui.symbol)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(ui.accessibility))
         .accessibilityHint(Text("يفتح تفاصيل الطقس"))
@@ -165,10 +170,15 @@ struct DestinationWeatherBadge: View {
         let ui = WeatherChipPresenter.chip(source: .destination(destination), report: store.report, refreshing: store.refreshing, failed: store.lastFailed, now: now)
         HStack(spacing: 3) {
             Image(systemName: ui.phase == .loading ? "cloud" : ui.symbol).symbolRenderingMode(.multicolor).font(.system(size: 12))
+                .contentTransition(.symbolEffect(.replace))
             Text(ui.temp).saryNumber(.caption, weight: .bold)
                 .foregroundStyle(ui.alertLevel > 0 ? theme.palette.warningText : theme.palette.textSecondary)
-            if ui.staleText != nil { Image(systemName: "clock").font(.system(size: 9, weight: .bold)).foregroundStyle(theme.palette.warningText) }
+                .contentTransition(theme.reduceMotion ? .opacity : .numericText())
+            if ui.staleText != nil { Image(systemName: "clock").saryGlyph(9, weight: .bold).foregroundStyle(theme.palette.warningText) }
         }
+        /* The reading arrives after the card: its digits roll in rather than pop. */
+        .saryAnimation(.smooth, value: ui.temp)
+        .saryAnimation(.smooth, value: ui.symbol)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(ui.accessibility))
         .accessibilityIdentifier("outing-row.weather")
@@ -181,6 +191,7 @@ struct DestinationWeatherBadge: View {
 @MainActor
 final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var fix: Geo.LatLng?
+    @Published private(set) var measuredLocation: CLLocation?
     private let manager = CLLocationManager()
     private var asked = false
 
@@ -189,6 +200,7 @@ final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegat
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         if let l = manager.location, -l.timestamp.timeIntervalSinceNow < 6 * 3600 {
+            measuredLocation = l
             fix = Geo.LatLng(lat: l.coordinate.latitude, lng: l.coordinate.longitude)
         }
     }
@@ -203,7 +215,10 @@ final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegat
     nonisolated func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
         guard let l = locs.last else { return }
         let c = Geo.LatLng(lat: l.coordinate.latitude, lng: l.coordinate.longitude)
-        Task { @MainActor in self.fix = c }
+        Task { @MainActor in
+            self.measuredLocation = l
+            self.fix = c
+        }
     }
 
     nonisolated func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {}

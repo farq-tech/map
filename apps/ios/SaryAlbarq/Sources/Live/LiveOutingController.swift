@@ -330,9 +330,14 @@ final class LiveOutingController: ObservableObject {
     private var alertedNotes: [String: (text: String, at: Date)] = [:]
     /// This outing's stored trip log, decoded once per change of the stored bytes (`tripInput`).
     var tripLogMemo = StoredBytesMemo<TripLog?>()
+    /// My driven distance on the trip panel, walked once per change of the trail (`tripInput`).
+    var drivenMemo = DrivenMetersMemo()
     /// A `sessionChanged` / `locationChanged` pass is already queued on the main queue.
     private var sessionPassQueued = false
     private var locationPassQueued = false
+    /// The same for the guidance session's and the shared features' forwarding passes.
+    private var navPassQueued = false
+    private var featuresPassQueued = false
 
     init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings, featuresBackend: OutingFeaturesBackend? = nil) {
         self.session = session
@@ -346,6 +351,8 @@ final class LiveOutingController: ObservableObject {
         inviteLink = session.storedInviteURL()?.absoluteString
         weather = OutingWeather(outingId: session.id, tracksMap: true)
         weather.onAlert = { [weak self] a in self?.pushAlert(LiveAlertUI(id: a.id, kind: .weather(a)), ttl: 45) }
+        /* #173: an action already done here waits for the network (or was refused): one toast. */
+        session.onDeferredNotice = { [weak self] text in self?.toast(text) }
         #if DEBUG
         /* Screenshots: `-SaryLiveSheet half|full`, `-SaryLiveModal weather`. */
         let shotArgs = ProcessInfo.processInfo.arguments
@@ -412,8 +419,16 @@ final class LiveOutingController: ObservableObject {
         /* «فهد يتكلم الآن — انتظر دورك» and friends, as the usual toast. */
         session.walkie.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
         session.voiceNotes.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
+        /* Coalesced like the passes above: every queued block ran after the same publishes and read
+         * the same state, so one block per burst does the same work once. */
         features.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.objectWillChange.send() }
+            guard let self, !self.featuresPassQueued else { return }
+            self.featuresPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.featuresPassQueued = false
+                self.objectWillChange.send()
+            }
         }.store(in: &bag)
         features.start()
         wireChatToasts()
@@ -437,8 +452,15 @@ final class LiveOutingController: ObservableObject {
             UINotificationFeedback.warning()
             self?.toast(t)
         }
+        /* One guidance update publishes several properties (progress, remaining, phase…). */
         nav.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.followCamGuidanceCheck(); self?.objectWillChange.send() }
+            guard let self, !self.navPassQueued else { return }
+            self.navPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.navPassQueued = false
+                self.exploreDrivingCheck(); self.followCamGuidanceCheck(); self.objectWillChange.send()
+            }
         }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
@@ -545,6 +567,12 @@ final class LiveOutingController: ObservableObject {
 
     var ui: LiveOutingUIState { LiveOutingPresenter.state(input) }
 
+    /// `ui.sos.mine` from the same sources as `input` (the merged view, the sending flag, now),
+    /// without building the input or running the presenter.
+    var mySOS: MySOSUI {
+        LiveOutingPresenter.mySOS(view: session.meshOverlay.view, sending: session.sosSending, now: Date())
+    }
+
     /// The outing's area for offline maps: every car (and the rally point), padded to a few km.
     var offlineSuggestion: OfflinePlan.Box? {
         var pts = mapMembers(theme: .default).map(\.position)
@@ -634,8 +662,7 @@ final class LiveOutingController: ObservableObject {
             if m != motion { motion = m }
         }
         exploreDrivingCheck()
-        checkConvoy()
-        feedWeather()
+        feedWeather(members: checkConvoy())
         if session.closedReason != nil, !closeHandled {
             closeHandled = true
             if modal?.closesWhenTripEnds == true { modal = nil }
@@ -660,8 +687,7 @@ final class LiveOutingController: ObservableObject {
             if m != motion { motion = m }
         }
         exploreDrivingCheck()
-        checkConvoy()
-        feedWeather()
+        feedWeather(members: checkConvoy())
         objectWillChange.send()
     }
 
@@ -675,10 +701,16 @@ final class LiveOutingController: ObservableObject {
     }
 
     /// Convoy alerts from the cars drawn right now (live ones only; see `OutingFeaturesModel.liveCars`).
-    private func checkConvoy() {
-        checkConvoyIntel()
-        guard session.view?.convoy?.isOn == true else { return features.evaluateConvoy(members: []) }
-        features.evaluateConvoy(members: LiveOutingPresenter.mapMembers(input, hideNotes: true))
+    /// The convoy watch and the convoy alerts read the same cars: they are built once per pass (and
+    /// returned, for the weather feed) instead of once per reader. Nil when nothing needed them.
+    @discardableResult
+    private func checkConvoy() -> [MapMember]? {
+        let convoyOn = session.view?.convoy?.isOn == true
+        let cars = convoyOn || session.view?.status == .active ? LiveOutingPresenter.mapMembers(input, hideNotes: true) : nil
+        checkConvoyIntel(members: cars)
+        guard convoyOn else { features.evaluateConvoy(members: []); return cars }
+        features.evaluateConvoy(members: cars ?? [])
+        return cars
     }
 
     /// Waypoints for the map.
@@ -1018,7 +1050,7 @@ final class LiveOutingController: ObservableObject {
             copyLink: { [weak self] in
                 guard let self, let l = self.inviteLink else { return }
                 UIPasteboard.general.string = l
-                self.toast("تم نسخ الرابط")
+                self.toast("نسخنا الرابط")
             },
             shareLink: { [weak self] in
                 guard let self, let l = self.inviteLink else { return }
@@ -1077,13 +1109,13 @@ final class LiveOutingController: ObservableObject {
     }
 
     /// «غادر الطلعة» — the only way to stop sharing (confirmed first by the caller's dialog).
+    /// Instant (#173): sharing stops and the screen closes now; the server is told in the
+    /// background (`OutingSession.leave`, persisted and retried).
     func leaveOuting() {
         confirm = nil
-        Task {
-            guard await session.leave() else { return }
-            endGuidanceForLeaving()
-            onExit()
-        }
+        session.leave()
+        endGuidanceForLeaving()
+        onExit()
     }
 
     /// The first alert worth a notification, after an invite join: our explainer, then iOS's prompt.
@@ -1184,7 +1216,7 @@ final class LiveOutingController: ObservableObject {
         session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
     }
 
-    /// The «دائمًا» explainer is the after-join one («خلّ الربع يشوفونك طول الطلعة»).
+    /// The «دائمًا» explainer is the after-join one («خلّ الأصدقاء يشوفونك طول الطلعة»).
     @Published var shareAlwaysAfterJoin = false
 
     /// Right after «انضم» (field 2026-11-06: members on «أثناء الاستخدام» went dark the moment
@@ -1340,7 +1372,7 @@ final class LiveOutingController: ObservableObject {
         modal = nil
         let clean = ServerRules.cleanText(label, max: 40)
         Task {
-            if await session.setRally(lat: p.lat, lng: p.lng, label: clean) { toast("تم تحديد نقطة التجمع") }
+            if await session.setRally(lat: p.lat, lng: p.lng, label: clean) { toast("حددنا نقطة التجمع") }
         }
     }
 

@@ -56,6 +56,8 @@ final class WeatherOverlay {
     private init(map: MapView, layers: WeatherLayers) {
         self.map = map
         self.layers = layers
+        legend.onTogglePlay = { [weak self] in self?.togglePlay() }
+        legend.onScrub = { [weak self] i in self?.seek(to: i) }
         styleReady = map.mapboxMap.isStyleLoaded
         map.mapboxMap.onStyleLoaded.observe { [weak self] _ in
             guard let self else { return }
@@ -120,7 +122,7 @@ final class WeatherOverlay {
         legend.days = layers.rainDays
         legend.attribution = kind.attribution()
         legend.items = WeatherLegend.items(kind)
-        if kind != .clouds { stopAnimation() }
+        if kind != .clouds { stopAnimation(); framesTask?.cancel(); framesTask = nil }
         guard let map, styleReady else { layoutLegend(); return }
         let m: MapboxMap = map.mapboxMap
         switch kind {
@@ -138,10 +140,18 @@ final class WeatherOverlay {
             refreshFrames()
             if !frames.isEmpty {
                 let key = "clouds-" + frames.map(\.id).joined(separator: ",")
+                let fresh = drawn != Drawn(kind: .clouds, key: key)
                 install(m, kind: .clouds, key: key,
                         sources: frames.map { ("cloud-\($0.id)", WeatherLayerAPI.absolute($0.tile_url)) }, min: 3, max: 9, bounds: [25, 8, 65, 40],
                         visibleIndex: frames.count - 1)
-                startAnimation()
+                if fresh {
+                    /* New frames (first open or a refresh): show the newest and play. A plain
+                     * re-apply (chrome/layout) must not disturb a paused or scrubbed frame. */
+                    legend.playing = true
+                    startAnimation()
+                } else if legend.playing, timer == nil {
+                    startTimer()
+                }
             } else {
                 legend.time = "نجيب آخر صور السحاب…"
             }
@@ -166,6 +176,9 @@ final class WeatherOverlay {
             var layer = RasterLayer(id: Self.prefix + id, source: Self.prefix + id)
             let shown = visibleIndex.map { $0 == i } ?? true
             layer.rasterOpacity = .constant(shown ? Self.opacity : 0)
+            /* Progressive loading (clouds): only the shown frame is visible at install, so the other
+             * frames fetch no tiles until the loop — or the scrubber — reaches them. */
+            if visibleIndex != nil { layer.visibility = .constant(shown ? .visible : .none) }
             layer.rasterFadeDuration = .constant(0)
             layer.rasterResampling = .constant(.linear)
             do {
@@ -219,6 +232,14 @@ final class WeatherOverlay {
     private func startAnimation() {
         frameIndex = frames.count - 1
         showFrame(frameIndex)
+        legend.frameCount = frames.count
+        if legend.playing { startTimer() }
+    }
+
+    /// Start (or resume) the frame loop from the current frame. Newest picture plays by default.
+    private func startTimer() {
+        legend.playing = true
+        legend.frameCount = frames.count
         guard timer == nil, frames.count > 1 else { return }
         let t = Timer(timeInterval: 0.55, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -230,6 +251,21 @@ final class WeatherOverlay {
     private func stopAnimation() {
         timer?.invalidate()
         timer = nil
+    }
+
+    /// «تشغيل / إيقاف» the cloud loop (the legend's play/pause button).
+    func togglePlay() {
+        guard effectiveKind == .clouds, frames.count > 1 else { return }
+        if timer == nil { startTimer() } else { legend.playing = false; stopAnimation() }
+    }
+
+    /// The timeline scrubber dragged to frame `i`: pause the loop and show that frame.
+    func seek(to i: Int) {
+        guard effectiveKind == .clouds, frames.indices.contains(i) else { return }
+        legend.playing = false
+        stopAnimation()
+        pauseTicks = 0
+        showFrame(i)
     }
 
     private func tick() {
@@ -247,14 +283,42 @@ final class WeatherOverlay {
 
     private func showFrame(_ i: Int) {
         guard let m = map?.mapboxMap, frames.indices.contains(i) else { return }
+        /* Progressive + flicker-free: make this frame (and the next) visible so their tiles are
+         * already loading, raise the new frame's opacity, then drop the previous one. */
+        ensureVisible(m, i)
+        ensureVisible(m, (i + 1) % frames.count)
         let old = frameIndex
         frameIndex = i
+        try? m.setLayerProperty(for: Self.prefix + "cloud-" + frames[i].id, property: "raster-opacity", value: Self.opacity)
         if old != i, frames.indices.contains(old) {
             try? m.setLayerProperty(for: Self.prefix + "cloud-" + frames[old].id, property: "raster-opacity", value: 0)
         }
-        try? m.setLayerProperty(for: Self.prefix + "cloud-" + frames[i].id, property: "raster-opacity", value: Self.opacity)
+        legend.frameIndex = i
+        legend.frameCount = frames.count
+        legend.age = Self.ageLabel(frames[i].time)
         legend.time = "الساعة \(frames[i].label_ar)" + (i == frames.count - 1 ? " · آخر صورة" : "")
         legend.progress = frames.count > 1 ? Double(i) / Double(frames.count - 1) : 1
+    }
+
+    /// Make a cloud frame's layer visible so Mapbox begins fetching its tiles (deferred until now).
+    private func ensureVisible(_ m: MapboxMap, _ i: Int) {
+        guard frames.indices.contains(i) else { return }
+        let id = Self.prefix + "cloud-" + frames[i].id
+        guard m.layerExists(withId: id) else { return }
+        try? m.setLayerProperty(for: id, property: "visibility", value: "visible")
+    }
+
+    /// «قبل ساعة ونصف»: how old the frame's satellite picture is (the licence delays it ≥ 1 h).
+    static func ageLabel(_ iso: String) -> String {
+        let withFrac = ISO8601DateFormatter(); withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let d = withFrac.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return "" }
+        let mins = Swift.max(0, Int(Date().timeIntervalSince(d) / 60))
+        if mins < 1 { return "الآن" }
+        if mins < 60 { return "قبل \(SaryFormat.number(mins)) دقيقة" }
+        let h = mins / 60, m = mins % 60
+        if m == 0 { return "قبل \(SaryFormat.number(h)) ساعة" }
+        if m == 30 { return "قبل \(SaryFormat.number(h)) ساعة ونصف" }
+        return "قبل \(SaryFormat.number(h)) ساعة و\(SaryFormat.number(m)) دقيقة"
     }
 
     // MARK: legend
@@ -279,6 +343,13 @@ final class WeatherLegendModel: ObservableObject {
     @Published var progress: Double = 1
     @Published var items: [WeatherLegendItem] = []
     @Published var attribution = ""
+    /// «السحاب الآن» animation controls (play/pause + timeline scrubber + the frame's age).
+    @Published var playing = true
+    @Published var frameIndex = 0
+    @Published var frameCount = 0
+    @Published var age = ""
+    var onTogglePlay: () -> Void = {}
+    var onScrub: (Int) -> Void = { _ in }
 }
 
 /// «السحاب الآن · الساعة ٢:٠٠ م» + colour key + the source's credit line.
@@ -300,14 +371,38 @@ struct WeatherLegendCard: View {
                     .accessibilityIdentifier("weather.legend.time")
             }
             if model.kind == .clouds {
-                GeometryReader { g in
-                    Capsule().fill(p.sunken)
-                        .overlay(alignment: .leading) {
-                            Capsule().fill(p.accent).frame(width: max(6, g.size.width * model.progress))
+                HStack(spacing: 8) {
+                    Button { model.onTogglePlay() } label: {
+                        Image(systemName: model.playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: 12, weight: .bold)).foregroundStyle(p.accentText)
+                            .frame(width: 26, height: 26).background(Circle().fill(p.accent.opacity(0.2)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("weather.clouds.playpause")
+                    .accessibilityLabel(Text(model.playing ? "إيقاف حركة السحاب" : "تشغيل حركة السحاب"))
+                    if model.frameCount > 1 {
+                        Slider(value: Binding(get: { Double(model.frameIndex) },
+                                              set: { model.onScrub(Int($0.rounded())) }),
+                               in: 0...Double(model.frameCount - 1), step: 1)
+                            .tint(p.accent)
+                            .environment(\.layoutDirection, .leftToRight)
+                            .accessibilityIdentifier("weather.clouds.scrubber")
+                    } else {
+                        GeometryReader { g in
+                            Capsule().fill(p.sunken)
+                                .overlay(alignment: .leading) {
+                                    Capsule().fill(p.accent).frame(width: max(6, g.size.width * model.progress))
+                                }
                         }
+                        .frame(height: 4)
+                        .environment(\.layoutDirection, .leftToRight)
+                    }
+                    if !model.age.isEmpty {
+                        Text(model.age).saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                            .lineLimit(1).fixedSize()
+                            .accessibilityIdentifier("weather.legend.age")
+                    }
                 }
-                .frame(height: 4)
-                .environment(\.layoutDirection, .leftToRight)
             }
             if model.kind == .clouds {
                 HStack(spacing: 10) {
@@ -331,9 +426,10 @@ struct WeatherLegendCard: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
+            /* Data attribution over the map: 10 pt semibold, secondary (was 9 pt tertiary). */
             Text(model.attribution)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(p.textTertiary)
+                .saryGlyph(10, weight: .semibold, maxGrowth: SaryGlyph.tightGrowth)
+                .foregroundStyle(p.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .environment(\.layoutDirection, .leftToRight)
                 .frame(maxWidth: .infinity, alignment: .trailing)

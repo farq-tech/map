@@ -147,7 +147,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     reasonOf: (outingId, userId, lastAt) => presenceNow(outingId, { user_id: userId }, lastAt ? { recorded_at: lastAt } : null).reason,
     notify: (outingId, userId, info) => Promise.all([
       features.pushFeature('member_silent', outingId, userId, { ...info, userId }),
-      /* And the silent member themself: «افتح سرى عشان يرجع موقعك يوصل للربع» (a tap relaunches the app). */
+      /* And the silent member themself: «افتح سرى عشان يرجع موقعك يوصل للأصدقاء» (a tap relaunches the app). */
       features.pushFeature('self_silent', outingId, userId, { toUser: userId, exceptUserId: null, reason: info.reason }),
     ]),
   });
@@ -1268,7 +1268,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
 
   /**
    * The leader taps «نبّهه» on a member who is not live: one push to that member only
-   * («افتح سرى عشان يرجع موقعك يوصل للربع») and a live frame if a socket is still open.
+   * («افتح سرى عشان يرجع موقعك يوصل للأصدقاء») and a live frame if a socket is still open.
    * Never for a member who hid their location on purpose; at most once per 3 min per member.
    */
   async function nudge(user, outingId, targetId) {

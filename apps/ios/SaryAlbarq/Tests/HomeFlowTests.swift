@@ -98,7 +98,7 @@ final class HomeFlowTests: XCTestCase {
     }
 
     func testStateCardFirstTimeLoadingAndFailure() {
-        XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loaded), .start, "nothing current: «أنشئ طلعة وادعُ ربعك»")
+        XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loaded), .start, "nothing current: «أنشئ طلعة وادعُ أصدقاءك»")
         XCTAssertEqual(HomeStateCard.pick(current: [outing("e", .ended)], phase: .loaded), .start)
         XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loading), .none, "no flash of «أنشئ طلعة» while loading")
         XCTAssertEqual(HomeStateCard.pick(current: [], phase: .failed("x")), .failed("x"), "a failed list is said, never empty")
@@ -222,6 +222,23 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertEqual(IntroPolicy.mode(IntroFacts(enabled: IntroPolicy.enabled(defaults))), .still)
     }
 
+    // MARK: screen fit
+
+    func testCollapsedSheetGrowsWithTextSizeOnly() {
+        let base = HomeSheetRules.collapsedHeight(card: .start)
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 1), base, "default text: unchanged")
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 0.82), base, "smaller text never shrinks it")
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 1.2), (base * 1.2).rounded())
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .invite, textScale: 3), (HomeSheetRules.collapsedHeight(card: .invite) * 1.4).rounded())
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .none, textScale: .nan), HomeSheetRules.collapsedHeight)
+    }
+
+    func testCollapsedSheetLeavesTheMapVisibleOnAnSE() {
+        // Largest collapsed sheet at the largest scale, on a 667 pt SE.
+        let h = HomeSheetRules.frameHeight(screen: 667, preferred: HomeSheetRules.collapsedHeight(card: .invite, textScale: 1.4), drag: 0)
+        XCTAssertLessThanOrEqual(h, 667 - 60)
+    }
+
     /// «اتجه» draws my car in the colour the live map last gave me, else the white car (temporary, #157).
     func testMyCarColorRemembersTheLiveColourElseWhite() {
         let d = UserDefaults(suiteName: "MyCarColorTests")!
@@ -269,5 +286,41 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertEqual(g.judge(fix(last, 8), nowMs: last + 1000), .reject(.stale), "not newer than the reference")
         XCTAssertEqual(g.judge(fix(last + 500, 8), nowMs: last + 15_500), .reject(.stale), "15 s old on arrival")
         XCTAssertEqual(g.accepted, 11)
+    }
+
+    /// Owner's phone, Riyadh → Thumamah: «ترابي» on a route the legend itself shows as 71.4 of 72.9 km
+    /// asphalt. The tag now says what is really off the asphalt, with its length.
+    func testRouteTagNamesTheRealSurfaceAndLength() {
+        func line(_ km: Double) -> [LngLat] { [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.6, lat: 24.7 + km / 111.19)] }
+        var r = NavRoute(id: "r", coordinates: line(72.9), distanceM: 72_900, durationS: 3_600, steps: [], hasUnpaved: true)
+        r.surfaceRuns = [NavSurfaceRun(kind: .paved, coordinates: line(71.4)), NavSurfaceRun(kind: .unpaved, coordinates: line(1.5))]
+        let tag = NavSurfaceLegend.badge(for: r)
+        XCTAssertNotNil(tag)
+        XCTAssertTrue(tag?.hasPrefix("ترابي ") == true, "the surface, then its length: \(tag ?? "-")")
+        XCTAssertTrue(tag?.contains("كم") == true)
+        /* The biggest non-asphalt kind wins. */
+        r.surfaceRuns = [NavSurfaceRun(kind: .paved, coordinates: line(5)), NavSurfaceRun(kind: .unpaved, coordinates: line(1)),
+                         NavSurfaceRun(kind: .terrain, coordinates: line(20))]
+        XCTAssertTrue(NavSurfaceLegend.badge(for: r)?.hasPrefix("بر مفتوح ") == true)
+        /* All asphalt (the flag was set, the runs say otherwise): no tag. */
+        r.surfaceRuns = [NavSurfaceRun(kind: .paved, coordinates: line(72.9))]
+        XCTAssertNil(NavSurfaceLegend.badge(for: r))
+        /* No surface data: the old word, so nothing regresses. */
+        r.surfaceRuns = []
+        XCTAssertEqual(NavSurfaceLegend.badge(for: r), "ترابي")
+        r.hasUnpaved = false
+        XCTAssertNil(NavSurfaceLegend.badge(for: r))
+    }
+
+    /// The road-type window (owner): every surface with its length, then the total; it can be put away.
+    func testSurfaceLegendTotalsEverySurface() {
+        func line(_ km: Double) -> [LngLat] { [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.6, lat: 24.7 + km / 111.19)] }
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: line(71.4)), NavSurfaceRun(kind: .unpaved, coordinates: line(1.1)),
+                    NavSurfaceRun(kind: .terrain, coordinates: line(0.4)), NavSurfaceRun(kind: .gridSnap, coordinates: line(0.02))]
+        let rows = NavSurfaceLegend.rows(runs)
+        XCTAssertEqual(rows.map(\.kind), [.paved, .unpaved, .terrain], "asphalt, dirt and open ground; the join is not a surface")
+        XCTAssertEqual(NavSurfaceLegend.total(rows) / 1000, 72.9, accuracy: 0.05, "the total is what the rows add up to")
+        XCTAssertEqual(NavSurfaceLegend.total([]), 0)
+        XCTAssertEqual(NavSurfaceLegend.hiddenKey, "sary.nav.surfaceLegend.hidden.v1")
     }
 }

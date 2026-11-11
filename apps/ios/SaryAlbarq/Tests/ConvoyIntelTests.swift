@@ -165,7 +165,7 @@ final class ConvoyIntelTests: XCTestCase {
         let stop = ConvoyAlertUI(kind: .unexpectedStop, userId: "a", name: "فهد", color: 0, meters: 0, minutes: 4)
         XCTAssertEqual(AlertPriority(.convoy(stop)), .silent, "a sudden stop is as urgent as a silent car")
         XCTAssertEqual(stop.title, "فهد وقف فجأة")
-        XCTAssertEqual(stop.detail, "واقف منذ ٤ د والربع يتحركون")
+        XCTAssertEqual(stop.detail, "واقف منذ ٤ د والأصدقاء يتحركون")
         let sep = ConvoyAlertUI(kind: .separated, userId: "a", name: "فهد", color: 0, meters: 2600, otherName: "سلطان", leaderTitle: "المقدمة")
         XCTAssertEqual(AlertPriority(.convoy(sep)), .convoy)
         XCTAssertEqual(sep.title, "فهد ابتعد عن المقدمة")

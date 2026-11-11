@@ -44,6 +44,9 @@ struct MapNavDrawing: Equatable {
     /// True only while a navigation leg is active. A route preview can fit the camera without
     /// putting the map into the driving state.
     var guidanceActive = false
+    /// The chosen route's geometry revision (`NavRoute.geometryRevision`): a new value is a new
+    /// route on the map (`NavRouteReveal`). Not the drawn coordinates, which shrink with every fix.
+    var revealKey: String? = nil
     var camera: Camera? = nil
     /// Bumps to re-run a one-shot `fit`.
     var cameraKey = 0
@@ -67,6 +70,45 @@ struct NavSourceChanges: Equatable {
         return NavSourceChanges(routes: drawn.routes != next.routes, offRoad: drawn.offRoad != next.offRoad,
                                 maneuver: drawn.maneuver != next.maneuver)
     }
+}
+
+/// How a new route arrives on the map (pure, unit-tested in `NavigationTests`). The style's own
+/// paint transitions do the animating (two property writes, no per-frame updates): the chosen
+/// route fades in on its first appearance, a reroute fades in faster with a brief darker halo,
+/// and the next-turn arrow fades in when the maneuver changes. Reduce Motion: none of it.
+enum NavRouteReveal: Equatable {
+    case none
+    /// The first route on the map (the options, or guidance started without a preview).
+    case reveal
+    /// A new route while guiding.
+    case reroute
+
+    static func kind(previous: String?, next: String?, wasGuiding: Bool, isGuiding: Bool) -> NavRouteReveal {
+        guard let next, next != previous else { return .none }
+        guard previous != nil else { return .reveal }
+        /* Picking another option, or starting guidance on the previewed route, is not a new line. */
+        return wasGuiding && isGuiding ? .reroute : .none
+    }
+
+    /// The fade-in, in ms (the style transition's `duration`).
+    static func fadeMs(_ k: NavRouteReveal, reduceMotion: Bool) -> Int {
+        guard !reduceMotion else { return 0 }
+        switch k {
+        case .none: return 0
+        case .reveal: return 600
+        case .reroute: return 350
+        }
+    }
+
+    /// The next-turn arrow fades in when it moves to a new maneuver (not when it goes away).
+    static func maneuverFades(previous: [LngLat]?, next: [LngLat]?, reduceMotion: Bool) -> Bool {
+        guard !reduceMotion, let next, next.count >= 2 else { return false }
+        return next != previous
+    }
+
+    /// The reroute's emphasis: the halo darkens for a moment, then settles back.
+    static let rerouteHaloOpacity = 0.9
+    static let rerouteHoldS = 0.6
 }
 
 /// Draws `MapNavDrawing` on the outing's `MapView`; owned by the map's coordinator (main thread, like it).
@@ -93,6 +135,42 @@ final class NavMapDrawer {
                            "sary-nav-rough-casing", "sary-nav-rough", "sary-nav-rough-ticks",
                            "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off",
                            "sary-nav-maneuver-casing", "sary-nav-maneuver", "sary-nav-maneuver-head"]
+
+    /// One faded paint property and the value it rests at (the same values as in `addLayers`).
+    struct Fade: Equatable {
+        var layer: String
+        var property: String
+        var rest: Double
+    }
+
+    /// The chosen route's layers, faded in by `NavRouteReveal` (alternatives stay as they are).
+    static let routeFades: [Fade] = [
+        Fade(layer: haloLayer, property: "line-opacity", rest: haloOpacity),
+        Fade(layer: "sary-nav-main-casing", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-main", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-dirt-casing", property: "line-opacity", rest: 0.9),
+        Fade(layer: "sary-nav-dirt", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-dirt-ruts", property: "line-opacity", rest: 0.85),
+        Fade(layer: "sary-nav-terrain-casing", property: "line-opacity", rest: 0.6),
+        Fade(layer: "sary-nav-terrain", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-rough-casing", property: "line-opacity", rest: 0.8),
+        Fade(layer: "sary-nav-rough", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-rough-ticks", property: "line-opacity", rest: 0.9),
+        Fade(layer: "sary-nav-grid-snap-casing", property: "line-opacity", rest: 0.8),
+        Fade(layer: "sary-nav-grid-snap", property: "line-opacity", rest: 1),
+    ]
+
+    /// The next-turn arrow, faded in when it moves to a new maneuver.
+    static let maneuverFades: [Fade] = [
+        Fade(layer: "sary-nav-maneuver-casing", property: "line-opacity", rest: 0.85),
+        Fade(layer: "sary-nav-maneuver", property: "line-opacity", rest: 1),
+        Fade(layer: "sary-nav-maneuver-head", property: "icon-opacity", rest: 1),
+    ]
+    static let maneuverFadeMs = 300
+
+    /// The route key and guidance state the map last showed (`NavRouteReveal.kind`).
+    private var revealedKey: String?
+    private var revealedGuiding = false
 
     /// Line width by zoom for a route layer of nominal width `k` (pt at z14). Build 36 grew it
     /// only 1.6× by z18, so at the guidance zooms (z15–17, tilted: the far half shrinks further)
@@ -274,9 +352,18 @@ final class NavMapDrawer {
             addLayers()
             drawnSources = nil
         }
+        let before = drawnSources
         let changes = NavSourceChanges.between(drawn: drawnSources, next: drawing)
         drawnSources = drawing
+        let reveal = NavRouteReveal.kind(previous: revealedKey, next: drawing.revealKey,
+                                         wasGuiding: revealedGuiding, isGuiding: drawing.guidanceActive)
+        revealedKey = drawing.revealKey
+        revealedGuiding = drawing.guidanceActive
         if changes.routes { drawRoutes(m) }
+        if reveal != .none { revealRoute(reveal, m) }
+        if changes.maneuver, NavRouteReveal.maneuverFades(previous: before?.maneuver, next: drawing.maneuver, reduceMotion: theme.reduceMotion) {
+            fadeIn(Self.maneuverFades, ms: Self.maneuverFadeMs, m)
+        }
         if changes.offRoad {
             var off: [Feature] = []
             if let o = drawing.offRoad, o.count >= 2 { off.append(Feature(geometry: .lineString(LineString(o.map(\.coordinate))))) }
@@ -287,6 +374,42 @@ final class NavMapDrawer {
         }
         placeTarget()
         placeLabels()
+    }
+
+    /// A new route: the chosen line fades in; a reroute also darkens the halo for a moment.
+    private func revealRoute(_ kind: NavRouteReveal, _ m: MapboxMap) {
+        let ms = NavRouteReveal.fadeMs(kind, reduceMotion: theme.reduceMotion)
+        guard ms > 0 else { return }
+        let reroute = kind == .reroute
+        fadeIn(Self.routeFades, ms: ms, m, haloPeak: reroute ? NavRouteReveal.rerouteHaloOpacity : nil)
+        guard reroute else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fadeHopS + NavRouteReveal.rerouteHoldS) { [weak self] in
+            guard let m = self?.map?.mapboxMap, m.layerExists(withId: Self.haloLayer) else { return }
+            try? m.setLayerProperty(for: Self.haloLayer, property: "line-opacity-transition", value: ["duration": 600, "delay": 0])
+            try? m.setLayerProperty(for: Self.haloLayer, property: "line-opacity", value: Self.haloOpacity)
+        }
+    }
+
+    /// Long enough for the map to draw one frame at 0 before the fade starts (a 0 and its rest value
+    /// set before the same frame would cancel out).
+    static let fadeHopS = 0.05
+
+    /// Two writes per property: to 0 at once, then (a frame later) back to rest with the style's own
+    /// `-transition`, which Mapbox animates on its render thread. `haloPeak`: the halo rests there
+    /// until `revealRoute` settles it.
+    private func fadeIn(_ fades: [Fade], ms: Int, _ m: MapboxMap, haloPeak: Double? = nil) {
+        for f in fades where m.layerExists(withId: f.layer) {
+            try? m.setLayerProperty(for: f.layer, property: f.property + "-transition", value: ["duration": 0, "delay": 0])
+            try? m.setLayerProperty(for: f.layer, property: f.property, value: 0.0)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fadeHopS) { [weak self] in
+            guard let m = self?.map?.mapboxMap else { return }
+            for f in fades where m.layerExists(withId: f.layer) {
+                let rest = f.layer == Self.haloLayer ? (haloPeak ?? f.rest) : f.rest
+                try? m.setLayerProperty(for: f.layer, property: f.property + "-transition", value: ["duration": ms, "delay": 0])
+                try? m.setLayerProperty(for: f.layer, property: f.property, value: rest)
+            }
+        }
     }
 
     private func drawRoutes(_ m: MapboxMap) {

@@ -43,6 +43,10 @@ struct SessionEnv {
     var backgroundSessionOverride: Bool?
     /// Presence hint heartbeat (outingId, hint, lowPower). nil = the real API.
     var postHint: ((String, PresenceHint, Bool) async -> Void)?
+    /// Server requests of actions already applied on the phone (leave, rally, «أنا بخير»…), sent in
+    /// the background (#173). nil = the session builds its own over `api` (tests); the app passes
+    /// its one shared outbox (`AppModel.outbox`), so a leave keeps going after the screen closed.
+    var outbox: OutingActionOutbox?
 }
 
 /// One open outing: the live channel, the reducer's picture, and — only when
@@ -92,17 +96,40 @@ final class OutingSession: ObservableObject, Identifiable {
     /// The GPS is kept on with the screen locked, for the trail only.
     @Published private(set) var recordingInBackground = false
 
-    let isDemo: Bool
+    /// Where this session's outing lives.
+    /// - `server`: a real outing; everything goes through `api` and the live channel.
+    /// - `demo`: `-demo`, seeded friends and canned replies, on this phone only.
+    /// - `solo`: «اتجه» on my own (docs/SOLO-OUTING.md), one member (me), on this phone only.
+    enum Kind: Equatable, Sendable {
+        case server, demo, solo
+
+        /// No server: nothing is sent, every action applies on this phone.
+        var isLocal: Bool { self != .server }
+        /// Demo data and demo behaviour (seeded members, «أبو فهد» answering, auto-nav off…).
+        var isDemo: Bool { self == .demo }
+    }
+
+    nonisolated let kind: Kind
+    /// `-demo` data or behaviour. For "is there a server?" ask `isLocal`.
+    nonisolated var isDemo: Bool { kind.isDemo }
+    /// No server behind this session (demo or solo): never send, apply locally.
+    nonisolated var isLocal: Bool { kind.isLocal }
     let location: LocationSharer
     /// Return-timer and «غرّزت» events for `SafetyController`.
     let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
     /// The server side of the safety pack (nil in the demo: all local).
-    var safetyBackend: SafetyBackend? { isDemo ? nil : api }
+    var safetyBackend: SafetyBackend? { isLocal ? nil : api }
     /// Internal so the per-person invites model (Sources/Invites) shares this client.
     let api: OutingsAPI
     private let token: String
     /// Positions that could not go out (no network): uploaded in one batch when it is back.
     private(set) var offlineQueue = OfflineFixQueue()
+    /// Actions already applied here whose server request is still owed (#173, docs/RESPONSIVENESS.md).
+    let outbox: OutingActionOutbox
+    private var outboxSink: AnyCancellable?
+    /// A deferred action could not reach the server yet, or the server refused it: one line for
+    /// the live screen (a toast). Never a reason to resume sharing.
+    var onDeferredNotice: (String) -> Void = { _ in }
     private let env: SessionEnv
     private var channel: LiveChannel?
     private var backgroundSender: BackgroundPositionSender?
@@ -154,27 +181,41 @@ final class OutingSession: ObservableObject, Identifiable {
     static let modeKey = "sary.outings.mode.v1"
     static let batteryKey = "sary.outings.battery.v1"
 
-    init(id: String, myUserId: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil, env: SessionEnv = SessionEnv()) {
+    /// `demo`: the local session's own picture (no server sends one). `kind`: nil = `.demo` with a
+    /// `demo` view, `.server` without; `.solo` comes from `OutingSession.solo(...)`.
+    init(id: String, myUserId: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil, kind: Kind? = nil, env: SessionEnv = SessionEnv()) {
+        let resolved: Kind = kind ?? (demo != nil ? .demo : .server)
+        assert(resolved.isLocal == (demo != nil), "a local session starts from its own view; a server session from the server's")
         self.id = id
         self.myUserId = myUserId
         self.api = api
         self.token = token
         self.location = location
         self.env = env
-        self.isDemo = demo != nil
+        self.kind = resolved
         self.view = demo
+        if let shared = env.outbox {
+            outbox = shared
+        } else {
+            let own = OutingActionOutbox.live(api: api, defaults: env.defaults, keepAlive: env.keepAlive)
+            own.currentUser = { [myUserId] in myUserId }
+            outbox = own
+        }
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
         self.mesh = NearbyMesh(outingId: id, me: myUserId, members: Set(demo?.members.keys.map { $0 } ?? []), serverKey: demo?.snapshot.mesh_key)
         walkie = OutingWalkieTalkie(
             outingId: id,
             me: myUserId,
-            tokenBackend: demo == nil ? api : nil,
-            demo: demo != nil,
-            demoCanCreatePrivate: demo?.snapshot.me.role == "owner",
+            tokenBackend: resolved.isLocal ? nil : api,
+            demo: resolved.isDemo,
+            demoCanCreatePrivate: resolved.isDemo && demo?.snapshot.me.role == "owner",
             defaults: env.defaults
         )
-        if let demo {
+        if resolved == .solo {
+            /* Solo: nobody to send a note to, and nobody answers. */
+            voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: LocalVoiceNoteBackend(), walkie: walkie, defaults: env.defaults)
+        } else if let demo {
             /* The demo has no server: «أبو فهد» (or the first friend) answers each note with the same recording. */
             let friend = demo.members.keys.sorted().first { $0 != myUserId } ?? "demo-friend"
             let b = DemoVoiceNoteBackend(friendId: friend, me: myUserId)
@@ -183,7 +224,10 @@ final class OutingSession: ObservableObject, Identifiable {
         } else {
             voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: env.voiceNoteBackend ?? api, walkie: walkie, defaults: env.defaults)
         }
-        if let demo {
+        if resolved == .solo {
+            /* Solo: no chat (the store reads it as "not here" and hides it calmly). */
+            chat = ChatStore(outingId: id, me: myUserId, backend: LocalChatBackend(), defaults: env.defaults)
+        } else if let demo {
             let friends = Dictionary(demo.members.values.filter { $0.user_id != myUserId }.map { ($0.user_id, $0.display_name) }, uniquingKeysWith: { a, _ in a })
             let backend = DemoChatBackend(outingId: id, me: myUserId, friends: friends)
             chat = ChatStore(outingId: id, me: myUserId, backend: backend, defaults: env.defaults)
@@ -195,12 +239,13 @@ final class OutingSession: ObservableObject, Identifiable {
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
         trail.markGap()
-        if demo == nil || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
+        /* Road matching runs for real outings and solo (as on a real trip); the demo only with -SaryTrailMatch. */
+        if !resolved.isDemo || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
             let m = TrailMatchCoordinator(outingId: id, dir: env.trailDirectory, service: svc)
             matcher = m
         }
         #if DEBUG
-        if demo != nil, Self.forcedOffline { link = .offline }
+        if resolved.isDemo, Self.forcedOffline { link = .offline }
         #endif
         mesh.myFix = { [weak self] in
             guard let self, self.gate.allowsPosition else { return nil }
@@ -211,7 +256,7 @@ final class OutingSession: ObservableObject, Identifiable {
         walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
         walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
         /* «ترددات»: private channels over REST; the demo keeps them on this phone (its owner is the leader). */
-        walkie.channelBackend = demo == nil ? api : nil
+        walkie.channelBackend = resolved.isLocal ? nil : api
         walkie.demoLeader = { [weak self] in self?.view?.snapshot.me.role == "owner" }
         walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         voiceNotes.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
@@ -225,6 +270,9 @@ final class OutingSession: ObservableObject, Identifiable {
         ))
         chat.snapshot(unread: demo?.snapshot.chat_unread)
         chatSink = chat.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        if !resolved.isLocal {
+            outboxSink = outbox.reports.filter { [id] r in r.action.outing == id }.sink { [weak self] r in self?.outboxReport(r) }
+        }
     }
 
     // MARK: the privacy gate
@@ -239,11 +287,15 @@ final class OutingSession: ObservableObject, Identifiable {
             foreground: visible && env.isForeground(),
             closed: closedReason != nil,
             alwaysAuthorized: sharesInBackground,
-            hidden: view?.me?.hidden == true
+            /* A «أخفِ موقعي» still on its way to the server already hides me here (#173). */
+            hidden: view?.me?.hidden == true || pendingHide
         )
     }
 
     var hasConsent: Bool { ShareMemory.hasConsent(user: myUserId, outing: id, defaults: env.defaults) }
+
+    /// «أخفِ موقعي» pressed here and not confirmed by the server yet.
+    private var pendingHide: Bool { !isLocal && outbox.has(user: myUserId, outing: id, kind: .hide) }
 
     /// Sharing for real: the gate is open and the GPS is running for it.
     var isSharingNow: Bool { gate.allowsPosition && (location.isSharing || isDemo) }
@@ -299,18 +351,22 @@ final class OutingSession: ObservableObject, Identifiable {
             ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
             Task { await self.beginSharing() }
         }
-        if Self.forcedOffline, !isDemo {
+        if Self.forcedOffline, !isLocal {
             link = .offline
             location.onFix = { [weak self] f in self?.handleFix(f) }
             return
         }
         #endif
-        /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
         voiceNotes.attach()
-        guard !isDemo else {
-            walkie.attach(channel: nil, mesh: mesh)
-            debugKeepDemoFixLive()
-            return debugAutoTalk()
+        /* A local session (demo, solo) has no server: no live channel, no background sender, no heartbeat. */
+        guard !isLocal else {
+            /* The demo's walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
+            if isDemo {
+                walkie.attach(channel: nil, mesh: mesh)
+                debugKeepDemoFixLive()
+                debugAutoTalk()
+            }
+            return
         }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
             makeSocket: env.makeSocket,
@@ -497,7 +553,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// about to be suspended), so the others read «الموقع «أثناء الاستخدام» بس» right away
     /// instead of «انقطع» ten minutes later.
     func sendPresenceHint(foreground: Bool) {
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil else { return }
+        guard !isLocal, wantsToShare, view?.status == .active, closedReason == nil else { return }
         let hint = currentHint(foreground: foreground), low = env.lowPower(), outing = id
         if let post = env.postHint {
             Task { await post(outing, hint, low) }
@@ -515,13 +571,13 @@ final class OutingSession: ObservableObject, Identifiable {
     /// With «دائمًا» iOS relaunches it on the next significant move and sharing resumes by itself.
     func appWillTerminate() {
         saveOfflineQueue()
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil, env.postHint == nil else { return }
+        guard !isLocal, wantsToShare, view?.status == .active, closedReason == nil, env.postHint == nil else { return }
         api.heartbeatTerminatingNow(id, gps: location.gpsState)
     }
 
     /// A fix that could not reach the server: kept (thinned, capped, persisted) for the batch.
     func queueOffline(_ f: DeviceFix, mode: ShareMode) {
-        guard !isDemo, gate.allowsPosition || gate.allowsBackgroundPosition else { return }
+        guard !isLocal, gate.allowsPosition || gate.allowsBackgroundPosition else { return }
         if offlineQueue.enqueue(f, mode: mode) { saveOfflineQueue() }
     }
 
@@ -531,7 +587,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// The network is back (socket live, a background POST went through): upload what waited, once.
     func flushBackfill() {
-        guard !isDemo, !offlineQueue.isEmpty, view?.status == .active || view == nil, closedReason == nil, hasConsent else { return }
+        guard !isLocal, !offlineQueue.isEmpty, view?.status == .active || view == nil, closedReason == nil, hasConsent else { return }
         let now = env.now()
         offlineQueue.prune(nowMs: now)
         guard let b = offlineQueue.batch(nowMs: now) else { return saveOfflineQueue() }
@@ -570,7 +626,7 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
         pendingServerStop = false
-        if !v.snapshot.me.sharing, !isDemo {
+        if !v.snapshot.me.sharing, !isLocal {
             do { _ = try await api.setSharing(id, sharing: true) } catch let e as OutingAPIError {
                 errorText = e.arabic
                 return
@@ -609,7 +665,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* Tell nearby cars too, so a relay never keeps showing where you were. */
         mesh.stop(farewell: .stop)
         stopSharingLocally()
-        guard !isDemo else { return }
+        guard !isLocal else { return }
         /* Off screen (e.g. from the lock screen / CarPlay later): finish telling the server. */
         let done = env.keepAlive()
         defer { done() }
@@ -644,7 +700,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent else { return }
         wantsToShare = true
         if let v = view { reassertServerShare(v) } else { reassertOnSnapshot = true }
-        if !visible && hasAlwaysPermission && !isDemo && view == nil {
+        if !visible && hasAlwaysPermission && !isLocal && view == nil {
             if env.authorizationOverride ?? location.canLocate { location.startSharing(mode: mode) }
             let done = env.keepAlive()
             Task { [weak self, api, id] in
@@ -659,7 +715,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// switched back on when the trip opens. Once only per open: a later «off» from the server is
     /// respected (the gate closes) — it can only come from elsewhere.
     private func reassertServerShare(_ v: OutingView) {
-        guard !isDemo, !v.snapshot.me.sharing, v.status != .ended, closedReason == nil, !reassertingServerShare else { return }
+        guard !isLocal, !v.snapshot.me.sharing, v.status != .ended, closedReason == nil, !reassertingServerShare else { return }
         reassertingServerShare = true
         Task { [weak self] in
             guard let self else { return }
@@ -792,14 +848,14 @@ final class OutingSession: ObservableObject, Identifiable {
         let m = location.effectiveMode
         if !gate.foreground {
             /* Off screen («دائمًا»): the HTTP sender keeps only the latest fix and decides when. */
-            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isDemo else { return }
+            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isLocal else { return }
             backgroundSender?.offer(f, mode: m)
             return
         }
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
         guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok else { return }
         lastSent = .init(fix: f, sentAtMs: now)
-        if isDemo { return }
+        if isLocal { return }
         /* No link at all (dead zone): keep it for the batch upload when the network is back. */
         if link == .offline || link == .connecting { queueOffline(f, mode: m) }
         channel?.sendFix(f, mode: m)
@@ -978,7 +1034,10 @@ final class OutingSession: ObservableObject, Identifiable {
 
     private func applySnapshot(_ s: OutingSnapshot) {
         let previous = view
-        view = OutingView.merge(view, s)
+        var next = OutingView.merge(view, s)
+        /* The server's picture may predate what this phone already did (#173): keep that on top. */
+        reapplyPending(&next)
+        view = next
         chat.snapshot(unread: s.chat_unread)
         mesh.setServerKey(s.mesh_key, outingId: id)
         if let previous { notifyChanges(from: previous) }
@@ -993,7 +1052,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Reconcile the waiting state with the authoritative outing snapshot.
     /// This is also exposed through the waiting banner as an immediate recovery action.
     func refreshWaitingStatus() async {
-        guard !isDemo, view?.status == .created, !refreshingWaitingStatus else { return }
+        guard !isLocal, view?.status == .created, !refreshingWaitingStatus else { return }
         refreshingWaitingStatus = true
         defer { refreshingWaitingStatus = false }
         guard let snapshot = try? await api.poll(id) else { return }
@@ -1012,6 +1071,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard var v = view else { return }
         let before = v
         v.apply(e)
+        reapplyPending(&v)
         view = v
         events.send(e)
         switch e {
@@ -1096,11 +1156,88 @@ final class OutingSession: ObservableObject, Identifiable {
         return false
     }
 
+    // MARK: instant actions (#173, docs/RESPONSIVENESS.md)
+    //
+    // One pattern for every action that is safe to apply before the server answers:
+    //   (a) the screen changes at once (< 100 ms: no network on the way);
+    //   (b) what is safe locally happens now — sharing stops, the screen closes, the picture changes;
+    //   (c) the request goes through `outbox` (persisted, retried with backoff, again when the
+    //       network is back, survives the app being killed);
+    //   (d) a failure shows one line («نكمل … لما يرجع النت») and never resumes sharing.
+    // Local sessions (demo, solo) apply on this phone and queue nothing.
+    // Deliberately NOT here: raising SOS (its delivery must be confirmed), ending / starting /
+    // pausing the outing (everyone's state; one confirmation, then the server decides), showing my
+    // location again and turning sharing on (they open sharing: only once the server agreed).
+
+    /// Queue the server half of an action already applied here.
+    private func sendLater(_ kind: PendingOutingAction.Kind, member: String? = nil, on: Bool? = nil, lat: Double? = nil, lng: Double? = nil,
+                           label: String? = nil, text: String? = nil, trace: ActionTrace.Interval) {
+        guard !isLocal else { return ActionTrace.acked(trace, ok: true) }
+        outbox.enqueue(PendingOutingAction(user: myUserId, outing: id, kind: kind, member: member, on: on, lat: lat, lng: lng,
+                                           label: label, text: text, createdMs: env.now()), trace: trace)
+    }
+
+    /// What the outbox heard back for this outing.
+    private func outboxReport(_ r: OutingActionOutbox.Report) {
+        guard closedReason == nil, r.action.user == myUserId else { return }
+        switch r.outcome {
+        case .sent:
+            break
+        case .willRetry:
+            /* Once per action, at its first failure; the outbox keeps trying by itself. */
+            if r.action.attempts == 0 { onDeferredNotice(PendingActionCopy.toast(r.action.kind)) }
+        case let .dropped(e):
+            onDeferredNotice(e?.arabic ?? SaryCopy.genericError)
+            /* Refused for good: the server's picture wins again. Except «أخفِ موقعي»: a refusal
+             * never shows my location again on its own (privacy; I can press «أظهر موقعي»). */
+            guard r.action.kind != .hide else { return }
+            Task { [weak self, api, id] in
+                if let snap = try? await api.poll(id) { self?.applySnapshot(snap) }
+            }
+        }
+    }
+
+    /// Lay what this phone did and the server has not confirmed yet over `v` (a snapshot or event
+    /// from before it must not undo it on screen — above all a queued «أخفِ موقعي»).
+    private func reapplyPending(_ v: inout OutingView) {
+        guard !isLocal else { return }
+        let pending = outbox.queue.pending(user: myUserId, outing: id)
+        guard !pending.isEmpty else { return }
+        for a in pending {
+            let at = ISODate.string(Date(timeIntervalSince1970: a.createdMs / 1000))
+            switch a.kind {
+            case .hide:
+                if v.me?.hidden != true { v.apply(.memberHidden(userId: myUserId, hidden: true, since: at, reason: "self")) }
+            case .setRally:
+                if let lat = a.lat, let lng = a.lng { v.apply(.rally(RallyInfo(lat: lat, lng: lng, label: a.label, set_at: at, set_by: myUserId))) }
+            case .clearRally:
+                v.apply(.rally(nil))
+            case .cancelSOS:
+                if v.members[myUserId]?.sos != nil { v.apply(.sos(userId: myUserId, sos: nil, refresh: false)) }
+            case .coLeader:
+                if let m = a.member, v.members[m] != nil { v.apply(.memberRole(userId: m, coLeader: a.on ?? false)) }
+            case .removeMember:
+                if let m = a.member, v.members[m] != nil { v.apply(.memberLeft(userId: m)) }
+            case .note:
+                let t = a.text ?? ""
+                v.apply(.memberNote(userId: myUserId, note: t.isEmpty ? nil : MemberNote(text: t, at: at)))
+            case .leave:
+                break
+            }
+        }
+    }
+
+    /// «رسالة فوق سيارتي». `deferred` (the note sheet): shown at once and sent through the outbox.
+    /// Without it (broadcasts whose caller says «وصل…»): true only once the server or nearby cars got it.
     @discardableResult
-    func sendNote(_ text: String) async -> Bool {
+    func sendNote(_ text: String, deferred: Bool = false) async -> Bool {
         let clean = text.isEmpty ? "" : (ServerRules.cleanText(text, max: ServerRules.noteMax) ?? "")
-        if isDemo {
+        let t = ActionTrace.begin("note")
+        if isLocal || deferred {
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: clean.isEmpty ? nil : MemberNote(text: clean, at: ISODate.string(Date())))) }
+            ActionTrace.uiShown(t)
+            if !isLocal { mesh.announce(.note, text: clean) }
+            sendLater(.note, text: clean, trace: t)
             return true
         }
         mesh.announce(.note, text: clean)
@@ -1108,39 +1245,48 @@ final class OutingSession: ObservableObject, Identifiable {
             let n = try await api.note(id, text: clean)
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: n)) }
         }
+        ActionTrace.uiShown(t)
+        ActionTrace.acked(t, ok: ok)
         if !ok { deliveredNearby() }
         return ok || mesh.nearbyCars > 0
     }
 
+    /// Start / pause / resume / end — everyone's state, so the server decides (deliberately not
+    /// instant, #173). The caller shows «جاري…» at once; success is never faked.
     func setStatus(_ action: String) async {
-        if isDemo {
+        let t = ActionTrace.begin("status-\(action)")
+        defer { ActionTrace.uiShown(t) }
+        if isLocal {
             /* `-demo`: no server; the demo outing changes state on this phone only. */
             let st: OutingStatus = action == "end" ? .ended : action == "pause" ? .paused : .active
             view?.apply(.outingStatus(st))
             reconcileSharing()
             if st == .ended { closed(.outingEnded) }
+            ActionTrace.acked(t, ok: true)
             return
         }
-        _ = await run("status") {
+        let ok = await run("status") {
             let o = try await api.setStatus(id, action: action)
             view?.apply(.outingStatus(o.status))
             reconcileSharing()
             if o.status == .ended { closed(.outingEnded) }
         }
+        ActionTrace.acked(t, ok: ok)
     }
 
-    /// Leave the outing (also after it ended). True when the server agreed.
+    /// Leave the outing (also after it ended). Instant (#173): sharing stops, nearby cars are told
+    /// and the session closes on this phone now; `POST /leave` goes through the persisted outbox
+    /// and is retried until the server agrees. A failed or pending request never resumes sharing:
+    /// on this phone I have left. Always true (kept for callers that read it).
     @discardableResult
-    func leave() async -> Bool {
-        if isDemo { stopSharingLocally(); closed(.left); return true }
-        /* Stop only once the server agreed: a failed request (no network) leaves me a member,
-         * and a member keeps sharing — the error says so and «غادر الطلعة» can be tried again. */
-        let ok = await run("leave") { try await api.leave(id) }
-        if ok {
-            stopSharingLocally()
-            closed(.left)
-        }
-        return ok
+    func leave() -> Bool {
+        let t = ActionTrace.begin("leave")
+        mesh.stop(farewell: .stop)
+        stopSharingLocally()
+        closed(.left)
+        ActionTrace.uiShown(t)
+        sendLater(.leave, trace: t)
+        return true
     }
 
     // MARK: «أخفِ موقعي»
@@ -1153,18 +1299,30 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// Hide / show my location. Hidden: still in the trip (voice notes, radio, chat); nothing is
     /// sent (SendGate.hidden), whatever waited offline is dropped, a reminder comes at 30 min.
+    /// Hiding is instant (#173: it only closes the gate); showing again opens sharing, so it waits
+    /// for the server — unless the hide never reached it, then there is nothing to undo there.
     @discardableResult
     func setHidden(_ on: Bool) async -> Bool {
         guard let me = view?.myId, view?.status != .ended else { return false }
+        let t = ActionTrace.begin(on ? "hide" : "show")
         let ok: Bool
-        if isDemo {
+        if isLocal || on {
             view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
+            ActionTrace.uiShown(t)
+            if on { sendLater(.hide, trace: t) } else { ActionTrace.acked(t, ok: true) }
+            ok = true
+        } else if outbox.discard(user: myUserId, outing: id, kind: .hide) {
+            view?.apply(.memberHidden(userId: me, hidden: false, since: nil, reason: "self"))
+            ActionTrace.uiShown(t)
+            ActionTrace.acked(t, ok: true)
             ok = true
         } else {
             ok = await run("hidden") {
                 let r = try await api.setHidden(id, hidden: on)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
             }
+            ActionTrace.uiShown(t)
+            ActionTrace.acked(t, ok: ok)
         }
         if ok && on {
             channel?.dropPendingFix()
@@ -1176,27 +1334,38 @@ final class OutingSession: ObservableObject, Identifiable {
         return ok
     }
 
-    /// «نبّهه» (leader): nil when sent, else the line to show.
+    /// «نبّهه» (leader): nil when sent, else the line to show. Not queued: a nudge that arrives
+    /// late is wrong, and the specific refusals (hidden, too soon) are the answer the leader wants.
     func nudge(_ uid: String) async -> String? {
-        if isDemo { return nil }
+        if isLocal { return nil }
+        let t = ActionTrace.begin("nudge")
+        defer { ActionTrace.uiShown(t) }
         do {
             try await api.nudge(id, member: uid)
+            ActionTrace.acked(t, ok: true)
             return nil
         } catch let e as OutingAPIError {
+            ActionTrace.acked(t, ok: false)
             switch e.code {
             case "member_hidden": return "مخفي موقعه بإرادته — ما نرسل له تنبيه"
             case "too_frequent", "rate_limited": return "نبّهته قبل شوي — انتظر دقايق"
             case "leader_only": return "التنبيه للأمير ونائبه بس"
             default: return "ما قدرنا نرسل التنبيه — حاول مرة ثانية"
             }
-        } catch { return "ما قدرنا نرسل التنبيه — حاول مرة ثانية" }
+        } catch {
+            ActionTrace.acked(t, ok: false)
+            return "ما قدرنا نرسل التنبيه — حاول مرة ثانية"
+        }
     }
 
     /// SOS after the 1 s hold. Carries my real fix whenever iOS allows — even with «أخفِ موقعي»
     /// on (SendGate.allowsSosFix), and then my location is shown again (true is returned).
+    /// Deliberately not instant (#173): the alert's delivery is confirmed (`sosSending` meanwhile).
     @discardableResult
     func raiseSOS() async -> Bool {
         guard let me = view?.myId else { return false }
+        let t = ActionTrace.begin("sos")
+        defer { ActionTrace.uiShown(t) }
         let wasHidden = view?.me?.hidden == true
         defer {
             if wasHidden {
@@ -1212,14 +1381,20 @@ final class OutingSession: ObservableObject, Identifiable {
             if w.age_ms <= 25 * 60_000, (f.accuracy ?? 0) <= ServerRules.maxAccuracyM { wire = w }
         }
         mesh.announce(.sos, sosFix: wire == nil ? nil : location.lastFix)
-        if isDemo {
+        if isLocal {
             view?.apply(.sos(userId: me, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
+            ActionTrace.acked(t, ok: true)
             return wasHidden
         }
+        /* A «أنا بخير» still queued from before must not land after this SOS and cancel it. */
+        outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
+        /* The SOS shows me again (the server does the same): a queued hide must not undo that. */
+        if wasHidden { outbox.discard(user: myUserId, outing: id, kind: .hide) }
         let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
             view?.apply(.sos(userId: me, sos: s, refresh: false))
         }
+        ActionTrace.acked(t, ok: ok)
         if !ok {
             deliveredNearby()
             /* The server did not hear the SOS: still show my location again, as promised. */
@@ -1228,46 +1403,49 @@ final class OutingSession: ObservableObject, Identifiable {
         return wasHidden
     }
 
+    /// «أنا بخير»: instant (#173). The nearby cars hear it at once, my screen drops the alert, and
+    /// `DELETE /sos` goes through the outbox. Until it lands the others still see my SOS — the safe
+    /// side of a failure.
     func cancelSOS() async {
         guard let me = view?.myId else { return }
+        let t = ActionTrace.begin("sos-cancel")
         mesh.announce(.sosClear)
-        if isDemo { view?.apply(.sos(userId: me, sos: nil, refresh: false)); return }
-        let ok = await run("sos") {
-            try await api.cancelSos(id)
-            view?.apply(.sos(userId: me, sos: nil, refresh: false))
-        }
-        if !ok { deliveredNearby() }
+        view?.apply(.sos(userId: me, sos: nil, refresh: false))
+        ActionTrace.uiShown(t)
+        sendLater(.cancelSOS, trace: t)
     }
 
+    /// Drop or move the meeting point: instant (#173). True once applied here.
     @discardableResult
     func setRally(lat: Double, lng: Double, label: String?) async -> Bool {
-        if isDemo { view?.apply(.rally(RallyInfo(lat: lat, lng: lng, label: label, set_at: ISODate.string(Date()), set_by: myUserId))); return true }
-        return await run("rally") {
-            let r = try await api.setRally(id, lat: lat, lng: lng, label: label)
-            view?.apply(.rally(r))
-        }
+        let t = ActionTrace.begin("rally-set")
+        view?.apply(.rally(RallyInfo(lat: lat, lng: lng, label: label, set_at: ISODate.string(Date()), set_by: myUserId)))
+        ActionTrace.uiShown(t)
+        sendLater(.setRally, lat: lat, lng: lng, label: label, trace: t)
+        return true
     }
 
     func clearRally() async {
-        if isDemo { view?.apply(.rally(nil)); return }
-        _ = await run("rally") {
-            try await api.clearRally(id)
-            view?.apply(.rally(nil))
-        }
+        let t = ActionTrace.begin("rally-clear")
+        view?.apply(.rally(nil))
+        ActionTrace.uiShown(t)
+        sendLater(.clearRally, trace: t)
     }
 
+    /// «نائب الأمير»: instant (#173). A refusal brings the server's picture back.
     func setCoLeader(_ member: String, on: Bool) async {
-        _ = await run("member:\(member)") {
-            if !isDemo { try await api.setCoLeader(id, member: member, on: on) }
-            view?.apply(.memberRole(userId: member, coLeader: on))
-        }
+        let t = ActionTrace.begin("co-leader")
+        view?.apply(.memberRole(userId: member, coLeader: on))
+        ActionTrace.uiShown(t)
+        sendLater(.coLeader, member: member, on: on, trace: t)
     }
 
+    /// Remove a member: instant on this screen (#173); the server is told through the outbox.
     func removeMember(_ member: String) async {
-        _ = await run("member:\(member)") {
-            if !isDemo { try await api.removeMember(id, member: member) }
-            view?.apply(.memberLeft(userId: member))
-        }
+        let t = ActionTrace.begin("remove-member")
+        view?.apply(.memberLeft(userId: member))
+        ActionTrace.uiShown(t)
+        sendLater(.removeMember, member: member, trace: t)
     }
 
     /// The invite link this device created, if any. The server keeps only its hash.
@@ -1276,19 +1454,23 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     /// Owner only: a new link. This revokes every earlier link, so it is never automatic.
+    /// Not instant (#173): the link is made by the server; the screen shows «جاري…» meanwhile.
     func newInviteURL() async -> URL? {
+        let t = ActionTrace.begin("invite")
         var out: URL?
-        _ = await run("invite") {
+        let ok = await run("invite") {
             let inv = try await api.rotateInvite(id)
             InviteTokenStore.save(id, inv.token)
             out = InviteLink.url(for: inv.token)
         }
+        ActionTrace.uiShown(t)
+        ActionTrace.acked(t, ok: ok)
         return out
     }
 
     /// Push-to-talk upload. Returns the clip on success.
     func sendClip(_ audio: Data, durationMs: Int) async -> VoiceClip? {
-        if isDemo { return nil }
+        if isLocal { return nil }
         var out: VoiceClip?
         _ = await run("clip") { out = try await api.uploadClip(id, audio: audio, durationMs: durationMs) }
         return out
@@ -1341,4 +1523,71 @@ struct DisplayTrailMemo {
         result = r
         return r
     }
+}
+
+// MARK: - solo («اتجه» on my own, docs/SOLO-OUTING.md)
+
+/// A solo outing: one member (me), on this phone only. Its id is `solo-<uuid>`, which
+/// `OutingsAPI` refuses before anything reaches the network.
+enum SoloOuting {
+    static let idPrefix = "solo-"
+
+    static func newId() -> String { idPrefix + UUID().uuidString.lowercased() }
+
+    static func isSoloId(_ id: String) -> Bool { id.hasPrefix(idPrefix) }
+
+    /// The session's own picture (no server sends one): me alone, owner, active, not sharing,
+    /// no positions, no invite. No phone number: it is never put in an outing picture here.
+    static func view(id: String, me: PublicUser, name: String, now: Date = Date()) -> OutingView {
+        let t = ISODate.string(now)
+        let member = Member(user_id: me.id, display_name: me.display_name, avatar: me.avatar, phone: nil, role: "owner", sharing: false,
+                            joined_at: t, online: true, last_seen_at: t)
+        let snap = OutingSnapshot(
+            outing: OutingInfo(id: id, name: name, status: .active, owner_id: me.id, created_at: t, started_at: t, ended_at: nil),
+            me: SnapshotMe(user_id: me.id, role: "owner", sharing: false),
+            members: [member], positions: [], invite: InviteState(active: false, expires_at: nil),
+            server_now: t
+        )
+        return OutingView(snap, deviceNow: now)
+    }
+}
+
+extension OutingSession {
+    /// «اتجه» without an outing (docs/SOLO-OUTING.md (ب)2): one member (me), no server, nothing
+    /// sent. The demo's construction path with a one-member view and `kind: .solo`: no live
+    /// channel, no background sender, no heartbeat, walkie-talkie never attached, nearby link off,
+    /// and `SendGate` stays closed (no consent, no share press, server flag off).
+    /// Nothing calls it yet (the «اتجه» entry point is a later step).
+    static func solo(id: String = SoloOuting.newId(), me: PublicUser, name: String, location: LocationSharer, env: SessionEnv = SessionEnv()) -> OutingSession {
+        assert(SoloOuting.isSoloId(id), "a solo outing id starts with \(SoloOuting.idPrefix)")
+        var env = env
+        env.nearbyMesh = false
+        /* No token: the client is only here because the session holds one; it refuses `solo-` ids anyway. */
+        return OutingSession(id: id, myUserId: me.id, api: OutingsAPI(tokenProvider: { nil }), token: "", location: location,
+                             demo: SoloOuting.view(id: id, me: me, name: name), kind: .solo, env: env)
+    }
+}
+
+/// Solo voice notes: nobody to send to, nobody answers. A 4xx error, so the outbox drops a note
+/// instead of retrying (the talk button is not offered in a solo outing).
+final class LocalVoiceNoteBackend: VoiceNoteBackend {
+    func uploadVoiceNote(_ outingId: String, audio: Data, durationMs: Int, channel: String, clientId: String, ageMs: Int) async throws -> VoiceNote {
+        throw OutingAPIError.localOuting
+    }
+
+    func listVoiceNotes(_ outingId: String, channel: String) async throws -> [VoiceNote] { [] }
+
+    func fetchVoiceNote(_ note: VoiceNote) async throws -> Data { throw OutingAPIError(code: "clip_gone", status: 404) }
+}
+
+/// Solo chat: there is none. Answers like a route the server does not have (405), which
+/// `ChatStore` reads as `.notDeployed`: the chat is hidden calmly and nothing is queued.
+final class LocalChatBackend: ChatBackend {
+    private var noChat: OutingAPIError { OutingAPIError(code: "local_outing", status: 405) }
+
+    func chatOverview(_ outingId: String) async throws -> ChatOverview { throw noChat }
+    func chatPage(_ outingId: String, with: ChatWith, before: Int?, after: Int?, limit: Int) async throws -> ChatPage { throw noChat }
+    func chatSend(_ outingId: String, draft: ChatDraft) async throws -> ChatMessage { throw noChat }
+    func chatRead(_ outingId: String, with: ChatWith, seq: Int) async throws { throw noChat }
+    func chatDelete(_ outingId: String, messageId: String) async throws -> ChatMessage { throw noChat }
 }
