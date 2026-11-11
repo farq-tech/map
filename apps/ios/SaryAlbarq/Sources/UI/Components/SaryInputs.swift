@@ -133,7 +133,7 @@ struct SaryToggleRow: View {
         .tint(toggleTint ?? theme.palette.accent)
         .frame(minHeight: theme.minTarget)
         .padding(.vertical, theme.space(.xs))
-        .sensoryFeedback(.selection, trigger: isOn)
+        .saryHaptic(.selection, trigger: isOn)
         .modifier(OptionalIdentifier(id: id))
     }
 }
@@ -226,7 +226,7 @@ struct SarySegmented<Value: Hashable>: View {
         .padding(3)
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .animation(theme.animation(.snappy), value: selection)
-        .sensoryFeedback(.selection, trigger: selection)
+        .saryHaptic(.selection, trigger: selection)
         .accessibilityElement(children: .contain)
         .modifier(OptionalIdentifier(id: id))
     }

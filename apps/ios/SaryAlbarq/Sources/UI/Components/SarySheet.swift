@@ -75,7 +75,7 @@ private struct SarySheetPresentation: ViewModifier {
             .presentationContentInteraction(.resizes)
             .interactiveDismissDisabled()
             .modifier(SheetBackground())
-            .sensoryFeedback(.selection, trigger: detent)
+            .saryHaptic(.selection, trigger: detent)
     }
 }
 

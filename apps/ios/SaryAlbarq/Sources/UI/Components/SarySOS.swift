@@ -67,6 +67,12 @@ struct SarySOSButton: View {
                 .rotationEffect(.degrees(-90))
                 .padding(-7)
                 .environment(\.layoutDirection, .leftToRight)
+            /* Sent: one calm ripple per beat says «it is out, it is live». Invisible otherwise. */
+            Circle()
+                .stroke(p.emergency.opacity(0.7), lineWidth: 2)
+                .padding(-7)
+                .saryPulse(.urgent, style: .ripple, active: active)
+                .allowsHitTesting(false)
         }
         .scaleEffect(holding && !theme.reduceMotion ? 0.94 : 1)
         .animation(theme.animation(.snappy), value: holding)
@@ -78,6 +84,7 @@ struct SarySOSButton: View {
             pressing ? beginHold() : finishHold(fire: false)
         }
         .disabled(sending || active)
+        /* The escalating hold ticks are SOS feedback (critical): raw on purpose, they play in drive too. */
         .sensoryFeedback(trigger: stage) { _, new in
             switch new {
             case 1: return .impact(weight: .light, intensity: 0.7)
@@ -86,7 +93,7 @@ struct SarySOSButton: View {
             default: return nil
             }
         }
-        .sensoryFeedback(.warning, trigger: fired)
+        .saryHaptic(.warning, trigger: fired)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(active ? "تم إرسال طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
         .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الربع"))
@@ -281,7 +288,9 @@ struct SOSCountdownView: View {
                 Text(SaryFormat.number(center.remaining ?? 0))
                     .font(.system(size: 96, weight: .heavy, design: .rounded))
                     .foregroundStyle(p.onEmergency)
-                    .contentTransition(.numericText(countsDown: true))
+                    .contentTransition(theme.reduceMotion ? .opacity : .numericText(countsDown: true))
+                    /* One deliberate beat per second: the count is the thing to watch. */
+                    .saryEmphasis(trigger: center.remaining, scale: 1.08)
                     .accessibilityIdentifier("sos-countdown-seconds")
                 Text("توصل لكل الربع مع موقعك")
                     .saryText(.callout, weight: .medium)
@@ -376,7 +385,7 @@ struct SaryMySOSStrip: View {
     private var message: some View {
         Image(systemName: SaryIcon.sos)
             .font(.system(size: 16, weight: .heavy))
-            .symbolEffect(.pulse, isActive: !theme.reduceMotion)
+            .saryPulse(.urgent, style: .dim)
         VStack(alignment: .leading, spacing: 0) {
             Text("أرسلت طوارئ").saryText(.headline)
             Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل · بدون موقع") · \(SaryFormat.elapsed(since: since, now: now))")
@@ -498,7 +507,6 @@ struct SaryFriendSOSAlert: View {
     var call: () -> Void = {}
 
     @Environment(\.sary) private var theme
-    @State private var pulse = false
     @State private var buzz = 0
 
     var body: some View {
@@ -516,12 +524,8 @@ struct SaryFriendSOSAlert: View {
                 ScrollView { content(p, hero: .compact) }
             }
         }
-        .onAppear {
-            buzz += 1
-            guard !theme.reduceMotion else { return }
-            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { pulse = true }
-        }
-        .sensoryFeedback(.error, trigger: buzz)
+        .onAppear { buzz += 1 }
+        .saryHaptic(.sos, trigger: buzz)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
     }
@@ -532,8 +536,8 @@ struct SaryFriendSOSAlert: View {
             ZStack {
                 Circle().stroke(p.onEmergency.opacity(0.25), lineWidth: 2)
                     .frame(width: hero.ring, height: hero.ring)
-                    .scaleEffect(pulse ? 1.12 : 0.92)
-                    .opacity(pulse ? 0 : 1)
+                    /* Stops off-screen and in the background; a slow fade under Reduce Motion. */
+                    .saryPulse(.urgent, style: .ripple)
                 Circle().fill(p.onEmergency.opacity(0.1)).frame(width: hero.disc, height: hero.disc)
                 SaryAvatar(name: alert.name, color: alert.color, size: hero.avatar)
             }

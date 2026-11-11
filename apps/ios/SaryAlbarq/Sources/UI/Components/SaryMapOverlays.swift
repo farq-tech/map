@@ -32,6 +32,7 @@ struct SaryNameChip: View {
     var tapped: () -> Void = {}
     var id: String? = nil
     @Environment(\.sary) private var theme
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let p = theme.palette
@@ -68,18 +69,23 @@ struct SaryNameChip: View {
                         .frame(width: 20, height: 16)
                         .background(Capsule().fill(p.warningText))
                         .accessibilityLabel(Text("غرّز"))
+                        .transition(SaryTransition.chipPop(theme))
                 }
                 if chip.speaking {
                     /* «يتكلم»: on air in «قناة الطلعة» now. */
                     Image(systemName: "waveform")
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(p.onAccent)
-                        .symbolEffect(.variableColor.iterative, isActive: !theme.reduceMotion)
+                        /* Live loop: still in drive mode, under Reduce Motion and in the background. */
+                        .symbolEffect(.variableColor.iterative, isActive: SaryMotionPolicy.loop(
+                            .live, active: true, reduceMotion: theme.reduceMotion, drive: theme.drive,
+                            sceneActive: scenePhase == .active) == .full)
                         .environment(\.layoutDirection, .leftToRight)
                         .frame(width: 22, height: 16)
                         .background(Capsule().fill(p.accent))
                         .accessibilityLabel(Text("يتكلم الآن"))
                         .accessibilityIdentifier("car.speaking")
+                        .transition(SaryTransition.chipPop(theme))
                 } else if chip.hasVoice {
                     Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
                 }
@@ -92,6 +98,7 @@ struct SaryNameChip: View {
                         .padding(.vertical, 1)
                         .background(Capsule().fill(p.accent))
                         .accessibilityIdentifier("car.convoy.badge")
+                        .transition(SaryTransition.chipPop(theme))
                 }
                 if chip.viaNearby && !chip.isMe {
                     SaryNearbyMark(compact: true)
@@ -103,6 +110,7 @@ struct SaryNameChip: View {
                         .frame(width: 18, height: 16)
                         .background(Capsule().fill(Color(rgb: chip.color)))
                         .accessibilityLabel(Text("لديه رسالة"))
+                        .transition(SaryTransition.chipPop(theme))
                 }
             }
             .fixedSize()
@@ -125,6 +133,12 @@ struct SaryNameChip: View {
             .saryShadow(.raised, theme)
         }
         .buttonStyle(SaryPressStyle())
+        /* A badge joining or leaving the chip (غرّز، يتكلم، رسالة) pops in place; presence
+         * changes recolour smoothly. In drive mode these only fade (peripheral). */
+        .saryAnimation(.snappy, value: NameChipBadges(chip: chip, noteWaiting: noteWaiting))
+        .saryAnimation(.smooth, value: style.phase)
+        /* The chip itself pops in and out when the map layer adds or removes it. */
+        .transition(SaryTransition.chipPop(theme))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text((chip.isMe ? "أنت" : "\(chip.name)، \(chip.silentSince.map { SilenceText.badge(since: $0, now: chip.now) } ?? style.accessibilityLabel(now: chip.now))\(chip.viaNearby ? "، \(SaryNearbyMark.text)" : "")") + (chip.convoy.map { "، \($0.label)" } ?? "")))
         .modifier(OptionalIdentifier(id: id))
@@ -156,6 +170,7 @@ struct SaryGroupChip: View {
                     .saryText(.caption, weight: .bold)
                     .foregroundStyle(p.textPrimary)
                     .lineLimit(1)
+                    .contentTransition(SaryTransition.number(Double(count), theme))
                 Image(systemName: "plus.magnifyingglass")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(p.textSecondary)
@@ -168,6 +183,8 @@ struct SaryGroupChip: View {
             .saryShadow(.raised, theme)
         }
         .buttonStyle(SaryPressStyle())
+        .saryAnimation(.snappy, value: count)
+        .transition(SaryTransition.chipPop(theme))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("\(SaryFormat.cars(count)) متقاربة، اضغط للتكبير"))
     }
@@ -203,6 +220,7 @@ struct SaryNoteBubble: View {
         }
         .compositingGroup()
         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+        .transition(SaryTransition.chipPop(theme))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("رسالة: \(bubble.text)"))
     }
@@ -266,6 +284,8 @@ struct SaryEdgeArrowChip: View {
         }
         .buttonStyle(SaryPressStyle())
         .animation(theme.animation(.smooth), value: chip.bearingDegrees)
+        .saryAnimation(.smooth, value: chip.isStale)
+        .transition(SaryTransition.chipPop(theme))
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("\(chip.name) خارج الشاشة، \(chip.distanceMeters.map { "على بعد \(SaryFormat.distance(meters: $0))، " } ?? "")\(SaryFormat.relativeDirection(chip.bearingDegrees))"))
     }
@@ -306,6 +326,7 @@ struct SaryRallyFlag: View {
         }
         .compositingGroup()
         .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+        .transition(SaryTransition.chipPop(theme))
         .accessibilityLabel(Text(marker.label ?? "نقطة التجمع"))
     }
 }
@@ -378,6 +399,23 @@ struct SaryCarGlassShape: Shape {
         p.addRoundedRect(in: CGRect(x: w * 0.18, y: h * 0.22, width: w * 0.64, height: h * 0.2), cornerSize: CGSize(width: 3, height: 3))
         p.addRoundedRect(in: CGRect(x: w * 0.2, y: h * 0.66, width: w * 0.6, height: h * 0.13), cornerSize: CGSize(width: 3, height: 3))
         return p
+    }
+}
+
+/// The optional badges on a name chip, as one value to animate on.
+struct NameChipBadges: Equatable {
+    var stuck: Bool
+    var speaking: Bool
+    var hasVoice: Bool
+    var convoy: String?
+    var noteWaiting: Bool
+
+    init(chip: NameChipUI, noteWaiting: Bool) {
+        stuck = chip.stuck
+        speaking = chip.speaking
+        hasVoice = chip.hasVoice
+        convoy = chip.convoy?.label
+        self.noteWaiting = noteWaiting
     }
 }
 

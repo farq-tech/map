@@ -115,6 +115,6 @@ struct SaryAppearancePanel: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .sensoryFeedback(.selection, trigger: settings.prefs.accent)
+        .saryHaptic(.selection, trigger: settings.prefs.accent)
     }
 }

@@ -40,6 +40,13 @@ struct SaryStatusSignals: Equatable {
     }
 
     var allGood: Bool { connection == .good && gps == .good && internet == .good }
+
+    /// «مباشر»: the outing is running, my position is going out and the link
+    /// is up. Only then does the connection dot breathe (docs/MOTION.md: pulses
+    /// only for live data).
+    static func isLive(status: OutingStatusUI, connection: ConnectionStateUI, sharing: MySharingUI) -> Bool {
+        status == .active && connection == .connected && sharing == .sharing
+    }
 }
 
 /// Top-of-map status: back button + capsule with outing name and the
@@ -90,7 +97,8 @@ struct SaryStatusCapsule: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: theme.space(.s)) {
-                    SaryStatusDots(signals: signals)
+                    SaryStatusDots(signals: signals,
+                                   live: SaryStatusSignals.isLive(status: status, connection: connection, sharing: sharing))
                         .accessibilityIdentifier("outing-link-state")
                     VStack(alignment: .leading, spacing: 0) {
                         Text(outingName)
@@ -112,6 +120,7 @@ struct SaryStatusCapsule: View {
                             Image(systemName: SaryIcon.warning)
                                 .font(.system(size: 12, weight: .bold))
                             Text(SaryFormat.number(warnings.count)).saryNumber(.caption)
+                                .contentTransition(SaryTransition.number(Double(warnings.count), theme))
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 11, weight: .bold))
                                 .rotationEffect(.degrees(expanded ? 180 : 0))
@@ -120,6 +129,7 @@ struct SaryStatusCapsule: View {
                         .padding(.horizontal, 8)
                         .frame(minHeight: 26)
                         .background(Capsule().fill(theme.palette.warning.opacity(0.16)))
+                        .transition(SaryTransition.chipPop(theme))
                     }
                 }
                 .padding(.horizontal, theme.space(.l))
@@ -160,13 +170,14 @@ struct SaryStatusCapsule: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(SaryTransition.banner(theme))
             }
         }
         .clipShape(shape)
         .saryGlass(shape, role: .chrome)
         .animation(theme.animation(.smooth), value: expanded)
-        .sensoryFeedback(.selection, trigger: expanded)
+        .animation(theme.animation(.snappy), value: warnings)
+        .saryHaptic(.selection, trigger: expanded)
     }
 
     private var subtitle: String {
@@ -211,19 +222,24 @@ struct SaryStatusCapsule: View {
 /// Three small glyph-dots: shape carries meaning, not only colour.
 struct SaryStatusDots: View {
     var signals: SaryStatusSignals
+    /// Live data is flowing: a soft halo breathes behind the connection dot
+    /// (`saryPulse`: off in drive mode, under Reduce Motion, in the background).
+    var live = false
     @Environment(\.sary) private var theme
 
     var body: some View {
         HStack(spacing: 3) {
-            dot(SaryIcon.connection, signals.connection)
+            dot(SaryIcon.connection, signals.connection, live: live && signals.connection == .good)
             dot(signals.gps == .bad ? SaryIcon.gpsOff : SaryIcon.gps, signals.gps)
             dot(signals.internet == .bad ? SaryIcon.offline : SaryIcon.internet, signals.internet)
         }
         .environment(\.layoutDirection, .leftToRight)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        /* A signal getting worse (or better) shifts colour, it does not blink. */
+        .saryAnimation(.smooth, value: signals)
     }
 
-    private func dot(_ symbol: String, _ level: SarySignalLevel) -> some View {
+    private func dot(_ symbol: String, _ level: SarySignalLevel, live: Bool = false) -> some View {
         let c = level.color(theme.palette)
         let d: CGFloat = theme.drive ? 26 : 20
         return Image(systemName: symbol)
@@ -231,6 +247,12 @@ struct SaryStatusDots: View {
             .foregroundStyle(level == .good ? c : theme.palette.onEmergency)
             .frame(width: d, height: d)
             .background(Circle().fill(level == .good ? c.opacity(0.18) : c))
+            .background {
+                /* Behind the dot, never changing its frame: the layout stays put. */
+                Circle().fill(c.opacity(0.5))
+                    .saryPulse(.live, style: .halo, active: live)
+                    .allowsHitTesting(false)
+            }
             .accessibilityHidden(true)
     }
 }

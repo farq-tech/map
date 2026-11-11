@@ -31,6 +31,11 @@ struct SaryAlertLane: View {
         "+\(SaryFormat.number(hidden)) \(hidden == 1 ? "تنبيه" : "تنبيهات")"
     }
 
+    static func isToast(_ alert: LiveAlertUI) -> Bool {
+        if case .toast = alert.kind { return true }
+        return false
+    }
+
     /// What the lane shows: the first `limit`, or all of them once expanded.
     static func visible(_ alerts: [LiveAlertUI], limit: Int, expanded: Bool) -> (shown: [LiveAlertUI], hidden: Int) {
         let l = max(1, limit)
@@ -68,6 +73,7 @@ struct SaryAlertLane: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
+                .transition(SaryTransition.chipPop(theme))
                 .accessibilityIdentifier("alerts.more")
                 .accessibilityLabel(Text(expanded ? "إخفاء التنبيهات" : "\(Self.overflowLabel(v.hidden))، اعرضها"))
             }
@@ -82,10 +88,10 @@ struct SaryAlertLane: View {
         VStack(spacing: theme.space(.s)) {
             ForEach(list) { alert in
                 SaryAlertCard(alert: alert, tapped: { tapped(alert.id) }, dismiss: { dismiss(alert.id) }, voice: voice, silent: silent)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))
-                    ))
+                    /* Spatial continuity: cards come down out of the status capsule they sit
+                     * under, and leave in place (fade + settle) rather than flying off. A toast
+                     * only rises a little. Both cross-fade under Reduce Motion. */
+                    .transition(Self.isToast(alert) ? SaryTransition.toast(theme) : SaryTransition.banner(theme))
             }
         }
     }
@@ -291,7 +297,7 @@ struct SaryVoiceBanner: View {
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text(playing ? "إيقاف الرسالة الصوتية" : "تشغيل رسالة \(clip.senderName) الصوتية"))
-            .sensoryFeedback(.impact(weight: .light), trigger: playing)
+            .saryHaptic(.selection, trigger: playing)
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {

@@ -447,6 +447,31 @@ final class SaryMotionPolicyTests: XCTestCase {
     }
 }
 
+final class SaryLiveIndicatorTests: XCTestCase {
+    func testStatusDotBreathesOnlyWhenReallyLive() {
+        XCTAssertTrue(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .paused, connection: .connected, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .offline, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connecting, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .paused))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .starting))
+    }
+
+    func testPresencePhaseIgnoresTheTimestamp() {
+        let a = SaryPresenceStyle(presence: .stale(since: Date(timeIntervalSince1970: 0))).phase
+        let b = SaryPresenceStyle(presence: .stale(since: Date(timeIntervalSince1970: 600))).phase
+        XCTAssertEqual(a, b, "a ticking «since» must not re-trigger the presence animation")
+        XCTAssertEqual(SaryPresenceStyle(presence: .live).phase, .live)
+        XCTAssertEqual(SaryPresenceStyle(presence: .paused).phase, .paused)
+    }
+
+    func testStateTransitionKeysOnTheKindNotItsText() {
+        XCTAssertEqual(SaryStateView.phase(.loading("أ")), SaryStateView.phase(.loading("ب")))
+        XCTAssertNotEqual(SaryStateView.phase(.loading("أ")), SaryStateView.phase(.offline(message: nil)))
+        XCTAssertNotEqual(SaryStateView.phase(.error(title: "x", message: nil)), SaryStateView.phase(.empty(title: "x", message: nil, systemImage: "tray")))
+    }
+}
+
 final class SaryHapticsPolicyTests: XCTestCase {
     func testEverythingPlaysWhenNotDriving() {
         for e in SaryHapticEvent.allCases { XCTAssertTrue(SaryHaptics.allows(e, driving: false), "\(e)") }

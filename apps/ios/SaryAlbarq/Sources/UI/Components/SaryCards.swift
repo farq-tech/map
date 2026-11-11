@@ -77,6 +77,8 @@ struct SaryRallyCard: View {
             }
         }
         .padding(theme.space(.l))
+        /* Setting / removing the point morphs the card in place. */
+        .saryAnimation(.smooth, value: rally == nil)
         .sarySurface(radius: SaryRadius.l)
         .confirmationDialog("إزالة نقطة التجمع؟", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("أزلها", role: .destructive, action: actions.rallyRemove)
@@ -96,6 +98,7 @@ struct SaryRallyCard: View {
                 Spacer()
                 if r.arrivedCount == r.totalCount && r.totalCount > 0 {
                     Label("الكل وصل", systemImage: SaryIcon.checkCircle).saryText(.footnote, weight: .bold).foregroundStyle(p.liveText)
+                        .transition(SaryTransition.chipPop(theme))
                 }
             }
             GeometryReader { g in
@@ -106,6 +109,8 @@ struct SaryRallyCard: View {
             }
             .frame(height: 6)
         }
+        /* Each arrival fills the bar toward the point; the last one settles with `celebrate`. */
+        .saryAnimation(r.arrivedCount == r.totalCount && r.totalCount > 0 ? .celebrate : .smooth, value: r.arrivedCount)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("وصل \(SaryFormat.number(r.arrivedCount)) من \(SaryFormat.number(r.totalCount))"))
     }

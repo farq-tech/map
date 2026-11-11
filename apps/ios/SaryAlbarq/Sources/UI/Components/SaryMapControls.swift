@@ -34,7 +34,7 @@ struct SaryMapControlButton: View {
                 .saryGlass(Circle(), role: .control, tint: item.isActive ? theme.palette.accent : nil, interactive: true)
         }
         .buttonStyle(SaryPressStyle())
-        .sensoryFeedback(.selection, trigger: item.isActive)
+        .saryHaptic(.selection, trigger: item.isActive)
         .accessibilityLabel(Text(item.label))
         .accessibilityHint(Text(item.hint ?? ""))
         .accessibilityValue(Text(item.value ?? ""))
@@ -148,7 +148,7 @@ private struct ControlAccessibility: ViewModifier {
             .accessibilityValue(Text(item.value ?? ""))
             .accessibilityAddTraits(item.isActive ? .isSelected : [])
             .accessibilityIdentifier(item.accessibilityID)
-            .sensoryFeedback(.selection, trigger: item.isActive)
+            .saryHaptic(.selection, trigger: item.isActive)
     }
 }
 

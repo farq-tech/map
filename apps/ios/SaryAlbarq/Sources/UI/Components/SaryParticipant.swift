@@ -13,6 +13,18 @@ struct SaryPresenceStyle {
     var dashed: Bool { if case .stale = presence { return true }; return false }
     var paused: Bool { presence == .paused }
 
+    /// The presence without its timestamp: what motion keys on, so a member
+    /// going live → stale → paused animates once per change (a smooth colour
+    /// and opacity shift), not every time the «since» moves.
+    enum Phase: Equatable { case live, stale, paused }
+    var phase: Phase {
+        switch presence {
+        case .live: return .live
+        case .stale: return .stale
+        case .paused: return .paused
+        }
+    }
+
     func label(now: Date) -> String {
         switch presence {
         case .live: return "مباشر"
@@ -92,8 +104,11 @@ struct SaryAvatar: View {
                     .overlay(Circle().stroke(theme.palette.stale, lineWidth: 1.5))
                     /* Outward on the trailing side in RTL and LTR alike (not `.offset(x:)`). */
                     .padding(.trailing, -2).padding(.bottom, -2)
+                    .transition(SaryTransition.chipPop(theme))
             }
         }
+        /* Live → late → silent: colour drains and the ring turns dashed smoothly, never a jump. */
+        .saryAnimation(.smooth, value: style.phase)
         .accessibilityHidden(true)
     }
 
@@ -134,6 +149,7 @@ struct SaryPresenceBadge: View {
                 Capsule().strokeBorder(p.stale, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }
         }
+        .saryAnimation(.smooth, value: style.phase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(style.accessibilityLabel(now: now)))
     }
@@ -305,7 +321,7 @@ struct SaryParticipantRow: View {
                                 .accessibilityIdentifier("participant.convoy")
                         }
                         if participant.tripArrived {
-                            SaryTripArrivedBadge()
+                            SaryTripArrivedBadge().transition(SaryTransition.chipPop(theme))
                         } else if let r = participant.tripRemainingMeters {
                             Text("باقي \(SaryFormat.distance(meters: r))" + (participant.tripRemainingApprox ? " تقريبًا" : "") + " للوجهة")
                                 .saryNumber(.caption, weight: .bold)
@@ -327,6 +343,10 @@ struct SaryParticipantRow: View {
             .frame(minHeight: theme.minTarget + 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            /* Presence changes (live → late → silent) recolour the row in one smooth shift. */
+            .saryAnimation(.smooth, value: SaryPresenceStyle(presence: participant.presence).phase)
+            .saryAnimation(.smooth, value: participant.silentSince != nil)
+            .saryAnimation(.celebrate, value: participant.tripArrived)
         }
         .buttonStyle(SaryRowPressStyle())
         .accessibilityElement(children: .combine)

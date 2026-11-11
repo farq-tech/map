@@ -31,7 +31,8 @@ enum SaryButtonKind: CaseIterable {
 enum SaryButtonWidth { case fill, hug }
 
 /// Full-width (or hugging) button. Height follows the button-size setting and
-/// is ≥ 64 pt in drive mode. Press = slight scale; disabled = 40 % opacity.
+/// is ≥ 64 pt in drive mode. Press = slight scale + dim (the finger sees it
+/// land, the eye does not need to); disabled = 40 % opacity, faded in.
 struct SaryButtonStyle: ButtonStyle {
     var kind: SaryButtonKind = .primary
     var width: SaryButtonWidth = .fill
@@ -78,8 +79,9 @@ private struct SaryButtonBody: View {
             .contentShape(shape)
             .scaleEffect(configuration.isPressed && !theme.reduceMotion ? 0.97 : 1)
             .brightness(configuration.isPressed ? (theme.isLight ? -0.04 : 0.06) : 0)
-            .opacity(enabled ? 1 : 0.4)
+            .opacity(enabled ? (configuration.isPressed ? 0.92 : 1) : 0.4)
             .animation(theme.animation(.snappy), value: configuration.isPressed)
+            .animation(theme.animation(.smooth), value: enabled)
     }
 
     @ViewBuilder

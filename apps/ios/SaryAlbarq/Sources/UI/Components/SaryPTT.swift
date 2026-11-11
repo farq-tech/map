@@ -26,6 +26,7 @@ struct SaryPTTButton: View {
     @Environment(\.sary) private var theme
     @State private var pressing = false
     @State private var pulse = false
+    @Environment(\.scenePhase) private var scenePhase
     /// «طريقة اللاسلكي»: the wording follows what the button really does (tap to record vs hold).
     @AppStorage(PTTTalkMode.key) private var talkModeRaw = PTTTalkMode.default.rawValue
 
@@ -76,13 +77,13 @@ struct SaryPTTButton: View {
         .accessibilityAction(named: Text(notesMode ? "ابدأ التسجيل" : "ابدأ التكلم")) { actions.pressBegan() }
         .accessibilityAction(named: Text(notesMode ? "أرسل الرسالة" : "أوقف التكلم")) { notesMode ? actions.pressBegan() : actions.pressEnded() }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .onChange(of: isOnAir) { _, on in
-            guard on, !theme.reduceMotion else { pulse = false; return }
-            pulse = false
-            withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
-        }
+        /* The on-air loop runs only while on air, on screen and in the foreground. */
+        .onChange(of: isOnAir) { _, _ in updatePulse() }
+        .onChange(of: scenePhase) { _, _ in updatePulse() }
+        .onDisappear { pulse = false }
+        /* Raw on purpose (docs/MOTION.md): it confirms an eyes-free action the driver is doing. */
         .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
-        .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
+        .saryHaptic(.selection, trigger: isListening, condition: { _, new in new })
         .animation(theme.animation(.snappy), value: state)
             if channelLabel != nil, openChannels != nil {
                 pillFace(h: h, d: d, fill: nil, ink: ink, placeholder: true)
@@ -284,19 +285,27 @@ struct SaryPTTButton: View {
                     .accessibilityIdentifier("outing-ptt-caption")
             }
         }
-        .onChange(of: isOnAir) { _, on in
-            guard on, !theme.reduceMotion else { pulse = false; return }
-            pulse = false
-            withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
-        }
+        /* The on-air loop runs only while on air, on screen and in the foreground. */
+        .onChange(of: isOnAir) { _, _ in updatePulse() }
+        .onChange(of: scenePhase) { _, _ in updatePulse() }
+        .onDisappear { pulse = false }
+        /* Raw on purpose (docs/MOTION.md): it confirms an eyes-free action the driver is doing. */
         .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
-        .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
+        .saryHaptic(.selection, trigger: isListening, condition: { _, new in new })
         .animation(theme.animation(.snappy), value: state)
     }
 
     private var isTalking: Bool { if case .talking = state { return true }; return false }
     private var isListening: Bool { if case .listening = state { return true }; return false }
     private var isOnAir: Bool { isTalking || isListening }
+
+    /// Starts or stops the on-air halo. Kept while driving on purpose: it says
+    /// «you are transmitting» on the control the driver's thumb is on.
+    private func updatePulse() {
+        pulse = false
+        guard isOnAir, !theme.reduceMotion, scenePhase == .active else { return }
+        withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
+    }
 
     @ViewBuilder
     private func halo(size: CGFloat) -> some View {

@@ -277,6 +277,8 @@ enum SaryPulseStyle: Equatable {
     case halo
     /// A barely visible scale beat on the subject itself: the SOS disc.
     case heartbeat
+    /// Opacity only, never a scale: loading placeholders.
+    case dim
 }
 
 extension View {
@@ -401,6 +403,8 @@ private struct SaryPulseFrame: ViewModifier {
             content
                 .scaleEffect(on && full ? 1.04 : 1)
                 .opacity(on && !full ? 0.82 : 1)
+        case .dim:
+            content.opacity(on ? 0.55 : 1)
         }
     }
 }
