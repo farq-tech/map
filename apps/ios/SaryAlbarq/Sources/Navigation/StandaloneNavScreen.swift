@@ -4,7 +4,7 @@ import SwiftUI
 /// Routing for guidance on this phone — the live trip and «اتجه» from the home map alike:
 /// Mapbox (or the company's Valhalla, hidden setting) for streets, the desert router after.
 enum NavProviders {
-    static func standard() -> NavRoutingProvider {
+    @MainActor static func standard() -> NavRoutingProvider {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
         #endif
