@@ -280,7 +280,7 @@ final class WeatherPresenterTests: XCTestCase {
         XCTAssertEqual(ui.visibility, "قد تقل بسبب الغبار", "the model's 20 km visibility ignores dust")
         XCTAssertEqual(ui.wind?.name, "رياح جنوبية شرقية")
         XCTAssertEqual(ui.wind?.speed, "٧ كم/س")
-        XCTAssertEqual(ui.updated, "آخر تحديث قبل ١٠ د")
+        XCTAssertEqual(ui.updated, "آخر تحديث ٣:١٥ م (قبل ١٠ د)")
         XCTAssertEqual(ui.hours.first?.label, "هذه الساعة")
         XCTAssertEqual(ui.rainText, "لا مطر متوقع خلال ١٢ س")
     }
@@ -292,7 +292,7 @@ final class WeatherPresenterTests: XCTestCase {
         XCTAssertEqual(ui.nowLabel, "متوقع لهذه الساعة")
         XCTAssertTrue(ui.stale)
         XCTAssertTrue(ui.offline)
-        XCTAssertEqual(ui.updated, "آخر تحديث قبل ٣ س")
+        XCTAssertEqual(ui.updated, "آخر تحديث ٣:١٥ م (قبل ٣ س)")
         let h = try XCTUnwrap(WeatherRules.hour(containing: now, in: r))
         XCTAssertEqual(ui.temp, WeatherFormat.temp(h.temperatureC), "the forecast hour, not the old «current» value")
     }
@@ -421,7 +421,7 @@ final class WeatherCacheTests: XCTestCase {
         XCTAssertEqual(s.report?.fetchedAt, Fixture.currentAt, "the cached report keeps its own time")
         let ui = WeatherPresenter.card(title: "", report: s.report, refreshing: false, failed: s.lastFailed, now: now)
         XCTAssertEqual(ui.nowLabel, "متوقع لهذه الساعة")
-        XCTAssertEqual(ui.updated, "آخر تحديث قبل ٢ س")
+        XCTAssertEqual(ui.updated, "آخر تحديث ٣:١٥ م (قبل ٢ س)")
         XCTAssertTrue(ui.offline)
 
         let calls = t.calls.count

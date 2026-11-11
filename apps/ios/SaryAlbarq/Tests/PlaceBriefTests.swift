@@ -238,7 +238,7 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertEqual(fresh.hours.count, 12)
         XCTAssertEqual(fresh.hours.first?.label, "الآن")
         XCTAssertEqual(fresh.wind?.name, "رياح جنوبية")
-        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo · الآن")
+        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo · ١١:١٥ ص (الآن)")
 
         let stale = PlaceBriefPresenter.build(PlaceWeather(report: try Desert.report(), provider: .openMeteo), loading: false, failed: .offline,
                                               point: Desert.point, now: Desert.currentAt.addingTimeInterval(2 * 3600))
