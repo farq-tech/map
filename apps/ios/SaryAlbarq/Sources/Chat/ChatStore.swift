@@ -113,6 +113,7 @@ final class ChatStore: ObservableObject {
         self.deps = deps
         drafts = outbox.load()
         for d in drafts { insert([d.pendingMessage(outingId: outingId, me: me, myName: nil).with(delivery: .retrying)], into: d.with) }
+        if let demo = backend as? DemoChatBackend { applyOverview(demo.initialOverview()) }
     }
 
     func configure(_ deps: Deps) { self.deps = deps }
@@ -146,27 +147,7 @@ final class ChatStore: ObservableObject {
 
     func refresh() async {
         do {
-            let o = try await backend.chatOverview(outingId)
-            writable = o.writable
-            readOnlyReason = o.read_only_reason
-            canModerate = o.can_moderate
-            if let q = o.quick_replies, !q.isEmpty { quickReplies = q }
-            purgeAt = o.purge_at
-            retentionDays = o.retention_days ?? 30
-            for c in o.conversations {
-                let w = ChatWith(wire: c.with)
-                var t = threads[w] ?? ChatThreadState()
-                t.unread = w == visible ? 0 : c.unread
-                t.myReadSeq = max(t.myReadSeq, c.my_read_seq)
-                t.writable = c.writable
-                if let lm = c.last_message { t.lastMessage = lm }
-                if let p = c.peer_read_seq, let peer = w.peer { t.reads[peer] = max(t.reads[peer] ?? 0, p) }
-                threads[w] = t
-            }
-            if threads[.group] == nil { threads[.group] = ChatThreadState() }
-            overviewLoaded = true
-            availability = .available
-            lastError = nil
+            applyOverview(try await backend.chatOverview(outingId))
         } catch let e as OutingAPIError where Self.notDeployed(e) {
             /* The production server before the chat PR: no chat, no error, nothing queued. */
             availability = .notDeployed
@@ -175,6 +156,32 @@ final class ChatStore: ObservableObject {
             /* keep what we have; the badge falls back to the snapshot */
         }
         if availability == .available { flushOutbox() }
+    }
+
+    private func applyOverview(_ o: ChatOverview) {
+        if writable != o.writable { writable = o.writable }
+        if readOnlyReason != o.read_only_reason { readOnlyReason = o.read_only_reason }
+        if canModerate != o.can_moderate { canModerate = o.can_moderate }
+        if let q = o.quick_replies, !q.isEmpty, quickReplies != q { quickReplies = q }
+        if purgeAt != o.purge_at { purgeAt = o.purge_at }
+        let days = o.retention_days ?? 30
+        if retentionDays != days { retentionDays = days }
+        var updatedThreads = threads
+        for c in o.conversations {
+            let w = ChatWith(wire: c.with)
+            var t = updatedThreads[w] ?? ChatThreadState()
+            t.unread = w == visible ? 0 : c.unread
+            t.myReadSeq = max(t.myReadSeq, c.my_read_seq)
+            t.writable = c.writable
+            if let lm = c.last_message { t.lastMessage = lm }
+            if let p = c.peer_read_seq, let peer = w.peer { t.reads[peer] = max(t.reads[peer] ?? 0, p) }
+            updatedThreads[w] = t
+        }
+        if updatedThreads[.group] == nil { updatedThreads[.group] = ChatThreadState() }
+        if threads != updatedThreads { threads = updatedThreads }
+        if !overviewLoaded { overviewLoaded = true }
+        if availability != .available { availability = .available }
+        if lastError != nil { lastError = nil }
     }
 
     /// The newest page (first open), or what is newer than what we have (after a gap).
@@ -659,7 +666,7 @@ final class DemoChatBackend: ChatBackend, ChatModerationBackend, @unchecked Send
 
     private func inThread(_ m: ChatMessage, _ w: ChatWith) -> Bool { m.thread(me: me) == w }
 
-    func chatOverview(_ outingId: String) async throws -> ChatOverview {
+    func initialOverview() -> ChatOverview {
         var convs: [ChatConversationWire] = []
         var keys: [ChatWith] = [.group]
         for m in messages where !keys.contains(m.thread(me: me)) { keys.append(m.thread(me: me)) }
@@ -672,6 +679,8 @@ final class DemoChatBackend: ChatBackend, ChatModerationBackend, @unchecked Send
         return ChatOverview(conversations: convs, unread_total: convs.reduce(0) { $0 + $1.unread }, writable: true, read_only_reason: nil,
                             can_moderate: true, quick_replies: ChatRules.quickReplies, retention_days: 30, purge_at: nil)
     }
+
+    func chatOverview(_ outingId: String) async throws -> ChatOverview { initialOverview() }
 
     private var readMarks: [ChatWith: Int] = [:]
 

@@ -28,12 +28,12 @@ final class CreateFlowStateTests: XCTestCase {
         XCTAssertTrue(f.canGoBack)
     }
 
-    func testTypedCoordinateKeepsNameEmptyAndInvalidIsRefused() {
+    func testTypedCoordinateGetsDefaultNameAndInvalidIsRefused() {
         var f = CreateFlowState(now: t0)
         XCTAssertFalse(f.choose(OutingDestination(name: "x", lat: 120, lng: 46)))
         XCTAssertEqual(f.step, .destination)
         XCTAssertTrue(f.choose(OutingDestination(name: "نقطة على الخريطة", lat: 24.7, lng: 46.7)))
-        XCTAssertEqual(f.name, "", "a bare point does not invent a name")
+        XCTAssertEqual(f.name, "طلعة جديدة", "a bare point can start without typing a name")
         var g = CreateFlowState(now: t0)
         g.name = "كشتة الخميس"
         g.choose(thumama)
@@ -61,28 +61,31 @@ final class CreateFlowStateTests: XCTestCase {
         XCTAssertNil(f.issue(now: t0))
     }
 
-    func testApproveValidatesNameAndDeparture() {
+    func testApproveSuppliesDefaultNameAndValidatesDeparture() {
         var f = CreateFlowState(now: t0)
         f.choose(OutingDestination(name: "", lat: 24.7, lng: 46.7))
         XCTAssertEqual(f.destination?.name, "الوجهة")
-        XCTAssertFalse(f.approve(now: t0))
-        XCTAssertEqual(f.error, "اكتب اسم الطلعة.")
         f.name = "   "
-        XCTAssertFalse(f.approve(now: t0))
-        f.name = "كشتة"
-        f.departure = t0.addingTimeInterval(-3600)
-        XCTAssertFalse(f.approve(now: t0))
-        XCTAssertEqual(f.error, CreateFlowState.Issue.departurePast.arabic)
-        f.departure = t0.addingTimeInterval(15 * 86_400)
-        XCTAssertFalse(f.approve(now: t0))
-        XCTAssertEqual(f.error, CreateFlowState.Issue.departureTooFar.arabic)
-        f.departure = t0.addingTimeInterval(-120)
-        XCTAssertTrue(f.approve(now: t0), "a minute or two late still counts as now")
-        XCTAssertEqual(f.departure, t0)
-        XCTAssertTrue(f.creating)
+        XCTAssertTrue(f.approve(now: t0), "a blank optional name is filled automatically")
+        XCTAssertEqual(f.name, "طلعة جديدة")
         XCTAssertNil(f.error)
-        XCTAssertFalse(f.canGoBack, "no going back while the outing is being created")
-        XCTAssertFalse(f.approve(now: t0), "no double create")
+
+        var g = CreateFlowState(now: t0)
+        g.choose(thumama)
+        g.name = "كشتة"
+        g.departure = t0.addingTimeInterval(-3600)
+        XCTAssertFalse(g.approve(now: t0))
+        XCTAssertEqual(g.error, CreateFlowState.Issue.departurePast.arabic)
+        g.departure = t0.addingTimeInterval(15 * 86_400)
+        XCTAssertFalse(g.approve(now: t0))
+        XCTAssertEqual(g.error, CreateFlowState.Issue.departureTooFar.arabic)
+        g.departure = t0.addingTimeInterval(-120)
+        XCTAssertTrue(g.approve(now: t0), "a minute or two late still counts as now")
+        XCTAssertEqual(g.departure, t0)
+        XCTAssertTrue(g.creating)
+        XCTAssertNil(g.error)
+        XCTAssertFalse(g.canGoBack, "no going back while the outing is being created")
+        XCTAssertFalse(g.approve(now: t0), "no double create")
     }
 
     func testCreatedMovesToInviteAndFailureStays() {

@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 import Network
 import SwiftUI
@@ -27,6 +28,10 @@ final class AppModel: ObservableObject {
     private var parkedSink: AnyCancellable?
     /// An invite that arrived by link and waits for the join sheet.
     @Published var pendingInvite: String?
+    /// Join was tapped and iOS is resolving location permission. Keep this across a sheet
+    /// recreation when the system permission alert takes the app inactive.
+    @Published private var pendingInviteJoinAttempt: String?
+    private static let pendingInviteJoinAttemptKey = "sary.invite.pending-join-hash"
     /// First launch after installing from an invite page: the pasteboard probably holds the
     /// link (`DeferredInvite`). The first page offers «كمّل دعوتك» with the system «لصق» button.
     @Published var deferredInviteHint = false
@@ -42,6 +47,13 @@ final class AppModel: ObservableObject {
     @Published var offerNotifications = false
     /// «ابدأ الطلعة» at the end of «طلعة جديدة»: the live screen starts this outing when it opens.
     @Published var pendingStart: String?
+    /// A point selected on the home map should open the active outing and start a leg there,
+    /// instead of accidentally creating a second outing.
+    struct PendingMapDestination: Equatable {
+        var outingId: String
+        var destination: OutingDestination
+    }
+    @Published var pendingMapDestination: PendingMapDestination?
     /// «ملخص الرحلة» from the live map after the end: «طلعاتي» opens this summary.
     @Published var pendingSummary: String?
 
@@ -75,15 +87,18 @@ final class AppModel: ObservableObject {
             TripLogStore.forgetAll()
             TripStore.forgetAll()
             ReturnTripStore.forgetAll()
+            OutboundJunctionStore.forgetAll()
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
             OutingLegStore.forgetAll()
             RecentPlaces.forget()
+            PlaceNameCache().forget()
             /* Everything account deletion wipes, plus test-only state (dev settings, local API base). */
             LocalAccountData.wipe()
             for k in [OutingSession.modeKey, OutingSession.batteryKey, PushRegistrar.explainedKey, PushRegistrar.tokenKey, OnboardingProgress.key,
-                      "sary.dev.unlocked", LiveContextOverride.key] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
+                      ConvoyAlertPrefs.key,
+                      "sary.dev.unlocked", LiveContextOverride.key, Self.pendingInviteJoinAttemptKey] + TrailPrefs.keys + SpeedPrefs.keys + DrivingRealismPrefs.keys {
                 UserDefaults.standard.removeObject(forKey: k)
             }
             #if DEBUG
@@ -108,10 +123,12 @@ final class AppModel: ObservableObject {
         })
         let forcedOffline = arguments.contains("-SaryOffline")
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
-                guard let self else { return }
-                let now = forcedOffline ? false : path.status == .satisfied
-                if now && !self.online { self.session?.networkBack(); self.parkedSession?.networkBack() }
+            let now = forcedOffline ? false : path.status == .satisfied
+            /* NWPathMonitor can report immediately while SwiftUI is still creating its first
+             * StateObject graph. Publish on the next main-loop turn, and skip duplicate states. */
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.online != now else { return }
+                if now { self.session?.networkBack(); self.parkedSession?.networkBack() }
                 self.online = now
             }
         }
@@ -185,10 +202,14 @@ final class AppModel: ObservableObject {
             Task { try? await Task.sleep(nanoseconds: 1_500_000_000); activity.debugStart(name) }
         }
         #endif
-        Task {
+        Task { @MainActor [weak self] in
             /* A short branded beat, never a wait: the list loads behind it. */
             try? await Task.sleep(nanoseconds: arguments.contains("-SaryHoldSplash") ? 60_000_000_000 : 650_000_000)
-            launching = false
+            guard let self, self.launching else { return }
+            DispatchQueue.main.async {
+                guard self.launching else { return }
+                self.launching = false
+            }
         }
         Task {
             await push.refresh(signedIn: identity != nil)
@@ -432,6 +453,7 @@ final class AppModel: ObservableObject {
         /* «الرحلة» (start point, arrivals) is about where I went: it goes with the identity too. */
         TripStore.forgetAll()
         ReturnTripStore.forgetAll()
+        OutboundJunctionStore.forgetAll()
         /* Outing data of this identity (shared waypoints read offline) goes with it. */
         WaypointCache.wipeAll()
         /* «مساري» is about where I went: it goes with the identity. */
@@ -447,7 +469,10 @@ final class AppModel: ObservableObject {
     // MARK: outings
 
     func refresh() async {
-        guard identity != nil, !isDemo else { if isDemo { listPhase = .loaded }; return }
+        guard identity != nil, !isDemo else {
+            if isDemo, listPhase != .loaded { listPhase = .loaded }
+            return
+        }
         if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()
@@ -518,6 +543,54 @@ final class AppModel: ObservableObject {
                                  destination_name: "روضة الثمامة")
         }
         return try await api.preview(token: token)
+    }
+
+    /// Persist only a one-way fingerprint, never the invite token itself, so permission recovery
+    /// still works if iOS rebuilds the invite sheet or relaunches the app after its alert.
+    func markPendingInviteJoinAttempt(_ token: String) {
+        pendingInviteJoinAttempt = token
+        let fingerprint = Self.inviteFingerprint(token)
+        UserDefaults.standard.set(fingerprint, forKey: Self.pendingInviteJoinAttemptKey)
+        #if DEBUG
+        NSLog("[JOIN_DIAG] persist attempt=%@", String(fingerprint.prefix(8)))
+        #endif
+    }
+
+    func hasPendingInviteJoinAttempt(_ token: String) -> Bool {
+        if pendingInviteJoinAttempt == token {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] memory attempt matches")
+            #endif
+            return true
+        }
+        guard let stored = UserDefaults.standard.string(forKey: Self.pendingInviteJoinAttemptKey) else {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] no persisted attempt")
+            #endif
+            return false
+        }
+        guard stored == Self.inviteFingerprint(token) else {
+            #if DEBUG
+            NSLog("[JOIN_DIAG] persisted attempt mismatch; clearing")
+            #endif
+            UserDefaults.standard.removeObject(forKey: Self.pendingInviteJoinAttemptKey)
+            return false
+        }
+        pendingInviteJoinAttempt = token
+        #if DEBUG
+        NSLog("[JOIN_DIAG] restored attempt from fingerprint")
+        #endif
+        return true
+    }
+
+    func clearPendingInviteJoinAttempt(_ token: String) {
+        guard pendingInviteJoinAttempt == token || hasPendingInviteJoinAttempt(token) else { return }
+        pendingInviteJoinAttempt = nil
+        UserDefaults.standard.removeObject(forKey: Self.pendingInviteJoinAttemptKey)
+    }
+
+    private static func inviteFingerprint(_ token: String) -> String {
+        SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// «انضم للطلعة» once iOS allowed the location (the one-step join, `JoinMachine`): join,
@@ -612,7 +685,10 @@ final class AppModel: ObservableObject {
         return false
     }
 
-    func open(_ outingId: String) {
+    func open(_ outingId: String, mapDestination: OutingDestination? = nil) {
+        if let mapDestination {
+            pendingMapDestination = PendingMapDestination(outingId: outingId, destination: mapDestination)
+        }
         if let p = parkedSession {
             if p.id == outingId, session == nil { return unpark() }
             if p.id != outingId { closeParked() }

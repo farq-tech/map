@@ -50,6 +50,8 @@ describe("install guide (iPhone, no app)", () => {
 		expect(html).toContain("افتح سرى البارق، والدعوة جاهزة");
 		expect(html).toContain(`href="${TESTFLIGHT_APP_URL}"`);
 		expect(html).toContain(`href="${IOS_TESTFLIGHT_PUBLIC_URL}"`);
+		expect(html).toContain('data-testid="outing-guide-open-app"');
+		expect(html).toContain("عندك التطبيق؟ افتح الدعوة فيه");
 		expect(html).toContain("ما تبي تنزّل؟ تابع من المتصفح");
 		expect(html).toContain("/icons/sary-albarq-app.png");
 		/* The token never lands in the markup (it is copied on tap only). */

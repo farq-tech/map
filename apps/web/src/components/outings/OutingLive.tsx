@@ -99,6 +99,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 	const [panel, setPanel] = useState<OutingPanel>(initialPanel || "members");
 	const [snap, setSnap] = useState<SheetSnap>(initialPanel === "invite" ? "half" : "peek");
 	const [selected, setSelected] = useState<string | null>(null);
+	const [refreshingStatus, setRefreshingStatus] = useState(false);
 	/* One in-app confirmation for every irreversible step (no browser dialogs). */
 	const [confirm, setConfirm] = useState<{ kind: "end" | "leave" | "remove"; userId?: string; name?: string } | null>(null);
 	const [toast, setToast] = useState<string | null>(null);
@@ -1233,7 +1234,22 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 							</button>
 						</div>
 					) : !canLead && outing?.status === "created" ? (
-						<p className="sary-o-stage-line" data-testid="outing-stage">{isRTL ? "بانتظار أمير الرحلة ليبدأ" : "Waiting for the owner to start"}</p>
+						<div className="sary-o-stage-line" data-testid="outing-stage">
+							<p>{isRTL ? "بانتظار أمير الرحلة ليبدأ" : "Waiting for the owner to start"}</p>
+							<button
+								type="button"
+								className="sary-o-stage-refresh"
+								disabled={refreshingStatus}
+								data-testid="outing-refresh-status"
+								onClick={() => {
+									if (refreshingStatus) return;
+									setRefreshingStatus(true);
+									void live.reload().finally(() => setRefreshingStatus(false));
+								}}
+							>
+								{refreshingStatus ? (isRTL ? "جارٍ التحديث…" : "Refreshing…") : (isRTL ? "حدّث حالة الطلعة" : "Refresh outing status")}
+							</button>
+						</div>
 					) : outing?.status === "paused" ? (
 						<p className="sary-o-stage-line" data-testid="outing-stage">
 							{canLead ? (isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "The outing is paused — sharing is off for everyone") : isRTL ? "أمير الرحلة أوقفها مؤقتًا" : "The owner paused the outing"}

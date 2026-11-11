@@ -37,6 +37,12 @@ struct VisualEffectsSettings: Equatable {
     }
 }
 
+enum MapVisualDriving {
+    static func isDriving(driveMode: Bool, guidanceActive: Bool, speedMps: Double?) -> Bool {
+        driveMode || guidanceActive || (speedMps ?? 0) > 4.2
+    }
+}
+
 /// Where the map is and what the phone is doing: what the budget decides from.
 struct VisualContext: Equatable {
     var driving = false
@@ -162,7 +168,15 @@ final class MapVisualsHub: ObservableObject {
     @Published var lastFlightStats: String = ""
 
     weak var director: MapVisualsDirector? {
-        didSet { mapAttached = director != nil }
+        didSet {
+            /* The director is attached from UIViewRepresentable.makeUIView. Publish its
+             * SwiftUI-facing flag on the next main-loop turn, outside representable creation. */
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let attached = self.director != nil
+                if self.mapAttached != attached { self.mapAttached = attached }
+            }
+        }
     }
 
     /// «طيران درون استكشافي» around `point`. No-op while driving or with no live map.

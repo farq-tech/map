@@ -16,6 +16,7 @@ struct PlaceBriefSection: View {
     var terrain: TerrainSample
     var compact: Bool
     @Environment(\.sary) private var theme
+    @State private var detailsExpanded = false
 
     var body: some View {
         let p = theme.palette
@@ -35,14 +36,25 @@ struct PlaceBriefSection: View {
                 if compact {
                     Text(PlaceBriefPresenter.compactLine(ui)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                 } else {
-                    facts
+                    keyFacts
                 }
-                if let a = ui.assessment { AssessmentView(a: a, compact: compact) }
-                if !compact, !ui.hours.isEmpty { HoursStrip(hours: ui.hours).accessibilityIdentifier("brief.hours") }
-            }
-            if !compact {
-                sunRow
-                terrainRow
+                if let a = ui.assessment { AssessmentView(a: a, compact: compact || !detailsExpanded) }
+                if !compact { detailsToggle }
+                if !compact, detailsExpanded {
+                    secondaryFacts
+                    sunRow
+                    terrainRow
+                    if !ui.hours.isEmpty {
+                        VStack(alignment: .leading, spacing: theme.space(.s)) {
+                            Text("الساعات القادمة").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                            /* The floating SOS window occupies the bottom-left corner over sheets.
+                             * In RTL, reserve that edge so forecast tiles remain fully readable. */
+                            HoursStrip(hours: ui.hours)
+                                .padding(.trailing, 104)
+                                .accessibilityIdentifier("brief.hours")
+                        }
+                    }
+                }
             }
             sourceRow
         }
@@ -67,40 +79,76 @@ struct PlaceBriefSection: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(theme.space(.m))
+        .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(p.sunken))
         .accessibilityElement(children: .combine)
     }
 
-    private var facts: some View {
-        let p = theme.palette
-        let windHot = (ui.wind?.level ?? 0) > 0
-        let dustHot = (ui.dustLevel ?? .clear) >= .moderate
-        return VStack(alignment: .leading, spacing: theme.space(.s)) {
+    /// The first view answers the immediate questions for a point in the desert:
+    /// what is it like now, is anything concerning, and what changes soon?
+    private var keyFacts: some View {
+        let columns = [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))]
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: theme.space(.s)) {
             if let w = ui.wind {
-                HStack(spacing: theme.space(.s)) {
-                    WindArrow(degrees: w.arrowDeg, size: 18, tint: windHot ? p.warningText : p.accentText)
-                    Text([w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " · "))
-                        .saryNumber(.subhead, weight: windHot ? .bold : .medium)
-                        .foregroundStyle(windHot ? p.warningText : p.textPrimary).lineLimit(2)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("brief.wind")
+                metric(icon: "wind", value: [w.name, w.speed, w.gust].compactMap { $0 }.joined(separator: " · "),
+                       hot: w.level > 0, id: "brief.wind", arrow: w.arrowDeg)
             }
-            fact("sun.dust.fill", ui.dust, hot: dustHot, id: "brief.dust")
-            fact("eye.fill", "الرؤية \(ui.visibility)", id: "brief.visibility")
-            fact("humidity.fill", ui.humidity, id: "brief.humidity")
-            fact("sun.max.fill", "الأشعة فوق البنفسجية \(ui.uv)", id: "brief.uv")
-            fact("cloud.rain.fill", ui.rain, id: "brief.rain")
+            metric(icon: "sun.dust.fill", value: ui.dust, hot: (ui.dustLevel ?? .clear) >= .moderate, id: "brief.dust")
+            metric(icon: "eye.fill", value: "الرؤية \(ui.visibility)", hot: (ui.dustLevel ?? .clear) >= .moderate, id: "brief.visibility")
+            metric(icon: "cloud.rain.fill", value: ui.rain, id: "brief.rain")
         }
     }
 
-    private func fact(_ icon: String, _ text: String, hot: Bool = false, id: String) -> some View {
-        let p = theme.palette
-        return HStack(spacing: theme.space(.s)) {
-            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(hot ? p.warningText : p.textSecondary).frame(width: 18)
-            Text(text).saryNumber(.subhead, weight: hot ? .bold : .medium).foregroundStyle(hot ? p.warningText : p.textPrimary).lineLimit(2)
+    private var secondaryFacts: some View {
+        let columns = [GridItem(.flexible(), spacing: theme.space(.s)), GridItem(.flexible(), spacing: theme.space(.s))]
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: theme.space(.s)) {
+            metric(icon: "humidity.fill", value: ui.humidity, id: "brief.humidity")
+            metric(icon: "sun.max.fill", value: "الأشعة فوق البنفسجية \(ui.uv)", id: "brief.uv")
         }
+    }
+
+    private func metric(icon: String, value: String, hot: Bool = false, id: String, arrow: Double? = nil) -> some View {
+        let p = theme.palette
+        return HStack(alignment: .top, spacing: theme.space(.s)) {
+            Group {
+                if icon == "wind" {
+                    WindArrow(degrees: arrow, size: 17, tint: hot ? p.warningText : p.accentText)
+                } else {
+                    Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(hot ? p.warningText : p.textSecondary)
+                }
+            }
+            .frame(width: 18, height: 18)
+            Text(value).saryNumber(.footnote, weight: hot ? .bold : .medium)
+                .foregroundStyle(hot ? p.warningText : p.textPrimary)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .padding(.horizontal, theme.space(.m))
+        .padding(.vertical, theme.space(.s))
+        .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(id)
+    }
+
+    private var detailsToggle: some View {
+        let p = theme.palette
+        return Button {
+            withAnimation(theme.animation(.snappy)) { detailsExpanded.toggle() }
+        } label: {
+            HStack(spacing: theme.space(.s)) {
+                Image(systemName: detailsExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                Text(detailsExpanded ? "إخفاء التفاصيل" : "التفاصيل والتوقعات")
+                    .saryText(.footnote, weight: .bold)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(p.accentText)
+            .padding(.vertical, theme.space(.xs))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("brief.more")
+        .accessibilityValue(detailsExpanded ? "مفتوحة" : "مغلقة")
     }
 
     private var sunRow: some View {

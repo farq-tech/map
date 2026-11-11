@@ -526,10 +526,12 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     Text("الخرائط © Mapbox و© OpenStreetMap المساهمون. صور الأقمار © Maxar وغيرها عبر Mapbox.")
                     Text("محطات الوقود من OpenStreetMap (ODbL).")
-                    Text("خط «تجوّل» (Tajawal) برخصة SIL Open Font License.")
+                    Text("خط «هوية» (ITF Huwiya Arabic).")
                     Text("مجسّم السيارة مبني على «Offroader SUV» (CC0).")
                     HiResLicenseNotice()
                     VoiceDenoiseLicenseNotice()
+                    CampSitesAttributionNotice()
+                    DesertGazetteerAttributionNotice()
                 }
                 .saryText(.subhead).foregroundStyle(p.textSecondary)
                 .padding(.vertical, theme.space(.s))

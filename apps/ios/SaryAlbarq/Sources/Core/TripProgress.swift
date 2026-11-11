@@ -115,10 +115,35 @@ struct TripRecord: Codable, Equatable {
     var me = ArrivalDetector()
     var arrivedManually = false
     var endedAtMs: Double?
+    /// The destination this device associated with its persisted arrival detector. Old records
+    /// did not store this, so their arrival state is discarded once a destination is first bound.
+    var arrivalDestinationLat: Double?
+    var arrivalDestinationLng: Double?
     /// Members (me included) and when they arrived, as this phone saw it.
     var arrivals: [String: Double] = [:]
     /// Friends' detectors (fed only from their fresh positions).
     var friends: [String: ArrivalDetector] = [:]
+
+    /// Keep arrival state scoped to one destination. A previous stop must never make a newly
+    /// selected destination look reached after the app restores its per-outing record.
+    mutating func bindArrivalDestination(_ destination: LngLat) {
+        let changed: Bool
+        if let lat = arrivalDestinationLat, let lng = arrivalDestinationLng {
+            changed = Vehicle.distanceMeters(LngLat(lng: lng, lat: lat), destination) > 5
+        } else {
+            // Migration from records written before the target was persisted: don't trust an
+            // unscoped arrival (or an unfinished dwell) against today's destination.
+            changed = true
+        }
+        if changed {
+            me = ArrivalDetector()
+            arrivedManually = false
+            arrivals.removeAll()
+            friends.removeAll()
+        }
+        arrivalDestinationLat = destination.lat
+        arrivalDestinationLng = destination.lng
+    }
 
     enum Event: Equatable {
         case started(TripStartPoint)
@@ -236,6 +261,166 @@ enum ReturnTripStore {
     }
 
     static func forgetAll(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+}
+
+// MARK: - «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road
+
+/// Where an outing's guidance to its destination left the paved road (the city ↔ desert
+/// junction of its route), saved during that trip (this device only; wiped with the account).
+/// A return trip uses it to cut the outbound trail into its city part and its desert part.
+enum OutboundJunctionStore {
+    static let key = "sary.trip.roadJunction.v1"
+
+    static func load(_ outingId: String, defaults: UserDefaults = .standard) -> LngLat? {
+        guard let a = (defaults.dictionary(forKey: key) as? [String: [Double]])?[outingId], a.count == 2 else { return nil }
+        return LngLat(lng: a[0], lat: a[1])
+    }
+
+    static func save(_ outingId: String, _ p: LngLat, defaults: UserDefaults = .standard) {
+        var d = (defaults.dictionary(forKey: key) as? [String: [Double]]) ?? [:]
+        d[outingId] = [(p.lng * 1e6).rounded() / 1e6, (p.lat * 1e6).rounded() / 1e6]
+        defaults.set(d, forKey: key)
+    }
+
+    static func forgetAll(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+}
+
+/// The owner's rule for «طريق الرجعة»: in the desert the return follows EXACTLY the outbound
+/// path (the recorded trail, `BackTrack`); in the city it may take the fastest road (the trip's
+/// normal guidance). Pure decisions; the live screen applies them (`LiveOutingController+Trip`).
+enum ReturnRoute {
+    /// How the junction (where the outbound trail left the road network) was found.
+    enum JunctionSource: Equatable {
+        /// The road end of the outbound guidance's route (`OutboundJunctionStore`), on the trail.
+        case savedRoute
+        /// The last stretch of the trail the road matcher put on a road (`TrailMatchCache`).
+        case roadMatch
+        /// Where the trail entered the desert region of its destination (`DesertGrid.bboxes`).
+        case desertRegion
+        /// Nothing known: the whole trail counts as desert (retraced end to end, the safe choice).
+        case none
+    }
+
+    struct Split: Equatable {
+        /// Index in the outbound trail (start → destination) where its desert part starts.
+        /// 0: the whole trail is desert; the last index: it never left the road.
+        var junction: Int
+        var source: JunctionSource
+    }
+
+    /// The saved road end counts only if the trail passed this close to it (the driver may
+    /// have left the road somewhere else than the route said).
+    static let savedOnTrailM = 300.0
+    /// A matched stretch shorter than this is not «the road network» (a glitch, a crossing).
+    static let minRoadSpanM = 200.0
+    /// The matcher must have looked at the trail up to this close to its end, or what it did
+    /// not match says nothing.
+    static let matchCoverSlackMs = 120_000.0
+    /// Farther than this from the outbound trail, the return is not «on» it: normal guidance.
+    static let maxStartOffM = 3_000.0
+
+    /// Where a route stops being paved: its explicit road end (a hybrid road + desert route),
+    /// else the end of its last paved stretch, else its end. Nil for a pure desert-grid route.
+    static func roadEnd(of r: NavRoute) -> LngLat? {
+        if let e = r.roadEnd { return e }
+        if r.id.contains("desert") { return nil }
+        return pavedEnd(r.surfaceRuns, fallback: r.end)
+    }
+
+    /// The last point of the last paved run (`fallback` when the runs say nothing).
+    static func pavedEnd(_ runs: [NavSurfaceRun], fallback: LngLat?) -> LngLat? {
+        guard let i = runs.lastIndex(where: { $0.kind == .paved }), let e = runs[i].coordinates.last else { return fallback }
+        return e
+    }
+
+    /// Cut the outbound trail at its city ↔ desert junction: the saved road end first, then
+    /// the road matcher, then the desert region; nothing known → the whole trail is desert.
+    static func split(_ pts: [TrailPoint], saved: LngLat?, match: TrailMatchCache?,
+                      region: (LngLat) -> String? = { DesertAwareRouteProvider.regionName(containing: $0) }) -> Split {
+        guard pts.count >= 2, let last = pts.last else { return Split(junction: 0, source: .none) }
+        if let saved, let n = nearestIndex(pts, to: saved), Vehicle.distanceMeters(pts[n].position, saved) <= savedOnTrailM {
+            return Split(junction: n, source: .savedRoute)
+        }
+        if let c = match, c.doneUpToT >= last.t - matchCoverSlackMs {
+            let roadEndT = c.spans.filter { length($0.line) >= minRoadSpanM }.map(\.endT).max()
+            if let t = roadEndT, let n = pts.lastIndex(where: { $0.t <= t }) {
+                return Split(junction: n, source: .roadMatch)
+            }
+        }
+        if let r = region(last.position), let out = pts.lastIndex(where: { region($0.position) != r }) {
+            return Split(junction: min(out + 1, pts.count - 1), source: .desertRegion)
+        }
+        return Split(junction: 0, source: .none)
+    }
+
+    /// The desert part, junction first: `BackTrack` guides to its path's FIRST point, so the
+    /// outbound order (start → destination) already leads back to the junction.
+    static func desertLeg(_ pts: [TrailPoint], split: Split) -> [TrailPoint] {
+        guard pts.indices.contains(split.junction) else { return [] }
+        var leg = Array(pts[split.junction...])
+        /* The junction's own gap flag was about the stretch before it, which is not in this leg. */
+        leg[0].gap = false
+        return leg
+    }
+
+    enum Start: Equatable {
+        /// Retrace this (the desert part of the outbound trail) back to the junction.
+        case desertTrail([TrailPoint])
+        /// The city part (or off the trail): the trip's normal guidance, fastest road.
+        case road
+    }
+
+    /// When the return trip's guidance starts, from `me`: on the desert part (beyond the
+    /// junction) → back along the outbound trail; on the city part, at the junction, or far
+    /// from the trail → the normal road guidance.
+    static func start(trail pts: [TrailPoint], split: Split, me: LngLat) -> Start {
+        let leg = desertLeg(pts, split: split)
+        guard leg.count >= 2, Vehicle.distanceMeters(me, leg[0].position) > BackTrack.arrivedM else { return .road }
+        var best: (seg: Int, d: Double)?
+        for i in 0..<(pts.count - 1) {
+            let d = TrailGeo.segmentDistance(me, pts[i].position, pts[i + 1].position)
+            if best == nil || d < best!.d { best = (i, d) }
+        }
+        guard let b = best, b.d <= maxStartOffM, b.seg >= split.junction else { return .road }
+        return .desertTrail(leg)
+    }
+
+    private static func nearestIndex(_ pts: [TrailPoint], to p: LngLat) -> Int? {
+        pts.indices.min { Vehicle.distanceMeters(pts[$0].position, p) < Vehicle.distanceMeters(pts[$1].position, p) }
+    }
+
+    private static func length(_ line: [LngLat]) -> Double {
+        zip(line, line.dropFirst()).reduce(0.0) { $0 + Vehicle.distanceMeters($1.0, $1.1) }
+    }
+}
+
+/// One return trip's guidance on this screen: undecided until the trip's guidance would
+/// start, then the desert leg (`BackTrack` on the outbound trail, the trip's own road guidance
+/// waits) until it arrives at the junction, then the road (the trip's normal guidance).
+struct ReturnGuide: Equatable {
+    enum Phase: Equatable { case undecided, desert, road }
+    private(set) var phase: Phase = .undecided
+
+    /// The trip's road guidance must not start (no new desert route while retracing the trail).
+    var holdsRoadGuidance: Bool { phase == .desert }
+
+    mutating func begin(_ s: ReturnRoute.Start) {
+        guard phase == .undecided else { return }
+        if case .desertTrail = s { phase = .desert } else { phase = .road }
+    }
+
+    /// A back-track update of the desert leg: true once, when it reached the junction — hand
+    /// over to the road guidance now.
+    mutating func backTrackUpdate(_ st: BackTrackStatus) -> Bool {
+        guard phase == .desert, st.arrived else { return false }
+        phase = .road
+        return true
+    }
+
+    /// The desert leg was stopped (by the person, or replaced by «على مساري»): the road from here.
+    mutating func cancel() {
+        if phase == .desert { phase = .road }
+    }
 }
 
 // MARK: - remaining distance

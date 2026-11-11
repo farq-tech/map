@@ -252,7 +252,7 @@
 	--glass-dark-blur: 22px;
 
 	/* ─── Typography: families ─── */
-	--font-sans: "Inter", "ITF Huwiya Arabic", system-ui, sans-serif;
+	--font-sans: "ITF Huwiya Arabic", "Inter", system-ui, sans-serif;
 	/* Arabic-first stack for RTL-only surfaces */
 	--font-arabic: "ITF Huwiya Arabic", "Inter", system-ui, sans-serif;
 	--font-brand: "Futura", "Inter", system-ui, sans-serif;

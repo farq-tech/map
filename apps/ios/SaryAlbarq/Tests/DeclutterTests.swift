@@ -151,10 +151,13 @@ final class DeclutterTests: XCTestCase {
         XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
         XCTAssertEqual(Set(ids), ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                                  "outing-timer", "outing-brief", "outing-save-place", "outing-weather", "outing-waypoint-add", "outing-nearest-open",
+                                  "outing-timer", "outing-location-tools", "outing-nearest-open", "outing-weather-tools",
                                   "outing-explore", "outing-fit"])
+        let nestedIDs = g.flatMap(\.items).flatMap(\.children).map(\.accessibilityID)
+        XCTAssertEqual(Set(nestedIDs), ["outing-brief", "outing-save-place", "outing-waypoint-add", "outing-weather", "outing-qibla"])
         XCTAssertEqual(LiveActionCatalog.tripRouteActions(.init()).map(\.accessibilityID), ["plan.follow"])
-        XCTAssertEqual(ids.count, Set(ids).count, "no duplicate entry")
+        let allIDs = ids + nestedIDs
+        XCTAssertEqual(allIDs.count, Set(allIDs).count, "no duplicate entry")
         XCTAssertTrue(Set(g.flatMap(\.items).map(\.id)).isDisjoint(with: LiveActionCatalog.inQuickRow), "nothing the quick row already has")
         let active = LiveActionCatalog.groups(.init(backTracking: true, following: true, hasRoute: true, stuck: true)).flatMap(\.items)
         XCTAssertEqual(active.first { $0.id == "stuck" }?.title, "أنا مغرّز")
@@ -179,7 +182,7 @@ final class DeclutterTests: XCTestCase {
     func testActionCatalogOnAnEndedTrip() {
         let ids = Set(LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).map(\.id))
         XCTAssertTrue(ids.isDisjoint(with: LiveActionCatalog.needsRunningTrip), "\(ids)")
-        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "nearest", "weather"]))
+        XCTAssertTrue(ids.isSuperset(of: ["search", "navigate", "route", "explore", "nearest", "weatherTools"]))
         XCTAssertFalse(LiveActionCatalog.groups(.init(ended: true)).contains { $0.items.isEmpty }, "no empty group")
     }
 

@@ -9,7 +9,8 @@ extension LiveOutingController {
         if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
         #endif
         /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla. */
-        return SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
+        let streets = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
+        return DesertAwareRouteProvider(base: streets)
     }
 
     // MARK: starting points
@@ -131,8 +132,18 @@ extension LiveOutingController {
 
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
     func navLongPressed(_ p: LngLat, name: String? = nil) {
-        guard !nav.isActive else { return }
-        navigate(NavTargets.point(p, name: name))
+        guard case let .success(target) = NavTargets.point(p, name: name) else { return }
+        guard hasFreshFix else {
+            modal = nil
+            return beginFixWait(.immediate(target))
+        }
+        if case .immediate = fixWait?.pending { fixWait = nil }
+        backTrackOffForNav()
+        following = false
+        modal = nil
+        sheetDetent = .peek
+        nav.startImmediately(to: target)
+        navCameraKey += 1
     }
 
     func startNav() {
@@ -209,15 +220,20 @@ extension LiveOutingController {
             d.camera = .fit(pts, bottomShare: 0.55)
             d.cameraKey = navCameraKey * 1000 + nav.routes.count
         case .guiding:
+            d.guidanceActive = true
             if let r = nav.active {
                 /* Traffic colours along what is left (Mapbox `driving-traffic`); none in the desert / Valhalla. */
                 let done = nav.progress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
+                let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done)
+                /* Surfaces are drawn only without traffic colours; like traffic, only what is left. */
+                let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done)
                 d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true,
-                                  traffic: NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done))]
+                                  traffic: traffic, surfaces: surfaces)]
             }
             d.camera = navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
         case .offRoad, .arrived:
+            d.guidanceActive = nav.phase == .offRoad
             d.camera = nav.phase == .arrived ? nil : navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
         case .idle:

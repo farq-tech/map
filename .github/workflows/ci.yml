@@ -45,4 +45,4 @@ jobs:
         working-directory: apps/tiles
         run: |
           pip install -r requirements-test.txt
-          python3 -m unittest test_build_tiles
+          python3 -m unittest test_build_tiles test_serve_desert

@@ -37,6 +37,7 @@ final class TripTracker {
         let before = record
         let nowMs = now.timeIntervalSince1970 * 1000
         let dest = destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
+        if let dest { record.bindArrivalDestination(dest) }
         if v.status == .ended {
             record.ended(nowMs: nowMs)
             commit(before, events: [])

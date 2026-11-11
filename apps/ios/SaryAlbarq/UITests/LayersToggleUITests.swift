@@ -22,18 +22,17 @@ final class LayersToggleUITests: XCTestCase {
         let sheet = app.descendants(matching: .any)["explore.layers.sheet"]
         XCTAssertTrue(sheet.waitForExistence(timeout: 20))
         sleep(2)
-        for id in ["explore-osm-tracks", "explore-hires"] {
+        // The sheet scroll helper moves downward only; visit top-to-bottom.
+        for id in ["explore-hires", "explore-osm-tracks"] {
             let sw = app.switches[id].firstMatch
             XCTAssertTrue(sw.waitForExistence(timeout: 5), id)
             sw.scrollIntoView(in: app, margin: 120)
             XCTAssertTrue(sw.isHittable, "\(id) on screen")
             let before = sw.value as? String
-            let inner = sw.switches.firstMatch
-            let target = inner.exists ? inner : sw
-            target.tap()
+            sw.tap()
             sleep(1)
             XCTAssertNotEqual(sw.value as? String, before, "\(id) flips with a tap")
-            target.tap()
+            sw.tap()
             sleep(1)
             XCTAssertEqual(sw.value as? String, before, "\(id) flips back")
         }

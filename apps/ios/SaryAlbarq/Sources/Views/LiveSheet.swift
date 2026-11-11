@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 
 /// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
@@ -31,7 +32,7 @@ struct LiveSheet: View {
                 /* One line: the people (the trip's numbers are in the header above), then the key actions. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
-                if controller.showsQuickRow(drive: theme.drive) {
+                if controller.showsQuickRow(drive: theme.drive) && !controller.exploreActive {
                     LiveQuickRow(controller: controller)
                 }
             }
@@ -49,6 +50,7 @@ struct LiveSheet: View {
             }
         }
         .padding(.top, theme.space(.s))
+        .frame(maxWidth: 720, maxHeight: .infinity, alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(SafetyPrompts(safety: controller.safety))
         .modifier(FeatureModals(controller: controller, features: controller.features))
@@ -173,6 +175,10 @@ struct LiveSheet: View {
                          changeDestination: controller.session.view?.iLead == true ? { controller.changeDestinationFromWeather() } : nil,
                          destinationNote: controller.planModel?.destinationLocalOnly == true ? LocalDestinationCopy.note : nil)
                 .presentationDetents([.large])
+        case .qibla:
+            QiblaView(fallback: controller.location.lastFix.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+                      close: { controller.modal = nil })
+                .presentationDetents([.large])
         case let .weatherAt(point):
             WeatherPointSheet(point: point, close: { controller.modal = nil })
                 .presentationDetents([.medium, .large])
@@ -208,6 +214,18 @@ struct LiveSheet: View {
                             me: controller.session.myUserId,
                             close: { controller.modal = nil })
                 .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case .campSuggest:
+            CampSuggestSheet(controller: controller)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        case let .campSite(id):
+            CampSiteTappedSheet(controller: controller, siteId: id)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        case let .desertRoute(target, name, rain, weatherAvailable):
+            DesertRouteSheet(controller: controller, target: target, name: name, rain: rain, weatherAvailable: weatherAvailable)
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         case .layers:
             ExploreLayersSheet(controller: controller)
@@ -362,12 +380,16 @@ private struct LiveSheetBody: View {
         return false
     }
 
+    private var shouldShowTripCard: Bool {
+        controller.showsTripStrip && (arrivedOrOver || (controller.session.view?.iOwn == true && ui.status != .notStarted))
+    }
+
     var body: some View {
         let actions = controller.actions
         Group {
             TripStatusCallout(controller: controller, ui: ui)
-            /* Arrived or over: «أنهِ الرحلة» / «ملخص الرحلة» is what matters now, so the trip card comes into the sheet. */
-            if controller.showsTripStrip, arrivedOrOver {
+            /* Keep the owner's trip controls visible throughout the outing, including the end action. */
+            if shouldShowTripCard {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
             }
             VStack(spacing: 0) {
@@ -396,7 +418,9 @@ private struct LiveSheetBody: View {
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
             ConvoySection(controller: controller, features: features)
-            if !features.waypoints.isEmpty {
+            // Keep the section available for the first waypoint and show the honest
+            // unavailable state when the server has not deployed its routes.
+            if !features.waypoints.isEmpty || features.phase != .loading {
                 WaypointsSection(controller: controller, features: features)
             }
         }
@@ -419,12 +443,19 @@ private struct TripStatusCallout: View {
             switch ui.status {
             case .notStarted:
                 VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "بانتظار أمير الرحلة يبدأ الطلعة.", tone: .info)
+                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها.", tone: .info)
                         .accessibilityIdentifier("live.notStarted")
                     if v?.iLead == true {
                         Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
                             .buttonStyle(.saryPrimary)
                             .accessibilityIdentifier("live.start")
+                    } else {
+                        Button { controller.refreshWaitingStatus() } label: {
+                            SaryButtonLabel(title: "حدّث حالة الطلعة", systemImage: "arrow.clockwise", busy: controller.session.refreshingWaitingStatus)
+                        }
+                        .buttonStyle(.sary(.secondary))
+                        .disabled(controller.session.refreshingWaitingStatus)
+                        .accessibilityIdentifier("live.refreshWaitingStatus")
                     }
                 }
             case .paused:

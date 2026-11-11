@@ -41,7 +41,14 @@ final class VoiceNoteDenoiseTests: XCTestCase {
 
     func testSTFTAnalysisThenSynthesisIsTheIdentity() {
         /* libDF's Vorbis window + wnorm reconstruct perfectly after the n_fft − hop delay. */
-        let x = (0..<48_000).map { Float(0.3 * sin(Double($0) * 0.013) + 0.1 * sin(Double($0) * 0.41)) }
+        var x: [Float] = []
+        x.reserveCapacity(48_000)
+        for index in 0..<48_000 {
+            let phase = Double(index)
+            let lowTone = 0.3 * sin(phase * 0.013)
+            let highTone = 0.1 * sin(phase * 0.41)
+            x.append(Float(lowTone + highTone))
+        }
         let padded = x + [Float](repeating: 0, count: 960)
         let frames = padded.count / 480
         var re = [Float](repeating: 0, count: frames * 481), im = re
@@ -53,7 +60,12 @@ final class VoiceNoteDenoiseTests: XCTestCase {
     }
 
     func testResampleByThreeKeepsLengthAndTheVoiceBand() {
-        let x = (0..<16_000).map { Float(0.5 * sin(2 * Double.pi * 1_000 * Double($0) / 16_000)) }
+        var x: [Float] = []
+        x.reserveCapacity(16_000)
+        for index in 0..<16_000 {
+            let phase = 2 * Double.pi * 1_000 * Double(index) / 16_000
+            x.append(Float(0.5 * sin(phase)))
+        }
         let up = Resample3.up(x)
         XCTAssertEqual(up.count, 48_000)
         let back = Resample3.down(up, count: x.count)

@@ -1,5 +1,6 @@
 import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
+import CoreMedia
 import UIKit
 import XCTest
 @testable import SaryAlbarq
@@ -74,6 +75,52 @@ final class NavOptionMappingTests: XCTestCase {
         XCTAssertEqual(NavRouteChoice.order([b, a], options: .init(fastest: true)).map(\.id), ["a", "b"])
         XCTAssertEqual(NavRouteChoice.order([a, b], options: .init(fastest: false)).map(\.id), ["b", "a"])
         XCTAssertEqual(NavRouteChoice.delta(b, best: a), "أبطأ ٤ د")
+    }
+}
+
+final class NavPiPSnapshotTests: XCTestCase {
+    func testSameEndpointsAndPointCountButChangedRouteGeometryInvalidatesSnapshot() {
+        let routeA = NavRoute(id: "same-route-id", coordinates: [
+            LngLat(lng: 46.0, lat: 24.0),
+            LngLat(lng: 46.1, lat: 24.1),
+            LngLat(lng: 46.2, lat: 24.2),
+        ], distanceM: 1_000, durationS: 200, steps: [])
+        let routeB = NavRoute(id: "same-route-id", coordinates: [
+            LngLat(lng: 46.0, lat: 24.0),
+            LngLat(lng: 46.1, lat: 24.15),
+            LngLat(lng: 46.2, lat: 24.2),
+        ], distanceM: 1_000, durationS: 200, steps: [])
+
+        func snapshot(_ route: NavRoute) -> NavPiPSnapshot {
+            NavPiPSnapshot(target: "الوجهة", road: "الطريق", instruction: "تابع", symbol: "arrow.up",
+                           distanceToTurn: "١ كم", distanceRemaining: "١ كم", timeRemaining: "دقيقتان",
+                           route: route.coordinates, routeRevision: route.geometryRevision, progress: 0)
+        }
+
+        XCTAssertEqual(routeA.coordinates.count, routeB.coordinates.count)
+        XCTAssertEqual(routeA.coordinates.first, routeB.coordinates.first)
+        XCTAssertEqual(routeA.coordinates.last, routeB.coordinates.last)
+        XCTAssertNotEqual(snapshot(routeA), snapshot(routeB), "PiP must refresh for a route change even when endpoints and count match")
+        XCTAssertEqual(snapshot(routeA), snapshot(routeA), "progress-only updates retain the route revision")
+    }
+}
+
+final class NavPiPFrameTimingTests: XCTestCase {
+    func testFirstHostClockFrameIsAccepted() {
+        let now = CMTime(seconds: 100, preferredTimescale: 600)
+        XCTAssertEqual(NavPiPFrameTiming.next(current: now, after: .invalid), now)
+    }
+
+    func testFramesAreRateLimitedAndMonotonic() {
+        let previous = CMTime(seconds: 100, preferredTimescale: 600)
+        XCTAssertNil(NavPiPFrameTiming.next(current: CMTime(seconds: 100.5, preferredTimescale: 600), after: previous))
+        XCTAssertNil(NavPiPFrameTiming.next(current: CMTime(seconds: 99, preferredTimescale: 600), after: previous))
+        XCTAssertEqual(NavPiPFrameTiming.next(current: CMTime(seconds: 101, preferredTimescale: 600), after: previous),
+                       CMTime(seconds: 101, preferredTimescale: 600))
+    }
+
+    func testInvalidCurrentFrameTimeIsRejected() {
+        XCTAssertNil(NavPiPFrameTiming.next(current: .invalid, after: .invalid))
     }
 }
 

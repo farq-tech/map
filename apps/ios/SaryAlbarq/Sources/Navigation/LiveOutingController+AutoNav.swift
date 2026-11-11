@@ -62,6 +62,7 @@ extension LiveOutingController {
     /// Every change (session, GPS, the trip clock): decide, then act.
     func autoNavTick() {
         guard autoNavAllowed else { return }
+        recordOutboundJunction()
         if let f = location.lastFix, Date().timeIntervalSince1970 * 1000 - f.atMs < 30_000, !tripStops.isEmpty {
             let s = TripAutoNav.passStops(autoNavState, stops: tripStops, me: LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy)
             if s != autoNavState { setAutoNavState(s) }
@@ -81,8 +82,12 @@ extension LiveOutingController {
             guard backTrack == nil, trackFollow == nil || autoNavFollowId != nil else { return }
             /* Not before the plan has loaded: its stops decide where the first leg goes. */
             guard planModel?.planPhase != .loading else { return }
+            /* «طريق الرجعة» from the desert: back on the outbound trail first, the road after. */
+            if startReturnDesertLegIfNeeded(t) { return }
             autoNavGo(t, resumed: nav.phase == .arrived)
         case let .retarget(t):
+            /* Never a new desert route while the return's desert leg retraces the trail. */
+            guard !returnGuide.holdsRoadGuidance else { return }
             autoNavGo(t, resumed: true)
         case .finish:
             nav.finishArrival()

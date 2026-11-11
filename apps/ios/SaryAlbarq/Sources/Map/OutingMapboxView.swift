@@ -176,6 +176,7 @@ struct OutingMapboxView: UIViewRepresentable {
         try? map.mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: layer.maxZoom))
         context.coordinator.theme = theme
         context.coordinator.attach(map)
+        CampSitesMapLayer.attach(map)
         let first = layer
         ArabicBasemap.load(layer) { [weak coordinator = context.coordinator] json in
             /* Same style with place names in Arabic; English labels only if it cannot be fetched. */
@@ -222,6 +223,8 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setTerrain3D(terrain3D)
         c.setExplore(explore)
         HiResImagery.of(map).update(hiRes)
+        /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
+        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome))
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
             switch req.kind {
@@ -1998,8 +2001,10 @@ extension OutingMapboxView.Coordinator {
         if planDrawing.plan.route.count >= 2 { routes.append(planDrawing.plan.route) }
         /* UX ٢١: after the end the slope warning is history — no routes, no legend. */
         if tripEnded { routes = [] }
-        /* Same idea as LiveContextRule: guidance, drive mode, or clearly moving (> ~15 km/h). */
-        let driving = theme.drive || navDrawer.ownsCamera || (me?.speedMps ?? 0) > 4.2
+        /* Camera fitting a route preview is not driving. Block the drone for active guidance,
+         * explicit drive mode, or a clearly moving vehicle. */
+        let driving = MapVisualDriving.isDriving(driveMode: theme.drive, guidanceActive: navLast.guidanceActive,
+                                                  speedMps: me?.speedMps)
         return MapVisualInputs(me: me.map { recs[$0.id]?.shown ?? $0.position }, driving: driving, exploring: exploreDrawer.last.active,
                                terrain3D: terrain3D, night: theme.night, layer: layer, chrome: chrome, routes: routes)
     }

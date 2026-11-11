@@ -49,6 +49,46 @@ test('search finds a real named well when the substring exists', () => {
   assert.ok(hit.features.some((f) => f.properties.id === named.properties.id));
 });
 
+test('category intent returns only observed features of that type', () => {
+  assert.deepEqual(outdoor.categoryIntent('وين نفود').kinds, ['nafud']);
+  assert.equal(outdoor.categoryIntent('وين نفود').categoryOnly, true);
+  assert.deepEqual(outdoor.categoryIntent('وين أقرب نفود؟').kinds, ['nafud']);
+  const hits = outdoor.searchFeatures('وين نفود', 40);
+  assert.ok(hits.count > 0, 'the OSM extract contains some explicitly named nafud features');
+  assert.ok(hits.features.every((f) => f.properties.kind === 'nafud'));
+  const named = outdoor.searchFeatures('نفود الغويطة', 40);
+  assert.ok(named.features.every((f) => f.properties.kind === 'nafud' && /الغويطة/.test(f.properties.name || '')),
+    'a specific desert name keeps the category constraint while narrowing by name');
+});
+
+test('search with a user location sorts nearest-first and returns measured distances', () => {
+  const me = { lat: 24.7136, lng: 46.6753 };
+  const hits = outdoor.searchFeatures('نفود', 40, me);
+  assert.ok(hits.features.length > 1);
+  const distances = hits.features.map((f) => f.properties.distance_m);
+  assert.ok(distances.every(Number.isFinite));
+  assert.deepEqual(distances, [...distances].sort((a, b) => a - b));
+});
+
+test('outdoor search route validates the optional user location', async () => {
+  const express = require('express');
+  const app = express();
+  app.use('/api/outdoor', require('../routes/outdoor')());
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api/outdoor/search`;
+  try {
+    const ok = await fetch(`${base}?q=${encodeURIComponent('نفود')}&near=24.7136,46.6753`);
+    assert.equal(ok.status, 200);
+    const body = await ok.json();
+    assert.ok(body.features.length > 0);
+    assert.ok(body.features.every((f) => f.properties.kind === 'nafud' && Number.isFinite(f.properties.distance_m)));
+    const bad = await fetch(`${base}?q=${encodeURIComponent('نفود')}&near=0,0`);
+    assert.equal(bad.status, 400);
+  } finally {
+    server.close();
+  }
+});
+
 test('getFeature 404s on a made-up id', () => {
   assert.equal(outdoor.getFeature('well:not-a-real-osm-id'), null);
 });

@@ -30,7 +30,9 @@ enum LocationTuning {
         let parked = (speedMps ?? 0) < Policy.stillMps
         switch mode {
         case .precise:
-            return Settings(desiredAccuracy: tier == .fast ? kCLLocationAccuracyBestForNavigation : kCLLocationAccuracyBest,
+            /* At rest, precise means a precise *position*, not constant navigation-grade sampling.
+               Keep ten-metre requested accuracy for the convoy heartbeat; moving uses best/nav. */
+            return Settings(desiredAccuracy: parked ? kCLLocationAccuracyNearestTenMeters : (tier == .fast ? kCLLocationAccuracyBestForNavigation : kCLLocationAccuracyBest),
                             distanceFilter: kCLDistanceFilterNone)
         case .balanced:
             return Settings(desiredAccuracy: parked ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest,

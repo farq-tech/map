@@ -176,15 +176,21 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         var steps: [NavStep] = []
         var unpaved = false, tolls = false
         var names: [String: Double] = [:]
+        var surfaceRuns: [NavSurfaceRun] = []
         for (i, s) in msteps.enumerated() {
             let lanes = s.intersections?.first?.approachLanes.map { ind -> [NavLane] in
                 let usable = s.intersections?.first?.usableApproachLanes ?? IndexSet()
                 let preferred = s.intersections?.first?.preferredApproachLanes ?? IndexSet()
                 return ind.enumerated().map { j, l in NavLane(directions: laneDirections(l), valid: usable.contains(j), preferred: preferred.contains(j)) }
             } ?? []
+            var stepUnpaved = false
             for x in s.intersections ?? [] {
-                if x.outletRoadClasses?.contains(.unpaved) == true { unpaved = true }
+                if x.outletRoadClasses?.contains(.unpaved) == true { unpaved = true; stepUnpaved = true }
                 if x.outletRoadClasses?.contains(.toll) == true || x.tollCollection != nil { tolls = true }
+            }
+            let stepCoordinates = (s.shape?.coordinates ?? []).map { LngLat(lng: $0.longitude, lat: $0.latitude) }
+            if stepCoordinates.count >= 2 {
+                surfaceRuns.append(NavSurfaceRun(kind: stepUnpaved ? .unpaved : .paved, coordinates: stepCoordinates))
             }
             if let n = s.names?.first, !n.isEmpty { names[n, default: 0] += s.distance }
             /* Directions speaks the NEXT maneuver along a step; ours hangs off the maneuver itself. */
@@ -204,7 +210,10 @@ final class MapboxNavRoutingProvider: NavRoutingProvider {
         }
         let via = names.sorted { $0.value > $1.value }.prefix(1).map(\.key).first
         return NavRoute(id: id, coordinates: coords, distanceM: route.distance, durationS: route.expectedTravelTime,
-                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via, congestion: congestion(route))
+                        steps: steps, hasUnpaved: unpaved, hasTolls: tolls, via: via, congestion: congestion(route),
+                        /* Keep live traffic tinting for ordinary paved routes. Surface overlays
+                         * are needed when Directions reports at least one unpaved step. */
+                        surfaceRuns: unpaved ? surfaceRuns : [])
     }
 
     /// Per-segment traffic from the `driving-traffic` annotations (numeric, else the named levels).

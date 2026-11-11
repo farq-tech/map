@@ -134,6 +134,41 @@ final class OutingLegsUITests: XCTestCase {
         shot(app, "09-summary")
     }
 
+    func testInTripSearchOpensTheHomeDestinationSearch() {
+        let app = launch([])
+        tap(app, "flow.cta.startOuting")
+        XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
+        tap(app, "outing-actions")
+        tap(app, "outing-search")
+
+        XCTAssertTrue(el(app, "home.search").waitForExistence(timeout: 8), "in-trip search uses the home search bar")
+        XCTAssertFalse(el(app, "search.field").exists, "the old coordinate search screen is no longer used here")
+    }
+
+    func testAfterArrivalCanChooseAndStartAnotherDestination() {
+        let app = launch([])
+        tap(app, "flow.cta.startOuting")
+        XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
+
+        pick(app, "محطة الوقود")
+        tap(app, "flow.cta.startLeg")
+        XCTAssertTrue(waitLine(app, contains: "في الطريق إلى محطة الوقود"), line(app))
+        tap(app, "flow.cta.arrived")
+        XCTAssertTrue(waitLine(app, contains: "واقفين عند محطة الوقود"), line(app))
+
+        /* Reusing the large map CTA after arrival must open the picker, then the next
+           selection becomes the one destination offered to the group when started. */
+        tap(app, "flow.cta.whereTo")
+        XCTAssertTrue(el(app, "whereTo.sheet").waitForExistence(timeout: 6))
+        let next = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "مخيم النفود")).firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 5))
+        next.tap()
+        XCTAssertTrue(waitLine(app, contains: "الوجهة مخيم النفود"), line(app))
+        XCTAssertTrue(el(app, "flow.cta.startLeg").isHittable, "the next destination has its own start action")
+        tap(app, "flow.cta.startLeg")
+        XCTAssertTrue(waitLine(app, contains: "في الطريق إلى مخيم النفود"), line(app))
+    }
+
     /// Driving: the walkie-talkie is the big button, «وصلنا» is compact.
     func testOnALegWhileDriving() {
         let app = launch(["-SaryDrive", "1"])
@@ -149,7 +184,7 @@ final class OutingLegsUITests: XCTestCase {
 
     func testMemberWaitsForTheLeader() {
         let app = launch(["-SaryDemoMe", "00000000-0000-4000-8000-000000000002"])
-        XCTAssertTrue(waitLine(app, contains: "بانتظار أمير الرحلة يبدأ"), line(app))
+        XCTAssertTrue(waitLine(app, contains: "ننتظر أمير الرحلة يبدأها"), line(app))
         XCTAssertTrue(el(app, "flow.cta.waitLeader").exists)
         XCTAssertFalse(el(app, "flow.cta.startOuting").exists, "only the leader starts")
         shot(app, "02-not-started-member")

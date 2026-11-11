@@ -50,7 +50,15 @@ module.exports = function createOutdoorRouter() {
 
   router.get('/search', (req, res) => {
     const q = String(req.query.q || '').slice(0, 80);
-    sendJson(req, res, outdoor.searchFeatures(q, req.query.limit));
+    let near = null;
+    if (req.query.near) {
+      const parts = String(req.query.near).split(',').map(Number);
+      if (parts.length !== 2 || !outdoor.validCoord(parts[1], parts[0])) {
+        return res.status(400).json({ ok: false, error: 'invalid_origin', message_ar: 'الموقع لازم يكون lat,lng داخل المملكة.' });
+      }
+      near = { lat: parts[0], lng: parts[1] };
+    }
+    sendJson(req, res, outdoor.searchFeatures(q, req.query.limit, near));
   });
 
   router.get('/stats', (req, res) => {

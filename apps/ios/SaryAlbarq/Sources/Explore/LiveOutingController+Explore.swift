@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import UIKit
 
-/// The crosshair's latest reading (kept apart from the controller: it changes several times a second).
+/// The crosshair's latest settled reading (kept apart from the controller).
 @MainActor
 final class ExploreReadingModel: ObservableObject {
     @Published var reading: MapCenterReading?
@@ -92,9 +92,15 @@ extension LiveOutingController {
     /// The map's centre moved (the crosshair): store it; after a real pan that settled far from
     /// everyone while stopped, open exploration.
     func mapCenterChanged(_ r: MapCenterReading) {
-        if exploreActive || exploreReading.reading == nil || r.settled {
-            if exploreReading.reading != r { exploreReading.reading = r }
-        }
+        /* Camera callbacks arrive while Mapbox is rendering several intermediate frames. The
+         * crosshair readout is only actionable once the camera is idle; publishing those frames
+         * was needlessly invalidating SwiftUI and could publish inside its map update cycle. */
+        guard r.settled else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.applyMapCenter(r) }
+    }
+
+    private func applyMapCenter(_ r: MapCenterReading) {
+        if exploreReading.reading != r { exploreReading.reading = r }
         guard r.settled, userPannedMap else { return }
         userPannedMap = false
         guard !exploreActive, sheetDetent == .peek, !picking.active, liveContext(drive: appearance.isDriving) == .stopped else { return }

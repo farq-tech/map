@@ -1,0 +1,9 @@
+# Python 3.12, isolated venv. All permissive licences (BSD/MIT/Apache); no AGPL.
+rasterio==1.4.*
+numpy
+scipy
+osmium
+shapely
+pyproj
+matplotlib>=3.11
+pytest

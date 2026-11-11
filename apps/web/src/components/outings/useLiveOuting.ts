@@ -143,6 +143,23 @@ export function useLiveOuting(outingId: string, mode: ShareMode, fieldDiag?: Fie
 	const sharing = view?.snapshot.me.sharing ?? false;
 	const canSend = status === "active" && sharing && visible && !closed && locationPinKind === "gps";
 
+	/* A connected socket can miss one status frame without reconnecting. Reconcile the
+	 * waiting state with the authoritative snapshot until the leader starts the outing. */
+	useEffect(() => {
+		if (status !== "created" || !visible || closed) return;
+		let cancelled = false;
+		let inFlight = false;
+		const timer = window.setInterval(() => {
+			if (inFlight || document.visibilityState !== "visible") return;
+			inFlight = true;
+			void OutingsApi.get(outingId)
+				.then((snapshot) => { if (!cancelled) onSnapshot(snapshot); })
+				.catch(() => { /* Keep the last known state; retry on the next interval. */ })
+				.finally(() => { inFlight = false; });
+		}, 15_000);
+		return () => { cancelled = true; window.clearInterval(timer); };
+	}, [status, visible, closed, outingId, onSnapshot]);
+
 	useEffect(() => {
 		if (!canSend || !userLocation || userFixAt == null) return;
 		const raw: DeviceFix = {

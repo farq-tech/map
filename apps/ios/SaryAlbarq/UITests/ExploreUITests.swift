@@ -81,6 +81,35 @@ final class ExploreUITests: XCTestCase {
         any(app, "page-back").tap()
     }
 
+    func testWeatherRainLayerAndPeriodControls() {
+        let app = launch()
+        app.buttons["outing-actions"].tap()
+        let entry = any(app, "outing-explore")
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        let layersButton = app.buttons["explore-layers"]
+        XCTAssertTrue(layersButton.waitForExistence(timeout: 5))
+        layersButton.tap()
+
+        let rain = any(app, "weather.layer.rain")
+        XCTAssertTrue(rain.waitForExistence(timeout: 5), "rain is a selectable layer")
+        /* The layer page has one long ScrollView. Swiping the whole application flings past
+         * the weather rows on iPhone and leaves `rain` off-screen by the time XCTest checks it.
+         * Scroll that page in short, deliberate steps and stop as soon as the row is reachable. */
+        let layerList = app.scrollViews.firstMatch
+        XCTAssertTrue(layerList.waitForExistence(timeout: 5), "layer sheet content scrolls")
+        for _ in 0..<8 where !rain.isHittable { layerList.swipeUp(velocity: .slow) }
+        XCTAssertTrue(rain.isHittable, "rain is reachable in the scrollable layer sheet: \(rain.frame)")
+        rain.tap()
+        XCTAssertTrue(any(app, "weather.rain.days").waitForExistence(timeout: 3), "rain exposes its period picker")
+        let week = app.buttons["weather.rain.days.7"].firstMatch
+        XCTAssertTrue(week.waitForExistence(timeout: 5), app.debugDescription)
+        week.tap()
+        XCTAssertTrue(week.isSelected, "seven-day period is selected")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "NASA GPM IMERG")).firstMatch.exists,
+                       "the map-layer sheet credits the rain data source")
+    }
+
     func testSavePlaceAndListIt() {
         let app = launch(["-SaryExplore"])
         let save = app.buttons["explore-save"]

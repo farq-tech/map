@@ -62,7 +62,7 @@ struct LiveOutingScreen: View {
                     onRallyTap: { controller.actions.participantsTab.rallyShow() },
                     onMapTap: { controller.picked($0) },
                     onEmptyTap: { controller.mapTappedEmpty($0, name: $1) },
-                    onProjection: { controller.overlay.projection = $0 },
+                    onProjection: { controller.overlay.enqueueProjection($0) },
                     onUserGesture: {
                         controller.cameraUserMoved()
                         controller.userPannedMap = true
@@ -105,6 +105,11 @@ struct LiveOutingScreen: View {
         }
         .background(TouchWatcherView { down in touchChanged(down) }.allowsHitTesting(false))
         .onChange(of: controller.realisticRequest) { _, _ in openRealistic() }
+        /* «أماكن مقترحة للكشتة»: a site tapped on the map opens its card. */
+        .onReceive(CampSitesHub.shared.$tapped.compactMap { $0 }) { id in
+            CampSitesHub.shared.tapped = nil
+            if controller.modal == nil { controller.modal = .campSite(id) }
+        }
         .ignoresSafeArea(.keyboard)
         /* SOS never disappears: over the full-height sheet and any sheet on top, it floats in
          * its own window (the dock's copy is hidden or covered then). */
@@ -228,6 +233,8 @@ struct LiveOutingScreen: View {
                 }
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.horizontal, 12)
             .padding(.top, 4)
 
@@ -301,6 +308,23 @@ struct LiveOutingScreen: View {
                         } else if driving && !hasCTA {
                             Spacer()
                         }
+                        /* Leaders can end the outing from the live map at any stage. Keep this
+                         * separate from the trip CTA and PTT; confirmation prevents an accidental end. */
+                        if controller.tripPanel.canEnd {
+                            Button { controller.legConfirmEnd = true } label: {
+                                Image(systemName: "flag.checkered")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(theme.palette.emergencyText)
+                                    .frame(width: 48, height: 48)
+                                    .background(theme.palette.emergency.opacity(0.14), in: Circle())
+                                    .overlay(Circle().stroke(theme.palette.emergencyText.opacity(0.32), lineWidth: 1))
+                            }
+                            .buttonStyle(SaryPressStyle())
+                            .accessibilityLabel("أنهِ الطلعة")
+                            .accessibilityHint("ينهي الطلعة عند الجميع بعد التأكيد")
+                            .accessibilityIdentifier("outing-end")
+                            .transition(.scale.combined(with: .opacity))
+                        }
                         if guidingHUD && controller.speed.everRead {
                             NavSpeedCluster(ui: controller.speedometerUI, limit: controller.nav.progress?.speedLimitKmh)
                                 .chromeFrame("speed")
@@ -311,13 +335,6 @@ struct LiveOutingScreen: View {
                                 .chromeFrame("cluster-row")
                                 .transition(.opacity)
                         }
-                    }
-                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
-                                        titleVisibility: .visible) {
-                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
-                        Button("لا، نكمل", role: .cancel) {}
-                    } message: {
-                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
                     }
                     .overlay(alignment: .topTrailing) {
                         /* Guiding with no speed read yet: the posted limit alone, where the speed will be. */
@@ -333,8 +350,18 @@ struct LiveOutingScreen: View {
                     .padding(.bottom, lift + theme.space(.s))
                     .opacity(controller.sheetDetent == .full ? 0 : 1)
                     .allowsHitTesting(controller.sheetDetent != .full)
+                    .confirmationDialog("أنهِ الطلعة للكل؟", isPresented: Binding(get: { controller.legConfirmEnd }, set: { controller.legConfirmEnd = $0 }),
+                                        titleVisibility: .visible) {
+                        Button("أنهِ الطلعة للجميع", role: .destructive) { controller.endOutingFlow() }
+                            .accessibilityIdentifier("outing-end-confirm")
+                        Button("لا، نكمل", role: .cancel) {}
+                    } message: {
+                        Text("تتوقف المشاركة عند الكل ويطلع ملخص الطلعة بكل مشاويرها.")
+                    }
                 }
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity, alignment: .bottom)
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: controller.tripEnded)

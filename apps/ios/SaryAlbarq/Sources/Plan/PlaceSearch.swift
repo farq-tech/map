@@ -30,6 +30,10 @@ enum PlaceSearch {
         var country: String? = nil
         /// The name in the other language ("Starbucks" beside «ستاربكس») when known and different.
         var altName: String? = nil
+        /// Desert gazetteer area metadata; points retain the ordinary place-search behavior.
+        var areaPolygon: [[LngLat]]? = nil
+        var areaDistanceM: Double? = nil
+        var areaApproach: LngLat? = nil
 
         /// «Starbucks · مقهى · العليا، الرياض».
         var subtitle: String? {
@@ -113,9 +117,19 @@ enum PlaceSearch {
             let id = (f["id"] as? String) ?? (props["mapbox_id"] as? String) ?? "\(lat),\(lng)"
             let ctx = props["context"] as? [String: Any]
             let country = ((ctx?["country"] as? [String: Any])?["country_code"] as? String)?.uppercased()
+            let category = mapboxCategory(props)
             return Place(id: id, name: name, detail: detail, point: LngLat(lng: lng, lat: lat),
-                         icon: icon(mapboxType: props["feature_type"] as? String), country: country)
+                         category: category, icon: icon(mapboxType: props["feature_type"] as? String), country: country)
         }
+    }
+
+    /// Mapbox's POI category has appeared as either `poi_category` or `category` across response versions.
+    private static func mapboxCategory(_ properties: [String: Any]) -> String? {
+        for key in ["poi_category", "category", "poi_category_ids"] {
+            if let value = properties[key] as? String, !value.isEmpty { return value }
+            if let values = properties[key] as? [String], let first = values.first(where: { !$0.isEmpty }) { return first }
+        }
+        return nil
     }
 
     static func icon(mapboxType: String?) -> String {
@@ -138,6 +152,7 @@ enum PlaceSearch {
     static func mapbox(_ query: String, near: LngLat?, token: String?, fetch: Fetch) async throws -> [Place] {
         guard let token else { throw SearchError.noToken }
         for saudi in [true, false] {
+            try Task.checkCancellation()
             guard let req = request(query: query, proximity: near, saudiOnly: saudi, token: token) else { return [] }
             let data: Data, status: Int
             do { (data, status) = try await fetch(req) } catch { throw SearchError.network }
@@ -180,7 +195,7 @@ enum PlaceSearch {
     /// is asked as a category instead.
     static func poiCategory(forQuery query: String) -> MKPointOfInterestCategory? {
         let q = normalize(query)
-        let table: [(MKPointOfInterestCategory, [String])] = [
+        var table: [(MKPointOfInterestCategory, [String])] = [
             (.gasStation, ["محطه بنزين", "محطات بنزين", "محطه وقود", "محطات وقود", "بنزين", "بنزينه", "وقود",
                            "gas station", "gas", "petrol", "petrol station", "fuel"]),
             (.pharmacy, ["صيدليه", "صيدليات", "pharmacy"]),
@@ -188,10 +203,14 @@ enum PlaceSearch {
             (.cafe, ["مقهي", "مقاهي", "كافيه", "كوفي", "قهوه", "cafe", "coffee"]),
             (.restaurant, ["مطعم", "مطاعم", "restaurant"]),
             (.hotel, ["فندق", "فنادق", "hotel"]),
+            (.airport, ["مطار", "مطارات", "airport", "airports"]),
             (.atm, ["صراف", "صراف الي", "atm"]),
             (.parking, ["موقف", "مواقف", "parking"]),
             (.foodMarket, ["بقاله", "تموينات", "سوبرماركت", "supermarket", "grocery"]),
         ]
+        if #available(iOS 18.0, *) {
+            table.append((.spa, ["سبا", "مساج", "تدليك", "spa", "massage", "day spa", "wellness"]))
+        }
         return table.first { $0.1.contains(q) }?.0
     }
 
@@ -202,17 +221,22 @@ enum PlaceSearch {
             let poi = MKLocalPointsOfInterestRequest(center: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng),
                                                      radius: min(PlaceSearch.nearbyRadiusM / 2, MKLocalPointsOfInterestRequest.maxRadius))
             poi.pointOfInterestFilter = MKPointOfInterestFilter(including: [cat])
-            if let resp = try? await MKLocalSearch(request: poi).start() {
+            let poiSearch = MKLocalSearch(request: poi)
+            if let resp = try? await withTaskCancellationHandler(operation: { try await poiSearch.start() },
+                                                                  onCancel: { poiSearch.cancel() }) {
                 let found = resp.mapItems.compactMap { PlaceSearch.place(from: $0) }
                 if !found.isEmpty { return found }
             }
         }
+        try Task.checkCancellation()
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = String(q.prefix(256))
         req.resultTypes = [.pointOfInterest, .address]
         req.region = PlaceSearch.region(scope)
         do {
-            let resp = try await MKLocalSearch(request: req).start()
+            let search = MKLocalSearch(request: req)
+            let resp = try await withTaskCancellationHandler(operation: { try await search.start() },
+                                                              onCancel: { search.cancel() })
             return resp.mapItems.compactMap { PlaceSearch.place(from: $0) }
         } catch let e as MKError where e.code == .placemarkNotFound {
             return []
@@ -284,6 +308,7 @@ enum PlaceSearch {
             .postOffice: ("بريد", "envelope.fill"),
             .laundry: ("مغسلة", "washer.fill"),
         ]
+        if #available(iOS 18.0, *), c == .spa { return ("سبا", "sparkles") }
         guard let hit = table[c] else { return nil }
         return (hit.0, hit.1)
     }
@@ -334,7 +359,10 @@ enum PlaceSearch {
         let live = jobs.filter { $0.local != nil }
         return await withTaskGroup(of: (Int, Result<[Place], Error>).self) { g in
             for (i, j) in live.enumerated() {
-                g.addTask { (i, await attempt { try await j.local!(j.query, j.scope) }) }
+                g.addTask {
+                    guard !Task.isCancelled else { return (i, .failure(CancellationError())) }
+                    return (i, await attempt { try await j.local!(j.query, j.scope) })
+                }
             }
             var out = [Result<[Place], Error>?](repeating: nil, count: live.count)
             for await (i, r) in g { out[i] = r }
@@ -344,7 +372,12 @@ enum PlaceSearch {
 
     private static func gatherMapbox(_ forms: [String], _ run: @escaping @Sendable (String) async throws -> [Place]) async -> [Result<[Place], Error>] {
         await withTaskGroup(of: (Int, Result<[Place], Error>).self) { g in
-            for (i, f) in forms.enumerated() { g.addTask { (i, await attempt { try await run(f) }) } }
+            for (i, f) in forms.enumerated() {
+                g.addTask {
+                    guard !Task.isCancelled else { return (i, .failure(CancellationError())) }
+                    return (i, await attempt { try await run(f) })
+                }
+            }
             var out = [Result<[Place], Error>?](repeating: nil, count: forms.count)
             for await (i, r) in g { out[i] = r }
             return out.compactMap { $0 }
@@ -366,9 +399,14 @@ enum PlaceSearch {
     /// `forms`: what the sources were asked (`SearchLexicon.plan`); an exact match is a match on any of them.
     static func rank(query: String, forms: [String]? = nil, around: [Place], saudi: [Place], mapbox: [Place], near: LngLat?,
                      limit: Int = PlaceSearch.maxResults) -> [Place] {
+        let intent = SearchLexicon.categoryIntent(query)
         var all: [Place] = []
         var keys: [NameKeys] = []
-        for p in (stackedDropped(around + saudi) + mapbox).map(localized) {
+        let candidates = (stackedDropped(around + saudi) + mapbox).map(localized).filter { p in
+            guard let intent else { return true }
+            return matches(p, intent: intent)
+        }
+        for p in candidates {
             let k = NameKeys(p)
             if let i = all.indices.first(where: { duplicate(all[$0], keys[$0], p, k) }) {
                 all[i] = merged(all[i], p); keys[i] = NameKeys(all[i])
@@ -379,7 +417,13 @@ enum PlaceSearch {
         let wanted = Set(asked.map(normalize)).subtracting([""])
         /* A chain's every branch is what you asked for («ستاربكس» finds "Starbucks Olaya" as much as «ستاربكس»). */
         let wantedBrands = Set(asked.compactMap { SearchLexicon.segments($0).count == 1 ? SearchLexicon.brandId($0) : nil })
-        let exactIds = Set(zip(all, keys).filter { p, k in !wanted.isDisjoint(with: k.names) || !wantedBrands.isDisjoint(with: k.brands) }.map { $0.0.id })
+        func containsWholeQuery(_ query: String, in name: String) -> Bool {
+            guard query.count >= 3 else { return false }
+            return name == query || name.hasPrefix(query + " ") || name.hasSuffix(" " + query) || name.contains(" " + query + " ")
+        }
+        let exactIds = Set(zip(all, keys).filter { _, k in
+            !wantedBrands.isDisjoint(with: k.brands) || k.names.contains { name in wanted.contains { containsWholeQuery($0, in: name) } }
+        }.map { $0.0.id })
         func isExact(_ p: Place) -> Bool { exactIds.contains(p.id) }
         func dist(_ p: Place) -> Double { near.map { PlanGeo.meters($0, p.point) } ?? .infinity }
         func abroad(_ p: Place) -> Bool { p.country != nil && p.country != "SA" }
@@ -396,8 +440,35 @@ enum PlaceSearch {
             let a = dist($0.element), b = dist($1.element)
             return a == b ? $0.offset < $1.offset : a < b
         }
-        let ordered = exact.sorted(by: byDistance) + nearby.sorted(by: byDistance) + kingdom + world
+        let categoryOnly = intent != nil && SearchLexicon.segments(query).count == 1
+        let ordered: [(offset: Int, element: Place)]
+        if categoryOnly {
+            /* A category search is a local assistant: nearest matching place first, even when a farther
+               result's name happens to repeat the category word. */
+            ordered = indexed.filter { !abroad($0.element) }.sorted(by: byDistance) + world
+        } else {
+            ordered = exact.sorted(by: byDistance) + nearby.sorted(by: byDistance)
+                + kingdom.sorted(by: byDistance) + world
+        }
         return Array(ordered.map { $0.element }.prefix(limit))
+    }
+
+    /// Category searches are strict. Use structured source categories when present; for a result
+    /// without category metadata (common in Mapbox geocoding), require the category in its name.
+    private static func matches(_ place: Place, intent: SearchLexicon.Entry) -> Bool {
+        let labels = SearchLexicon.categoryLabels(for: intent).map(normalize)
+        if let category = place.category, !category.isEmpty {
+            let actual = normalize(category)
+            return labels.contains { label in
+                actual == label || actual.hasPrefix(label + " ") || actual.hasSuffix(" " + label)
+            }
+        }
+        let names = [place.name, place.altName].compactMap { $0 }.map(normalize)
+        return labels.contains { label in
+            names.contains { name in
+                name == label || name.hasPrefix(label + " ") || name.hasSuffix(" " + label) || name.contains(" " + label + " ")
+            }
+        }
     }
 
     /// Apple puts businesses it cannot locate on a city's centre point: in Riyadh five «petrol stations» sat on

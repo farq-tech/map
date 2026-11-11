@@ -37,15 +37,45 @@ enum RecentPlaces {
     static let key = "sary.create.recentPlaces.v1"
     static let max = 6
 
+    /// Side-effect free: views call it from `body` / `@State` initialisers. Naming runs from
+    /// `nameOncePerLaunch()` and `add(_:)` only.
     static func load(defaults: UserDefaults = .standard) -> [OutingDestination] {
         guard let d = defaults.data(forKey: key) else { return [] }
         return (try? JSONDecoder().decode([OutingDestination].self, from: d)) ?? []
+    }
+
+    /// One background naming pass at a time (`PlaceNamer`).
+    private static var naming = false
+    private static var namedThisLaunch = false
+    private static let namingLock = NSLock()
+
+    /// Older bare «نقطة على الخريطة» entries are named in the background once per app launch;
+    /// `.saryRecentPlacesChanged` tells open screens to reload.
+    static func nameOncePerLaunch() {
+        namingLock.lock()
+        let first = !namedThisLaunch
+        namedThisLaunch = true
+        namingLock.unlock()
+        if first { nameInBackground() }
+    }
+
+    static func nameInBackground() {
+        namingLock.lock()
+        defer { namingLock.unlock() }
+        guard !naming else { return }
+        naming = true
+        Task.detached(priority: .utility) {
+            await resolveNames()
+            namingLock.lock(); naming = false; namingLock.unlock()
+        }
     }
 
     static func add(_ p: OutingDestination, defaults: UserDefaults = .standard) {
         var all = load(defaults: defaults).filter { Geo.haversineMeters(.init(lat: $0.lat, lng: $0.lng), .init(lat: p.lat, lng: p.lng)) > 50 }
         all.insert(p, at: 0)
         if let d = try? JSONEncoder().encode(Array(all.prefix(max))) { defaults.set(d, forKey: key) }
+        /* A bare «نقطة على الخريطة» gets its real name in the background (`PlaceNamer`). */
+        if defaults === UserDefaults.standard, PlaceLabel.isGeneric(p.name) { nameInBackground() }
     }
 
     static func forget(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
