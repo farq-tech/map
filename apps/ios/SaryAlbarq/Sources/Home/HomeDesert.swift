@@ -5,6 +5,17 @@ import Foundation
 enum HomeDesertRules {
     /// Markers drawn on the map for a chip (the list holds more).
     static let onMap = 12
+
+    /// Issue #161: a city chip or a search listed places but drew nothing on the map. The same
+    /// numbered markers as the desert chips, in the list's order (number = row), the first
+    /// `onMap`. Google results (`gm:`) are never drawn (not ours to show).
+    static func resultPins(_ ordered: [PlaceSearch.Place]) -> [DesertCategoryItem] {
+        ordered.lazy.filter { !$0.id.hasPrefix("gm:") }.prefix(onMap).map {
+            DesertCategoryItem(id: $0.id, title: $0.name, detail: $0.subtitle, point: $0.point,
+                               meters: $0.areaDistanceM, systemImage: $0.icon, polygon: $0.areaPolygon,
+                               approach: $0.areaApproach)
+        }
+    }
     /// Results the map fits on (with you).
     static let fitCount = 5
 

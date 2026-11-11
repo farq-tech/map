@@ -165,3 +165,30 @@ final class StandaloneNavStaleFixUITests: XCTestCase {
         XCTAssertTrue(started, "guidance never started: «\(status.exists ? status.label : "-")»")
     }
 }
+
+/// Issue #161: a category chip (or a search) lists places; they must show on the map too.
+final class CategoryPinsUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func shot(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name; a.lifetime = .keepAlways; add(a)
+    }
+
+    func testCityCategoryResultsShowOnTheMap() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        any("home.category.restaurants").tap()
+        XCTAssertTrue(any("home.result").waitForExistence(timeout: 20), "the list has places")
+        sleep(2)
+        /* Lower the sheet: the map with its markers. */
+        let handle = any("home.sheet.handle")
+        if handle.exists { handle.swipeDown() }
+        sleep(4)
+        shot("category-restaurants")
+    }
+}
