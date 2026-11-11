@@ -67,6 +67,8 @@ struct MapHomeScreen: View {
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
+    /// «دروب البر» opened from here: drawn on this map while its sheet is open.
+    @ObservedObject private var desertRoutes = DesertRoutesHub.shared
 
     struct SelectedPlace: Equatable {
         var destination: OutingDestination
@@ -139,6 +141,10 @@ struct MapHomeScreen: View {
         .sheet(item: $tool) { t in
             HomeToolSheet(tool: t, me: myPoint, host: desertHost, open: openTool, close: { tool = nil })
                 .saryPresented(appearance)
+        }
+        .onChange(of: tool?.id) { old, new in
+            /* «دروب البر» closed (swiped down too): its lines leave the home map with it. */
+            if old?.hasPrefix("routes:") == true, new?.hasPrefix("routes:") != true { DesertRoutesHub.shared.clear() }
         }
         .background {
             /* Its own host view: a full-screen cover next to the sheets above. */
@@ -797,6 +803,10 @@ struct MapHomeScreen: View {
     }
 
     private var desertOverlay: DesertOverlay? {
+        HomeDesertRules.overlay(desertPlaces, routes: desertRoutes.options, selected: desertRoutes.selected)
+    }
+
+    private var desertPlaces: DesertOverlay? {
         if let s = desertPicked, selected != nil { return DesertOverlay(items: [s], selected: s.id) }
         guard selected == nil, category?.desertSource != nil, !desertItems.isEmpty else { return nil }
         return DesertOverlay(items: Array(desertItems.prefix(HomeDesertRules.onMap)))
@@ -1159,6 +1169,13 @@ struct MapHomeScreen: View {
             follow: { s in
                 tool = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { cover = TrackFollowModel(s).map(HomeCover.follow) }
+            },
+            fitTrack: { pts in
+                /* The routes are drawn on this map (`desertOverlay`): frame them above the half sheet. */
+                let fit = HomeDesertRules.routesFit(pts)
+                guard fit.count >= 2 else { return }
+                cameraSeq += 1
+                camera = PlanCamera(kind: .fit(fit), id: cameraSeq)
             })
     }
 

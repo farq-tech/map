@@ -175,6 +175,53 @@ final class CampSitesTests: XCTestCase {
         XCTAssertEqual(RouteReveal.popTransition["duration"] as? Int, 180)
     }
 
+    // MARK: «دروب البر» on the home map
+
+    private func option(_ m: DesertRouter.Mode, _ pts: [LngLat], hard: [DesertRouter.HardStretch] = []) -> DesertRouter.Option {
+        DesertRouter.Option(mode: m, points: pts, distanceM: 1_000, minutes: 10, trackPercent: 50, hard: hard)
+    }
+
+    func testHomeOverlayCarriesTheRoutesWithThePlaces() {
+        let a = LngLat(lng: 46.70, lat: 24.90), b = LngLat(lng: 46.72, lat: 24.95)
+        let opts = [option(.easy, [a, b]), option(.short, [a, b])]
+        XCTAssertNil(HomeDesertRules.overlay(nil, routes: [], selected: .easy), "no routes, no chip: nothing drawn")
+        let routesOnly = HomeDesertRules.overlay(nil, routes: opts, selected: .short)
+        XCTAssertEqual(routesOnly?.routes, opts)
+        XCTAssertEqual(routesOnly?.selectedRoute, .short, "the picked one is the highlighted line")
+        XCTAssertEqual(routesOnly?.items, [])
+        let item = DesertCategoryItem(id: "n1", title: "نفود", point: b, meters: nil, systemImage: DesertKind.nafud.systemImage)
+        let picked = DesertOverlay(items: [item], selected: "n1")
+        let both = HomeDesertRules.overlay(picked, routes: opts, selected: .easy)
+        XCTAssertEqual(both?.items, [item], "the picked place stays drawn under the routes")
+        XCTAssertEqual(both?.selected, "n1")
+        XCTAssertEqual(HomeDesertRules.overlay(picked, routes: [], selected: .easy), picked, "routes closed: as before")
+    }
+
+    func testRouteLinesDrawEveryOptionAndOnlyThePicksHardStretches() {
+        let a = LngLat(lng: 46.70, lat: 24.90), b = LngLat(lng: 46.72, lat: 24.95)
+        let hard = DesertRouter.HardStretch(reason: .sabkha, points: [a, b], meters: 300)
+        let opts = [option(.easy, [a, b], hard: [hard]), option(.balanced, [a, b], hard: [hard]), option(.short, [a, b])]
+        XCTAssertEqual(DesertRouteLayers.collection(opts, selected: .easy).features.count, 4, "three lines + the pick's hard stretch")
+        XCTAssertEqual(DesertRouteLayers.collection(opts, selected: .short).features.count, 3)
+        XCTAssertEqual(DesertRouteLayers.collection([], selected: .easy).features.count, 0)
+        /* The live map and the home map share the same layers (the alternatives' `-alt` included). */
+        XCTAssertEqual(Set(DesertRouteLayers.kinds.map(\.id)), ["sary-desert-routes-line", "sary-desert-routes-alt", "sary-desert-routes-hard"])
+        XCTAssertEqual(Set(DesertRouter.Mode.allCases.map(DesertRouteLayers.hex)).count, 3, "each route its own colour")
+    }
+
+    func testHomeRoutesFitLandAboveTheHalfSheet() {
+        let pts = [LngLat(lng: 46.70, lat: 24.90), LngLat(lng: 46.80, lat: 25.00), LngLat(lng: 46.75, lat: 24.95)]
+        let fit = HomeDesertRules.routesFit(pts)
+        XCTAssertEqual(fit.count, 3)
+        let south = fit.map(\.lat).min() ?? 0, north = fit.map(\.lat).max() ?? 0
+        XCTAssertEqual(north, 25.00, accuracy: 1e-9)
+        /* Half the screen under the sheet: the framed area is twice the routes' height. */
+        XCTAssertEqual((25.00 - 24.90) / (north - south), 0.5, accuracy: 1e-6)
+        XCTAssertEqual(fit.map(\.lng).min() ?? 0, 46.70, accuracy: 1e-9)
+        XCTAssertEqual(fit.map(\.lng).max() ?? 0, 46.80, accuracy: 1e-9)
+        XCTAssertTrue(HomeDesertRules.routesFit([pts[0]]).isEmpty, "one point: nothing to fit")
+    }
+
     private func night(from: Double, gust: Double) -> CampNight {
         CampNight(windKmh: gust * 0.7, gustKmh: gust, fromDeg: from, rainProbability: 0, rainMm: 0, dust: nil, pm10: nil, sunset: nil)
     }

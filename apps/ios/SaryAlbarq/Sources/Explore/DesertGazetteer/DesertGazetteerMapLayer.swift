@@ -7,6 +7,10 @@ import UIKit
 struct DesertOverlay: Equatable {
     var items: [DesertCategoryItem]
     var selected: String? = nil
+    /// «دروب البر» opened from the home map: the options' lines, `selectedRoute` on top
+    /// (`DesertRouteLayers`, the same layers the live map draws).
+    var routes: [DesertRouter.Option] = []
+    var selectedRoute: DesertRouter.Mode = .easy
 }
 
 /// Mapbox layers for `DesertOverlay` (one GeoJSON source, fill + outline + marker + label).
@@ -117,6 +121,8 @@ enum DesertGazetteerMapLayer {
             ], layerPosition: nil)
         }
         m.updateGeoJSONSource(withId: source, geoJSON: .featureCollection(collection(o)))
+        /* «دروب البر»: under the numbered markers, over the area tint (none: they fade out). */
+        DesertRouteLayers.apply(m, o?.routes ?? [], selected: o?.selectedRoute ?? .easy, below: marker)
     }
 }
 

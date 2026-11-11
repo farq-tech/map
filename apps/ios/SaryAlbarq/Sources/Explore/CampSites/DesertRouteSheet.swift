@@ -27,7 +27,7 @@ struct DesertToolsHost {
     var openRoutes: @MainActor (LngLat, String, Bool, Bool) -> Void
     /// «اتجه» (was «امشِ عليه»): follow the picked desert route («اسلك هذا المسار»).
     var follow: @MainActor (FollowSubject) -> Void
-    /// Frame the routes on the host's map (the home map has none drawn: nothing to do).
+    /// Frame the routes on the host's map (the live map, or the home map that draws them too).
     var fitTrack: @MainActor ([LngLat]) -> Void = { _ in }
 
     /// Inside a live outing: the same modals and guidance as before (`LiveSheet`).
@@ -68,6 +68,7 @@ struct DesertRouteSheet: View {
     enum Phase: Equatable { case working, ready, outside, noFix, none }
 
     static let note = "مسار مقترح من صور الأقمار، تأكد بعينك. ما يغني عن خبرة الدليل"
+    static let attribution = "الدروب من بيانات مفتوحة · © OpenStreetMap contributors"
 
     init(host: DesertToolsHost, target: LngLat, name: String, rain: Bool, weatherAvailable: Bool) {
         self.host = host
@@ -116,6 +117,9 @@ struct DesertRouteSheet: View {
             Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("routes.note")
+            /* The grid's tracks come from OSM (ODbL): the credit shows with the lines. */
+            Text(Self.attribution).saryText(.caption).foregroundStyle(p.textTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task { await compute() }
         /* The computed routes arrive with a soft entrance; picking one pops it (and a tick). */
@@ -212,13 +216,7 @@ struct DesertRouteSheet: View {
         }
     }
 
-    static func hex(_ m: DesertRouter.Mode) -> String {
-        switch m {
-        case .easy: return "#2ecc71"
-        case .balanced: return "#3498db"
-        case .short: return "#e74c3c"
-        }
-    }
+    static func hex(_ m: DesertRouter.Mode) -> String { DesertRouteLayers.hex(m) }
 
     private func go(_ o: DesertRouter.Option) {
         guard let s = FollowSubject.desertRoute(points: o.points, name: "دروب البر: \(o.mode.label) إلى \(name)") else { return }

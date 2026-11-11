@@ -32,6 +32,31 @@ enum HomeDesertRules {
         }
     }
 
+    /// «دروب البر» opened from the home map: its options drawn with whatever desert overlay is on
+    /// (a chip's results, the picked place); none → the overlay as it was.
+    static func overlay(_ base: DesertOverlay?, routes: [DesertRouter.Option], selected: DesertRouter.Mode) -> DesertOverlay? {
+        guard !routes.isEmpty else { return base }
+        var o = base ?? DesertOverlay(items: [])
+        o.routes = routes
+        o.selectedRoute = selected
+        return o
+    }
+
+    /// The share of the screen the half-height routes sheet covers at the bottom.
+    static let routesSheetShare = 0.5
+
+    /// The routes, fitted into the part of the map above the half-height sheet: the camera fits
+    /// the routes plus one point as far below them as the sheet is tall, so the lines land in
+    /// the visible upper part. Fewer than two points: nothing to fit.
+    static func routesFit(_ points: [LngLat], sheetShare: Double = routesSheetShare) -> [LngLat] {
+        guard points.count >= 2, let south = points.map(\.lat).min(), let north = points.map(\.lat).max(),
+              let west = points.map(\.lng).min(), let east = points.map(\.lng).max() else { return [] }
+        let share = min(0.8, max(0, sheetShare))
+        let span = max(north - south, 0.002)
+        let below = span * share / (1 - share)
+        return [LngLat(lng: west, lat: north), LngLat(lng: east, lat: south), LngLat(lng: (west + east) / 2, lat: south - below)]
+    }
+
     /// You and the first few results, for the camera.
     static func fitPoints(_ items: [DesertCategoryItem], me: LngLat?) -> [LngLat] {
         (me.map { [$0] } ?? []) + items.prefix(fitCount).map(\.point)
