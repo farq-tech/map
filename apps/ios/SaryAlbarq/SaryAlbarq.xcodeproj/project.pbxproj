@@ -537,6 +537,8 @@
 		6958AF0760D56E9A42498EFD /* itfHuwiyaArabic-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = 1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */; };
 		BD744CBC9883E2DF048B6405 /* itfHuwiyaArabic-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */; };
 		8E4767056282B09A468B40B0 /* itfHuwiyaArabic-Black.otf in Resources */ = {isa = PBXBuildFile; fileRef = C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */; };
+		259ECD9E9BB0E90613F00BEE /* MetricsSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */; };
+		D82B3414D7AD4571B035A210 /* MetricsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1117,6 +1119,8 @@
 		1AABCBD7312731AB3E496280 /* itfHuwiyaArabic-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Medium.otf"; sourceTree = "<group>"; };
 		6752F996CFF273DA878D6597 /* itfHuwiyaArabic-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Bold.otf"; sourceTree = "<group>"; };
 		C23318113FB3B042F2F0A23B /* itfHuwiyaArabic-Black.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Huwaiya/itfHuwiyaArabic-Black.otf"; sourceTree = "<group>"; };
+		2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsSummary.swift; sourceTree = "<group>"; };
+		C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsCollector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2045,6 +2049,8 @@
 				FD9FA98B1A53C6183E33883C /* SendGate.swift */,
 				EF0E8EB8C788D5272182C0E7 /* ServerRules.swift */,
 				49C1A5D2B4ACEC01517DF4A4 /* Speed.swift */,
+				C62900B86F0FCF716C96BC75 /* MetricsCollector.swift */,
+				2ECA18D64E759DEC007042A2 /* MetricsSummary.swift */,
 				000D919D5EA50F43C9AB2C28 /* TrackDisplay.swift */,
 				AA1C5098C72208D681996BC6 /* TrackFollow.swift */,
 				71FA16F086DA2E158BD914C1 /* Trail.swift */,
@@ -2811,6 +2817,8 @@
 				8B531A50B19D4227914CD5F7 /* SkyAtmosphere.swift in Sources */,
 				0FC046786700F5D30ADE0A43 /* SlopeProfile.swift in Sources */,
 				B20BBCBCD2257C003224C512 /* Speed.swift in Sources */,
+				D82B3414D7AD4571B035A210 /* MetricsCollector.swift in Sources */,
+				259ECD9E9BB0E90613F00BEE /* MetricsSummary.swift in Sources */,
 				873355BA15A8FE6ECC910CC5 /* SpeedModel.swift in Sources */,
 				90E9904DE376425B0849683F /* SpeedSettingsSection.swift in Sources */,
 				9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */,
