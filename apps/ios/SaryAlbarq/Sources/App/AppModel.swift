@@ -759,15 +759,15 @@ final class AppModel: ObservableObject {
     @discardableResult
     func startReturnTrip(from outingId: String) async -> String? {
         guard !isDemo else {
-            errorText = "«طريق الرجعة» كرحلة جديدة يحتاج الخادم؛ في العرض التجريبي استخدم «طريق الرجعة» في «مساري»."
+            errorText = "«طلعة الرجعة» تحتاج الخادم؛ في العرض التجريبي استخدم «طريق الرجعة» في «مساري»."
             return nil
         }
         guard let start = TripStore.load(outingId)?.start?.position ?? myTrailPoints(outingId)?.start?.position else {
-            errorText = "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."
+            errorText = "ما عندنا نقطة بداية محفوظة لهذه الطلعة على هذا الجوال."
             return nil
         }
         let from = plans.model(outingId).plan.destination?.name
-        let name = String((from.map { "الرجعة من \($0)" } ?? "طريق الرجعة").prefix(ServerRules.outingNameMax))
+        let name = String((from.map { "الرجعة من \($0)" } ?? SaryCopy.returnOuting).prefix(ServerRules.outingNameMax))
         guard let id = await createOuting(name: name, openNow: false) else { return nil }
         ReturnTripStore.link(id, returnsFrom: outingId)
         let plan = plans.model(id)

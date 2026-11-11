@@ -429,7 +429,7 @@ struct ChatThreadView: View {
         }
         if chat.canDelete(m) {
             Button(role: .destructive) { Task { await chat.delete(m) } } label: {
-                Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الرحلة)", systemImage: "trash")
+                Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الطلعة)", systemImage: "trash")
             }
         }
     }

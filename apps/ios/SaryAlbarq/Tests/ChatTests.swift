@@ -90,7 +90,7 @@ final class ChatTests: XCTestCase {
         XCTAssertFalse(ChatRules.canType(moving: true), "«وقّف عشان تكتب»")
         XCTAssertTrue(ChatRules.canType(moving: false))
         XCTAssertEqual(ChatRules.quickReplies.prefix(3), ["بوقف", "محطة بنزين", "اصبروا لي"])
-        XCTAssertEqual(ChatRules.deletedLabel(Self.message(1, from: Self.fahd).deletedBy("leader")), "حذفها أمير الرحلة")
+        XCTAssertEqual(ChatRules.deletedLabel(Self.message(1, from: Self.fahd).deletedBy("leader")), "حذفها أمير الطلعة")
         let id = ChatRules.newClientId()
         XCTAssertTrue(id.range(of: "^[A-Za-z0-9_.:-]{1,64}$", options: .regularExpression) != nil, "a client_id the server accepts")
     }
@@ -250,7 +250,7 @@ final class ChatTests: XCTestCase {
         s.receive(["type": "chat_message", "message": Self.wire(theirs)])
         await s.delete(theirs)
         XCTAssertEqual(s.threads[.group]?.messages.first?.deleted, true)
-        XCTAssertEqual(ChatPreview.line(s.threads[.group]!.messages.first!), "حذفها أمير الرحلة")
+        XCTAssertEqual(ChatPreview.line(s.threads[.group]!.messages.first!), "حذفها أمير الطلعة")
         let plain = store(FakeBackend())
         XCTAssertFalse(plain.canDelete(theirs))
         XCTAssertTrue(plain.canDelete(Self.message(3, from: Self.me)))

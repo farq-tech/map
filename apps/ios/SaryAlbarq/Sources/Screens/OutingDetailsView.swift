@@ -37,7 +37,7 @@ struct OutingDetailsView: View {
                 SarySection(title: "الطلعة") {
                     infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     SaryDivider()
-                    infoRow(SaryIcon.crown, "أمير الرحلة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
+                    infoRow(SaryIcon.crown, "أمير الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
                     if let d = ISODate.parse(s.outing.started_at) {
                         SaryDivider()
                         infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))
@@ -228,7 +228,7 @@ struct TripSummaryView: View {
                         } label: { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack, busy: busy) }
                             .buttonStyle(.sary(.secondary))
                             .accessibilityIdentifier("summary.returnTrip")
-                        Text("رحلة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
+                        Text("«طلعة الرجعة» طلعة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
                             .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -478,14 +478,14 @@ struct TripSummarySection: View {
     var body: some View {
         let p = theme.palette
         let m = facts.motion
-        SarySection(title: "الرحلة", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوبة على جوالك فقط.") {
+        SarySection(title: "مشواري", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوب على جوالك فقط.") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 row("flag.fill", "البداية", facts.start.map { NavText.clock(Date(timeIntervalSince1970: $0.atMs / 1000)) } ?? "—")
                 SaryDivider()
                 row("flag.checkered", facts.arrivedAt != nil ? "الوصول إلى \(destination?.name ?? "الوجهة")" : "النهاية",
                     (facts.arrivedAt ?? facts.endedAt).map { NavText.clock($0) } ?? "—")
                 SaryDivider()
-                row("clock.fill", "مدة الرحلة", SaryFormat.duration(seconds: m.elapsedS))
+                row("clock.fill", "مدة المشوار", SaryFormat.duration(seconds: m.elapsedS))
                 SaryDivider()
                 row("car.side.fill", "وقت الحركة", SaryFormat.duration(seconds: m.movingS))
                 SaryDivider()

@@ -236,7 +236,7 @@ struct SaryRoleChip: View {
             HStack(spacing: 3) {
                 Image(systemName: role == .leader ? SaryIcon.crown : SaryIcon.shield)
                     .font(.system(size: 9, weight: .bold))
-                Text(role == .leader ? "أمير الرحلة" : "نائب الأمير").saryText(.micro)
+                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro)
             }
             .foregroundStyle(theme.palette.accentText)
             .padding(.horizontal, 6)

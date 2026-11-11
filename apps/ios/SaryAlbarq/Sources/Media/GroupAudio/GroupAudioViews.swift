@@ -166,7 +166,7 @@ struct GroupAudioSheet: View {
                     }
                     NowPlayingCard(center: center)
                     if center.canSetAllowAll {
-                        SaryToggleRow(title: "الكل يقدر يشغّل", subtitle: "بدونها: أمير الرحلة ونائبه بس", systemImage: "person.3.fill",
+                        SaryToggleRow(title: "الكل يقدر يشغّل", subtitle: "بدونها: أمير الطلعة ونائبه بس", systemImage: "person.3.fill",
                                       isOn: Binding(get: { center.state.allow_all }, set: { v in Task { await center.setAllowAll(v) } }), id: "radio.allowAll")
                             .padding(theme.space(.s))
                             .sarySurface(radius: SaryRadius.l)
@@ -179,7 +179,7 @@ struct GroupAudioSheet: View {
                         case .audius: AudiusPicker(center: center)
                         }
                     } else {
-                        SaryInlineMessage(text: "أمير الرحلة هو اللي يختار. تقدر تسكّتها عندك بس.", tone: .info)
+                        SaryInlineMessage(text: "أمير الطلعة هو اللي يختار. تقدر تسكّتها عندك بس.", tone: .info)
                             .accessibilityIdentifier("radio.memberNote")
                     }
                     Text("كل جوال يشغّل البث من مصدره الرسمي مباشرة، والخادم يعرف بس وش يشتغل ووين وصل. الإذاعات مباشرة فالكل يسمع نفس البث؛ القرآن وAudius متزامنة على ساعة الخادم. صوت الملاحة يخفّض الصوت، والقناة (اضغط وتكلم) توقفها لين تخلص.")
@@ -260,7 +260,7 @@ private struct NowPlayingCard: View {
                 VStack(alignment: .leading, spacing: theme.space(.xs)) {
                     Text("ما فيه شي شغّال").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("radio.idle")
-                    Text(center.canControl ? "اختر إذاعة أو تلاوة وتشتغل عند الكل." : "إذا شغّل أمير الرحلة شي، يشتغل عندك تلقائي.")
+                    Text(center.canControl ? "اختر إذاعة أو تلاوة وتشتغل عند الكل." : "إذا شغّل أمير الطلعة شي، يشتغل عندك تلقائي.")
                         .saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
             }

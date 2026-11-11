@@ -290,6 +290,6 @@ private struct TripRow: View {
             .environment(\.layoutDirection, .rightToLeft)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("الرحلة: \(line)"))
+        .accessibilityLabel(Text("الطلعة: \(line)"))
     }
 }

@@ -112,7 +112,7 @@ struct LiveSettingsPage: View {
             sub("اتجاه الخريطة أثناء القيادة", footer: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس. «ابدأ التوجيه تلقائيًا»: إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة، على جوالك فقط. «شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل؛ «تلقائي» يختار من سرعتك والملاحة.") {
                 toggle("رجّعني للتوجيه تلقائيًا", isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
                                                               set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
-                toggle("ابدأ التوجيه تلقائيًا مع الرحلة", isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
+                toggle("ابدأ التوجيه تلقائيًا مع الطلعة", isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
                 segmentRow("شكل الشاشة") {
                     SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
                 }

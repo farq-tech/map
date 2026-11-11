@@ -17,7 +17,7 @@ final class ConvoyIntelTests: XCTestCase {
         XCTAssertEqual(ConvoyLeader.id(convoy: nil, ownerId: "o"), "o")
         XCTAssertEqual(ConvoyLeader.id(convoy: ConvoyInfo(lead_user_id: "l", tail_user_id: nil, max_gap_m: nil), ownerId: "o"), "l")
         XCTAssertEqual(ConvoyLeader.id(convoy: ConvoyInfo(lead_user_id: nil, tail_user_id: "t", max_gap_m: nil), ownerId: "o"), "o")
-        XCTAssertEqual(ConvoyLeader.title(convoy: nil), "أمير الرحلة")
+        XCTAssertEqual(ConvoyLeader.title(convoy: nil), "أمير الطلعة")
         XCTAssertEqual(ConvoyLeader.title(convoy: ConvoyInfo(lead_user_id: "l", tail_user_id: nil, max_gap_m: nil)), "المقدمة")
     }
 
@@ -180,12 +180,12 @@ final class ConvoyIntelTests: XCTestCase {
                               batteryPercent: nil, note: nil, hasPhone: false, photo: nil)
         XCTAssertNil(SaryConvoyLine.text(p, now: now))
         p.leaderDistanceMeters = 1200
-        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الرحلة ١٫٢ كم")
+        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم")
         p.stoppedSince = now.addingTimeInterval(-30)
-        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الرحلة ١٫٢ كم", "a red light is not «واقف»")
+        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم", "a red light is not «واقف»")
         p.stoppedSince = now.addingTimeInterval(-260)
-        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الرحلة ١٫٢ كم · واقف منذ ٤ د")
+        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم · واقف منذ ٤ د")
         p.presence = .stale(since: now.addingTimeInterval(-600))
-        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الرحلة ١٫٢ كم", "never a stale «واقف»")
+        XCTAssertEqual(SaryConvoyLine.text(p, now: now), "عن أمير الطلعة ١٫٢ كم", "never a stale «واقف»")
     }
 }

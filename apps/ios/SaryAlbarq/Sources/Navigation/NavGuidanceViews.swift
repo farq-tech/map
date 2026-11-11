@@ -394,7 +394,7 @@ struct NavArrivalCard: View {
                     .accessibilityIdentifier("nav.arrived.title")
                 Text(nav.target?.name ?? "وجهتك").saryText(.callout, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
                 if let s = nav.startedAt, let a = nav.arrivedAt {
-                    Text("مدة الرحلة \(NavText.remaining(seconds: a.timeIntervalSince(s)))").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Text("مدة المشوار \(NavText.remaining(seconds: a.timeIntervalSince(s)))").saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

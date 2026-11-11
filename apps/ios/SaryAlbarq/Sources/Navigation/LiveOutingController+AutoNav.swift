@@ -134,7 +134,7 @@ extension LiveOutingController {
             let target = NavBroadcast.targetName(n.text) ?? tripDestination?.name ?? "الوجهة"
             switch r {
             case .start:
-                toast("أمير الرحلة بدأ التوجيه إلى \(target)")
+                toast("أمير الطلعة بدأ التوجيه إلى \(target)")
             case .offer:
                 UINotificationFeedback.warning()
             case .ignored, .none:
@@ -156,7 +156,7 @@ extension LiveOutingController {
 
     /// «ابدأ التوجيه للكل» (the leader): my own guidance, and the group command in my note.
     func startGuidanceForAll() {
-        guard canGuideAll else { return toast("التوجيه للكل لأمير الرحلة فقط") }
+        guard canGuideAll else { return toast("التوجيه للكل لأمير الطلعة فقط") }
         startGuidanceForMe()
         let name = autoNavNextTarget?.name ?? tripDestination?.name ?? "الوجهة"
         Task {
@@ -303,5 +303,5 @@ extension LiveOutingController {
 
 extension LiveOutingController {
     /// «أمير الرحلة» (the title the outing uses for its leader).
-    var leaderName: String { "أمير الرحلة" }
+    var leaderName: String { "أمير الطلعة" }
 }

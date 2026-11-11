@@ -25,7 +25,7 @@ final class EnjadTests: XCTestCase {
         XCTAssertTrue(m.contains("آخر تحديث: "))
         XCTAssertTrue(m.contains("البطارية: ٤٢٪"))
         XCTAssertTrue(m.contains("عدد الأفراد في الطلعة: ٥"))
-        XCTAssertTrue(m.contains("أمير الرحلة: سلطان — 0509999999"))
+        XCTAssertTrue(m.contains("أمير الطلعة: سلطان — 0509999999"))
         XCTAssertFalse(m.contains("السيارة"), "unknown car: not said")
     }
 

@@ -278,9 +278,55 @@ enum OutingFlow {
     }
 }
 
+/// The word dictionary (UI-AUDIT §٢ «قاموس الكلمات», owner-approved): ONE Najdi word per concept,
+/// on every screen, CarPlay and notifications. The widget / Live Activity target does not compile
+/// this file: its copies of these words are literals that must match (`Widgets/`, `Shared/`).
+enum SaryCopy {
+    /// The whole outing: «الطلعة», never «الرحلة».
+    static let outing = "الطلعة"
+    /// Its leader.
+    static let leader = "أمير الطلعة"
+    /// The outing's members.
+    static let members = "الربع"
+    /// Retrace your own recorded trail back (offline, on this phone).
+    static let backTrack = "طريق الرجعة"
+    /// End the retrace (its panel's button).
+    static let endBackTrack = "أنهِ الرجعة"
+    /// A NEW outing from here to the start point (needs the server).
+    static let returnOuting = "طلعة الرجعة"
+    /// The leg / pin back to where you started.
+    static let startPoint = "نقطة البداية"
+    /// Start guidance for me.
+    static let go = "اتجه"
+    /// Start guidance for everyone (the leader).
+    static let guideAll = "وجّه الكل"
+    /// Stop guidance.
+    static let stopGuidance = "أوقف التوجيه"
+    /// End the outing (the action); its confirmation is `EndOutingCopy`.
+    static let endOuting = "أنهِ الطلعة"
+    /// Postpone («not now»).
+    static let later = "لاحقًا"
+    /// Back out of what you were doing.
+    static let cancel = "إلغاء"
+    /// Frame everyone on the map.
+    static let seeAll = "شوف الكل"
+    static let rally = "نقطة التجمع"
+    static let chat = "المحادثة"
+    static let myPlaces = "أماكني"
+    /// The emergency button's word (no Latin «SOS» on screen).
+    static let emergency = "طوارئ"
+    /// The outing has ended.
+    static let outingEnded = "انتهت الطلعة"
+    /// Back from explore mode to the outing.
+    static let backToOuting = "ارجع للطلعة"
+    /// The generic failure, said in Najdi.
+    static let genericError = "صار خلل. جرّب مرة ثانية."
+}
+
 /// «أنهِ الطلعة»: ONE confirmation everywhere (the CTA, «المزيد» → «الطلعة»), one icon.
 /// `flag.checkered` stays «وصلنا»'s.
 enum EndOutingCopy {
+    static let action = SaryCopy.endOuting
     static let title = "تنهي الطلعة للكل؟"
     static let confirm = "أنهِها"
     static let cancel = "لا"

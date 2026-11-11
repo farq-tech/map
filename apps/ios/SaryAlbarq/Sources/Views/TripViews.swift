@@ -63,7 +63,7 @@ struct TripPeekStrip: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibility))
-        .accessibilityHint(Text("اضغط لعرض الرحلة"))
+        .accessibilityHint(Text("اضغط لعرض تفاصيل الطلعة"))
         .accessibilityIdentifier("trip.peek")
     }
 
@@ -92,9 +92,9 @@ struct TripPeekStrip: View {
         switch ui.phase {
         case let .needsDestination(canSet): return canSet ? "حدّد الوجهة قبل ما تبدأ" : "بانتظار الوجهة"
         case .notStarted: return "إلى \(ui.destinationName) · لم تبدأ"
-        case .waitingFix: return "بدأت الرحلة · ننتظر موقعك"
+        case .waitingFix: return "بدأت الطلعة · ننتظر موقعك"
         case .arrived: return "وصلت \(ui.destinationName) 🎉"
-        case .ended: return "انتهت الرحلة"
+        case .ended: return "انتهت الطلعة"
         case .underway:
             if minimal { return ui.progressLine ?? "إلى \(ui.destinationName)" }
             if let s = stale { return [ui.progressLine, s].compactMap { $0 }.joined(separator: " · ") }
@@ -103,7 +103,7 @@ struct TripPeekStrip: View {
     }
 
     private var accessibility: String {
-        "الرحلة: " + line
+        "الطلعة: " + line
     }
 }
 
@@ -121,8 +121,8 @@ struct TripCard: View {
             header
             switch ui.phase {
             case let .needsDestination(canSet):
-                Text(canSet ? "كل طلعة رحلة لها بداية ونهاية. حدّد وين رايحين، وتبدأ الرحلة لما تبدأ الطلعة."
-                            : "أمير الرحلة ما حدّد الوجهة بعد. أول ما يحددها تبدأ الرحلة.")
+                Text(canSet ? "كل طلعة لها بداية ونهاية. حدّد وين رايحين، ونحسب المشوار أول ما تبدأ الطلعة."
+                            : "أمير الطلعة ما حدّد الوجهة بعد. أول ما يحددها نحسب المشوار.")
                     .saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                 if canSet {
                     Button(action: actions.setDestination) { SaryButtonLabel(title: "حدّد الوجهة", systemImage: "flag.checkered") }
@@ -130,7 +130,7 @@ struct TripCard: View {
                         .accessibilityIdentifier("trip.setDestination")
                 }
             case .notStarted:
-                Text("تبدأ الرحلة لكل واحد من أول موقع يوصل بعد بداية الطلعة.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                Text("نحسب مشوار كل واحد من أول موقع يوصل بعد بداية الطلعة.").saryText(.subhead).foregroundStyle(p.textSecondary)
             case .waitingFix:
                 Text("بدأت الطلعة. أول موقع مباشر يوصلنا منك يصير نقطة البداية.").saryText(.subhead).foregroundStyle(p.textSecondary)
             case .underway:
@@ -183,8 +183,8 @@ struct TripCard: View {
         switch ui.phase {
         case .needsDestination: return "ما فيه وجهة"
         case .arrived: return "وصلت 🎉"
-        case .ended: return "انتهت الرحلة"
-        default: return ui.isReturnTrip ? "طريق الرجعة إلى \(ui.destinationName)" : "الرحلة إلى \(ui.destinationName)"
+        case .ended: return "انتهت الطلعة"
+        default: return ui.isReturnTrip ? "طلعة الرجعة إلى \(ui.destinationName)" : "الطلعة إلى \(ui.destinationName)"
         }
     }
 

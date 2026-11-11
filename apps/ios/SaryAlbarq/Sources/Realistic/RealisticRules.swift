@@ -88,8 +88,8 @@ enum RealisticGate: Equatable {
     var detail: String {
         switch self {
         case .ok: return ""
-        case .moving: return "خفّف تحت ١٥ كم/س أو وقّف، والقيادة تبقى على خريطة الرحلة."
-        case .navigating: return "الملاحة والتتبع على خريطة الرحلة. أوقف الملاحة ثم افتحه."
+        case .moving: return "خفّف تحت ١٥ كم/س أو وقّف، والقيادة تبقى على خريطة الطلعة."
+        case .navigating: return "الملاحة والتتبع على خريطة الطلعة. أوقف الملاحة ثم افتحه."
         case .offline: return "الصور الواقعية ثلاثية الأبعاد من Apple تُحمَّل مباشرة ولا تُحفظ على الجهاز. اتصل بالإنترنت وجرّب مرة ثانية."
         }
     }

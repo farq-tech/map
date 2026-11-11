@@ -20,8 +20,8 @@ struct PersonalInvitesSection<Legacy: View>: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             if !canLead {
-                SaryStateView(kind: .empty(title: "الدعوات عند أمير الرحلة",
-                                           message: "كل دعوة لشخص واحد باسمه. اطلب من أمير الرحلة يدعو من تبي.", systemImage: "person.badge.plus"))
+                SaryStateView(kind: .empty(title: "الدعوات عند أمير الطلعة",
+                                           message: "كل دعوة لشخص واحد باسمه. اطلب من أمير الطلعة يدعو من تبي.", systemImage: "person.badge.plus"))
             } else {
                 Text("كل دعوة لشخص واحد تعرفه: يظهر في الطلعة بالاسم اللي حفظته له، والرابط يدخله هو فقط مرة وحدة.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)

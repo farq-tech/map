@@ -23,7 +23,7 @@ struct ConvoyAlertUI: Equatable {
     /// Whole minutes stopped (unexpected stop).
     var minutes: Int? = nil
     /// «أمير الرحلة» or «المقدمة» (separation).
-    var leaderTitle = "أمير الرحلة"
+    var leaderTitle = "أمير الطلعة"
 
     var title: String {
         switch kind {

@@ -518,7 +518,7 @@ private struct TripStatusCallout: View {
     private func closedText(_ r: LiveCloseReason) -> String {
         switch r {
         case .outingEnded: return "انتهت هذه الطلعة."
-        case .removed: return "أزالك أمير الرحلة منها."
+        case .removed: return "أزالك أمير الطلعة منها."
         case .left: return "غادرت هذه الطلعة."
         case .notAMember: return "لست عضوًا في هذه الطلعة."
         case .unauthorized: return "انتهت جلستك على هذا الجهاز."
@@ -900,7 +900,7 @@ private struct InviteTab: View {
                 SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
-                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الرحلة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
+                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
             }
             if s.canRevoke {
                 Button { if s.link == nil { actions.revokeLink() } else { confirmRevoke = true } } label: {

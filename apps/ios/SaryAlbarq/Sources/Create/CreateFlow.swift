@@ -33,7 +33,7 @@ struct CreateFlowState: Equatable {
 
         var arabic: String {
             switch self {
-            case .destinationMissing: return "اختر الوجهة أولًا: كل رحلة لها بداية ونهاية."
+            case .destinationMissing: return "اختر الوجهة أولًا: كل طلعة لها بداية ونهاية."
             case .nameEmpty: return "اكتب اسم الطلعة."
             case .departurePast: return "وقت الانطلاق فات. اختر وقتًا من الآن وطالع."
             case .departureTooFar: return "اختر وقت انطلاق خلال ١٤ يومًا."

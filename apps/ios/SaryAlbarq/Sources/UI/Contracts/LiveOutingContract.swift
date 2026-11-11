@@ -17,7 +17,7 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    /// Lovable: «الخريطة» · «العيال» · «الرحلة» in the sheet; «المزيد» (the settings) behind the
+    /// Lovable: «الخريطة» · «الربع» · «الطلعة» in the sheet; «المزيد» (the settings) behind the
     /// header's gear.
     case trip, group, more, map
 
@@ -27,8 +27,8 @@ enum LiveTabUI: Equatable, CaseIterable, Hashable {
     var label: String {
         switch self {
         case .map: return "الخريطة"
-        case .trip: return "الرحلة"
-        case .group: return "العيال"
+        case .trip: return "الطلعة"
+        case .group: return "الربع"
         case .more: return "الإعدادات"
         }
     }

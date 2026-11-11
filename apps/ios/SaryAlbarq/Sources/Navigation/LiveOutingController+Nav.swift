@@ -112,7 +112,7 @@ extension LiveOutingController {
     }
 
     static func retargetHint(wasAuto: Bool) -> String {
-        wasAuto ? "يرجع توجيه الرحلة للوجهة لما تنهي هذا التوجيه" : "ترجع للوجهة من أدوات ← الطريق"
+        wasAuto ? "يرجع توجيه الطلعة للوجهة لما تنهي هذا التوجيه" : "ترجع للوجهة من أدوات ← الطريق"
     }
 
     /// «روح له»: refused in the card itself (with the reason) when their position is old.

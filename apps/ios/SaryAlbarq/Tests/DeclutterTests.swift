@@ -299,8 +299,8 @@ final class DeclutterTests: XCTestCase {
     }
 
     func testThreeTabs() {
-        /* Lovable: «الخريطة · العيال · الرحلة» in the sheet; the settings behind the header's gear. */
-        XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "العيال", "الرحلة"])
+        /* Lovable: «الخريطة · الربع · الطلعة» in the sheet (the word dictionary); the settings behind the header's gear. */
+        XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "الربع", "الطلعة"])
         XCTAssertEqual(LiveTabUI.more.label, "الإعدادات")
     }
 }

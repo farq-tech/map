@@ -279,7 +279,7 @@ private struct DestinationStep: View {
             }
         }
         /* No «بدون وجهة»: every outing is a trip with a start and an end. */
-        Label("كل طلعة رحلة لها بداية ونهاية، فالوجهة مطلوبة.", systemImage: "flag.checkered")
+        Label("كل طلعة لها بداية ونهاية، فالوجهة مطلوبة.", systemImage: "flag.checkered")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("create.dest.required")

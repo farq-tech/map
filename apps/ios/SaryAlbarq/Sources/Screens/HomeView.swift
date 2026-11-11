@@ -110,7 +110,7 @@ struct OutingCard: View {
                             Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
                             if o.role == "owner" {
                                 Image(systemName: SaryIcon.crown).font(.system(size: 10)).foregroundStyle(p.warningText)
-                                    .accessibilityLabel(Text("أمير الرحلة"))
+                                    .accessibilityLabel(Text("أمير الطلعة"))
                             }
                         }
                         HStack(spacing: 6) {

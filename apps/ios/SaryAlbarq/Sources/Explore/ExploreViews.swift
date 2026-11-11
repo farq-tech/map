@@ -28,7 +28,7 @@ struct ExploreHeader: View {
                     .saryGlass(Circle(), role: .chrome, interactive: true)
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("ارجع للرحلة"))
+            .accessibilityLabel(Text("ارجع للطلعة"))
             .accessibilityIdentifier("explore-exit")
 
             HStack(spacing: theme.space(.s)) {
@@ -639,7 +639,7 @@ struct ExploreTopBar: View {
         let p = theme.palette
         VStack(spacing: 8) {
             HStack(spacing: 4) {
-                round(SaryIcon.back, label: "ارجع للرحلة", id: "explore-exit", action: exit)
+                round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit)
                 HStack(spacing: 0) {
                     ForEach([MapLayer.satellite, .topo, .standard], id: \.self) { l in
                         let on = controller.mapLayer == l

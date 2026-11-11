@@ -568,7 +568,7 @@ private struct RallyBlocks: View {
             SaryRallyCard(rally: Mock.rally, canManage: true)
             SaryRallyCard(rally: Mock.rallyDone, canManage: false)
         }
-        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الرحلة · عضو") {
+        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الطلعة · عضو") {
             SaryRallyCard(rally: nil, canManage: true)
             SaryRallyCard(rally: nil, canManage: false)
         }

@@ -178,7 +178,7 @@ enum ChatRules {
 
     static func newClientId() -> String { "i" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(20).lowercased() }
 
-    static func deletedLabel(_ m: ChatMessage) -> String { m.deleted_by == "leader" ? "حذفها أمير الرحلة" : "حُذفت الرسالة" }
+    static func deletedLabel(_ m: ChatMessage) -> String { m.deleted_by == "leader" ? "حذفها أمير الطلعة" : "حُذفت الرسالة" }
 
     static func errorText(_ code: String) -> String {
         switch code {

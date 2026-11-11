@@ -83,7 +83,7 @@ struct RecoveryRestoreScreen: View {
                 SarySection(title: "من وين أجيب الرمز؟") {
                     VStack(alignment: .leading, spacing: theme.space(.s)) {
                         Text("في جوالك القديم: «ملفي» ← «رمز الاسترجاع». يظهر الرمز ورمز QR مرة واحدة عند إنشائه.")
-                        Text("إذا ما حفظت رمزًا من قبل، لا يمكن استرجاع الحساب — ابدأ باسم جديد، وأمير الرحلة يرسل لك دعوة.")
+                        Text("إذا ما حفظت رمزًا من قبل، لا يمكن استرجاع الحساب — ابدأ باسم جديد، وأمير الطلعة يرسل لك دعوة.")
                     }
                     .saryText(.subhead)
                     .foregroundStyle(p.textSecondary)

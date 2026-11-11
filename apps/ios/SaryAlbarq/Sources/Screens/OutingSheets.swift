@@ -41,7 +41,7 @@ struct JoinByLinkSheet: View {
                 .saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .sheet(isPresented: $scanning) {
-            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الرحلة.") { s in
+            QRScanSheet(title: "امسح رمز الدعوة", hint: "وجّه الكاميرا لرمز QR في جوال أمير الطلعة.") { s in
                 scanning = false
                 text = s
                 go(s)
@@ -231,15 +231,15 @@ struct InviteJoinSheet: View {
                         .accessibilityIdentifier("join.shareStatement")
                 }
             case .expired:
-                SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الرحلة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الرحلة."),
+                SaryStateView(kind: .error(title: "انتهت صلاحية الدعوة", message: "اطلب من أمير الطلعة رابطًا جديدًا. الروابط تنتهي أو يلغيها أمير الطلعة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.expired")
             case .taken:
-                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الرحلة دعوة جديدة باسمك."),
+                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الطلعة دعوة جديدة باسمك."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.taken")
             case .invalid:
-                SaryStateView(kind: .error(title: "الرابط ناقص أو فيه خطأ", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الرحلة."),
+                SaryStateView(kind: .error(title: "الرابط ناقص أو فيه خطأ", message: "تأكد أنك نسخت الرابط كاملًا، أو امسح رمز QR من جوال أمير الطلعة."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.invalid")
             case .error(let m):

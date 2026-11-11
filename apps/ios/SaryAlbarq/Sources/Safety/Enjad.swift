@@ -70,7 +70,7 @@ enum Enjad {
         if let c = i.car, !c.isEmpty { extra.append("السيارة: \(c)") }
         if !extra.isEmpty { l.append(extra.joined(separator: " · ")) }
         if let ln = i.leaderName, !ln.isEmpty {
-            l.append("أمير الرحلة: \(ln)\((i.leaderPhone ?? "").isEmpty ? "" : " — \(i.leaderPhone!)")")
+            l.append("أمير الطلعة: \(ln)\((i.leaderPhone ?? "").isEmpty ? "" : " — \(i.leaderPhone!)")")
         }
         return l.joined(separator: "\n")
     }

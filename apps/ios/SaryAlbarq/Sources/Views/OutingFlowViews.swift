@@ -82,7 +82,7 @@ struct WhereToSheet: View {
                     .accessibilityAddTraits(.isHeader)
                 Text(controller.session.view?.iLead == true
                      ? "اختر الوجهة، وبعدها «ابدأ المشوار» للكل. الطلعة تكمل بعد ما توصلون."
-                     : "مشوارك أنت بس. وجهة الطلعة يحددها أمير الرحلة.")
+                     : "مشوارك أنت بس. وجهة الطلعة يحددها أمير الطلعة.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                 Button {
                     /* A direct swap: `sheet(item:)` replaces the presented sheet when the item's identity

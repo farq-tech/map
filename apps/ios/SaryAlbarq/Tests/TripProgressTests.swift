@@ -82,7 +82,7 @@ final class TripProgressTests: XCTestCase {
         XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "network", status: 0).arabic))
         XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "timeout", status: 0).arabic))
         XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "rate_limited", status: 429).arabic))
-        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: "ما عندنا نقطة بداية محفوظة لهذه الطلعة على هذا الجوال."))
         XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: nil))
     }
 

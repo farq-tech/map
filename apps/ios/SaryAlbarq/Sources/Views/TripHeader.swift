@@ -26,7 +26,7 @@ enum TripHeaderPresenter {
             case .notStarted: return "لم تبدأ"
             case .waitingFix: return "ننتظر موقعك"
             case .arrived: return t.destinationName.isEmpty ? "وصلت" : "وصلت \(t.destinationName)"
-            case .ended: return "انتهت الرحلة"
+            case .ended: return "انتهت الطلعة"
             case .underway:
                 if let s = t.myFixStaleSince { return SaryFormat.lastUpdate(since: s, now: Date()) }
                 let to = t.destinationName.isEmpty ? nil : "إلى \(t.destinationName)"

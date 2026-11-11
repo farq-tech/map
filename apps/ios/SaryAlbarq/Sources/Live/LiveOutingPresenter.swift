@@ -50,7 +50,7 @@ struct LivePresenterInput {
     var myTripRemaining: RemainingDistance?
     /// «ذكاء القافلة»: who distances are measured from, and who has been standing still since when.
     var convoyLeaderId: String?
-    var convoyLeaderTitle = "أمير الرحلة"
+    var convoyLeaderTitle = "أمير الطلعة"
     var stoppedSince: [String: Date] = [:]
 }
 
