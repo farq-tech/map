@@ -738,9 +738,10 @@ struct ExploreCoordinateBar: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                             .accessibilityIdentifier("explore.coordinate")
+                        /* 12 pt secondary: it sits on glass over the map (10 pt tertiary was unreadable in sun). */
                         Text(ExploreRules.elevationText(r?.elevationM))
-                            .font(.sary(10, .regular))
-                            .foregroundStyle(p.textTertiary)
+                            .font(.sary(12, .medium, relativeTo: .caption))
+                            .foregroundStyle(p.textSecondary)
                             .lineLimit(1)
                             .accessibilityIdentifier("explore.elevation")
                     }

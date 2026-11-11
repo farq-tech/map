@@ -210,7 +210,7 @@ struct MyStuckStrip: View {
                 .accessibilityIdentifier("stuck-enjad")
             }
         }
-        .foregroundStyle(Color.black.opacity(0.85))
+        .foregroundStyle(p.onWarning)
         .padding(.leading, theme.space(.l))
         .padding(.trailing, theme.space(.s))
         .padding(.vertical, theme.space(.s))

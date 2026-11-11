@@ -192,13 +192,16 @@ struct MapHomeScreen: View {
         let p = theme.palette
         return Button { tool = .menu } label: {
             HStack(spacing: 6) {
-                Image(systemName: "sun.dust.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.onAccent)
-                Text("البر").font(.sary(14, .bold)).foregroundStyle(p.onAccent)
+                Image(systemName: "sun.dust.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.onWarning)
+                Text("البر").font(.sary(14, .bold)).foregroundStyle(p.onWarning)
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 36)
             .background(Capsule().fill(p.warning))
             .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            /* Same as the category chips: 36 tall to the eye, 44 to the finger. */
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text("البر: الطقس والقبلة والكشتة والدروب"))
