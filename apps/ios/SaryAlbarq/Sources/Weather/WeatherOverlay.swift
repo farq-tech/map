@@ -40,7 +40,7 @@ final class WeatherOverlay {
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
-    private var outlookFor: (point: LngLat, at: Date)?
+    private var outlookFor: (point: LngLat, at: Date, destination: Bool)?
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
@@ -259,11 +259,11 @@ final class WeatherOverlay {
             return
         }
         if let last = outlookFor, Date().timeIntervalSince(last.at) < 600,
-           Self.km(last.point, p) < 25 { return }
+           Self.km(last.point, p) < 25, last.destination == request.pointIsDestination { return }
         /* A new place (not a refresh of the same one): never keep showing the old place's arrival. */
-        if outlookFor.map({ Self.km($0.point, p) >= 25 }) ?? true { legend.outlook = nil }
+        if outlookFor.map({ Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
-        outlookFor = (p, Date())
+        outlookFor = (p, Date(), request.pointIsDestination)
         legend.outlookLoading = true
         let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         outlookTask = Task { [weak self] in

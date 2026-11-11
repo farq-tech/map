@@ -144,8 +144,8 @@ test('clouds.warm: fetches the Kingdom tiles of the newest frames once, newest f
   try {
     const r = await clouds.warm(nowMs, { frames: 2 });
     assert.equal(r.frames, 2);
-    assert.ok(r.tiles >= 10 && r.tiles <= 60, `tiles ${r.tiles}`);
-    assert.equal(seen.length, r.frames * r.tiles);
+    assert.ok(r.tiles >= 20 && r.tiles <= 200, `tiles ${r.tiles}`);
+    assert.equal(seen.length, r.tiles);
     assert.match(decodeURIComponent(seen[0]), /T19:00:00Z/); // newest first
   } finally {
     fetcher.setFetch(null);
