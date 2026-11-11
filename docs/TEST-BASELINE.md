@@ -32,3 +32,18 @@
 
 ## ملاحظة عن الحمل (2026-11-11، Build 40)
 عند تشغيل دفعة واجهة كاملة بينما تعمل أرشفة Release وبناء بيانات (8 مهام) على الجهاز نفسه فشلت **10 اختبارات ملاحة** (`NavigationUITests` و`StandaloneNav*` و`TripUITests`) بمهل زمنية، ونجحت **كلها** عند إعادتها وحدها على جهاز هادئ. قاعدة: لا تُحكم بفشل ملاحة في دفعة كاملة قبل إعادتها وحدها. القبلة `ReachabilityUITests/testQibla…` ما زال يفشل على `main` النظيف.
+
+## خط الأساس بعد Build 41 (قيس 2026-11-11 على `main` `53c6ab54` وعلى شجرة Build 41 `5d10bf9f`)
+عشرة اختبارات واجهة تفشل على `main` وعلى Build 41 بالطريقة نفسها، وحدها على محاكٍ مُهيّأ:
+- `SaryAlbarqUITests`: `testApproximateRefusedShowsPreciseRecovery`، `testDeniedLocationThenSettingsJoinsByItself`، `testDeniedRecoveryOnlySettingsThenJoinsByItself`، `testPreviouslyDeniedLocationShowsRecoveryWithoutJoining` (أذونات الموقع).
+- `ReachabilityUITests/testQiblaDeniedLocationOffersSettingsAndFailureCanRetry`.
+- `HiResImageryUITests/testBadgeInExplorationThenActiveNavigation`.
+- `WaypointsUITests`: `testConvoyDark`، `testConvoyDrive`، `testConvoyLight`.
+- `DesertGazetteerUITests/testNufudChipListsRealPlacesAndStartsATrip`.
+
+تفشل في الدفعة الكاملة تحت الحمل وتنجح وحدها: `VisualsUITests` (4) و`LayersToggleUITests/testLayersSheetSwitchesFlip`.
+
+أرقام Build 41: وحدة **1695 ناجحًا، 0 فشل، 2 متخطّيان**؛ واجهة كاملة 189 (28 متخطّاة).
+
+قاعدة من دمج 41: الدمج الآلي لفروع أضافت اختبارات في آخر الملف نفسه قد يضع الاختبار في الصنف الخطأ (يترجم خطأً «cannot find in scope»)، فيُنقل إلى صنفه.
+
