@@ -364,14 +364,24 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
                         roadEnd: prefix.count >= 2 ? ReturnRoute.pavedEnd(streetSurfaces, fallback: prefix.last) : nil)
     }
 
+    /// Ground that is slow and demanding off a track: dune crests («طعوس»), rock, sabkha, wadi beds.
+    static func isRough(_ g: DesertGrid.Ground) -> Bool {
+        switch g {
+        case .crest, .rock, .sabkha, .wadi: return true
+        case .firm, .sand, .forbidden: return false
+        }
+    }
+
     private static func surfaceRuns(_ points: [LngLat], grid: DesertGrid) -> [NavSurfaceRun] {
         guard points.count >= 2 else { return [] }
         var runs: [NavSurfaceRun] = []
         for (a, b) in zip(points, points.dropFirst()) {
             let mid = LngLat(lng: (a.lng + b.lng) / 2, lat: (a.lat + b.lat) / 2)
-            let flags = grid.cell[grid.index(mid)] & 0xF0
+            let i = grid.index(mid)
+            let flags = grid.cell[i] & 0xF0
             let kind: NavSurfaceKind = flags & DesertGrid.road != 0 ? .paved
-                : flags & DesertGrid.track != 0 ? .unpaved : .terrain
+                : flags & DesertGrid.track != 0 ? .unpaved
+                : Self.isRough(grid.ground(i)) ? .rough : .terrain
             if runs.last?.kind == kind {
                 runs[runs.count - 1].coordinates.append(b)
             } else {

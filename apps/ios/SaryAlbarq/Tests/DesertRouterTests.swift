@@ -171,7 +171,7 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertTrue(route.via?.contains("درب بري محسوب") == true,
                       "a nearby router snap must not degrade to a street-only route")
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved })
-        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain })
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain || $0.kind == .rough })
         let snap = try XCTUnwrap(route.surfaceRuns.first { $0.kind == .gridSnap },
                                  "the unsourced road-to-grid connector must be identified as an approximate snap")
         let pavedEnd = try XCTUnwrap(route.surfaceRuns.last(where: { $0.kind == .paved })?.coordinates.last,
@@ -343,7 +343,7 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), max(130, hypot(grid.dx, grid.dy) * 1.5))
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved }, "preserve the city-road approach")
-        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .terrain || $0.kind == .unpaved }, "continue over a classified desert surface")
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .terrain || $0.kind == .rough || $0.kind == .unpaved }, "continue over a classified desert surface")
         XCTAssertGreaterThanOrEqual(route.timingProfile?.count ?? 0, 2, "keep separate road and off-road ETA legs")
     }
 
@@ -749,5 +749,38 @@ private final class ConcurrencyProbeProvider: NavRoutingProvider {
         try? await Task.sleep(nanoseconds: 100_000_000)
         await probe.leave()
         return try handler(request)
+    }
+}
+
+/// Route surfaces read as three materials: asphalt, dirt track, open terrain and rough ground.
+final class NavSurfaceStyleTests: XCTestCase {
+    func testRoughGroundIsCrestRockSabkhaWadi() {
+        for g in [DesertGrid.Ground.crest, .rock, .sabkha, .wadi] { XCTAssertTrue(DesertAwareRouteProvider.isRough(g), "\(g)") }
+        for g in [DesertGrid.Ground.firm, .sand, .forbidden] { XCTAssertFalse(DesertAwareRouteProvider.isRough(g), "\(g)") }
+    }
+
+    func testLegendSumsEachSurfaceAndSkipsTheApproximateJoin() {
+        let a = LngLat(lng: 46.60, lat: 25.10), b = LngLat(lng: 46.61, lat: 25.10)
+        let c = LngLat(lng: 46.62, lat: 25.10), d = LngLat(lng: 46.63, lat: 25.10)
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: [a, b]),
+                    NavSurfaceRun(kind: .gridSnap, coordinates: [b, c]),
+                    NavSurfaceRun(kind: .rough, coordinates: [c, d]),
+                    NavSurfaceRun(kind: .paved, coordinates: [d, LngLat(lng: 46.64, lat: 25.10)])]
+        let rows = NavSurfaceLegend.rows(runs)
+        XCTAssertEqual(rows.map(\.kind), [.paved, .rough])
+        XCTAssertEqual(rows[0].meters, 2 * Vehicle.distanceMeters(a, b), accuracy: 5)
+        XCTAssertTrue(NavSurfaceLegend.shows(runs))
+        XCTAssertFalse(NavSurfaceLegend.shows([NavSurfaceRun(kind: .paved, coordinates: [a, b])]), "all asphalt: no legend")
+        XCTAssertEqual(NavSurfaceLegend.label(.unpaved), "ترابي")
+        XCTAssertEqual(NavSurfaceLegend.label(.rough), "وعر")
+    }
+
+    func testEachSurfaceHasItsOwnMapLayers() {
+        for id in ["sary-nav-dirt", "sary-nav-dirt-ruts", "sary-nav-terrain", "sary-nav-rough", "sary-nav-rough-ticks"] {
+            XCTAssertTrue(NavMapDrawer.layerIds.contains(id), id)
+        }
+        XCTAssertEqual(NavMapDrawer.SurfaceStyle.dirt, "#D6A15A")
+        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.dirt, NavMapDrawer.SurfaceStyle.terrain)
+        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.terrain, NavMapDrawer.SurfaceStyle.rough)
     }
 }

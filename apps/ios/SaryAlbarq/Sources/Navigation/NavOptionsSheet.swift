@@ -104,6 +104,9 @@ struct NavOptionsSheet: View {
                     routeRow(r, best: nav.routes[0], index: i)
                 }
             }
+            if let r = nav.selected ?? nav.routes.first, NavSurfaceLegend.shows(r.surfaceRuns) {
+                NavSurfaceLegend(runs: r.surfaceRuns)
+            }
             if let leg = nav.offRoad { offRoadNote(leg, whole: false) }
             if nav.options.avoidUnpaved, nav.selected?.hasUnpaved == true {
                 SaryInlineMessage(text: "ما لقينا طريقًا بدون أجزاء ترابية؛ هذا أقرب ما يكون.", tone: .warning)
@@ -243,5 +246,88 @@ struct NavTargetPicker: View {
         .background(p.elevated.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .accessibilityIdentifier("nav.picker")
+    }
+}
+
+
+/// The route's surfaces in words and in the same "materials" the map draws (`NavMapDrawer.SurfaceStyle`):
+/// «زفلت ٣٢ كم · ترابي ٦ كم · بر سهل ٤ كم · وعر ١٫٢ كم». Shown only when the route is not all asphalt.
+struct NavSurfaceLegend: View {
+    @Environment(\.sary) private var theme
+    var runs: [NavSurfaceRun]
+
+    struct Row: Identifiable, Equatable {
+        var kind: NavSurfaceKind
+        var meters: Double
+        var id: String { kind.rawValue }
+    }
+
+    static func label(_ k: NavSurfaceKind) -> String {
+        switch k {
+        case .paved: return "زفلت"
+        case .unpaved: return "ترابي"
+        case .terrain: return "بر سهل"
+        case .rough: return "وعر"
+        case .gridSnap: return "وصلة تقريبية"
+        }
+    }
+
+    /// Total length per surface, in route order of first appearance; the tiny approximate join is left out.
+    static func rows(_ runs: [NavSurfaceRun]) -> [Row] {
+        var out: [Row] = []
+        for run in runs where run.kind != .gridSnap && run.coordinates.count >= 2 {
+            let m = zip(run.coordinates, run.coordinates.dropFirst()).reduce(0.0) { $0 + Vehicle.distanceMeters($1.0, $1.1) }
+            if let i = out.firstIndex(where: { $0.kind == run.kind }) { out[i].meters += m } else { out.append(Row(kind: run.kind, meters: m)) }
+        }
+        return out.filter { $0.meters >= 50 }
+    }
+
+    /// Worth a legend: something other than asphalt is on the way.
+    static func shows(_ runs: [NavSurfaceRun]) -> Bool { rows(runs).contains { $0.kind != .paved } }
+
+    var body: some View {
+        let p = theme.palette
+        let rows = Self.rows(runs)
+        return VStack(alignment: .leading, spacing: theme.space(.xs)) {
+            Text("نوع الطريق").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+            ForEach(rows) { r in
+                HStack(spacing: theme.space(.s)) {
+                    swatch(r.kind)
+                    Text(Self.label(r.kind)).saryText(.footnote, weight: .semibold).foregroundStyle(p.textPrimary)
+                    Spacer(minLength: 0)
+                    Text(SaryFormat.distance(meters: r.meters)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(theme.space(.m))
+        .sarySurface(radius: SaryRadius.m)
+        .accessibilityIdentifier("nav.surfaceLegend")
+    }
+
+    /// A short sample of each line style, drawn like the map (casing + fill + pattern).
+    @ViewBuilder private func swatch(_ k: NavSurfaceKind) -> some View {
+        let w: CGFloat = 34, h: CGFloat = 8
+        ZStack {
+            switch k {
+            case .paved:
+                Capsule().fill(Color.white).frame(width: w, height: h + 4)
+                Capsule().fill(Color(rgb: SaryPalette.navBlueDay)).frame(width: w - 4, height: h)
+            case .unpaved:
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.dirtEdgeRGB)).frame(width: w, height: h + 3)
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.dirtRGB)).frame(width: w - 3, height: h)
+                Capsule().stroke(Color(rgb: NavMapDrawer.SurfaceStyle.dirtRutsRGB), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .frame(width: w - 10, height: 3)
+            case .terrain:
+                HStack(spacing: 3) { ForEach(0..<5, id: \.self) { _ in Circle().fill(Color(rgb: NavMapDrawer.SurfaceStyle.terrainRGB)).frame(width: 5, height: 5) } }
+            case .rough:
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughEdgeRGB)).frame(width: w, height: h + 3)
+                HStack(spacing: 2) { ForEach(0..<4, id: \.self) { _ in Rectangle().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughRGB)).frame(width: 6, height: h) } }
+            case .gridSnap:
+                EmptyView()
+            }
+        }
+        .frame(width: w, height: h + 4)
+        .accessibilityHidden(true)
     }
 }

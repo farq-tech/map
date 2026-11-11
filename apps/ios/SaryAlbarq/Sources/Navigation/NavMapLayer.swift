@@ -62,7 +62,23 @@ final class NavMapDrawer {
     static let source = "sary-nav-routes"
     static let offSource = "sary-nav-offroad"
     static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main",
+                           "sary-nav-dirt-casing", "sary-nav-dirt", "sary-nav-dirt-ruts",
+                           "sary-nav-terrain-casing", "sary-nav-terrain",
+                           "sary-nav-rough-casing", "sary-nav-rough", "sary-nav-rough-ticks",
                            "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off"]
+    /// Surface styles on the chosen route — three readable "materials", never a colour alone
+    /// (each also differs in pattern, so it reads in sunlight and for colour-blind drivers):
+    /// asphalt = solid blue with a white casing; dirt track = sand line with dark-earth edges and
+    /// pale wheel-rut dashes; open terrain = amber dots; rough ground = red-ochre dashes with ticks.
+    enum SurfaceStyle {
+        static let dirtRGB: UInt32 = 0xD6A15A, dirtEdgeRGB: UInt32 = 0x5B3A1C, dirtRutsRGB: UInt32 = 0xF6E2B8
+        static let terrainRGB: UInt32 = 0xF2C14E, terrainEdgeRGB: UInt32 = 0x3A2913
+        static let roughRGB: UInt32 = 0xD9502F, roughEdgeRGB: UInt32 = 0x2A0E07, roughTicksRGB: UInt32 = 0xFFD9C9
+        static func hex(_ rgb: UInt32) -> String { String(format: "#%06X", rgb) }
+        static let dirt = hex(dirtRGB), dirtEdge = hex(dirtEdgeRGB), dirtRuts = hex(dirtRutsRGB)
+        static let terrain = hex(terrainRGB), terrainEdge = hex(terrainEdgeRGB)
+        static let rough = hex(roughRGB), roughEdge = hex(roughEdgeRGB), roughTicks = hex(roughTicksRGB)
+    }
     /// `SaryPalette.navBlueDay` as a style colour ("#2B7BF0").
     static let routeBlue = String(format: "#%06X", SaryPalette.navBlueDay)
     /// Traffic bands on the chosen route: free (blue), slow (orange), heavy (red), standstill (dark red).
@@ -106,20 +122,48 @@ final class NavMapDrawer {
         let sel: [Any] = ["==", ["get", "s"], 1]
         let alt: [Any] = ["==", ["get", "s"], 0]
         let knownSurface: [Any] = ["all", sel, ["!", ["has", "k"]]]
-        let nonSnapSurface: [Any] = ["all", sel, ["has", "k"], ["!=", ["get", "k"], NavSurfaceKind.gridSnap.rawValue]]
+        func kind(_ k: NavSurfaceKind) -> [Any] { ["all", sel, ["==", ["get", "k"], k.rawValue]] }
+        /* Asphalt (and routes without surface data) keep the classic solid blue line. */
+        let asphalt: [Any] = ["any", knownSurface, kind(.paved)]
         let gridSnap: [Any] = ["all", sel, ["==", ["get", "k"], NavSurfaceKind.gridSnap.rawValue]]
         let layers: [[String: Any]] = [
             ["id": "sary-nav-alt-casing", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#1b2a44", "line-width": width(9), "line-opacity": 0.55, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-alt", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#9db8e6", "line-width": width(6), "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
-            ["id": "sary-nav-main-casing", "type": "line", "source": Self.source, "filter": ["any", knownSurface, nonSnapSurface], "layout": round,
+            ["id": "sary-nav-main-casing", "type": "line", "source": Self.source, "filter": asphalt, "layout": round,
              "paint": ["line-color": "#ffffff", "line-width": width(12), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
-            ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": ["any", knownSurface, nonSnapSurface], "layout": round,
+            ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": asphalt, "layout": round,
              /* Still visible behind 3D buildings (Olaya towers would hide the turn otherwise). */
-             "paint": ["line-color": ["match", ["get", "k"], "unpaved", "#E6A430", "terrain", "#F5B83D",
-                                        ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue]] as [Any],
+             "paint": ["line-color": ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue] as [Any],
                        "line-width": width(8), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
+            /* Dirt track («ترابي»): a sand-coloured road with dark-earth edges and two pale wheel ruts. */
+            ["id": "sary-nav-dirt-casing", "type": "line", "source": Self.source, "filter": kind(.unpaved), "layout": round,
+             "paint": ["line-color": SurfaceStyle.dirtEdge, "line-width": width(11), "line-opacity": 0.9,
+                       "line-occlusion-opacity": 0.6, "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-dirt", "type": "line", "source": Self.source, "filter": kind(.unpaved), "layout": round,
+             "paint": ["line-color": SurfaceStyle.dirt, "line-width": width(7.5), "line-occlusion-opacity": 0.6,
+                       "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-dirt-ruts", "type": "line", "source": Self.source, "filter": kind(.unpaved), "layout": ["line-cap": "butt", "line-join": "round"],
+             "paint": ["line-color": SurfaceStyle.dirtRuts, "line-width": width(1.4), "line-gap-width": width(2.6),
+                       "line-dasharray": [3, 2], "line-opacity": 0.85, "line-emissive-strength": 1] as [String: Any]],
+            /* Open terrain («بر سهل»): a chain of amber dots over a soft dark halo — a predicted way, not a road. */
+            ["id": "sary-nav-terrain-casing", "type": "line", "source": Self.source, "filter": kind(.terrain), "layout": round,
+             "paint": ["line-color": SurfaceStyle.terrainEdge, "line-width": width(9), "line-opacity": 0.45,
+                       "line-blur": 1.5, "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-terrain", "type": "line", "source": Self.source, "filter": kind(.terrain), "layout": round,
+             "paint": ["line-color": SurfaceStyle.terrain, "line-width": width(6.5),
+                       "line-dasharray": [0.01, 1.7], "line-emissive-strength": 1] as [String: Any]],
+            /* Rough ground («وعر»: طعوس، صخر، سبخة، شعيب): bold red-ochre dashes with pale cross-ticks. */
+            ["id": "sary-nav-rough-casing", "type": "line", "source": Self.source, "filter": kind(.rough), "layout": round,
+             "paint": ["line-color": SurfaceStyle.roughEdge, "line-width": width(10.5), "line-opacity": 0.8,
+                       "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-rough", "type": "line", "source": Self.source, "filter": kind(.rough), "layout": ["line-cap": "butt", "line-join": "round"],
+             "paint": ["line-color": SurfaceStyle.rough, "line-width": width(7),
+                       "line-dasharray": [1.6, 0.7], "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-rough-ticks", "type": "line", "source": Self.source, "filter": kind(.rough), "layout": ["line-cap": "butt"],
+             "paint": ["line-color": SurfaceStyle.roughTicks, "line-width": width(7), "line-dasharray": [0.12, 1.1],
+                       "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
             /* The road-to-grid cell-center join is approximate by definition, never a solid road. */
             ["id": "sary-nav-grid-snap-casing", "type": "line", "source": Self.source, "filter": gridSnap, "layout": round,
              "paint": ["line-color": "#21180d", "line-width": width(7), "line-opacity": 0.8,

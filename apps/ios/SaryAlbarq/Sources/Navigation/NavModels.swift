@@ -147,8 +147,10 @@ struct NavRouteTimingLeg: Equatable {
 enum NavSurfaceKind: String, Equatable {
     case paved
     case unpaved
-    /// A cost-grid path through terrain, not a mapped road or track.
+    /// A cost-grid path through open, easy terrain (firm ground, flat sand), not a mapped road or track.
     case terrain
+    /// A cost-grid path through rough ground: dune crests, rock, sabkha or a wadi bed.
+    case rough
     /// Short, approximate join from an exact provider coordinate to a cost-grid cell center.
     /// Drawn dashed so it is never mistaken for a mapped road or verified trail.
     case gridSnap
