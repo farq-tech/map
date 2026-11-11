@@ -220,3 +220,13 @@ test('marginMinutes grows with weak confidence and distance', () => {
   assert.ok(m.marginMinutes(120, 0.5) > m.marginMinutes(120, 1));
   assert.ok(m.marginMinutes(240, 0.8) > m.marginMinutes(60, 0.8));
 });
+
+test('estimateMotion: a small shift that barely beats "no motion" is not reported with confidence', () => {
+  const world = makeWorld(420, 7);
+  const [a, b] = pair(world, 190, 1.2, 0); // ~1.2 px
+  // Make the pair almost identical plus noise so the displaced peak ≈ the zero-shift peak.
+  const g = rng(5);
+  const noisy = (f) => ({ w: f.w, h: f.h, data: Float32Array.from(f.data, (v) => Math.max(0, Math.min(1, v + (g() - 0.5) * 0.6))) });
+  const r = m.estimateMotion(noisy(a), noisy(b), DT, PX_KM, { maxShift: 28 });
+  assert.ok(!r.ok || r.stationary || r.confidence < 0.45, `confidence ${r.confidence} speed ${r.speedKmh}`);
+});

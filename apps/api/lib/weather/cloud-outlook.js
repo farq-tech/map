@@ -160,7 +160,9 @@ async function outlook(lat, lng, nowMs = Date.now()) {
   const px = ((x - win.box[0]) / (win.box[2] - win.box[0])) * (WINDOW_PX - 1);
   const py = ((win.box[3] - y) / (win.box[3] - win.box[1])) * (WINDOW_PX - 1);
   const pxKm = WINDOW_KM / WINDOW_PX;
-  const ageMin = Math.max(0, (nowMs - Date.parse(win.sel.newer.time)) / 60000);
+  /* The frames may have taken minutes to load: age counts from now, not from the request's start. */
+  const nowAfter = Math.max(nowMs, Date.now());
+  const ageMin = Math.max(0, (nowAfter - Date.parse(win.sel.newer.time)) / 60000);
   const grays = { newer: win.newer.gray, older: win.older.gray, oldest: win.oldest ? win.oldest.gray : null };
   /* The matching is the expensive part (~0.3 s): once per window, then every point in the cell reuses it. */
   if (!win.motionResult) win.motionResult = motionOf(grays, win.sel.dtMin, win.sel.dt2Min, pxKm);

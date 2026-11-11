@@ -150,7 +150,10 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
   const peakScore = clamp01((best - 0.35) / 0.5);
   const distinct = clamp01((best - Math.max(second, -1)) / 0.12);
   const texture = clamp01(s.template.std / 0.12);
-  const confidence = Math.min(peakScore, distinct, texture);
+  /* A displaced peak must beat "nothing moved" clearly; otherwise a small noisy shift passes for motion. */
+  const shiftPx0 = Math.hypot(dx, dy);
+  const gainOverZero = shiftPx0 >= 1 ? clamp01((best - zero) / 0.05) : 1;
+  const confidence = Math.min(peakScore, distinct, texture, gainOverZero);
 
   const shiftPx = Math.hypot(dx, dy);
   const speedKmh = (shiftPx * pxKm) / (dtMin / 60);
@@ -166,6 +169,7 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
     zeroShiftCorrelation: zero,
     distinct,
     texture,
+    gainOverZero,
     stationary,
   };
 }
