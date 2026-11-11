@@ -88,10 +88,13 @@ final class TripUITests: XCTestCase {
         let summary = app.buttons["live.ended.summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 10), "«اعرض الملخص» once it ended")
         XCTAssertFalse(app.buttons["trip.summary"].exists, "the summary is offered once")
-        app.descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap()
+        /* The ended screen leaves the sheet open, so «طلعة الرجعة» is already in it: the handle toggles, so
+         * tap it only when the sheet is folded (a tap on an open sheet would fold it and hide the button). */
+        if !app.buttons["trip.return"].waitForExistence(timeout: 3) {
+            app.descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap()
+        }
         XCTAssertTrue(app.buttons["trip.return"].waitForExistence(timeout: 5), "«طلعة الرجعة» as a new outing")
         XCTAssertTrue(app.buttons["trip.return"].label.contains("طلعة الرجعة"), app.buttons["trip.return"].label)
-        app.descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap()
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         summary.tap()
         let trip = app.descendants(matching: .any)["summary.trip"]
