@@ -127,7 +127,7 @@ extension NavSession: NavigationSessionProviding {
         }
         s.offRoad = offRoad
         if let leg = offRoad {
-            /* The trip's guidance says why it is a straight line («بدون طريق معبّد» / «بلا إنترنت»). */
+            /* The trip's guidance says why it is a straight line («مافي طريق مزفلت» / «بلا إنترنت»). */
             s.offRoadInstruction = auto ? NavOffRoad.line(leg, remainingM: offRoadNow?.distanceM, bearing: offRoadNow?.bearing, fallback: fallback)
                                         : NavOffRoad.summary(leg)
             s.offRoadBearing = offRoadNow?.bearing ?? leg.bearing

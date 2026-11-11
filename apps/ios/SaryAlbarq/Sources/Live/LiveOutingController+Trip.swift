@@ -13,8 +13,8 @@ extension LiveOutingController {
     var returnOrigin: String? { ReturnTripStore.origin(of: session.id) }
 
     func registerTrip() {
-        /* The navigation picker's «الوجهة» and «نهاية المسار» read the plan too. */
-        navDestination = { [weak self] in self?.planModel?.plan.destination }
+        /* The navigation picker must follow the active leg when it differs from the old plan. */
+        navDestination = { [weak self] in self?.tripDestination }
         navPlanRoute = { [weak self] in self?.planModel?.plan.points ?? [] }
         trip.onEvent = { [weak self] e in self?.tripEvent(e) }
         session.tripSnapshot = { [weak self] in
@@ -107,13 +107,82 @@ extension LiveOutingController {
         Task { await session.setStatus("end") }
     }
 
-    /// Return trip: guide back along the trail of the outing it came back from.
+    /// The trip is over on this phone (ended here or by the leader's phone, or I left / was
+    /// removed): every guidance of this screen stops, once. `TripAutoNav` stops only the trip's own
+    /// guidance; a person's own («روح له», a map point via `NavSession.startImmediately`) used to
+    /// keep its GPS (`NavLocator` / the Mapbox trip), its offline retries and the blue location
+    /// arrow running after the trip ended.
+    func stopGuidanceWhenTripOver() {
+        guard !tripEndHandled, session.closedReason != nil || session.view?.status == .ended else { return }
+        tripEndHandled = true
+        if nav.isActive || nav.phase == .planning { nav.end() }
+        stopAutoFollow()
+        if backTrack != nil { stopBackTrack() }
+        if fixWait != nil {
+            fixWait = nil
+            location.endFreshFixRequest()
+        }
+        if modal == .navOptions || modal == .navSteps { modal = nil }
+    }
+
+    /// Return trip: guide back along the trail of the outing it came back from — the WHOLE
+    /// trail, city included (the person's explicit choice «على مساري»).
     func followOldTrail() {
         guard let old = returnOrigin, let t = TrailStore.load(old), t.points.count >= 2 else {
             toast("ما عندنا مسار محفوظ للطلعة السابقة على هذا الجوال.")
             return
         }
+        /* Replaces the automatic desert leg: no hand-over to the road at the junction. */
+        returnGuide.cancel()
         startBackTrack(along: t.points)
+    }
+
+    // MARK: «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road
+
+    /// The trip's guidance is about to start to `t` (`TripAutoNav` said `.start`). On a return
+    /// trip, from the desert part of the outbound trail: retrace ONLY that part back to the city
+    /// ↔ desert junction (`BackTrack`; off it, «خرجت عن الطريق» leads back to the same trail —
+    /// never a new desert route) and true (the road guidance waits). Decided once per screen:
+    /// on the city side, without the old trail, or far from it → false (normal guidance).
+    func startReturnDesertLegIfNeeded(_ t: NavTarget) -> Bool {
+        guard returnGuide.phase == .undecided, t.source == .destination, let old = returnOrigin else { return false }
+        guard let f = location.lastFix, let trail = TrailStore.load(old), trail.points.count >= 2 else {
+            returnGuide.begin(.road)
+            return false
+        }
+        let split = ReturnRoute.split(trail.points, saved: OutboundJunctionStore.load(old), match: TrailMatchStore.load(old))
+        let start = ReturnRoute.start(trail: trail.points, split: split, me: LngLat(lng: f.lng, lat: f.lat))
+        returnGuide.begin(start)
+        guard case let .desertTrail(leg) = start else { return false }
+        startBackTrack(along: leg)
+        /* `startBackTrack` refused (or arrived and handed over at once): the road guidance now. */
+        guard backTrack != nil, returnGuide.holdsRoadGuidance else {
+            returnGuide.cancel()
+            return false
+        }
+        toast("نرجع على نفس دربك في البر، وبعده أسرع طريق في المدينة")
+        return true
+    }
+
+    /// The desert leg reached the junction: stop retracing, the trip's normal road guidance
+    /// (fastest, reroutes) takes the city part to the start point.
+    func handOverReturnToRoad() {
+        stopBackTrack()
+        toast("وصلت طرف البر · نكمل بأسرع طريق")
+        DispatchQueue.main.async { [weak self] in self?.autoNavTick() }
+    }
+
+    /// While this outing's guidance to its destination drives a route: keep where that route
+    /// leaves the paved road (`OutboundJunctionStore`), for a later «طريق الرجعة». Only while I
+    /// am still on the city side of it (a reroute from the desert says nothing about the city).
+    func recordOutboundJunction() {
+        guard nav.phase == .guiding, let target = nav.target, target.source == .destination, returnOrigin == nil,
+              let r = nav.active, let j = ReturnRoute.roadEnd(of: r), let f = location.lastFix else { return }
+        if let s = savedRoadJunction, Vehicle.distanceMeters(s, j) < 1 { return }
+        let me = LngLat(lng: f.lng, lat: f.lat)
+        guard Vehicle.distanceMeters(me, target.position) > Vehicle.distanceMeters(j, target.position) else { return }
+        savedRoadJunction = j
+        OutboundJunctionStore.save(session.id, j)
     }
 
     private func tripEvent(_ e: TripRecord.Event) {

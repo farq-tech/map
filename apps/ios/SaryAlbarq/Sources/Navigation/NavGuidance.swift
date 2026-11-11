@@ -104,9 +104,28 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
         let next = stepAlong.firstIndex(where: { $0 > s + 1 }) ?? max(0, r.steps.count - 1)
         let toManeuver = max(0, (next < stepAlong.count ? stepAlong[next] : total) - s)
         let remaining = max(0, total - s)
-        let dur = total > 0 ? r.durationS * remaining / total : 0
+        let dur: Double
+        if total <= 0 {
+            dur = 0
+        } else if let profile = r.timingProfile, !profile.isEmpty {
+            dur = remainingDuration(profile: profile, traveledM: s)
+        } else {
+            dur = r.durationS * remaining / total
+        }
         let limit = next > 0 && next - 1 < r.steps.count ? r.steps[next - 1].speedLimitKmh : nil
         return NavProgress(stepIndex: next, distanceToManeuverM: toManeuver, distanceRemainingM: remaining, durationRemainingS: dur, speedLimitKmh: limit)
+    }
+
+    /// Preserves separate road/desert speeds as the driver advances along a hybrid route.
+    static func remainingDuration(profile: [NavRouteTimingLeg], traveledM: Double) -> Double {
+        var traveled = max(0, traveledM)
+        var remaining = 0.0
+        for leg in profile where leg.distanceM > 0 && leg.durationS > 0 {
+            let consumed = min(leg.distanceM, traveled)
+            remaining += leg.durationS * (leg.distanceM - consumed) / leg.distanceM
+            traveled = max(0, traveled - leg.distanceM)
+        }
+        return remaining
     }
 
     func ingest(_ fix: DeviceFix) {

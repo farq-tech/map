@@ -39,7 +39,7 @@ enum SearchLexicon {
     }
 
     struct Plan: Equatable {
-        /// What the sources are asked, Arabic first. Two forms when every word is known, else the query as typed.
+        /// What the sources are asked, Arabic first. Unknown place names also get a fallback without a known place type.
         let forms: [String]
         let segments: [Segment]
         /// Every word was in the lexicon.
@@ -53,7 +53,22 @@ enum SearchLexicon {
         var segs = segments(raw)
         segs = canonicalOrder(segs)
         let entries = segs.compactMap { s -> Entry? in if case let .known(e) = s { return e } else { return nil } }
-        guard !segs.isEmpty, entries.count == segs.count else { return Plan(forms: raw.isEmpty ? [] : [raw], segments: segs) }
+        guard !segs.isEmpty, entries.count == segs.count else {
+            guard !raw.isEmpty else { return Plan(forms: [], segments: segs) }
+            let hasUnknown = segs.contains { if case .unknown = $0 { return true }; return false }
+            let hasPlaceType = segs.contains { if case let .known(e) = $0 { return e.role == .head }; return false }
+            let fallback = segs.compactMap { segment -> String? in
+                switch segment {
+                case let .unknown(word): return word
+                case let .known(entry) where entry.role != .head:
+                    return PlaceSearch.isArabic(raw) ? entry.ar[0] : entry.en[0]
+                case .known: return nil
+                }
+            }.joined(separator: " ")
+            let forms = hasUnknown && hasPlaceType && !fallback.isEmpty && PlaceSearch.normalize(fallback) != PlaceSearch.normalize(raw)
+                ? [raw, fallback] : [raw]
+            return Plan(forms: forms, segments: segs)
+        }
         let ar = entries.map { $0.ar[0] }.joined(separator: " ")
         let en = englishOrder(entries).map { $0.en[0] }.joined(separator: " ")
         let forms = PlaceSearch.normalize(ar) == PlaceSearch.normalize(en) ? [ar] : [ar, en]
@@ -110,6 +125,49 @@ enum SearchLexicon {
         let segs = canonicalOrder(segments(name))
         let ids = segs.compactMap { s -> String? in if case let .known(e) = s { return e.id } else { return nil } }
         return !ids.isEmpty && ids.count == segs.count ? ids.joined(separator: " ") : nil
+    }
+
+    /// A category in the query is an intent: results must belong to this kind of place.
+    /// We keep the intent even when a proper name or district is also present.
+    static func categoryIntent(_ query: String) -> Entry? {
+        let parts = segments(query)
+        let heads = parts.compactMap { segment -> Entry? in
+            guard case let .known(entry) = segment, entry.role == .head else { return nil }
+            return entry
+        }
+        let unique = Dictionary(heads.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        guard unique.count == 1,
+              !parts.contains(where: { if case let .known(entry) = $0 { return entry.role == .brand }; return false }),
+              let entry = unique.values.first,
+              !["district", "street", "road", "center", "tower", "gate"].contains(entry.id),
+              let first = parts.first, let last = parts.last else { return nil }
+        /* Arabic writes the type first; English normally writes it last. A trailing Arabic «مول»
+           after an unknown proper name (e.g. «الأندلس مول») is part of that name, not a mall filter. */
+        if PlaceSearch.isArabic(query) {
+            guard case let .known(firstEntry) = first, firstEntry.id == entry.id else { return nil }
+        } else {
+            let startsWithIntent: Bool = { if case let .known(e) = first { return e.id == entry.id }; return false }()
+            let endsWithIntent: Bool = { if case let .known(e) = last { return e.id == entry.id }; return false }()
+            guard startsWithIntent || endsWithIntent else { return nil }
+        }
+        return entry
+    }
+
+    /// Labels returned by Apple/Mapbox that mean the requested category. Names are checked separately.
+    static func categoryLabels(for entry: Entry) -> [String] {
+        switch entry.id {
+        case "spa": return ["سبا", "مساج", "تدليك", "spa", "massage", "day spa", "wellness"]
+        case "supermarket": return ["بقالة", "تموينات", "سوبرماركت", "سوبر ماركت", "هايبر ماركت", "food market", "grocery", "supermarket", "hypermarket"]
+        case "restaurant", "restaurants": return ["مطعم", "مطاعم", "restaurant"]
+        case "cafe", "cafes": return ["مقهى", "مقاهي", "كافيه", "كوفي", "cafe", "coffee shop"]
+        case "pharmacy", "pharmacies": return ["صيدلية", "صيدليات", "pharmacy"]
+        case "gas-station", "gas-stations": return ["محطة وقود", "محطة بنزين", "gas station", "fuel station", "petrol station"]
+        case "hospital", "hospitals": return ["مستشفى", "مستشفيات", "hospital"]
+        case "hotel", "hotels": return ["فندق", "فنادق", "hotel"]
+        case "gym": return ["نادي رياضي", "جيم", "fitness center", "gym"]
+        case "chalet", "chalets": return ["شاليه", "شاليهات", "chalet", "chalets"]
+        default: return entry.ar + entry.en
+        }
     }
 
     /// The brand a place name is (or starts with), for merging «ستاربكس» and "Starbucks Olaya" on one spot.
@@ -316,9 +374,10 @@ enum SearchLexicon {
         e("mall", .head, ar: "مول|مجمع تجاري", en: "Mall|shopping mall|shopping center"),
         e("market", .head, ar: "سوق|أسواق", en: "Market|souq|souk"),
         e("supermarket", .head, ar: "سوبرماركت|سوبر ماركت|بقالة|تموينات|هايبر ماركت", en: "Supermarket|grocery|hypermarket"),
+        e("spa", .head, ar: "سبا|مساج|تدليك|مركز سبا|منتجع صحي", en: "Spa|Massage|massage spa|day spa|wellness spa"),
         e("bank", .head, ar: "بنك|مصرف", en: "Bank"),
         e("atm", .head, ar: "صراف|صراف آلي", en: "ATM|cash machine"),
-        e("airport", .head, ar: "مطار", en: "Airport"),
+        e("airport", .head, ar: "مطار|مطارات", en: "Airport|Airports"),
         e("station", .head, ar: "محطة", en: "Station"),
         e("metro", .head, ar: "مترو|محطة مترو", en: "Metro|metro station"),
         e("center", .head, ar: "مركز", en: "Center|centre"),

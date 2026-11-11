@@ -139,6 +139,11 @@ struct TripCard: View {
             case .ended:
                 ended
             }
+            if ui.canEnd {
+                Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
+                    .buttonStyle(.sarySecondary)
+                    .accessibilityIdentifier("trip.end")
+            }
         }
         .padding(theme.space(.m))
         .sarySurface(radius: SaryRadius.l)
@@ -277,9 +282,6 @@ struct TripCard: View {
             if ui.everyoneArrived {
                 Text("وصل الجميع. إذا خلصت الطلعة، أنهِها ليتوقف إرسال المواقع ويظهر الملخص.").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
-            Button { confirmEnd = true } label: { SaryButtonLabel(title: "أنهِ الطلعة", systemImage: "house.fill") }
-                .buttonStyle(ui.everyoneArrived ? .saryPrimary : .sarySecondary)
-                .accessibilityIdentifier("trip.end")
         } else {
             Text("أمير الرحلة ينهي الرحلة لما يوصل الجميع.").saryText(.footnote).foregroundStyle(p.textSecondary)
         }

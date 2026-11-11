@@ -3,13 +3,18 @@ import SwiftUI
 /// The first screen: a map, the category chips floating over it, and ONE bottom sheet —
 /// «وين رايحين؟» (mic + profile), the shortcuts (البيت · الشغل · المفضلة) and what is
 /// happening now. Pulled up: every category, recent places and «طلعاتي».
-/// The flow (after Hudhud's, not its look): search → pick → «ابدأ» → «مين معك؟» → the trip.
+/// The flow: search → pick → continue the active outing or create a new one when no outing is active.
 struct MapHomeScreen: View {
     var push: (HomeRoute) -> Void
+    /// In-trip «وين رايحين؟» uses the same map, search, results and home sheet; picking
+    /// a place sends it to the current outing instead of opening the new-outing flow.
+    var destinationPicker: ((OutingDestination) -> Void)? = nil
+    var autoFocusSearch = false
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var location: LocationSharer
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
@@ -20,13 +25,22 @@ struct MapHomeScreen: View {
     @State private var searching = false
     @State private var searchError: String?
     @State private var job: Task<Void, Never>?
+    /// A desert chip's places («دليل البر» or the rain/green search), nearest first.
+    @State private var desertItems: [DesertCategoryItem] = []
+    /// «قريبًا» (or a failure) for a desert chip with no places.
+    @State private var desertNote: String?
+    /// The desert result picked (its outline stays drawn under the place card).
+    @State private var desertPicked: DesertCategoryItem?
+    private let desertService: DesertCategoryService = DesertCategoryRouter.shared
     @State private var selected: SelectedPlace?
+    @State private var selectedPointNameTask: Task<Void, Never>?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
-    @State private var shortcuts = HomeShortcutStore.load()
+    /* Loaded in onAppear: a @State initialiser runs on every re-init of this struct (each parent re-render). */
+    @State private var shortcuts: [HomeShortcut: OutingDestination] = [:]
     /// Choosing a place for «البيت» / «الشغل» (the next pick is saved there).
     @State private var assigning: HomeShortcut?
-    @State private var recent = RecentPlaces.load()
+    @State private var recent: [OutingDestination] = []
     @State private var profileOpen = false
     @State private var startFor: StartTarget?
     @State private var creating = false
@@ -52,9 +66,11 @@ struct MapHomeScreen: View {
             let screen = g.size.height + g.safeAreaInsets.top + g.safeAreaInsets.bottom
             let sheetH = sheetHeight(screen: screen)
             ZStack(alignment: .bottom) {
-                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, showsUser: true,
+                PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, userLocation: myPoint,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
-                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) })
+                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) },
+                            desert: desertOverlay,
+                            onDesertTap: { id in if let it = desertItems.first(where: { $0.id == id }) { pickDesert(it) } })
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
                 VStack(spacing: theme.space(.s)) {
@@ -77,6 +93,13 @@ struct MapHomeScreen: View {
             shortcuts = HomeShortcutStore.load()
             locator.request()
             if camera == nil { recenter(zoom: 12) }
+            if autoFocusSearch {
+                setExpanded(true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { searchFocused = true }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .saryRecentPlacesChanged)) { _ in
+            recent = RecentPlaces.load()
         }
         .onChange(of: locator.fix) { old, fix in if old == nil, fix != nil, selected == nil { recenter(zoom: 12) } }
         .onChange(of: voice.text) { _, t in if !t.isEmpty { query = t } }
@@ -144,13 +167,17 @@ struct MapHomeScreen: View {
     private func sheetHeight(screen: CGFloat) -> CGFloat {
         let base: CGFloat
         if selected != nil {
-            base = 200
+            // The picked-point card has only its title, coordinates, and two actions.
+            // 200pt left a large empty area below the buttons; keep enough room for
+            // a two-line place name while letting the map remain visible. At accessibility
+            // sizes, give the card room to grow; its content remains scrollable as a fallback.
+            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 168
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
         }
-        return min(screen - 60, max(160, base - drag))
+        return CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(base), drag: Double(drag)))
     }
 
     private func sheet(height: CGFloat) -> some View {
@@ -158,17 +185,32 @@ struct MapHomeScreen: View {
         let shape = UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
         return VStack(spacing: 0) {
             Capsule().fill(p.textTertiary.opacity(0.6)).frame(width: 40, height: 5)
-                .padding(.top, 8).padding(.bottom, 8)
                 .frame(maxWidth: .infinity)
+                .frame(height: 44)
                 .contentShape(Rectangle())
                 .onTapGesture { setExpanded(!expanded) }
+                /* The sheet itself contains a vertical ScrollView. Keep its pan gesture out of
+                 * that scroll view so dragging the categories/recent places cannot collapse the
+                 * sheet or pan the map; only the dedicated handle resizes it. */
+                .gesture(DragGesture(minimumDistance: 12)
+                    .onChanged { v in drag = v.translation.height }
+                    .onEnded { v in
+                        let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
+                                                         velocity: Double(v.predictedEndTranslation.height - v.translation.height))
+                        drag = 0
+                        setExpanded(next)
+                    })
                 .accessibilityElement()
                 .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى للتصنيفات"))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { setExpanded(!expanded) }
                 .accessibilityIdentifier("home.sheet.handle")
             if let s = selected {
-                placeCard(s)
+                ScrollView {
+                    placeCard(s)
+                }
+                .scrollIndicators(.hidden)
+                .accessibilityIdentifier("home.place.scroll")
             } else {
                 searchBar
                 ScrollView {
@@ -189,20 +231,14 @@ struct MapHomeScreen: View {
                 }
                 .scrollDisabled(!expanded && !showingResults)
                 .scrollDismissesKeyboard(.interactively)
+                .accessibilityIdentifier("home.sheet.content")
             }
         }
         .frame(height: height, alignment: .top)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: 560)
         .background(shape.fill(p.background).shadow(color: .black.opacity(0.18), radius: 12, y: -2))
         .clipShape(shape)
-        .gesture(DragGesture(minimumDistance: 12)
-            .onChanged { v in drag = v.translation.height }
-            .onEnded { v in
-                let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
-                                                 velocity: Double(v.predictedEndTranslation.height - v.translation.height))
-                drag = 0
-                setExpanded(next)
-            })
+        .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
         .accessibilityElement(children: .contain)
@@ -415,9 +451,12 @@ struct MapHomeScreen: View {
     private var resultsList: some View {
         let p = theme.palette
         if let c = category {
-            Text("\(c.label) قريبة منك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+            Text(c.desertSource == nil ? "\(c.label) قريبة منك" : HomeDesertRules.heading(c)).saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                .accessibilityIdentifier("home.results.heading")
         }
-        if let parsed = CoordinateParser.parse(query) {
+        if let c = category, c.desertSource != nil {
+            desertResults
+        } else if let parsed = CoordinateParser.parse(query) {
             placeRow(icon: "scope", title: CoordinateShare.displayDecimal(parsed.point), detail: CoordinateShare.displayDMS(parsed.point), point: parsed.point,
                      id: "home.result.coordinate") {
                 pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: parsed.point.lat, lng: parsed.point.lng),
@@ -430,8 +469,16 @@ struct MapHomeScreen: View {
                 VStack(spacing: 0) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        placeRow(icon: r.icon, title: r.name, detail: r.subtitle, point: r.point, id: "home.result") {
-                            pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: r.point.lat, lng: r.point.lng),
+                        placeRow(icon: r.icon, title: r.name, detail: r.subtitle, point: r.point, id: "home.result", meters: r.areaDistanceM) {
+                            if let polygon = r.areaPolygon {
+                                desertPicked = DesertCategoryItem(id: r.id, title: r.name, detail: r.subtitle, point: r.point,
+                                                                 meters: r.areaDistanceM, systemImage: r.icon, polygon: polygon,
+                                                                 approach: r.areaApproach)
+                            } else {
+                                desertPicked = nil
+                            }
+                            let target = r.areaApproach ?? r.point
+                            pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
                                        subtitle: r.subtitle, icon: r.icon))
                         }
                     }
@@ -444,7 +491,37 @@ struct MapHomeScreen: View {
         }
     }
 
-    private func placeRow(icon: String, title: String, detail: String?, point: LngLat, id: String, run: @escaping () -> Void) -> some View {
+    /// A desert chip's list: nearest first, the distance to the edge for a sand sea.
+    @ViewBuilder
+    private var desertResults: some View {
+        let p = theme.palette
+        if searching { SaryStateView(kind: .loading("نجهّز الأماكن…")) }
+        if let note = desertNote {
+            SaryBanner(text: note, tone: .info, systemImage: "clock")
+                .accessibilityIdentifier("home.desert.soon")
+        }
+        if !desertItems.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(desertItems.enumerated()), id: \.element.id) { i, it in
+                    if i > 0 { SaryDivider() }
+                    placeRow(icon: it.systemImage, title: "\(SaryFormat.number(i + 1)). \(it.title)", detail: it.detail, point: it.point,
+                             id: "home.desert.result", meters: it.meters) { pickDesert(it) }
+                }
+            }
+            .padding(.horizontal, theme.space(.m))
+            .sarySurface(radius: SaryRadius.m)
+            Text(HomeDesertRules.footnote(category)).saryText(.caption).foregroundStyle(p.textTertiary)
+                .accessibilityIdentifier("home.desert.attribution")
+        }
+    }
+
+    private var desertOverlay: DesertOverlay? {
+        if let s = desertPicked, selected != nil { return DesertOverlay(items: [s], selected: s.id) }
+        guard selected == nil, category?.desertSource != nil, !desertItems.isEmpty else { return nil }
+        return DesertOverlay(items: Array(desertItems.prefix(HomeDesertRules.onMap)))
+    }
+
+    private func placeRow(icon: String, title: String, detail: String?, point: LngLat, id: String, meters: Double? = nil, run: @escaping () -> Void) -> some View {
         let p = theme.palette
         return Button(action: run) {
             HStack(spacing: theme.space(.m)) {
@@ -454,7 +531,9 @@ struct MapHomeScreen: View {
                     if let detail { Text(detail).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
                 Spacer()
-                if let me = myPoint { Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
+                if let m = meters ?? myPoint.map({ PlanGeo.meters($0, point) }) {
+                    Text(m == 0 ? "هنا" : SaryFormat.distance(meters: m)).saryNumber(.footnote).foregroundStyle(p.textTertiary)
+                }
             }
             .frame(minHeight: theme.minTarget + 8)
             .contentShape(Rectangle())
@@ -474,19 +553,31 @@ struct MapHomeScreen: View {
             HStack(alignment: .top, spacing: theme.space(.m)) {
                 SaryRowIcon(systemImage: s.icon, color: p.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                    Text(d.name).saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                         .accessibilityIdentifier("home.place.name")
-                    HStack(spacing: 6) {
-                        if let me = myPoint {
-                            Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
                         }
-                        if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                    } else {
+                        HStack(spacing: 6) {
+                            if let me = myPoint {
+                                Text(SaryFormat.distance(meters: PlanGeo.meters(me, point))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
+                            }
+                            if let sub = s.subtitle { Text(sub).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 Button { closePlace() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textPrimary)
-                        .frame(width: 34, height: 34).background(Circle().fill(p.sunken))
+                        .frame(width: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34,
+                               height: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34)
+                        .background(Circle().fill(p.sunken))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إغلاق"))
@@ -501,9 +592,21 @@ struct MapHomeScreen: View {
                 } label: { SaryButtonLabel(title: "احفظه كـ\(a.label)", systemImage: a.systemImage) }
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("home.place.assign")
+            } else if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: theme.space(.s)) {
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
+                        .buttonStyle(.sary(.primary))
+                        .accessibilityIdentifier("home.place.start")
+                    Button {
+                        if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
+                    } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
+                        .buttonStyle(.sary(.secondary))
+                        .disabled(isSaved)
+                        .accessibilityIdentifier("home.place.save")
+                }
             } else {
                 HStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: "ابدأ", systemImage: "location.north.fill") }
+                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("home.place.start")
                     Button {
@@ -546,6 +649,8 @@ struct MapHomeScreen: View {
     }
 
     private func beginAssign(_ s: HomeShortcut) {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         assigning = s
         selected = nil
         setExpanded(true)
@@ -554,11 +659,48 @@ struct MapHomeScreen: View {
 
     private func runCategory(_ c: HomeCategory) {
         if category == c { clearSearch(); return }
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         category = c
         selected = nil
+        desertPicked = nil
+        desertItems = []
+        desertNote = nil
         query = c.query
         setExpanded(true)
         schedule(c.query, now: true)
+    }
+
+    /// A desert chip: ask its service, list nearest first, fit the map on you and the first ones.
+    private func runDesert(_ c: HomeCategory) {
+        results = []
+        searching = true
+        let near = myPoint
+        let service = desertService
+        job = Task {
+            /* Edge distances to thousands of outlines: off the main thread, then the state on it. */
+            let r = await Task.detached(priority: .userInitiated) { await service.search(c, near: near) }.value
+            guard !Task.isCancelled, category == c else { return }
+            searching = false
+            switch r {
+            case let .places(items):
+                desertItems = items
+                desertNote = items.isEmpty ? "ما لقينا أماكن قريبة في دليل البر." : nil
+                let pts = HomeDesertRules.fitPoints(items, me: near)
+                if pts.count >= 2 { cameraSeq += 1; camera = PlanCamera(kind: .fit(pts), id: cameraSeq) }
+            case let .comingSoon(text), let .failed(text):
+                desertItems = []
+                desertNote = text
+            }
+        }
+    }
+
+    private func pickDesert(_ it: DesertCategoryItem) {
+        desertPicked = it
+        let to = it.approach ?? it.point
+        let sub = [it.detail, to != it.point ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
+        pick(.init(destination: OutingDestination(name: String(it.title.prefix(TripPlan.destinationNameMax)), lat: to.lat, lng: to.lng),
+                   subtitle: sub.isEmpty ? nil : sub, icon: it.systemImage))
     }
 
     private func clearSearch() {
@@ -568,32 +710,74 @@ struct MapHomeScreen: View {
         results = []
         searching = false
         searchError = nil
+        desertItems = []
+        desertNote = nil
+        desertPicked = nil
     }
 
     private func pick(_ s: SelectedPlace) {
+        if let destinationPicker {
+            RecentPlaces.add(s.destination)
+            recent = RecentPlaces.load()
+            destinationPicker(s.destination)
+            return
+        }
         searchFocused = false
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = s
         expanded = false
         cameraSeq += 1
-        camera = PlanCamera(kind: .point(LngLat(lng: s.destination.lng, lat: s.destination.lat), zoom: 14), id: cameraSeq)
+        let point = LngLat(lng: s.destination.lng, lat: s.destination.lat)
+        camera = PlanCamera(kind: .point(point, zoom: 14), id: cameraSeq)
+        guard PlaceLabel.isGeneric(s.destination.name) else { return }
+        selectedPointNameTask = Task {
+            let name = await PlaceNameResolver.shared.name(for: point, within: 3)
+            guard !Task.isCancelled, !PlaceLabel.isGeneric(name),
+                  var current = selected,
+                  PlaceLabel.isGeneric(current.destination.name),
+                  PlanGeo.meters(LngLat(lng: current.destination.lng, lat: current.destination.lat), point) < 2 else { return }
+            current.destination.name = name
+            selected = current
+        }
     }
 
     private func closePlace() {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
         selected = nil
+        desertPicked = nil
     }
 
-    /// «ابدأ» → «مين معك؟» (the quick «طلعة»: this place, leaving now).
+    /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
     private func start(_ d: OutingDestination) {
-        RecentPlaces.add(d)
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
+        let destination = selected.map(\.destination).flatMap { picked in
+            let a = LngLat(lng: picked.lng, lat: picked.lat)
+            let b = LngLat(lng: d.lng, lat: d.lat)
+            return PlanGeo.meters(a, b) < 2 ? picked : nil
+        } ?? d
+        RecentPlaces.add(destination)
         recent = RecentPlaces.load()
-        startFor = StartTarget(destination: d)
+        if let outing = activeOuting {
+            DispatchQueue.main.async { model.open(outing.id, mapDestination: destination) }
+            return
+        }
+        startFor = StartTarget(destination: destination)
+    }
+
+    private var placeStartTitle: String {
+        guard let outing = activeOuting else { return "أنشئ طلعة" }
+        return outing.role == "owner" ? "وجّه القافلة إلى هنا" : "ابدأ مشوارًا لنفسي"
     }
 
     private func schedule(_ q: String, now: Bool = false) {
         job?.cancel()
         searchError = nil
         let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
-        if category != nil, t != category?.query { category = nil }
+        if category != nil, t != category?.query { category = nil; desertItems = []; desertNote = nil }
+        if let c = category, c.desertSource != nil { runDesert(c); return }
         guard t.count >= 2, CoordinateParser.parse(t) == nil else {
             results = []
             searching = false
@@ -604,16 +788,29 @@ struct MapHomeScreen: View {
         job = Task {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
+            /* «دليل البر» first: a known desert name answers offline too. */
+            /* Matched off the main thread (thousands of names, edge distances), shown on it. */
+            let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
+                (HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near), HomeDesertRules.categoryKind(t) != nil)
+            }.value
+            guard !Task.isCancelled else { return }
+            results = desert
+            if desertOnly {
+                /* Category intent is entirely answered by the bundled gazetteer. Avoid waiting on
+                 * geocoders or leaking a query that cannot improve these type-filtered results. */
+                searching = false
+                return
+            }
             do {
                 let r = try await PlaceSearch.search(t, near: near)
                 guard !Task.isCancelled else { return }
-                results = r
+                results = HomeDesertRules.merge(desert: desert, places: r)
             } catch let e as PlaceSearch.SearchError {
-                results = []
-                searchError = e.arabic
+                results = desert
+                if desert.isEmpty { searchError = e.arabic }
             } catch {
-                results = []
-                searchError = PlaceSearch.SearchError.network.arabic
+                results = desert
+                if desert.isEmpty { searchError = PlaceSearch.SearchError.network.arabic }
             }
             searching = false
         }

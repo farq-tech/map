@@ -1079,6 +1079,23 @@
 	font-size: 0.85rem;
 }
 
+.sary-o-stage-refresh {
+	align-self: flex-start;
+	border: 0;
+	padding: 4px 0;
+	background: transparent;
+	color: #e8c06a;
+	font: inherit;
+	font-size: 0.8rem;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.sary-o-stage-refresh:disabled {
+	opacity: 0.65;
+	cursor: wait;
+}
+
 .sary-o-stage .sary-o-primary {
 	width: 100%;
 }

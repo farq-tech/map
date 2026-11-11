@@ -13,6 +13,32 @@
 					"value": "application/json"
 				}
 			]
+		},
+		{
+			"source": "/watch",
+			"headers": [
+				{
+					"key": "X-Robots-Tag",
+					"value": "noindex, nofollow"
+				},
+				{
+					"key": "Referrer-Policy",
+					"value": "no-referrer"
+				}
+			]
+		},
+		{
+			"source": "/sw.js",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "no-cache"
+				},
+				{
+					"key": "Content-Type",
+					"value": "application/javascript; charset=utf-8"
+				}
+			]
 		}
 	],
 	"rewrites": [
@@ -39,34 +65,6 @@
 		{
 			"source": "/((?!api/|_api/).*)",
 			"destination": "/index.html"
-		}
-	],
-	"headers": [
-		{
-			"source": "/watch",
-			"headers": [
-				{
-					"key": "X-Robots-Tag",
-					"value": "noindex, nofollow"
-				},
-				{
-					"key": "Referrer-Policy",
-					"value": "no-referrer"
-				}
-			]
-		},
-		{
-			"source": "/sw.js",
-			"headers": [
-				{
-					"key": "Cache-Control",
-					"value": "no-cache"
-				},
-				{
-					"key": "Content-Type",
-					"value": "application/javascript; charset=utf-8"
-				}
-			]
 		}
 	]
 }

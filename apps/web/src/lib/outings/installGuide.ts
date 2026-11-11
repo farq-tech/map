@@ -88,7 +88,7 @@ export function inviteLine(owner: string, outing: string): string {
 
 /**
  * Try the app; if the page is still in front after `waitMs`, it is not installed — go install.
- * (A visitor who already has the app usually never sees this page: the link opens the app.)
+ * This explicit handoff also covers links opened inside in-app browsers that keep Universal Links in-webview.
  */
 export function openAppOrInstall(
 	appUrl: string,

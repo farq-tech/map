@@ -429,12 +429,18 @@ final class SafetyController: ObservableObject {
         if v.snapshot.server_now != lastServerNow {
             lastServerNow = v.snapshot.server_now
             if let wire = v.snapshot.stuck {
-                stuck = StuckLogic.fromSnapshot(wire, clockOffsetMs: v.clockOffsetMs, now: now())
+                let snapshot = StuckLogic.fromSnapshot(wire, clockOffsetMs: v.clockOffsetMs, now: now())
+                if stuck != snapshot { stuck = snapshot }
                 stuckAvailability = .available
             }
         }
-        if v.status == .ended { stuck = [:] }
-        StuckLogic.prune(&stuck, members: Set(v.members.keys), now: now())
+        if v.status == .ended {
+            if !stuck.isEmpty { stuck = [:] }
+        } else {
+            var pruned = stuck
+            StuckLogic.prune(&pruned, members: Set(v.members.keys), now: now())
+            if pruned != stuck { stuck = pruned }
+        }
         refreshStuckAlerts()
     }
 
@@ -448,9 +454,12 @@ final class SafetyController: ObservableObject {
     func tick() {
         if let t = timer, t.state == .armed { refreshTimerAlert() }
         if let v = view() {
-            let before = stuck.count
-            StuckLogic.prune(&stuck, members: Set(v.members.keys), now: now())
-            if stuck.count != before { refreshStuckAlerts() }
+            var pruned = stuck
+            StuckLogic.prune(&pruned, members: Set(v.members.keys), now: now())
+            if pruned != stuck {
+                stuck = pruned
+                refreshStuckAlerts()
+            }
         }
         updateSunset()
     }

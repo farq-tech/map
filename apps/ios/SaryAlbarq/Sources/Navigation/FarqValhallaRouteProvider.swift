@@ -63,7 +63,13 @@ final class FarqValhallaRouteProvider: NavRoutingProvider {
     let base: URL
     let token: () -> String?
     let session: URLSession
-    private var statusCache: (enabled: Bool, at: Date)?
+    /// Guarded by a lock: `DesertAwareRouteProvider` sends several route requests at once.
+    private let statusLock = NSLock()
+    private var statusCacheValue: (enabled: Bool, at: Date)?
+    private var statusCache: (enabled: Bool, at: Date)? {
+        get { statusLock.lock(); defer { statusLock.unlock() }; return statusCacheValue }
+        set { statusLock.lock(); statusCacheValue = newValue; statusLock.unlock() }
+    }
 
     init(base: URL = Endpoints.apiBase, token: @escaping () -> String? = { IdentityStore.currentToken() }, session: URLSession = .shared) {
         self.base = base
@@ -178,9 +184,19 @@ final class SwitchingRouteProvider: NavRoutingProvider {
     let farq: FarqValhallaRouteProvider
     let mapbox: NavRoutingProvider
     var choice: () -> NavProviderChoice
-    /// Which one answered last (diagnostics row in the options sheet, DEBUG).
-    private(set) var lastUsed = "Mapbox"
-    private(set) var lastFallbackReason: FarqRoutingError?
+    /// Which one answered last (diagnostics row in the options sheet, DEBUG). Guarded by a lock:
+    /// `DesertAwareRouteProvider` sends several route requests through this provider at once.
+    private(set) var lastUsed: String {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return lastUsedValue }
+        set { stateLock.lock(); lastUsedValue = newValue; stateLock.unlock() }
+    }
+    private(set) var lastFallbackReason: FarqRoutingError? {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return lastFallbackReasonValue }
+        set { stateLock.lock(); lastFallbackReasonValue = newValue; stateLock.unlock() }
+    }
+    private let stateLock = NSLock()
+    private var lastUsedValue = "Mapbox"
+    private var lastFallbackReasonValue: FarqRoutingError?
 
     var name: String { lastUsed }
 

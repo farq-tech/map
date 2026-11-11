@@ -29,7 +29,7 @@ final class HomeFlowTests: XCTestCase {
 
     func testCategoriesHoldTheCityAndTheDesert() {
         let labels = HomeCategory.all.map(\.label)
-        for l in ["مطاعم", "مقاهي", "مساجد", "محطات وقود", "نفود", "روضة", "فيضة", "مخيمات", "أمطار وربيع"] {
+        for l in ["مطاعم", "مقاهي", "مساجد", "محطات وقود", "المطارات", "نفود", "روضة", "فيضة", "مخيمات", "أمطار وربيع"] {
             XCTAssertTrue(labels.contains(l), l)
         }
         XCTAssertEqual(Set(HomeCategory.all.map(\.id)).count, HomeCategory.all.count, "unique ids")
@@ -44,6 +44,16 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertTrue(HomeSheetRules.settle(expanded: true, translation: 30, velocity: 0))
         XCTAssertFalse(HomeSheetRules.settle(expanded: true, translation: 10, velocity: 900), "a flick down lowers it")
         XCTAssertGreaterThan(HomeSheetRules.expandedHeight(screen: 874), HomeSheetRules.collapsedHeight)
+    }
+
+    func testSheetFrameStaysValidForInitialAndInvalidGeometry() {
+        for screen in [0.0, -1, .nan, .infinity] {
+            let height = HomeSheetRules.frameHeight(screen: screen, preferred: .nan, drag: .infinity)
+            XCTAssertTrue(height.isFinite, "height must be finite for screen=\(screen)")
+            XCTAssertGreaterThanOrEqual(height, 160, "height must not be negative or collapse before layout")
+        }
+        XCTAssertEqual(HomeSheetRules.frameHeight(screen: 874, preferred: 220, drag: 20), 200)
+        XCTAssertEqual(HomeSheetRules.frameHeight(screen: 874, preferred: 900, drag: 0), 760)
     }
 
     /// The cinematic intro is off by default (the owner: the moving logo looked laggy).

@@ -36,7 +36,7 @@ enum NavOffRoad {
     }
 
     /// The honest line under every straight-line leg.
-    static let honestNote = "بدون طريق معبّد: اتجه مع السهم"
+    static let honestNote = "مافي طريق مزفلت: كمّل مع السهم"
 
     /// The off-road panel's title: why it is a straight line.
     static func title(direct: Bool, fallback: NavFallback?) -> String {

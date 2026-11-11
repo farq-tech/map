@@ -7,6 +7,25 @@ import UIKit
 @MainActor
 final class MapOverlayModel: ObservableObject {
     @Published var projection = MapProjection(points: [:], rally: nil, bearing: 0, size: .zero)
+    private var pendingProjection: MapProjection?
+    private var projectionPublishScheduled = false
+
+    /// The Mapbox display link reports projections at camera-frame frequency. Coalesce them
+    /// before publishing to keep this overlay model from invalidating SwiftUI at display rate.
+    func enqueueProjection(_ next: MapProjection) {
+        pendingProjection = next
+        guard !projectionPublishScheduled else { return }
+        projectionPublishScheduled = true
+        /* Limit updates to 10 Hz and expose only the latest projection. This is a performance
+         * throttle; runtime testing still needs to confirm whether it affects SwiftUI warnings. */
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            self.projectionPublishScheduled = false
+            guard let latest = self.pendingProjection else { return }
+            self.pendingProjection = nil
+            if self.projection != latest { self.projection = latest }
+        }
+    }
 }
 
 /// Which modal is up over the live sheet.
@@ -59,6 +78,14 @@ enum LiveModal: Identifiable, Equatable {
     /// One focused part of the trip (UX simplification): the sheet holds only the essentials,
     /// «المزيد» and the quick row open these.
     case panel(LivePanel)
+    /// «القبلة»: the compass to the Kaaba.
+    case qibla
+    /// «اقترح لي مكان كشتة»: tonight's five best camp sites (Sources/Explore/CampSites).
+    case campSuggest
+    /// A camp site tapped on the map («أماكن مقترحة للكشتة»).
+    case campSite(String)
+    /// «مخطط دروب البر» to a point (name, rain tonight, forecast available).
+    case desertRoute(LngLat, String, Bool, Bool)
 
     var id: String {
         switch self {
@@ -88,6 +115,10 @@ enum LiveModal: Identifiable, Equatable {
         case .pttChannels: return "pttChannels"
         case .whereTo: return "whereTo"
         case let .panel(p): return "panel:\(p.rawValue)"
+        case .qibla: return "qibla"
+        case .campSuggest: return "campSuggest"
+        case let .campSite(id): return "campSite:\(id)"
+        case let .desertRoute(p, _, _, _): return "desertRoute:\(p.lat),\(p.lng)"
         }
     }
 
@@ -221,6 +252,10 @@ final class LiveOutingController: ObservableObject {
     /// «طريق العودة»: a frozen copy of my trail being retraced (nil when off).
     @Published private(set) var backTrack: BackTrack?
     @Published private(set) var backTrackStatus: BackTrackStatus?
+    /// A return trip's guidance: the desert leg on the outbound trail, then the road (`ReturnGuide`).
+    var returnGuide = ReturnGuide()
+    /// The road end last saved for this outing's guidance (`OutboundJunctionStore`), so it is written once.
+    var savedRoadJunction: LngLat?
     /// «اسلك هذا المسار» (build 10): following any saved track, off-road (nil when off).
     @Published var trackFollow: TrackFollowModel?
     /// My trail as drawn (`TrackDisplay`), rebuilt only when the trail changes.
@@ -273,6 +308,9 @@ final class LiveOutingController: ObservableObject {
     /// was closed ONCE. Build 11 closed every sheet on every later update, so on an ended trip
     /// «أدوات الطلعة» and anything opened from it vanished about a second after opening.
     var closeHandled = false
+    /// The trip ended (or I left / was removed) and this screen's guidance was stopped ONCE
+    /// (`stopGuidanceWhenTripOver`); guidance the person starts afterwards is theirs.
+    var tripEndHandled = false
 
     var bag = Set<AnyCancellable>()
     /// CarPlay's view of `nav` (kept here: `CarPlayFeatures.roadNavigation` is weak).
@@ -320,7 +358,15 @@ final class LiveOutingController: ObservableObject {
             if t == "more" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.openSettings() } }
         }
         if arg("-SaryLiveModal") == "layers" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .layers } }
+        if arg("-SaryLiveModal") == "routes", let t = arg("-SaryRouteTo").map({ $0.split(separator: ",").compactMap { Double($0) } }), t.count == 2 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                let hasForecast = !shotArgs.contains("-SaryRouteNoWeather")
+                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), "جلسة", shotArgs.contains("-SaryRouteRain"), hasForecast)
+            }
+        }
+        if arg("-SaryLiveModal") == "camp" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .campSuggest } }
         if arg("-SaryLiveModal") == "weather" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .weather } }
+        if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
         session.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
@@ -512,6 +558,7 @@ final class LiveOutingController: ObservableObject {
         updateSpeed()
         updateTrip()
         autoNavSessionChanged()
+        stopGuidanceWhenTripOver()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
@@ -693,6 +740,8 @@ final class LiveOutingController: ObservableObject {
     func stopBackTrack() {
         backTrack = nil
         backTrackStatus = nil
+        /* A return trip's desert leg stopped by the person: the trip's road guidance from here. */
+        returnGuide.cancel()
         followCamGuidanceCheck()
     }
 
@@ -705,6 +754,11 @@ final class LiveOutingController: ObservableObject {
         }
         let st = bt.update(LngLat(lng: f.lng, lat: f.lat), accuracy: f.accuracy, atMs: f.atMs)
         if bt != backTrack { backTrack = bt }
+        /* A return trip's desert leg reached the city ↔ desert junction: the fastest road from here. */
+        if returnGuide.backTrackUpdate(st) {
+            handOverReturnToRoad()
+            return
+        }
         if st.arrived && backTrackStatus?.arrived != true { toast("وصلت نقطة البداية") }
         if st != backTrackStatus { backTrackStatus = st }
     }
@@ -950,7 +1004,8 @@ final class LiveOutingController: ObservableObject {
                 guard let self, let st = self.session.view?.status else { return }
                 Task { await self.session.setStatus(st == .paused ? "resume" : st == .created ? "start" : "pause") }
             },
-            endOuting: { [weak self] in Task { await self?.session.setStatus("end") } },
+            /* The same path as the trip strip's «أنهِ الطلعة»: the guidance (and its own GPS) ends too. */
+            endOuting: { [weak self] in self?.endTrip() },
             leaveOuting: { [weak self] in self?.leaveOuting() }
         )
         return a

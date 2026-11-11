@@ -1,3 +1,5 @@
+import AVKit
+import CoreLocation
 import XCTest
 
 /// «الملاحة»: the route options, active guidance, reroute, the off-road last leg and
@@ -16,6 +18,11 @@ final class NavigationUITests: XCTestCase {
     private func launch(_ extra: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo"] + extra
+        /* Keep this suite self-contained: the demo route starts by Kingdom Centre, so do not
+         * rely on whoever launched xcodebuild having set the simulator's location beforehand. */
+        XCUIDevice.shared.location = XCUILocation(location: CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744), altitude: 600,
+            horizontalAccuracy: 5, verticalAccuracy: 5, course: 0, speed: 0, timestamp: Date()))
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -78,7 +85,10 @@ final class NavigationUITests: XCTestCase {
     func testActiveGuidance() {
         for m in ["light", "dark", "drive"] {
             let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode(m))
-            XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 15))
+            /* The debug route may wait 40 seconds for its first GPS fix and another 20 for
+             * planning; the previous 15-second assertion expired before that supported path. */
+            XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 75), "active guidance after the demo GPS and route setup")
+            XCTAssertTrue(el(app, "nav.pip").exists, "live guidance can be opened as a floating PiP window")
             XCTAssertTrue(el(app, "nav.lanes").exists, "lanes")
             /* v2: «ثم …» only when the next turn is within 400 m (the demo's next turn is ~1 km away). */
             XCTAssertFalse(el(app, "nav.next").exists, "no «ثم» for a far next turn")
@@ -100,6 +110,28 @@ final class NavigationUITests: XCTestCase {
             }
             app.terminate()
         }
+    }
+
+    func testGuidancePiPStartsAndRemainsOnHomeScreen() throws {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else {
+            throw XCTSkip("The iOS Simulator does not provide system PiP; run this assertion on an iPhone.")
+        }
+        let app = launch(["-SaryNavDemo", Self.target, Self.hittin, "-SaryNavDelay", "3", "-SaryNavState", "guiding"] + mode("light"))
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 75), "active route guidance")
+        let pipButton = el(app, "nav.pip")
+        XCTAssertTrue(pipButton.waitForExistence(timeout: 5))
+        pipButton.tap()
+        let opened = NSPredicate(format: "value == %@", "مفتوحة")
+        expectation(for: opened, evaluatedWith: pipButton)
+        waitForExpectations(timeout: 12)
+
+        XCUIDevice.shared.press(.home)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCTAssertTrue(springboard.wait(for: .runningForeground, timeout: 8), "PiP remains while the app is backgrounded")
+        let attachment = XCTAttachment(screenshot: springboard.screenshot())
+        attachment.name = "navigation-pip-on-home-screen"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// Pull the guidance sheet up from its grabber: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة».

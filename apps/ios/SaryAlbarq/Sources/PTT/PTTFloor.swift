@@ -173,6 +173,15 @@ struct PTTFloor: Equatable {
         }
     }
 
+    /// Avoid mutating the `@Published` floor for the hundreds of idle / non-expired timer ticks.
+    func needsTick(nowMs: Double) -> Bool {
+        switch state {
+        case let .talking(_, since) : return nowMs - since >= maxTalkMs
+        case let .requesting(_, at): return nowMs - at >= requestWaitMs
+        default: return false
+        }
+    }
+
     /// «اكتم القناة»: no audio in, and no talking out (the server takes us off the channel).
     mutating func setMuted(_ on: Bool) -> [Effect] {
         guard on != muted else { return [] }

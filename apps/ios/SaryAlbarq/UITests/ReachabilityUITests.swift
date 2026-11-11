@@ -7,9 +7,9 @@ import XCTest
 final class ReachabilityUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func launch(context: String = "stopped") -> XCUIApplication {
+    private func launch(context: String = "stopped", extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", context]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryContext", context] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -67,16 +67,43 @@ final class ReachabilityUITests: XCTestCase {
         }
         XCTAssertFalse(app.staticTexts["الترفيه"].exists, "radio / YouTube are in the settings")
         for id in ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                   "outing-timer", "outing-brief", "outing-save-place", "outing-weather", "outing-waypoint-add", "outing-nearest-open",
+                   "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-nearest-open",
                    "outing-explore", "outing-fit", "outing-settings", "settings-leave"] {
             XCTAssertTrue(any(app, id).exists, "\(id) in «المزيد»")
+        }
+        for id in ["outing-brief", "outing-save-place", "outing-weather", "outing-qibla", "outing-waypoint-add"] {
+            XCTAssertFalse(any(app, id).exists, "\(id) is revealed when its related tool group is opened")
         }
         for id in ["outing-backtrack", "outing-chat", "outing-rally", "outing-hires", "outing-realistic", "outing-effects", "outing-radio", "outing-youtube"] {
             XCTAssertFalse(any(app, id).exists, "\(id): a duplicate, gone from «المزيد»")
         }
         shot(app, "actions-sheet")
+        any(app, "outing-weather-tools").tap()
+        XCTAssertTrue(any(app, "outing-weather").waitForExistence(timeout: 3))
+        XCTAssertTrue(any(app, "outing-qibla").exists)
         any(app, "outing-weather").tap()
         XCTAssertTrue(any(app, "weather.sheet").waitForExistence(timeout: 5), "«الطقس» opens the weather")
+    }
+
+    func testQiblaDeniedLocationOffersSettingsAndFailureCanRetry() {
+        let deniedApp = launch(extra: ["-SaryQiblaLocationState", "denied"])
+        any(deniedApp, "outing-actions").tap()
+        any(deniedApp, "outing-weather-tools").tap()
+        any(deniedApp, "outing-qibla").tap()
+        XCTAssertTrue(any(deniedApp, "qibla.location-denied").waitForExistence(timeout: 5))
+        XCTAssertTrue(deniedApp.buttons["qibla.open-settings"].isHittable, "denied location offers an app Settings action")
+        XCTAssertFalse(any(deniedApp, "qibla.waiting").exists, "denial does not leave a spinner on screen")
+        deniedApp.terminate()
+
+        let failedApp = launch(extra: ["-SaryQiblaLocationState", "failed"])
+        any(failedApp, "outing-actions").tap()
+        any(failedApp, "outing-weather-tools").tap()
+        any(failedApp, "outing-qibla").tap()
+        XCTAssertTrue(any(failedApp, "qibla.location-error").waitForExistence(timeout: 5))
+        let retry = failedApp.buttons["qibla.retry"]
+        XCTAssertTrue(retry.isHittable, "location failure offers retry")
+        retry.tap()
+        XCTAssertTrue(any(failedApp, "qibla.waiting").waitForExistence(timeout: 3), "retry returns to a bounded locating state")
     }
 
     /// The raised sheet and the panels hold what the three tabs held.
@@ -123,7 +150,8 @@ final class ReachabilityUITests: XCTestCase {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id): two taps from the trip map")
         }
         app.buttons["explore-layers"].tap()
-        for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-realistic", "explore-offline"] {
+        for id in ["layer.satellite", "layer.standard", "layer.topo", "explore-terrain3d", "explore-realistic", "explore-offline",
+                   "explore-desert-route", "explore-camp-suggest"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 5), "\(id) in «الطبقات»")
         }
     }

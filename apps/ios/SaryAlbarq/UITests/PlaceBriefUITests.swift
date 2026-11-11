@@ -49,16 +49,37 @@ final class PlaceBriefUITests: XCTestCase {
         let app = launch()
         emptySpot(app).tap()
         XCTAssertTrue(any(app, "brief.section").waitForExistence(timeout: 6), "one tap ⇒ the brief")
-        for id in ["point.title", "brief.temp", "brief.wind", "brief.dust", "brief.humidity", "brief.uv", "brief.rain",
-                   "brief.assessment", "brief.hours", "brief.sun", "brief.elevation", "brief.source"] {
+        for id in ["point.title", "brief.temp", "brief.wind", "brief.dust", "brief.visibility", "brief.rain",
+                   "brief.assessment", "brief.source", "brief.more"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 3), "\(id) in the brief")
         }
-        XCTAssertTrue(any(app, "brief.elevation").label.contains("الارتفاع"), "elevation, a value or «غير متاح»")
+        XCTAssertFalse(any(app, "brief.hours").exists, "the short summary does not lead with the forecast strip")
         XCTAssertTrue(any(app, "brief.source").label.hasPrefix("المصدر: Open-Meteo"), any(app, "brief.source").label)
         /* The demo «dust» forecast: heavy dust ⇒ not suitable, with the reason shown. */
         XCTAssertTrue(any(app, "brief.assessment").label.contains("غير مناسب للتخييم الآن"), any(app, "brief.assessment").label)
-        XCTAssertTrue(any(app, "brief.assessment").label.contains("غبار كثيف"))
+        XCTAssertTrue(any(app, "brief.dust").label.contains("غبار كثيف"), any(app, "brief.dust").label)
         shot(app, "place-brief-tap")
+        any(app, "brief.more").tap()
+        XCTAssertEqual(any(app, "brief.more").value as? String, "مفتوحة", "the details control changes state")
+        let briefScroll = any(app, "point.sheet.scroll")
+        XCTAssertTrue(briefScroll.exists, "the point brief is in a scrollable sheet")
+        for _ in 0..<5 where !any(app, "brief.humidity").exists { briefScroll.swipeUp() }
+        for id in ["brief.humidity", "brief.uv", "brief.sun", "brief.elevation", "brief.hours"] {
+            XCTAssertTrue(any(app, id).waitForExistence(timeout: 3), "expanded details show \(id)")
+        }
+        XCTAssertTrue(any(app, "brief.elevation").label.contains("الارتفاع"), "elevation, a value or «غير متاح»")
+        XCTAssertTrue(any(app, "brief.assessment").label.contains("غبار كثيف"))
+        let sos = any(app, "sos.overlay")
+        XCTAssertTrue(sos.waitForExistence(timeout: 3), "emergency access stays visible over the sheet")
+        let hourTiles = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "brief.hour."))
+        XCTAssertGreaterThan(hourTiles.count, 0, "forecast tiles are individually accessible")
+        for index in 0..<hourTiles.count {
+            let tile = hourTiles.element(boundBy: index)
+            if tile.isHittable {
+                XCTAssertFalse(sos.frame.intersects(tile.frame), "SOS must not cover \(tile.identifier)")
+            }
+        }
+        shot(app, "place-brief-expanded")
         /* The card's actions stay, under the brief. */
         /* On a smaller phone the sheet first grows to full height, then scrolls. */
         for _ in 0..<4 where !any(app, "point.save").waitForExistence(timeout: 2) { any(app, "brief.section").swipeUp() }

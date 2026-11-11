@@ -94,15 +94,41 @@ struct InviteJoinSheet: View {
         .task {
             if let presetStep { step = presetStep }
             if let preset { phase = preset } else { await load() }
+            restorePendingJoinAttempt()
         }
         .onChange(of: scenePhase) { _, p in
             /* Back from Settings: iOS may say yes now → join and enter by itself. */
             guard p == .active else { return }
             location.refreshAuthorization()
-            send(.sceneActive(currentPermission))
+            /* iOS may rebuild the sheet while its permission alert is in front. The persisted
+             * attempt survives that rebuild; if the view state restarted at `.ready`, restore
+             * it from Core Location's resolved answer before showing another active Join button. */
+            if step == .ready, model.hasPendingInviteJoinAttempt(token), currentPermission != .notAsked {
+                restorePendingJoinAttempt()
+                return
+            }
+            switch step {
+            case .askingLocation, .needsLocation:
+                /* The system prompt can reactivate the app before Core Location finishes its
+                 * async request. Resolve the join state from the manager's current answer. */
+                send(.sceneActive(currentPermission))
+            default:
+                break
+            }
         }
         .onReceive(location.$authorization.combineLatest(location.$accuracyAuthorization).dropFirst()) { _ in
-            if case .needsLocation = step { send(.permission(currentPermission)) }
+            switch step {
+            case .askingLocation, .needsLocation:
+                /* Do not leave the join button spinning if the authorization publisher wins
+                 * the race with the request continuation after the system alert. */
+                send(.permission(currentPermission))
+            case .ready where model.hasPendingInviteJoinAttempt(token) && currentPermission != .notAsked:
+                /* Authorization can publish before the scene-active event. Recover even if the
+                 * permission sheet caused SwiftUI to recreate this view's local state. */
+                restorePendingJoinAttempt()
+            default:
+                break
+            }
         }
     }
 
@@ -113,6 +139,16 @@ struct InviteJoinSheet: View {
         if JoinDebug.reduced != nil, p == .granted, !debugPreciseGranted { return .reduced }
         #endif
         return p
+    }
+
+    private var joinButtonAccessibilityValue: String {
+        let stepValue = step.accessibilityValue
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-SaryJoinDiagnostics") {
+            return "\(stepValue) · auth=\(location.authorization.rawValue) · pending=\(model.hasPendingInviteJoinAttempt(token))"
+        }
+        #endif
+        return stepValue
     }
 
     #if DEBUG
@@ -176,6 +212,7 @@ struct InviteJoinSheet: View {
                     .buttonStyle(.sary(.primary))
                     .disabled(step.busy || (needsTypedName(inv) && name.trimmingCharacters(in: .whitespaces).isEmpty))
                     .accessibilityIdentifier("invite.join")
+                    .accessibilityValue(joinButtonAccessibilityValue)
                     Text(JoinCopy.statement)
                         .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary)
                         .multilineTextAlignment(.center)
@@ -215,6 +252,7 @@ struct InviteJoinSheet: View {
     }
 
     private func close() {
+        model.clearPendingInviteJoinAttempt(token)
         model.pendingInvite = nil
         dismiss()
     }
@@ -262,9 +300,36 @@ struct InviteJoinSheet: View {
     private func send(_ e: JoinEvent) {
         let before = step
         let after = JoinMachine.next(before, e)
+        #if DEBUG
+        NSLog("[JOIN_DIAG] event=%@ before=%@ after=%@ auth=%d", String(describing: e), String(describing: before), String(describing: after), location.authorization.rawValue)
+        #endif
         guard after != before else { return }
         step = after
+        if case .askingLocation = after { model.markPendingInviteJoinAttempt(token) }
+        if case .needsLocation = after { model.markPendingInviteJoinAttempt(token) }
+        if after == .cancelled { model.clearPendingInviteJoinAttempt(token) }
         run(after)
+    }
+
+    /// The iOS permission alert can take this sheet out of the view tree. If SwiftUI builds it
+    /// again, recover the join from the model and the authoritative Core Location state.
+    private func restorePendingJoinAttempt() {
+        let pending = model.hasPendingInviteJoinAttempt(token)
+        location.refreshAuthorization()
+        #if DEBUG
+        NSLog("[JOIN_DIAG] restore pending=%d step=%@ auth=%d", pending, String(describing: step), location.authorization.rawValue)
+        #endif
+        guard pending else { return }
+        switch currentPermission {
+        case .denied, .reduced:
+            step = .needsLocation(currentPermission)
+        case .granted:
+            step = .joining(viewOnly: false)
+            run(step)
+        case .notAsked:
+            step = .askingLocation
+            run(step)
+        }
     }
 
     private func run(_ s: JoinStep) {
@@ -285,15 +350,28 @@ struct InviteJoinSheet: View {
         case .askingLocation:
             Task {
                 /* Right after the pre-prompt: When In Use. Already answered → what iOS says now. */
-                _ = await location.requestWhenInUse()
-                send(.permission(currentPermission))
+                let status = await location.requestWhenInUse()
+                /* Use Core Location's completed answer, then refresh the manager snapshot. This
+                 * avoids leaving the join spinner up if the published authorization update races
+                 * the async permission continuation. */
+                location.refreshAuthorization()
+                var permission = JoinPermission.from(status, location.accuracyAuthorization)
+                #if DEBUG
+                /* iOS Simulator cannot switch full/reduced accuracy on demand; only the
+                 * precise-location follow-up is substituted by this focused UI-test hook. */
+                if JoinDebug.reduced != nil, permission == .granted, !debugPreciseGranted {
+                    permission = .reduced
+                }
+                #endif
+                send(.permission(permission))
             }
         case .askingPrecise:
             Task {
                 /* «الموقع الدقيق» off: iOS's temporary full accuracy (GPS's `requestPreciseForTrip`, purpose key ConvoyTrip). */
                 #if DEBUG
                 if let allow = JoinDebug.reduced {
-                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    /* Keep the simulated request visible long enough for UI automation to observe it. */
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
                     debugPreciseGranted = allow
                     send(.precise(currentPermission))
                     return
@@ -322,6 +400,7 @@ struct InviteJoinSheet: View {
                 send(.joinFailed(m))
             }
         case .entered:
+            model.clearPendingInviteJoinAttempt(token)
             dismiss()
         case .cancelled:
             close()

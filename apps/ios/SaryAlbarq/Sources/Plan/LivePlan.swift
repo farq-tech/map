@@ -82,7 +82,9 @@ struct LivePlanModalView: View {
                         .presentationDetents([.medium])
                 }
             case .search:
-                CoordinateSearchSheet(near: location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }, myFix: location.lastFix, actions: actions(plan), close: close)
+                MapHomeScreen(push: { _ in }, destinationPicker: { destination in
+                    controller.pickLegDestination(destination)
+                }, autoFocusSearch: true)
                     .presentationDetents([.large])
             case .editor:
                 PlanEditorView(plan: plan, outingName: controller.ui.outingName, canEdit: controller.session.view?.iLead == true, myFix: location.lastFix, close: close)
@@ -101,6 +103,7 @@ struct LivePlanModalView: View {
         ScrollView {
             PointCard(subject: .point(p, name: name), actions: actions(plan), close: close, brief: opts)
         }
+        .accessibilityIdentifier("point.sheet.scroll")
         .scrollBounceBehavior(.basedOnSize)
         .presentationDetents(compact ? [.height(330), .large] : [.fraction(0.62), .large])
     }
@@ -108,12 +111,10 @@ struct LivePlanModalView: View {
     private func actions(_ plan: PlanModel) -> PointActions {
         let lead = controller.session.view?.iLead == true
         var a = PointActions(setDestination: nil, addPoint: nil, rally: nil)
-        if !controller.nav.isActive {
-            a.navigateHere = { p, name in
-                controller.modal = nil
-                /* After the card's sheet has gone, so the nav sheets never race it. */
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { controller.navLongPressed(p, name: name) }
-            }
+        a.navigateHere = { p, name in
+            controller.modal = nil
+            /* Let the point sheet dismiss before starting/replacing personal guidance. */
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.navLongPressed(p, name: name) }
         }
         a.savePlace = { p, name in
             controller.modal = nil

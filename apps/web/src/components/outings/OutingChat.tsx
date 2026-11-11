@@ -50,6 +50,8 @@ export function OutingChat({
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [reads, setReads] = useState<ChatRead[]>([]);
 	const [hasMore, setHasMore] = useState(false);
+	const [loadingOlder, setLoadingOlder] = useState(false);
+	const [olderError, setOlderError] = useState<string | null>(null);
 	const [writable, setWritable] = useState(true);
 	const [readOnlyReason, setReadOnlyReason] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
@@ -124,13 +126,17 @@ export function OutingChat({
 
 	async function older() {
 		const first = messages.find((m) => !m.pending);
-		if (!first) return;
+		if (!first || loadingOlder) return;
+		setLoadingOlder(true);
+		setOlderError(null);
 		try {
 			const p = await ChatApi.page(outingId, "group", { before: first.seq, limit: 50 });
 			setMessages((prev) => mergeMessages(prev, p.messages));
 			setHasMore(p.has_more);
-		} catch {
-			/* keep what we have */
+		} catch (e) {
+			setOlderError(e instanceof OutingApiError ? chatErrorText(e.code, isRTL) : chatErrorText("network", isRTL));
+		} finally {
+			setLoadingOlder(false);
 		}
 	}
 
@@ -191,10 +197,11 @@ export function OutingChat({
 		<div className="sary-o-panel sary-o-chat" data-testid="outing-chat" dir={isRTL ? "rtl" : "ltr"}>
 			<h3 className="sary-o-chat-title">{isRTL ? "دردشة الطلعة" : "Trip chat"}</h3>
 			{hasMore ? (
-				<button type="button" className="sary-o-secondary" onClick={() => void older()} data-testid="outing-chat-older">
-					{isRTL ? "رسائل أقدم" : "Older messages"}
+				<button type="button" className="sary-o-secondary" onClick={() => void older()} disabled={loadingOlder} aria-busy={loadingOlder} data-testid="outing-chat-older">
+					{loadingOlder ? (isRTL ? "جارٍ تحميل رسائل أقدم…" : "Loading older messages…") : isRTL ? "رسائل أقدم" : "Older messages"}
 				</button>
 			) : null}
+			{olderError ? <p className="sary-o-error" role="alert" data-testid="outing-chat-older-error">{olderError}</p> : null}
 			<ol className="sary-o-chat-list" ref={listRef} data-testid="outing-chat-list" aria-live="polite">
 				{loaded && !messages.length ? <li className="sary-o-note">{isRTL ? "ما فيه رسائل بعد. قل هلا 👋" : "No messages yet."}</li> : null}
 				{messages.map((m) => {

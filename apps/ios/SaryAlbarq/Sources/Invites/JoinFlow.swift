@@ -70,6 +70,22 @@ enum JoinStep: Equatable {
         default: return false
         }
     }
+
+    /// Screen-reader status for the invite button while its one-tap join flow advances.
+    var accessibilityValue: String {
+        switch self {
+        case .ready: return "جاهز للانضمام"
+        case .preparing: return "جارٍ تجهيز الحساب"
+        case .askingLocation: return "جارٍ طلب إذن الموقع"
+        case .askingPrecise: return "جارٍ طلب الموقع الدقيق"
+        case .needsLocation(.reduced): return "الموقع الدقيق غير مفعّل"
+        case .needsLocation: return "إذن الموقع مطلوب"
+        case .joining: return "جارٍ الانضمام"
+        case .entered: return "انضممت للطلعة"
+        case .cancelled: return "أُلغيت الدعوة"
+        case .failed: return "تعذّر الانضمام"
+        }
+    }
 }
 
 enum JoinEvent: Equatable {

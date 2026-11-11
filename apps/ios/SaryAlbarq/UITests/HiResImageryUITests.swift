@@ -1,9 +1,10 @@
 import XCTest
 
 /// «صور عالية الوضوح»: the «مُحسّنة» badge appears in exploration once over-zoomed past the
-/// imagery's real detail (Huraymila's shuaib, z18.6), and disappears when navigation starts
-/// (original imagery while navigating). Needs the network (Mapbox tiles), the bundled model and a
-/// simulated GPS fix for the demo navigation: `xcrun simctl location <udid> set 25.121,46.101`.
+/// imagery's real detail (Huraymila's shuaib, z18.6), then the same map enters active navigation
+/// with the enhancement badge absent. Needs the network (Mapbox tiles), the bundled model and a
+/// simulated GPS fix and location permission: `xcrun simctl privacy <udid> grant location sa.sary.albarq`
+/// and `xcrun simctl location <udid> set 25.121,46.101`.
 final class HiResImageryUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
@@ -25,19 +26,22 @@ final class HiResImageryUITests: XCTestCase {
 
     private func badge(_ app: XCUIApplication) -> XCUIElement { app.descendants(matching: .any)["hires.badge"].firstMatch }
 
-    func testBadgeInExplorationOverZoomGoneInNavigation() {
+    func testBadgeInExplorationThenActiveNavigation() {
         let app = launch(["-SaryExplore", "-SaryHiResCam", "25.12,46.10,18.6",
-                          "-SaryNavDemo", "-SaryNavTo", "25.10,46.12,الشعيب", "-SaryNavDelay", "120", "-SaryNavState", "guiding"])
-        sleep(3)
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap() // lets the permission monitor answer
+                          "-SaryNavDemo", "-SaryNavTo", "25.10,46.12,الشعيب", "-SaryNavDelay", "45", "-SaryNavState", "guiding"])
+        XCTAssertTrue(app.descendants(matching: .any)["explore.header"].waitForExistence(timeout: 20), "exploration map is open")
+        /* Start polling immediately: the badge is intentionally transient after the first enhanced tile. */
         XCTAssertTrue(badge(app).waitForExistence(timeout: 110), "«مُحسّنة» once enhanced tiles are on screen (network tiles + on-device model; slow under a loaded simulator)")
         attach(app, "hires-exploration-badge")
         /* «تخفيف الزحمة» ٧: it says so for 3 s, then steps aside. */
         XCTAssertTrue(badge(app).waitForNonExistence(timeout: 8), "the badge hides after a few seconds")
-        /* Navigation starts at 120 s (demo router): the enhanced layer is removed with its badge. */
-        let gone = NSPredicate(format: "exists == false")
-        expectation(for: gone, evaluatedWith: badge(app))
-        waitForExpectations(timeout: 150)
+        app.buttons["explore-exit"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["explore.header"].waitForNonExistence(timeout: 8), "leave exploration before guidance starts")
+        /* Do not mistake the badge's 3 s timeout for navigation: assert that guidance really began. */
+        let banner = app.descendants(matching: .any)["nav.banner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 90), "active guidance began")
+        XCTAssertTrue(banner.isHittable, "the active maneuver banner is visible, not just in the accessibility tree")
+        XCTAssertFalse(badge(app).exists, "the navigation screen has no enhancement badge")
         attach(app, "hires-navigation-original")
     }
 

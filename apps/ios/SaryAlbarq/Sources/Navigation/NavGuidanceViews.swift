@@ -95,6 +95,7 @@ enum NavHUD {
 /// bottom bar now.
 struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
+    @StateObject private var pip = NavPictureInPicture()
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -150,6 +151,42 @@ struct NavManeuverBanner: View {
             }
         }
         .navPanel(theme)
+        .overlay(alignment: .topLeading) {
+            Button { pip.start() } label: {
+                Image(systemName: pip.active ? "pip.exit" : "pip.enter")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(p.textPrimary)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(p.sunken.opacity(0.85)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .disabled(!pip.supported)
+            .accessibilityLabel(Text("نافذة الملاحة العائمة"))
+            .accessibilityValue(Text(pip.active ? "مفتوحة" : "مغلقة"))
+            .accessibilityIdentifier("nav.pip")
+            .padding(8)
+        }
+        .background(alignment: .bottomTrailing) {
+            NavPiPLayerHost(displayLayer: pip.displayLayer)
+                .frame(width: 160, height: 90)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+        }
+        .onAppear { pip.update(NavPiPSnapshot.make(nav: nav), guiding: nav.phase == .guiding) }
+        .onChange(of: NavPiPSnapshot.make(nav: nav)) { _, snapshot in
+            pip.update(snapshot, guiding: nav.phase == .guiding)
+        }
+        .onChange(of: nav.phase) { _, phase in
+            pip.update(NavPiPSnapshot.make(nav: nav), guiding: phase == .guiding)
+        }
+        .alert("تعذر فتح النافذة العائمة", isPresented: Binding(
+            get: { pip.startError != nil },
+            set: { if !$0 { pip.startError = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { pip.startError = nil }
+        } message: {
+            Text(pip.startError ?? "")
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.banner")
     }
@@ -283,7 +320,7 @@ struct NavOffRoadPanel: View {
         let bearing = nav.offRoadNow?.bearing ?? leg?.bearing ?? 0
         let arrow: CGFloat = theme.drive ? 64 : 56
         VStack(spacing: 0) {
-            /* Lovable: «٣٠٠ م» big, «بدون طريق معبّد: اتجه مع السهم», the arrow in the orange tile. */
+            /* Lovable: «٣٠٠ م» big, «مافي طريق مزفلت: كمّل مع السهم», the arrow in the orange tile. */
             HStack(spacing: theme.space(.m)) {
                 ZStack {
                     RoundedRectangle(cornerRadius: arrow * 0.43, style: .continuous).fill(p.accent)

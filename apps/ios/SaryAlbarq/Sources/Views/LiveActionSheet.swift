@@ -10,6 +10,8 @@ struct LiveActionItem: Identifiable, Equatable {
     var subtitle: String?
     var isActive = false
     var tone: Tone = .normal
+    /// Related secondary actions expand inside the group so the first sheet stays concise.
+    var children: [LiveActionItem] = []
 
     enum Tone: Equatable { case normal, emergency }
 }
@@ -100,13 +102,20 @@ enum LiveActionCatalog {
                 .init(id: "timer", title: "مؤقت الرجوع", systemImage: "timer", accessibilityID: "outing-timer"),
             ]),
             LiveActionGroup(title: "المكان", items: [
-                .init(id: "brief", title: "بريف المكان", systemImage: "info.circle", accessibilityID: "outing-brief"),
-                .init(id: "savePlace", title: "احفظ مكان", systemImage: "bookmark", accessibilityID: "outing-save-place"),
-                .init(id: "weather", title: "طقس", systemImage: "sun.max", accessibilityID: "outing-weather"),
-                .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
+                .init(id: "locationTools", title: "مكاني", systemImage: "mappin.and.ellipse", accessibilityID: "outing-location-tools",
+                      subtitle: "تفاصيل الموقع، حفظه أو إضافته للخطة", children: [
+                        .init(id: "brief", title: "بريف المكان", systemImage: "info.circle", accessibilityID: "outing-brief"),
+                        .init(id: "savePlace", title: "احفظ مكان", systemImage: "bookmark", accessibilityID: "outing-save-place"),
+                        .init(id: "waypoint", title: "أضف نقطة", systemImage: "mappin.and.ellipse", accessibilityID: "outing-waypoint-add"),
+                      ]),
                 .init(id: "nearest", title: "أقرب محطة", systemImage: SaryIcon.nearest, accessibilityID: "outing-nearest-open"),
             ]),
             LiveActionGroup(title: "الخريطة", items: [
+                .init(id: "weatherTools", title: "طقس واتجاه", systemImage: "sun.horizon", accessibilityID: "outing-weather-tools",
+                      subtitle: "الطقس والسحاب والقبلة", children: [
+                        .init(id: "weather", title: "الطقس", systemImage: "sun.max", accessibilityID: "outing-weather"),
+                        .init(id: "qibla", title: "القبلة", systemImage: "location.north.circle", accessibilityID: "outing-qibla"),
+                      ]),
                 .init(id: "explore", title: "الطبقات", systemImage: "square.3.layers.3d", accessibilityID: "outing-explore",
                       subtitle: "قمر صناعي، طبوغرافي، صور عالية الوضوح، الوضع الواقعي"),
                 .init(id: "fit", title: "شوف الكل", systemImage: SaryIcon.fitGroup, accessibilityID: "outing-fit"),
@@ -115,7 +124,12 @@ enum LiveActionCatalog {
         guard s.ended else { return all }
         return all.compactMap { g in
             var g = g
-            g.items.removeAll { needsRunningTrip.contains($0.id) }
+            g.items = g.items.compactMap { original in
+                var item = original
+                guard !item.children.isEmpty else { return needsRunningTrip.contains(item.id) ? nil : item }
+                item.children.removeAll { needsRunningTrip.contains($0.id) }
+                return item.children.isEmpty ? nil : item
+            }
             return g.items.isEmpty ? nil : g
         }
     }
@@ -164,6 +178,7 @@ struct LiveActionSheet: View {
     var trip = LiveTripRows()
     @Environment(\.sary) private var theme
     @State private var confirm: Confirm?
+    @State private var expandedActionID: String?
 
     enum Confirm: Identifiable { case pause, end, leave; var id: Self { self } }
 
@@ -193,10 +208,29 @@ struct LiveActionSheet: View {
                         VStack(spacing: theme.space(.s)) {
                             ForEach(Array(stride(from: 0, to: g.items.count, by: 4)), id: \.self) { i in
                                 HStack(spacing: theme.space(.s)) {
-                                    ForEach(g.items[i..<min(i + 4, g.items.count)]) { tile($0) }
+                                    ForEach(g.items[i..<min(i + 4, g.items.count)]) { item in
+                                        tile(item)
+                                    }
                                     ForEach(0..<(4 - min(4, g.items.count - i)), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity, minHeight: 1) }
                                 }
                             }
+                        }
+                        if let item = g.items.first(where: { $0.id == expandedActionID }), !item.children.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(item.children) { child in
+                                    tripRow(child.title, icon: child.systemImage, id: child.accessibilityID) {
+                                        action(child.id)
+                                    }
+                                    if child.id != item.children.last?.id { SaryDivider() }
+                                }
+                            }
+                            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(p.sunken.opacity(0.6)))
+                            .padding(.top, theme.space(.xs))
+                            /* A parent accessibility identifier is inherited by SwiftUI children
+                             * on iOS 27, which overwrites each tripRow's own ID (weather, qibla,
+                             * place details). Keep the container discoverable by its children. */
+                            .accessibilityElement(children: .contain)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }
@@ -284,7 +318,15 @@ struct LiveActionSheet: View {
         let red = item.tone == .emergency
         let ink = red ? p.emergencyText : p.accentText
         let fill = red ? p.emergency.opacity(0.15) : p.sunken.opacity(0.6)
-        return Button { action(item.id) } label: {
+        return Button {
+            if item.children.isEmpty {
+                action(item.id)
+            } else {
+                withAnimation(theme.animation(.snappy)) {
+                    expandedActionID = expandedActionID == item.id ? nil : item.id
+                }
+            }
+        } label: {
             VStack(spacing: 6) {
                 Image(systemName: item.systemImage)
                     .font(.system(size: 20, weight: .regular))
@@ -313,6 +355,7 @@ struct LiveActionSheet: View {
         .accessibilityLabel(Text(item.title))
         .accessibilityHint(Text(item.subtitle ?? ""))
         .accessibilityAddTraits(item.isActive ? [.isButton, .isSelected] : .isButton)
+        .accessibilityValue(Text(item.children.isEmpty ? "" : (expandedActionID == item.id ? "مفتوح" : "مغلق")))
         .accessibilityIdentifier(item.accessibilityID)
     }
 }

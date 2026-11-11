@@ -34,8 +34,9 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(leader.primary?.title, "ابدأ الطلعة")
 
         let member = OutingFlow.ui(input(.created, lead: false))
-        XCTAssertEqual(member.line, "بانتظار أمير الرحلة يبدأ")
+        XCTAssertEqual(member.line, "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها")
         XCTAssertEqual(member.primary, .waitLeader)
+        XCTAssertEqual(member.primary?.title, "بانتظار بدء الطلعة")
     }
 
     func testRunningWithoutALegAsksWhereTo() {

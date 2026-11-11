@@ -72,6 +72,15 @@ final class SavedPlacesStore: ObservableObject {
 
     @Published private(set) var places: [SavedPlace] = []
     private let url: URL?
+    /// Names places saved without one (tests inject their own). Resolved on first use, not at init.
+    var namer: PlaceNameResolver {
+        get { injectedNamer ?? .shared }
+        set { injectedNamer = newValue }
+    }
+    private var injectedNamer: PlaceNameResolver?
+    /// One naming pass at a time; a request during a pass runs one more pass after it.
+    private var naming = false
+    private var namingAgain = false
 
     init(fileName: String = "saved-places-v1.json") {
         url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent(fileName)
@@ -84,6 +93,45 @@ final class SavedPlacesStore: ObservableObject {
         dec.dateDecodingStrategy = .iso8601
         let list = (try? dec.decode([SavedPlace].self, from: d)) ?? []
         places = SavedPlaceRules.sorted(list.filter { SavedPlaceRules.valid($0.position) })
+        nameBarePlaces()
+    }
+
+    /// «مكان محفوظ» / «نقطة على الخريطة» get the place's real name (`PlaceNamer`), unless renamed meanwhile.
+    /// Names are applied in one batch at the end: one publish, one save.
+    func nameBarePlaces(resolver: PlaceNameResolver? = nil) {
+        guard !naming else {
+            namingAgain = true
+            return
+        }
+        let bare = places.filter { PlaceLabel.isGeneric($0.name) }
+        guard !bare.isEmpty else { return }
+        naming = true
+        let resolver = resolver ?? namer
+        Task { @MainActor in
+            var found: [String: String] = [:]
+            for b in bare {
+                let n = await resolver.name(for: b.position, within: 5)
+                if !PlaceLabel.isGeneric(n) { found[b.id] = SavedPlaceRules.cleanName(n) }
+            }
+            /* Re-read: places may have been renamed, deleted or wiped meanwhile. */
+            var list = places
+            var changed = false
+            for i in list.indices where PlaceLabel.isGeneric(list[i].name) {
+                if let n = found[list[i].id] {
+                    list[i].name = n
+                    changed = true
+                }
+            }
+            if changed {
+                places = list
+                save()
+            }
+            naming = false
+            if namingAgain {
+                namingAgain = false
+                nameBarePlaces(resolver: resolver)
+            }
+        }
     }
 
     private func save() {
@@ -100,6 +148,7 @@ final class SavedPlacesStore: ObservableObject {
         let place = SavedPlace(id: UUID().uuidString, name: SavedPlaceRules.cleanName(name), icon: icon, lat: p.lat, lng: p.lng, createdAt: now)
         places = SavedPlaceRules.sorted(places + [place])
         save()
+        nameBarePlaces()
         return place
     }
 

@@ -165,4 +165,34 @@ describe("OutingChat panel", () => {
 		expect(items().length).toBe(3);
 		await act(async () => root.unmount());
 	});
+
+	it("shows a retryable error when loading older messages fails", async () => {
+		(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+		localStorage.setItem("sary.outings.identity.v1", JSON.stringify({ token: "t".repeat(43), user: { id: ME, display_name: "أنا" } }));
+		vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+			if (new URL(url, "https://test.invalid").searchParams.has("before")) return new Response(JSON.stringify({ code: "network" }), { status: 503 });
+			return new Response(JSON.stringify({ ok: true, with: "group", messages: [msg(5)], has_more: true, my_read_seq: 0, reads: [], writable: true, read_only_reason: null }), { status: 200 });
+		}));
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		const root = createRoot(host);
+		await act(async () => {
+			root.render(createElement(OutingChat, {
+				outingId: "o1", meId: ME, isRTL: true, live: true,
+				names: new Map([[B, "فهد"]]), colors: new Map([[B, "#d6452f"]]),
+				othersCount: 1, canModerate: false, myLocation: null, onShowPoint: () => {}, onSeen: () => {},
+			}));
+		});
+		await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+		const olderButton = host.querySelector<HTMLButtonElement>('[data-testid="outing-chat-older"]');
+		expect(olderButton).not.toBeNull();
+		await act(async () => {
+			olderButton!.click();
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		const error = host.querySelector('[data-testid="outing-chat-older-error"]');
+		expect(error?.textContent).toBeTruthy();
+		expect(host.querySelector('[data-testid="outing-chat-older"]')).not.toBeNull();
+		await act(async () => root.unmount());
+	});
 });

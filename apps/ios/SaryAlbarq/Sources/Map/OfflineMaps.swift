@@ -206,6 +206,9 @@ final class OfflineMaps: ObservableObject {
                 switch r {
                 case let .success(region):
                     self.job = .finished(name: name, bytes: Int64(region.completedResourceSize))
+                    // «دروب البر» offline too: keep the national route tiles of this area on disk.
+                    let area = DesertGrid.BBox(s: box.south, w: box.west, n: box.north, e: box.east)
+                    Task.detached(priority: .utility) { await DesertTileStore.shared.prefetch(area) }
                 case let .failure(e):
                     if case .canceled? = e as? TileRegionError { self.job = .idle } else {
                         self.job = .failed(Self.arabic(e))

@@ -70,6 +70,18 @@ extension LiveOutingHost {
         model.pendingStart = nil
         if v.status == .created, !controller.session.isDemo { controller.startOuting() }
     }
+
+    fileprivate func startPendingMapDestination() {
+        guard let request = model.pendingMapDestination,
+              request.outingId == controller.session.id,
+              let outing = controller.session.displayView else { return }
+        model.pendingMapDestination = nil
+        guard outing.status == .active else {
+            model.errorText = "الطلعة ليست نشطة الآن. افتح طلعة نشطة لاختيار وجهة."
+            return
+        }
+        controller.startLegFromMap(request.destination)
+    }
 }
 
 struct InviteToken: Identifiable { let id: String }
@@ -114,14 +126,26 @@ struct LiveOutingHost: View {
         LiveOutingScreen(controller: controller)
             /* A new destination (or one kept on this phone) moves the weather chip at once. */
             .onReceive(model.plans.model(controller.session.id).$plan.map(\.destination).removeDuplicates()) { _ in
-                controller.feedWeather(force: true)
-                controller.updateTrip()
-                DispatchQueue.main.async { startIfAsked() }
+                /* onReceive may run as SwiftUI is reconciling this host. Keep the weather model
+                 * and trip controller mutations out of that view-update transaction. */
+                DispatchQueue.main.async {
+                    controller.feedWeather(force: true)
+                    controller.updateTrip()
+                    startIfAsked()
+                }
             }
             .onReceive(controller.session.objectWillChange) { _ in
-                DispatchQueue.main.async { startIfAsked() }
+                DispatchQueue.main.async {
+                    startIfAsked()
+                    startPendingMapDestination()
+                }
             }
-            .onAppear { startIfAsked() }
+            .onAppear {
+                DispatchQueue.main.async {
+                    startIfAsked()
+                    startPendingMapDestination()
+                }
+            }
             .onReceive(model.$offerNotifications) { offer in
                 /* First join: notifications are NOT asked at join (build 14). Our explainer comes with
                  * the first alert worth sending in this trip (a friend's message, SOS, convoy alert). */

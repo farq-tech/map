@@ -93,6 +93,9 @@ final class MediaUITests: XCTestCase {
 
     func testSharedChannelJoinFromTheAlertLane() {
         let app = launch(["-SaryMediaShared"])
+        // The demo forecast has a higher-priority dust alert, so the media notice
+        // is correctly placed in the alert history until that lane is opened.
+        app.buttons["alerts.bell"].tap()
         let join = app.buttons["media.notice.join"]
         XCTAssertTrue(join.waitForExistence(timeout: 10), "«أبو فهد شغّل: … في قناة الطلعة»")
         XCTAssertTrue(app.staticTexts["media.notice.text"].label.contains("في قناة الطلعة"))

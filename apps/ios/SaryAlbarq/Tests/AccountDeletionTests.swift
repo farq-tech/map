@@ -99,12 +99,26 @@ final class AccountDeletionTests: XCTestCase {
     }
 
     func testLocalWipeKeepsAppearanceAndOfflineAreas() {
+        // This test exercises the wipe contract, not the simulator's real Keychain.
+        // Keep it deterministic across simulator signing/protected-data states.
+        let previousKeychain = IdentityStore.keychain
+        let previousProtectedDataAvailable = IdentityStore.protectedDataAvailable
+        let keychain = SessionPersistenceTests.FakeKeychain()
+        IdentityStore.keychain = keychain
+        IdentityStore.protectedDataAvailable = { true }
+        IdentityStore.forgetCache()
+        defer {
+            IdentityStore.keychain = previousKeychain
+            IdentityStore.protectedDataAvailable = previousProtectedDataAvailable
+            IdentityStore.forgetCache()
+        }
+
         let d = UserDefaults(suiteName: "acct-\(UUID().uuidString)")!
         for k in LocalAccountData.keys { d.set("x", forKey: k) }
         d.set("dark", forKey: "sary.appearance.scheme")
         d.set(true, forKey: MapboxTelemetry.key)
-        IdentityStore.save(Identity(token: "t".padding(toLength: 43, withPad: "t", startingAt: 0),
-                                    user: PublicUser(id: "me", display_name: "أنا", avatar: nil, phone: nil)))
+        XCTAssertTrue(IdentityStore.save(Identity(token: "t".padding(toLength: 43, withPad: "t", startingAt: 0),
+                                                  user: PublicUser(id: "me", display_name: "أنا", avatar: nil, phone: nil))))
         XCTAssertNotNil(IdentityStore.load())
         LocalAccountData.wipe(defaults: d)
         XCTAssertNil(IdentityStore.load(), "Keychain identity gone")

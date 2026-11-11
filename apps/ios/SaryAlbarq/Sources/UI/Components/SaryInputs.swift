@@ -154,7 +154,7 @@ struct SaryRowIcon: View {
 
 // MARK: - Segmented control
 
-/// Tajawal segmented control with a sliding selection pill. Used for tabs and
+/// Huwiya segmented control with a sliding selection pill. Used for tabs and
 /// for settings choices (tri-modes, sizes). Wraps to a vertical list at
 /// accessibility text sizes so labels never truncate.
 struct SarySegmented<Value: Hashable>: View {
@@ -224,6 +224,7 @@ struct SarySegmented<Value: Hashable>: View {
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .animation(theme.animation(.snappy), value: selection)
         .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityElement(children: .contain)
         .modifier(OptionalIdentifier(id: id))
     }
 }

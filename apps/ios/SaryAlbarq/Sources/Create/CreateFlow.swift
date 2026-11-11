@@ -78,8 +78,8 @@ struct CreateFlowState: Equatable {
         clean.name = String(d.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(TripPlan.destinationNameMax))
         if clean.name.isEmpty { clean.name = "الوجهة" }
         destination = clean
-        if trimmedName.isEmpty, clean.name != "الوجهة", clean.name != "نقطة على الخريطة" {
-            name = String("طلعة \(clean.name)".prefix(ServerRules.outingNameMax))
+        if trimmedName.isEmpty {
+            name = Self.suggestedName(for: clean)
         }
         error = nil
         step = .weather
@@ -106,6 +106,8 @@ struct CreateFlowState: Equatable {
     /// «يناسبنا الجو، كمّل»: validated; true = go ahead and create the outing.
     mutating func approve(now: Date) -> Bool {
         guard step == .weather, !creating else { return false }
+        /* The name is optional: use the selected place, or a neutral title for a map pin. */
+        if trimmedName.isEmpty, let destination { name = Self.suggestedName(for: destination) }
         if let i = issue(now: now) {
             error = i.arabic
             return false
@@ -126,6 +128,12 @@ struct CreateFlowState: Equatable {
     mutating func createFailed(_ message: String) {
         creating = false
         error = message
+    }
+
+    private static func suggestedName(for destination: OutingDestination) -> String {
+        let place = destination.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !PlaceLabel.isGeneric(place), !PlaceLabel.isRelative(place) else { return "طلعة جديدة" }
+        return String("طلعة \(place)".prefix(ServerRules.outingNameMax))
     }
 }
 

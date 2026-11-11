@@ -76,6 +76,23 @@ final class TripProgressTests: XCTestCase {
         XCTAssertNil(ReturnTripStore.origin(of: "o2", defaults: d))
     }
 
+    func testArrivalBelongsOnlyToTheDestinationThatWasReached() {
+        var r = TripRecord()
+        r.bindArrivalDestination(dest)
+        _ = r.markArrived(myId: me, nowMs: t0)
+        XCTAssertTrue(r.me.arrived)
+        XCTAssertEqual(r.arrivals[me], t0)
+
+        let next = LngLat(lng: dest.lng + 0.02, lat: dest.lat)
+        r.bindArrivalDestination(next)
+
+        XCTAssertFalse(r.me.arrived, "a previous destination must not make the next one look reached")
+        XCTAssertNil(r.me.insideSinceMs)
+        XCTAssertFalse(r.arrivedManually)
+        XCTAssertTrue(r.arrivals.isEmpty)
+        XCTAssertTrue(r.friends.isEmpty)
+    }
+
     // MARK: arrival detection
 
     func testArrivesAfterThirtySecondsInside() {

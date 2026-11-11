@@ -30,6 +30,13 @@
 	<!-- Mapbox public token, from Config/Secrets.xcconfig (gitignored). -->
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>itfHuwiyaArabic-Regular.otf</string>
+		<string>itfHuwiyaArabic-Medium.otf</string>
+		<string>itfHuwiyaArabic-Bold.otf</string>
+		<string>itfHuwiyaArabic-Black.otf</string>
+	</array>
 	<!-- Farq map tiles TileJSON (apps/tiles), from FARQ_TILES_URL in Config/*.xcconfig. Empty = Mapbox roads as before. -->
 	<key>FarqTilesURL</key>
 	<string>$(FARQ_TILES_URL)</string>
@@ -86,7 +93,7 @@
 		<string>audio</string>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>يلتقط صوتك فقط وأنت ضاغط على «اضغط وتكلم»، ويصل مباشرة لأعضاء الطلعة مثل اللاسلكي. لمن عنده إصدار أقدم يُرسل مقطع قصير يُحذف من الخادم بعد ١٠ دقائق، ولا يُحفظ على جوالك. ولما تضغط المايك في البحث يسمع اسم المكان اللي تقوله فقط.</string>
+	<string>يلتقط صوتك عند استخدام «اضغط وتكلم» أو تسجيل رسالة صوتية. إذا تعذّر إرسال رسالة، قد يحتفظ بها التطبيق مؤقتًا على جوالك لإعادة المحاولة؛ وإذا بقيت معلّقة أكثر من ٦ ساعات، يتخلّص منها عند محاولة الإرسال التالية. تُحذف الرسائل الصوتية الجديدة من الخادم بعد ٢٤ ساعة، أما المقاطع القصيرة للإصدارات الأقدم فتنتهي بعد ١٠ دقائق. وعند استخدام مايك البحث نحوّل كلامك إلى اسم مكان.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>لما تضغط المايك في «وين رايحين؟» نحوّل اسم المكان اللي تقوله إلى نص للبحث، على جوالك متى ما أمكن. ما نحفظ صوتك.</string>
 
@@ -145,6 +152,13 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>

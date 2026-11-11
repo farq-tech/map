@@ -210,6 +210,9 @@ final class VoiceNoteCenter: ObservableObject {
         }
         /* My message cuts whatever note is playing (it stays in the list). */
         if playing != nil { player.stop() }
+        /* This foreground tap is explicit consent to join the system PTT channel. It lets
+           a later PushToTalk wake play friends' stored notes after this screen closes. */
+        walkie?.prepareForBackgroundMessages()
         guard VoiceNoteAudio.acquire(why: "record") else { return say("تعذّر فتح الميكروفون") }
         do {
             meter.reset()

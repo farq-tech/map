@@ -138,10 +138,35 @@ struct NavStep: Equatable {
     var speedLimitKmh: Int? = nil
 }
 
+/// A distance/time leg in a route whose segments have different expected speeds.
+struct NavRouteTimingLeg: Equatable {
+    var distanceM: Double
+    var durationS: Double
+}
+
+enum NavSurfaceKind: String, Equatable {
+    case paved
+    case unpaved
+    /// A cost-grid path through terrain, not a mapped road or track.
+    case terrain
+    /// Short, approximate join from an exact provider coordinate to a cost-grid cell center.
+    /// Drawn dashed so it is never mistaken for a mapped road or verified trail.
+    case gridSnap
+}
+
+struct NavSurfaceRun: Equatable {
+    var kind: NavSurfaceKind
+    var coordinates: [LngLat]
+}
+
 /// A route between me and a target, provider-agnostic.
 struct NavRoute: Equatable, Identifiable {
     var id: String
     var coordinates: [LngLat]
+    /// Stable for copies of this route value; a newly constructed route gets a new token. Consumers
+    /// that need a cheap geometry-change signal (for example PiP snapshot equality) must not scan
+    /// the entire polyline on every SwiftUI body evaluation.
+    let geometryRevision = UUID()
     var distanceM: Double
     var durationS: Double
     var steps: [NavStep]
@@ -153,12 +178,20 @@ struct NavRoute: Equatable, Identifiable {
     /// Traffic on each segment (`coordinates[i]`→`coordinates[i+1]`), from Mapbox `driving-traffic`
     /// congestion annotations. Nil off the traffic profile (Valhalla, the desert): one colour.
     var congestion: [NavCongestion]? = nil
+    /// Optional piecewise travel-time model; nil keeps the route-wide average.
+    var timingProfile: [NavRouteTimingLeg]? = nil
+    /// Segment geometry and surface source where the provider can establish it.
+    var surfaceRuns: [NavSurfaceRun] = []
+    /// A hybrid road + desert route: where its street part stops being paved (the city ↔
+    /// desert junction; `ReturnRoute.roadEnd`). Nil elsewhere. Not part of equality.
+    var roadEnd: LngLat? = nil
 
     var end: LngLat? { coordinates.last }
     var start: LngLat? { coordinates.first }
 
     static func == (a: NavRoute, b: NavRoute) -> Bool {
-        a.id == b.id && a.distanceM == b.distanceM && a.durationS == b.durationS && a.coordinates.count == b.coordinates.count
+        a.id == b.id && a.distanceM == b.distanceM && a.durationS == b.durationS &&
+        a.coordinates.count == b.coordinates.count && a.timingProfile == b.timingProfile && a.surfaceRuns == b.surfaceRuns
     }
 }
 
@@ -252,5 +285,34 @@ enum NavTraffic {
             add(c[i].band, from, b)
         }
         return out.isEmpty ? nil : out
+    }
+}
+
+enum NavSurface {
+    /// The surface runs from `done` metres along the route on (runs follow the route in order):
+    /// the travelled part is dropped and the run under the car is cut where it is, as
+    /// `NavTraffic.runs` does for traffic.
+    static func remaining(_ runs: [NavSurfaceRun], from done: Double) -> [NavSurfaceRun] {
+        guard done > 0 else { return runs }
+        var out: [NavSurfaceRun] = []
+        var acc = 0.0
+        for run in runs where run.coordinates.count >= 2 {
+            if acc >= done { out.append(run); continue }
+            var cut: [LngLat] = []
+            for (a, b) in zip(run.coordinates, run.coordinates.dropFirst()) {
+                let seg = Vehicle.distanceMeters(a, b)
+                defer { acc += seg }
+                if !cut.isEmpty { cut.append(b); continue }
+                if acc + seg <= done { continue }
+                var from = a
+                if acc < done, seg > 0 {
+                    let u = (done - acc) / seg
+                    from = LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
+                }
+                cut = [from, b]
+            }
+            if cut.count >= 2 { out.append(NavSurfaceRun(kind: run.kind, coordinates: cut)) }
+        }
+        return out
     }
 }

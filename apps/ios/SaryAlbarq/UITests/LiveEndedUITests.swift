@@ -108,6 +108,7 @@ final class LiveEndedUITests: XCTestCase {
         let plus = app.buttons["outing-actions"]
         XCTAssertTrue(plus.waitForExistence(timeout: 8))
         plus.tap()
+        app.buttons["outing-weather-tools"].tap()
         let weather = app.buttons["outing-weather"]
         XCTAssertTrue(weather.waitForExistence(timeout: 5))
         weather.tap()
