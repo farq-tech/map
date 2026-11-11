@@ -55,6 +55,34 @@ enum StandaloneNavRules {
         gate == .waitingForFix && !started && !alreadyAsked
     }
 
+    /// Owner, Build 39: «ننتظر موقعك… · الدقة ±٨ م» with the spinner, forever, though the map followed a
+    /// good fix. The screen kept a one-way `started` flag: once guidance had started, anything that
+    /// brought it back to idle (`nav.end()` from a disappear/appear, a refused start) left it idle for
+    /// good, and the idle card said «ننتظر موقعك» even with the gate ready. Now the guidance phase
+    /// itself decides: idle and the gate ready → start (re-checked every second).
+    static func shouldStart(gate: Gate, phase: NavPhase, loading: Bool) -> Bool {
+        gate == .ready && phase == .idle && !loading
+    }
+
+    /// The idle card: «ننتظر موقعك…» only while the gate really waits for a fix.
+    static func idleText(gate: Gate, accuracyM: Double?, waitingSince: Date?, now: Date, targetName: String) -> String {
+        gate == .ready ? "نبدأ التوجيه إلى \(targetName)…" : waitText(accuracyM: accuracyM, waitingSince: waitingSince, now: now)
+    }
+
+    /// One small line under the waiting card (owner's phone, remote diagnosis): accepted / refused fixes
+    /// by reason, and the age of the last fix — «مقبولة ٣٠ · مرفوضة: قديمة ١٢ · آخر قراءة قبل ٤ ث».
+    static func diagnostics(accepted: Int, rejected: [FixRejection: Int], lastFixAgeS: Double?) -> String {
+        let names: [FixRejection: String] = [.stale: "قديمة", .coarse: "ضعيفة", .teleport: "قفزة", .invalid: "غير صالحة"]
+        let refused = FixRejection.allCases.compactMap { r -> String? in
+            guard let n = rejected[r], n > 0 else { return nil }
+            return "\(names[r] ?? r.rawValue) \(ArabicFormat.number(Double(n)))"
+        }
+        var parts = ["مقبولة \(ArabicFormat.number(Double(accepted)))"]
+        parts.append(refused.isEmpty ? "مرفوضة ٠" : "مرفوضة: " + refused.joined(separator: "، "))
+        if let a = lastFixAgeS, a.isFinite { parts.append("آخر قراءة قبل \(ArabicFormat.number(a.rounded())) ث") }
+        return parts.joined(separator: " · ")
+    }
+
     /// The waiting line: «ننتظر موقعك… · الدقة ±N م», then the open-sky hint (the live screen's words).
     static func waitText(accuracyM: Double?, waitingSince: Date?, now: Date) -> String {
         NavFixWait.text(accuracyM: accuracyM, slow: waitSlow(waitingSince: waitingSince, now: now))
@@ -179,18 +207,28 @@ struct StandaloneNavScreen: View {
             location.watchForeground()
             begin()
         }
+        #if DEBUG
+        .task {
+            /* `-SaryNavResetOnce <s>`: s seconds after guidance starts it is brought back to idle once
+             * (as a disappear/appear does) — the Build 39 regression path. */
+            let a = ProcessInfo.processInfo.arguments
+            guard let i = a.firstIndex(of: "-SaryNavResetOnce"), i + 1 < a.count, let s = Double(a[i + 1]) else { return }
+            while !Task.isCancelled, nav.phase == .idle || nav.phase == .planning { try? await Task.sleep(for: .seconds(0.5)) }
+            try? await Task.sleep(for: .seconds(s))
+            nav.end()
+        }
+        #endif
         .task {
             /* Re-check every second while waiting: the gate reads the clock, and a still phone sends
              * no new fix to trigger `onChange` (owner report, Build 38). */
-            while !Task.isCancelled && !started {
+            while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(StandaloneNavRules.recheckS))
-                now = Date()
-                begin()
+                if nav.phase == .idle { now = Date(); begin() }
             }
         }
         .onChange(of: location.lastFix) { _, f in
             guard let f else { return }
-            if !started { begin() }
+            if nav.phase == .idle { begin() }
             nav.ingest(f)
             speed.ingest(f)
             follow(LngLat(lng: f.lng, lat: f.lat))
@@ -238,9 +276,16 @@ struct StandaloneNavScreen: View {
             switch gate {
             case .needsPermission: permissionCard
             case .waitingForFix, .ready:
-                let slow = StandaloneNavRules.waitSlow(waitingSince: waitingSince, now: now)
-                status(StandaloneNavRules.waitText(accuracyM: location.quality.lastAccuracyM ?? location.lastFix?.accuracy,
-                                                   waitingSince: waitingSince, now: now), busy: !slow)
+                let slow = gate == .waitingForFix && StandaloneNavRules.waitSlow(waitingSince: waitingSince, now: now)
+                VStack(alignment: .leading, spacing: theme.space(.xs)) {
+                    status(StandaloneNavRules.idleText(gate: gate, accuracyM: location.quality.lastAccuracyM ?? location.lastFix?.accuracy,
+                                                       waitingSince: waitingSince, now: now, targetName: target.name), busy: !slow)
+                    Text(StandaloneNavRules.diagnostics(accepted: location.quality.accepted, rejected: location.quality.rejected,
+                                                        lastFixAgeS: location.lastFix.map { (now.timeIntervalSince1970 * 1000 - $0.atMs) / 1000 }))
+                        .saryText(.caption).foregroundStyle(theme.palette.textSecondary)
+                        .padding(.horizontal, theme.space(.m))
+                        .accessibilityIdentifier("standaloneNav.diagnostics")
+                }
             }
         }
     }
@@ -301,12 +346,12 @@ struct StandaloneNavScreen: View {
 
     /// Starts once: permission and a fresh fix first (the wait is said on screen, never silent).
     private func begin() {
-        guard !started else { return }
+        guard nav.phase == .idle, !nav.loading else { return }
         let gate = StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: Date())
-        guard gate == .ready else {
+        guard StandaloneNavRules.shouldStart(gate: gate, phase: nav.phase, loading: nav.loading) else {
             if gate == .waitingForFix, waitingSince == nil { waitingSince = Date() }
             /* The GPS at its best, no distance filter, until a fresh fix comes (as the live screen's wait). */
-            if StandaloneNavRules.needsFreshFixRequest(gate: gate, started: started, alreadyAsked: location.wantsFreshFix) {
+            if StandaloneNavRules.needsFreshFixRequest(gate: gate, started: false, alreadyAsked: location.wantsFreshFix) {
                 location.requestFreshFix()
             }
             return

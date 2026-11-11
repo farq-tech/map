@@ -213,3 +213,26 @@ final class StandaloneNavDriveShotsUITests: XCTestCase {
         XCTAssertTrue(any("standaloneNav.speed").exists || any("standaloneNav.speedLimit").exists, "speed or the posted limit")
     }
 }
+
+/// Owner, Build 39: «اتجه» stuck on «ننتظر موقعك… · الدقة ±٨ م» with a good fix — guidance had started
+/// and was brought back to idle. It must start again by itself.
+final class StandaloneNavRestartUITests: XCTestCase {
+    func testGuidanceBackToIdleStartsAgain() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
+                               "-SaryNavDemo", "-SaryNavResetOnce", "3"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 1.3)
+        XCTAssertTrue(any("home.place.go").waitForExistence(timeout: 10))
+        any("home.place.go").tap()
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 20), "guiding first")
+        sleep(6)   /* reset at +3 s, then the 1 s re-check */
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "standalone-after-reset"; a.lifetime = .keepAlways; add(a)
+        let status = any("standaloneNav.status")
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
+    }
+}
