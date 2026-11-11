@@ -97,7 +97,7 @@ struct WaypointRow: View {
                     let to = Geo.LatLng(lat: waypoint.lat, lng: waypoint.lng)
                     HStack(spacing: 4) {
                         Image(systemName: "location.north.fill")
-                            .font(.system(size: 11, weight: .bold))
+                            .saryGlyph(11, weight: .bold)
                             .rotationEffect(.degrees(LiveOutingPresenter.relative(Geo.bearingDeg(from, to), mapBearing: mapBearing)))
                             .environment(\.layoutDirection, .leftToRight)
                         Text(SaryFormat.distance(meters: Geo.haversineMeters(from, to))).saryNumber(.footnote, weight: .bold)
@@ -177,7 +177,7 @@ struct ConvoySection: View {
                 .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
             Spacer()
             if m != nil {
-                Text(live ? "مباشر" : "موقعه قديم").saryText(.caption, weight: .bold).foregroundStyle(live ? p.liveText : p.textTertiary)
+                Text(live ? "مباشر" : "موقعه قديم").saryText(.caption, weight: .bold).foregroundStyle(live ? p.liveText : p.textSecondary)
             }
         }
         .frame(minHeight: theme.minTarget)

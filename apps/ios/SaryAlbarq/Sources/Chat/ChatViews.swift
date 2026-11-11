@@ -365,7 +365,8 @@ struct ChatThreadView: View {
                 }
                 content(m)
                 HStack(spacing: 4) {
-                    Text(time(m.created_at)).saryNumber(.micro).foregroundStyle(p.textTertiary)
+                    /* 12 pt secondary (was 11 pt tertiary): the bubble grows to fit. */
+                    Text(time(m.created_at)).saryNumber(.caption, weight: .medium).foregroundStyle(p.textSecondary)
                     if let r = ChatRules.receipt(m, me: context.me, reads: thread.reads, others: others) { receipt(r) }
                 }
             }
@@ -431,11 +432,12 @@ struct ChatThreadView: View {
     private func receipt(_ r: ChatRules.Receipt) -> some View {
         let p = theme.palette
         switch r {
-        case .sending: Image(systemName: "clock").font(.system(size: 10)).foregroundStyle(p.textTertiary).accessibilityIdentifier("chat.receipt.sending")
-        case .retrying: Image(systemName: "arrow.clockwise").font(.system(size: 10)).foregroundStyle(p.warningText).accessibilityIdentifier("chat.receipt.retrying")
-        case .failed: Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11)).foregroundStyle(p.emergency).accessibilityIdentifier("chat.receipt.failed")
-        case .sent: Text("✓").saryText(.micro, weight: .bold).foregroundStyle(p.textTertiary).accessibilityIdentifier("chat.receipt.sent")
-        case .read: Text("✓✓").saryText(.micro, weight: .bold).foregroundStyle(p.accentText).accessibilityIdentifier("chat.receipt.read")
+        /* Ticks beside the 12 pt time: the same size, secondary (not tertiary) so «وصلت» reads at night. */
+        case .sending: Image(systemName: "clock").saryGlyph(10, weight: .semibold).foregroundStyle(p.textSecondary).accessibilityIdentifier("chat.receipt.sending")
+        case .retrying: Image(systemName: "arrow.clockwise").saryGlyph(10, weight: .semibold).foregroundStyle(p.warningText).accessibilityIdentifier("chat.receipt.retrying")
+        case .failed: Image(systemName: "exclamationmark.circle.fill").saryGlyph(11).foregroundStyle(p.emergency).accessibilityIdentifier("chat.receipt.failed")
+        case .sent: Text("✓").saryText(.caption, weight: .heavy).foregroundStyle(p.textSecondary).accessibilityIdentifier("chat.receipt.sent")
+        case .read: Text("✓✓").saryText(.caption, weight: .heavy).foregroundStyle(p.accentText).accessibilityIdentifier("chat.receipt.read")
         }
     }
 

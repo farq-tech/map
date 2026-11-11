@@ -132,9 +132,9 @@ struct SaryPresenceBadge: View {
             case .live:
                 Circle().fill(p.live).frame(width: 7, height: 7)
             case .stale:
-                Image(systemName: "clock").font(.system(size: 10, weight: .bold))
+                Image(systemName: "clock").saryGlyph(10, weight: .bold)
             case .paused:
-                Image(systemName: SaryIcon.pause).font(.system(size: 9, weight: .heavy))
+                Image(systemName: SaryIcon.pause).saryGlyph(9, weight: .heavy)
             }
             Text(style.label(now: now))
                 .saryText(.caption)
@@ -252,8 +252,10 @@ struct SaryRoleChip: View {
         if role != .member {
             HStack(spacing: 3) {
                 Image(systemName: role == .leader ? SaryIcon.crown : SaryIcon.shield)
-                    .font(.system(size: 9, weight: .bold))
-                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro)
+                    .saryGlyph(9, weight: .bold)
+                /* Stays 11 pt (it sits beside the one-line name, which would truncate sooner);
+                 * the heaviest weight keeps it legible. Drive mode floors it at 12 pt. */
+                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro, weight: .heavy)
             }
             .foregroundStyle(theme.palette.accentText)
             .padding(.horizontal, 6)
@@ -546,8 +548,9 @@ struct SaryNearbyMark: View {
     var body: some View {
         let p = theme.palette
         HStack(spacing: 3) {
-            Image(systemName: Self.icon).font(.system(size: compact ? 8 : 10, weight: .bold))
-            Text(Self.text).saryText(.micro, weight: .medium).lineLimit(1)
+            Image(systemName: Self.icon).saryGlyph(compact ? 8 : 10, weight: .bold)
+            /* 11 pt inside a name chip: bold (was medium) so it survives sun glare. */
+            Text(Self.text).saryText(.micro, weight: .bold).lineLimit(1)
         }
         .foregroundStyle(p.textSecondary)
         .padding(.horizontal, compact ? 5 : 6)

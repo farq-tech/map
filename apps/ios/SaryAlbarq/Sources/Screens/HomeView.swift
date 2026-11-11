@@ -109,7 +109,7 @@ struct OutingCard: View {
                             SaryOutingStatusPill(status: o.status)
                             Text(o.participantsLabel).saryText(.footnote).foregroundStyle(p.textSecondary)
                             if o.role == "owner" {
-                                Image(systemName: SaryIcon.crown).font(.system(size: 10)).foregroundStyle(p.warningText)
+                                Image(systemName: SaryIcon.crown).saryGlyph(10).foregroundStyle(p.warningText)
                                     .accessibilityLabel(Text("أمير الطلعة"))
                             }
                         }
@@ -175,7 +175,7 @@ private struct OutingRowWeather: View {
             Group {
                 if let d = plan.plan.destination {
                     HStack(spacing: 4) {
-                        Image(systemName: "flag.checkered").font(.system(size: 9, weight: .bold)).accessibilityHidden(true)
+                        Image(systemName: "flag.checkered").saryGlyph(9, weight: .bold).accessibilityHidden(true)
                         DestinationWeatherBadge(destination: d)
                     }
                 } else {

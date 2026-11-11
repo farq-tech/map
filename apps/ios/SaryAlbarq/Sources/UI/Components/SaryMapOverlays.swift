@@ -43,7 +43,7 @@ struct SaryNameChip: View {
                 ZStack {
                     Circle().fill(Color(rgb: chip.color)).saturation(style.saturation)
                     if style.paused {
-                        Image(systemName: SaryIcon.pause).font(.system(size: 6, weight: .heavy))
+                        Image(systemName: SaryIcon.pause).saryGlyph(6, weight: .heavy, maxGrowth: SaryGlyph.tightGrowth)
                             .foregroundStyle(SaryCarColors.ink(on: chip.color))
                     }
                 }
@@ -64,9 +64,9 @@ struct SaryNameChip: View {
                 }
                 if chip.stuck {
                     Image(systemName: SafetyIcon.stuck)
-                        .font(.system(size: 10, weight: .bold))
+                        .saryGlyph(10, weight: .bold)
                         .foregroundStyle(p.onAccent)
-                        .frame(width: 20, height: 16)
+                        .frame(minWidth: 20, minHeight: 16)
                         .background(Capsule().fill(p.warningText))
                         .accessibilityLabel(Text("غرّز"))
                         .transition(SaryTransition.chipPop(theme))
@@ -74,25 +74,27 @@ struct SaryNameChip: View {
                 if chip.speaking {
                     /* «يتكلم»: on air in «قناة الطلعة» now. */
                     Image(systemName: "waveform")
-                        .font(.system(size: 10, weight: .heavy))
+                        .saryGlyph(10, weight: .heavy)
                         .foregroundStyle(p.onAccent)
                         /* Live loop: still in drive mode, under Reduce Motion and in the background. */
                         .symbolEffect(.variableColor.iterative, isActive: SaryMotionPolicy.loop(
                             .live, active: true, reduceMotion: theme.reduceMotion, drive: theme.drive,
                             sceneActive: scenePhase == .active) == .full)
                         .environment(\.layoutDirection, .leftToRight)
-                        .frame(width: 22, height: 16)
+                        .frame(minWidth: 22, minHeight: 16)
                         .background(Capsule().fill(p.accent))
                         .accessibilityLabel(Text("يتكلم الآن"))
                         .accessibilityIdentifier("car.speaking")
                         .transition(SaryTransition.chipPop(theme))
                 } else if chip.hasVoice {
-                    Image(systemName: "waveform").font(.system(size: 10, weight: .bold)).foregroundStyle(p.accentText)
+                    Image(systemName: "waveform").saryGlyph(10, weight: .bold).foregroundStyle(p.accentText)
                 }
                 if let b = chip.convoy {
+                    /* The convoy's problem on this car: 12 pt heavy (was 11 bold); the chip is
+                     * already that tall, so only its width grows a little. */
                     Label(b.label, systemImage: b.symbol)
                         .labelStyle(.titleAndIcon)
-                        .saryText(.micro, weight: .bold)
+                        .saryText(.caption, weight: .heavy)
                         .foregroundStyle(p.onAccent)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -105,9 +107,9 @@ struct SaryNameChip: View {
                 }
                 if noteWaiting {
                     Image(systemName: SaryIcon.note)
-                        .font(.system(size: 10, weight: .bold))
+                        .saryGlyph(10, weight: .bold)
                         .foregroundStyle(SaryCarColors.ink(on: chip.color))
-                        .frame(width: 18, height: 16)
+                        .frame(minWidth: 18, minHeight: 16)
                         .background(Capsule().fill(Color(rgb: chip.color)))
                         .accessibilityLabel(Text("لديه رسالة"))
                         .transition(SaryTransition.chipPop(theme))
@@ -120,7 +122,8 @@ struct SaryNameChip: View {
                 // Chips over the map are tiny: a solid surface reads better than glass.
                 shape.fill(chip.isMe ? p.accent.opacity(0.2) : Color.clear)
             }
-            .background(shape.fill(p.chromeOpaque.opacity(chip.presence.isLive ? 0.94 : 0.82)))
+            /* Drive mode: a fully opaque plate, so the name never fights the terrain in sun. */
+            .background(shape.fill(p.chromeOpaque.opacity(theme.drive ? 1 : (chip.presence.isLive ? 0.94 : 0.82))))
             .overlay {
                 if style.dashed {
                     shape.strokeBorder(p.stale, style: StrokeStyle(lineWidth: 1.2, dash: [3, 2]))
@@ -172,7 +175,7 @@ struct SaryGroupChip: View {
                     .lineLimit(1)
                     .contentTransition(SaryTransition.number(Double(count), theme))
                 Image(systemName: "plus.magnifyingglass")
-                    .font(.system(size: 10, weight: .bold))
+                    .saryGlyph(10, weight: .bold)
                     .foregroundStyle(p.textSecondary)
             }
             .fixedSize()
@@ -271,7 +274,7 @@ struct SaryEdgeArrowChip: View {
             .padding(.leading, 4)
             .padding(.trailing, 10)
             .padding(.vertical, 4)
-            .background(Capsule().fill(p.chromeOpaque.opacity(0.94)))
+            .background(Capsule().fill(p.chromeOpaque.opacity(theme.drive ? 1 : 0.94)))
             .overlay {
                 if chip.isStale {
                     Capsule().strokeBorder(p.stale, style: StrokeStyle(lineWidth: 1.2, dash: [3, 2]))
@@ -374,7 +377,7 @@ struct SaryCarMarker: View {
         }
         .overlay(alignment: .topTrailing) {
             if style.paused {
-                Image(systemName: SaryIcon.pause).font(.system(size: 8, weight: .heavy))
+                Image(systemName: SaryIcon.pause).saryGlyph(8, weight: .heavy, maxGrowth: SaryGlyph.tightGrowth)
                     .foregroundStyle(.white)
                     .frame(width: 16, height: 16)
                     .background(Circle().fill(theme.palette.stale))

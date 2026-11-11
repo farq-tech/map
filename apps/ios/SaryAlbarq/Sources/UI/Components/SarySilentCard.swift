@@ -147,7 +147,7 @@ struct SarySilentBadge: View {
     var body: some View {
         let p = theme.palette
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: compact ? 8 : 10, weight: .bold))
+            Image(systemName: icon).saryGlyph(compact ? 8 : 10, weight: .bold)
             Text(line)
                 .saryText(compact ? .micro : .caption, weight: .bold)
                 .lineLimit(1)

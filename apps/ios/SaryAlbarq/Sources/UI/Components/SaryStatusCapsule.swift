@@ -122,7 +122,7 @@ struct SaryStatusCapsule: View {
                             Text(SaryFormat.number(warnings.count)).saryNumber(.caption)
                                 .contentTransition(SaryTransition.number(Double(warnings.count), theme))
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 11, weight: .bold))
+                                .saryGlyph(11, weight: .bold)
                                 .rotationEffect(.degrees(expanded ? 180 : 0))
                         }
                         .foregroundStyle(theme.palette.warningText)

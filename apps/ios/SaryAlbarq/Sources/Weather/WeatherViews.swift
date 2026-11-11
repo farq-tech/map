@@ -132,7 +132,7 @@ struct WeatherCardView: View {
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: theme.space(.xs)) {
                 if ui.offline || ui.stale {
-                    Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold))
+                    Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").saryGlyph(11, weight: .bold)
                 }
                 Text(footerText).saryNumber(.caption, weight: ui.stale || ui.offline ? .bold : .regular).lineLimit(2)
             }
@@ -171,7 +171,7 @@ struct HoursStrip: View {
                         Text(h.temp).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                         HStack(spacing: 2) {
                             WindArrow(degrees: h.arrowDeg, size: 11, tint: p.textSecondary)
-                            Text(h.wind).saryNumber(.micro).foregroundStyle(p.textSecondary)
+                            Text(h.wind).saryNumber(.micro, weight: .medium).foregroundStyle(p.textSecondary)
                         }
                         Text(h.rainChance ?? " ").saryNumber(.micro, weight: .bold).foregroundStyle(p.accentText)
                     }

@@ -61,7 +61,7 @@ struct SaryAlertLane: View {
                 Button { expanded.toggle() } label: {
                     HStack(spacing: 4) {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
+                            .saryGlyph(11, weight: .bold)
                         Text(expanded ? "إخفاء" : Self.overflowLabel(v.hidden))
                             .saryText(.caption, weight: .bold)
                     }
@@ -122,7 +122,7 @@ struct SaryAlertCard: View {
                     Text("خرجت عن المسار").saryText(theme.drive ? .headline : .callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(1)
                     Text("على بعد \(SaryFormat.distance(meters: o.meters)) من «\(o.trackName)» · ارجع باتجاه السهم")
-                        .saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
+                        .saryNumber(.footnote, weight: detailWeight).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
                 }
             }
             .accessibilityLabel(Text("خرجت عن المسار، على بعد \(SaryFormat.distance(meters: o.meters)) من \(o.trackName)"))
@@ -149,18 +149,18 @@ struct SaryAlertCard: View {
             card {
                 ZStack(alignment: .bottomTrailing) {
                     Image(systemName: SaryIcon.warning)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: theme.drive ? 20 : 15, weight: .bold))
                         .foregroundStyle(theme.palette.warningText)
-                        .frame(width: 36, height: 36)
+                        .frame(width: theme.drive ? 48 : 36, height: theme.drive ? 48 : 36)
                         .background(Circle().fill(theme.palette.warning.opacity(0.18)))
                     Circle().fill(Color(rgb: color)).frame(width: 12, height: 12)
                         .overlay(Circle().stroke(theme.palette.background, lineWidth: 2))
                 }
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(name) ابتعد عن الربع").saryText(.callout, weight: .bold)
+                    Text("\(name) ابتعد عن الربع").saryText(theme.drive ? .headline : .callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                    Text("على بعد \(SaryFormat.distance(meters: meters))").saryNumber(.footnote, weight: .medium)
+                    Text("على بعد \(SaryFormat.distance(meters: meters))").saryNumber(.footnote, weight: detailWeight)
                         .foregroundStyle(theme.palette.textSecondary)
                 }
             }
@@ -170,8 +170,8 @@ struct SaryAlertCard: View {
                 WeatherAlertLeading(alert: w)
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(w.title).saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                    Text(w.detail).saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(w.kind == .flood ? 4 : (theme.drive ? 2 : 3))
+                    Text(w.title).saryText(theme.drive ? .headline : .callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
+                    Text(w.detail).saryNumber(.footnote, weight: detailWeight).foregroundStyle(theme.palette.textSecondary).lineLimit(w.kind == .flood ? 4 : (theme.drive ? 2 : 3))
                 }
             }
             .accessibilityLabel(Text("\(w.title). \(w.detail)"))
@@ -196,7 +196,7 @@ struct SaryAlertCard: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(c.title).saryText(theme.drive ? .headline : .callout, weight: .bold)
                             .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                        Text(c.detail).saryNumber(.footnote, weight: .medium)
+                        Text(c.detail).saryNumber(.footnote, weight: detailWeight)
                             .foregroundStyle(theme.palette.textSecondary)
                     }
                 }
@@ -206,6 +206,9 @@ struct SaryAlertCard: View {
             }
         }
     }
+
+    /// A card's second line: medium at rest, bold in drive mode so it still reads in sun glare.
+    private var detailWeight: SaryWeight { theme.drive ? .bold : .medium }
 
     /// «اتجه» on the return-to-rally prompt; «ارجعوا لنقطة التجمع» on separation / stop for leaders.
     @ViewBuilder

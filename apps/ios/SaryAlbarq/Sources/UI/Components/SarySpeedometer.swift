@@ -72,8 +72,9 @@ struct SarySpeedometer: View {
                 .contentTransition(SaryTransition.number(ui.current.kmh ?? 0, theme))
                 .animation(theme.animation(.snappy), value: ui.current.kmh.map { Int($0.rounded()) })
                 .accessibilityIdentifier("speedometer.value")
+            /* 12 pt outside drive mode (was 11): it fits under the number in the 62 pt face. */
             Text(SaryFormat.speedUnit)
-                .saryText(theme.drive ? .footnote : .micro, weight: .bold)
+                .saryText(theme.drive ? .footnote : .caption, weight: .bold)
                 .foregroundStyle(p.textSecondary)
                 .lineLimit(1)
         }
@@ -95,7 +96,8 @@ struct SarySpeedometer: View {
 
     private func row(_ k: String, _ v: Double?) -> some View {
         VStack(alignment: .leading, spacing: -2) {
-            Text(k).saryText(theme.drive ? .caption : .micro, weight: .bold).foregroundStyle(theme.palette.textSecondary)
+            /* Two rows share the 62 pt face: the key stays 11 pt, at the heaviest weight. */
+            Text(k).saryText(theme.drive ? .caption : .micro, weight: .heavy).foregroundStyle(theme.palette.textSecondary)
             Text(SaryFormat.speedValue(kmh: v)).saryNumber(theme.drive ? .title2 : .subhead, weight: .heavy)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

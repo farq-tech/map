@@ -119,13 +119,13 @@ struct WeatherChipView: View {
                     .frame(maxWidth: 110, alignment: .leading)
                 if let s = ui.staleText {
                     HStack(spacing: 2) {
-                        Image(systemName: ui.offline ? SaryIcon.offline : "clock").font(.system(size: 10, weight: .bold))
+                        Image(systemName: ui.offline ? SaryIcon.offline : "clock").saryGlyph(10, weight: .bold)
                         Text(s.replacingOccurrences(of: "آخر تحديث ", with: "")).saryNumber(.micro, weight: .bold).lineLimit(1)
                     }
                     .foregroundStyle(p.warningText)
                 }
                 if ui.alertLevel > 0 {
-                    Image(systemName: SaryIcon.warning).font(.system(size: 11, weight: .bold)).foregroundStyle(tint)
+                    Image(systemName: SaryIcon.warning).saryGlyph(11, weight: .bold).foregroundStyle(tint)
                 }
             }
             .padding(.horizontal, theme.space(.m))
@@ -174,7 +174,7 @@ struct DestinationWeatherBadge: View {
             Text(ui.temp).saryNumber(.caption, weight: .bold)
                 .foregroundStyle(ui.alertLevel > 0 ? theme.palette.warningText : theme.palette.textSecondary)
                 .contentTransition(theme.reduceMotion ? .opacity : .numericText())
-            if ui.staleText != nil { Image(systemName: "clock").font(.system(size: 9, weight: .bold)).foregroundStyle(theme.palette.warningText) }
+            if ui.staleText != nil { Image(systemName: "clock").saryGlyph(9, weight: .bold).foregroundStyle(theme.palette.warningText) }
         }
         /* The reading arrives after the card: its digits roll in rather than pop. */
         .saryAnimation(.smooth, value: ui.temp)

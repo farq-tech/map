@@ -175,7 +175,7 @@ struct SaryOutingStatusPill: View {
             }
         }()
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: 10, weight: .bold))
+            Image(systemName: icon).saryGlyph(10, weight: .bold)
             Text(text).saryText(.caption, weight: .bold).lineLimit(1)
         }
         .foregroundStyle(color)

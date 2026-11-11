@@ -83,18 +83,20 @@ extension View {
     func liveStaggerIn(_ index: Int) -> some View { modifier(LiveStaggerIn(index: index)) }
 }
 
-/// Lovable's caption under a round button: 10 pt on a dark pill.
+/// Lovable's caption under a round button: 11 pt bold on a dark pill (was 10 pt regular,
+/// unreadable in sun).
 struct LovableCaption: View {
     var text: String
     @Environment(\.sary) private var theme
     var body: some View {
         Text(text)
-            .font(.sary(10, .regular))
+            .saryText(.micro, weight: .bold)
             .foregroundStyle(theme.palette.textSecondary)
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 6)
-            .frame(height: 15)
+            /* The pill keeps its 15 pt at rest (layout unchanged); drive mode's bigger text gets 18. */
+            .frame(height: theme.drive ? 18 : 15)
             .background(Capsule().fill(Color.black.opacity(0.6)))
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
             .accessibilityHidden(true)
@@ -130,8 +132,9 @@ struct LiveSideButtons: View {
                             .saryGlass(Circle(), role: .chrome, interactive: true)
                             .overlay(alignment: .topTrailing) {
                                 if let b = item.badge, b > 0 {
-                                    Text(SaryFormat.number(b)).font(.sary(10, .heavy)).foregroundStyle(p.onEmergency)
+                                    Text(SaryFormat.number(b)).saryNumber(.micro, weight: .heavy).foregroundStyle(p.onEmergency)
                                         .frame(minWidth: 17, minHeight: 17)
+                                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                                         .background(Circle().fill(p.emergency))
                                         .saryBadgeOutset(trailing: 3, top: 3)
                                 }
@@ -181,15 +184,17 @@ struct LovableSpeedBubble: View {
         let p = theme.palette
         let kmh = ui.current.kmh.map { Int($0.rounded()) }
         VStack(spacing: 0) {
+            /* Tabular digits (no jitter while it ticks) that grow with the drive scale like
+             * every other number: 26 pt at rest, 30 pt in drive mode. */
             Text(kmh.map { SaryFormat.number($0) } ?? "—")
-                .font(.sary(26, .heavy))
+                .saryNumber(.title, weight: .heavy)
                 .foregroundStyle(ui.overLimit ? p.emergencyText : p.textPrimary)
                 .contentTransition(SaryTransition.number(Double(kmh ?? 0), theme))
                 /* Rolls on the speed readings that already arrive (no extra updates). */
                 .animation(theme.animation(.snappy), value: kmh)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text("كم/س").font(.sary(11, .regular)).foregroundStyle(p.textSecondary)
+            Text("كم/س").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -197,7 +202,7 @@ struct LovableSpeedBubble: View {
         /* A fixed 76 pt disc: its text follows Dynamic Type only as far as `SarySpeedometer` does. */
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .frame(width: 76, height: 76)
-        .background(Circle().fill(p.chromeOpaque.opacity(0.88)))
+        .background(Circle().fill(p.chromeOpaque.opacity(theme.drive ? 1 : 0.88)))
         .saryGlass(Circle(), role: .chrome)
         .overlay { if ui.overLimit { Circle().stroke(p.emergency, lineWidth: 3) } }
         .accessibilityElement(children: .ignore)
@@ -215,9 +220,10 @@ struct ConvoyLinePill: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 6) {
-                Circle().fill(theme.palette.live).frame(width: 8, height: 8)
+                Circle().fill(theme.palette.live).frame(width: theme.drive ? 10 : 8, height: theme.drive ? 10 : 8)
+                /* Primary while driving: the ramp's footnote (15 pt in drive mode), bold. */
                 Text(text)
-                    .font(.sary(13, .medium))
+                    .saryText(.footnote, weight: .bold)
                     .foregroundStyle(theme.palette.textPrimary)
                     .lineLimit(1)
             }
@@ -241,9 +247,10 @@ struct AlertHistoryButton: View {
 
     var body: some View {
         Button(action: action) {
+            /* Secondary chrome: it steps back in drive mode so the alert beside it leads. */
             Image(systemName: open ? "xmark" : "clock.arrow.circlepath")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(theme.palette.textPrimary)
+                .foregroundStyle(theme.drive && !open ? theme.palette.textSecondary : theme.palette.textPrimary)
                 .frame(width: 44, height: 44)
                 .saryGlass(Circle(), role: .chrome, interactive: true)
                 .frame(width: 44, height: 44)

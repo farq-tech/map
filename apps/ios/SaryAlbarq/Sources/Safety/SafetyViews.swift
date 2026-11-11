@@ -83,7 +83,7 @@ struct SafetyAlertCard: View {
             ZStack(alignment: .bottomTrailing) {
                 SaryAvatar(name: s.name, color: s.color, size: theme.drive ? 44 : 36)
                 Image(systemName: SafetyIcon.stuck)
-                    .font(.system(size: 10, weight: .bold))
+                    .saryGlyph(10, weight: .bold, maxGrowth: SaryGlyph.tightGrowth)
                     .foregroundStyle(p.onAccent)
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(p.warningText))

@@ -284,7 +284,7 @@ struct LiveOutingScreen: View {
                         HStack(alignment: .center, spacing: theme.space(.s)) {
                             Spacer(minLength: 0)
                             Text("اضغط على أي مكان بالخريطة عشان تشوف بريفه")
-                                .font(.sary(12, .regular))
+                                .saryText(.caption, weight: .medium)
                                 .foregroundStyle(theme.palette.textSecondary)
                                 .multilineTextAlignment(.center)
                                 .frame(maxWidth: 200)

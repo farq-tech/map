@@ -493,3 +493,41 @@ final class SaryHapticsPolicyTests: XCTestCase {
         XCTAssertFalse(SaryHaptics.allows(.selection, driving: false, enabled: false))
     }
 }
+
+/// Legibility while driving and for tiny glyphs (UI polish pass 3).
+final class SaryLegibilityTests: XCTestCase {
+    func testDriveFloorsTinyStylesThenScales() {
+        // At rest every style keeps its ramp size: layout unchanged.
+        for s in SaryTextStyle.allCases { XCTAssertEqual(s.size(drive: false), s.size, s.label) }
+        // Drive: `.micro` (11) reads like `.caption` (12), both × 1.15.
+        XCTAssertEqual(SaryTextStyle.micro.size(drive: true), 12 * 1.15, accuracy: 0.001)
+        XCTAssertEqual(SaryTextStyle.caption.size(drive: true), 12 * 1.15, accuracy: 0.001)
+        XCTAssertEqual(SaryTextStyle.headline.size(drive: true), 17 * 1.15, accuracy: 0.001)
+        // Nothing is smaller than ~13.8 pt in drive mode, and nothing shrinks.
+        for s in SaryTextStyle.allCases {
+            XCTAssertGreaterThanOrEqual(s.size(drive: true), SaryTextStyle.driveFloor * SaryTextStyle.driveScale - 0.001, s.label)
+            XCTAssertGreaterThanOrEqual(s.size(drive: true), s.size(drive: false), s.label)
+            XCTAssertEqual(s.scale(drive: true) * s.size, s.size(drive: true), accuracy: 0.001, s.label)
+            XCTAssertEqual(s.scale(drive: false), 1, accuracy: 0.0001, s.label)
+        }
+        // The theme's scale is the same token.
+        XCTAssertEqual(SaryTheme.resolve(prefs: .init(), scheme: .dark, night: false, drive: true).typeScale, SaryTextStyle.driveScale)
+        XCTAssertEqual(SaryTheme.default.typeScale, 1)
+    }
+
+    func testGlyphGrowsALittleAndNeverShrinks() {
+        // Default text size: exactly the designed size.
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 10), 10)
+        // Larger text: follows, up to the cap.
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 12), 12)
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 30), 10 * SaryGlyph.maxGrowth, accuracy: 0.001)
+        XCTAssertEqual(SaryGlyph.size(base: 6, scaled: 20, maxGrowth: SaryGlyph.tightGrowth), 6 * SaryGlyph.tightGrowth, accuracy: 0.001)
+        // Smaller text sizes never make a tiny glyph tinier.
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: 7), 9)
+        // A cap under 1 means «never grows»; bad input falls back to the base.
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: 14, maxGrowth: 0.5), 9)
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: .infinity), 9)
+        XCTAssertEqual(SaryGlyph.size(base: 0, scaled: 12), 0)
+        XCTAssertLessThan(SaryGlyph.tightGrowth, SaryGlyph.maxGrowth)
+    }
+}

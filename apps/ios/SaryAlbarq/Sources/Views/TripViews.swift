@@ -229,7 +229,7 @@ struct TripCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         if let g = ui.groupStartMeters, g > 200, !theme.drive {
-            Text("نقطة انطلاق الربع على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textTertiary)
+            Text("نقطة انطلاق الربع على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textSecondary)
         }
         HStack(spacing: theme.space(.s)) {
             if ui.isReturnTrip {
@@ -299,7 +299,8 @@ struct TripCard: View {
                 /* The trip's numbers roll as they update and into the arrival / end summary. */
                 .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                 .animation(theme.animation(.smooth), value: v)
-            if let note { Text(note).saryText(.micro).foregroundStyle(p.textTertiary).lineLimit(1).minimumScaleFactor(0.8) }
+            /* 11 pt under the number (the tile is tight): secondary, not tertiary, so it reads at night. */
+            if let note { Text(note).saryText(.micro).foregroundStyle(p.textSecondary).lineLimit(1).minimumScaleFactor(0.8) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(theme.space(.s))

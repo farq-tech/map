@@ -111,7 +111,7 @@ struct SaryTheme: Equatable {
     /// Full-width buttons.
     var buttonHeight: CGFloat { drive ? max(64, buttonSize.height) : buttonSize.height }
     /// Drive mode text scale on top of Dynamic Type.
-    var typeScale: CGFloat { drive ? 1.15 : 1 }
+    var typeScale: CGFloat { drive ? SaryTextStyle.driveScale : 1 }
 
     // MARK: Motion
 
@@ -219,7 +219,8 @@ private struct SaryTextModifier: ViewModifier {
     var weight: SaryWeight?
 
     func body(content: Content) -> some View {
-        content.font(.sary(style.size * theme.typeScale, weight ?? style.weight, relativeTo: style.relativeTo))
+        /* Drive mode floors the tiny styles (`SaryTextStyle.driveFloor`) before scaling. */
+        content.font(.sary(style.size(drive: theme.drive), weight ?? style.weight, relativeTo: style.relativeTo))
     }
 }
 
@@ -227,15 +228,38 @@ private struct SaryTextModifier: ViewModifier {
 private struct SaryNumberModifier: ViewModifier {
     @Environment(\.sary) private var theme
     @ScaledMetric private var size: CGFloat
+    var style: SaryTextStyle
     var weight: SaryWeight
 
     init(style: SaryTextStyle, weight: SaryWeight?) {
         _size = ScaledMetric(wrappedValue: style.size, relativeTo: style.relativeTo)
+        self.style = style
         self.weight = weight ?? style.weight
     }
 
     func body(content: Content) -> some View {
-        content.font(.saryNumeric(scaled: size * theme.typeScale, weight))
+        content.font(.saryNumeric(scaled: size * style.scale(drive: theme.drive), weight))
+    }
+}
+
+/// A small SF Symbol that grows a little with Dynamic Type (`SaryGlyph`), and
+/// with the drive scale like the text beside it.
+private struct SaryGlyphModifier: ViewModifier {
+    @Environment(\.sary) private var theme
+    @ScaledMetric private var scaled: CGFloat
+    var base: CGFloat
+    var weight: Font.Weight
+    var maxGrowth: CGFloat
+
+    init(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle, maxGrowth: CGFloat) {
+        _scaled = ScaledMetric(wrappedValue: size, relativeTo: style)
+        base = size
+        self.weight = weight
+        self.maxGrowth = maxGrowth
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: SaryGlyph.size(base: base, scaled: scaled, maxGrowth: maxGrowth) * theme.typeScale, weight: weight))
     }
 }
 
@@ -247,6 +271,14 @@ extension View {
     /// For live numbers (distance, timers, battery): fixed-width digits.
     func saryNumber(_ style: SaryTextStyle, weight: SaryWeight? = nil) -> some View {
         modifier(SaryNumberModifier(style: style, weight: weight))
+    }
+
+    /// A small SF Symbol (6–11 pt: map badges, chip icons, chat ticks) instead of
+    /// `.font(.system(size:))`: it grows with Dynamic Type up to `maxGrowth`
+    /// (`SaryGlyph`) and with the drive scale. Same size at the default text size.
+    func saryGlyph(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .caption2,
+                   maxGrowth: CGFloat = SaryGlyph.maxGrowth) -> some View {
+        modifier(SaryGlyphModifier(size: size, weight: weight, relativeTo: style, maxGrowth: maxGrowth))
     }
 
     /// Animation that respects Reduce Motion / the motion preference.

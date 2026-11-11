@@ -91,6 +91,39 @@ enum SaryTextStyle: String, CaseIterable {
     }
 
     var label: String { rawValue }
+
+    /// Drive mode: no ramp style is drawn smaller than this (before the drive
+    /// scale), so `.micro` reads like `.caption` at arm's length: 12 × 1.15 ≈ 14 pt.
+    static let driveFloor: CGFloat = 12
+    /// Drive mode text scale on top of Dynamic Type (`SaryTheme.typeScale`).
+    static let driveScale: CGFloat = 1.15
+
+    /// Point size before Dynamic Type: the ramp size, floored and scaled in drive mode.
+    func size(drive: Bool) -> CGFloat {
+        drive ? max(size, Self.driveFloor) * Self.driveScale : size
+    }
+
+    /// `size(drive:)` as a factor of the ramp size, for metrics already scaled by Dynamic Type.
+    func scale(drive: Bool) -> CGFloat { size(drive: drive) / size }
+}
+
+/// Small SF Symbols beside tiny text (map badges, chat ticks, chip icons, 6–11 pt):
+/// they follow Dynamic Type a little — never smaller than designed, at most
+/// `maxGrowth` times — so they keep up with their label without bursting the
+/// badge or dot they sit in. Applied by `.saryGlyph(_:)`.
+enum SaryGlyph {
+    /// Default cap: a 10 pt glyph stops at 14 pt.
+    static let maxGrowth: CGFloat = 1.4
+    /// Glyphs inside a fixed small shape (a 10 pt dot, a 16 pt badge) grow less.
+    static let tightGrowth: CGFloat = 1.2
+
+    /// `scaled` is `base` after `@ScaledMetric`; the result is clamped to
+    /// `base ... base × maxGrowth` (a cap below 1 means «never grows»).
+    static func size(base: CGFloat, scaled: CGFloat, maxGrowth: CGFloat = maxGrowth) -> CGFloat {
+        guard base > 0 else { return 0 }
+        guard scaled.isFinite else { return base }
+        return min(max(scaled, base), base * max(1, maxGrowth))
+    }
 }
 
 extension Font {

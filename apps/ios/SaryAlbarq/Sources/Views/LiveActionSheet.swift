@@ -330,14 +330,16 @@ struct LiveActionSheet: View {
                     .frame(width: 34, height: 30)
                     .background { if item.isActive { Circle().fill(red ? p.emergency : p.accent).frame(width: 34, height: 34) } }
                 VStack(spacing: 0) {
+                    /* Four columns: the title stays 11 pt, medium weight for sun. */
                     Text(item.title)
-                        .font(.sary(11, .regular))
+                        .saryText(.micro, weight: .medium)
                         .foregroundStyle(p.textPrimary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.85)
                     if item.id == "youtube", let sub = item.subtitle {
-                        Text(sub).font(.sary(9, .regular)).foregroundStyle(p.textTertiary)
+                        Text(sub).saryText(.micro, weight: .regular).foregroundStyle(p.textSecondary)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)

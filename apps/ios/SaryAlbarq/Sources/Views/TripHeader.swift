@@ -126,8 +126,9 @@ struct TripHeader: View {
                         .minimumScaleFactor(0.8)
                         .accessibilityIdentifier("outing-title")
                     if let line = ui.line {
+                        /* Drive mode: medium weight, so the state line holds up in sun. */
                         Text(line)
-                            .font(.sary(theme.drive ? 14 : 12, .regular))
+                            .font(.sary(theme.drive ? 14 : 12, theme.drive ? .medium : .regular))
                             .foregroundStyle(p.textSecondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
@@ -197,7 +198,8 @@ struct TripHeader: View {
                             .frame(width: hit, height: hit)
                         if ui.bell > 0 && !bellOpen {
                             Text(SaryFormat.number(ui.bell))
-                                .font(.sary(10, .heavy))
+                                .saryNumber(.micro, weight: .heavy)
+                                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                                 .foregroundStyle(p.onAccent)
                                 .padding(.horizontal, 4)
                                 .frame(minWidth: 16, minHeight: 16)

@@ -360,7 +360,7 @@ struct LiveQuickRow: View {
                 .foregroundStyle(p.accentText)
                 .frame(width: size, height: size)
                 .background(Circle().fill(p.sunken))
-            Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+            Text(title).font(.sary(11, .bold)).foregroundStyle(p.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity)
@@ -380,13 +380,13 @@ struct LiveQuickRow: View {
                     .background(Circle().fill(accent ? p.accent : active ? p.accent.opacity(0.85) : p.sunken))
                     .overlay(alignment: .topTrailing) {
                         if badge > 0 {
-                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(p.onEmergency)
+                            Text(SaryFormat.number(badge)).saryNumber(.micro, weight: .heavy).foregroundStyle(p.onEmergency)
                                 .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                                 .background(Capsule().fill(p.emergency))
                                 .saryBadgeOutset(trailing: 4, top: 2)
                         }
                     }
-                Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+                Text(title).font(.sary(11, .bold)).foregroundStyle(p.textPrimary)
                     .lineLimit(1).minimumScaleFactor(0.75)
             }
             .frame(maxWidth: .infinity)
@@ -1007,7 +1007,8 @@ struct NearestStationsView: View {
                     .sarySurface(radius: SaryRadius.l)
                 }
             }
-            Text("© OpenStreetMap contributors · ODbL").saryText(.micro).foregroundStyle(theme.palette.textTertiary)
+            /* ODbL: the attribution must stay readable (secondary, also at night). */
+            Text("© OpenStreetMap contributors · ODbL").saryText(.micro).foregroundStyle(theme.palette.textSecondary)
                 .environment(\.layoutDirection, .leftToRight)
         }
         .padding(theme.space(.l))

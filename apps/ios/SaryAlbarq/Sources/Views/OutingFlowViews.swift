@@ -143,7 +143,7 @@ struct WhereToSheet: View {
                         Image(systemName: r.1).font(.system(size: 15, weight: .semibold)).foregroundStyle(p.accentText).frame(width: 24)
                         Text(r.0.name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                         Spacer()
-                        if let d = distance(r.0) { Text(d).saryNumber(.caption).foregroundStyle(p.textTertiary) }
+                        if let d = distance(r.0) { Text(d).saryNumber(.caption).foregroundStyle(p.textSecondary) }
                     }
                     .frame(minHeight: 48)
                     .contentShape(Rectangle())

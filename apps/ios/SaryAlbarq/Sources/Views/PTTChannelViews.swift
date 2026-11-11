@@ -267,7 +267,7 @@ struct PTTChannelKnob: View {
                             .background(Circle().fill(id == selection ? theme.palette.accent : theme.palette.textSecondary.opacity(0.14)))
                             .overlay(alignment: .topTrailing) {
                                 if busy.contains(id) {
-                                    Image(systemName: "waveform").font(.system(size: 9, weight: .bold))
+                                    Image(systemName: "waveform").saryGlyph(9, weight: .bold)
                                         .foregroundStyle(theme.palette.accentText)
                                         .accessibilityHidden(true)
                                 }
