@@ -137,9 +137,17 @@ struct StoryComposerView: View {
         var outside = 0, undated = 0
         for item in picks {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            switch StoryPhotoReader.check(data, window: facts.photoWindow) {
+            /* Reading EXIF and decoding + downscaling a 12 MP photo (ImageIO) took the main thread
+             * for each pick; it runs off it now. */
+            let window = facts.photoWindow
+            let read = await Task.detached(priority: .userInitiated) { () -> (StoryPhotoReader.Outcome, UIImage?) in
+                let outcome = StoryPhotoReader.check(data, window: window)
+                guard case .ok = outcome else { return (outcome, nil) }
+                return (outcome, StoryPhotoReader.image(data))
+            }.value
+            switch read.0 {
             case .ok(let d):
-                if let img = StoryPhotoReader.image(data) { out.append(StoryPhoto(image: img, takenAt: d)) }
+                if let img = read.1 { out.append(StoryPhoto(image: img, takenAt: d)) }
             case .outsideWindow: outside += 1
             case .noDate, .unreadable: undated += 1
             }
