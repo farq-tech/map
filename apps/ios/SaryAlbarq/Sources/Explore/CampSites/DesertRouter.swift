@@ -665,7 +665,7 @@ enum DesertRouter {
         } else if flags & DesertGrid.track != 0 {
             base = trackEffort
         } else {
-            base = (groundEffort[g] ?? 1) * (rain && g == .wadi ? 3 : 1)
+            base = groundEffortValue(g) * (rain && g == .wadi ? 3 : 1)
             switch g {
             case .crest: why = .crest
             case .sabkha: why = .sabkha
@@ -683,6 +683,21 @@ enum DesertRouter {
         base *= 1 + (a / 0.10) * (a / 0.10)
         if a > hardGrade, why == nil { why = grade < 0 ? .down : .up }
         return (base, why)
+    }
+
+    /// `groundEffort[g] ?? 1` without hashing: `effort` runs up to eight times per A* expansion.
+    /// Must equal the table (DesertRouterTests checks every ground).
+    @inline(__always)
+    static func groundEffortValue(_ g: DesertGrid.Ground) -> Double {
+        switch g {
+        case .firm: return 1.0
+        case .sand: return 1.7
+        case .crest: return 4.5
+        case .sabkha: return 9.0
+        case .wadi: return 2.5
+        case .rock: return 6.0
+        case .forbidden: return 1
+        }
     }
 
     static func stepCost(_ mode: Mode, effort: Double, dist: Double) -> Double {
@@ -735,7 +750,12 @@ enum DesertRouter {
             let bearing = (atan2(Double(dc) * g.dx, Double(-dr) * g.dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
             return (dr, dc, d, bearing)
         }
-        let geoByDelta = Dictionary(uniqueKeysWithValues: geo.map { ($0.0 * 3 + $0.1, ($0.2, $0.3)) })
+        /* `nb` starts with the four orthogonal moves (up, down, left, right), then the diagonals.
+         * A diagonal's corner test needs the orthogonal moves of the same expansion with the same
+         * distance and bearing, so their results are kept here instead of evaluated again (the old
+         * code recomputed both, through a dictionary lookup, for every diagonal). */
+        assert(nb.prefix(4).elementsEqual([(-1, 0), (1, 0), (0, -1), (0, 1)], by: { $0 == $1 }))
+        var orthogonalPassable = (up: false, down: false, left: false, right: false)
 
         func canMove(from i: Int, to j: Int, distance: Double, bearing: Double) -> Double? {
             let grade = Double(g.elev[j] - g.elev[i]) / distance
@@ -755,21 +775,29 @@ enum DesertRouter {
             expanded += 1
             if expanded > maxExpand { return nil }
             let r = i / g.cols, c = i % g.cols
+            orthogonalPassable = (false, false, false, false)
             for (dr, dc, d, bearing) in geo {
                 let rr = r + dr, cc = c + dc
                 guard rr >= 0, rr < g.rows, cc >= 0, cc < g.cols else { continue }
                 let j = rr * g.cols + cc
                 if dr != 0 && dc != 0 && !(i == a && startsInBlockedCell) {
-                    // Do not let a diagonal jump squeeze between two blocked cells.
-                    let horizontal = r * g.cols + cc
-                    let vertical = rr * g.cols + c
-                    guard let (hd, hb) = geoByDelta[dc],
-                          let (vd, vb) = geoByDelta[dr * 3] else { continue }
-                    let horizontalPassable = canMove(from: i, to: horizontal, distance: hd, bearing: hb) != nil
-                    let verticalPassable = canMove(from: i, to: vertical, distance: vd, bearing: vb) != nil
+                    // Do not let a diagonal jump squeeze between two blocked cells. Both orthogonal
+                    // cells are inside the grid (the diagonal is) and were evaluated just above.
+                    let horizontalPassable = dc < 0 ? orthogonalPassable.left : orthogonalPassable.right
+                    let verticalPassable = dr < 0 ? orthogonalPassable.up : orthogonalPassable.down
                     guard horizontalPassable || verticalPassable else { continue }
                 }
-                guard let e = canMove(from: i, to: j, distance: d, bearing: bearing) else { continue }
+                let move = canMove(from: i, to: j, distance: d, bearing: bearing)
+                if dr == 0 || dc == 0 {
+                    let ok = move != nil
+                    switch (dr, dc) {
+                    case (-1, 0): orthogonalPassable.up = ok
+                    case (1, 0): orthogonalPassable.down = ok
+                    case (0, -1): orthogonalPassable.left = ok
+                    default: orthogonalPassable.right = ok
+                    }
+                }
+                guard let e = move else { continue }
                 let ng = gi + stepCost(mode, effort: e, dist: d)
                 if ng < best[j] {
                     best[j] = ng
