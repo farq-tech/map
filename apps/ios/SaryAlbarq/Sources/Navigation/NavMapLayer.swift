@@ -237,7 +237,7 @@ final class NavMapDrawer {
             p.addLine(to: CGPoint(x: s / 2, y: s - 14))
             p.addLine(to: CGPoint(x: 4, y: s - 7))
             p.close()
-            p.lineJoin = .round
+            p.lineJoinStyle = .round
             p.lineWidth = 4
             UIColor(red: 0.04, green: 0.07, blue: 0.13, alpha: 0.9).setStroke()
             p.stroke()
