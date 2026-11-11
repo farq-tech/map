@@ -19,6 +19,9 @@ struct PlanMapView: UIViewRepresentable {
     /// Do not enable Mapbox's built-in provider here: it can request location before the user
     /// has seen the app's own explanation (notably while a shared-outing invite is open).
     var userLocation: LngLat? = nil
+    /// «اتجه» only: my car in this colour (and heading) instead of the blue dot.
+    var userCar: UInt32? = nil
+    var userHeading: Double? = nil
     var onTap: (LngLat) -> Void = { _ in }
     var onLongPress: (LngLat) -> Void = { _ in }
     var onMove: (Int, LngLat) -> Void = { _, _ in }
@@ -164,7 +167,11 @@ struct PlanMapView: UIViewRepresentable {
                 PlanDestinationPin(name: p.destination?.name ?? "الوجهة", theme: theme)
             }
             picked.set(p.picked, key: "picked", on: map, priority: 130) { PlanPickedPin() }
-            user.set(p.userLocation, key: "user", on: map, anchor: .center, priority: 140) { PlanUserLocationPin() }
+            /* The key carries the car and its heading (10° steps): the annotation is rebuilt when they change. */
+            let carKey = p.userCar.map { "car|\($0)|\(Int((CarIcon.rotate(p.userHeading) / 10).rounded()))" } ?? "user"
+            user.set(p.userLocation, key: carKey, on: map, anchor: .center, priority: 140) {
+                PlanUserLocationPin(car: p.userCar, heading: p.userHeading)
+            }
             if let c = p.camera, c.id != lastCamera {
                 lastCamera = c.id
                 if styleReady && map.bounds.height > 0 { move(c, on: map) } else { pendingCamera = c }

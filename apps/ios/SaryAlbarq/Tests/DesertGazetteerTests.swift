@@ -191,4 +191,20 @@ final class DesertGazetteerTests: XCTestCase {
         XCTAssertEqual(fc.features.count, 3, "one outline + two markers")
         XCTAssertNil(DesertGazetteerMapLayer.collection(nil).features.first)
     }
+
+    /// Issue #161: a city chip / a search draws its places, numbered in the list's order, at most
+    /// `onMap`, never Google's (`gm:`).
+    func testResultPinsFollowTheListAndSkipGoogle() {
+        let places = (0..<20).map { i in
+            PlaceSearch.Place(id: i == 1 ? "gm:abc" : "p\(i)", name: "مكان \(i)", detail: nil,
+                              point: LngLat(lng: 46.6 + Double(i) * 0.001, lat: 24.7), icon: "fork.knife")
+        }
+        let pins = HomeDesertRules.resultPins(places)
+        XCTAssertEqual(pins.count, HomeDesertRules.onMap)
+        XCTAssertFalse(pins.contains { $0.id.hasPrefix("gm:") }, "Google results are not drawn")
+        XCTAssertEqual(pins.first?.id, "p0")
+        XCTAssertEqual(pins[1].id, "p2", "the list order, Google skipped")
+        XCTAssertEqual(pins.first?.systemImage, "fork.knife")
+        XCTAssertTrue(HomeDesertRules.resultPins([]).isEmpty)
+    }
 }
