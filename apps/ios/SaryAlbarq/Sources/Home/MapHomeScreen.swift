@@ -15,6 +15,8 @@ struct MapHomeScreen: View {
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// 100 at the default text size: the collapsed sheet grows with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var textScale100: CGFloat = 100
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
@@ -245,7 +247,7 @@ struct MapHomeScreen: View {
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
-            base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard))
+            base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard, textScale: Double(textScale100 / 100)))
         }
         return base
     }

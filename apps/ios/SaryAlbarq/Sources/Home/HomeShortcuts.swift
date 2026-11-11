@@ -95,6 +95,15 @@ enum HomeSheetRules {
         }
     }
 
+    /// The collapsed height for the current text size: `textScale` is the body text's scale
+    /// (1 at the default size). Text in the collapsed sheet grows with Dynamic Type while the
+    /// sheet stayed fixed, so its card was cut off (collapsed, nothing scrolls); the sheet now
+    /// grows with it, up to 1.4×, and `frameHeight` still keeps the map visible above it.
+    static func collapsedHeight(card: HomeStateCard, textScale: Double) -> Double {
+        let k = textScale.isFinite ? min(1.4, max(1, textScale)) : 1
+        return (collapsedHeight(card: card) * k).rounded()
+    }
+
     /// Clamp a GeometryReader's first (sometimes zero) measurement before it reaches `.frame`.
     /// SwiftUI may lay out the home screen once before safe-area insets are available.
     static func frameHeight(screen: Double, preferred: Double, drag: Double) -> Double {

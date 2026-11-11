@@ -201,4 +201,21 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(IntroPolicy.enabledByDefault)
         XCTAssertEqual(IntroPolicy.mode(IntroFacts(enabled: IntroPolicy.enabled(defaults))), .still)
     }
+
+    // MARK: screen fit
+
+    func testCollapsedSheetGrowsWithTextSizeOnly() {
+        let base = HomeSheetRules.collapsedHeight(card: .start)
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 1), base, "default text: unchanged")
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 0.82), base, "smaller text never shrinks it")
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .start, textScale: 1.2), (base * 1.2).rounded())
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .invite, textScale: 3), (HomeSheetRules.collapsedHeight(card: .invite) * 1.4).rounded())
+        XCTAssertEqual(HomeSheetRules.collapsedHeight(card: .none, textScale: .nan), HomeSheetRules.collapsedHeight)
+    }
+
+    func testCollapsedSheetLeavesTheMapVisibleOnAnSE() {
+        // Largest collapsed sheet at the largest scale, on a 667 pt SE.
+        let h = HomeSheetRules.frameHeight(screen: 667, preferred: HomeSheetRules.collapsedHeight(card: .invite, textScale: 1.4), drag: 0)
+        XCTAssertLessThanOrEqual(h, 667 - 60)
+    }
 }
