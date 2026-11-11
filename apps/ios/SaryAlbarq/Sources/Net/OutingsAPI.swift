@@ -218,6 +218,31 @@ enum IdentityStore {
     static func forgetCache() { lock.withLock { cached = nil; migrated = false } }
 }
 
+/// Shares one in-flight async run among concurrent callers asking for the same key: the second
+/// `GET /api/outings` while the first is still out waits for the first answer instead of sending
+/// its own. Once a run ends, the next call starts a fresh one (nothing is cached).
+/// A caller's cancellation does not cancel the shared run (another caller may still want it).
+final class InFlight<Key: Hashable, Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running: [Key: (id: UInt64, task: Task<Value, Error>)] = [:]
+    private var nextId: UInt64 = 0
+
+    /// Keys with a run still out (tests).
+    var count: Int { lock.withLock { running.count } }
+
+    func run(_ key: Key, _ work: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        let (id, task) = lock.withLock { () -> (UInt64, Task<Value, Error>) in
+            if let r = running[key] { return (r.id, r.task) }
+            nextId &+= 1
+            let t = Task { try await work() }
+            running[key] = (nextId, t)
+            return (nextId, t)
+        }
+        defer { lock.withLock { if running[key]?.id == id { running[key] = nil } } }
+        return try await task.value
+    }
+}
+
 /// REST client for `/api/outings`. Invite tokens travel in bodies, never URLs.
 final class OutingsAPI {
     var tokenProvider: () -> String?
@@ -226,6 +251,9 @@ final class OutingsAPI {
     private let session: URLSession
     /// Internal so the voice-note client (Sources/VoiceNotes) builds its raw-audio requests the same way.
     let base: URL
+    /// One response, shared by identical GETs that overlap (`InFlight`).
+    private struct Fetched: @unchecked Sendable { let data: Data; let response: URLResponse }
+    private let inFlightGets = InFlight<String, Fetched>()
 
     init(base: URL = Endpoints.apiBase, session: URLSession = .shared, tokenProvider: @escaping () -> String?) {
         self.base = base
@@ -254,7 +282,19 @@ final class OutingsAPI {
         if let t = sent { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         let data: Data, resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            /* The list, a snapshot, /me: several screens and timers ask at once (foreground, a
+             * push, a pull to refresh). Identical GETs (same URL, same token) ride one request. */
+            let fetch: @Sendable () async throws -> Fetched = { [session, req] in
+                let (d, r) = try await session.data(for: req)
+                return Fetched(data: d, response: r)
+            }
+            let got: Fetched
+            if method == "GET" && body == nil {
+                got = try await inFlightGets.run(url.absoluteString + "\n" + (sent ?? ""), fetch)
+            } else {
+                got = try await fetch()
+            }
+            (data, resp) = (got.data, got.response)
         } catch let e as URLError {
             throw OutingAPIError(code: e.code == .timedOut ? "timeout" : "network", status: 0)
         }

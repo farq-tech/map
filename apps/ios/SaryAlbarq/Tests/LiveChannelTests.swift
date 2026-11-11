@@ -527,3 +527,54 @@ extension LiveChannelTests {
         XCTAssertEqual(positionFrames(sockets[0]).count, 1)
     }
 }
+
+/// `InFlight`: identical GETs that overlap share one request (`OutingsAPI.call`).
+final class InFlightTests: XCTestCase {
+    private actor Counter {
+        var n = 0
+        func bump() { n += 1 }
+    }
+
+    func testOverlappingCallersShareOneRun() async throws {
+        let c = InFlight<String, Int>()
+        let runs = Counter()
+        let work: @Sendable () async throws -> Int = {
+            await runs.bump()
+            try await Task.sleep(nanoseconds: 300_000_000)
+            return 7
+        }
+        async let a = c.run("k", work)
+        async let b = c.run("k", work)
+        let (x, y) = try await (a, b)
+        XCTAssertEqual([x, y], [7, 7])
+        let n = await runs.n
+        XCTAssertEqual(n, 1, "the second caller waited for the first request")
+        XCTAssertEqual(c.count, 0, "nothing kept once the run ended")
+    }
+
+    func testDifferentKeysAndLaterCallsRunAgain() async throws {
+        let c = InFlight<String, Int>()
+        let runs = Counter()
+        let work: @Sendable () async throws -> Int = { await runs.bump(); return 1 }
+        async let a = c.run("a", work)
+        async let b = c.run("b", work)
+        _ = try await (a, b)
+        _ = try await c.run("a", work)
+        let n = await runs.n
+        XCTAssertEqual(n, 3, "other keys and later calls are never served an old answer")
+    }
+
+    func testErrorsReachEveryCallerAndAreNotKept() async {
+        struct Boom: Error {}
+        let c = InFlight<String, Int>()
+        do {
+            _ = try await c.run("k") { throw Boom() }
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertTrue(error is Boom)
+        }
+        XCTAssertEqual(c.count, 0)
+        let v = try? await c.run("k") { 2 }
+        XCTAssertEqual(v, 2, "a failed run does not stick")
+    }
+}
