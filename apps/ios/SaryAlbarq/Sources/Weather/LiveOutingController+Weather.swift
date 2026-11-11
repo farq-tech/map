@@ -22,9 +22,12 @@ extension LiveOutingController: WeatherPlanSource {
     var weatherRoute: [Geo.LatLng] { planModel?.plan.points.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) } ?? [] }
 
     /// Real positions only (last real fixes, my GPS, the rally point) — never estimated.
-    func feedWeather(force: Bool = false) {
+    /// `members`: the pass's cars when the caller already built them. Only positions are read, so
+    /// the bare presenter list is enough: no participants pass, no name chips.
+    func feedWeather(force: Bool = false, members prebuilt: [MapMember]? = nil) {
         guard weather.feedDue(Date()) || force else { return }
-        var pts = mapMembers(theme: .default).filter { !$0.isMe }.map { Geo.LatLng(lat: $0.position.lat, lng: $0.position.lng) }
+        let members = prebuilt ?? LiveOutingPresenter.mapMembers(input, hideNotes: true)
+        var pts = members.filter { !$0.isMe }.map { Geo.LatLng(lat: $0.position.lat, lng: $0.position.lng) }
         if let r = rallyPoint { pts.append(Geo.LatLng(lat: r.position.lat, lng: r.position.lng)) }
         weather.setDestination(weatherDestination)
         weather.setPositions(pts, me: location.lastFix, route: weatherRoute)

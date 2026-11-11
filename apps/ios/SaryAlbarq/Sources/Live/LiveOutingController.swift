@@ -632,8 +632,7 @@ final class LiveOutingController: ObservableObject {
             if m != motion { motion = m }
         }
         exploreDrivingCheck()
-        checkConvoy()
-        feedWeather()
+        feedWeather(members: checkConvoy())
         if session.closedReason != nil, !closeHandled {
             closeHandled = true
             if modal?.closesWhenTripEnds == true { modal = nil }
@@ -658,8 +657,7 @@ final class LiveOutingController: ObservableObject {
             if m != motion { motion = m }
         }
         exploreDrivingCheck()
-        checkConvoy()
-        feedWeather()
+        feedWeather(members: checkConvoy())
         objectWillChange.send()
     }
 
@@ -673,10 +671,16 @@ final class LiveOutingController: ObservableObject {
     }
 
     /// Convoy alerts from the cars drawn right now (live ones only; see `OutingFeaturesModel.liveCars`).
-    private func checkConvoy() {
-        checkConvoyIntel()
-        guard session.view?.convoy?.isOn == true else { return features.evaluateConvoy(members: []) }
-        features.evaluateConvoy(members: LiveOutingPresenter.mapMembers(input, hideNotes: true))
+    /// The convoy watch and the convoy alerts read the same cars: they are built once per pass (and
+    /// returned, for the weather feed) instead of once per reader. Nil when nothing needed them.
+    @discardableResult
+    private func checkConvoy() -> [MapMember]? {
+        let convoyOn = session.view?.convoy?.isOn == true
+        let cars = convoyOn || session.view?.status == .active ? LiveOutingPresenter.mapMembers(input, hideNotes: true) : nil
+        checkConvoyIntel(members: cars)
+        guard convoyOn else { features.evaluateConvoy(members: []); return cars }
+        features.evaluateConvoy(members: cars ?? [])
+        return cars
     }
 
     /// Waypoints for the map.
