@@ -71,6 +71,24 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertNil(DesertRouter.route(g, from: 5 * 20 + 2, to: 5 * 20 + 17, mode: .short, rain: false))
     }
 
+    func testDiagonalCannotCutBetweenForbiddenCells() {
+        var g = DesertGrid(rows: 3, cols: 3)
+        set(&g, rows: 0..<1, cols: 1..<2, .forbidden)
+        set(&g, rows: 1..<2, cols: 0..<1, .forbidden)
+        XCTAssertNil(DesertRouter.route(g, from: 4, to: 0, mode: .short, rain: false))
+    }
+
+    func testForbiddenDestinationIsRejectedButBlockedStreetSnapCanExit() {
+        var g = DesertGrid(rows: 4, cols: 4)
+        set(&g, rows: 1..<2, cols: 1..<2, .forbidden)
+        let escape = try! XCTUnwrap(DesertRouter.route(g, from: 5, to: 15, mode: .short, rain: false),
+                                    "a street-router snap may land in a coarse blocked cell; allow exiting it")
+        XCTAssertFalse(escape.dropFirst().contains { g.ground($0) == .forbidden },
+                       "only the initial snapped cell may be exited; the route must not re-enter blocked cells")
+        XCTAssertNil(DesertRouter.route(g, from: 0, to: 5, mode: .short, rain: false))
+        XCTAssertNil(DesertRouter.route(g, from: -1, to: 15, mode: .short, rain: false))
+    }
+
     func testBundledGridsLoadAndRouteInTheNafud() throws {
         for r in CampSiteCatalog.regions {
             let g = try XCTUnwrap(DesertGrid.bundled(r), r)

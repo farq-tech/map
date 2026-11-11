@@ -238,6 +238,19 @@ enum DesertRouter {
     /// A* over the grid. Returns cell indices from a to b, or nil.
     static func route(_ g: DesertGrid, from a: Int, to b: Int, mode: Mode, rain: Bool, maxExpand: Int = 3_000_000) -> [Int]? {
         let n = g.rows * g.cols
+        guard a >= 0, a < n, b >= 0, b < n else { return nil }
+
+        func isBlocked(_ i: Int) -> Bool {
+            let flags = g.cell[i] & 0xF0
+            return g.ground(i) == .forbidden ||
+                (rain && flags & DesertGrid.bigWadi != 0 && flags & DesertGrid.road == 0)
+        }
+        let startsInBlockedCell = isBlocked(a)
+        // A street router can end on a coarse (~90 m) cell marked forbidden even when the
+        // actual road is valid. Permit leaving that first snapped cell, but never enter a
+        // blocked cell or route to a blocked destination.
+        guard !isBlocked(b) else { return nil }
+
         var best = [Double](repeating: .infinity, count: n)
         var prev = [Int32](repeating: -1, count: n)
         let floor: Double = {
@@ -262,6 +275,13 @@ enum DesertRouter {
             let bearing = (atan2(Double(dc) * g.dx, Double(-dr) * g.dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
             return (dr, dc, d, bearing)
         }
+        let geoByDelta = Dictionary(uniqueKeysWithValues: geo.map { ($0.0 * 3 + $0.1, ($0.2, $0.3)) })
+
+        func canMove(from i: Int, to j: Int, distance: Double, bearing: Double) -> Double? {
+            let grade = Double(g.elev[j] - g.elev[i]) / distance
+            return effort(ground: g.ground(j), flags: g.cell[j] & 0xF0,
+                          ridge: g.ridge[j], bearing: bearing, grade: grade, rain: rain).0
+        }
         while let top = heap.pop() {
             let (f, i) = top
             if i == b {
@@ -279,9 +299,17 @@ enum DesertRouter {
                 let rr = r + dr, cc = c + dc
                 guard rr >= 0, rr < g.rows, cc >= 0, cc < g.cols else { continue }
                 let j = rr * g.cols + cc
-                let grade = Double(g.elev[j] - g.elev[i]) / d
-                let (e, _) = effort(ground: g.ground(j), flags: g.cell[j] & 0xF0, ridge: g.ridge[j], bearing: bearing, grade: grade, rain: rain)
-                guard let e else { continue }
+                if dr != 0 && dc != 0 && !(i == a && startsInBlockedCell) {
+                    // Do not let a diagonal jump squeeze between two blocked cells.
+                    let horizontal = r * g.cols + cc
+                    let vertical = rr * g.cols + c
+                    guard let (hd, hb) = geoByDelta[dc],
+                          let (vd, vb) = geoByDelta[dr * 3] else { continue }
+                    let horizontalPassable = canMove(from: i, to: horizontal, distance: hd, bearing: hb) != nil
+                    let verticalPassable = canMove(from: i, to: vertical, distance: vd, bearing: vb) != nil
+                    guard horizontalPassable || verticalPassable else { continue }
+                }
+                guard let e = canMove(from: i, to: j, distance: d, bearing: bearing) else { continue }
                 let ng = gi + stepCost(mode, effort: e, dist: d)
                 if ng < best[j] {
                     best[j] = ng
