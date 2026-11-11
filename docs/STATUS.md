@@ -1,4 +1,4 @@
-# حالة سَرى البارق — آخر تحديث 2026-11-11 06:40 (Asia/Riyadh)
+# حالة سَرى البارق — آخر تحديث 2026-11-11 07:15 (Asia/Riyadh)
 
 ## الحالة الحالية للإصدار وطلبات الدمج — 2026-11-11 06:40 (Asia/Riyadh)
 
@@ -377,3 +377,12 @@
 - على الرأس نفسه `cc1de32c993033cb743661a6c0ec7dca35936af0`، شغّلت على Atlas Isolated iPhone 18 Pro Simulator / iOS 27.2: `SaryAlbarqUITests.testMapPointStartsLegInActiveOuting`، و`OutingLegsUITests.testInTripSearchOpensTheHomeDestinationSearch`، و`OutingLegsUITests.testAfterArrivalCanChooseAndStartAnotherDestination`.
 - النتيجة من xcresult: **3/3 ناجحة، 0 فشل، 0 تخطٍ، 0 runtime warnings**. التدفقات تستخدم `-demo` وبيانات محاكي؛ تثبت وصول التفاعل للواجهة وتحديث الوجهة/البحث داخل الطلعة، ولا تثبت حساب مسار حيًا أو مزامنة متعددة الأجهزة أو سلوك iPhone فعلي. سجل المحاكي طبع تحذيرًا عن رمز وصول مكرر من إطار إمكانية الوصول في WebKit وWebCore، لكن xcresult لم يسجل runtime warnings؛ لا ننسبه إلى التطبيق دون إعادة تحقق.
 - المالك: Codex. التالي: إعادة اختبار التدفقات على جهاز فعلي مع وجهة حقيقية، ثم اختبر حساب المدينة-إلى-البر مستقلًا؛ لا تخلط نجاح demo UI باكتمال الملاحة.
+
+## إعادة تحقق بعد بلاغ عدم ظهور Build 36 في TestFlight — 2026-11-11 07:15 (Asia/Riyadh)
+
+- أُعيد فحص PRs المفتوحة عبر GitHub: **15 PR مفتوحة**. #141 مفتوح/Draft عند `7541c2b2366db1ae62c248af1d9fef08144c8864` و`UNSTABLE`؛ #144 مفتوح/Draft عند `cc1de32c993033cb743661a6c0ec7dca35936af0` و`UNSTABLE`؛ #145 مفتوح/Draft عند `eb89ee52d7e634712b05d0cb215fb6aadb7c5d7f` و`DIRTY`.
+- تحققت من فحوص التشغيل الحالية مباشرة. #141 run `42957554893`، #144 run `42953015710`، و#145 run `42893843500` انتهت جميعها قبل تنفيذ أي خطوة (`steps: []`). annotations الحالية تنص أن GitHub لم يبدأ الوظائف لأن الحساب مقفل بسبب مشكلة فوترة. لذلك لا توجد نتيجة CI للكود لهذه التشغيلات. Vercel Preview ناجح على #141 و#144 و#145؛ نجاحه لا يثبت بناء iOS.
+- بلاغ المستخدم أن Build 36 لم يظهر له على TestFlight لم يُحسم بهذا الفحص: آخر سجل موثق لـApp Store Connect يثبت Build `36` بحالة `VALID` ومجموعات داخلية مفعّلة، لكنه لا يثبت أن البناء ظاهر على جهاز هذا المستخدم. لا يوجد استعلام جديد من App Store Connect ضمن هذه الجولة؛ يجب أن تكون الخطوة التالية فحص صفحة البناء والمجموعة وحساب المختبر على App Store Connect، ثم إثبات ما يظهر على الجهاز قبل الرد بأن المشكلة حُلّت.
+- لم يُعثر على Build أحدث أو دليل رفع جديد في ملفات المستودع. لا تُنسب تغييرات #144 أو #145 إلى Build 36؛ تاريخ الرأسين أحدث من رفع البناء بحسب آخر سجل موثق.
+- فُحصت worktrees الحالية دون تعديل أو حذف: worktree الجذر `/Users/m4pro/code/map` عند `b4ba126` detached، و`hybrid-desert-route` نظيف عند `cc1de32`، و`status-2026-11-09` نظيف عند `7541c2b`. ما زالت شجرات `offroad-evidence` و`desert-gazetteer-reconcile` و`simplify-home` و`search-nearest` و`b22` و`b23` و`b24` غير نظيفة. لا تُجرِ reset/clean عليها؛ صنّف تغييراتها قبل النقل أو الإغلاق.
+- المالك: Codex لمتابعة سبب عدم ظهور TestFlight والتحقق من نتيجة الإصدار؛ مسؤول فوترة GitHub مسؤول عن فتح CI. الخطوة التالية: احسم رؤية Build 36 أولًا عبر App Store Connect والجهاز، ثم نظّف بوابة CI وراجع/اختبر مرشح #144 قبل أي Build جديد. لا يوجد اختبار iPhone فعلي أو Build أحدث مثبت في هذه اللقطة.
