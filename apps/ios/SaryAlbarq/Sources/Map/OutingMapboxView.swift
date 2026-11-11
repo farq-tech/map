@@ -347,6 +347,8 @@ struct OutingMapboxView: UIViewRepresentable {
         /// Members the person spread out (their group tapped while parked together).
         private var expandedGroups = Set<String>()
         private var lastLayout: ChipLayout.Result?
+        /// The leader lines' stroke colours, converted for `theme`.
+        private var leaderColors: (theme: SaryTheme, stroke: CGColor, halo: CGColor)?
         private var ornamentSpot: String?
         private var ornamentCheckedAt: CFTimeInterval = 0
         /// "Keep everyone on screen": on by default, off once you move the map yourself, back on with the group button.
@@ -1316,10 +1318,14 @@ struct OutingMapboxView: UIViewRepresentable {
                 if let b = me.noteBox, !b.isHidden { overlay.bringSubviewToFront(b) }
                 if let b = me.chipBox { overlay.bringSubviewToFront(b) }
             }
+            /* The palette is fixed RGB per theme: convert the SwiftUI colours once per theme, not every frame. */
+            if leaderColors?.theme != theme {
+                leaderColors = (theme, UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor, UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor)
+            }
             overlay.leaders.path = leaders
-            overlay.leaders.strokeColor = UIColor(theme.palette.textPrimary.opacity(0.75)).cgColor
+            overlay.leaders.strokeColor = leaderColors?.stroke
             overlay.leaderHalo.path = leaders
-            overlay.leaderHalo.strokeColor = UIColor(theme.palette.chromeOpaque.opacity(0.85)).cgColor
+            overlay.leaderHalo.strokeColor = leaderColors?.halo
             /* Waypoint pins fit around what the cars' chips took. */
             var taken = result.chips.map(\.frame) + result.chips.compactMap(\.noteFrame) + result.groups.map(\.frame)
             /* «نقطة البداية»: its label folds away (icon only) where a chip would cover it or it would
