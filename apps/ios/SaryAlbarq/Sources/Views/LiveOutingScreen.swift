@@ -189,7 +189,9 @@ struct LiveOutingScreen: View {
 
     /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
     private var qiblaMapOrigin: LngLat? {
-        guard showQiblaOnMap, let fix = controller.location.lastFix else { return nil }
+        let navigating = controller.nav.phase == .guiding || controller.nav.phase == .offRoad
+        guard QiblaMapOverlay.shows(userChoice: showQiblaOnMap, navigating: navigating),
+              let fix = controller.location.lastFix else { return nil }
         let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
         guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
         return LngLat(lng: fix.lng, lat: fix.lat)
