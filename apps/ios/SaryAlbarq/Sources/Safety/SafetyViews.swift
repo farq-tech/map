@@ -88,7 +88,10 @@ struct SafetyAlertCard: View {
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(p.warningText))
                     .overlay(Circle().stroke(p.background, lineWidth: 1.5))
-                    .offset(x: 4, y: 4)
+                    /* Out past the avatar's bottom-trailing corner in RTL and LTR alike
+                     * (a hard-coded `offset(x: 4)` pulled it inward under RTL). */
+                    .padding(.trailing, -4)
+                    .padding(.bottom, -4)
             }
         case .sunset: icon(SafetyIcon.sunset)
         case .myTimerOverdue, .friendTimerOverdue: icon(SafetyIcon.overdue)
