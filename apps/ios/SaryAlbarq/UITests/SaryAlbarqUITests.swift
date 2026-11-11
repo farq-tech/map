@@ -143,8 +143,8 @@ final class SaryAlbarqUITests: XCTestCase {
          * alert may arrive after the initiating tap returns. Poll SpringBoard directly;
          * tapping blank app space can dismiss the alert, reach the map, or leave the app. */
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        /* Interruption monitors run in response to an app interaction. Tap the invite title,
-         * a no-op element, so the prompt is handled without replaying Join underneath. */
+        /* Do not tap the obscured invitation/map while waiting: a system alert can report the
+         * underlying title as hittable even though XCTest cannot compute a valid hit point. */
         usleep(600_000)
         let deadline = Date().addingTimeInterval(15)
         let expectsRefusal = labels.contains("Don’t Allow") || labels.contains("Don't Allow") || labels.contains("عدم السماح")
@@ -160,9 +160,6 @@ final class SaryAlbarqUITests: XCTestCase {
                 handled = true
                 break
             }
-            let inviteTitle = app.staticTexts["invite.name"]
-            if inviteTitle.exists && inviteTitle.isHittable { inviteTitle.tap() }
-            if handled { break }
             for label in labels {
                 /* Core Location's prompt is surfaced as a SpringBoard interruption on some
                  * simulator runtimes and as an app button on others; query both owners. */
@@ -266,6 +263,7 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         shot("1-invite-one-screen", app)
 
+        setTestLocation()
         XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
 
         let summary = any(app, "outing-sheet-summary")
