@@ -522,6 +522,19 @@ final class BackgroundSessionTests: XCTestCase {
         return o
     }
 
+    /// Like `slowOutbox`, but a failed action really waits out its backoff (10 s), so it stays
+    /// queued — not back on the wire at once — while the test looks at it. Stop it at the end.
+    private func heldOutbox(_ server: SlowServer) -> OutingActionOutbox {
+        let o = OutingActionOutbox(deps: .init(
+            perform: { a in try await server.perform(a) },
+            defaults: defaults,
+            now: { [unowned self] in self.clock },
+            sleep: { _ in try? await Task.sleep(nanoseconds: 10_000_000_000) }
+        ))
+        o.currentUser = { "u1" }
+        return o
+    }
+
     private func waitUntil(timeout: TimeInterval = 8, _ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         let end = Date().addingTimeInterval(timeout)
         while !condition() && Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
@@ -618,8 +631,12 @@ final class BackgroundSessionTests: XCTestCase {
     /// it says "shown", and after it failed; showing again takes back a hide the server never got.
     func testAPendingHideKeepsTheGateClosed() async {
         let server = SlowServer()
+        server.delay = 50_000_000
         server.failuresLeft = .max
-        let outbox = slowOutbox(server)
+        /* Flaky under load before (Build 42): with the clock-moving backoff the failed hide was
+         * retried at once, so «أظهر» often found it on the wire (can't be taken back) instead of
+         * queued. Here it waits out a real backoff, so it is queued when we look. */
+        let outbox = heldOutbox(server)
         let s = await sharingInBackground(outbox: outbox)
         foreground = true
         s.foreground(true)
@@ -630,7 +647,7 @@ final class BackgroundSessionTests: XCTestCase {
         ready(sockets[0])
         XCTAssertEqual(s.view?.me?.hidden, true, "a snapshot from before the hide does not show me again")
         XCTAssertFalse(s.gate.allowsPosition, "a pending hide never resumes sharing")
-        await waitUntil { (outbox.queue.items.first?.attempts ?? 0) >= 1 }
+        await waitUntil { (outbox.queue.items.first?.attempts ?? 0) >= 1 && !outbox.isInFlight(user: "u1", outing: "o1", kind: .hide) }
         XCTAssertFalse(s.gate.allowsPosition, "nor a failed one")
         let shown = await s.setHidden(false)
         XCTAssertTrue(shown)
@@ -646,13 +663,7 @@ final class BackgroundSessionTests: XCTestCase {
         server.delay = 50_000_000
         server.failuresLeft = 1
         /* A real backoff (not the clock-moving one): the retry must still be waiting when we look. */
-        let outbox = OutingActionOutbox(deps: .init(
-            perform: { a in try await server.perform(a) },
-            defaults: defaults,
-            now: { [unowned self] in self.clock },
-            sleep: { _ in try? await Task.sleep(nanoseconds: 10_000_000_000) }
-        ))
-        outbox.currentUser = { "u1" }
+        let outbox = heldOutbox(server)
         outbox.enqueue(PendingOutingAction(user: "u1", outing: "o1", kind: .cancelSOS, createdMs: clock))
         await waitUntil { outbox.isInFlight(user: "u1", outing: "o1", kind: .cancelSOS) }
         XCTAssertFalse(outbox.discard(user: "u1", outing: "o1", kind: .cancelSOS), "on the wire: can't be taken back")
