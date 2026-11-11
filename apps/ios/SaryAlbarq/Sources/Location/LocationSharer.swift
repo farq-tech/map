@@ -126,6 +126,17 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     /// Tests that drive fixes by hand: ignore the simulator's own GPS (its location leaks
     /// in whenever the host app holds the permission, and races the scripted fixes).
     var ignoresSystemFixes = false
+    /// `-SaryParkedPhone` (UI tests): a phone lying still with the distance filter on — iOS sends
+    /// nothing new, so my only fix is old, until the app asks for a fresh one (`requestFreshFix`),
+    /// which iOS then answers. The «اتجه» regression of Build 38.
+    var parkedUntilAsked = false
+
+    func debugParkPhone(at p: LngLat, ageS: Double) {
+        ignoresSystemFixes = true
+        parkedUntilAsked = true
+        debugSetLastFix(DeviceFix(lat: p.lat, lng: p.lng, accuracy: 35, heading: nil, speed: 0,
+                                  atMs: Date().timeIntervalSince1970 * 1000 - ageS * 1000))
+    }
     /// UI tests: my last fix as given (no gate), e.g. one 5 minutes old.
     func debugSetLastFix(_ f: DeviceFix) {
         lastFix = f
@@ -367,6 +378,17 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     func requestFreshFix() {
         guard canLocate else { return }
+        #if DEBUG
+        if parkedUntilAsked, let f = lastFix {
+            parkedUntilAsked = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self else { return }
+                let now = Date().timeIntervalSince1970 * 1000
+                self.ignoresSystemFixes = false
+                self.ingest(DeviceFix(lat: f.lat, lng: f.lng, accuracy: 8, heading: nil, speed: 0, atMs: now), nowMs: now)
+            }
+        }
+        #endif
         wantsFreshFix = true
         if !watching { watching = true }
         applySettings()

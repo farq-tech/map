@@ -167,6 +167,26 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertEqual(StandaloneNavRules.gate(canLocate: true, fix: fresh, now: now), .ready)
     }
 
+    /// Owner report, Build 38: «اتجه» on a still phone waited forever. While waiting it asks the GPS
+    /// once, re-checks on a clock, and says «اطلع لمكان مكشوف» after 45 s — never from an old fix.
+    func testStandaloneWaitAsksForAFixAndSaysWhenSlow() {
+        let now = Date()
+        XCTAssertTrue(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: false, alreadyAsked: false), "a stale fix: ask")
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: false, alreadyAsked: true), "asked once")
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .needsPermission, started: false, alreadyAsked: false))
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .ready, started: false, alreadyAsked: false))
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: true, alreadyAsked: false))
+        XCTAssertLessThanOrEqual(StandaloneNavRules.recheckS, 2, "re-checked on a clock, not only on new fixes")
+        XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: nil, now: now))
+        XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-44), now: now))
+        XCTAssertTrue(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-45), now: now))
+        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: 35, waitingSince: now.addingTimeInterval(-3), now: now), "ننتظر موقعك… · الدقة ±٣٥ م")
+        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: nil, waitingSince: now.addingTimeInterval(-60), now: now), "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف")
+        /* The gate itself is unchanged: a 5-minute-old fix is still not where I am. */
+        let old = DeviceFix(lat: 24.7, lng: 46.6, accuracy: 10, heading: nil, speed: 0, atMs: now.timeIntervalSince1970 * 1000 - 300_000)
+        XCTAssertEqual(StandaloneNavRules.gate(canLocate: true, fix: old, now: now), .waitingForFix)
+    }
+
     func testStandaloneNavLine() {
         let a = LngLat(lng: 46.70, lat: 24.70), b = LngLat(lng: 46.70, lat: 24.72), c = LngLat(lng: 46.72, lat: 24.72)
         let target = LngLat(lng: 46.73, lat: 24.73)
