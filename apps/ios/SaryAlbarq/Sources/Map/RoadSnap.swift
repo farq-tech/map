@@ -42,6 +42,25 @@ enum RoadSnap {
         var coords: [[Double]]
     }
 
+    /// The key of a road feature without an id: its class and first non-empty name (a road cut
+    /// at a tile edge comes back as two features, and both get the same key).
+    static func nameKey(cls: String, name: String, nameAr: String, ref: String) -> String {
+        let n = [name, nameAr, ref].first { !$0.isEmpty } ?? ""
+        return "\(cls):\(n)"
+    }
+
+    /// What a fresh road query means for the road set in use.
+    struct RoadSetUpdate: Equatable {
+        /// The lines differ: store the new set.
+        var replace: Bool
+        /// The set visibly changed (count or first line): re-match unmatched cars and re-sync.
+        var changed: Bool
+
+        static func between(old: [RoadLine], new: [RoadLine]) -> RoadSetUpdate {
+            RoadSetUpdate(replace: new != old, changed: new.count != old.count || new.first?.coords != old.first?.coords)
+        }
+    }
+
     /// The nearest point on any of `lines` within maxM metres of p, or nil.
     static func nearestOnLines(_ p: LngLat, _ lines: [[[Double]]], maxM: Double = maxSnapM) -> LngLat? {
         let kx = 111_320 * cos(p.lat * Double.pi / 180), ky = 110_540.0
@@ -269,5 +288,29 @@ enum RoadSnap {
             }
             return Match(point: chosen.point, key: chosen.key, heading: RoadSnap.alignHeading(course, chosen.bearing))
         }
+    }
+}
+
+/// Latest-wins for asynchronous results: each request takes a new generation, and a result
+/// is applied only while its generation is still the current one (a slower, older answer
+/// never overwrites a newer one).
+struct QueryGeneration {
+    private(set) var current = 0
+
+    mutating func next() -> Int {
+        current &+= 1
+        return current
+    }
+
+    func isCurrent(_ generation: Int) -> Bool { generation == current }
+}
+
+extension WadiProximity {
+    /// The class a queried waterway feature is kept under (Streets v8 `class`, else its `type`),
+    /// or nil when it is no watercourse (a wadi by `type` counts whatever its class).
+    static func watercourseClass(cls: String?, type: String?) -> String? {
+        let c = cls ?? type ?? ""
+        guard isWatercourse(c) || type == "wadi" else { return nil }
+        return c
     }
 }

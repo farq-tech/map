@@ -277,6 +277,9 @@ struct OutingMapboxView: UIViewRepresentable {
         /// A road query already ran when the map went idle at `roadsCamera` (tiles there are loaded).
         private var idleQueried = false
         private var roadQuery: Cancelable?
+        /// Latest road / waterway query: an older result converted off the main thread is dropped.
+        private var roadGen = QueryGeneration()
+        private var waterGen = QueryGeneration()
         private var tapInteraction: Cancelable?
         let waypointPins = WaypointPins()
         private var lastWaypoints: [MapWaypoint] = []
@@ -713,27 +716,19 @@ struct OutingMapboxView: UIViewRepresentable {
         private func refreshWaterways() {
             guard styleReady, let m = map?.mapboxMap else { return }
             waterQuery?.cancel()
+            let gen = waterGen.next()
             waterQuery = m.querySourceFeatures(for: RoadSnap.source, options: SourceQueryOptions(sourceLayerIds: ["waterway"], filter: WadiProximity.filter)) { [weak self] result in
-                guard let self, case let .success(feats) = result else { return }
-                var lines: [WaterwayLine] = []
-                for q in feats {
-                    let f = q.queriedFeature.feature
-                    let props = f.properties ?? [:]
-                    func str(_ k: String) -> String? {
-                        if case let .string(s)?? = props[k] { return s }
-                        return nil
-                    }
-                    let cls = str("class") ?? str("type") ?? ""
-                    guard WadiProximity.isWatercourse(cls) || str("type") == "wadi" else { continue }
-                    let name = str("name_ar") ?? str("name")
-                    switch f.geometry {
-                    case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
-                    case let .multiLineString(ml)?:
-                        for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
-                    default: break
+                guard let self, case let .success(feats) = result, self.waterGen.isCurrent(gen) else { return }
+                /* Only plain Turf values leave the main thread; converting every line of the loaded
+                 * tiles runs on the conversion queue. */
+                let features = feats.map { $0.queriedFeature.feature }
+                Self.conversionQueue.async {
+                    let lines = Self.waterwayLines(features)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.waterGen.isCurrent(gen) else { return }
+                        self.onWaterways(lines)
                     }
                 }
-                DispatchQueue.main.async { self.onWaterways(lines) }
             }
         }
 
@@ -743,41 +738,86 @@ struct OutingMapboxView: UIViewRepresentable {
             if roadsCameraMoved() { idleQueried = false }
             if idle { idleQueried = true }
             roadsCamera = (m.cameraState.center, m.cameraState.zoom)
+            let gen = roadGen.next()
             let probe = FarqTiles.probe
             roadQuery = m.querySourceFeatures(for: probe.source, options: SourceQueryOptions(sourceLayerIds: [probe.sourceLayer], filter: probe.filter)) { [weak self] result in
-                guard let self, case let .success(feats) = result else { return }
-                var lines: [RoadSnap.RoadLine] = []
-                for q in feats {
-                    let f = q.queriedFeature.feature
-                    let props = f.properties ?? [:]
-                    func str(_ k: String) -> String {
-                        if case let .string(s)?? = props[k] { return s }
-                        return ""
-                    }
-                    /* A road cut at a tile edge comes back as two features with the same id. */
-                    let key: String
-                    switch f.identifier {
-                    case let .string(s)?: key = "id:\(s)"
-                    case let .number(n)?: key = "id:\(n)"
-                    default:
-                        let name = [str("name"), str("name_ar"), str("ref")].first { !$0.isEmpty } ?? ""
-                        key = "\(str("class")):\(name)"
-                    }
-                    switch f.geometry {
-                    case let .lineString(l)?: lines.append(.init(key: key, coords: l.coordinates.map { [$0.longitude, $0.latitude] }))
-                    case let .multiLineString(ml)?: for l in ml.coordinates { lines.append(.init(key: key, coords: l.map { [$0.longitude, $0.latitude] })) }
-                    default: break
+                guard let self, case let .success(feats) = result, self.roadGen.isCurrent(gen) else { return }
+                /* Converting (and comparing) every road of the loaded tiles took the main thread every
+                 * few seconds while following a car in a city. Only plain Turf values and the current
+                 * set (copy-on-write) leave the main thread; the result comes back to it. */
+                let features = feats.map { $0.queriedFeature.feature }
+                let before = self.roads
+                let beforeVersion = self.roadsVersion
+                Self.conversionQueue.async {
+                    let lines = Self.roadLines(features)
+                    let update = RoadSnap.RoadSetUpdate.between(old: before, new: lines)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.roadGen.isCurrent(gen) else { return }
+                        /* The diff is against the set it was computed from; recompute if another landed since. */
+                        let u = self.roadsVersion == beforeVersion ? update : RoadSnap.RoadSetUpdate.between(old: self.roads, new: lines)
+                        self.applyRoads(lines, u)
                     }
                 }
-                let changed = lines.count != self.roads.count || lines.first?.coords != self.roads.first?.coords
-                if lines != self.roads { self.roads = lines }
-                guard changed else { return }
-                /* A car drawn before its street loaded gets matched now. */
-                for r in self.recs.values where r.matcher.road == nil && !r.matcher.offRoad {
-                    r.matcher.reset()
-                }
-                self.sync(self.lastCars)
             }
+        }
+
+        private func applyRoads(_ lines: [RoadSnap.RoadLine], _ u: RoadSnap.RoadSetUpdate) {
+            if u.replace { roads = lines }
+            guard u.changed else { return }
+            /* A car drawn before its street loaded gets matched now. */
+            for r in recs.values where r.matcher.road == nil && !r.matcher.offRoad {
+                r.matcher.reset()
+            }
+            sync(lastCars)
+        }
+
+        /// Road and waterway query results are converted here, off the main thread (plain values only).
+        private static let conversionQueue = DispatchQueue(label: "sary.map.features", qos: .utility)
+
+        /// The street lines cars are matched to, from the probe's queried features. Pure: any thread.
+        static func roadLines(_ features: [Feature]) -> [RoadSnap.RoadLine] {
+            var lines: [RoadSnap.RoadLine] = []
+            for f in features {
+                let props = f.properties ?? [:]
+                func str(_ k: String) -> String {
+                    if case let .string(s)?? = props[k] { return s }
+                    return ""
+                }
+                /* A road cut at a tile edge comes back as two features with the same id. */
+                let key: String
+                switch f.identifier {
+                case let .string(s)?: key = "id:\(s)"
+                case let .number(n)?: key = "id:\(n)"
+                default: key = RoadSnap.nameKey(cls: str("class"), name: str("name"), nameAr: str("name_ar"), ref: str("ref"))
+                }
+                switch f.geometry {
+                case let .lineString(l)?: lines.append(.init(key: key, coords: l.coordinates.map { [$0.longitude, $0.latitude] }))
+                case let .multiLineString(ml)?: for l in ml.coordinates { lines.append(.init(key: key, coords: l.map { [$0.longitude, $0.latitude] })) }
+                default: break
+                }
+            }
+            return lines
+        }
+
+        /// Watercourse lines (the wadi hint) from the waterway probe's queried features. Pure: any thread.
+        static func waterwayLines(_ features: [Feature]) -> [WaterwayLine] {
+            var lines: [WaterwayLine] = []
+            for f in features {
+                let props = f.properties ?? [:]
+                func str(_ k: String) -> String? {
+                    if case let .string(s)?? = props[k] { return s }
+                    return nil
+                }
+                guard let cls = WadiProximity.watercourseClass(cls: str("class"), type: str("type")) else { continue }
+                let name = str("name_ar") ?? str("name")
+                switch f.geometry {
+                case let .lineString(l)?: lines.append(.init(cls: cls, name: name, coords: l.coordinates.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) }))
+                case let .multiLineString(ml)?:
+                    for l in ml.coordinates { lines.append(.init(cls: cls, name: name, coords: l.map { Geo.LatLng(lat: $0.latitude, lng: $0.longitude) })) }
+                default: break
+                }
+            }
+            return lines
         }
 
         /// True before the first query, or when the camera moved ≥ 30 m or zoomed since the last query.
