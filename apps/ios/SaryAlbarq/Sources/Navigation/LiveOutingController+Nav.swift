@@ -232,6 +232,10 @@ extension LiveOutingController {
                 let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done)
                 d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
+                /* The next turn as an arrow on the line (the banner's maneuver, `currentStep`). */
+                if let step = nav.currentStep, NavManeuverArrow.shows(step.maneuver) {
+                    d.maneuver = NavManeuverArrow.shaft(r.coordinates, at: step.location)
+                }
             }
             d.camera = navCamera()
             d.cameraKey = navCameraKey * 1000 + 500

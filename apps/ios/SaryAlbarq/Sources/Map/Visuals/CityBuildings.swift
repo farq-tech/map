@@ -64,6 +64,8 @@ enum BuildingFootprints {
     static let layerId = "sary-building-footprints"
     /// A city block reads from here; fully drawn half a level later.
     static let minZoom = 14.5
+    /// The satellite raster's own `raster-emissive-strength` (`SandGrade.Look.emissive`).
+    static var imageryEmissive: Double { SandGrade.shipped.emissive }
 
     static func layer(source: String, sourceLayer: String, atlas: Bool) -> [String: Any] {
         var l: [String: Any] = [
@@ -77,8 +79,12 @@ enum BuildingFootprints {
             "paint": [
                 "fill-color": "hsl(36, 45%, 92%)",
                 "fill-outline-color": "hsl(32, 28%, 58%)",
-                "fill-opacity": ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, 0.22, 17, 0.32] as [Any],
-                "fill-emissive-strength": 0.6,
+                /* A hint, not a coat: cream slabs at a third of full strength read as flat patches next
+                   to blocks the data does not cover (footprint coverage is uneven across the Kingdom). */
+                "fill-opacity": ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, 0.16, 17, 0.24] as [Any],
+                /* Lit like the imagery under it (its raster emissive is 0.3), so at night the
+                   footprints do not glow brighter than the photo around them. */
+                "fill-emissive-strength": imageryEmissive,
             ] as [String: Any],
         ]
         if !atlas { l["filter"] = ["!=", ["get", "underground"], "true"] as [Any] }

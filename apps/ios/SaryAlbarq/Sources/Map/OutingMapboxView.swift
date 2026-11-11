@@ -960,6 +960,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 src.data = .geometry(.point(Point(r.shown.coordinate)))
                 try? m.addSource(src)
                 let spot = r.item.isMe ? Vehicle.mySpotHex : r.item.color
+                if r.item.isMe {
+                    /* My position over sand: a soft dark disc with a white ring under my car, so a
+                       sand- or white-painted car still stands out from the imagery and the route. */
+                    try? m.addLayer(with: Vehicle.myHaloLayer(id: Vehicle.haloId(ids.spot), source: ids.source), layerPosition: nil)
+                }
                 try? m.addLayer(with: [
                     "id": ids.spot, "type": "circle", "source": ids.source,
                     "paint": [
@@ -1062,7 +1067,7 @@ struct OutingMapboxView: UIViewRepresentable {
         private func removeLayers(_ r: Rec, on map: MapView) {
             let m: MapboxMap = map.mapboxMap!
             let ids = Vehicle.ids(r.key)
-            for l in [ids.layer, ids.spot] where m.layerExists(withId: l) { try? m.removeLayer(withId: l) }
+            for l in [ids.layer, ids.spot, Vehicle.haloId(ids.spot)] where m.layerExists(withId: l) { try? m.removeLayer(withId: l) }
             if m.sourceExists(withId: ids.source) { try? m.removeSource(withId: ids.source) }
         }
 

@@ -38,6 +38,9 @@ struct MapNavDrawing: Equatable {
     /// «آخر موقع معروف · قبل ١٤ د» under the name for a last-known target (never shown as live).
     var targetNote: String? = nil
     var labels: [Label] = []
+    /// The next turn drawn on the route: a short white arrow along the line through the
+    /// maneuver point (`NavManeuverArrow.shaft`), nil when the next step is not a turn.
+    var maneuver: [LngLat]? = nil
     /// True only while a navigation leg is active. A route preview can fit the camera without
     /// putting the map into the driving state.
     var guidanceActive = false
@@ -61,11 +64,29 @@ final class NavMapDrawer {
 
     static let source = "sary-nav-routes"
     static let offSource = "sary-nav-offroad"
-    static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main",
+    static let maneuverSource = "sary-nav-maneuver"
+    static let maneuverHeadImage = "sary-nav-maneuver-head"
+    static let haloLayer = "sary-nav-halo"
+    static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", haloLayer, "sary-nav-main-casing", "sary-nav-main",
                            "sary-nav-dirt-casing", "sary-nav-dirt", "sary-nav-dirt-ruts",
                            "sary-nav-terrain-casing", "sary-nav-terrain",
                            "sary-nav-rough-casing", "sary-nav-rough", "sary-nav-rough-ticks",
-                           "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off"]
+                           "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off",
+                           "sary-nav-maneuver-casing", "sary-nav-maneuver", "sary-nav-maneuver-head"]
+
+    /// Line width by zoom for a route layer of nominal width `k` (pt at z14). Build 36 grew it
+    /// only 1.6× by z18, so at the guidance zooms (z15–17, tilted: the far half shrinks further)
+    /// the line was thin over busy desert imagery; it now grows ~1.15× at z15 and 1.5× at z17.
+    static func width(_ k: Double) -> [Any] {
+        ["interpolate", ["linear"], ["zoom"], 8.0, k * 0.4, 13.0, k * 0.85, 15.0, k * 1.15, 17.0, k * 1.5, 19.0, k * 1.9]
+    }
+
+    /// The chosen route's outer shadow: a dark, soft band under the white casing. Over pale sand
+    /// a white casing alone has almost no contrast (white on cream), so the blue line read as a
+    /// faint stroke; the dark band gives every surface style an edge on light ground, the white
+    /// casing on dark ground and at night.
+    static let haloColor = "#06101F"
+    static let haloOpacity = 0.55
     /// Surface styles on the chosen route — three readable "materials", never a colour alone
     /// (each also differs in pattern, so it reads in sunlight and for colour-blind drivers):
     /// asphalt = solid blue with a white casing; dirt track = sand line with dark-earth edges and
@@ -109,15 +130,17 @@ final class NavMapDrawer {
     private func addLayers() {
         guard styleReady, let m = map?.mapboxMap else { return }
         for id in Self.layerIds where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
-        for src in [Self.source, Self.offSource] where !m.sourceExists(withId: src) {
+        for src in [Self.source, Self.offSource, Self.maneuverSource] where !m.sourceExists(withId: src) {
             var s = GeoJSONSource(id: src)
             s.data = .featureCollection(FeatureCollection(features: []))
             try? m.addSource(s)
         }
+        /* Same id again replaces the image (addLayers runs once per style load). */
+        try? m.addImage(Self.arrowHead(), id: Self.maneuverHeadImage)
         /* Under every car, chip and pin (cars are the newest layers), above the trails. */
         let below = m.allLayerIdentifiers.first { $0.id.hasPrefix("sary-vehicle") }?.id
         let pos: LayerPosition? = below.map { .below($0) }
-        func width(_ k: Double) -> [Any] { ["interpolate", ["linear"], ["zoom"], 8, k * 0.4, 14, k, 18, k * 1.6] }
+        func width(_ k: Double) -> [Any] { Self.width(k) }
         let round: [String: Any] = ["line-join": "round", "line-cap": "round"]
         let sel: [Any] = ["==", ["get", "s"], 1]
         let alt: [Any] = ["==", ["get", "s"], 0]
@@ -126,11 +149,18 @@ final class NavMapDrawer {
         /* Asphalt (and routes without surface data) keep the classic solid blue line. */
         let asphalt: [Any] = ["any", knownSurface, kind(.paved)]
         let gridSnap: [Any] = ["all", sel, ["==", ["get", "k"], NavSurfaceKind.gridSnap.rawValue]]
+        let shaftFilter: [Any] = ["==", ["get", "t"], "s"]
+        let headFilter: [Any] = ["==", ["get", "t"], "h"]
         let layers: [[String: Any]] = [
             ["id": "sary-nav-alt-casing", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#1b2a44", "line-width": width(9), "line-opacity": 0.55, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-alt", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#9db8e6", "line-width": width(6), "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
+            /* Under the whole chosen route, whatever its surface: a dark soft edge on light sand. */
+            ["id": Self.haloLayer, "type": "line", "source": Self.source, "filter": sel, "layout": round,
+             "paint": ["line-color": Self.haloColor, "line-width": width(15.5), "line-opacity": Self.haloOpacity,
+                       "line-blur": ["interpolate", ["linear"], ["zoom"], 10, 1, 16, 2.5] as [Any],
+                       "line-occlusion-opacity": 0.5, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-main-casing", "type": "line", "source": Self.source, "filter": asphalt, "layout": round,
              "paint": ["line-color": "#ffffff", "line-width": width(12), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": asphalt, "layout": round,
@@ -149,7 +179,7 @@ final class NavMapDrawer {
                        "line-dasharray": [3, 2], "line-opacity": 0.85, "line-emissive-strength": 1] as [String: Any]],
             /* Open terrain («بر مفتوح»): a chain of amber dots over a soft dark halo — a predicted way, not a road. */
             ["id": "sary-nav-terrain-casing", "type": "line", "source": Self.source, "filter": kind(.terrain), "layout": round,
-             "paint": ["line-color": SurfaceStyle.terrainEdge, "line-width": width(9), "line-opacity": 0.45,
+             "paint": ["line-color": SurfaceStyle.terrainEdge, "line-width": width(9), "line-opacity": 0.6,
                        "line-blur": 1.5, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-terrain", "type": "line", "source": Self.source, "filter": kind(.terrain), "layout": round,
              "paint": ["line-color": SurfaceStyle.terrain, "line-width": width(6.5),
@@ -176,8 +206,44 @@ final class NavMapDrawer {
              "paint": ["line-color": "#16110b", "line-width": width(6), "line-opacity": 0.7, "line-dasharray": [1.4, 1.4], "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-off", "type": "line", "source": Self.offSource, "layout": ["line-cap": "round"],
              "paint": ["line-color": "#F5B83D", "line-width": width(3.5), "line-dasharray": [1.4, 1.4], "line-emissive-strength": 1] as [String: Any]],
+            /* The next turn: a white arrow along the route through the maneuver (dark edge for sand,
+               white body for night), on top of every surface style. */
+            ["id": "sary-nav-maneuver-casing", "type": "line", "source": Self.maneuverSource, "filter": shaftFilter,
+             "layout": round,
+             "paint": ["line-color": "#0B1220", "line-width": width(7.5), "line-opacity": 0.85,
+                       "line-occlusion-opacity": 0.6, "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-maneuver", "type": "line", "source": Self.maneuverSource, "filter": shaftFilter,
+             "layout": round,
+             "paint": ["line-color": "#FFFFFF", "line-width": width(4.5), "line-occlusion-opacity": 0.6,
+                       "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-maneuver-head", "type": "symbol", "source": Self.maneuverSource, "filter": headFilter,
+             "layout": ["icon-image": Self.maneuverHeadImage, "icon-rotate": ["get", "b"] as [Any],
+                        "icon-rotation-alignment": "map", "icon-pitch-alignment": "map",
+                        "icon-allow-overlap": true, "icon-ignore-placement": true,
+                        "icon-size": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 15, 0.75, 17, 1.0, 19, 1.25] as [Any]] as [String: Any],
+             "paint": ["icon-emissive-strength": 1] as [String: Any]],
         ]
         for l in layers { try? m.addLayer(with: l, layerPosition: pos) }
+    }
+
+    /// The arrowhead at the end of the turn arrow: white, dark edge, pointing north (the
+    /// symbol layer turns it by the last segment's bearing, aligned to the map).
+    static func arrowHead() -> UIImage {
+        let s: CGFloat = 40
+        return UIGraphicsImageRenderer(size: CGSize(width: s, height: s)).image { _ in
+            let p = UIBezierPath()
+            p.move(to: CGPoint(x: s / 2, y: 3))
+            p.addLine(to: CGPoint(x: s - 4, y: s - 7))
+            p.addLine(to: CGPoint(x: s / 2, y: s - 14))
+            p.addLine(to: CGPoint(x: 4, y: s - 7))
+            p.close()
+            p.lineJoin = .round
+            p.lineWidth = 4
+            UIColor(red: 0.04, green: 0.07, blue: 0.13, alpha: 0.9).setStroke()
+            p.stroke()
+            UIColor.white.setFill()
+            p.fill()
+        }
     }
 
     private func draw() {
@@ -212,8 +278,20 @@ final class NavMapDrawer {
         var off: [Feature] = []
         if let o = drawing.offRoad, o.count >= 2 { off.append(Feature(geometry: .lineString(LineString(o.map(\.coordinate))))) }
         m.updateGeoJSONSource(withId: Self.offSource, geoJSON: .featureCollection(FeatureCollection(features: off)))
+        m.updateGeoJSONSource(withId: Self.maneuverSource, geoJSON: .featureCollection(FeatureCollection(features: maneuverFeatures())))
         placeTarget()
         placeLabels()
+    }
+
+    /// The turn arrow's shaft and its head (turned by the last segment's bearing).
+    private func maneuverFeatures() -> [Feature] {
+        guard let shaft = drawing.maneuver, shaft.count >= 2, let end = shaft.last,
+              let b = NavManeuverArrow.headBearing(shaft) else { return [] }
+        var line = Feature(geometry: .lineString(LineString(shaft.map(\.coordinate))))
+        line.properties = ["t": .string("s")]
+        var head = Feature(geometry: .point(Point(end.coordinate)))
+        head.properties = ["t": .string("h"), "b": .number(b)]
+        return [line, head]
     }
 
     private func placeTarget() {
@@ -356,5 +434,76 @@ struct NavRouteLabel: View {
         .saryTheme(theme)
         .environment(\.layoutDirection, .rightToLeft)
         .accessibilityIdentifier(selected ? "map.navLabel.selected" : "map.navLabel")
+    }
+}
+
+/// The next turn on the map (pure, unit-tested): a short stretch of the route itself through
+/// the maneuver point, drawn as a white arrow. Build 36 had nothing on the line at a turn, so
+/// at a glance over desert imagery the turn was only in the banner.
+enum NavManeuverArrow {
+    /// Metres of route drawn before / after the maneuver point.
+    static let beforeM = 40.0
+    static let afterM = 30.0
+    /// A maneuver further than this from the route line is not drawn (stale / other route).
+    static let maxOffsetM = 50.0
+
+    /// Turns worth an arrow; «تابع» / a new road name / depart / arrive are not.
+    static func shows(_ m: NavManeuver) -> Bool {
+        switch m.kind {
+        case .depart, .arrive, .continue, .newName, .notification: return false
+        case .roundabout, .exitRoundabout: return true
+        case .turn, .merge, .onRamp, .offRamp, .fork, .endOfRoad, .useLane:
+            return m.direction != nil && m.direction != .straight
+        }
+    }
+
+    /// The route from `before` m ahead of `at` (projected onto the line) to `after` m past it;
+    /// nil when the point is off the route or there is nothing after it to point along.
+    static func shaft(_ route: [LngLat], at: LngLat, before: Double = beforeM, after: Double = afterM) -> [LngLat]? {
+        guard route.count >= 2 else { return nil }
+        let kx = cos(at.lat * .pi / 180) * 111_320, ky = 110_540.0
+        func xy(_ p: LngLat) -> (Double, Double) { ((p.lng - at.lng) * kx, (p.lat - at.lat) * ky) }
+        var cum = [0.0]
+        for i in 1..<route.count { cum.append(cum[i - 1] + Vehicle.distanceMeters(route[i - 1], route[i])) }
+        var best: (d: Double, s: Double)?
+        for i in 1..<route.count {
+            let (ax, ay) = xy(route[i - 1]), (bx, by) = xy(route[i])
+            let dx = bx - ax, dy = by - ay
+            let len2 = dx * dx + dy * dy
+            let t = len2 > 0 ? min(1, max(0, -(ax * dx + ay * dy) / len2)) : 0
+            let px = ax + t * dx, py = ay + t * dy
+            let d = (px * px + py * py).squareRoot()
+            if best == nil || d < best!.d { best = (d, cum[i - 1] + t * (cum[i] - cum[i - 1])) }
+        }
+        guard let b = best, b.d <= maxOffsetM, let total = cum.last else { return nil }
+        let from = max(0, b.s - before), to = min(total, b.s + after)
+        guard to - b.s >= 5, to - from >= 10 else { return nil }
+        return slice(route, cum: cum, from: from, to: to)
+    }
+
+    /// The part of `route` between two distances along it (`cum`: cumulative metres per vertex).
+    static func slice(_ route: [LngLat], cum: [Double], from a: Double, to b: Double) -> [LngLat] {
+        func point(_ s: Double) -> LngLat {
+            if s <= 0 { return route[0] }
+            if let total = cum.last, s >= total { return route[route.count - 1] }
+            guard let i = cum.indices.dropFirst().first(where: { cum[$0] >= s }) else { return route[route.count - 1] }
+            let seg = cum[i] - cum[i - 1]
+            let u = seg > 0 ? (s - cum[i - 1]) / seg : 0
+            let p = route[i - 1], q = route[i]
+            return LngLat(lng: p.lng + (q.lng - p.lng) * u, lat: p.lat + (q.lat - p.lat) * u)
+        }
+        var out = [point(a)]
+        for i in route.indices where cum[i] > a && cum[i] < b { out.append(route[i]) }
+        out.append(point(b))
+        return out
+    }
+
+    /// Which way the arrowhead points: the bearing of the shaft's last metres.
+    static func headBearing(_ shaft: [LngLat]) -> Double? {
+        guard let end = shaft.last else { return nil }
+        for p in shaft.dropLast().reversed() where Vehicle.distanceMeters(p, end) > 0.5 {
+            return Vehicle.bearing(p, end)
+        }
+        return nil
     }
 }

@@ -723,3 +723,84 @@ final class NavHUDTests: XCTestCase {
         XCTAssertNil(NavTraffic.runs(pts, congestion: [.heavy], from: 0), "a mismatched annotation is never drawn")
     }
 }
+
+/// Build 36 report: the blue route was hard to tell from the desert imagery and turns were not
+/// marked on the line.
+final class RouteVisibilityTests: XCTestCase {
+    /// ~10 m per 0.0001° of latitude near Riyadh.
+    private let corner = LngLat(lng: 46.7, lat: 24.7)
+    /// North 200 m, then east 200 m (a right turn at `corner`).
+    private var lRoute: [LngLat] {
+        [LngLat(lng: 46.7, lat: 24.698), corner, LngLat(lng: 46.702, lat: 24.7)]
+    }
+
+    func testArrowRunsAlongTheRouteThroughTheTurn() throws {
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(lRoute, at: corner))
+        XCTAssertEqual(s.count, 3, "start, the corner, end")
+        XCTAssertEqual(Vehicle.distanceMeters(s[0], corner), NavManeuverArrow.beforeM, accuracy: 1)
+        XCTAssertEqual(Vehicle.distanceMeters(corner, s[2]), NavManeuverArrow.afterM, accuracy: 1)
+        XCTAssertEqual(s[1], corner)
+        let b = try XCTUnwrap(NavManeuverArrow.headBearing(s))
+        XCTAssertEqual(b, 90, accuracy: 1, "points east, the way the turn goes")
+    }
+
+    func testArrowSnapsAManeuverSlightlyOffTheLine() throws {
+        let off = LngLat(lng: 46.70005, lat: 24.69998)
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(lRoute, at: off))
+        XCTAssertGreaterThanOrEqual(s.count, 2)
+    }
+
+    func testNoArrowFarFromTheRouteOrAtItsEnd() {
+        XCTAssertNil(NavManeuverArrow.shaft(lRoute, at: LngLat(lng: 46.71, lat: 24.71)), "another route's maneuver")
+        XCTAssertNil(NavManeuverArrow.shaft(lRoute, at: lRoute.last!), "nothing after it to point along")
+        XCTAssertNil(NavManeuverArrow.shaft([corner], at: corner))
+    }
+
+    func testShortRouteClampsToItsEnds() throws {
+        let r = [LngLat(lng: 46.7, lat: 24.6999), corner, LngLat(lng: 46.7001, lat: 24.7)]
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(r, at: corner))
+        XCTAssertEqual(s.first, r.first)
+        XCTAssertEqual(s.last, r.last)
+    }
+
+    func testOnlyRealTurnsGetAnArrow() {
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .turn, direction: .left)))
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .roundabout, direction: nil, exit: 2)))
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .offRamp, direction: .slightRight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .turn, direction: .straight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .continue, direction: .straight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .arrive, direction: nil)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .depart, direction: .right)))
+    }
+
+    func testRouteHasADarkHaloAndATurnArrowLayer() {
+        for id in [NavMapDrawer.haloLayer, "sary-nav-maneuver-casing", "sary-nav-maneuver", "sary-nav-maneuver-head"] {
+            XCTAssertTrue(NavMapDrawer.layerIds.contains(id), id)
+        }
+        let halo = NavMapDrawer.layerIds.firstIndex(of: NavMapDrawer.haloLayer)!
+        XCTAssertLessThan(halo, NavMapDrawer.layerIds.firstIndex(of: "sary-nav-main-casing")!, "under the white casing")
+        XCTAssertGreaterThan(halo, NavMapDrawer.layerIds.firstIndex(of: "sary-nav-alt")!, "over the alternatives")
+        XCTAssertGreaterThanOrEqual(NavMapDrawer.haloOpacity, 0.5)
+        XCTAssertEqual(NavMapDrawer.arrowHead().size.width, 40)
+    }
+
+    func testRouteIsWiderAtGuidanceZooms() {
+        let e = NavMapDrawer.width(8)
+        var stops: [Double: Double] = [:]
+        var i = 3
+        while i + 1 < e.count {
+            if let z = e[i] as? Double, let v = e[i + 1] as? Double { stops[z] = v }
+            i += 2
+        }
+        XCTAssertGreaterThanOrEqual(stops[15] ?? 0, 8 * 1.15 - 0.01)
+        XCTAssertGreaterThanOrEqual(stops[17] ?? 0, 8 * 1.5 - 0.01, "Build 36 had ×1.3 at z17")
+    }
+
+    func testMyCarHasAHaloUnderIt() {
+        let l = Vehicle.myHaloLayer(id: Vehicle.haloId("sary-vehicle-spot"), source: "sary-vehicle")
+        XCTAssertEqual(l["id"] as? String, "sary-vehicle-spot-halo")
+        XCTAssertEqual(l["type"] as? String, "circle")
+        let p = l["paint"] as? [String: Any]
+        XCTAssertEqual(p?["circle-stroke-color"] as? String, "#ffffff")
+    }
+}

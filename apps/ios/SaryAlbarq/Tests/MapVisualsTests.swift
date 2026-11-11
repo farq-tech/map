@@ -563,4 +563,59 @@ final class BuildingFootprintsTests: XCTestCase {
         XCTAssertNotNil(l["filter"])
         XCTAssertEqual(l["source-layer"] as? String, "building")
     }
+
+    func testFootprintsAreAHintLitLikeTheImagery() {
+        let l = BuildingFootprints.layer(source: "farq", sourceLayer: "buildings", atlas: true)
+        let paint = l["paint"] as? [String: Any]
+        XCTAssertEqual(paint?["fill-emissive-strength"] as? Double, SandGrade.shipped.emissive, "no glow over the photo at night")
+        let opacity = paint?["fill-opacity"] as? [Any]
+        XCTAssertLessThanOrEqual(opacity?.last as? Double ?? 1, 0.25, "never a slab over the imagery")
+    }
+}
+
+/// Build 36 report: the satellite imagery looked patchy (areas of different colour, flat
+/// geometric patches). Our shading over it must not add either.
+final class ImageryConsistencyTests: XCTestCase {
+    private func stops(_ e: [Any]) -> [(Double, Double)] {
+        var out: [(Double, Double)] = []
+        var i = 3
+        while i + 1 < e.count {
+            if let z = e[i] as? Double, let v = e[i + 1] as? Double { out.append((z, v)) }
+            i += 2
+        }
+        return out
+    }
+
+    func testHillshadeFadesOutOverSatelliteBeforeTheDEMRunsOut() {
+        let d = stops(HillshadeLight.detailExaggeration(0.8, satellite: true))
+        XCTAssertEqual(d.last?.0, HillshadeLight.satelliteFadeEnd)
+        XCTAssertEqual(d.last?.1, 0, "no over-zoomed DEM facets over the photo")
+        XCTAssertLessThanOrEqual(HillshadeLight.satelliteFadeEnd, 15, "gone before the DEM's last tile level (z14) is over-zoomed far")
+        let b = stops(HillshadeLight.broadExaggeration(0.8, satellite: true))
+        XCTAssertEqual(b.last?.1, 0)
+        XCTAssertLessThanOrEqual(b.last?.0 ?? 99, 14, "the z11 broad DEM is gone sooner")
+        XCTAssertGreaterThan(d.first(where: { $0.0 == 12 })?.1 ?? 0, 0, "still shades the dunes from afar")
+    }
+
+    func testHillshadeOnVectorMapsIsUnchanged() {
+        let d = stops(HillshadeLight.detailExaggeration(0.8, satellite: false))
+        XCTAssertGreaterThan(d.last?.1 ?? 0, 0)
+        let b = stops(HillshadeLight.broadExaggeration(0.8, satellite: false))
+        XCTAssertGreaterThan(b.last?.1 ?? 0, 0)
+    }
+
+    func testHillshadeVeilIsLighterOverImagery() {
+        let sun = SunPosition(altitudeDeg: 8, azimuthDeg: 250, rising: false)
+        let vector = HillshadeLight.from(sun, satellite: false)
+        let sat = HillshadeLight.from(sun, satellite: true)
+        XCTAssertLessThan(sat.highlight.a, vector.highlight.a * 0.6, "no cream wash over sun-facing slopes")
+        XCTAssertLessThan(sat.shadow.a, vector.shadow.a)
+        XCTAssertEqual(sat.direction, vector.direction)
+    }
+
+    func testDesertAreaTintFadesWhenZoomedIn() {
+        let e = DesertGazetteerMapLayer.fillOpacity
+        XCTAssertEqual(e.last as? Double, 0, "the outline stays, the orange wash goes")
+        XCTAssertEqual(e[e.count - 2] as? Double, DesertGazetteerMapLayer.fillFadeEnd)
+    }
 }

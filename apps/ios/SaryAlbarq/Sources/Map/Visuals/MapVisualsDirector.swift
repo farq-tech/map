@@ -418,9 +418,9 @@ final class MapVisualsDirector: NSObject {
                                                                              "tileSize": 512, "maxzoom": 11])
         }
         let broad = h.broad
-        /* Detail pass: crisper as you come closer (the ~30 m DEM's ridges and slip faces). */
-        let detailEx: [Any] = ["interpolate", ["linear"], ["zoom"], 9, h.exaggeration * 0.6, 12, h.exaggeration, 15, min(1, h.exaggeration * 1.12)]
-        let broadEx: [Any] = ["interpolate", ["linear"], ["zoom"], 8, broad.exaggeration, 15, broad.exaggeration * 0.75]
+        let satellite = lastInputs.layer == .satellite
+        let detailEx = HillshadeLight.detailExaggeration(h.exaggeration, satellite: satellite)
+        let broadEx = HillshadeLight.broadExaggeration(broad.exaggeration, satellite: satellite)
         put(Self.hillshadeBroadLayer, source: Self.hillshadeBroadSource, light: broad, exaggeration: broadEx, below: nil, m, changed: h != appliedHillshade)
         put(Self.hillshadeLayer, source: Self.hillshadeSource, light: h, exaggeration: detailEx, below: nil, m, changed: h != appliedHillshade)
         appliedHillshade = h
