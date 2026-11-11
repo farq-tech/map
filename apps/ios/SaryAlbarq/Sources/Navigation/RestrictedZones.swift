@@ -171,20 +171,32 @@ struct RestrictedZoneSet {
 
     /// Zones `route` is driven through (≥ `minCrossingM` off public roads). Zones containing
     /// `exempt` points (the trip's origin) are ignored: the driver has to be able to leave.
-    func crossings(of route: [LngLat], exempt: [LngLat] = []) -> [Crossing] {
+    ///
+    /// `tailZoneId`/`tailM`: when the destination is itself inside an aerodrome, the last `tailM`
+    /// metres of the route do not count for THAT aerodrome (terminal roads, car parks), while a
+    /// route that crosses the airfield earlier on its way somewhere else is still rejected.
+    func crossings(of route: [LngLat], exempt: [LngLat] = [], tailZoneId: String? = nil, tailM: Double = 0) -> [Crossing] {
         guard route.count >= 2, !zones.isEmpty else { return [] }
         let rbox = Box(route)
+        // Metres from each vertex to the end of the route.
+        var toEnd = [Double](repeating: 0, count: route.count)
+        if tailZoneId != nil {
+            for i in stride(from: route.count - 2, through: 0, by: -1) { toEnd[i] = toEnd[i + 1] + Vehicle.distanceMeters(route[i], route[i + 1]) }
+        }
         var out: [Crossing] = []
         for z in zones where z.box.intersects(rbox) {
             if exempt.contains(where: { Self.covers(z, $0) }) { continue }
             var meters = 0.0
-            for (a, b) in zip(route, route.dropFirst()) {
+            let tailing = z.id == tailZoneId
+            for i in 0..<(route.count - 1) {
+                let a = route[i], b = route[i + 1]
                 let seg = Box([a, b])
                 guard seg.intersects(z.box) else { continue }
                 let len = Vehicle.distanceMeters(a, b)
                 let n = max(1, Int((len / Self.stepM).rounded(.up)))
                 for k in 0..<n {
                     let f = (Double(k) + 0.5) / Double(n)
+                    if tailing, toEnd[i] - len * f <= tailM { continue }
                     let p = LngLat(lng: a.lng + (b.lng - a.lng) * f, lat: a.lat + (b.lat - a.lat) * f)
                     if Self.covers(z, p), !isPublic(p) { meters += len / Double(n) }
                 }
@@ -203,6 +215,8 @@ final class RestrictedZoneGuardProvider: NavRoutingProvider {
     let base: NavRoutingProvider
     let zones: RestrictedZoneSet
     var name: String { base.name }
+    /// Last stretch of a route to a destination inside an airport that is not checked against that airport.
+    static let destinationTailM = 1500.0
 
     init(base: NavRoutingProvider, zones: RestrictedZoneSet = .bundled) {
         self.base = base
@@ -210,12 +224,16 @@ final class RestrictedZoneGuardProvider: NavRoutingProvider {
     }
 
     func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
-        // A destination inside a facility is never routed to: say so instead of drawing a path.
-        if let z = zones.restrictedZone(containing: request.target.position) {
+        // A destination inside a MILITARY facility is never routed to: say so instead of drawing a path.
+        // A destination inside an AERODROME (terminal, car park, cargo) is routed normally: people
+        // do go to airports. Only the last `tailM` of such a route is exempt from the check.
+        let target = request.target.position
+        if let z = zones.restrictedZone(containing: target), z.kind == .military {
             throw NavRoutingError.restrictedDestination(z.title)
         }
+        let tailZone = zones.zones.first { $0.kind == .aerodrome && RestrictedZoneSet.covers($0, target) }
         let plan = try await base.routes(request)
-        let firstPass = classify(plan, request)
+        let firstPass = classify(plan, request, tailZone: tailZone)
         if !firstPass.clean.isEmpty { return NavRoutePlan(routes: firstPass.clean, native: plan.native) }
         guard !plan.routes.isEmpty else { return plan }
 
@@ -228,16 +246,16 @@ final class RestrictedZoneGuardProvider: NavRoutingProvider {
         }
         let second: NavRoutePlan
         do { second = try await base.routes(retry) } catch { throw NavRoutingError.restrictedRoute(blocked) }
-        let again = classify(second, retry)
+        let again = classify(second, retry, tailZone: tailZone)
         guard !again.clean.isEmpty else { throw NavRoutingError.restrictedRoute(again.crossed.first?.title ?? blocked) }
         return NavRoutePlan(routes: again.clean, native: second.native)
     }
 
-    private func classify(_ plan: NavRoutePlan, _ request: NavRouteRequest) -> (clean: [NavRoute], crossed: [RestrictedZoneSet.Crossing]) {
+    private func classify(_ plan: NavRoutePlan, _ request: NavRouteRequest, tailZone: RestrictedZoneSet.Zone?) -> (clean: [NavRoute], crossed: [RestrictedZoneSet.Crossing]) {
         var clean: [NavRoute] = []
         var crossed: [RestrictedZoneSet.Crossing] = []
         for route in plan.routes {
-            let c = zones.crossings(of: route.coordinates, exempt: [request.origin])
+            let c = zones.crossings(of: route.coordinates, exempt: [request.origin], tailZoneId: tailZone?.id, tailM: Self.destinationTailM)
             if c.isEmpty { clean.append(route) } else { crossed.append(contentsOf: c) }
         }
         var seen = Set<String>()

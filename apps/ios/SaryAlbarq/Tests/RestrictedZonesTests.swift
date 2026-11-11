@@ -132,16 +132,80 @@ final class RestrictedZonesTests: XCTestCase {
         } catch { XCTFail("\(error)") }
     }
 
-    func testGuardRefusesDestinationInsideTheAirfieldWithoutCallingTheEngine() async {
+    func testGuardRefusesDestinationInsideAMilitaryZoneWithoutCallingTheEngine() async {
+        // Synthetic military square (same shape as the bundled `landuse=military` ways).
+        let ring = pts([(46.50, 25.00), (46.52, 25.00), (46.52, 25.02), (46.50, 25.02), (46.50, 25.00)])
+        let zones = RestrictedZoneSet(zones: [.init(id: "w1", kind: .military, name: "منشأة عسكرية", ring: ring)])
         let stub = Stub { _ in XCTFail("engine must not be asked"); return [] }
         do {
-            _ = try await RestrictedZoneGuardProvider(base: stub, zones: thumamah).routes(request(to: LngLat(lng: 46.6400, lat: 25.2100)))
+            _ = try await RestrictedZoneGuardProvider(base: stub, zones: zones).routes(request(to: LngLat(lng: 46.51, lat: 25.01)))
             XCTFail("must refuse")
         } catch let e as NavRoutingError {
-            XCTAssertEqual(e, .restrictedDestination("مطار الثمامة"))
+            XCTAssertEqual(e, .restrictedDestination("منشأة عسكرية"))
             XCTAssertTrue(e.message.contains("الوجهة داخل منطقة مقيّدة"))
         } catch { XCTFail("\(error)") }
         XCTAssertTrue(stub.calls.isEmpty)
+    }
+
+    // MARK: destinations inside an airport are routed (people go to airports)
+
+    /// King Khalid International (Riyadh), OSM way 471667957; terminal building from the bundled data.
+    private let kkiaTerminal = LngLat(lng: 46.69136, lat: 24.9794)
+    private let kkiaInteriorCarPark = LngLat(lng: 46.69, lat: 24.93)
+
+    func testDestinationInAirportTerminalIsRoutedAndEndOfRouteIsNotChecked() async throws {
+        let set = RestrictedZoneSet.bundled
+        let zone = try XCTUnwrap(set.zone(id: "w471667957"), "KKIA is bundled")
+        XCTAssertTrue(RestrictedZoneSet.contains(zone.ring, kkiaTerminal), "fixture point is inside the aerodrome ring")
+        // Straight approach from the north-west: ~0.9 km of it is inside the airport ring.
+        let route = [LngLat(lng: 46.6700, lat: 25.0000), kkiaTerminal]
+        XCTAssertFalse(set.crossings(of: route).isEmpty, "unguarded, the approach crosses the airport ring")
+        let stub = Stub { _ in [self.route("to-terminal", route)] }
+        let plan = try await RestrictedZoneGuardProvider(base: stub, zones: set).routes(request(to: kkiaTerminal))
+        XCTAssertEqual(plan.routes.map(\.id), ["to-terminal"])
+        XCTAssertEqual(stub.calls.count, 1, "no re-ask, no refusal")
+    }
+
+    func testDestinationInAirportCarParkAreaIsRouted() async throws {
+        let route = [LngLat(lng: 46.69, lat: 24.90), kkiaInteriorCarPark]
+        let stub = Stub { _ in [self.route("to-park", route)] }
+        let plan = try await RestrictedZoneGuardProvider(base: stub, zones: .bundled).routes(request(to: kkiaInteriorCarPark))
+        XCTAssertEqual(plan.routes.map(\.id), ["to-park"])
+    }
+
+    func testRouteToAnAirportStillRejectedWhenItCrossesAnotherAirfieldEarlier() async {
+        // To KKIA, but via Thumamah's service road: the tail exemption belongs to KKIA only.
+        let via = pts([(46.6580, 25.1500), (46.63086, 25.21264)] + serviceRoad.dropFirst() + [(46.6335, 25.2400), (46.6700, 25.0000)]) + [kkiaTerminal]
+        let stub = Stub { _ in [self.route("via-thumamah", via)] }
+        do {
+            _ = try await RestrictedZoneGuardProvider(base: stub, zones: .bundled).routes(request(to: kkiaTerminal))
+            XCTFail("must refuse")
+        } catch let e as NavRoutingError {
+            XCTAssertEqual(e, .restrictedRoute("مطار الثمامة"))
+        } catch { XCTFail("\(error)") }
+    }
+
+    func testNorthToSouthRouteThroughThumamahIsRejectedWithBundledData() async {
+        let bad = routeThroughAirfield
+        let stub = Stub { _ in [self.route("bad", bad)] }
+        do {
+            _ = try await RestrictedZoneGuardProvider(base: stub, zones: .bundled).routes(request())
+            XCTFail("must refuse")
+        } catch let e as NavRoutingError {
+            XCTAssertEqual(e, .restrictedRoute("مطار الثمامة"))
+        } catch { XCTFail("\(error)") }
+    }
+
+    func testTailExemptionIsOnlyTheLastStretch() {
+        // Thumamah destination at the north end; the service road is crossed >1.5 km before it.
+        let zones = thumamah
+        let route = pts([(46.63086, 25.21264)] + serviceRoad.dropFirst() + [(46.6335, 25.2400)])
+        let endPoint = route.last!
+        let zone = zones.zones[0]
+        XCTAssertFalse(zones.crossings(of: route).isEmpty)
+        XCTAssertTrue(zones.crossings(of: route, tailZoneId: zone.id, tailM: 5000).isEmpty, "a long tail would swallow everything")
+        XCTAssertFalse(zones.crossings(of: route, tailZoneId: zone.id, tailM: 1500).isEmpty, "1.5 km tail leaves the earlier crossing")
+        _ = endPoint
     }
 
     func testGuardPassesCleanRoutesUntouched() async throws {
