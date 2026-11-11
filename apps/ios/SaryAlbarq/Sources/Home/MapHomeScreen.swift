@@ -275,6 +275,8 @@ struct MapHomeScreen: View {
                     placeCard(s)
                 }
                 .scrollIndicators(.hidden)
+                /* The picked place rises into the sheet as the sheet takes its height. */
+                .transition(.opacity.combined(with: .offset(y: 18)))
                 .accessibilityIdentifier("home.place.scroll")
             } else {
                 VStack(spacing: 0) {
@@ -301,6 +303,7 @@ struct MapHomeScreen: View {
                 }
                 /* Collapsed nothing scrolls: drag the sheet up from anywhere on it, not only the handle. */
                 .gesture(sheetDrag(screen: screen), including: collapsedDraggable ? .all : .subviews)
+                .transition(.opacity)
             }
         }
         .frame(height: height, alignment: .top)
@@ -310,6 +313,9 @@ struct MapHomeScreen: View {
         .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
+        /* The collapsed height follows the state card; results replace the home content. */
+        .animation(theme.animation(.smooth), value: stateCard)
+        .animation(theme.animation(.smooth), value: showingResults)
         .onChange(of: sheetDragging) { _, dragging in
             guard !dragging else { return }
             /* A cancelled drag (no `onEnded`): settle back instead of staying where the finger left it.
@@ -374,8 +380,27 @@ struct MapHomeScreen: View {
         return HomeStateCard.pick(current: model.current, phase: model.listPhase, inviteHint: model.deferredInviteHint)
     }
 
-    @ViewBuilder
+    /// The one state card cross-fades when what it says changes (start → upcoming → active…).
     private var stateCardView: some View {
+        stateCardContent
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+            .id(stateCardKind)
+    }
+
+    /// Which card (not its live details): a new kind swaps the card, new details update in place.
+    private var stateCardKind: String {
+        switch stateCard {
+        case .active: return "active"
+        case .upcoming: return "upcoming"
+        case .invite: return "invite"
+        case .start: return "start"
+        case .failed: return "failed"
+        case .none: return "none"
+        }
+    }
+
+    @ViewBuilder
+    private var stateCardContent: some View {
         switch stateCard {
         case let .active(id):
             if let o = model.current.first(where: { $0.id == id }) { activeCard(o) }
@@ -402,8 +427,11 @@ struct MapHomeScreen: View {
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
-                    Text([paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · "))
+                    let line = [paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · ")
+                    Text(line)
                         .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
+                        .contentTransition(.numericText())
+                        .saryAnimation(.smooth, value: line)
                 }
                 Spacer(minLength: 0)
                 Text("افتحها").font(.sary(13, .bold)).foregroundStyle(p.onAccent)
@@ -592,6 +620,9 @@ struct MapHomeScreen: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
                     Text("طلعتك جارية · \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
+                        /* Someone joins: the count rolls, the card stays. */
+                        .contentTransition(.numericText())
+                        .saryAnimation(.smooth, value: o.participantsLabel)
                 }
                 Spacer(minLength: 0)
                 Text("افتح الخريطة").font(.sary(13, .bold)).foregroundStyle(p.onAccent)
@@ -707,8 +738,9 @@ struct MapHomeScreen: View {
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
                 if results.count >= 3 { PlaceOrderPicker(order: $resultOrder, hasPosition: myPoint != nil) }
+                let ordered = PlaceSearch.ordered(results, by: resultOrder, near: myPoint)
                 VStack(spacing: 0) {
-                    ForEach(Array(PlaceSearch.ordered(results, by: resultOrder, near: myPoint).enumerated()), id: \.element.id) { i, r in
+                    ForEach(Array(ordered.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
                         /* Build 36 item 11: Arabic name first, the other language on its own small line, the distance bold. */
                         PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
@@ -724,10 +756,14 @@ struct MapHomeScreen: View {
                             pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
                                        subtitle: r.subtitle, icon: r.icon, desert: r.id.hasPrefix("gazetteer:")))
                         }
+                        .transition(.opacity.combined(with: .offset(y: 6)))
                     }
                 }
                 .padding(.horizontal, theme.space(.m))
                 .sarySurface(radius: SaryRadius.m)
+                /* Results refine as you type: rows keep their place (stable ids), new ones fade in,
+                   a new order slides them. */
+                .saryAnimation(.snappy, value: ordered.map(\.id))
             } else if !searching && searchError == nil && query.count >= 2 {
                 Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني، أو اضغط مطوّلًا على الخريطة.").saryText(.subhead).foregroundStyle(p.textSecondary)
             }
@@ -749,10 +785,12 @@ struct MapHomeScreen: View {
                     if i > 0 { SaryDivider() }
                     placeRow(icon: it.systemImage, title: "\(SaryFormat.number(i + 1)). \(it.title)", detail: it.detail, point: it.point,
                              id: "home.desert.result", meters: it.meters) { pickDesert(it) }
+                        .transition(.opacity.combined(with: .offset(y: 6)))
                 }
             }
             .padding(.horizontal, theme.space(.m))
             .sarySurface(radius: SaryRadius.m)
+            .saryAnimation(.snappy, value: desertItems.map(\.id))
             Text(HomeDesertRules.footnote(category)).saryText(.caption).foregroundStyle(p.textTertiary)
                 .accessibilityIdentifier("home.desert.attribution")
         }
