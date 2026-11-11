@@ -699,3 +699,44 @@ enum ArrivalOrder {
         !memberIds.isEmpty && memberIds.allSatisfy { arrivals[$0] != nil }
     }
 }
+
+// MARK: - «جاهز للبر»
+
+/// Before leaving coverage: does this phone hold what the desert needs with no signal? The
+/// offline map of the destination (a complete saved area holds it), the desert grid there
+/// («دروب البر», saved with the area by `DesertTileStore.prefetch`) and the trail recording that
+/// «طريق الرجعة» retraces. Pure: the plan's row feeds it from the stores.
+struct DesertReadiness: Equatable {
+    var map: Bool
+    /// nil: no desert routing there (outside the Kingdom), so not asked.
+    var trails: Bool?
+    var returnTrail: Bool
+
+    var ready: Bool { map && trails != false && returnTrail }
+
+    static func make(destination: LngLat, savedAreas: [OfflinePlan.Box], trailsOnPhone: Bool?, trailRecording: Bool) -> DesertReadiness {
+        DesertReadiness(map: savedAreas.contains { holds($0, destination) }, trails: trailsOnPhone, returnTrail: trailRecording)
+    }
+
+    /// The saved area's box holds `p` (edges included).
+    static func holds(_ b: OfflinePlan.Box, _ p: LngLat) -> Bool {
+        p.lat >= b.south && p.lat <= b.north && p.lng >= b.west && p.lng <= b.east
+    }
+
+    /// «جاهز للبر: الخريطة ✓ الدروب ✓ طريق الرجعة ✓».
+    var line: String {
+        func mark(_ ok: Bool) -> String { ok ? "✓" : "✗" }
+        var parts = ["الخريطة \(mark(map))"]
+        if let trails { parts.append("الدروب \(mark(trails))") }
+        parts.append("طريق الرجعة \(mark(returnTrail))")
+        return (ready ? "جاهز للبر: " : "جاهزية البر: ") + parts.joined(separator: " ")
+    }
+
+    /// What to do first, while there is still a network.
+    var hint: String? {
+        if !map { return "احفظ خريطة المنطقة بدون نت قبل تطلع من التغطية، وتنحفظ معها الدروب" }
+        if trails == false { return "الدروب ما انحفظت: احفظ خريطة المنطقة مرة ثانية وأنت على نت" }
+        if !returnTrail { return "شغّل «سجّل مساري» عشان «طريق الرجعة» يرجّعك على دربك بدون نت" }
+        return nil
+    }
+}

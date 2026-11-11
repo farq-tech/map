@@ -610,6 +610,45 @@ final class ReturnOnPhoneTests: XCTestCase {
         XCTAssertEqual(city.phase, .road)
     }
 
+    // MARK: «جاهز للبر»
+
+    func testDesertReadinessFromTheStores() {
+        let camp = LngLat(lng: 45.20, lat: 24.30)
+        let area = OfflinePlan.Box(west: 45.0, south: 24.1, east: 45.4, north: 24.5)
+        let elsewhere = OfflinePlan.Box(west: 46.0, south: 24.1, east: 46.4, north: 24.5)
+        let all = DesertReadiness.make(destination: camp, savedAreas: [elsewhere, area], trailsOnPhone: true, trailRecording: true)
+        XCTAssertTrue(all.ready)
+        XCTAssertEqual(all.line, "جاهز للبر: الخريطة ✓ الدروب ✓ طريق الرجعة ✓")
+        XCTAssertNil(all.hint)
+
+        let noMap = DesertReadiness.make(destination: camp, savedAreas: [elsewhere], trailsOnPhone: false, trailRecording: true)
+        XCTAssertFalse(noMap.ready)
+        XCTAssertEqual(noMap.line, "جاهزية البر: الخريطة ✗ الدروب ✗ طريق الرجعة ✓")
+        XCTAssertTrue(noMap.hint?.contains("احفظ خريطة المنطقة") == true, "the first thing to do, while on network")
+
+        let noTrails = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: false, trailRecording: true)
+        XCTAssertTrue(noTrails.hint?.contains("الدروب") == true)
+        let noRecording = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: true, trailRecording: false)
+        XCTAssertFalse(noRecording.ready)
+        XCTAssertTrue(noRecording.hint?.contains("سجّل مساري") == true)
+
+        /* Outside the Kingdom there is no desert routing: not asked, not held against readiness. */
+        let abroad = DesertReadiness.make(destination: camp, savedAreas: [area], trailsOnPhone: nil, trailRecording: true)
+        XCTAssertTrue(abroad.ready)
+        XCTAssertEqual(abroad.line, "جاهز للبر: الخريطة ✓ طريق الرجعة ✓")
+    }
+
+    func testDesertTilesOnThePhone() {
+        let camp = LngLat(lng: 45.20, lat: 24.30)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { _ in true }), true)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { _ in false }), false)
+        /* One tile of the corridor missing is not ready. */
+        let missing = DesertTiles.tile(containing: camp)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in nil }, saved: { $0 != missing }), false)
+        XCTAssertEqual(DesertTiles.onPhone(around: camp, pilotRegion: { _ in "thumamah" }, saved: { _ in false }), true, "a bundled pilot region")
+        XCTAssertNil(DesertTiles.onPhone(around: LngLat(lng: 10, lat: 50), saved: { _ in true }), "outside the Kingdom")
+    }
+
     func testServerReturnTripHasNoPhoneCityLeg() {
         var g = ReturnGuide()
         g.begin(.desertTrail(outbound))

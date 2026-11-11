@@ -63,6 +63,8 @@ struct PlanDetailsSections: View {
                     }
                     if let d = tp.destination {
                         DestinationRow(destination: d, myFix: location.lastFix)
+                        DesertReadinessRow(destination: LngLat(lng: d.lng, lat: d.lat))
+                            .transition(SaryTransition.appear(theme))
                     }
                     if !tp.notes.isEmpty {
                         Text(tp.notes).saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -111,6 +113,39 @@ struct PlanDetailsSections: View {
             Text(k).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// «جاهز للبر»: before leaving coverage, whether the destination's offline map, its desert grid
+/// and the trail recording for «طريق الرجعة» are on this phone (`DesertReadiness`).
+struct DesertReadinessRow: View {
+    let destination: LngLat
+    @ObservedObject private var offline = OfflineMaps.shared
+    @Environment(\.sary) private var theme
+
+    private var readiness: DesertReadiness {
+        DesertReadiness.make(destination: destination,
+                             savedAreas: offline.areas.filter(\.isComplete).compactMap(\.box),
+                             trailsOnPhone: DesertTiles.onPhone(around: destination, saved: { DesertTileStore.shared.hasTileOnDisk($0) }),
+                             trailRecording: TrailPrefs.record())
+    }
+
+    var body: some View {
+        let r = readiness
+        let p = theme.palette
+        VStack(alignment: .leading, spacing: 2) {
+            Label(r.line, systemImage: r.ready ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .saryText(.footnote, weight: .bold)
+                .foregroundStyle(r.ready ? p.liveText : p.warningText)
+                .fixedSize(horizontal: false, vertical: true)
+            if let h = r.hint {
+                Text(h).saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .saryAnimation(.smooth, value: r)
+        .onAppear { if !offline.loaded { offline.reload() } }
     }
 }
 
