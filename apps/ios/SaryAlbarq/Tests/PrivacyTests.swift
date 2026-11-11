@@ -332,3 +332,168 @@ final class TripLogTests: XCTestCase {
         XCTAssertNotNil(TripLogStore.load("x", defaults: d), "a broken value is replaced, as before")
     }
 }
+
+/// `OutingSession.Kind` (docs/SOLO-OUTING.md (ب)): "no server" (`isLocal`) and "demo data"
+/// (`isDemo`) are separate questions. A solo session is local without being the demo.
+@MainActor
+final class OutingSessionKindTests: XCTestCase {
+    func testKindMapping() {
+        XCTAssertFalse(OutingSession.Kind.server.isLocal, "a real outing talks to the server")
+        XCTAssertFalse(OutingSession.Kind.server.isDemo)
+        XCTAssertTrue(OutingSession.Kind.demo.isLocal, "the demo never talks to the server")
+        XCTAssertTrue(OutingSession.Kind.demo.isDemo)
+        XCTAssertTrue(OutingSession.Kind.solo.isLocal, "solo never talks to the server")
+        XCTAssertFalse(OutingSession.Kind.solo.isDemo, "solo has no demo data or demo behaviour")
+    }
+
+    private func env() -> SessionEnv {
+        var e = SessionEnv()
+        e.defaults = UserDefaults(suiteName: "session-kind-\(UUID().uuidString)")!
+        e.timers = false
+        e.nearbyMesh = false
+        e.trailMatching = nil
+        e.trailDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("kind-\(UUID().uuidString)")
+        return e
+    }
+
+    func testSessionWithoutDemoViewIsServer() {
+        let s = OutingSession(id: "o1", myUserId: "u1", api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43),
+                              location: LocationSharer(), env: env())
+        XCTAssertEqual(s.kind, .server)
+        XCTAssertFalse(s.isLocal)
+        XCTAssertFalse(s.isDemo)
+        XCTAssertNotNil(s.safetyBackend, "a real outing keeps the server's safety pack")
+    }
+
+    func testSessionWithDemoViewIsDemoAndLocal() {
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: OutingsAPI(tokenProvider: { nil }), token: "",
+                              location: LocationSharer(), demo: DemoData.view(), env: env())
+        XCTAssertEqual(s.kind, .demo)
+        XCTAssertTrue(s.isLocal)
+        XCTAssertTrue(s.isDemo)
+        XCTAssertNil(s.safetyBackend, "the demo's safety pack is all local")
+    }
+}
+
+/// «اتجه» on my own (docs/SOLO-OUTING.md, step 2): a one-member local session that never
+/// reaches the server, and an `OutingsAPI` that refuses `solo-` ids before the network.
+@MainActor
+final class SoloOutingTests: XCTestCase {
+    private var sockets: [FakeSocket] = []
+    private let me = PublicUser(id: "u1", display_name: "أنا")
+
+    override func setUp() async throws {
+        sockets = []
+        StubAPIProtocol.requests = []
+        StubAPIProtocol.failing = []
+    }
+
+    private func env() -> SessionEnv {
+        var e = SessionEnv()
+        e.makeSocket = { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s }
+        e.scheduler = FakeScheduler()
+        e.isForeground = { true }
+        e.defaults = UserDefaults(suiteName: "solo-\(UUID().uuidString)")!
+        e.timers = false
+        e.authorizationOverride = true
+        e.alwaysOverride = false
+        e.backgroundSessionOverride = false
+        e.trailMatching = nil
+        e.keepAlive = { {} }
+        e.trailDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("solo-\(UUID().uuidString)")
+        return e
+    }
+
+    private func solo() -> OutingSession {
+        let location = LocationSharer()
+        location.testAuthorization = .authorizedWhenInUse
+        return OutingSession.solo(me: me, name: "مشوار إلى النفود", location: location, env: env())
+    }
+
+    func testSoloIsLocalAndNotTheDemo() {
+        let s = solo()
+        XCTAssertEqual(s.kind, .solo)
+        XCTAssertTrue(s.isLocal, "no server behind a solo outing")
+        XCTAssertFalse(s.isDemo, "no demo data or demo behaviour in a solo outing")
+        XCTAssertTrue(s.id.hasPrefix("solo-"))
+        XCTAssertNotNil(UUID(uuidString: String(s.id.dropFirst("solo-".count))), "solo- then a UUID")
+        XCTAssertNotEqual(SoloOuting.newId(), SoloOuting.newId())
+        XCTAssertNil(s.safetyBackend, "the safety pack has no server either")
+        XCTAssertEqual(s.link, .live, "no false «ما فيه نت» from a link that does not exist")
+    }
+
+    func testSoloHasOneMemberAndItIsMe() throws {
+        let s = solo()
+        let v = try XCTUnwrap(s.view, "a local session starts with its own picture")
+        XCTAssertEqual(v.members.count, 1)
+        XCTAssertEqual(v.myId, "u1")
+        XCTAssertEqual(v.me?.user_id, "u1")
+        XCTAssertEqual(v.me?.display_name, "أنا")
+        XCTAssertNil(v.me?.phone, "never a phone number in the outing picture")
+        XCTAssertTrue(v.iLead)
+        XCTAssertEqual(v.status, .active)
+        XCTAssertTrue(v.positions.isEmpty)
+        XCTAssertEqual(v.snapshot.outing.id, s.id)
+        XCTAssertEqual(v.snapshot.outing.name, "مشوار إلى النفود")
+        XCTAssertFalse(v.snapshot.me.sharing)
+        XCTAssertEqual(v.snapshot.invite?.active, false)
+    }
+
+    func testSoloOpensNoLiveChannelAndSendsNothing() async {
+        let s = solo()
+        s.open()
+        XCTAssertTrue(sockets.isEmpty, "no LiveChannel: no socket was ever made")
+        XCTAssertFalse(s.gate.allowsPosition, "SendGate stays closed: no consent, no share press, server flag off")
+        XCTAssertFalse(s.isSharingNow)
+        /* Group actions apply on this phone only; the outing ends locally. */
+        let rallied = await s.setRally(lat: 24.7, lng: 46.6, label: nil)
+        XCTAssertTrue(rallied)
+        XCTAssertEqual(s.view?.snapshot.outing.rally?.lat, 24.7)
+        await s.setStatus("end")
+        XCTAssertEqual(s.view?.status, .ended)
+        XCTAssertEqual(s.closedReason, .outingEnded)
+        XCTAssertTrue(sockets.isEmpty, "still no socket after acting in the outing")
+        s.close()
+    }
+
+    func testAPIRefusesSoloIdsWithoutTheNetwork() async {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.protocolClasses = [StubAPIProtocol.self]
+        let api = OutingsAPI(base: URL(string: "http://stub.test")!, session: URLSession(configuration: cfg), tokenProvider: { "t" })
+        let id = SoloOuting.newId()
+        let calls: [(String, () async throws -> Void)] = [
+            ("get", { _ = try await api.get(id) }),
+            ("poll", { _ = try await api.poll(id) }),
+            ("heartbeat", { try await api.heartbeat(id, gps: .ok) }),
+            ("status", { _ = try await api.setStatus(id, action: "end") }),
+            ("sharing", { _ = try await api.setSharing(id, sharing: true) }),
+            ("note", { _ = try await api.note(id, text: "هلا") }),
+            ("sos", { _ = try await api.raiseSos(id, fix: nil) }),
+            ("rally", { _ = try await api.setRally(id, lat: 24.7, lng: 46.6, label: nil) }),
+            ("leave", { try await api.leave(id) }),
+            ("summary", { _ = try await api.shareSummary(id, TripTotals(distanceM: 1000, durationS: 600, movingS: 500)) }),
+            ("personal invites", { _ = try await api.personalInvites(id) }),
+            ("chat", { _ = try await api.chatOverview(id) }),
+            ("clip upload (raw)", { _ = try await api.uploadClip(id, audio: Data([1, 2, 3]), durationMs: 900) }),
+            ("voice note upload (raw)", { _ = try await api.uploadVoiceNote(id, audio: Data([1, 2, 3]), durationMs: 900, channel: "1", clientId: "c1", ageMs: 0) }),
+        ]
+        for (name, call) in calls {
+            do {
+                try await call()
+                XCTFail("\(name): a solo id went through")
+            } catch let e as OutingAPIError {
+                XCTAssertEqual(e, .localOuting, name)
+            } catch {
+                XCTFail("\(name): \(error)")
+            }
+        }
+        api.heartbeatTerminatingNow(id, gps: .ok, wait: 0.5)
+        XCTAssertTrue(StubAPIProtocol.requests.isEmpty, "nothing for a solo outing reached the network: \(StubAPIProtocol.requests.map(\.path))")
+        XCTAssertEqual(OutingsAPI.localOutingId(inPath: "/\(id)/plan"), id)
+        XCTAssertNil(OutingsAPI.localOutingId(inPath: "/o1/plan"))
+        XCTAssertNil(OutingsAPI.localOutingId(inPath: "/me"))
+        /* Control: a server outing still goes out (the stub is wired). */
+        _ = try? await api.heartbeat("o1", gps: .ok)
+        XCTAssertEqual(StubAPIProtocol.requests.map(\.path), ["/api/outings/o1/heartbeat"])
+    }
+}

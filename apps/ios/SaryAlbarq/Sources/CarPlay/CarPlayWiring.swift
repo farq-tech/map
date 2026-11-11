@@ -158,7 +158,7 @@ extension LiveOutingController: CarPlayFeatureSource {
                              gapWarning: gap.map { [$0.title, $0.detail].filter { !$0.isEmpty }.joined(separator: " ") })
     }
 
-    var carPlayStuckReportSupported: Bool { session.view?.status == .active && !session.isDemo }
+    var carPlayStuckReportSupported: Bool { session.view?.status == .active && !session.isLocal }
 
     func carPlayReportStuck() -> Bool {
         guard carPlayStuckReportSupported, safety.myStuck == nil else { return false }

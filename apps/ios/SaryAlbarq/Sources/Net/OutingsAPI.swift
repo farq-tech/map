@@ -1,4 +1,5 @@
 import Foundation
+import os
 import UIKit
 import Security
 
@@ -44,6 +45,10 @@ enum Endpoints {
 struct OutingAPIError: Error, Equatable {
     var code: String
     var status: Int
+
+    /// A request for a solo outing (`solo-…`), refused on this phone: it never reaches the server.
+    /// A 4xx status so retrying clients (voice-note outbox, chat outbox) drop it instead of retrying.
+    static let localOuting = OutingAPIError(code: "local_outing", status: 403)
 
     /// A sentence a person can act on — same table as the web's `outingErrorText`.
     var arabic: String {
@@ -91,6 +96,7 @@ struct OutingAPIError: Error, Equatable {
             "invalid_invitee_name": "اكتب اسم الشخص كما تعرفه.",
             "too_many_invites": "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
             "invalid_open_links": "تعذّر تغيير الرابط المفتوح.",
+            "local_outing": "هذا المشوار على جوالك بس، ما يوصل لأحد.",
         ]
         return t[code] ?? SaryCopy.genericError
     }
@@ -261,10 +267,28 @@ final class OutingsAPI {
         self.tokenProvider = tokenProvider
     }
 
+    // MARK: local outings never reach the network
+
+    static let log = Logger(subsystem: "sa.sary.albarq", category: "api")
+
+    /// The solo outing id this path names, if any (any path component starting with `solo-`).
+    static func localOutingId(inPath path: String) -> String? {
+        path.split(separator: "/").first { SoloOuting.isSoloId(String($0)) }.map(String.init)
+    }
+
+    /// Last line of defence (docs/SOLO-OUTING.md (ب)3.5): a solo outing lives on this phone only.
+    /// Callers should never get here with one; if one slips through review it is logged and refused.
+    func refuseLocalOuting(_ method: String, _ path: String) throws {
+        guard let id = Self.localOutingId(inPath: path) else { return }
+        Self.log.error("refused \(method, privacy: .public) \(path, privacy: .public) for local outing \(id, privacy: .public)")
+        throw OutingAPIError.localOuting
+    }
+
     private struct Empty: Encodable {}
 
     /// Internal (not private) so the feature clients in other files (waypoints, convoy, plan) use the same path.
     func call<T: Decodable>(_ method: String, _ path: String, body: Encodable? = nil, auth: Bool = true, timeout: TimeInterval = 12, query: String? = nil) async throws -> T {
+        try refuseLocalOuting(method, path)
         var url = base.appendingPathComponent("api/outings" + path)
         /* «المحادثات»: cursor pagination (?before=/?after=). Never anything personal in a query. */
         if let query, var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
@@ -454,6 +478,7 @@ final class OutingsAPI {
     /// The app is being closed (`applicationWillTerminate`): tell the server in the ~2 s left, so
     /// the others read «سرى مسكّر عنده» instead of guessing. Blocking on purpose; best effort.
     func heartbeatTerminatingNow(_ id: String, gps: GpsState, wait: TimeInterval = 2) {
+        do { try refuseLocalOuting("POST", "/\(id)/heartbeat") } catch { return }
         guard let t = tokenProvider() else { return }
         var req = URLRequest(url: base.appendingPathComponent("api/outings/\(id)/heartbeat"), timeoutInterval: wait)
         req.httpMethod = "POST"
@@ -560,6 +585,7 @@ final class OutingsAPI {
     }
 
     func raw(_ req: URLRequest) async throws -> (Data, URLResponse) {
+        try refuseLocalOuting(req.httpMethod ?? "GET", req.url?.path ?? "")
         do { return try await session.data(for: req) } catch let e as URLError {
             throw OutingAPIError(code: e.code == .timedOut ? "timeout" : "network", status: 0)
         }
