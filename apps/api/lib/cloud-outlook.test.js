@@ -110,6 +110,7 @@ test('HTTP: /weather/clouds/outlook — bad point 400; fake WMS gives a motion e
     assert.equal(r.status, 400);
     r = await fetch(`${base}/api/weather/clouds/outlook?lat=24.7&lng=46.7`);
     assert.equal(r.status, 200);
+    assert.equal(r.headers.get('cache-control'), 'no-store');
     const j = await r.json();
     assert.equal(j.ok, true);
     assert.equal(j.image_time, '2026-11-11T19:00:00.000Z');
