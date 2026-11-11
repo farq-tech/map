@@ -1,9 +1,13 @@
 import Combine
+import CoreLocation
 import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @EnvironmentObject private var location: LocationSharer
+    /* Not `@EnvironmentObject LocationSharer`: the root reads only the authorization, and observing
+     * the whole sharer redrew the root on every GPS fix (`lastFix`, `displayFix`, `quality`…). */
+    @State private var locationAuthorization: CLAuthorizationStatus?
+    private var authorization: CLAuthorizationStatus { locationAuthorization ?? model.location.authorization }
     @Environment(AppearanceSettings.self) private var appearance
     @Environment(\.sary) private var theme
 
@@ -34,10 +38,11 @@ struct RootView: View {
             } else {
                 HomeView()
                     .transition(.opacity)
-                    .onAppear { if model.identity != nil && location.authorization != .notDetermined { OnboardingProgress.done = true } }
+                    .onAppear { if model.identity != nil && authorization != .notDetermined { OnboardingProgress.done = true } }
             }
         }
         .animation(theme.animation(.smooth), value: model.launching)
+        .onReceive(model.location.$authorization.removeDuplicates()) { locationAuthorization = $0 }
         /* During a trip the live sheet is always presented: the invite is shown from inside it
          * (`LiveSheet`), never from here, where a second sheet would silently not appear. */
         .sheet(item: Binding(get: { model.session == nil ? model.pendingInvite.map(InviteToken.init) : nil }, set: { model.pendingInvite = $0?.id })) { inv in
@@ -56,7 +61,7 @@ struct RootView: View {
 
     /// Signed in, but the location explainer was never seen and iOS has not asked yet.
     private var needsOnboarding: Bool {
-        model.identity != nil && !OnboardingProgress.done && location.authorization == .notDetermined && !model.isDemo
+        model.identity != nil && !OnboardingProgress.done && authorization == .notDetermined && !model.isDemo
     }
 }
 

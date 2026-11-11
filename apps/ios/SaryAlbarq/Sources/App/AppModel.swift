@@ -476,12 +476,15 @@ final class AppModel: ObservableObject {
         if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()
-            current = r.current
-            history = r.history
-            listPhase = .loaded
+            /* Refreshed on every return to the list: skip unchanged values so the home screen
+             * (which observes this whole model) is not redrawn for nothing. */
+            if current != r.current { current = r.current }
+            if history != r.history { history = r.history }
+            if listPhase != .loaded { listPhase = .loaded }
         } catch let e as OutingAPIError {
             /* Keep what we have on screen; only an empty list turns into an error page. */
-            if current.isEmpty && history.isEmpty { listPhase = .failed(e.arabic) } else { listPhase = .loaded }
+            let next: ListPhase = current.isEmpty && history.isEmpty ? .failed(e.arabic) : .loaded
+            if listPhase != next { listPhase = next }
         } catch {}
     }
 
