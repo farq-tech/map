@@ -8,6 +8,9 @@ import SwiftUI
 /// (`FriendSOSAlertHost`), so nothing presented here can hold it back.
 struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
+    /// The live screen's presenter state for this render (`LiveOutingScreen` builds it once and
+    /// hands it down), so the sheet and everything under it never run the presenter again.
+    var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @EnvironmentObject private var model: AppModel
@@ -15,7 +18,6 @@ struct LiveSheet: View {
     @State private var invite: InviteToken?
 
     var body: some View {
-        let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
@@ -37,7 +39,7 @@ struct LiveSheet: View {
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
                 if controller.showsQuickRow(drive: theme.drive) && !controller.exploreActive {
-                    LiveQuickRow(controller: controller)
+                    LiveQuickRow(controller: controller, hasRally: ui.participantsTab.rally != nil)
                 }
             }
             if ui.sheetDetent != .peek {
@@ -154,7 +156,7 @@ struct LiveSheet: View {
                     .accessibilityIdentifier("participant-card")
             }
         case .note:
-            NoteComposer(state: NoteComposerUIState(currentNote: controller.ui.participantsTab.participants.first(where: \.isMe)?.note,
+            NoteComposer(state: NoteComposerUIState(currentNote: ui.participantsTab.participants.first(where: \.isMe)?.note,
                                                    isSending: controller.session.busy.contains("note")),
                          actions: NoteComposerActions(
                             send: { t in Task { if await controller.session.sendNote(t) { controller.modal = nil; controller.toast("رسالتك فوق سيارتك ١٥ دقيقة") } } },
@@ -170,7 +172,7 @@ struct LiveSheet: View {
         case .notify:
             NotifyExplainerSheet(done: { controller.modal = nil })
         case .offlineMaps:
-            OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
+            OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: ui.outingName)
                 .presentationDetents([.large])
         case .weather:
             WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
@@ -261,7 +263,7 @@ struct LiveSheet: View {
 
     /// «المزيد» → «الطلعة»: pause / end for the leader, leave for everyone, the settings.
     private var tripRows: LiveTripRows {
-        let s = controller.ui.settingsTab
+        let s = ui.settingsTab
         let a = controller.actions.settingsTab
         let running = s.outingStatus != .ended
         return LiveTripRows(canPause: s.isLeader && running && s.outingStatus != .notStarted,
@@ -286,6 +288,8 @@ extension IncomingSOSUI: @retroactive Hashable {
 /// «المزيد» (everything else). No accent here: the state's one primary is the CTA over the map.
 struct LiveQuickRow: View {
     @ObservedObject var controller: LiveOutingController
+    /// A rally point is set (the sheet's presenter state says it; no presenter pass here).
+    var hasRally: Bool
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -299,7 +303,7 @@ struct LiveQuickRow: View {
                         controller.performAction("chat")
                     }
                 case "rally":
-                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
+                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: hasRally) {
                         controller.performAction("rally")
                     }
                 default:
@@ -449,7 +453,7 @@ private struct LiveSheetBody: View {
             }
             .padding(.vertical, theme.space(.xs))
             .sarySurface(radius: SaryRadius.l)
-            ConvoySection(controller: controller, features: features)
+            ConvoySection(controller: controller, features: features, participants: ui.participantsTab.participants)
             // Keep the section available for the first waypoint and show the honest
             // unavailable state when the server has not deployed its routes.
             if !features.waypoints.isEmpty || features.phase != .loading {

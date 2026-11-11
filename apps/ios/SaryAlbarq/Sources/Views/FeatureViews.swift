@@ -121,6 +121,9 @@ struct WaypointRow: View {
 struct ConvoySection: View {
     @ObservedObject var controller: LiveOutingController
     @ObservedObject var features: OutingFeaturesModel
+    /// The sheet's participants for this render: the lead and tail rows read their presence from
+    /// it instead of each running a participants pass of their own.
+    var participants: [ParticipantUI]
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -163,8 +166,7 @@ struct ConvoySection: View {
     private func roleRow(_ r: ConvoyRole, _ uid: String?, _ v: OutingView) -> some View {
         let p = theme.palette
         let m = uid.flatMap { v.members[$0] }
-        let parts = Dictionary(LiveOutingPresenter.participants(controller.input).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let live = uid.flatMap { parts[$0] }?.presence.isLive ?? false
+        let live = uid.flatMap { id in participants.first { $0.id == id } }?.presence.isLive ?? false
         return HStack(spacing: theme.space(.m)) {
             Label(r.label, systemImage: ConvoyBadgeUI(r).symbol)
                 .saryText(.footnote, weight: .bold)

@@ -127,7 +127,8 @@ struct LiveOutingScreen: View {
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
                                        show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
         .sheet(isPresented: .constant(true)) {
-            LiveSheet(controller: controller)
+            /* The presenter state this render already built: the sheet does not run it again. */
+            LiveSheet(controller: controller, ui: ui)
                 .realisticCover($realistic)
                 .background {
                     /* The sheet's real top edge on screen (its content height leaves out the home-indicator area). */
@@ -158,7 +159,8 @@ struct LiveOutingScreen: View {
         touching = down
         controller.cameraTouch(down: down)
         if down {
-            if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+            /* `ui.alerts` is the controller's `alerts` as is: no presenter pass for one touch. */
+            if frozenAlerts == nil { frozenAlerts = controller.alerts }
             if frozenSheetShape == nil { frozenSheetShape = controller.sheetShape(drive: theme.drive) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
