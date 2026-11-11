@@ -161,6 +161,8 @@ struct LiveOutingHost: View {
                 }
             }
             .onAppear {
+                /* «أداء التطبيق»: live screen shown → first car drawn (OutingMapboxView.drawCar). */
+                PerfSignpost.begin(.liveFirstCar)
                 DispatchQueue.main.async {
                     startIfAsked()
                     startPendingMapDestination()

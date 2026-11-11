@@ -362,6 +362,9 @@ struct LiveSearchSheet: View {
         job = Task {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
+            /* «أداء التطبيق»: the search runs (after the typing pause) → results shown. */
+            let perf = PerfSignpost.begin(.search)
+            defer { perf.end() }
             let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
                 (HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near), HomeDesertRules.categoryKind(t) != nil)
             }.value
