@@ -87,6 +87,7 @@ struct StoryComposerView: View {
 
     private var previewCard: some View {
         let ratio = options.format.pixelSize.width / options.format.pixelSize.height
+        let maxWidth: CGFloat = options.format == .vertical ? 300 : 360
         return ZStack {
             RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(theme.palette.sunken)
             if let preview {
@@ -99,7 +100,10 @@ struct StoryComposerView: View {
             }
         }
         .aspectRatio(ratio, contentMode: .fit)
-        .frame(maxWidth: options.format == .vertical ? 300 : 360)
+        .frame(maxWidth: maxWidth)
+        /* The 9:16 preview is 533 pt tall: on a 375×667 SE it filled the whole screen and pushed
+           every control below the fold. Same size on standard phones (cover ≈ 669 pt), smaller there. */
+        .saryFitHeight(maxWidth / ratio, reference: 660)
         .frame(maxWidth: .infinity)
         .saryShadow(.raised, theme)
         .accessibilityIdentifier("story.preview")

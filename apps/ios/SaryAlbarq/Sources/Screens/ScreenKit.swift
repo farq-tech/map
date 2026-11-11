@@ -77,9 +77,9 @@ enum SaryFit {
     /// A fixed design height (map previews, track maps) in a container `container` points tall:
     /// unchanged on standard, mini and Pro Max phones, scaled down proportionally (never below
     /// `minScale`) on a short screen such as a 375×667 SE, so the buttons under it stay in reach.
-    static func height(_ design: CGFloat, container: CGFloat, minScale: CGFloat = 0.7) -> CGFloat {
-        guard container.isFinite, container > 0 else { return design }
-        let k = min(1, max(minScale, container / referenceHeight))
+    static func height(_ design: CGFloat, container: CGFloat, minScale: CGFloat = 0.7, reference: CGFloat = referenceHeight) -> CGFloat {
+        guard container.isFinite, container > 0, reference > 0 else { return design }
+        let k = min(1, max(minScale, container / reference))
         return (design * k).rounded()
     }
 
@@ -95,8 +95,8 @@ enum SaryFit {
 extension View {
     /// `.frame(height: design)` that shrinks on short screens (see `SaryFit.height`), measured
     /// against the nearest scroll view / sheet / window.
-    func saryFitHeight(_ design: CGFloat, minScale: CGFloat = 0.7) -> some View {
-        containerRelativeFrame(.vertical) { length, _ in SaryFit.height(design, container: length, minScale: minScale) }
+    func saryFitHeight(_ design: CGFloat, minScale: CGFloat = 0.7, reference: CGFloat = SaryFit.referenceHeight) -> some View {
+        containerRelativeFrame(.vertical) { length, _ in SaryFit.height(design, container: length, minScale: minScale, reference: reference) }
     }
 }
 

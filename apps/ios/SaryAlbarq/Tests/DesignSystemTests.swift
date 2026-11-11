@@ -362,4 +362,11 @@ final class SaryFitTests: XCTestCase {
         XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 300), 300, "never taller than the sheet")
         XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 0), 400)
     }
+
+    func testStoryPreviewKeepsItsSizeOnAStandardPhoneAndShrinksOnAnSE() {
+        let design: CGFloat = 300 / (1080.0 / 1920.0)   // 533⅓ pt, the 9:16 preview
+        XCTAssertEqual(SaryFit.height(design, container: 669, reference: 660), design.rounded(), "393×852 cover")
+        XCTAssertEqual(SaryFit.height(design, container: 557, reference: 660), (design * 557 / 660).rounded(), "SE cover")
+        XCTAssertEqual(SaryFit.height(200, container: 600, reference: 0), 200)
+    }
 }
