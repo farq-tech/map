@@ -7,13 +7,17 @@ enum SaryFormat {
 
     /// Replaces Western digits with Arabic-Indic ones and "." with "٫".
     /// Other characters (letters, spaces, ":") are kept.
-    static func digits(_ s: String) -> String {
+    static func digits(_ s: String) -> String { digits(s, decimalSeparator: true) }
+
+    /// The one digit converter. `decimalSeparator: false` keeps "." as is, for
+    /// names and ids that only need their digits shown in Arabic («مخرج 5», «St.»).
+    static func digits(_ s: String, decimalSeparator: Bool) -> String {
         var out = ""
         out.reserveCapacity(s.count)
         for ch in s {
             if let v = ch.wholeNumberValue, ch.isASCII {
                 out.append(arabicDigits[v])
-            } else if ch == "." {
+            } else if ch == ".", decimalSeparator {
                 out.append("٫")
             } else {
                 out.append(ch)

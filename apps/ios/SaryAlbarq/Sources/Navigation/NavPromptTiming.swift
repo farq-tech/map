@@ -180,8 +180,14 @@ struct NavPromptBudget: Equatable {
     /// The route's bend at `at`: bearing ~40 m after minus ~40 m before (degrees, −180…180). nil off the line.
     static func bendDeg(_ c: [LngLat], at p: LngLat) -> Double? {
         guard c.count >= 3 else { return nil }
-        guard let i = c.indices.min(by: { Vehicle.distanceMeters(c[$0], p) < Vehicle.distanceMeters(c[$1], p) }),
-              Vehicle.distanceMeters(c[i], p) < 30 else { return nil }
+        /* The nearest vertex (the first of equals, as `min(by:)` picked), one distance per vertex
+         * instead of two per comparison. */
+        var i = 0, nearest = Double.infinity
+        for k in c.indices {
+            let d = Vehicle.distanceMeters(c[k], p)
+            if d < nearest { nearest = d; i = k }
+        }
+        guard nearest < 30 else { return nil }
         var a = i, b = i
         while a > 0, Vehicle.distanceMeters(c[a], c[i]) < 40 { a -= 1 }
         while b < c.count - 1, Vehicle.distanceMeters(c[b], c[i]) < 40 { b += 1 }

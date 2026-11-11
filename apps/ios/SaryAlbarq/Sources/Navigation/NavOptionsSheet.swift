@@ -13,23 +13,18 @@ struct NavOptionsSheet: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             HStack(spacing: theme.space(.m)) {
-                SaryRowIcon(systemImage: icon, color: Color(rgb: 0x2B7BF0))
+                SaryRowIcon(systemImage: icon, color: p.navBlue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("الملاحة إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                     Text(nav.target?.name ?? "").saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2)
                         .accessibilityIdentifier("nav.options.target")
                     if let note = nav.target?.staleNote() {
-                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warning)
+                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                             .accessibilityIdentifier("nav.options.stale")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: cancel) {
-                    Image(systemName: SaryIcon.close).font(.system(size: 15, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
-                }
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("nav.options.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "nav.options.close", visual: 36, action: cancel)
             }
 
             ScrollView {
@@ -109,6 +104,9 @@ struct NavOptionsSheet: View {
                     routeRow(r, best: nav.routes[0], index: i)
                 }
             }
+            if let r = nav.selected ?? nav.routes.first, NavSurfaceLegend.shows(r.surfaceRuns) {
+                NavSurfaceLegend(runs: r.surfaceRuns)
+            }
             if let leg = nav.offRoad { offRoadNote(leg, whole: false) }
             if nav.options.avoidUnpaved, nav.selected?.hasUnpaved == true {
                 SaryInlineMessage(text: "ما لقينا طريقًا بدون أجزاء ترابية؛ هذا أقرب ما يكون.", tone: .warning)
@@ -123,7 +121,7 @@ struct NavOptionsSheet: View {
             HStack(spacing: theme.space(.m)) {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(on ? Color(rgb: 0x2B7BF0) : p.textTertiary)
+                    .foregroundStyle(on ? p.navBlue : p.textTertiary)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(NavText.remaining(seconds: r.durationS)).saryNumber(.headline, weight: .heavy).foregroundStyle(p.textPrimary)
@@ -143,8 +141,8 @@ struct NavOptionsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(theme.space(.m))
-            .sarySurface(radius: SaryRadius.m, fill: on ? Color(rgb: 0x2B7BF0).opacity(0.12) : p.surface)
-            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(on ? Color(rgb: 0x2B7BF0) : .clear, lineWidth: 2))
+            .sarySurface(radius: SaryRadius.m, fill: on ? p.navBlue.opacity(0.12) : p.surface)
+            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(on ? p.navBlue : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(on ? "nav.route.selected" : "nav.route")
@@ -161,10 +159,10 @@ struct NavOptionsSheet: View {
         return HStack(alignment: .top, spacing: theme.space(.m)) {
             Image(systemName: "arrow.up")
                 .font(.system(size: 18, weight: .black))
-                .foregroundStyle(Color(rgb: 0x16110B))
+                .foregroundStyle(p.onWarning)
                 .rotationEffect(.degrees(leg.bearing))
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(Color(rgb: 0xF5B83D)))
+                .background(Circle().fill(p.warning))
                 .environment(\.layoutDirection, .leftToRight)
             VStack(alignment: .leading, spacing: 2) {
                 Text(whole ? "اتجاه مباشر: \(SaryFormat.distance(meters: leg.distanceM)) باتجاه \(NavText.compassDefinite(leg.bearing))" : NavOffRoad.summary(leg))
@@ -175,7 +173,7 @@ struct NavOptionsSheet: View {
             }
         }
         .padding(theme.space(.m))
-        .sarySurface(radius: SaryRadius.m, fill: Color(rgb: 0xF5B83D).opacity(0.14))
+        .sarySurface(radius: SaryRadius.m, fill: p.warning.opacity(0.14))
     }
 }
 
@@ -230,7 +228,7 @@ struct NavTargetPicker: View {
                                 if case .failure = r.result {
                                     Image(systemName: "clock.badge.exclamationmark").foregroundStyle(p.warningText)
                                 } else {
-                                    Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary)
+                                    Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
                                 }
                             }
                             .padding(theme.space(.m))
@@ -248,5 +246,88 @@ struct NavTargetPicker: View {
         .background(p.elevated.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .accessibilityIdentifier("nav.picker")
+    }
+}
+
+
+/// The route's surfaces in words and in the same "materials" the map draws (`NavMapDrawer.SurfaceStyle`):
+/// «زفلت ٣٢ كم · ترابي ٦ كم · بر مفتوح ٤ كم · وعر ١٫٢ كم». Shown only when the route is not all asphalt.
+struct NavSurfaceLegend: View {
+    @Environment(\.sary) private var theme
+    var runs: [NavSurfaceRun]
+
+    struct Row: Identifiable, Equatable {
+        var kind: NavSurfaceKind
+        var meters: Double
+        var id: String { kind.rawValue }
+    }
+
+    static func label(_ k: NavSurfaceKind) -> String {
+        switch k {
+        case .paved: return "زفلت"
+        case .unpaved: return "ترابي"
+        case .terrain: return "بر مفتوح"
+        case .rough: return "وعر"
+        case .gridSnap: return "وصلة تقريبية"
+        }
+    }
+
+    /// Total length per surface, in route order of first appearance; the tiny approximate join is left out.
+    static func rows(_ runs: [NavSurfaceRun]) -> [Row] {
+        var out: [Row] = []
+        for run in runs where run.kind != .gridSnap && run.coordinates.count >= 2 {
+            let m = zip(run.coordinates, run.coordinates.dropFirst()).reduce(0.0) { $0 + Vehicle.distanceMeters($1.0, $1.1) }
+            if let i = out.firstIndex(where: { $0.kind == run.kind }) { out[i].meters += m } else { out.append(Row(kind: run.kind, meters: m)) }
+        }
+        return out.filter { $0.meters >= 50 }
+    }
+
+    /// Worth a legend: something other than asphalt is on the way.
+    static func shows(_ runs: [NavSurfaceRun]) -> Bool { rows(runs).contains { $0.kind != .paved } }
+
+    var body: some View {
+        let p = theme.palette
+        let rows = Self.rows(runs)
+        return VStack(alignment: .leading, spacing: theme.space(.xs)) {
+            Text("نوع الطريق").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+            ForEach(rows) { r in
+                HStack(spacing: theme.space(.s)) {
+                    swatch(r.kind)
+                    Text(Self.label(r.kind)).saryText(.footnote, weight: .medium).foregroundStyle(p.textPrimary)
+                    Spacer(minLength: 0)
+                    Text(SaryFormat.distance(meters: r.meters)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(theme.space(.m))
+        .sarySurface(radius: SaryRadius.m)
+        .accessibilityIdentifier("nav.surfaceLegend")
+    }
+
+    /// A short sample of each line style, drawn like the map (casing + fill + pattern).
+    @ViewBuilder private func swatch(_ k: NavSurfaceKind) -> some View {
+        let w: CGFloat = 34, h: CGFloat = 8
+        ZStack {
+            switch k {
+            case .paved:
+                Capsule().fill(Color.white).frame(width: w, height: h + 4)
+                Capsule().fill(Color(rgb: SaryPalette.navBlueDay)).frame(width: w - 4, height: h)
+            case .unpaved:
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.dirtEdgeRGB)).frame(width: w, height: h + 3)
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.dirtRGB)).frame(width: w - 3, height: h)
+                Capsule().stroke(Color(rgb: NavMapDrawer.SurfaceStyle.dirtRutsRGB), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .frame(width: w - 10, height: 3)
+            case .terrain:
+                HStack(spacing: 3) { ForEach(0..<5, id: \.self) { _ in Circle().fill(Color(rgb: NavMapDrawer.SurfaceStyle.terrainRGB)).frame(width: 5, height: 5) } }
+            case .rough:
+                Capsule().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughEdgeRGB)).frame(width: w, height: h + 3)
+                HStack(spacing: 2) { ForEach(0..<4, id: \.self) { _ in Rectangle().fill(Color(rgb: NavMapDrawer.SurfaceStyle.roughRGB)).frame(width: 6, height: h) } }
+            case .gridSnap:
+                EmptyView()
+            }
+        }
+        .frame(width: w, height: h + 4)
+        .accessibilityHidden(true)
     }
 }

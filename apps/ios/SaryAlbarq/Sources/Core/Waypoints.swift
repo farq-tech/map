@@ -144,10 +144,27 @@ enum WaypointPhoto {
         return UIGraphicsImageRenderer(size: size, format: f).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
     }
 
+    /// Views call this from `body`, so every redraw used to base64-decode and JPEG-decode the
+    /// photo again on the main thread. Decoded images are kept in a small bounded cache.
     static func image(fromDataURL s: String?) -> UIImage? {
-        guard let s, let comma = s.firstIndex(of: ","), let d = Data(base64Encoded: String(s[s.index(after: comma)...])) else { return nil }
-        return UIImage(data: d)
+        guard let s else { return nil }
+        let key = s as NSString
+        if let hit = decoded.object(forKey: key) { return hit }
+        guard let comma = s.firstIndex(of: ","), let d = Data(base64Encoded: String(s[s.index(after: comma)...])),
+              let img = UIImage(data: d) else { return nil }
+        /* Decode once now, so drawing the cached image never decodes it again. */
+        let ready = img.preparingForDisplay() ?? img
+        decoded.setObject(ready, forKey: key, cost: Int(ready.size.width * ready.size.height * ready.scale * ready.scale) * 4)
+        return ready
     }
+
+    /// At most a handful of photos (≤1280 px each); NSCache also empties itself under memory pressure.
+    private static let decoded: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 24
+        c.totalCostLimit = 48 * 1024 * 1024
+        return c
+    }()
 }
 
 /// The last list each outing's waypoints were seen with, on this device — so they

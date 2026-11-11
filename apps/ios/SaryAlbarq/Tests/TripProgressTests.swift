@@ -76,6 +76,16 @@ final class TripProgressTests: XCTestCase {
         XCTAssertNil(ReturnTripStore.origin(of: "o2", defaults: d))
     }
 
+    /// UI-AUDIT 0.3: «طريق الرجعة» with no network starts on this phone; other refusals stay errors.
+    func testReturnTripOfflineFallsBackToThePhone() {
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: false, errorText: nil), "no network path")
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "network", status: 0).arabic))
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "timeout", status: 0).arabic))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "rate_limited", status: 429).arabic))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: "ما عندنا نقطة بداية محفوظة لهذه الطلعة على هذا الجوال."))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: nil))
+    }
+
     func testArrivalBelongsOnlyToTheDestinationThatWasReached() {
         var r = TripRecord()
         r.bindArrivalDestination(dest)
@@ -412,5 +422,52 @@ final class TripProgressTests: XCTestCase {
         i.trip = CarPlayTripProgress(percent: 100, remainingM: 0, approximate: false, eta: nil, arrived: true)
         XCTAssertEqual(CarPlayPresenter.tripLine(i), "وصلنا الوجهة")
         XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم · وصلنا")
+    }
+}
+
+/// `StoredBytesMemo`: the stored trip logs are decoded again only when their bytes change.
+final class StoredBytesMemoTests: XCTestCase {
+    private func count(_ d: Data?) -> Int? { d.map { $0.count } }
+
+    func testSameBytesDecodeOnce() {
+        var memo = StoredBytesMemo<Int?>()
+        let first: Int? = memo.value(for: Data([1, 2, 3]), decode: count)
+        let second: Int? = memo.value(for: Data([1, 2, 3]), decode: { _ in 99 })
+        XCTAssertEqual(first, 3)
+        XCTAssertEqual(second, 3)
+        XCTAssertEqual(memo.decodeCount, 1)
+    }
+
+    func testChangedOrMissingBytesDecodeAgain() {
+        var memo = StoredBytesMemo<Int?>()
+        let one: Int? = memo.value(for: Data([1]), decode: count)
+        let two: Int? = memo.value(for: Data([1, 2]), decode: count)
+        XCTAssertEqual(one, 1)
+        XCTAssertEqual(two, 2)
+        /* A nil result is kept too (no log stored for this outing yet). */
+        let none: Int? = memo.value(for: nil, decode: count)
+        let stillNone: Int? = memo.value(for: nil, decode: { _ in 7 })
+        XCTAssertNil(none)
+        XCTAssertNil(stillNone)
+        XCTAssertEqual(memo.decodeCount, 3)
+    }
+
+    func testTripLogFollowsTheStore() {
+        let suite = "StoredBytesMemoTests"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        var memo = StoredBytesMemo<TripLog?>()
+        func read() -> TripLog? {
+            memo.value(for: defaults.data(forKey: TripLogStore.key), decode: { _ in TripLogStore.load("o1", defaults: defaults) })
+        }
+        XCTAssertNil(read())
+        TripLogStore.update("o1", defaults: defaults) { $0.distanceM = 120 }
+        XCTAssertEqual(read()?.distanceM, 120)
+        XCTAssertEqual(read()?.distanceM, 120)
+        XCTAssertEqual(memo.decodeCount, 2)
+        TripLogStore.update("o1", defaults: defaults) { $0.distanceM = 300 }
+        XCTAssertEqual(read()?.distanceM, 300)
+        XCTAssertEqual(memo.decodeCount, 3)
+        defaults.removePersistentDomain(forName: suite)
     }
 }

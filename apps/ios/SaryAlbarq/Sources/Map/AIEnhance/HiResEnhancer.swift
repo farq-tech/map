@@ -57,7 +57,12 @@ final class HiResEnhancer {
         f.setValue(1.0, forKey: kCIInputAspectRatioKey)
         guard let small = f.outputImage,
               let cg = ci.createCGImage(small, from: CGRect(x: 0, y: 0, width: Self.outputSize, height: Self.outputSize)) else { return nil }
-        return UIImage(cgImage: cg)
+        /* Matched to the imagery it covers (colour, contrast, a share of the plain upscale) and
+           feathered at its edge, so neither the tile's colour nor its border shows (`HiResBlend`). */
+        let n = Self.outputSize
+        guard let sr = HiResBlend.rgba(cg, size: n), let base = HiResBlend.rgba(crop, size: n),
+              let out = HiResBlend.image(HiResBlend.blend(enhanced: sr, base: base, size: n), size: n) else { return UIImage(cgImage: cg) }
+        return UIImage(cgImage: out)
     }
 
     private func record(_ ms: Double) {
@@ -85,5 +90,101 @@ final class HiResEnhancer {
         ctx.interpolationQuality = .high
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: size, height: size))
         return pb
+    }
+}
+
+/// How an enhanced tile sits on the imagery under it (pure, unit-tested in `HiResImageryTests`).
+///
+/// Build 36 (owner's recording): enhanced tiles read as patches. The model shifts colour and
+/// contrast a little, flattens low-texture sand into smooth areas, and each 512 px tile is
+/// enhanced alone, so its border did not continue into its neighbour or into the original
+/// imagery around it. Three corrections, all on the tile's own pixels:
+/// 1. colour: each channel brought to the mean and contrast of a plain upscale of the same crop;
+/// 2. texture: only `detail` of the model's difference from that upscale is kept;
+/// 3. edge: the alpha fades to 0 over `feather` px, so the original imagery under the tile
+///    (the same picture, Mapbox's own over-zoom) shows through at every tile border.
+enum HiResBlend {
+    /// Share of the model's own detail kept over the plain upscale (1 = model only).
+    static let detail = 0.7
+    /// Output pixels (of 512) over which the edge fades into the imagery underneath.
+    static let feather = 14
+    /// Bounds of the per-channel contrast correction (never a strong re-grade).
+    static let gainRange = 0.8...1.25
+
+    /// Per-channel (R, G, B) mean and standard deviation of RGBA pixels; alpha ignored.
+    static func stats(_ px: [UInt8]) -> (mean: [Double], std: [Double]) {
+        let n = px.count / 4
+        guard n > 0 else { return ([0, 0, 0], [0, 0, 0]) }
+        var sum = [0.0, 0.0, 0.0], sq = [0.0, 0.0, 0.0]
+        var i = 0
+        while i < n * 4 {
+            for c in 0..<3 {
+                let v = Double(px[i + c])
+                sum[c] += v
+                sq[c] += v * v
+            }
+            i += 4
+        }
+        let mean = sum.map { $0 / Double(n) }
+        let std = (0..<3).map { c in max(0, sq[c] / Double(n) - mean[c] * mean[c]).squareRoot() }
+        return (mean, std)
+    }
+
+    /// 1 inside, fading smoothly to 0 at the tile's border over `feather` px.
+    static func edgeAlpha(x: Int, y: Int, size: Int, feather: Int) -> Double {
+        guard feather > 0 else { return 1 }
+        let d = Double(min(min(x, size - 1 - x), min(y, size - 1 - y))) + 0.5
+        let t = min(1, max(0, d / Double(feather)))
+        return t * t * (3 - 2 * t)
+    }
+
+    /// `enhanced` (opaque RGBA) matched to `base` (the same crop, plainly upscaled), mixed by
+    /// `detail`, with the edge feather; premultiplied RGBA, `size` × `size`.
+    static func blend(enhanced: [UInt8], base: [UInt8], size: Int, detail: Double = HiResBlend.detail, feather: Int = HiResBlend.feather) -> [UInt8] {
+        let count = size * size * 4
+        guard enhanced.count == count, base.count == count else { return enhanced }
+        let e = stats(enhanced), b = stats(base)
+        let gain = (0..<3).map { c -> Double in
+            guard e.std[c] > 0.5 else { return 1 }
+            return min(gainRange.upperBound, max(gainRange.lowerBound, b.std[c] / e.std[c]))
+        }
+        var out = [UInt8](repeating: 0, count: count)
+        for y in 0..<size {
+            for x in 0..<size {
+                let i = (y * size + x) * 4
+                let a = edgeAlpha(x: x, y: y, size: size, feather: feather)
+                for c in 0..<3 {
+                    let matched = (Double(enhanced[i + c]) - e.mean[c]) * gain[c] + b.mean[c]
+                    let plain = Double(base[i + c])
+                    let v = min(255, max(0, plain + detail * (matched - plain)))
+                    out[i + c] = UInt8((v * a).rounded())
+                }
+                out[i + 3] = UInt8((255 * a).rounded())
+            }
+        }
+        return out
+    }
+
+    /// `image` drawn into a `size` × `size` premultiplied RGBA buffer (high-quality resampling).
+    static func rgba(_ image: CGImage, size: Int) -> [UInt8]? {
+        var px = [UInt8](repeating: 0, count: size * size * 4)
+        let ok = px.withUnsafeMutableBytes { buf -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let ctx = CGContext(data: buf.baseAddress, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            ctx.interpolationQuality = .high
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: size, height: size))
+            return true
+        }
+        return ok ? px : nil
+    }
+
+    /// A premultiplied RGBA buffer as an image.
+    static func image(_ px: [UInt8], size: Int) -> CGImage? {
+        guard px.count == size * size * 4, let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: Data(px) as CFData) else { return nil }
+        return CGImage(width: size, height: size, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: size * 4, space: space,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 }

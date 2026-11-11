@@ -180,7 +180,7 @@ private struct ButtonsBlocks: View {
                 Button {} label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: "play.fill") }.buttonStyle(.saryPrimary)
                 Button {} label: { SaryButtonLabel(title: "شارك رابط الدعوة", systemImage: SaryIcon.share) }.buttonStyle(.sarySecondary)
                 Button {} label: { SaryButtonLabel(title: "أنهِ الطلعة للجميع", systemImage: "stop.fill") }.buttonStyle(.saryDestructive)
-                Button("ليس الآن") {}.buttonStyle(.saryPlain)
+                Button("لاحقًا") {}.buttonStyle(.saryPlain)
                 Button("غادر الطلعة") {}.buttonStyle(.sary(.plainDestructive))
             }
         }
@@ -568,7 +568,7 @@ private struct RallyBlocks: View {
             SaryRallyCard(rally: Mock.rally, canManage: true)
             SaryRallyCard(rally: Mock.rallyDone, canManage: false)
         }
-        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الرحلة · عضو") {
+        ShowcaseBlock(index: 1, title: "بلا نقطة تجمع", note: "أمير الطلعة · عضو") {
             SaryRallyCard(rally: nil, canManage: true)
             SaryRallyCard(rally: nil, canManage: false)
         }
@@ -653,7 +653,7 @@ private struct StatesBlocks: View {
             SaryStateView(kind: .loading("جارٍ البحث عن أقرب محطة…")).sarySurface(radius: SaryRadius.l)
         }
         ShowcaseBlock(index: 1, title: "فارغ") {
-            SaryStateView(kind: .empty(title: "ما فيه طلعات بعد", message: "أنشئ طلعة وادعُ العيال برابط", systemImage: "car.2"),
+            SaryStateView(kind: .empty(title: "ما فيه طلعات بعد", message: "أنشئ طلعة وادعُ ربعك برابط", systemImage: "car.2"),
                           actionTitle: "طلعة جديدة").sarySurface(radius: SaryRadius.l)
         }
         ShowcaseBlock(index: 2, title: "خطأ") {
@@ -685,7 +685,7 @@ private struct InputsBlocks: View {
         ShowcaseBlock(index: 0, title: "حقول النص") {
             VStack(spacing: 16) {
                 SaryTextField(title: "اسم الطلعة", placeholder: "مثل: طلعة الثمامة", text: $name, id: "outing-name-input", maxLength: 40)
-                SaryTextField(title: "اسمك", placeholder: "كيف يشوفك العيال", text: $empty, id: "name-empty", help: "يظهر فوق سيارتك")
+                SaryTextField(title: "اسمك", placeholder: "كيف يشوفك الربع", text: $empty, id: "name-empty", help: "يظهر فوق سيارتك")
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "phone", keyboard: .phonePad,
                               state: .error("الرقم ناقص · اكتب ١٠ أرقام تبدأ بـ ٠٥"))
                 SaryTextField(title: "رمز الاسترجاع", placeholder: "XXXX-XXXX", text: $code, id: "recovery", state: .success("الرمز صحيح"))
@@ -694,7 +694,7 @@ private struct InputsBlocks: View {
         }
         ShowcaseBlock(index: 1, title: "مفاتيح") {
             SarySection {
-                SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ العيال", systemImage: "bell.fill", isOn: $t1)
+                SaryToggleRow(title: "الإشعارات", subtitle: "رسائل وطوارئ الربع", systemImage: "bell.fill", isOn: $t1)
                 SaryDivider()
                 SaryToggleRow(title: "أوقف مشاركة موقعي", systemImage: SaryIcon.pause, isOn: $t2)
             }
@@ -736,7 +736,7 @@ private struct DialogsBlocks: View {
             .confirmationDialog("غادر الطلعة؟", isPresented: $confirm, titleVisibility: .visible) {
                 Button("غادر", role: .destructive) {}
                 Button("إلغاء", role: .cancel) {}
-            } message: { Text("بيتوقف إرسال موقعك لأعضاء الطلعة") }
+            } message: { Text("بيتوقف إرسال موقعك للربع") }
             .alert("تعذّر الإرسال", isPresented: $alert) {
                 Button("حسنًا", role: .cancel) {}
             } message: { Text("تأكد من الاتصال وحاول مرة ثانية") }

@@ -62,7 +62,9 @@ final class OutingSession: ObservableObject, Identifiable {
     @Published private(set) var linkDiag = LiveChannel.Diagnostics()
     @Published private(set) var closedReason: LiveCloseReason?
     @Published private(set) var wantsToShare = false
-    @Published private(set) var lastAck: (ok: Bool, reason: String?)?
+    /// The server's last answer to a sent fix. Not published: nothing on screen reads it, and an
+    /// ack comes back for every shared fix (publishing it redrew the whole live screen each time).
+    private(set) var lastAck: (ok: Bool, reason: String?)?
     @Published var mode: ShareMode {
         didSet {
             env.defaults.set(mode.rawValue, forKey: Self.modeKey)
@@ -117,6 +119,8 @@ final class OutingSession: ObservableObject, Identifiable {
     private(set) var recentRaw: [RawFix] = []
     /// Road matching of my trail (nil: no token / switched off).
     private(set) var matcher: TrailMatchCoordinator?
+    /// `displayTrail`, kept until the trail or the matcher's cache changes (read several times per render).
+    private var displayTrailMemo = DisplayTrailMemo()
     /// Cars of the same outing nearby, phone to phone, when the internet is gone.
     let mesh: NearbyMesh
     /// «قناة الطلعة»: the live walkie-talkie (replaces the «اضغط وتكلم» clips).
@@ -556,7 +560,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// iOS permission is really granted, and only for this identity.
     func beginSharing() async {
         guard let v = view, v.status == .active else {
-            errorText = "المشاركة تبدأ عندما يبدأ أمير الرحلة الطلعة."
+            errorText = "المشاركة تبدأ عندما يبدأ أمير الطلعة الطلعة."
             return
         }
         let st = await location.requestWhenInUse()
@@ -773,7 +777,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// A send to the server failed but nearby cars got it: not an error to show.
     private func deliveredNearby() {
-        if mesh.running && mesh.nearbyCars > 0 { errorText = nil }
+        if mesh.running && mesh.nearbyCars > 0, errorText != nil { errorText = nil }
     }
 
     /// Every fix from the GPS while sharing. Internal for tests.
@@ -854,7 +858,8 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// What the map draws and «طريق العودة» follows: road-matched where confident, smoothed elsewhere.
     var displayTrail: [TrailPoint] {
-        TrailMatchPrefs.enabled(env.defaults) ? TrailDisplay.compose(trail.points, matcher?.cache) : trail.points
+        guard TrailMatchPrefs.enabled(env.defaults) else { return trail.points }
+        return displayTrailMemo.value(points: trail.points, cache: matcher?.cache, compose: TrailDisplay.compose)
     }
 
     /// «الدقة ±٨ م · ١٢ نقطة/دقيقة» and what to fix.
@@ -938,13 +943,19 @@ final class OutingSession: ObservableObject, Identifiable {
     #if DEBUG
     /// Screenshots / UI tests: a plausible trail into the demo outing (DEBUG builds only).
     func seedDemoTrail(_ t: Trail) { trail = t }
+
+    /// Screenshots and UI tests (`-SaryFriendSOS <s>`): a friend in the demo outing raises SOS.
+    func demoFriendSOS() {
+        guard isDemo, let v = view, let uid = v.positions.keys.sorted().first(where: { $0 != v.myId }) else { return }
+        view?.apply(.sos(userId: uid, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
+    }
     #endif
 
     // MARK: inbound
 
     private func linkChanged(_ s: LiveChannel.State) {
         let was = link
-        link = s
+        if s != was { link = s }
         if s == .live, was != .live {
             chat.linkLive()
             voiceNotes.linkLive()
@@ -1307,5 +1318,27 @@ enum Notifier {
         if kind == "sos" || kind == "voice_note" { c.interruptionLevel = .timeSensitive } else if kind == "ptt" { c.interruptionLevel = .active; c.sound = nil } else { c.interruptionLevel = .passive; c.sound = nil }
         let r = UNNotificationRequest(identifier: "\(kind)-\(outingId)-\(UUID().uuidString)", content: c, trigger: nil)
         UNUserNotificationCenter.current().add(r)
+    }
+}
+
+/// Memo for `OutingSession.displayTrail`. Composing the road-matched trail walks every point, and
+/// the live screen reads it several times per render (map trails, trip progress). Arrays compare
+/// by storage identity first, so an unchanged trail and cache make a hit O(1).
+struct DisplayTrailMemo {
+    private var points: [TrailPoint]?
+    private var cache: TrailMatchCache?
+    private var result: [TrailPoint] = []
+    /// How many times `compose` actually ran (tests).
+    private(set) var composeCount = 0
+
+    mutating func value(points: [TrailPoint], cache: TrailMatchCache?,
+                        compose: ([TrailPoint], TrailMatchCache?) -> [TrailPoint]) -> [TrailPoint] {
+        if let last = self.points, last == points, self.cache == cache { return result }
+        let r = compose(points, cache)
+        composeCount += 1
+        self.points = points
+        self.cache = cache
+        result = r
+        return r
     }
 }

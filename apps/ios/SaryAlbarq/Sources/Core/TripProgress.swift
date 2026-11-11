@@ -261,6 +261,15 @@ enum ReturnTripStore {
     }
 
     static func forgetAll(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+
+    /// UI-AUDIT 0.3: the new return trip could not be made on the server for want of a network
+    /// (no path, or the request failed as «network» / «timeout»). Then the return starts on this
+    /// phone (`LiveOutingController.startReturnOnPhone`) instead of an error.
+    static func failedOffline(online: Bool, errorText: String?) -> Bool {
+        guard online else { return true }
+        guard let e = errorText else { return false }
+        return e == OutingAPIError(code: "network", status: 0).arabic || e == OutingAPIError(code: "timeout", status: 0).arabic
+    }
 }
 
 // MARK: - «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road

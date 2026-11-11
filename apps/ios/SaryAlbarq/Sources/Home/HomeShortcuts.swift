@@ -85,6 +85,16 @@ enum HomeSheetRules {
     /// Raised: most of the screen, the map still peeks above.
     static func expandedHeight(screen: Double) -> Double { max(collapsedHeight, screen * 0.82) }
 
+    /// Collapsed with its one state card: a one-line card, or the first-time card with two actions.
+    static func collapsedHeight(card: HomeStateCard) -> Double {
+        switch card {
+        case .none: return collapsedHeight
+        case .active, .upcoming, .failed: return collapsedHeight + 78
+        case .start: return collapsedHeight + 128
+        case .invite: return collapsedHeight + 150
+        }
+    }
+
     /// Clamp a GeometryReader's first (sometimes zero) measurement before it reaches `.frame`.
     /// SwiftUI may lay out the home screen once before safe-area insets are available.
     static func frameHeight(screen: Double, preferred: Double, drag: Double) -> Double {
@@ -95,10 +105,143 @@ enum HomeSheetRules {
         return min(available, max(160, desired - offset))
     }
 
-    /// Where the sheet settles after a drag: `translation` > 0 is downwards.
-    static func settle(expanded: Bool, translation: Double, velocity: Double) -> Bool {
-        let push = translation + velocity * 0.15
-        if expanded { return push < 90 }
-        return push < -60
+    /// The finger's offset since the drag was recognized: `DragGesture` reports its first change only
+    /// after `minimumDistance`, and applying that whole translation made the sheet jump that far at once.
+    static func dragOffset(translation: Double, origin: Double) -> Double {
+        guard translation.isFinite else { return 0 }
+        return translation - (origin.isFinite ? origin : 0)
+    }
+
+    /// Where the sheet settles after a drag (true = expanded): the rest height nearest to where the
+    /// release would carry it — the start height moved by the gesture's predicted end translation
+    /// (> 0 is downwards; includes the release velocity). A slow drag stopped short goes back; a
+    /// drag past the middle, or a flick, goes on.
+    static func settle(expanded: Bool, collapsedHeight: Double, expandedHeight: Double, predictedTranslation: Double) -> Bool {
+        /* One rest height (the picked-place card, a tiny screen): nothing to choose, keep the state. */
+        guard abs(expandedHeight - collapsedHeight) > 0.5 else { return expanded }
+        let start = expanded ? expandedHeight : collapsedHeight
+        let projected = start - (predictedTranslation.isFinite ? predictedTranslation : 0)
+        return abs(projected - expandedHeight) < abs(projected - collapsedHeight)
+    }
+}
+
+/// The ONE state card on the collapsed home sheet (UI-AUDIT §٢ «الرئيسية»), decided here and
+/// unit-tested in HomeFlowTests: a running outing, else the planned / paused one, else (first
+/// time, or nothing current) «أنشئ طلعة وادعُ ربعك» with «انضم برابط».
+enum HomeStateCard: Equatable {
+    /// «طلعتك جارية».
+    case active(String)
+    /// Installed from an invite page and the link was never pasted: «جاي من دعوة؟» stays on the
+    /// home after onboarding (the system «لصق» button reads it).
+    case invite
+    /// «طلعتك القادمة»: planned (not started) or paused.
+    case upcoming(String)
+    /// «أنشئ طلعة وادعُ ربعك» + «انضم برابط».
+    case start
+    /// The list could not load and nothing is on screen: say so (never an empty home).
+    case failed(String)
+    /// Still loading the first list: nothing yet (no flash of «أنشئ طلعة»).
+    case none
+
+    static func pick(current: [OutingSummary], phase: ListPhase, inviteHint: Bool = false) -> HomeStateCard {
+        if let a = current.first(where: { $0.status == .active }) { return .active(a.id) }
+        if inviteHint { return .invite }
+        if let u = upcoming(current) { return .upcoming(u.id) }
+        switch phase {
+        case .loaded: return .start
+        case let .failed(m): return current.isEmpty ? .failed(m) : .start
+        case .loading: return current.isEmpty ? .none : .start
+        }
+    }
+
+    /// The outing «طلعتك القادمة» is about: a paused one first (it already ran), then a planned one.
+    static func upcoming(_ current: [OutingSummary]) -> OutingSummary? {
+        current.first { $0.status == .paused } ?? current.first { $0.status == .created }
+    }
+}
+
+/// The main action of the picked-place card (unit-tested in HomeFlowTests). Never a second
+/// outing while one I lead is running or planned.
+enum HomePlaceAction: Equatable {
+    /// No outing of mine to add it to: «أنشئ طلعة».
+    case create
+    /// I lead the running outing: «وجّه القافلة إلى هنا».
+    case guideConvoy(String)
+    /// A member of the running outing: «ابدأ مشوارًا لنفسي».
+    case personalLeg(String)
+    /// I lead a planned / paused outing: «أضفها لطلعتك» (its destination, or the next stop).
+    case addToOuting(String)
+
+    var title: String {
+        switch self {
+        case .create: return "أنشئ طلعة"
+        case .guideConvoy: return "وجّه القافلة إلى هنا"
+        case .personalLeg: return "ابدأ مشوارًا لنفسي"
+        case .addToOuting: return "أضفها لطلعتك"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .create: return "plus"
+        case .guideConvoy, .personalLeg: return "car.2.fill"
+        case .addToOuting: return "text.badge.plus"
+        }
+    }
+
+    /// Members cannot edit a plan (it is the leader's), so only an outing I own takes the place.
+    static func pick(current: [OutingSummary]) -> HomePlaceAction {
+        if let a = current.first(where: { $0.status == .active }) {
+            return a.role == "owner" ? .guideConvoy(a.id) : .personalLeg(a.id)
+        }
+        if let u = HomeStateCard.upcoming(current), u.role == "owner" { return .addToOuting(u.id) }
+        return .create
+    }
+}
+
+/// «أضفها لطلعتك»: the place becomes the planned outing's destination when it has none,
+/// else its next stop; the same place twice changes nothing (unit-tested in HomeFlowTests).
+enum HomePlanEdit {
+    enum Outcome: Equatable { case destination, stop, already, full }
+
+    /// Within this distance it is the same place.
+    static let sameM = 50.0
+    /// The most stops a plan takes from here (more is a route to draw, not a list).
+    static let maxStops = 10
+
+    static func adding(_ d: OutingDestination, to plan: TripPlan) -> (plan: TripPlan, outcome: Outcome) {
+        let p = LngLat(lng: d.lng, lat: d.lat)
+        func same(_ o: OutingDestination) -> Bool { PlanGeo.meters(LngLat(lng: o.lng, lat: o.lat), p) < sameM }
+        guard let dest = plan.destination else {
+            var next = plan
+            next.destination = d
+            return (next, .destination)
+        }
+        if same(dest) || plan.stops.contains(where: same) { return (plan, .already) }
+        if plan.stops.count >= maxStops { return (plan, .full) }
+        var next = plan
+        next.stops.append(d)
+        return (next, .stop)
+    }
+
+    static func confirmation(_ o: Outcome, name: String) -> String {
+        switch o {
+        case .destination: return "صارت «\(name)» وجهة طلعتك"
+        case .stop: return "أضفنا «\(name)» محطة في طلعتك"
+        case .already: return "«\(name)» موجودة في طلعتك"
+        case .full: return "خطة طلعتك فيها \(SaryFormat.number(maxStops)) محطات. عدّلها من تفاصيل الطلعة"
+        }
+    }
+}
+
+/// «طلعاتي» could not load (unit-tested in HomeFlowTests): said in Najdi, never an empty list.
+enum HomeListCopy {
+    static let failedTitle = "ما قدرنا نجيب طلعاتك"
+
+    /// The server's own reason when it has one; the catch-all becomes plain words.
+    static func failedDetail(_ message: String, online: Bool) -> String {
+        guard online else { return "ما فيه إنترنت. نجيبها أول ما يرجع الاتصال." }
+        let generic = [SaryCopy.genericError, "لا يوجد اتصال بالإنترنت.", ""]
+        return generic.contains(message.trimmingCharacters(in: .whitespaces)) ? "صار خلل من طرفنا. جرّب مرة ثانية بعد شوي." : message
     }
 }

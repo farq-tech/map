@@ -58,11 +58,11 @@ enum Enjad {
             l.append("(\(CoordinateParser.dmsString(p)))")
             l.append("خرائط: https://maps.google.com/?q=\(String(format: "%.6f,%.6f", f.lat, f.lng))")
             var gps: [String] = []
-            if let a = f.accuracy, a >= 0 { gps.append("دقة GPS: ±\(SaryFormat.number(Int(a.rounded()))) م") }
+            if let a = f.accuracy, a >= 0 { gps.append("دقة الموقع: ±\(SaryFormat.number(Int(a.rounded()))) م") }
             gps.append("آخر تحديث: \(NavText.clock(Date(timeIntervalSince1970: f.atMs / 1000)))")
             l.append(gps.joined(separator: " · "))
         } else {
-            l.append("الموقع: غير متوفر (ما وصل موقع من GPS)")
+            l.append("الموقع: غير متوفر (ما وصلنا موقع من الجوال)")
         }
         var extra: [String] = []
         if let b = i.batteryPercent { extra.append("البطارية: \(SaryFormat.percent(b))") }
@@ -70,7 +70,7 @@ enum Enjad {
         if let c = i.car, !c.isEmpty { extra.append("السيارة: \(c)") }
         if !extra.isEmpty { l.append(extra.joined(separator: " · ")) }
         if let ln = i.leaderName, !ln.isEmpty {
-            l.append("أمير الرحلة: \(ln)\((i.leaderPhone ?? "").isEmpty ? "" : " — \(i.leaderPhone!)")")
+            l.append("أمير الطلعة: \(ln)\((i.leaderPhone ?? "").isEmpty ? "" : " — \(i.leaderPhone!)")")
         }
         return l.joined(separator: "\n")
     }
@@ -89,6 +89,10 @@ enum Enjad {
     static func whatsappURL(_ text: String) -> URL { URL(string: "https://wa.me/\(phoneIntl)?text=\(encode(text))")! }
     static func smsURL(_ text: String) -> URL { URL(string: "sms:\(phoneLocal)&body=\(encode(text))")! }
     static var callURL: URL { URL(string: "tel:\(phoneLocal)")! }
+    /// The official emergency number (UI-AUDIT 0.5): «اتصل ٩١١» in the SOS countdown and the
+    /// «أرسلت طوارئ» strip. Enjad is volunteers; 911 is the state's unified emergency line.
+    static let officialEmergency = "911"
+    static var officialCallURL: URL { URL(string: "tel:\(officialEmergency)")! }
     /// Is WhatsApp installed? (`LSApplicationQueriesSchemes` lists `whatsapp`.)
     static let whatsappScheme = URL(string: "whatsapp://")!
 

@@ -39,14 +39,10 @@ final class LiveEndedUITests: XCTestCase {
         }
         wobble(0)
         app.launch()
-        /* The sheet opens at «نصف» (-SarySheetHalf): the map under it is not in the accessibility tree yet. */
-        let end = app.buttons["trip.end"]
-        XCTAssertTrue(end.waitForExistence(timeout: 45), "«أنهِ الرحلة» on the arrived trip card")
-        end.tap()
-        let confirm = app.buttons["أنهِ الطلعة للجميع"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
-        XCTAssertTrue(app.buttons["trip.summary"].waitForExistence(timeout: 10), "the trip has ended")
+        /* The sheet opens at «نصف» (-SarySheetHalf). UI-AUDIT م3: ending is «المزيد» → «الطلعة» → «أنهِها». */
+        XCTAssertTrue(app.buttons["outing-actions"].waitForExistence(timeout: 45), "«المزيد» in the quick row")
+        XCTAssertTrue(app.endOutingFromMore(), "«تنهي الطلعة للكل؟» → «أنهِها»")
+        XCTAssertTrue(app.buttons["trip.return"].waitForExistence(timeout: 10), "the trip has ended: «طلعة الرجعة» in the sheet")
         /* Back to the map with the sheet at its peek (where the floating «+» is). */
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
@@ -57,7 +53,7 @@ final class LiveEndedUITests: XCTestCase {
     func testEndedTripShowsAClearEndedState() {
         let app = launchEnded()
         let banner = app.descendants(matching: .any)["live.ended"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 8), "«الرحلة انتهت» over the map")
+        XCTAssertTrue(banner.waitForExistence(timeout: 8), "«انتهت الطلعة» over the map")
         XCTAssertTrue(app.buttons["live.ended.summary"].exists, "«اعرض الملخص»")
         XCTAssertTrue(app.buttons["live.ended.home"].exists, "«ارجع لطلعاتي»")
         /* Nothing that needs a running trip: no walkie-talkie, no SOS to an ended group. */

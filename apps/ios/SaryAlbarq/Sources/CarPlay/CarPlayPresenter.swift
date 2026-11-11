@@ -250,7 +250,7 @@ enum CarPlayTripKind: String, Equatable, CaseIterable {
 
     var title: String {
         switch self {
-        case .wayBack: return "طريق العودة"
+        case .wayBack: return SaryCopy.backTrack
         case .rally: return "إلى نقطة التجمع"
         case .destination: return "إلى الوجهة"
         case .place: return "إلى المكان"

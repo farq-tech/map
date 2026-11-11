@@ -108,7 +108,7 @@ extension NavSession: NavigationSessionProviding {
         s.target = target
         s.routes = active.map { [$0] } ?? routes
         s.activeRouteId = active?.id
-        s.distanceToManeuverM = progress?.distanceToManeuverM
+        s.distanceToManeuverM = shownProgress?.distanceToManeuverM
         s.distanceRemainingM = remainingMeters
         s.durationRemainingS = remainingSeconds
         s.eta = etaDate
@@ -116,10 +116,10 @@ extension NavSession: NavigationSessionProviding {
         s.rerouting = rerouting
         s.muted = muted
         if let r = active {
-            let from = progress?.stepIndex ?? 1
+            let from = shownProgress?.stepIndex ?? 1
             s.carPlayManeuvers = r.steps.indices.filter { $0 >= from }.prefix(3).map { i in
                 let st = r.steps[i]
-                let d = i == from ? (progress?.distanceToManeuverM ?? st.distanceM) : r.steps[i - 1].distanceM
+                let d = i == from ? (maneuverDistanceM ?? st.distanceM) : r.steps[i - 1].distanceM
                 return NavCarPlayManeuver(instructionVariants: [NavText.instruction(st, targetName: target?.name), NavText.action(st.maneuver)],
                                           symbolName: NavGlyph.symbol(st.maneuver), distanceM: d, durationS: st.durationS,
                                           lanes: st.lanes, maneuver: st.maneuver, cpManeuverType: NavGlyph.carPlayType(st.maneuver))

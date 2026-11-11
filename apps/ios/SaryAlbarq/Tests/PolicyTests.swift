@@ -110,11 +110,20 @@ final class PolicyTests: XCTestCase {
     }
 
     func testArabicFormatting() {
-        XCTAssertEqual(ArabicFormat.distance(4), "١٠ م")
+        /* One formatter app-wide (UI-AUDIT م5): ArabicFormat now reads exactly like SaryFormat
+         * (was «١٠ م» for 4 m and whole km from 10 km; «قبل ٣٠ ث» under a minute). */
+        XCTAssertEqual(ArabicFormat.distance(4), "٤ م")
         XCTAssertEqual(ArabicFormat.distance(2340), "٢٫٣ كم")
-        XCTAssertEqual(ArabicFormat.distance(23_400), "٢٣ كم")
+        XCTAssertEqual(ArabicFormat.distance(23_400), "٢٣٫٤ كم")
+        for m in [4.0, 904, 2340, 23_400, 123_400] {
+            XCTAssertEqual(ArabicFormat.distance(m), SaryFormat.distance(meters: m))
+        }
         XCTAssertEqual(ArabicFormat.ago(3_000), "الآن")
+        XCTAssertEqual(ArabicFormat.ago(30_000), "الآن", "under a minute is «الآن», like the phone")
         XCTAssertEqual(ArabicFormat.ago(180_000), "قبل ٣ د")
+        XCTAssertEqual(ArabicFormat.number(3), "٣")
+        XCTAssertEqual(ArabicFormat.number(2.34), "٢٫٣")
+        XCTAssertEqual(ArabicFormat.number(35), "٣٥")
         XCTAssertEqual(ArabicFormat.freshnessLabel(.live), "مباشر")
         XCTAssertEqual(ArabicFormat.freshnessLabel(.recent), "آخر موقع")
         XCTAssertEqual(ArabicFormat.freshnessLabel(.lost), "انقطع")

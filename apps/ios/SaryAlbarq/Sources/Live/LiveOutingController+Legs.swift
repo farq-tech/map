@@ -92,12 +92,20 @@ extension LiveOutingController {
             i.endSuggested = OutingEndSuggest.shouldSuggest(
                 startedAt: LiveOutingPresenter.deviceDate(v.snapshot.outing.started_at, view: v),
                 groupStart: trip.record.groupStart?.position, livePositions: livePts, hasActiveLeg: legs.current != nil || implicitLeg != nil, now: i.now)
+            if v.status == .created, !i.iLead {
+                /* «ننتظر أمير الطلعة» with what it waits on: the leader, «الربع», and my own link. */
+                /* `.limited` = polling: each poll's snapshot carries the server's `online` too. */
+                let link = ui.connection
+                i.waiting = WaitingLeader.info(members: Array(v.members.values), myId: v.myId, clockOffsetMs: v.clockOffsetMs,
+                                               myLinkUp: link == .connected || link == .limited, myLinkText: link.label, now: i.now)
+            }
         }
         if legs.current != nil || implicit != nil {
             let p = tripPanel
             i.remainingM = p.remainingMeters
             i.eta = p.eta
         }
+        i.guidance = guidanceState
         return i
     }
 
@@ -108,10 +116,15 @@ extension LiveOutingController {
     func flowTapped(_ cta: OutingCTA) {
         switch cta {
         case .startOuting: startOutingFlow()
-        case .waitLeader: toast("تبدأ المشاركة أول ما يبدأ أمير الرحلة الطلعة")
+        case .waitLeader:
+            /* The sheet's «حدّث حالة الطلعة» left with the second and third waiting messages: the one
+             * message (this button) asks the server again. */
+            refreshWaitingStatus()
+            toast("تبدأ المشاركة أول ما يبدأها أمير الطلعة")
         case .whereTo, .changeDestination: modal = .whereTo
         case .startLeg: startLegFlow()
         case .arrived: arrivedTapped()
+        case .resumeGuidance: resumeAutoNav()
         case .endOuting: legConfirmEnd = true
         case .summary: openSummary()
         }
@@ -127,6 +140,8 @@ extension LiveOutingController {
         Task {
             await session.setStatus("start")
             guard session.view?.status == .active else { return }
+            /* The leader is offered the notifications explainer (UI-AUDIT 0.2; waits for any sheet). */
+            offerNotificationsAtStart()
             if let d = legs.picked ?? planModel?.plan.destination {
                 await beginLeg(to: d)
             } else {

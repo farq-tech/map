@@ -37,18 +37,13 @@ struct SarySOSButton: View {
                 ProgressView().tint(p.onEmergency).controlSize(.regular)
             } else {
                 if compactLabel && !active {
-                    /* UX ٢١: «SOS» alone is English; «طوارئ» goes with it. */
-                    VStack(spacing: 0) {
-                        Text("SOS")
-                            .font(.system(size: max(13, size * 0.24), weight: .heavy, design: .rounded))
-                            .environment(\.layoutDirection, .leftToRight)
-                        Text("طوارئ")
-                            .font(.sary(max(9, size * 0.15), .heavy))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .dynamicTypeSize(...DynamicTypeSize.large)
-                    }
-                    .foregroundStyle(p.onEmergency)
+                    /* UI-AUDIT م2: no Latin «SOS» on screen; the one word is «طوارئ». */
+                    Text(SaryCopy.emergency)
+                        .font(.sary(max(11, size * 0.22), .heavy))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .dynamicTypeSize(...DynamicTypeSize.large)
+                        .foregroundStyle(p.onEmergency)
                 } else {
                 VStack(spacing: 0) {
                     Image(systemName: active ? SaryIcon.checkCircle : SaryIcon.sos)
@@ -286,7 +281,7 @@ struct SOSCountdownView: View {
                         .font(.sary(22, .heavy))
                         .foregroundStyle(p.emergency)
                         .frame(maxWidth: .infinity, minHeight: 64)
-                        .background(Capsule().fill(Color.white))
+                        .background(Capsule().fill(p.onEmergency))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityIdentifier("sos-countdown-cancel")
@@ -300,6 +295,18 @@ struct SOSCountdownView: View {
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityIdentifier("sos-countdown-send")
+                /* UI-AUDIT 0.5: the official line, one tap. The SOS to the group still goes out. */
+                Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                    Label("اتصل ٩١١", systemImage: SaryIcon.phone)
+                        .font(.sary(17, .bold))
+                        .foregroundStyle(p.onEmergency)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(Capsule().fill(Color.black.opacity(0.22)))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("اتصل ٩١١"))
+                .accessibilityHint(Text("الطوارئ الرسمية. تنبيهك للربع يكمل"))
+                .accessibilityIdentifier("sos.call911")
             }
             .padding(theme.space(.xl))
             .frame(maxWidth: 360)
@@ -344,7 +351,7 @@ struct SaryMySOSStrip: View {
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
                     .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(p.onEmergency))
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("outing-sos-ok")
@@ -355,12 +362,25 @@ struct SaryMySOSStrip: View {
                         .foregroundStyle(p.emergency)
                         .padding(.horizontal, theme.space(.m))
                         .frame(minHeight: theme.minTarget)
-                        .background(Capsule().fill(Color.white.opacity(0.85)))
+                        .background(Capsule().fill(p.onEmergency.opacity(0.85)))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
                 .accessibilityIdentifier("sos-enjad")
             }
+            /* UI-AUDIT 0.5: «اتصل ٩١١» (the official line; Enjad is volunteers). Short on the strip. */
+            Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                Label("٩١١", systemImage: SaryIcon.phone)
+                    .saryText(.callout, weight: .heavy)
+                    .lineLimit(1)
+                    .foregroundStyle(p.emergency)
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: theme.minTarget)
+                    .background(Capsule().fill(p.onEmergency.opacity(0.9)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("اتصل ٩١١"))
+            .accessibilityIdentifier("sos.call911")
         }
         .foregroundStyle(p.onEmergency)
         .padding(.leading, theme.space(.l))
@@ -404,7 +424,7 @@ struct SaryFriendSOSStrip: View {
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
                     .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(p.onEmergency))
             }
             .buttonStyle(SaryPressStyle())
         }
@@ -440,11 +460,11 @@ struct SaryFriendSOSAlert: View {
             VStack(spacing: theme.space(.xl)) {
                 Spacer(minLength: 0)
                 ZStack {
-                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 2)
+                    Circle().stroke(p.onEmergency.opacity(0.25), lineWidth: 2)
                         .frame(width: 190, height: 190)
                         .scaleEffect(pulse ? 1.12 : 0.92)
                         .opacity(pulse ? 0 : 1)
-                    Circle().fill(Color.white.opacity(0.1)).frame(width: 150, height: 150)
+                    Circle().fill(p.onEmergency.opacity(0.1)).frame(width: 150, height: 150)
                     SaryAvatar(name: alert.name, color: alert.color, size: 104)
                 }
                 .accessibilityHidden(true)
@@ -452,7 +472,7 @@ struct SaryFriendSOSAlert: View {
                     Label("طوارئ", systemImage: SaryIcon.sos)
                         .saryText(.headline)
                         .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(Capsule().fill(Color.white.opacity(0.18)))
+                        .background(Capsule().fill(p.onEmergency.opacity(0.18)))
                     Text(alert.name)
                         .saryText(.display)
                         .multilineTextAlignment(.center)
@@ -467,7 +487,7 @@ struct SaryFriendSOSAlert: View {
                 if alert.distanceMeters != nil || alert.bearingDegrees != nil {
                     HStack(spacing: theme.space(.m)) {
                         if let b = alert.bearingDegrees {
-                            SaryBearingArrow(degrees: b, color: .white, size: 34)
+                            SaryBearingArrow(degrees: b, color: p.onEmergency, size: 34)
                         }
                         if let d = alert.distanceMeters {
                             Text(SaryFormat.distance(meters: d)).saryNumber(.title)
@@ -488,7 +508,7 @@ struct SaryFriendSOSAlert: View {
                             .saryText(.headline)
                             .foregroundStyle(p.emergency)
                             .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
-                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.white))
+                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(p.onEmergency))
                     }
                     .buttonStyle(SaryPressStyle())
                     .accessibilityIdentifier("sos-alert-show")
@@ -496,17 +516,29 @@ struct SaryFriendSOSAlert: View {
                         Button(action: call) {
                             Label("اتصل به", systemImage: SaryIcon.phone)
                                 .saryText(.headline)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(p.onEmergency)
                                 .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
                                 .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.black.opacity(0.22)))
-                                .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(Color.white.opacity(0.5), lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
                         }
                         .buttonStyle(SaryPressStyle())
                         .accessibilityIdentifier("sos-alert-call")
                     }
+                    /* UI-AUDIT 0.5: a friend's SOS may need the official line too (device test of PR #149). */
+                    Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                        Label("اتصل ٩١١", systemImage: SaryIcon.phone)
+                            .saryText(.headline)
+                            .foregroundStyle(p.onEmergency)
+                            .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
+                            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityLabel(Text("اتصل ٩١١"))
+                    .accessibilityHint(Text("الطوارئ الرسمية"))
+                    .accessibilityIdentifier("sos-alert-911")
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(p.onEmergency)
             .padding(.horizontal, theme.space(.xxl))
             .padding(.vertical, theme.space(.xl))
         }

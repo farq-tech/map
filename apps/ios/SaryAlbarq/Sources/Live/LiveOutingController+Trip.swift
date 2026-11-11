@@ -38,6 +38,13 @@ extension LiveOutingController {
         trip.update(view: session.displayView, myFix: location.lastFix, destination: tripDestination)
     }
 
+    /// `TripLogStore.load(session.id)`, decoded again only when the stored bytes changed (one more
+    /// fix shared): `tripInput` is read several times per render (`input`, `tripPanel`).
+    func storedTripLog() -> TripLog? {
+        let id = session.id
+        return tripLogMemo.value(for: UserDefaults.standard.data(forKey: TripLogStore.key)) { _ in TripLogStore.load(id) }
+    }
+
     var tripInput: TripPresenterInput {
         var i = TripPresenterInput()
         let v = session.displayView
@@ -53,7 +60,7 @@ extension LiveOutingController {
         i.myId = v?.myId ?? session.myUserId
         i.myFix = session.smoothedFix(location.lastFix)
         i.trail = session.displayTrail
-        i.log = session.isDemo ? speed.local : TripLogStore.load(session.id)
+        i.log = session.isDemo ? speed.local : storedTripLog()
         if nav.phase == .guiding || nav.phase == .offRoad {
             i.navGuiding = true
             i.navRemainingM = nav.remainingMeters
@@ -88,8 +95,9 @@ extension LiveOutingController {
 
     /// «حدّد الوجهة»: the place search (its point card has «اجعلها الوجهة»).
     func chooseTripDestination() {
-        modal = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.modal = .plan(.search) }
+        /* A direct swap (`sheet(item:)` replaces the presented sheet when the item changes): no
+         * nil → 0.35 s → reopen flicker. */
+        modal = .plan(.search)
     }
 
     func markArrived() {
@@ -135,6 +143,21 @@ extension LiveOutingController {
         /* Replaces the automatic desert leg: no hand-over to the road at the junction. */
         returnGuide.cancel()
         startBackTrack(along: t.points)
+    }
+
+    /// «طريق الرجعة» on this phone, with no server (UI-AUDIT 0.3): back along my trail of this
+    /// outing to where I started (`BackTrack`: works with no network, the usual case in the desert).
+    /// Used when the new return trip cannot be made on the server because there is no network.
+    func startReturnOnPhone(offline: Bool) {
+        guard backTrack == nil else { return }
+        guard session.trail.points.count >= 2 else {
+            toast(offline ? "ما فيه نت، وما عندنا مسار محفوظ لهذه الطلعة على جوالك"
+                          : "ما عندنا مسار محفوظ لهذه الطلعة على جوالك")
+            return
+        }
+        returnGuide.cancel()
+        startBackTrack()
+        if offline, backTrack != nil { toast("ما فيه نت · نرجّعك على مسارك من جوالك") }
     }
 
     // MARK: «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road
@@ -211,7 +234,7 @@ extension LiveOutingController {
             if nav.isActive, nav.phase != .arrived { nav.voice.say("وصل \(name)", clips: ["grp_14"]) }
         }
         if let v, v.iOwn, ArrivalOrder.everyoneArrived(arrivals: trip.record.arrivals, memberIds: v.orderedMembers.map(\.user_id)) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الجميع · تقدر تنهي الرحلة") }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الربع كلهم · تقدر تنهي الطلعة") }
         }
         objectWillChange.send()
     }
@@ -239,4 +262,24 @@ extension LiveOutingController {
 enum UINotificationFeedback {
     @MainActor static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     @MainActor static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+}
+
+/// Keeps a value decoded from stored bytes until those bytes change. Comparing the bytes is a
+/// memcmp; decoding them (every outing's trip log, as JSON) is far dearer.
+struct StoredBytesMemo<Value> {
+    private var bytes: Data?
+    private var cached: Value?
+    private var filled = false
+    /// How many times `decode` actually ran (tests).
+    private(set) var decodeCount = 0
+
+    mutating func value(for bytes: Data?, decode: (Data?) -> Value) -> Value {
+        if filled, self.bytes == bytes, let cached { return cached }
+        let v = decode(bytes)
+        decodeCount += 1
+        self.bytes = bytes
+        cached = v
+        filled = true
+        return v
+    }
 }

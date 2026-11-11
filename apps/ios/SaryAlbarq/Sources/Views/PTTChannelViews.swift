@@ -111,7 +111,7 @@ struct PTTChannelSheet: View {
                     } footer: {
                         Text(walkie.canCreatePrivate
                              ? "التردد الخاص لا يسمعه ولا يراه إلا من تدعوهم — حتى ٥ ترددات في الطلعة."
-                             : "يفتحها أمير الرحلة لمن يدعوهم فقط.")
+                             : "يفتحها أمير الطلعة لمن يدعوهم فقط.")
                     }
                 }
 
@@ -314,7 +314,7 @@ struct PTTPrivateChannelEditor: View {
                 }
                 Section {
                     if members.isEmpty {
-                        Text("لا يوجد أعضاء آخرون في الطلعة بعد").foregroundStyle(.secondary)
+                        Text("ما فيه أحد ثاني من الربع في الطلعة بعد").foregroundStyle(.secondary)
                     }
                     ForEach(members) { p in
                         Button {
@@ -334,7 +334,7 @@ struct PTTPrivateChannelEditor: View {
                 } header: {
                     Text("من يسمع هذا التردد")
                 } footer: {
-                    Text("لا يدخله ولا يسمعه إلا من تختارهم. يوصلهم إشعار «أمير الرحلة دعاك إلى تردد خاص». من تزيله يخرج منه فورًا.")
+                    Text("لا يدخله ولا يسمعه إلا من تختارهم. يوصلهم إشعار «أمير الطلعة دعاك إلى تردد خاص». من تزيله يخرج منه فورًا.")
                 }
                 if existing != nil {
                     Section {

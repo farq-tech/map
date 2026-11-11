@@ -3,8 +3,9 @@ import SwiftUI
 
 /// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
 /// المزيد (docs/IA-REDESIGN.md §2.4). Everything presented over the live screen (participant card,
-/// note composer, stations, consent, rally label, a friend's SOS) is presented
-/// from here, because the sheet is the top-most presentation.
+/// note composer, stations, consent, rally label) is presented from here, because the sheet is
+/// the top-most presentation. A friend's SOS is the exception: it has its own window
+/// (`FriendSOSAlertHost`), so nothing presented here can hold it back.
 struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
@@ -18,8 +19,11 @@ struct LiveSheet: View {
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
-                /* Navigating: the peek is the guidance bar (arrival time, what is left, voice, steps, «إنهاء»). */
-                NavBottomBar(nav: controller.nav, end: controller.endNav)
+                /* Navigating: the peek is the guidance bar (arrival time, what is left, «المزيد»,
+                 * «غيّر الوجهة», «أوقف التوجيه»). */
+                NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
+                             more: { controller.modal = .actions },
+                             changeDestination: controller.navChangeDestination)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
                     /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة». */
                     NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
@@ -64,11 +68,9 @@ struct LiveSheet: View {
             SettingsPushHost { close in LiveSettingsPage(controller: controller, close: close) }
                 .saryAppearance(appearance)
         }
-        .fullScreenCover(item: Binding(get: { ui.sos.incoming.first { !$0.acknowledged } }, set: { _ in })) { a in
-            SaryFriendSOSAlert(alert: a, now: Date(), show: { controller.showSOS(a.id) }, call: { actions.sos.call(a.id) })
-                .saryAppearance(appearance)
-                .accessibilityIdentifier("friend-sos-alert")
-        }
+        /* A friend's SOS is NOT presented from here (UI-AUDIT 0.1): with a sheet or the settings page
+         * up, a second presentation from this view silently did not appear. It has its own window
+         * (`FriendSOSAlertHost`, on the live screen). */
         .sheet(item: $invite, onDismiss: { if model.pendingInvite == invite?.id { model.pendingInvite = nil } }) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }
@@ -95,13 +97,13 @@ struct LiveSheet: View {
             Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("أعضاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
+            Text("ربع الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
         }
         .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
             Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
+            Text("تتوقف مشاركة موقعك فورًا وينمسح آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
         }
         .confirmationDialog("نغيّر الوجهة إلى \(controller.confirm?.retargetTarget?.name ?? "النقطة")؟",
                             isPresented: Binding(get: { controller.confirm?.retargetTarget != nil },
@@ -279,47 +281,76 @@ extension IncomingSOSUI: @retroactive Hashable {
 
 // MARK: - The quick row
 
-/// The sheet's key actions, right under the summary line (UX simplification): the primary
-/// («ملاحة», or «وجّه الكل» for the leader), the chat, the rally point, «أخفِ موقعي»,
-/// «طريق الرجعة» and «المزيد» (everything else). Each was buried in a tab or the tools grid.
+/// The sheet's key actions while stopped, right under the summary line (UI-AUDIT م3, four):
+/// «البر» (camp sites, desert routes, the Qibla, the weather), the chat, the rally point and
+/// «المزيد» (everything else). No accent here: the state's one primary is the CTA over the map.
 struct LiveQuickRow: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
 
     var body: some View {
         let s = controller.actionState
-        let primary = LiveActionCatalog.primary(s)
-        let hidden = controller.isLocationHidden
-        let card = controller.trailCard
         HStack(alignment: .top, spacing: 4) {
-            item(primary.title, icon: primary.systemImage, id: primary.accessibilityID, accent: true, hint: primary.subtitle) {
-                controller.performAction(primary.id)
-            }
-            if s.chat {
-                item("المحادثة", icon: "bubble.left.and.bubble.right.fill", id: "sheet.chat", badge: controller.chat.totalUnread) {
-                    controller.performAction("chat")
+            ForEach(LiveScreenRules.quickRow(chat: s.chat), id: \.self) { id in
+                switch id {
+                case "desert": desertMenu
+                case "chat":
+                    item("المحادثة", icon: "bubble.left.and.bubble.right.fill", id: "sheet.chat", badge: controller.chat.totalUnread) {
+                        controller.performAction("chat")
+                    }
+                case "rally":
+                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
+                        controller.performAction("rally")
+                    }
+                default:
+                    item("المزيد", icon: "ellipsis", id: "outing-actions", badge: controller.safety.myStuck != nil ? 1 : 0) {
+                        controller.modal = .actions
+                    }
                 }
-            }
-            item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
-                controller.performAction("rally")
-            }
-            if controller.canHideLocation {
-                item(hidden ? HideText.shownButton : HideText.hideButton, icon: hidden ? "eye" : "eye.slash", id: "live.hideLocation", active: hidden,
-                     hint: hidden ? "يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل") {
-                    controller.toggleHidden()
-                }
-            }
-            item(card.backTrackActive ? "أنهِ الرجعة" : "طريق الرجعة", icon: SaryIcon.backTrack, id: "trail.backtrack", active: card.backTrackActive,
-                 disabled: card.pointCount < 2 && !card.backTrackActive) {
-                card.backTrackActive ? controller.stopBackTrack() : controller.startBackTrack()
-            }
-            item("المزيد", icon: "ellipsis", id: "outing-actions", badge: controller.safety.myStuck != nil ? 1 : 0) {
-                controller.modal = .actions
             }
         }
         .padding(.horizontal, theme.space(.m))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sheet.quickRow")
+    }
+
+    /// «البر» (UI-AUDIT م6): what makes Sary Albarq different, one tap away instead of six.
+    private var desertMenu: some View {
+        Menu {
+            Button { controller.performAction("camp") } label: { Label("اقترح لي مكان كشتة", systemImage: "tent.fill") }
+                .accessibilityIdentifier("desert.camp")
+            Button { controller.performAction("desertRoute") } label: { Label("دروب البر", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                .accessibilityIdentifier("desert.routes")
+            Button { controller.performAction("qibla") } label: { Label("القبلة", systemImage: "location.north.circle") }
+                .accessibilityIdentifier("desert.qibla")
+            Button { controller.performAction("weather") } label: { Label("الطقس", systemImage: "sun.max") }
+                .accessibilityIdentifier("desert.weather")
+        } label: {
+            itemLabel("البر", icon: "tent.2.fill")
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("البر"))
+        .accessibilityHint(Text("الكشتة، دروب البر، القبلة، الطقس"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sheet.desert")
+    }
+
+    /// The menu's label: the same circle and caption as `item` (no badge, never active).
+    private func itemLabel(_ title: String, icon: String) -> some View {
+        let p = theme.palette
+        let size: CGFloat = theme.drive ? 54 : 46
+        return VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: theme.drive ? 20 : 17, weight: .semibold))
+                .foregroundStyle(p.accentText)
+                .frame(width: size, height: size)
+                .background(Circle().fill(p.sunken))
+            Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 
     private func item(_ title: String, icon: String, id: String, accent: Bool = false, active: Bool = false, disabled: Bool = false,
@@ -335,10 +366,10 @@ struct LiveQuickRow: View {
                     .background(Circle().fill(accent ? p.accent : active ? p.accent.opacity(0.85) : p.sunken))
                     .overlay(alignment: .topTrailing) {
                         if badge > 0 {
-                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(.white)
+                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(p.onEmergency)
                                 .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                                 .background(Capsule().fill(p.emergency))
-                                .offset(x: 4, y: -2)
+                                .saryBadgeOutset(trailing: 4, top: 2)
                         }
                     }
                 Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
@@ -380,17 +411,18 @@ private struct LiveSheetBody: View {
         return false
     }
 
+    /// UI-AUDIT م3: the trip card is the «الوجهة والخطة» panel's (the header opens it); the sheet
+    /// keeps it only after the end, for «طلعة الرجعة» (the summary is the end card's «اعرض الملخص»).
     private var shouldShowTripCard: Bool {
-        controller.showsTripStrip && (arrivedOrOver || (controller.session.view?.iOwn == true && ui.status != .notStarted))
+        controller.showsTripStrip && controller.tripEnded
     }
 
     var body: some View {
         let actions = controller.actions
         Group {
             TripStatusCallout(controller: controller, ui: ui)
-            /* Keep the owner's trip controls visible throughout the outing, including the end action. */
             if shouldShowTripCard {
-                TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+                TripCard(ui: controller.tripPanel, actions: controller.tripActions)
             }
             VStack(spacing: 0) {
                 let list = ui.participantsTab.participants
@@ -436,28 +468,15 @@ private struct TripStatusCallout: View {
     @AppStorage("sary.live.shareHint.dismissed.v1") private var hintDismissed = false
 
     var body: some View {
-        let v = controller.session.view
         if let r = controller.session.closedReason {
             SaryBanner(text: closedText(r), tone: .warning, systemImage: SaryIcon.warning)
         } else {
             switch ui.status {
             case .notStarted:
-                VStack(spacing: theme.space(.s)) {
-                    SaryBanner(text: v?.iLead == true ? "الطلعة ما بدأت. ابدأها ويشارك الكل مواقعهم." : "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها.", tone: .info)
-                        .accessibilityIdentifier("live.notStarted")
-                    if v?.iLead == true {
-                        Button { controller.startOutingFlow() } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-                            .buttonStyle(.saryPrimary)
-                            .accessibilityIdentifier("live.start")
-                    } else {
-                        Button { controller.refreshWaitingStatus() } label: {
-                            SaryButtonLabel(title: "حدّث حالة الطلعة", systemImage: "arrow.clockwise", busy: controller.session.refreshingWaitingStatus)
-                        }
-                        .buttonStyle(.sary(.secondary))
-                        .disabled(controller.session.refreshingWaitingStatus)
-                        .accessibilityIdentifier("live.refreshWaitingStatus")
-                    }
-                }
+                /* UI-AUDIT م3: nothing here — «ابدأ الطلعة» (or the member's «ننتظر أمير الطلعة») is the
+                 * one CTA over the map; the header says «ما بدأت الطلعة». The sheet is the people and
+                 * «ادعُ ربعك». */
+                EmptyView()
             case .paused:
                 SaryBanner(text: "الطلعة متوقفة مؤقتًا. لا أحد يشارك موقعه الآن.", tone: .warning, systemImage: SaryIcon.pause)
             case .ended:
@@ -484,7 +503,7 @@ private struct TripStatusCallout: View {
                         ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
                         Button { hintDismissed = true } label: {
                             Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
-                                .frame(width: 36, height: 36).contentShape(Rectangle())
+                                .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(Text("أخفِ"))
@@ -499,7 +518,7 @@ private struct TripStatusCallout: View {
     private func closedText(_ r: LiveCloseReason) -> String {
         switch r {
         case .outingEnded: return "انتهت هذه الطلعة."
-        case .removed: return "أزالك أمير الرحلة منها."
+        case .removed: return "أزالك أمير الطلعة منها."
         case .left: return "غادرت هذه الطلعة."
         case .notAMember: return "لست عضوًا في هذه الطلعة."
         case .unauthorized: return "انتهت جلستك على هذا الجهاز."
@@ -525,8 +544,9 @@ struct LivePanelView: View {
                 Text(panel.title).font(.sary(18, .bold)).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textPrimary)
+                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
                         .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
+                        .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إغلاق"))
@@ -563,7 +583,7 @@ struct LivePanelView: View {
     @ViewBuilder
     private func route(_ ui: LiveOutingUIState) -> some View {
         if controller.showsTripStrip, ui.status != .notStarted {
-            TripCard(ui: controller.tripPanel, actions: controller.tripActions, confirmEnd: $controller.tripConfirmEnd)
+            TripCard(ui: controller.tripPanel, actions: controller.tripActions)
         }
         /* «سجل الطلعة»: the legs so far (and a quiet «غيّر الوجهة» while one is picked). */
         if ui.status != .notStarted, !controller.legs.timeline.isEmpty || controller.legPicked != nil {
@@ -611,7 +631,7 @@ private struct PhonePanel: View {
 
     var body: some View {
         let a = controller.actions.settingsTab
-        SarySection(title: nil, footer: "يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
+        SarySection(title: nil, footer: "يظهر لربعك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
             VStack(spacing: theme.space(.s)) {
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "settings-phone", keyboard: .phonePad, maxLength: 14)
                 Button { a.saveMyPhone(phone.isEmpty ? nil : phone); done() } label: { SaryButtonLabel(title: "حفظ", systemImage: SaryIcon.check) }
@@ -634,7 +654,7 @@ struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -657,7 +677,7 @@ struct TrailSettingsSection: View {
                           isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
                 .disabled(!card.recordingOn)
             SaryDivider()
-            SaryToggleRow(title: "أظهر مسارات العيال", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
+            SaryToggleRow(title: "أظهر مسارات الربع", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
                           isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends")
             /* Moved from the trip tab: the recording's accuracy and the GPS warnings, where the recording is set. */
             if let h = card.health {
@@ -675,7 +695,7 @@ struct TrailSettingsSection: View {
                             .accessibilityIdentifier("trail.precise")
                     }
                     if card.gapCount > 0 {
-                        Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة GPS لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
+                        Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة موقع لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
                             .saryText(.caption).foregroundStyle(p.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -699,7 +719,7 @@ struct TrailSettingsSection: View {
         .confirmationDialog("امسح مسارك؟", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("امسح مساري", role: .destructive, action: controller.clearTrail)
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("يُحذف مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق الرجعة» يبدأ من جديد.") }
+        } message: { Text("ينمسح مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق الرجعة» يبدأ من جديد.") }
     }
 
     private var backgroundSubtitle: String {
@@ -723,8 +743,8 @@ struct TrailAlwaysExplainer: View {
                     Text("سجّل مسارك حتى والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
                     Text("عشان «طريق الرجعة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
-                    bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
-                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أعضاء الطلعة تستمر والشاشة مقفلة.")
+                    bullet("iphone", "المسار يبقى على جوالك فقط. ما نرسله لأحد، ولا حتى للخادم.")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع ربع الطلعة تستمر والشاشة مقفلة.")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -772,7 +792,7 @@ struct ShareBackgroundHintRow: View {
             Text(hint.text).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            if link { Image(systemName: "chevron.left").font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
+            if link { Image(systemName: SaryIcon.disclosure).font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
         }
         .padding(.horizontal, theme.space(.m))
         .padding(.vertical, theme.space(.s))
@@ -797,7 +817,7 @@ struct ShareAlwaysExplainer: View {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
                     Text(afterJoin ? Self.afterJoinTitle : "المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للعيال. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للربع. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -872,7 +892,7 @@ private struct InviteTab: View {
                         .buttonStyle(.saryPrimary)
                         .accessibilityIdentifier("invite-share")
                 }
-                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع العيال فقط.")
+                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع ربعك فقط.")
                     .saryText(.footnote)
                     .foregroundStyle(theme.palette.textSecondary)
                     .multilineTextAlignment(.center)
@@ -880,7 +900,7 @@ private struct InviteTab: View {
                 SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
-                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الرحلة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
+                SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
             }
             if s.canRevoke {
                 Button { if s.link == nil { actions.revokeLink() } else { confirmRevoke = true } } label: {
@@ -913,7 +933,7 @@ struct NoteComposer: View {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             Text("رسالة فوق سيارتك").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-            Text("يشوفها العيال فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+            Text("يشوفها الربع فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             SaryTextField(title: "الرسالة", placeholder: "مثل: بوقف عند المحطة", text: $text, id: "note-input", maxLength: state.maxLength)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: theme.space(.s)) {
@@ -956,7 +976,7 @@ struct NearestStationsView: View {
             case .loading:
                 SaryStateView(kind: .loading("جارٍ البحث عن أقرب محطة…"))
             case .empty:
-                SaryStateView(kind: .empty(title: "لا توجد محطة مسجّلة قريبة", message: "لا نخمّن مكانها.", systemImage: SaryIcon.nearest))
+                SaryStateView(kind: .empty(title: "ما فيه محطة مسجّلة قريبة", message: "لا نخمّن مكانها.", systemImage: SaryIcon.nearest))
             case let .error(msg):
                 SaryStateView(kind: .error(title: "تعذّر التحميل", message: msg), actionTitle: "حاول مرة ثانية", action: actions.retry)
             case let .loaded(rows):

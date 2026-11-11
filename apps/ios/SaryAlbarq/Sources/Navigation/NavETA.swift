@@ -21,8 +21,15 @@ struct NavETASmoother: Equatable {
     private(set) var arrival: Date?
     private var lastAt: Date?
     private var stoppedSince: Date?
+    /// The next reading is taken as it is (`snapNext`).
+    private var snapPending = false
 
     mutating func reset() { self = NavETASmoother() }
+
+    /// A new route from here (a reroute): its remaining time is not a noisy reading of the old
+    /// route's — the next one is taken at once. Build 36: a reroute that added 3 min was blended in
+    /// over a minute or two, so the time left did not move with the new remaining distance.
+    mutating func snapNext() { snapPending = true }
 
     /// One progress: the engine's remaining seconds, my speed. Returns the smoothed remaining seconds.
     @discardableResult
@@ -31,6 +38,7 @@ struct NavETASmoother: Equatable {
         defer { lastAt = now }
         guard let a = arrival, let last = lastAt else {
             arrival = target
+            snapPending = false
             return max(0, remainingS)
         }
         if let v = speedMps, v < Self.stoppedMps {
@@ -39,7 +47,8 @@ struct NavETASmoother: Equatable {
             stoppedSince = nil
         }
         let diff = target.timeIntervalSince(a)
-        if abs(diff) >= Self.snapS {
+        if snapPending || abs(diff) >= Self.snapS {
+            snapPending = false
             arrival = target
         } else if let s = stoppedSince, now.timeIntervalSince(s) < Self.stopGraceS {
             /* Waiting at a light: the arrival stays where it was. */

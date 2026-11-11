@@ -105,9 +105,14 @@ final class CampSuggestModel: ObservableObject {
 }
 
 struct CampSuggestSheet: View {
-    @ObservedObject var controller: LiveOutingController
+    /// The live outing, or the home map without one (م6): where «اتجه» / «دروب البر» lead.
+    var host: DesertToolsHost
     @StateObject private var model = CampSuggestModel()
     @Environment(\.sary) private var theme
+
+    init(host: DesertToolsHost) { self.host = host }
+
+    init(controller: LiveOutingController) { self.init(host: .live(controller)) }
 
     var body: some View {
         let p = theme.palette
@@ -143,10 +148,7 @@ struct CampSuggestSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("camp.estimateNote")
         }
-        .task {
-            let f = controller.location.lastFix
-            await model.start(me: f.map { LngLat(lng: $0.lng, lat: $0.lat) })
-        }
+        .task { await model.start(me: host.myPoint()) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("camp.sheet")
     }
@@ -198,23 +200,18 @@ struct CampSuggestSheet: View {
 
     private func close() {
         CampSitesHub.shared.highlighted = [:]
-        controller.modal = nil
+        host.close()
     }
 
     private func routes(_ s: CampSite, rank: Int) {
         let night = model.nights[s.region]
-        let rain = night?.rainy ?? false
-        let weatherAvailable = night != nil
-        controller.modal = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            controller.modal = .desertRoute(s.position, "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? ""), rain, weatherAvailable)
-        }
+        host.openRoutes(s.position, "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? ""), night?.rainy ?? false, night != nil)
     }
 
     private func go(_ s: CampSite, rank: Int) {
         /* Our own guidance (NavSession); the off-road remainder never routes along a channel:
          * the target itself is outside every flood buffer (scripts/camp-sites). */
-        controller.directions(NavTargets.point(s.position, name: "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? "")))
+        host.directions(NavTargets.point(s.position, name: "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? "")))
     }
 }
 

@@ -18,7 +18,7 @@ struct MediaEntryCard: View {
                         .accessibilityIdentifier("media.entry.subtitle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())
@@ -117,12 +117,7 @@ struct MediaSheet: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("media.sheet")
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: theme.minTarget, height: theme.minTarget)
-                }
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("media.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "media.close", visual: 36) { dismiss() }
             }
             SarySegmented(options: MediaChannel.allCases, selection: Binding(get: { center.tab }, set: { center.select($0) }),
                           label: { $0.title }, systemImage: { $0 == .mine ? "person.fill" : "person.3.fill" }, id: "media.tabs")

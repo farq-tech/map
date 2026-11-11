@@ -20,48 +20,92 @@ struct CreateOutingWizard: View {
     var quick: OutingDestination? = nil
     /// «لحالي، ابدأ»: once the outing exists, open it and start (no invite step).
     @State private var solo = false
+    /// Quick mode, then «غيّر المكان» / back: the full steps from step ١ (UI-AUDIT ١-هـ).
+    @State private var quickChangedPlace = false
+    /// The outing ids on the list before the first create attempt (to recognise ours after a timeout).
+    @State private var knownBefore: Set<String>?
+
+    /// «مين معك؟» for a place picked on the home map, until the person goes back to change it.
+    private var isQuick: Bool { quick != nil && !quickChangedPlace }
 
     private var title: String {
-        if quick != nil, flow.step != .invite { return "مين معك؟" }
+        if isQuick, flow.step != .invite { return "مين معك؟" }
         return flow.step.title
     }
 
     var body: some View {
-        SaryPage(title: title, back: flow.canGoBack && quick == nil ? { withAnimation(theme.animation(.smooth)) { flow.back() } } : nil,
+        SaryPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
                  close: { finish(start: false) }) {
-            if quick == nil { progress }
+            if !isQuick { progress }
             switch flow.step {
             case .destination:
-                if quick != nil {
+                if isQuick {
                     ProgressView().frame(maxWidth: .infinity, minHeight: 120)
                 } else {
                     DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
                                     choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
                 }
             case .weather:
-                if quick != nil {
-                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo,
-                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() })
+                if isQuick {
+                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo, solo: solo,
+                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
                 } else {
                     WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
                 }
             case .invite:
-                InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly,
-                           start: { finish(start: true) }, later: { finish(start: false) })
+                InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly)
             }
+        }
+        /* «ابدأ الطلعة» pinned at the bottom of step ٣: never under the fold (UI-AUDIT ١-هـ). */
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if flow.step == .invite { inviteBar }
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(flow.creating)
         .onAppear {
             weather.myFix = location.lastFix.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) }
             weather.locator.request()
-            if let q = quick, flow.step == .destination {
+            if let q = quick, !quickChangedPlace, flow.step == .destination {
                 _ = flow.choose(q)
                 flow.departure = Date()
                 weather.setDestination(flow.destination)
             }
         }
         .onChange(of: flow.destination) { _, d in weather.setDestination(d) }
+    }
+
+    /// Back / «غيّر المكان»: to step ١, keeping the name and the time; quick mode becomes the full steps.
+    private func changePlace() {
+        withAnimation(theme.animation(.smooth)) {
+            if quick != nil { quickChangedPlace = true }
+            flow.back()
+        }
+    }
+
+    /// Step ٣'s actions, pinned: «ابدأ الطلعة» (the one primary) and «لاحقًا».
+    private var inviteBar: some View {
+        let p = theme.palette
+        return VStack(spacing: theme.space(.xs)) {
+            /* Said right above the button: finishing here is the creator's consent (shares by default). */
+            Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                .saryText(.caption, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("create.shareStatement")
+            Button { finish(start: true) } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
+                .buttonStyle(.sary(.primary))
+                .accessibilityIdentifier("create.start")
+            Button("لاحقًا") { finish(start: false) }
+                .buttonStyle(.sary(.plain, compact: true))
+                .accessibilityIdentifier("create.later")
+        }
+        .padding(.horizontal, theme.space(.l))
+        .padding(.top, theme.space(.s))
+        .padding(.bottom, theme.space(.xs))
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
+        .background(p.background.shadow(color: .black.opacity(0.12), radius: 8, y: -2).ignoresSafeArea(edges: .bottom))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("create.bar")
     }
 
     private var progress: some View {
@@ -84,22 +128,55 @@ struct CreateOutingWizard: View {
         }
     }
 
+    /// Create the outing, saying at each call what we wait on (`CreateStage`), and never leaving the
+    /// spinner without an answer: success → step ٣; failure → the reason and «أعد المحاولة». A create
+    /// that failed (timeout) may still have reached the server: before saying «تعذّر» and before a retry
+    /// posts again, the list is checked for it (`CreateFlowState.recovered`), so a retry never makes two.
     private func approve() {
+        let retrying = flow.failure != nil
         guard flow.approve(now: Date()) else { return }
         let name = flow.trimmedName
         let dest = flow.destination
+        /* The outings that existed before the FIRST attempt: anything new with this name is ours. */
+        if knownBefore == nil { knownBefore = Set(model.current.map(\.id)) }
+        let known = knownBefore ?? []
         Task {
-            guard let id = await model.createOuting(name: name, openNow: false) else {
-                flow.createFailed(model.errorText ?? "تعذّر إنشاء الطلعة.")
+            var id: String?
+            if retrying, !model.isDemo {
+                flow.advance(.verifying)
+                await model.refresh()
+                id = CreateFlowState.recovered(name: name, current: model.current, knownBefore: known, now: Date())
+                flow.advance(.outing)
+            }
+            if id == nil { id = await model.createOuting(name: name, openNow: false) }
+            if id == nil, !model.isDemo {
+                let message = model.errorText ?? "تعذّر إنشاء الطلعة."
                 model.errorText = nil
+                flow.advance(.verifying)
+                await model.refresh()
+                id = CreateFlowState.recovered(name: name, current: model.current, knownBefore: known, now: Date())
+                if id == nil {
+                    flow.createFailed(message)
+                    return
+                }
+            }
+            guard let id else {
+                flow.createFailed("تعذّر إنشاء الطلعة.")
                 return
             }
             if let dest {
+                flow.advance(.destination)
                 RecentPlaces.add(dest)
                 let plan = model.plans.model(id)
                 if plan.planPhase == .loading { await plan.loadPlan() }
-                _ = await plan.setDestination(dest)
-                destinationLocalOnly = plan.destinationLocalOnly
+                if await plan.setDestination(dest) {
+                    destinationLocalOnly = plan.destinationLocalOnly
+                } else {
+                    /* The outing exists; only the destination did not reach the server (slow network).
+                     * Keep it on this phone: `PlanModel.loadPlan` sends it when the live screen loads the plan. */
+                    LocalDestinationStore.save(id, .init(destination: dest, pending: true, savedAt: Date()))
+                    destinationLocalOnly = true
+                }
             }
             withAnimation(theme.animation(.smooth)) { flow.created(id) }
             if solo { finish(start: true) }
@@ -179,6 +256,7 @@ private struct DestinationStep: View {
     @State private var results: [PlaceSearch.Place] = []
     @State private var searching = false
     @State private var searchError: String?
+    @State private var order: PlaceSearch.ListOrder = .relevance
     @State private var job: Task<Void, Never>?
     @State private var mapOpen = false
     @State private var recent = RecentPlaces.load()
@@ -209,17 +287,18 @@ private struct DestinationStep: View {
             if searching { SaryStateView(kind: .loading("نبحث…")) }
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
+                if results.count >= 3 { PlaceOrderPicker(order: $order, hasPosition: near != nil) }
                 SarySection(title: "أماكن") {
-                    ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
+                    ForEach(Array(PlaceSearch.ordered(results, by: order, near: near).enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        row(icon: r.icon, title: r.name, detail: r.subtitle, trailing: near.map { SaryFormat.distance(meters: PlanGeo.meters($0, r.point)) },
-                            id: "create.dest.result") {
+                        PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
+                                       meters: r.meters(from: near), id: "create.dest.result") {
                             choose(OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: r.point.lat, lng: r.point.lng))
                         }
                     }
                 }
             } else if !searching && searchError == nil && text.count >= 2 {
-                Text("ما وجدنا مكانًا بهذا الاسم. جرّب اسمًا آخر أو أدخل إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني أو أدخل إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
             }
         }
         Button { mapOpen = true } label: { SaryButtonLabel(title: "اختر من الخريطة", systemImage: "map") }
@@ -237,7 +316,7 @@ private struct DestinationStep: View {
             }
         }
         /* No «بدون وجهة»: every outing is a trip with a start and an end. */
-        Label("كل طلعة رحلة لها بداية ونهاية، فالوجهة مطلوبة.", systemImage: "flag.checkered")
+        Label("كل طلعة لها بداية ونهاية، فالوجهة مطلوبة.", systemImage: "flag.checkered")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("create.dest.required")
@@ -267,7 +346,7 @@ private struct DestinationStep: View {
                 }
                 Spacer()
                 if let trailing { Text(trailing).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
-                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+                Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
             }
             .frame(minHeight: theme.minTarget)
             .contentShape(Rectangle())
@@ -357,6 +436,36 @@ struct MapPointPicker: View {
     }
 }
 
+// MARK: - Creating: what we wait on, with the seconds
+
+/// Under the busy button while the outing is being created: the call we wait on
+/// («ننشئ الطلعة على الخادم… ٥ ث»), and past 8 s that the network is slow and we are still trying.
+/// Every call has its own timeout (12 s), so this always ends in step ٣ or an error with «أعد المحاولة».
+private struct CreateProgressLine: View {
+    var flow: CreateFlowState
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        if flow.creating {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let text = flow.waitingText(now: ctx.date) ?? ""
+                let slow = text.contains("\n")
+                HStack(alignment: .firstTextBaseline, spacing: theme.space(.s)) {
+                    Image(systemName: slow ? "wifi.exclamationmark" : "hourglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(text).saryNumber(.footnote, weight: .medium)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(slow ? theme.palette.warningText : theme.palette.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("create.progressLine")
+        }
+    }
+}
+
 // MARK: - Quick start: «مين معك؟»
 
 /// After «ابدأ» on a place: who comes along. Inviting is optional — «لحالي» starts at once.
@@ -364,8 +473,12 @@ private struct CompanionsStep: View {
     var flow: CreateFlowState
     @ObservedObject var weather: WizardWeather
     var online: Bool
+    /// The running (or last failed) attempt is «لحالي»: that button shows the progress / retry.
+    var solo = false
     var withFriends: () -> Void
     var alone: () -> Void
+    /// Back to step ١ to pick another place (the full steps from there).
+    var changePlace: () -> Void
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -390,17 +503,29 @@ private struct CompanionsStep: View {
         Text("تبي أحد معك؟ أرسل لهم الدعوة في واتساب، ويشوفون موقعك وتشوفهم طول الطريق. أو امشِ لحالك.")
             .saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
         if let e = flow.error { SaryInlineMessage(text: e, tone: .error) }
-        if !online { SaryOfflineStrip(text: "بلا إنترنت — نبدأ أول ما يرجع الاتصال.") }
+        /* Honest: the server creates the outing, nothing is queued, so both buttons wait for the network. */
+        if !online { SaryOfflineStrip(text: CreateCopy.offline) }
+        CreateProgressLine(flow: flow)
         Button(action: withFriends) {
-            SaryButtonLabel(title: "ادعُ ربعك", systemImage: "person.2.fill", busy: flow.creating, busyTitle: "نجهّز الطلعة…")
+            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ ربعك",
+                            systemImage: flow.failure != nil && !solo ? SaryIcon.retry : "person.2.fill",
+                            busy: flow.creating && !solo, busyTitle: "ننشئ الطلعة…")
         }
         .buttonStyle(.sary(.primary))
         .disabled(flow.creating || !online)
         .accessibilityIdentifier("start.withFriends")
-        Button(action: alone) { SaryButtonLabel(title: "لحالي، ابدأ الآن", systemImage: SaryIcon.play) }
+        Button(action: alone) {
+            SaryButtonLabel(title: flow.failure != nil && solo ? CreateFlowState.retryTitle : "لحالي، ابدأ الآن",
+                            systemImage: flow.failure != nil && solo ? SaryIcon.retry : SaryIcon.play,
+                            busy: flow.creating && solo, busyTitle: "ننشئ الطلعة…")
+        }
             .buttonStyle(.sary(.secondary))
             .disabled(flow.creating || !online)
             .accessibilityIdentifier("start.solo")
+        Button(action: changePlace) { SaryButtonLabel(title: "غيّر المكان", systemImage: "mappin.and.ellipse") }
+            .buttonStyle(.sary(.plain, compact: true))
+            .disabled(flow.creating)
+            .accessibilityIdentifier("start.changePlace")
         Label(ShareMemory.joinStatement, systemImage: "location.fill")
             .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
     }
@@ -433,9 +558,13 @@ private struct WeatherStep: View {
                 }
                 Text("يناسبنا الجو؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 if let e = flow.error, e != CreateFlowState.Issue.nameEmpty.arabic { SaryInlineMessage(text: e, tone: .error) }
-                if !online { SaryOfflineStrip(text: "بلا إنترنت — ننشئ الطلعة أول ما يرجع الاتصال.") }
+                /* Honest: nothing is queued (the server creates the outing), the button waits for the network. */
+                if !online { SaryOfflineStrip(text: CreateCopy.offline) }
+                CreateProgressLine(flow: flow)
                 Button(action: approve) {
-                    SaryButtonLabel(title: "يناسبنا الجو، كمّل", systemImage: "checkmark", busy: flow.creating, busyTitle: "ننشئ الطلعة…")
+                    SaryButtonLabel(title: flow.failure != nil ? CreateFlowState.retryTitle : "يناسبنا الجو، كمّل",
+                                    systemImage: flow.failure != nil ? SaryIcon.retry : "checkmark",
+                                    busy: flow.creating, busyTitle: "ننشئ الطلعة…")
                 }
                 .buttonStyle(.sary(.primary))
                 .disabled(flow.creating || !online || flow.destination == nil)
@@ -501,7 +630,8 @@ private struct WeatherStep: View {
     private func weatherCards(_ d: OutingDestination) -> some View {
         let p = theme.palette
         let s = weather.store
-        let card = WeatherPresenter.card(title: "الجو في \(d.name) الآن", report: s.report, refreshing: s.refreshing, failed: s.lastFailed, now: now, hours: 24)
+        let card = WeatherPresenter.card(title: "الجو في \(d.name) الآن", report: s.report, refreshing: s.refreshing, failed: s.lastFailed, now: now, hours: 24,
+                                         reference: WeatherReference(point: Geo.LatLng(lat: d.lat, lng: d.lng), label: "من الوجهة"))
         WeatherCardView(ui: card)
             .accessibilityIdentifier("create.weather.now")
         arrivalCard(d)
@@ -574,12 +704,12 @@ private struct InviteStep: View {
     @ObservedObject var weather: WizardWeather
     var link: URL?
     var localOnly: Bool
-    var start: () -> Void
-    var later: () -> Void
     @Environment(\.sary) private var theme
     @Environment(\.openURL) private var openURL
     @State private var sharing = false
     @State private var copied = false
+    /// «خيارات أخرى»: QR, share, copy and the message itself (WhatsApp is how most invite).
+    @State private var more = false
 
     var body: some View {
         let p = theme.palette
@@ -598,56 +728,86 @@ private struct InviteStep: View {
                 .accessibilityIdentifier("create.destinationLocal")
         }
         if let link, let message {
-            VStack(spacing: theme.space(.m)) {
-                SaryQRCode(text: link.absoluteString, size: 170)
-                    .accessibilityIdentifier("create.qr")
-                Text(link.absoluteString).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1).truncationMode(.middle)
-                    .environment(\.layoutDirection, .leftToRight)
-                    .textSelection(.enabled)
+            whatsAppCard(message)
+                .sheet(isPresented: $sharing) { ShareSheet(items: [message]).presentationDetents([.medium, .large]) }
+            Button {
+                withAnimation(theme.animation(.smooth)) { more.toggle() }
+            } label: {
+                HStack {
+                    Text("خيارات أخرى").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text("رمز QR، مشاركة، نسخ").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                        .rotationEffect(.degrees(more ? 180 : 0))
+                }
+                .frame(minHeight: theme.minTarget)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
-            .padding(theme.space(.l))
-            .sarySurface(radius: SaryRadius.l)
-            Button { if let u = InviteMessage.whatsAppURL(message) { openURL(u) } } label: {
-                SaryButtonLabel(title: "أرسل في واتساب", systemImage: "message.fill")
+            .buttonStyle(.plain)
+            .accessibilityValue(Text(more ? "مفتوحة" : "مقفلة"))
+            .accessibilityIdentifier("create.more")
+            if more {
+                VStack(spacing: theme.space(.m)) {
+                    SaryQRCode(text: link.absoluteString, size: 170)
+                        .accessibilityIdentifier("create.qr")
+                    Text(link.absoluteString).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1).truncationMode(.middle)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(theme.space(.l))
+                .sarySurface(radius: SaryRadius.l)
+                HStack(spacing: theme.space(.s)) {
+                    Button { sharing = true } label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
+                        .buttonStyle(.sary(.secondary))
+                        .accessibilityIdentifier("create.share")
+                    Button {
+                        UIPasteboard.general.string = message
+                        copied = true
+                    } label: { SaryButtonLabel(title: copied ? "نُسخت" : "انسخ الرسالة", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
+                        .buttonStyle(.sary(.secondary))
+                        .accessibilityIdentifier("create.copy")
+                }
+                SarySection(title: "نص الدعوة") {
+                    Text(message).saryText(.footnote).foregroundStyle(p.textPrimary).fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, theme.space(.s))
+                        .accessibilityIdentifier("create.message")
+                }
             }
-            .buttonStyle(.sary(.primary))
-            .accessibilityIdentifier("create.whatsapp")
-            HStack(spacing: theme.space(.s)) {
-                Button { sharing = true } label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
-                    .buttonStyle(.sary(.secondary))
-                    .accessibilityIdentifier("create.share")
-                Button {
-                    UIPasteboard.general.string = message
-                    copied = true
-                } label: { SaryButtonLabel(title: copied ? "نُسخت" : "انسخ الرسالة", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
-                    .buttonStyle(.sary(.secondary))
-                    .accessibilityIdentifier("create.copy")
-            }
-            SarySection(title: "نص الدعوة") {
-                Text(message).saryText(.footnote).foregroundStyle(p.textPrimary).fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, theme.space(.s))
-                    .accessibilityIdentifier("create.message")
-            }
-            .sheet(isPresented: $sharing) { ShareSheet(items: [message]).presentationDetents([.medium, .large]) }
         } else if let id = flow.outingId {
             /* «دعوة شخصية» (build 12+): no open link — invite each person by name. */
             WizardPersonalInvites(outingId: id, outingName: flow.trimmedName)
         } else {
             SaryBanner(text: "ما عندنا رابط الدعوة على هذا الجوال. افتح الطلعة وأنشئ رابطًا جديدًا من «الدعوة».", tone: .warning)
         }
-        /* Said right above the buttons: finishing here is the creator's consent (shares by default). */
-        Label(ShareMemory.joinStatement, systemImage: "location.fill")
-            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("create.shareStatement")
-        Button(action: start) { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-            .buttonStyle(.sary(.primary))
-            .accessibilityIdentifier("create.start")
-        Button("لاحقًا", action: later)
-            .buttonStyle(.sary(.plain))
-            .accessibilityIdentifier("create.later")
-        Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع.")
+        Text("«ابدأ الطلعة» تحت تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The first card: WhatsApp (the destination, the weather at arrival and the link in one message).
+    private func whatsAppCard(_ message: String) -> some View {
+        let p = theme.palette
+        return Button { if let u = InviteMessage.whatsAppURL(message) { openURL(u) } } label: {
+            HStack(spacing: theme.space(.m)) {
+                Image(systemName: "message.fill").font(.system(size: 20, weight: .semibold)).foregroundStyle(p.onAccent)
+                    .frame(width: 48, height: 48)
+                    .background(Circle().fill(p.live))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("أرسل الدعوة في واتساب").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text("توصلهم الوجهة والجو وقت الوصول والرابط في رسالة وحدة.")
+                        .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+            }
+            .padding(theme.space(.m))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.elevated))
+            .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.live.opacity(0.6), lineWidth: 1.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityIdentifier("create.whatsapp")
     }
 }
 

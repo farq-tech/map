@@ -28,7 +28,7 @@ struct ExploreHeader: View {
                     .saryGlass(Circle(), role: .chrome, interactive: true)
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("ارجع للرحلة"))
+            .accessibilityLabel(Text("ارجع للطلعة"))
             .accessibilityIdentifier("explore-exit")
 
             HStack(spacing: theme.space(.s)) {
@@ -56,7 +56,7 @@ struct ExploreHeader: View {
                                     .padding(.horizontal, 4)
                                     .frame(minWidth: 17, minHeight: 17)
                                     .background(Capsule().fill(p.accent))
-                                    .offset(x: 6, y: -4)
+                                    .saryBadgeOutset(trailing: 6, top: 4)
                             }
                         }
                         .frame(width: 44, height: barHeight)
@@ -331,7 +331,7 @@ struct SavedPlacesSheet: View {
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
         .realisticCover($realistic)
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
-                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "ينمسح من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
             if let d = deleting { store.delete(d.id) }
             deleting = nil
         }
@@ -442,7 +442,7 @@ struct SavedPlaceEditSheet: View {
             } label: { SaryButtonLabel(title: "احفظ", systemImage: "star.fill") }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("placeEdit.save")
-            Text("يُحفظ على هذا الجوال فقط، ولا يُرسل لأحد.").saryText(.footnote).foregroundStyle(p.textTertiary)
+            Text("يُحفظ على هذا الجوال فقط، وما نرسله لأحد.").saryText(.footnote).foregroundStyle(p.textTertiary)
         }
         .onAppear {
             name = draft.name
@@ -485,7 +485,8 @@ struct TracksSheet: View {
                     }
                 }
             }
-            Text("الخطة نفسها تُستورد وتُصدّر من «الرحلة» ← «الخطة وقائمة التجهيز».").saryText(.footnote).foregroundStyle(p.textTertiary)
+            /* Named by the screen that has it (the live tabs are being renamed): the plan editor imports, «ملف المسار» exports. */
+            Text("مسار الخطة نفسه يُستورد من محرّر «خطة الطلعة»، ويُصدّر من «ملف المسار» في تفاصيل الطلعة.").saryText(.footnote).foregroundStyle(p.textTertiary)
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: RouteFile.contentTypes, allowsMultipleSelection: false) { r in
             if case let .success(urls) = r, let u = urls.first { importFile(u) }
@@ -502,7 +503,7 @@ struct TracksSheet: View {
             }
         }
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
-                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من قائمة المسارات على هذا الجوال. الخطة لا تتأثر.", confirmTitle: "احذف") {
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "ينمسح من قائمة المسارات على هذا الجوال. الخطة ما تتأثر.", confirmTitle: "احذف") {
             if let d = deleting { library.delete(d.id) }
             deleting = nil
         }
@@ -638,7 +639,7 @@ struct ExploreTopBar: View {
         let p = theme.palette
         VStack(spacing: 8) {
             HStack(spacing: 4) {
-                round(SaryIcon.back, label: "ارجع للرحلة", id: "explore-exit", action: exit)
+                round(SaryIcon.back, label: "ارجع للطلعة", id: "explore-exit", action: exit)
                 HStack(spacing: 0) {
                     ForEach([MapLayer.satellite, .topo, .standard], id: \.self) { l in
                         let on = controller.mapLayer == l
@@ -662,15 +663,39 @@ struct ExploreTopBar: View {
                 .accessibilityIdentifier("explore.layerName")
                 round("square.3.layers.3d", label: "الطبقات", id: "explore-layers", active: controller.terrain3D, action: layers)
             }
-            .padding(5)
+            /* The round buttons are 44 pt touch areas around 36 pt circles, so the
+             * bar's inset is 1 pt (the circles still sit 5 pt from its edge). */
+            .padding(1)
             .frame(height: 46)
             .saryGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
+            /* UI-AUDIT م6: the desert features in the open, not three levels under «الطبقات». */
+            HStack(spacing: 8) {
+                chip("tent.fill", "الكشتة", id: "explore.camp") { controller.performAction("camp") }
+                chip("point.topleft.down.to.point.bottomright.curvepath", "دروب البر", id: "explore.desertRoute") { controller.performAction("desertRoute") }
+                Spacer(minLength: 0)
+            }
             ExploreCoordinateBar(model: controller.exploreReading, format: controller.coordFormat,
                                  toggleFormat: { controller.coordFormat = controller.coordFormat == .decimal ? .dms : .decimal },
                                  copy: controller.copyCrosshair, save: controller.saveCrosshair)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("explore.header")
+    }
+
+    /// «الكشتة» / «دروب البر»: a 44 pt glass capsule under the layer bar.
+    private func chip(_ symbol: String, _ title: String, id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(theme.palette.accentText)
+                Text(title).font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary).lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .saryGlass(Capsule(), role: .chrome, interactive: true)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityIdentifier(id)
     }
 
     private func round(_ symbol: String, label: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {
@@ -680,6 +705,8 @@ struct ExploreTopBar: View {
                 .foregroundStyle(active ? theme.palette.onAccent : theme.palette.textPrimary)
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(active ? theme.palette.accent : theme.palette.sunken.opacity(0.7)))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text(label))
@@ -739,7 +766,7 @@ struct ExploreCoordinateBar: View {
     private func icon(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.palette.textPrimary)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())

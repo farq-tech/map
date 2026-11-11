@@ -31,7 +31,7 @@ extension LiveOutingController {
 
     /// The button: free → «تتبعني» → «باتجاهي» → free.
     func cycleCameraMode() {
-        if location.lastFix == nil { toast("ننتظر أول قراءة من GPS") }
+        if location.lastFix == nil { toast("ننتظر أول قراءة للموقع") }
         if nav.isActive, nav.camera == .overview {
             /* From «نظرة عامة» the button means "back on my car". */
             nav.camera = .follow
@@ -53,6 +53,15 @@ extension LiveOutingController {
     /// A pan / pinch / rotate / tilt on the map.
     func cameraUserMoved() {
         followCam.userMovedMap(at: Date().timeIntervalSince1970)
+        followCamTimerCheck()
+    }
+
+    /// That pan / pinch / rotate / tilt has settled: one that moved nothing gives the camera back
+    /// to the guidance at once (no «رجّعني للتوجيه» for a touch that only brushed the map).
+    func cameraGestureEnded(negligible: Bool) {
+        let was = followCam.mode
+        followCam.gestureEnded(negligible: negligible)
+        if was == .free, followCam.mode != .free, nav.isActive, nav.camera == .free { nav.camera = .follow }
         followCamTimerCheck()
     }
 

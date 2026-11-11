@@ -106,7 +106,7 @@ final class NavigationUITests: XCTestCase {
                 shot(app, "nav-steps-light")
                 app.buttons["nav.steps.close"].tap()
                 app.buttons["nav.end"].tap()
-                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«إنهاء» ends guidance")
+                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«أوقف التوجيه» ends guidance")
             }
             app.terminate()
         }
@@ -157,18 +157,23 @@ final class NavigationUITests: XCTestCase {
             XCTAssertTrue(el(app, "nav.distance").exists, "the distance, big")
             let title = el(app, "nav.instruction")
             XCTAssertTrue(title.label.contains("طريق مكة المكرمة"), title.label)
-            XCTAssertLessThan(title.frame.height, 60, "the road on one line")
+            /* Build 37: the direction in words (big) with the road under it (one smaller line). */
+            XCTAssertLessThan(title.frame.height, 84, "the action on one line, the road on one line")
             XCTAssertFalse(el(app, "nav.banner.eta").frame.intersects(el(app, "nav.banner").frame), "the ETA left the banner")
             let remaining = el(app, "nav.remainingTime")
             XCTAssertTrue(remaining.waitForExistence(timeout: 5), "the time left")
             XCTAssertTrue(el(app, "nav.eta").label.contains("كم"), "«١٩ كم · ١٢:٥٦ ص»: \(el(app, "nav.eta").label)")
             let end = app.buttons["nav.end"]
-            XCTAssertTrue(end.exists && end.isHittable, "a clear «إنهاء»")
-            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«إنهاء» is in the bottom bar")
+            XCTAssertTrue(end.exists && end.isHittable, "a clear «أوقف التوجيه»")
+            XCTAssertTrue(end.label.contains("أوقف التوجيه"), end.label)
+            XCTAssertGreaterThan(end.frame.minY, app.frame.height * 0.75, "«أوقف التوجيه» is in the bottom bar")
+            /* UI-AUDIT م3: «المزيد» and «غيّر الوجهة» in the guidance bar too. */
+            XCTAssertTrue(app.buttons["nav.more"].isHittable, "«المزيد» while guiding")
+            XCTAssertTrue(app.buttons["nav.changeDestination"].isHittable, "«غيّر الوجهة» while guiding")
             XCTAssertTrue(el(app, "outing-sos").exists, "SOS is never hidden while guiding")
+            /* Two side circles at most: the camera and «على الطريق»; the voice and routes are in the sheet. */
             let round = ["outing-locate", "nav.search", "nav.mute", "nav.routes"].filter { el(app, $0).exists }
-            XCTAssertGreaterThanOrEqual(round.count, 3, "the round buttons: \(round)")
-            XCTAssertLessThanOrEqual(round.count, 4, "four at most")
+            XCTAssertEqual(Set(round), ["outing-locate", "nav.search"], "the round buttons: \(round)")
             for id in round {
                 XCTAssertGreaterThan(el(app, id).frame.midX, app.frame.width / 2, "\(id) on the right")
             }

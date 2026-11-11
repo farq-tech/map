@@ -94,9 +94,7 @@ final class SpeedUITests: XCTestCase {
     func testOverSpeedNudgeIsOffByDefaultAndAdjustable() {
         let app = launch()
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let tab = app.buttons["tab.more"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        tab.tap()
+        app.openLiveSettings()
         /* «الإعدادات» → «القيادة والعرض». */
         let driving = app.descendants(matching: .any)["settings.driving"]
         XCTAssertTrue(driving.waitForExistence(timeout: 5))

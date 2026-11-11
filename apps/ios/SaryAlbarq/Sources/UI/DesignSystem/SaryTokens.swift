@@ -181,6 +181,14 @@ extension View {
     func saryShadow(_ s: SaryShadow, _ theme: SaryTheme) -> some View {
         shadow(color: theme.palette.shadow.opacity(s.opacity()), radius: s.radius(), x: 0, y: s.y())
     }
+
+    /// A count badge in a `.topTrailing` overlay, pushed `trailing` pt out past
+    /// the trailing edge and `top` pt up. Uses negative semantic padding, so it
+    /// goes outward on the trailing side in RTL (left) and LTR (right) alike —
+    /// unlike `.offset(x:)` with a hard-coded sign.
+    func saryBadgeOutset(trailing: CGFloat, top: CGFloat = 0) -> some View {
+        padding(.trailing, -trailing).padding(.top, -top)
+    }
 }
 
 // MARK: - Motion
@@ -215,6 +223,8 @@ enum SaryMotion {
 /// One place for every symbol, so the same idea always uses the same glyph.
 enum SaryIcon {
     static let back = "chevron.backward" // auto-mirrors in RTL
+    /// Row disclosure («ادخل»): points left in RTL, right in LTR. Never `chevron.left`/`.right`.
+    static let disclosure = "chevron.forward"
     static let close = "xmark"
     static let locate = "location.fill"
     static let locateFollow = "location.north.line.fill"

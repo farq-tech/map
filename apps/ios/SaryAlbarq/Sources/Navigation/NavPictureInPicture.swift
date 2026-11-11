@@ -45,7 +45,7 @@ struct NavPiPSnapshot: Equatable {
                               road: NavHUD.title(step, targetName: nav.target?.name),
                               instruction: NavText.action(step.maneuver),
                               symbol: NavGlyph.symbol(step.maneuver),
-                              distanceToTurn: SaryFormat.distance(meters: nav.progress?.distanceToManeuverM ?? step.distanceM),
+                              distanceToTurn: SaryFormat.distance(meters: nav.maneuverDistanceM ?? step.distanceM),
                               distanceRemaining: nav.remainingMeters.map(SaryFormat.distance(meters:)) ?? "",
                               timeRemaining: nav.remainingSeconds.map(NavText.remaining(seconds:)) ?? "",
                               route: nav.active?.coordinates ?? [],

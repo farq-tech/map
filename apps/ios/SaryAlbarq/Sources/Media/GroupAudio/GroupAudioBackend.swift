@@ -12,8 +12,8 @@ enum GroupAudioBackendError: Error, Equatable {
         case .network: return "لا يوجد اتصال بالإنترنت."
         case let .server(code, status):
             let t: [String: String] = [
-                "not_allowed": "أمير الرحلة هو اللي يشغّل. يقدر يفتحها للكل من «الكل يقدر يشغّل».",
-                "leader_only": "هذا لأمير الرحلة أو نائبه فقط.",
+                "not_allowed": "أمير الطلعة هو اللي يشغّل. يقدر يفتحها للكل من «الكل يقدر يشغّل».",
+                "leader_only": "هذا لأمير الطلعة أو نائبه فقط.",
                 "audio_idle": "ما فيه شي شغّال في إذاعة الطلعة.",
                 "queue_full": "القائمة مليانة (٢٠).",
                 "unknown_station": "هذي الإذاعة ما عادت متاحة.",
@@ -22,7 +22,7 @@ enum GroupAudioBackendError: Error, Equatable {
                 "rate_limited": "على هونك… اصبر ثواني.",
                 "not_a_member": "لست عضوًا في هذه الطلعة.",
             ]
-            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : "حدث خطأ. أعد المحاولة.")
+            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : SaryCopy.genericError)
         }
     }
 }

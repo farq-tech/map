@@ -60,6 +60,9 @@ final class MapVisualsDirector: NSObject {
     private var appliedBuildingsOpacity: Double?
     /// `SandGrade`'s `sarySand` last set on the imported satellite basemap.
     private var appliedSand: Double?
+    /// The `line-gradient` each glow layer was last given (the map goes idle after every source
+    /// update, and re-setting an unchanged speed-gradient expression each time was wasted work).
+    private var glowGradients: [String: NSObject] = [:]
     private let overlay = VisualsSourceView()
 
     private var flight: DroneOrbit?
@@ -211,6 +214,7 @@ final class MapVisualsDirector: NSObject {
         appliedExaggeration = nil
         appliedBuildingsOpacity = nil
         appliedSand = nil
+        glowGradients = [:]
         let m: MapboxMap = map.mapboxMap
         /* Terrain changes glide (none with Reduce Motion). */
         try? m.setTerrainProperty("exaggeration-transition", value: ["duration": UIAccessibility.isReduceMotionEnabled ? 0 : 400, "delay": 0])
@@ -418,9 +422,9 @@ final class MapVisualsDirector: NSObject {
                                                                              "tileSize": 512, "maxzoom": 11])
         }
         let broad = h.broad
-        /* Detail pass: crisper as you come closer (the ~30 m DEM's ridges and slip faces). */
-        let detailEx: [Any] = ["interpolate", ["linear"], ["zoom"], 9, h.exaggeration * 0.6, 12, h.exaggeration, 15, min(1, h.exaggeration * 1.12)]
-        let broadEx: [Any] = ["interpolate", ["linear"], ["zoom"], 8, broad.exaggeration, 15, broad.exaggeration * 0.75]
+        let satellite = lastInputs.layer == .satellite
+        let detailEx = HillshadeLight.detailExaggeration(h.exaggeration, satellite: satellite)
+        let broadEx = HillshadeLight.broadExaggeration(broad.exaggeration, satellite: satellite)
         put(Self.hillshadeBroadLayer, source: Self.hillshadeBroadSource, light: broad, exaggeration: broadEx, below: nil, m, changed: h != appliedHillshade)
         put(Self.hillshadeLayer, source: Self.hillshadeSource, light: h, exaggeration: detailEx, below: nil, m, changed: h != appliedHillshade)
         appliedHillshade = h
@@ -514,6 +518,7 @@ final class MapVisualsDirector: NSObject {
             let want = effective.managed && effective.glow && m.layerExists(withId: t.id) && !(t.skipIf.map { m.layerExists(withId: $0) } ?? false)
             if !want {
                 if m.layerExists(withId: gid) { try? m.removeLayer(withId: gid) }
+                glowGradients[gid] = nil
                 continue
             }
             guard let props = try? m.layerProperties(for: t.id), let source = props["source"] as? String else { continue }
@@ -527,9 +532,16 @@ final class MapVisualsDirector: NSObject {
                 let casing = t.id.hasSuffix("-line") ? String(t.id.dropLast(5)) + "-casing" : t.id + "-casing"
                 let below = m.layerExists(withId: casing) ? casing : t.id
                 try? m.addLayer(with: layer, layerPosition: .below(below))
+                glowGradients[gid] = paint["line-gradient"] as? NSObject
             } else {
                 /* Track colours follow the data (the speed gradient is rewritten with each new line). */
-                if let g = paint["line-gradient"] { try? m.setLayerProperty(for: gid, property: "line-gradient", value: g) }
+                if let g = paint["line-gradient"] {
+                    let obj = g as? NSObject
+                    if obj == nil || !(glowGradients[gid]?.isEqual(obj) ?? false) {
+                        try? m.setLayerProperty(for: gid, property: "line-gradient", value: g)
+                        glowGradients[gid] = obj
+                    }
+                }
                 if restyle { try? m.setLayerProperty(for: gid, property: "line-opacity", value: night ? 0.42 : 0.24) }
             }
         }

@@ -50,9 +50,9 @@ struct LiveSettingsPage: View {
                     row("مسح سجل الطلعات", id: "settings.clearHistory", last: true) { confirmClear = true }
                 }
                 group("متقدم") {
-                    toggle("دقة GPS العالية", isOn: Binding(get: { shareMode == ShareMode.precise.rawValue },
+                    toggle("دقة الموقع العالية", isOn: Binding(get: { shareMode == ShareMode.precise.rawValue },
                                                            set: { shareMode = ($0 ? ShareMode.precise : ShareMode.balanced).rawValue }), id: "settings.gpsPrecise")
-                    toggle("توفير بطارية GPS", isOn: Binding(get: { shareMode == ShareMode.saver.rawValue },
+                    toggle("توفير بطارية الموقع", isOn: Binding(get: { shareMode == ShareMode.saver.rawValue },
                                                             set: { shareMode = ($0 ? ShareMode.saver : ShareMode.balanced).rawValue }), id: "settings.gpsSaver")
                     row("الوضع بدون إنترنت", id: "settings-offline") { closeThen { controller.modal = .offlineMaps } }
                     row("تشخيص", id: "settings.diagnostics", last: true) { path.append(.diagnostics) }
@@ -112,13 +112,13 @@ struct LiveSettingsPage: View {
             sub("اتجاه الخريطة أثناء القيادة", footer: "إذا حرّكت الخريطة وأنت ماشي أكثر من ١٠ كم/س، ترجع «باتجاهي» بعد ١٠ ثوانٍ بدون لمس. «ابدأ التوجيه تلقائيًا»: إذا بدأت الطلعة يوجّهك صوتًا للمحطة التالية ثم الوجهة، على جوالك فقط. «شكل الشاشة»: أثناء القيادة تبقى الخريطة وأزرار قليلة كبيرة، وإذا وقفت تظهر التفاصيل؛ «تلقائي» يختار من سرعتك والملاحة.") {
                 toggle("رجّعني للتوجيه تلقائيًا", isOn: Binding(get: { FollowCameraPrefs.snapshot().autoRecenter },
                                                               set: { FollowCameraPrefs.setAuto($0); controller.objectWillChange.send() }), id: "settings-autorecenter")
-                toggle("ابدأ التوجيه تلقائيًا مع الرحلة", isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
+                toggle("ابدأ التوجيه تلقائيًا مع الطلعة", isOn: Binding(get: { controller.autoNavEnabled }, set: { controller.setAutoNavEnabled($0) }), id: "settings-autonav")
                 segmentRow("شكل الشاشة") {
                     SarySegmented(options: LiveContextOverride.allCases, selection: $controller.contextOverride, label: { $0.label }, id: "settings-context")
                 }
             }
         case .units:
-            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الأعضاء، الوجهة، الملاحة، المسار.") {
+            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الربع، الوجهة، الملاحة، المسار.") {
                 choice("كيلومتر", on: !DistanceUnits.miles, id: "settings.units.km") { DistanceUnits.miles = false; controller.objectWillChange.send() }
                 choice("ميل", on: DistanceUnits.miles, id: "settings.units.mi", last: true) { DistanceUnits.miles = true; controller.objectWillChange.send() }
             }
@@ -188,7 +188,7 @@ struct LiveSettingsPage: View {
 
     private func row(_ title: String, id: String, last: Bool = false, action: @escaping () -> Void) -> some View {
         SettingsRow(title: title, last: last) {
-            Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.textSecondary)
+            Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.textSecondary)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: action)
@@ -335,7 +335,7 @@ private struct VolumePage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت العيال من السماعة الخارجية.") {
+            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت الربع من السماعة الخارجية.") {
                 SarySegmented(options: PTTVoiceLevel.allCases, selection: $voiceLevel, label: { $0.label }, id: "settings.voiceLevel")
                     .padding(10)
             }
@@ -360,14 +360,14 @@ private struct WhoSeesPage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع أعضاء هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
+            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع ربع هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للربع «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
                 SettingsRow(title: controller.session.isSharingNow ? "موقعك مُشارَك الآن" : "موقعك غير مُشارَك الآن") { EmptyView() }
                     .accessibilityIdentifier("settings.sharing.state")
                 SettingsRow(title: "شارك البطارية") {
                     Toggle("", isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-battery")
-                SettingsRow(title: "الإشعارات: رسائل وطوارئ العيال", last: true) {
+                SettingsRow(title: "الإشعارات: رسائل وطوارئ الربع", last: true) {
                     Toggle("", isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-notify")

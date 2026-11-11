@@ -240,7 +240,7 @@ enum CarPlayDestinations {
                                     symbol: "flag.fill", action: .trip(.rally)))
             case .wayBack:
                 let d = trail.start.flatMap { st in i.myPosition.map { Vehicle.distanceMeters($0, st.position) } }
-                outing.append(.init(title: "طريق العودة", detail: "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
+                outing.append(.init(title: SaryCopy.backTrack, detail: "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
                                     symbol: "arrow.uturn.backward", action: .trip(.wayBack)))
             case .place: break
             }
@@ -253,7 +253,7 @@ enum CarPlayDestinations {
             /* Never drive anyone to where somebody WAS. */
             return .init(title: r.shortName, detail: r.detail, symbol: "car", action: .disabled)
         }
-        if !members.isEmpty { out.append(("العيال", members)) }
+        if !members.isEmpty { out.append(("الربع", members)) }
         let recent = recents.places.map { p in
             CarPlayDestinationRow(title: p.name, detail: CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: p.position)?.text ?? "",
                                   symbol: "clock.arrow.circlepath", action: .place(name: p.name, position: p.position))

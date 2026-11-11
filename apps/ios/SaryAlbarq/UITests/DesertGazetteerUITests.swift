@@ -29,15 +29,18 @@ final class DesertGazetteerUITests: XCTestCase {
 
     private func any(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
 
-    /// The chip when it is on screen, else the same category in the raised sheet («البر»).
+    /// The chip over the map (the raised sheet no longer repeats the categories, UI-AUDIT §٢):
+    /// scroll the chip row until it is on screen.
     private func open(_ app: XCUIApplication, _ id: String) {
         let chip = any(app, "home.category.\(id)")
-        if chip.exists, app.frame.insetBy(dx: 8, dy: 8).contains(chip.frame) { chip.tap(); return }
-        if !any(app, "home.grid.\(id)").exists { any(app, "home.sheet.handle").tap() }
-        let cell = any(app, "home.grid.\(id)")
-        XCTAssertTrue(cell.waitForExistence(timeout: 5), id)
-        cell.scrollIntoView(in: app)
-        cell.tap()
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), id)
+        let row = any(app, "home.categories")
+        func visible() -> Bool { app.frame.insetBy(dx: 8, dy: 8).contains(chip.frame) }
+        /* RTL: later chips sit towards the left; try that way first, then back. */
+        for _ in 0..<4 where !visible() { row.swipeRight() }
+        for _ in 0..<8 where !visible() { row.swipeLeft() }
+        XCTAssertTrue(visible(), "chip \(id) on screen")
+        chip.tap()
     }
 
     private func shot(_ name: String) {

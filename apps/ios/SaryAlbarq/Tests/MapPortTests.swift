@@ -532,3 +532,54 @@ final class FramingAndLightTests: XCTestCase {
         XCTAssertEqual(c.chipLabel, "أنت")
     }
 }
+
+/// The navigation layer re-sends only the GeoJSON sources whose drawing changed.
+final class NavSourceChangesTests: XCTestCase {
+    private func drawing() -> MapNavDrawing {
+        var d = MapNavDrawing()
+        d.routes = [.init(id: "r1", coordinates: [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.7, lat: 24.8)], selected: true)]
+        d.offRoad = [LngLat(lng: 46.7, lat: 24.8), LngLat(lng: 46.71, lat: 24.81)]
+        d.maneuver = [LngLat(lng: 46.65, lat: 24.75), LngLat(lng: 46.66, lat: 24.76)]
+        d.target = LngLat(lng: 46.71, lat: 24.81)
+        return d
+    }
+
+    func testNothingDrawnYetSendsEverything() {
+        XCTAssertEqual(NavSourceChanges.between(drawn: nil, next: MapNavDrawing()), .all)
+        XCTAssertEqual(NavSourceChanges.between(drawn: nil, next: drawing()), .all)
+    }
+
+    func testSameDrawingSendsNothing() {
+        let d = drawing()
+        XCTAssertEqual(NavSourceChanges.between(drawn: d, next: d), NavSourceChanges(routes: false, offRoad: false, maneuver: false))
+    }
+
+    func testOnlyTheChangedSourceIsSent() {
+        let d = drawing()
+        var off = d
+        off.offRoad = [LngLat(lng: 46.701, lat: 24.801), LngLat(lng: 46.71, lat: 24.81)]
+        XCTAssertEqual(NavSourceChanges.between(drawn: d, next: off), NavSourceChanges(routes: false, offRoad: true, maneuver: false))
+        var arrow = d
+        arrow.maneuver = nil
+        XCTAssertEqual(NavSourceChanges.between(drawn: d, next: arrow), NavSourceChanges(routes: false, offRoad: false, maneuver: true))
+        var route = d
+        route.routes[0].selected = false
+        XCTAssertEqual(NavSourceChanges.between(drawn: d, next: route), NavSourceChanges(routes: true, offRoad: false, maneuver: false))
+    }
+
+    func testPinOnlyChangesSendNoSource() {
+        let d = drawing()
+        var note = d
+        note.targetNote = "آخر موقع معروف"
+        note.cameraKey += 1
+        note.labels = [.init(id: "r1", at: LngLat(lng: 46.65, lat: 24.75), text: "12", selected: true)]
+        XCTAssertEqual(NavSourceChanges.between(drawn: d, next: note), NavSourceChanges(routes: false, offRoad: false, maneuver: false))
+    }
+
+    func testOffRoadRemovedIsSent() {
+        let d = drawing()
+        var gone = d
+        gone.offRoad = nil
+        XCTAssertTrue(NavSourceChanges.between(drawn: d, next: gone).offRoad)
+    }
+}

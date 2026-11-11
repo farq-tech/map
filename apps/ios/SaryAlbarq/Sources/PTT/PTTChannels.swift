@@ -99,10 +99,8 @@ enum PTTChannels {
 
     static func isPublic(_ id: String) -> Bool { publicIds.contains(id) }
 
-    private static let digits: [Character] = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"]
-    static func arabicDigits(_ s: String) -> String {
-        String(s.map { c in c.wholeNumberValue.map { digits[$0] } ?? c })
-    }
+    /// Channel ids / counts in Arabic-Indic digits (`SaryFormat`; a "." stays a dot).
+    static func arabicDigits(_ s: String) -> String { SaryFormat.digits(s, decimalSeparator: false) }
 
     /// «تردد ٣»
     static func publicName(_ id: String) -> String { "تردد \(arabicDigits(id))" }
@@ -133,13 +131,13 @@ enum PTTChannels {
     static func kickedText(_ reason: String, name: String?) -> String {
         let n = name ?? "التردد الخاص"
         switch reason {
-        case "closed": return "أغلق أمير الرحلة «\(n)» — رجعت إلى تردد ١"
+        case "closed": return "أغلق أمير الطلعة «\(n)» — رجعت إلى تردد ١"
         case "not_invited": return "«\(n)» للمدعوين فقط — أنت على تردد ١"
         default: return "أُخرجت من «\(n)» — رجعت إلى تردد ١"
         }
     }
 
-    static func inviteText(_ name: String) -> String { "أمير الرحلة دعاك إلى تردد خاص: \(name)" }
+    static func inviteText(_ name: String) -> String { "أمير الطلعة دعاك إلى تردد خاص: \(name)" }
 }
 
 /// When the first word of a friend reaches the ear, and why it is no later.

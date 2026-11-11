@@ -116,12 +116,8 @@ enum NavText {
         return Double(arabic.count) / Double(letters.count) >= 0.6
     }
 
-    static func arabicDigitsOnly(_ s: String) -> String {
-        String(s.map { ch -> Character in
-            if ch.isASCII, let v = ch.wholeNumberValue { return Character(SaryFormat.number(v)) }
-            return ch
-        })
-    }
+    /// Digits only (a "." in a road name stays a dot).
+    static func arabicDigitsOnly(_ s: String) -> String { SaryFormat.digits(s, decimalSeparator: false) }
 
     /// The main line of the banner, without the distance: «انعطف يمينًا إلى طريق الملك فهد».
     static func instruction(_ step: NavStep, targetName: String? = nil) -> String {

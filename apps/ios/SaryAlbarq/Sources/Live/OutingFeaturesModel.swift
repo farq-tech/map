@@ -164,7 +164,7 @@ final class OutingFeaturesModel: ObservableObject {
             upsert(w)
             composeError = nil
             modal = nil
-            toast("أُضيفت النقطة لكل أعضاء الطلعة")
+            toast("أُضيفت النقطة عند كل الربع")
             return true
         } catch {
             if FeatureAvailability.notDeployed(error) { phase = .notDeployed }

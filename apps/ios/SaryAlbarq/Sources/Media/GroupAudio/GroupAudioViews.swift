@@ -20,7 +20,7 @@ struct GroupAudioEntryCard: View {
                         .accessibilityIdentifier("radio.entry.subtitle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())
@@ -125,7 +125,7 @@ struct GroupAudioPromoCard: View {
                         Text("للكل، والشاشة مقفلة، وعلى سماعات السيارة").saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                    Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
                 }
                 .contentShape(Rectangle())
             }
@@ -156,22 +156,17 @@ struct GroupAudioSheet: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("radio.sheet")
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: theme.minTarget, height: theme.minTarget)
-                }
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("radio.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close", visual: 36) { dismiss() }
             }
             ScrollView {
                 VStack(spacing: theme.space(.m)) {
                     if center.availability == .localOnly {
-                        SaryInlineMessage(text: "التشغيل الحين لك أنت بس. المزامنة مع أعضاء الطلعة تشتغل مع تحديث الخادم القادم.", tone: .info)
+                        SaryInlineMessage(text: "التشغيل الحين لك أنت بس. المزامنة مع الربع تشتغل مع تحديث الخادم القادم.", tone: .info)
                             .accessibilityIdentifier("radio.localOnly")
                     }
                     NowPlayingCard(center: center)
                     if center.canSetAllowAll {
-                        SaryToggleRow(title: "الكل يقدر يشغّل", subtitle: "بدونها: أمير الرحلة ونائبه بس", systemImage: "person.3.fill",
+                        SaryToggleRow(title: "الكل يقدر يشغّل", subtitle: "بدونها: أمير الطلعة ونائبه بس", systemImage: "person.3.fill",
                                       isOn: Binding(get: { center.state.allow_all }, set: { v in Task { await center.setAllowAll(v) } }), id: "radio.allowAll")
                             .padding(theme.space(.s))
                             .sarySurface(radius: SaryRadius.l)
@@ -184,7 +179,7 @@ struct GroupAudioSheet: View {
                         case .audius: AudiusPicker(center: center)
                         }
                     } else {
-                        SaryInlineMessage(text: "أمير الرحلة هو اللي يختار. تقدر تسكّتها عندك بس.", tone: .info)
+                        SaryInlineMessage(text: "أمير الطلعة هو اللي يختار. تقدر تسكّتها عندك بس.", tone: .info)
                             .accessibilityIdentifier("radio.memberNote")
                     }
                     Text("كل جوال يشغّل البث من مصدره الرسمي مباشرة، والخادم يعرف بس وش يشتغل ووين وصل. الإذاعات مباشرة فالكل يسمع نفس البث؛ القرآن وAudius متزامنة على ساعة الخادم. صوت الملاحة يخفّض الصوت، والقناة (اضغط وتكلم) توقفها لين تخلص.")
@@ -265,7 +260,7 @@ private struct NowPlayingCard: View {
                 VStack(alignment: .leading, spacing: theme.space(.xs)) {
                     Text("ما فيه شي شغّال").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
                         .accessibilityIdentifier("radio.idle")
-                    Text(center.canControl ? "اختر إذاعة أو تلاوة وتشتغل عند الكل." : "إذا شغّل أمير الرحلة شي، يشتغل عندك تلقائي.")
+                    Text(center.canControl ? "اختر إذاعة أو تلاوة وتشتغل عند الكل." : "إذا شغّل أمير الطلعة شي، يشتغل عندك تلقائي.")
                         .saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
             }

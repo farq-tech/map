@@ -41,7 +41,7 @@ struct ProfileView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            SaryTextField(title: "الاسم", placeholder: "اسمك كما يراه العيال", text: $name, id: "profile.name", maxLength: ServerRules.nameMax)
+            SaryTextField(title: "الاسم", placeholder: "اسمك كما يشوفه الربع", text: $name, id: "profile.name", maxLength: ServerRules.nameMax)
             SaryTextField(title: "رقم الجوال (اختياري)", placeholder: "05XXXXXXXX", text: $phone, id: "profile.phone", keyboard: .phonePad, maxLength: 14,
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
                           help: "يظهر لأعضاء طلعاتك فقط (اتصال وواتساب). امسحه واحفظ لتحذفه من الخادم.")
@@ -176,7 +176,7 @@ struct SettingsView: View {
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
                 SaryDivider()
-                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من الدردشة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
+                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من المحادثة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
             }
             SarySection(title: "المظهر والقيادة") {
                 SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
@@ -236,15 +236,15 @@ struct PrivacySettingsView: View {
             SarySection(title: "متى يُشارك موقعي؟") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("hand.tap.fill", "المشاركة تلقائية ما دمت عضوًا في طلعة شغّالة: بانضمامك لطلعة (أو إنشائك لها) يشوف أعضاؤها موقعك المباشر، بدون زر «شارك» أو «أوقف».")
-                    fact("rectangle.portrait.and.arrow.right", "لإيقاف المشاركة غادر الطلعة. وتتوقف أيضًا إذا أزالك أمير الرحلة، أو أوقف الطلعة مؤقتًا، أو انتهت.")
-                    fact("lock.iphone", "بإذن «دائمًا» تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى تغادر، أو يزيلك أمير الرحلة، أو تتوقف الطلعة أو تنتهي. لا نطلب «دائمًا» عند الانضمام؛ نعرضه لاحقًا إذا قفلت الشاشة أثناء الطلعة.")
+                    fact("rectangle.portrait.and.arrow.right", "لإيقاف المشاركة غادر الطلعة. وتتوقف أيضًا إذا أزالك أمير الطلعة، أو أوقف الطلعة مؤقتًا، أو انتهت.")
+                    fact("lock.iphone", "بإذن «دائمًا» تستمر المشاركة في الخلفية والشاشة مقفلة (ويظهر مؤشر الموقع الأزرق) حتى تغادر، أو يزيلك أمير الطلعة، أو تتوقف الطلعة أو تنتهي. لا نطلب «دائمًا» عند الانضمام؛ نعرضه لاحقًا إذا قفلت الشاشة أثناء الطلعة.")
                     fact("iphone", "بإذن «أثناء الاستخدام» فقط: تُرسل والتطبيق مفتوح أمامك، وتتوقف إذا قفلت الشاشة.")
                     fact("xmark.app", "إذا قفلت التطبيق من قائمة التطبيقات، قد لا يعيد iOS فتحه، فتتوقف المشاركة حتى تفتحه.")
-                    fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل للعيال ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
-                    fact("person.wave.2.fill", "«انقطع الإرسال»: إذا كنت تشارك وتوقف وصول موقعك ١٠ دقائق، يخبر الخادم أعضاء الطلعة بذلك مع آخر موقع معروف لك.")
+                    fact("point.topleft.down.to.point.bottomright.curvepath.fill", "«مساري» (طريقك في الطلعة) يُسجَّل على جوالك فقط، ويستمر والشاشة مقفلة إذا فعّلت ذلك (مع مؤشر الموقع الأزرق). لا يُرسل للربع ولا لخوادمنا؛ تُطابق أجزاء منه مع الشوارع عبر Mapbox فقط. يُمسح مع تسجيل الخروج أو حذف الحساب.")
+                    fact("person.wave.2.fill", "«انقطع الإرسال»: إذا كنت تشارك وتوقف وصول موقعك ١٠ دقائق، يخبر الخادم ربع الطلعة بذلك مع آخر موقع معروف لك.")
                     fact("person.2.fill", "يراه أعضاء تلك الطلعة فقط، لا أحد غيرهم.")
-                    fact(SaryNearbyMark.icon, "إذا انقطع الإنترنت وأنت تشارك، يتبادل جوالك موقعك مباشرة مع جوالات أعضاء الطلعة القريبين (بلوتوث وواي فاي مباشر)، مشفّرًا ولا يقرؤه غيرهم، ويمرّر لهم آخر مواقع الباقين بعمرها الحقيقي. يتوقف مع توقف المشاركة، ولا يُرسل للخادم شيء مما يصل بهذه الطريقة.")
-                    fact("trash", "الخادم يحفظ آخر موقع لك فقط (لا مسارك)، ويحذفه إذا غادرت الطلعة أو أزالك أمير الرحلة أو أُوقفت الطلعة أو انتهت، ولا يبقى أي موقع أكثر من ٢٤ ساعة.")
+                    fact(SaryNearbyMark.icon, "إذا انقطع الإنترنت وأنت تشارك، يتبادل جوالك موقعك مباشرة مع جوالات ربع الطلعة القريبين (بلوتوث وواي فاي مباشر)، مشفّرًا ولا يقرؤه غيرهم، ويمرّر لهم آخر مواقع الباقين بعمرها الحقيقي. يتوقف مع توقف المشاركة، ولا يُرسل للخادم شيء مما يصل بهذه الطريقة.")
+                    fact("trash", "الخادم يحفظ آخر موقع لك فقط (لا مسارك)، ويحذفه إذا غادرت الطلعة أو أزالك أمير الطلعة أو أُوقفت الطلعة أو انتهت، ولا يبقى أي موقع أكثر من ٢٤ ساعة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
@@ -253,7 +253,7 @@ struct PrivacySettingsView: View {
                               label: { $0.label }, id: "privacy.mode")
                     .padding(.vertical, theme.space(.s))
             }
-            SarySection(footer: "إذا فعّلته يرى أعضاء طلعتك نسبة بطارية جوالك وهل هو على الشاحن، ليعرفوا إذا قرب ينطفي. لا يُرسل شيء آخر.") {
+            SarySection(footer: "إذا فعّلته يشوف ربع طلعتك نسبة بطارية جوالك وهل هو على الشاحن، ليعرفوا إذا قرب ينطفي. لا يُرسل شيء آخر.") {
                 SaryToggleRow(title: "شارك نسبة البطارية", systemImage: "battery.75percent", isOn: $battery, id: "privacy.battery")
             }
             SarySection(title: "Mapbox", footer: "مكتبة الخرائط (Mapbox) ترسل افتراضيًا إحصاءات استخدام مجهولة لتحسين خرائطها. أوقفها هنا إن شئت؛ الخريطة تعمل مثل ما هي. هذا الخيار نفسه الموجود في زر «i» على الخريطة.") {
@@ -265,12 +265,12 @@ struct PrivacySettingsView: View {
                     fact("person.text.rectangle", "اسمك وصورتك (إن وضعتها) ورقمك (إن كتبته): يراها أعضاء طلعاتك.")
                     fact("location.fill", "موقعك ما دمت في طلعة شغّالة: آخر موقع فقط.")
                     fact(SaryIcon.note, "رسائلك القصيرة: ١٥ دقيقة ثم تختفي.")
-                    fact(SaryIcon.mic, "صوتك في «قناة الطلعة»: يمرّ عبر الخادم مباشرة لأعضاء الطلعة وأنت ضاغط على الزر فقط، ولا يُسجَّل ولا يُحفظ في أي مكان.")
+                    fact(SaryIcon.mic, "صوتك في «قناة الطلعة»: يمرّ عبر الخادم مباشرة لربع الطلعة وأنت ضاغط على الزر فقط، ولا يُسجَّل ولا يُحفظ في أي مكان.")
                     fact(SaryIcon.sos, "الطوارئ: مع آخر موقع حقيقي لك، وتنتهي خلال ساعة أو بـ«أنا بخير».")
-                    fact("flag.checkered", "ملخص رحلتك: مجاميع فقط، ولا يُرسل إلا إذا اخترت «شارك ملخصي».")
+                    fact("flag.checkered", "ملخص طلعتك: مجاميع فقط، ولا يُرسل إلا إذا اخترت «شارك ملخصي».")
                     fact("map", "الخرائط من Mapbox: تطلب صور الخريطة للمنطقة المعروضة، دون اسمك أو حسابك.")
                     fact(SaryIcon.directions, "«الملاحة»: نقطة البداية والوجهة تُرسل لـ Mapbox (أو لخادم الشركة إذا اخترته) لحساب الطريق فقط، دون اسمك أو حسابك. الصوت يُنطق على جوالك.")
-                    fact("play.rectangle.fill", "«يوتيوب»: الفيديو يعمل بمشغّل YouTube الرسمي (تطبّق عليه سياسة Google). في «قناة الطلعة» يرى أعضاء الطلعة الفيديو الذي شغّلته؛ «قناتي» لك وحدك.")
+                    fact("play.rectangle.fill", "«يوتيوب»: الفيديو يعمل بمشغّل YouTube الرسمي (تطبّق عليه سياسة Google). في «قناة الطلعة» يرى ربع الطلعة الفيديو الذي شغّلته؛ «قناتي» لك وحدك.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
@@ -340,23 +340,23 @@ struct DeleteAccountView: View {
             SarySection(title: "يُحذف من الخادم") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("person.text.rectangle", "اسمك وصورتك ورقم جوالك.")
-                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت أمير الرحلة تنتقل الإمارة لنائبك أو لأقدم مشارك، وإذا ما بقي أحد تنتهي.")
+                    fact("person.2.fill", "عضويتك في كل الطلعات. تخرج من الطلعات الجارية مثل «غادر الطلعة»: إذا كنت أمير الطلعة تنتقل الإمارة لنائبك أو لأقدم مشارك، وإذا ما بقي أحد تنتهي.")
                     fact("location.fill", "آخر موقع محفوظ لك، ورسائلك القصيرة، ونداء الطوارئ، ورمز «قناة الطلعة» الذي يوقظ جوالك.")
-                    fact("flag.checkered", "ملخصات رحلاتك التي شاركتها.")
+                    fact("flag.checkered", "ملخصات طلعاتك التي شاركتها.")
                     fact("bell.fill", "تنبيهات هذا الجهاز وأي جهاز آخر، ورمز الاسترجاع.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
             SarySection(title: "يُمسح من هذا الجهاز") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    fact("key.fill", "هويتك المحفوظة، وموافقاتك على مشاركة الموقع، وسجل رحلاتك، وروابط الدعوة المحفوظة.")
+                    fact("key.fill", "هويتك المحفوظة، وموافقاتك على مشاركة الموقع، وسجل طلعاتك، وروابط الدعوة المحفوظة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
             SarySection(title: "يبقى") {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     fact("arrow.down.circle.fill", "الخرائط التي نزّلتها بلا إنترنت: صور خرائط فقط، تبقى على جوالك وتحذفها من «الخرائط بلا إنترنت».")
-                    fact("person.3.fill", "طلعات العيال وملخصاتهم تبقى لهم، ولا يظهر اسمك فيها بعد الآن.")
+                    fact("person.3.fill", "طلعات الربع وملخصاتهم تبقى لهم، ولا يظهر اسمك فيها بعد الآن.")
                     fact("paintbrush.fill", "إعدادات المظهر على هذا الجهاز.")
                 }
                 .padding(.vertical, theme.space(.s))
@@ -436,7 +436,7 @@ struct NotificationSettingsView: View {
             stateCard
             if chatPrefsLoaded {
             SarySection(footer: "تقدر توقف تنبيهات المحادثات وحدها وتبقى تنبيهات الطوارئ.") {
-                SaryToggleRow(title: "رسائل المحادثات", subtitle: "دردشة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
+                SaryToggleRow(title: "رسائل المحادثات", subtitle: "محادثة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
                               isOn: Binding(get: { chatPush }, set: { on in setChatPush(on) }), id: "notify.chat")
                     .disabled(!model.signedIn || model.isDemo)
             }
@@ -445,8 +445,8 @@ struct NotificationSettingsView: View {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     kind(SaryIcon.sos, p.emergency, "طوارئ", "تنبيه عاجل بصوت، حتى في وضع التركيز إذا سمحت بالتنبيهات العاجلة. يُستبدل بـ«أنا بخير» إذا انتهت.")
                     kind(SaryIcon.note, nil, "رسالة فوق السيارة", "بهدوء، بدون صوت.")
-                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل دردشة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
-                    kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت العيال مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
+                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل محادثة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
+                    kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت الربع مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
                 }
                 .padding(.vertical, theme.space(.s))
             }
@@ -555,7 +555,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         let p = theme.palette
         SaryPage(title: "متقدم", back: back) {
-            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
+            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
                     Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
                         .padding(.vertical, theme.space(.s))

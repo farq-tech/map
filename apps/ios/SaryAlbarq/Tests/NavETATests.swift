@@ -58,3 +58,28 @@ final class NavETATests: XCTestCase {
         XCTAssertFalse(a.isDue(arrival: t0.addingTimeInterval(660), now: t0.addingTimeInterval(600)), "a minute from arrival: the arrival line says it")
     }
 }
+
+/// Build 36 (owner's report item 5): after a reroute the time left follows the NEW route at once.
+final class NavETARerouteTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testARerouteIsTakenAtOnceThenSmoothingResumes() {
+        var s = NavETASmoother()
+        s.update(remainingS: 900, speedMps: 14, now: t0)
+        s.snapNext()
+        s.update(remainingS: 900 + 180, speedMps: 14, now: t0.addingTimeInterval(1))
+        XCTAssertEqual(s.remaining(t0.addingTimeInterval(1))!, 1_080, accuracy: 1, "+3 min from the new route, not blended over minutes")
+        let a = s.arrival!
+        s.update(remainingS: 1_079 + 90, speedMps: 14, now: t0.addingTimeInterval(2))
+        XCTAssertLessThan(s.arrival!.timeIntervalSince(a), 5, "one snap only: the next noisy reading is smoothed again")
+    }
+
+    func testASnapAskedBeforeTheFirstReadingIsNotCarriedOver() {
+        var s = NavETASmoother()
+        s.snapNext()
+        s.update(remainingS: 600, speedMps: 14, now: t0)
+        let a = s.arrival!
+        s.update(remainingS: 599 + 90, speedMps: 14, now: t0.addingTimeInterval(1))
+        XCTAssertLessThan(s.arrival!.timeIntervalSince(a), 5)
+    }
+}

@@ -49,15 +49,16 @@ final class TrackLineDrawer {
         drawnStyle = nil
     }
 
-    /// - Parameter below: put the layers under this one (cars, navigation route).
-    func update(_ m: MapboxMap, line: TrackLine?, style: TrackLineStyle, below: String?) {
+    /// - Parameter below: put the layers under this one (cars, navigation route). Only evaluated
+    ///   when the layers are (re)added: finding it walks the style's whole layer list.
+    func update(_ m: MapboxMap, line: TrackLine?, style: TrackLineStyle, below: @autoclosure () -> String?) {
         guard let line, line.isDrawable else {
             if drawnLine != nil || m.layerExists(withId: lineLayerId) { clear(m) }
             drawnLine = nil
             return
         }
         if style != drawnStyle || !m.layerExists(withId: lineLayerId) {
-            addLayers(m, style: style, below: below)
+            addLayers(m, style: style, below: below())
             drawnStyle = style
             drawnLine = nil
         }

@@ -208,19 +208,22 @@ final class PlaceBriefRulesTests: XCTestCase {
     // MARK: freshness / source line
 
     func testSourceLineNeverShowsStaleAsCurrent() {
+        /* Build 36 item 12: the clock time the data arrived, beside its age (Riyadh: at = 11:30 ص). */
+        let riyadh = TimeZone(identifier: "Asia/Riyadh")!
         let w = PlaceWeather(report: rep(fetchedAt: at.addingTimeInterval(-5 * 60)), provider: .openMeteo)
-        XCTAssertEqual(PlaceBriefRules.sourceLine(w, now: at, failed: nil).text, "المصدر: Open-Meteo · قبل ٥ د")
-        XCTAssertFalse(PlaceBriefRules.sourceLine(w, now: at, failed: nil).stale)
+        XCTAssertEqual(PlaceBriefRules.sourceLine(w, now: at, failed: nil, timeZone: riyadh).text, "المصدر: Open-Meteo · ١١:٢٥ ص (قبل ٥ د)")
+        XCTAssertFalse(PlaceBriefRules.sourceLine(w, now: at, failed: nil, timeZone: riyadh).stale)
         let old = PlaceWeather(report: rep(fetchedAt: at.addingTimeInterval(-3 * 3600)), provider: .openMeteo)
-        let line = PlaceBriefRules.sourceLine(old, now: at, failed: .offline)
+        let line = PlaceBriefRules.sourceLine(old, now: at, failed: .offline, timeZone: riyadh)
         XCTAssertTrue(line.stale)
-        XCTAssertEqual(line.text, "المصدر: Open-Meteo · بيانات محفوظة قبل ٣ س — ليست حالية · بلا إنترنت")
-        XCTAssertEqual(PlaceBriefRules.sourceLine(PlaceWeather(report: w.report, provider: .weatherKit), now: at, failed: nil).text, "المصدر: Apple Weather · قبل ٥ د")
+        XCTAssertEqual(line.text, "المصدر: Open-Meteo · بيانات محفوظة ٨:٣٠ ص (قبل ٣ س) — ليست حالية · بلا إنترنت")
+        XCTAssertEqual(PlaceBriefRules.sourceLine(PlaceWeather(report: w.report, provider: .weatherKit), now: at, failed: nil, timeZone: riyadh).text,
+                       "المصدر: Apple Weather · ١١:٢٥ ص (قبل ٥ د)")
     }
 
     func testPresenterPhases() throws {
         let offline = PlaceBriefPresenter.build(nil, loading: false, failed: .offline, point: Desert.point, now: at)
-        XCTAssertEqual(offline.phase, .unavailable("الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة"))
+        XCTAssertEqual(offline.phase, .unavailable("الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة"))
         XCTAssertNotNil(offline.sunset, "sun times need no network")
         XCTAssertEqual(PlaceBriefPresenter.build(nil, loading: true, failed: nil, point: Desert.point, now: at).phase, .loading)
 
@@ -235,7 +238,7 @@ final class PlaceBriefRulesTests: XCTestCase {
         XCTAssertEqual(fresh.hours.count, 12)
         XCTAssertEqual(fresh.hours.first?.label, "الآن")
         XCTAssertEqual(fresh.wind?.name, "رياح جنوبية")
-        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo · الآن")
+        XCTAssertEqual(fresh.source, "المصدر: Open-Meteo · ١١:١٥ ص (الآن)")
 
         let stale = PlaceBriefPresenter.build(PlaceWeather(report: try Desert.report(), provider: .openMeteo), loading: false, failed: .offline,
                                               point: Desert.point, now: Desert.currentAt.addingTimeInterval(2 * 3600))
@@ -395,7 +398,7 @@ final class PlaceBriefStoreTests: XCTestCase {
         await m.settle()
         XCTAssertNil(m.weather)
         let ui = PlaceBriefPresenter.build(m.weather, loading: m.loading, failed: m.failure, point: Desert.point, now: at)
-        XCTAssertEqual(ui.phase, .unavailable("الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة"))
+        XCTAssertEqual(ui.phase, .unavailable("الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة"))
     }
 
     func testFallbackProviderRecordsWhoAnswered() async throws {

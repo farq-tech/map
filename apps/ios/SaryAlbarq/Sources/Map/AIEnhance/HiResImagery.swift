@@ -73,6 +73,9 @@ final class HiResImagery: NSObject {
             self?.lock.withLock { self?.visible.reset() }
             self?.apply()
         }.store(in: &cancelables)
+        /* The basemap's `sarySand` follows the camera (MapVisualsDirector / SandGrade.follow);
+           the enhanced tiles must follow it too, or they keep the grade of where they were installed. */
+        map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.syncGrade() }.store(in: &cancelables)
         settings.$userOn.combineLatest(settings.$remoteOn).dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &bag)
@@ -141,9 +144,9 @@ final class HiResImagery: NSObject {
             try m.addLayer(layer)
             /* The same colour grade as the imagery it covers (`SandGrade`: warm sand in the open,
                neutral in a city), so an enhanced tile never changes colour as it fades in. */
-            let c = m.cameraState.center
-            try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))))
+            appliedSand = nil
             installed = true
+            syncGrade()
             #if DEBUG
             HiResStats.note("installed gen \(gen)")
             #endif
@@ -163,8 +166,24 @@ final class HiResImagery: NSObject {
             visible.reset()
         }
         installed = false
+        appliedSand = nil
         if m.layerExists(withId: Self.layerId) { try? m.removeLayer(withId: Self.layerId) }
         if m.sourceExists(withId: Self.sourceId) { try? m.removeSource(withId: Self.sourceId) }
+    }
+
+    /// `SandGrade`'s `sarySand` last set on the enhanced layer.
+    private var appliedSand: Double?
+
+    /// Keeps the enhanced layer's grade equal to the basemap's at the camera centre (same rule,
+    /// same 0.05 steps as `MapVisualsDirector.applySand`), so enhanced and original tiles side by
+    /// side never differ in colour.
+    private func syncGrade() {
+        guard installed, let m = map?.mapboxMap, m.layerExists(withId: Self.layerId) else { return }
+        let c = m.cameraState.center
+        let v = SandGrade.sand(urban: UrbanAreas.weight(lat: c.latitude, lng: c.longitude))
+        guard v != appliedSand else { return }
+        appliedSand = v
+        try? m.setLayerProperties(for: Self.layerId, properties: SandGrade.paint(sand: v))
     }
 
     private func showOriginal(_ on: Bool) {

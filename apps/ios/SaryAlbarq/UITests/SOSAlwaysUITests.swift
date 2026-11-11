@@ -23,7 +23,7 @@ final class SOSAlwaysUITests: XCTestCase {
 
         /* The sheet full height: the dock is covered, SOS floats above. */
         any(app, "outing-sheet-summary").tap()
-        let sheet = any(app, "tab.more")
+        let sheet = any(app, "sheet.invite")
         XCTAssertTrue(sheet.waitForExistence(timeout: 5))
         let overlay = any(app, "sos.overlay")
         /* Drag the sheet by its top row all the way up (full height). */
@@ -73,6 +73,12 @@ final class SOSAlwaysUITests: XCTestCase {
         XCTAssertTrue(any(app, "sos-countdown").waitForExistence(timeout: 3))
         let ok = any(app, "outing-sos-ok")
         XCTAssertTrue(ok.waitForExistence(timeout: 8), "sent after the countdown")
+        /* UI-AUDIT م3: my SOS on — the focused mode: the strip, the walkie-talkie and the map only. */
+        XCTAssertFalse(any(app, "sheet.quickRow").exists, "no quick row while my SOS is on")
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'flow.cta.'")).firstMatch.exists,
+                       "no CTA while my SOS is on")
+        XCTAssertFalse(any(app, "outing-locate").exists, "no side buttons while my SOS is on")
+        XCTAssertTrue(any(app, "outing-ptt").exists, "the walkie-talkie stays")
 
         /* «أنا بخير» asks first; «لا، خلها» keeps it. */
         ok.tap()
@@ -83,6 +89,7 @@ final class SOSAlwaysUITests: XCTestCase {
         ok.tap()
         any(app, "sos-stop-yes").tap()
         XCTAssertTrue(ok.waitForNonExistence(timeout: 5), "stopped after the confirmation")
+        XCTAssertTrue(any(app, "sheet.quickRow").waitForExistence(timeout: 5), "the quick row is back after «أنا بخير»")
     }
 
     /// Big enough and fully on screen, bottom left: over a full sheet it must not cover the sheet's

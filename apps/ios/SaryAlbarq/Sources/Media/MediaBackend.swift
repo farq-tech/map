@@ -39,8 +39,8 @@ enum MediaBackendError: Error, Equatable {
         case .network: return "لا يوجد اتصال بالإنترنت."
         case let .server(code, status):
             let t: [String: String] = [
-                "not_controller": "اللي شغّل الفيديو هو اللي يتحكم فيه، أو أمير الرحلة ونائبه.",
-                "leader_only": "هذا لأمير الرحلة أو نائبه فقط.",
+                "not_controller": "اللي شغّل الفيديو هو اللي يتحكم فيه، أو أمير الطلعة ونائبه.",
+                "leader_only": "هذا لأمير الطلعة أو نائبه فقط.",
                 "media_idle": "ما فيه شي شغّال في قناة الطلعة.",
                 "queue_full": "القائمة مليانة (٢٠ فيديو).",
                 "invalid_video_id": "الرابط مو لفيديو يوتيوب.",
@@ -48,7 +48,7 @@ enum MediaBackendError: Error, Equatable {
                 "rate_limited": "على هونك… اصبر ثواني.",
                 "not_a_member": "لست عضوًا في هذه الطلعة.",
             ]
-            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : "حدث خطأ. أعد المحاولة.")
+            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : SaryCopy.genericError)
         }
     }
 }

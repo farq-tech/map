@@ -476,12 +476,15 @@ final class AppModel: ObservableObject {
         if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()
-            current = r.current
-            history = r.history
-            listPhase = .loaded
+            /* Refreshed on every return to the list: skip unchanged values so the home screen
+             * (which observes this whole model) is not redrawn for nothing. */
+            if current != r.current { current = r.current }
+            if history != r.history { history = r.history }
+            if listPhase != .loaded { listPhase = .loaded }
         } catch let e as OutingAPIError {
             /* Keep what we have on screen; only an empty list turns into an error page. */
-            if current.isEmpty && history.isEmpty { listPhase = .failed(e.arabic) } else { listPhase = .loaded }
+            let next: ListPhase = current.isEmpty && history.isEmpty ? .failed(e.arabic) : .loaded
+            if listPhase != next { listPhase = next }
         } catch {}
     }
 
@@ -501,7 +504,9 @@ final class AppModel: ObservableObject {
             let r = try await api.create(name: clean)
             /* Personal-only trips have no open link: people are invited one by one (PersonalInvites). */
             InviteTokenStore.save(r.outing_id, r.invite?.token)
-            await refresh()
+            /* The wizard and «طلعة الرجعة» go on with their own calls (plan, destination): the list
+             * refresh is not on their path (it was one more 12 s wait under «ننشئ الطلعة…»). */
+            if openNow { await refresh() } else { Task { await refresh() } }
             if openNow {
                 /* The quick create (no wizard): the creator joins it, same default as «انضم». */
                 consentByJoining(r.outing_id)
@@ -759,15 +764,15 @@ final class AppModel: ObservableObject {
     @discardableResult
     func startReturnTrip(from outingId: String) async -> String? {
         guard !isDemo else {
-            errorText = "«طريق الرجعة» كرحلة جديدة يحتاج الخادم؛ في العرض التجريبي استخدم «طريق الرجعة» في «مساري»."
+            errorText = "«طلعة الرجعة» تحتاج الخادم؛ في العرض التجريبي استخدم «طريق الرجعة» في «مساري»."
             return nil
         }
         guard let start = TripStore.load(outingId)?.start?.position ?? myTrailPoints(outingId)?.start?.position else {
-            errorText = "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."
+            errorText = "ما عندنا نقطة بداية محفوظة لهذه الطلعة على هذا الجوال."
             return nil
         }
         let from = plans.model(outingId).plan.destination?.name
-        let name = String((from.map { "الرجعة من \($0)" } ?? "طريق الرجعة").prefix(ServerRules.outingNameMax))
+        let name = String((from.map { "الرجعة من \($0)" } ?? SaryCopy.returnOuting).prefix(ServerRules.outingNameMax))
         guard let id = await createOuting(name: name, openNow: false) else { return nil }
         ReturnTripStore.link(id, returnsFrom: outingId)
         let plan = plans.model(id)

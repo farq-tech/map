@@ -147,7 +147,7 @@ struct SaryStatusCapsule: View {
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 if w == .locationOff {
-                                    Image(systemName: "chevron.backward")
+                                    Image(systemName: SaryIcon.disclosure)
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(theme.palette.textTertiary)
                                 }

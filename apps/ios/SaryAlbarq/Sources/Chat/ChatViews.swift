@@ -69,8 +69,7 @@ struct ChatEntryRow: View {
                 }
                 Spacer(minLength: 0)
                 if n > 0 { ChatBadge(count: n) }
-                Image(systemName: "chevron.backward").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
-                    .flipsForRightToLeftLayoutDirection(true)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())
@@ -83,7 +82,7 @@ struct ChatEntryRow: View {
     }
 
     private var preview: String {
-        guard let m = chat.threads[.group]?.latest else { return "دردشة الطلعة والرسائل الخاصة" }
+        guard let m = chat.threads[.group]?.latest else { return "محادثة الطلعة والرسائل الخاصة" }
         return ChatPreview.line(m)
     }
 }
@@ -146,7 +145,7 @@ struct ChatHomeView: View {
                 SaryInlineMessage(text: retentionText, tone: .info).accessibilityIdentifier("chat.retention")
             }
             VStack(spacing: 0) {
-                row(.group, title: "دردشة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل أعضاء الطلعة")
+                row(.group, title: "محادثة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل الربع")
             }
             .sarySurface(radius: SaryRadius.l)
             if !others.isEmpty || !former.isEmpty {
@@ -232,7 +231,7 @@ struct ChatThreadView: View {
     private var others: Int {
         with.isGroup ? max(0, context.members.filter { $0.user_id != context.me }.count) : 1
     }
-    private var title: String { with.isGroup ? "دردشة الطلعة" : context.name(with.peer ?? "", fallback: thread.latest?.sender_name) }
+    private var title: String { with.isGroup ? "محادثة الطلعة" : context.name(with.peer ?? "", fallback: thread.latest?.sender_name) }
 
     var body: some View { threadBody }
 
@@ -430,7 +429,7 @@ struct ChatThreadView: View {
         }
         if chat.canDelete(m) {
             Button(role: .destructive) { Task { await chat.delete(m) } } label: {
-                Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الرحلة)", systemImage: "trash")
+                Label(m.sender_id == context.me ? "احذف رسالتي" : "احذفها (أمير الطلعة)", systemImage: "trash")
             }
         }
     }
