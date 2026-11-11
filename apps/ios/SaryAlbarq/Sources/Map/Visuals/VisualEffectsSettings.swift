@@ -26,14 +26,16 @@ struct VisualEffectsSettings: Equatable {
     /// «انحدار تقريبي» along routes and tracks.
     var slope = true
     /// Neutral 3D buildings (Mapbox Streets heights) over the satellite imagery in cities, when tilted.
-    var buildings = true
+    /// Off unless the person turns it on (owner, Build 40: a mosque stood as a black box over half
+    /// the screen after sunset). The base is the imagery with the flat footprints (`BuildingFootprints`).
+    var buildings = false
 
     static var current: VisualEffectsSettings {
         let d = UserDefaults.standard
-        func b(_ k: String) -> Bool { d.object(forKey: k) as? Bool ?? true }
+        func b(_ k: String, _ fallback: Bool = true) -> Bool { d.object(forKey: k) as? Bool ?? fallback }
         return VisualEffectsSettings(master: b(VisualEffectsKeys.master), terrain: b(VisualEffectsKeys.terrain), atmosphere: b(VisualEffectsKeys.atmosphere),
                                      sky: b(VisualEffectsKeys.sky), glow: b(VisualEffectsKeys.glow), slope: b(VisualEffectsKeys.slope),
-                                     buildings: b(VisualEffectsKeys.buildings))
+                                     buildings: b(VisualEffectsKeys.buildings, false))
     }
 }
 
@@ -203,7 +205,7 @@ struct VisualEffectsSection: View {
     @AppStorage(VisualEffectsKeys.sky) private var sky = true
     @AppStorage(VisualEffectsKeys.glow) private var glow = true
     @AppStorage(VisualEffectsKeys.slope) private var slope = true
-    @AppStorage(VisualEffectsKeys.buildings) private var buildings = true
+    @AppStorage(VisualEffectsKeys.buildings) private var buildings = false
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     var body: some View {

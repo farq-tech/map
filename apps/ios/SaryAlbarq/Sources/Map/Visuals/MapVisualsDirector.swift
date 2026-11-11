@@ -285,7 +285,7 @@ final class MapVisualsDirector: NSObject {
         }
         guard opacity != appliedBuildingsOpacity else { return }
         appliedBuildingsOpacity = opacity
-        try? m.setLayerProperty(for: Self.buildingsLayer, property: "fill-extrusion-opacity", value: opacity)
+        try? m.setLayerProperty(for: Self.buildingsLayer, property: "fill-extrusion-opacity", value: CityBuildings.opacityExpression(opacity))
     }
 
     /// «اعرضها بالوضع الواقعي»: tilted over a city, the photoreal view is one tap away.
