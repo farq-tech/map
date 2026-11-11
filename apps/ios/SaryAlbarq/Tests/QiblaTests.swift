@@ -70,4 +70,27 @@ final class QiblaTests: XCTestCase {
         let endedChildren = LiveActionCatalog.groups(.init(ended: true)).flatMap(\.items).flatMap(\.children)
         XCTAssertTrue(endedChildren.contains { $0.id == "qibla" })
     }
+
+    // MARK: screen fit
+
+    func testCompassKeepsItsSizeOnStandardAndLargePhones() {
+        // Sheet content areas (pt) of a 393×852 phone and a 440×956 Pro Max.
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 393, height: 780)), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 440, height: 890)), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 375, height: 745)), 1, "mini keeps the full compass")
+    }
+
+    func testCompassShrinksOnAnSE() {
+        let s = Qibla.compassScale(page: CGSize(width: 375, height: 620))
+        XCTAssertLessThan(s, 1)
+        XCTAssertEqual(s, (620 - 340) / 320, accuracy: 0.0001)
+        // Compass + header/degrees/hint fit the page.
+        XCTAssertLessThanOrEqual(Qibla.compassDesign.height * s + 340, 620.5)
+    }
+
+    func testCompassScaleIsBounded() {
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 200, height: 300)), 0.72)
+        XCTAssertEqual(Qibla.compassScale(page: .zero), 1)
+        XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 320, height: 900)), (320 - 40) / 300, accuracy: 0.0001)
+    }
 }

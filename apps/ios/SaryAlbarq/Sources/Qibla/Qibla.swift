@@ -58,6 +58,19 @@ enum Qibla {
 
     /// Facing the Qibla within this many degrees.
     static let alignedWithin = 5.0
+
+    /// The compass's design size (pointer + rose) on a standard phone.
+    static let compassDesign = CGSize(width: 300, height: 320)
+
+    /// Scale (0.72…1) for the compass in a `page`-sized sheet: full size whenever it fits
+    /// (every 390 pt+ phone), smaller when the width or the height left after the header,
+    /// degrees and hint (`reservedHeight`) is short, e.g. an SE's 375×667.
+    static func compassScale(page: CGSize, sideMargins: CGFloat = 40, reservedHeight: CGFloat = 340) -> CGFloat {
+        guard page.width > 0, page.height > 0 else { return 1 }
+        let byWidth = (page.width - sideMargins) / compassDesign.width
+        let byHeight = (page.height - reservedHeight) / compassDesign.height
+        return min(1, max(0.72, min(byWidth, byHeight)))
+    }
     /// A heading accuracy worse than this (degrees) asks for calibration.
     static let poorAccuracy = 20.0
 
@@ -256,11 +269,17 @@ struct QiblaView: View {
     }
 
     var body: some View {
+        GeometryReader { geo in page(scale: Qibla.compassScale(page: geo.size)) }
+            .onAppear { compass.start() }
+            .onDisappear { compass.stop() }
+    }
+
+    private func page(scale: CGFloat) -> some View {
         let p = theme.palette
-        SaryPage(title: "القبلة", close: close) {
+        return SaryPage(title: "القبلة", close: close) {
             VStack(spacing: theme.space(.l)) {
                 if let c = compass.coordinate {
-                    content(c)
+                    content(c, scale: scale)
                 } else {
                     VStack(spacing: theme.space(.m)) {
                         if compass.locationState == .locating {
@@ -287,16 +306,14 @@ struct QiblaView: View {
                                 .accessibilityIdentifier("qibla.retry")
                         }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 320)
+                    .frame(maxWidth: .infinity, minHeight: Qibla.compassDesign.height * scale)
                 }
             }
         }
-        .onAppear { compass.start() }
-        .onDisappear { compass.stop() }
     }
 
     @ViewBuilder
-    private func content(_ c: CLLocationCoordinate2D) -> some View {
+    private func content(_ c: CLLocationCoordinate2D, scale: CGFloat) -> some View {
         let p = theme.palette
         let q = Qibla.bearing(from: c)
         let cal = Qibla.calibration(accuracy: compass.heading == nil ? nil : compass.accuracy)
@@ -316,20 +333,20 @@ struct QiblaView: View {
 
         ZStack {
             /* The rose turns with the phone: north stays north. */
-            QiblaRose(qibla: q)
+            QiblaRose(qibla: q, diameter: QiblaRose.designDiameter * scale)
                 .rotationEffect(.degrees(-heading))
             /* The fixed pointer at the top: line it up with the Kaaba. */
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(aligned ? p.liveText : p.textPrimary)
-                .offset(y: -150)
+                .offset(y: -150 * scale)
             Image(systemName: "location.north.fill")
-                .font(.system(size: 64, weight: .bold))
+                .font(.system(size: 64 * scale, weight: .bold))
                 .foregroundStyle(aligned ? p.liveText : p.accent)
                 .rotationEffect(.degrees(compass.heading == nil ? q : turn))
                 .accessibilityHidden(true)
         }
-        .frame(width: 300, height: 320)
+        .frame(width: Qibla.compassDesign.width * scale, height: Qibla.compassDesign.height * scale)
         .animation(.easeOut(duration: 0.25), value: heading)
         .accessibilityElement()
         .accessibilityLabel(Text(compass.heading == nil ? "اتجاه القبلة \(Qibla.degreesLabel(q)) من الشمال" : Qibla.turnHint(turn)))
@@ -368,12 +385,16 @@ struct QiblaView: View {
 /// A compass rose (N/E/S/W in Arabic, ticks every 10°) with the Kaaba marked at `qibla`.
 struct QiblaRose: View {
     var qibla: Double
+    /// Rose diameter; every radius below is a fraction of the 280 pt design.
+    var diameter: CGFloat = designDiameter
+    static let designDiameter: CGFloat = 280
     struct Cardinal { var angle: Double; var label: String }
     static let cardinals = [Cardinal(angle: 0, label: "ش"), Cardinal(angle: 90, label: "ق"), Cardinal(angle: 180, label: "ج"), Cardinal(angle: 270, label: "غ")]
     @Environment(\.sary) private var theme
 
     var body: some View {
         let p = theme.palette
+        let k = diameter / Self.designDiameter
         ZStack {
             Circle().fill(p.sunken.opacity(0.6))
             Circle().stroke(p.separator, lineWidth: 1.5)
@@ -381,7 +402,7 @@ struct QiblaRose: View {
                 Rectangle()
                     .fill(i % 9 == 0 ? p.textPrimary : p.textTertiary)
                     .frame(width: i % 9 == 0 ? 3 : 1.5, height: i % 9 == 0 ? 14 : 8)
-                    .offset(y: -128)
+                    .offset(y: -128 * k)
                     .rotationEffect(.degrees(Double(i) * 10))
             }
             ForEach(Self.cardinals, id: \.angle) { c in
@@ -390,7 +411,7 @@ struct QiblaRose: View {
                     .font(.sary(16, .bold))
                     .foregroundStyle(a == 0 ? p.emergencyText : p.textSecondary)
                     .rotationEffect(.degrees(-a))
-                    .offset(y: -104)
+                    .offset(y: -104 * k)
                     .rotationEffect(.degrees(a))
             }
             /* The Kaaba on the rim. */
@@ -400,10 +421,10 @@ struct QiblaRose: View {
                 .padding(6)
                 .background(Circle().fill(p.accent.opacity(0.25)))
                 .rotationEffect(.degrees(-qibla))
-                .offset(y: -150)
+                .offset(y: -150 * k)
                 .rotationEffect(.degrees(qibla))
         }
-        .frame(width: 280, height: 280)
+        .frame(width: diameter, height: diameter)
         .environment(\.layoutDirection, .leftToRight)
     }
 }
