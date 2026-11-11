@@ -284,3 +284,33 @@ final class LiveFitTests: XCTestCase {
         XCTAssertGreaterThan(LiveFit.compactCTAWidth(title: "وصلنا", textScale: 1.24), LiveFit.compactCTAWidth(title: "وصلنا"))
     }
 }
+
+/// Motion on the live screen: a short stagger when stopped, nothing that trails or travels while driving.
+final class LiveMotionTests: XCTestCase {
+    func testStaggerIsShortAndBounded() {
+        XCTAssertEqual(LiveMotion.staggerDelay(index: 0, drive: false, reduceMotion: false), 0, "the first item at once")
+        XCTAssertEqual(LiveMotion.staggerDelay(index: 1, drive: false, reduceMotion: false), LiveMotion.staggerStep, accuracy: 1e-9)
+        XCTAssertLessThan(LiveMotion.staggerDelay(index: 2, drive: false, reduceMotion: false),
+                          LiveMotion.staggerDelay(index: 3, drive: false, reduceMotion: false))
+        let cap = LiveMotion.staggerDelay(index: LiveMotion.staggerMaxIndex, drive: false, reduceMotion: false)
+        XCTAssertEqual(LiveMotion.staggerDelay(index: 40, drive: false, reduceMotion: false), cap, "a long row never trails off")
+        XCTAssertLessThanOrEqual(cap, 0.2, "the whole row is in within a fifth of a second")
+    }
+
+    func testDrivingAndReduceMotionKeepItStill() {
+        for i in 0..<6 {
+            XCTAssertEqual(LiveMotion.staggerDelay(index: i, drive: true, reduceMotion: false), 0, "no stagger while driving")
+            XCTAssertEqual(LiveMotion.staggerDelay(index: i, drive: false, reduceMotion: true), 0)
+        }
+        XCTAssertEqual(LiveMotion.riseOffset(drive: true, reduceMotion: false), 0, "a fade only while driving")
+        XCTAssertEqual(LiveMotion.riseOffset(drive: false, reduceMotion: true), 0)
+        XCTAssertGreaterThan(LiveMotion.riseOffset(drive: false, reduceMotion: false), 0)
+        XCTAssertLessThanOrEqual(LiveMotion.riseOffset(drive: false, reduceMotion: false), 8, "a rise, not a slide")
+    }
+
+    func testMorphAndReorderAreQuickerWhileDriving() {
+        XCTAssertEqual(LiveMotion.primaryMorph(drive: false), .smooth)
+        XCTAssertEqual(LiveMotion.primaryMorph(drive: true), .snappy)
+        XCTAssertLessThan(LiveMotion.reorder(drive: true).duration, LiveMotion.reorder(drive: false).duration)
+    }
+}

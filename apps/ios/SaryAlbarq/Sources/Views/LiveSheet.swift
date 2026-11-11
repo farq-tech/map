@@ -298,7 +298,8 @@ struct LiveQuickRow: View {
     var body: some View {
         let s = controller.actionState
         HStack(alignment: .top, spacing: 4) {
-            ForEach(LiveScreenRules.quickRow(chat: s.chat), id: \.self) { id in
+            ForEach(Array(LiveScreenRules.quickRow(chat: s.chat).enumerated()), id: \.element) { index, id in
+                Group {
                 switch id {
                 case "desert": desertMenu
                 case "chat":
@@ -314,6 +315,9 @@ struct LiveQuickRow: View {
                         controller.modal = .actions
                     }
                 }
+                }
+                /* The row arrives (trip started, guidance ended): the actions in turn, once. */
+                .liveStaggerIn(index)
             }
         }
         .padding(.horizontal, theme.space(.m))
@@ -458,6 +462,8 @@ private struct LiveSheetBody: View {
                 }
             }
             .padding(.vertical, theme.space(.xs))
+            /* The people re-order (nearest first, who went quiet) in place: the rows keep their ids. */
+            .animation(theme.animation(LiveMotion.reorder(drive: theme.drive)), value: ui.participantsTab.participants.map(\.id))
             .sarySurface(radius: SaryRadius.l)
             ConvoySection(controller: controller, features: features, participants: ui.participantsTab.participants)
             // Keep the section available for the first waypoint and show the honest

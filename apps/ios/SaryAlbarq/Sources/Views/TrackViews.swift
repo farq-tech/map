@@ -262,8 +262,8 @@ struct FollowTrackPanel: View {
         .overlay {
             if off { RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.emergency, lineWidth: 3) }
         }
-        .sensoryFeedback(.warning, trigger: off) { was, now in now && !was }
-        .sensoryFeedback(.success, trigger: arrived) { was, now in now && !was }
+        .saryHaptic(.warning, trigger: off) { was, now in now && !was }
+        .saryHaptic(.arrival, trigger: arrived) { was, now in now && !was }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("follow.panel")
     }

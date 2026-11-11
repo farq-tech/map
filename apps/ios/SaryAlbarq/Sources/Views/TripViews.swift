@@ -158,6 +158,8 @@ struct TripCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if ui.phase == .underway, let pc = ui.percent {
                 Text(SaryFormat.percent(pc)).saryNumber(theme.drive ? .display : .title, weight: .heavy).foregroundStyle(p.accentText)
+                    .contentTransition(SaryTransition.number(Double(pc), theme))
+                    .animation(theme.animation(.smooth), value: pc)
                     .accessibilityIdentifier("trip.percent")
             }
         }
@@ -294,6 +296,9 @@ struct TripCard: View {
         return VStack(alignment: .leading, spacing: 2) {
             Text(k).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1)
             Text(v).saryNumber(big ? .title : .headline, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.6)
+                /* The trip's numbers roll as they update and into the arrival / end summary. */
+                .contentTransition(theme.reduceMotion ? .opacity : .numericText())
+                .animation(theme.animation(.smooth), value: v)
             if let note { Text(note).saryText(.micro).foregroundStyle(p.textTertiary).lineLimit(1).minimumScaleFactor(0.8) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

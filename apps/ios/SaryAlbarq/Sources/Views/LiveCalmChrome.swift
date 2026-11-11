@@ -30,6 +30,59 @@ enum LiveCalmRules {
     }
 }
 
+/// Motion on the live screen (pure, unit-tested in `LiveDeclutterTests`): it says what changed and
+/// stays almost still while driving (no stagger, no travel, quicker springs).
+enum LiveMotion {
+    /// The gap between items of a row appearing one after another.
+    static let staggerStep: Double = 0.04
+    /// Items past this one appear together (a long row never trails off).
+    static let staggerMaxIndex = 4
+    /// How far an item rises as it appears (pt).
+    static let rise: CGFloat = 6
+
+    /// The delay before item `index` of a row appears: none while driving or with Reduce Motion.
+    static func staggerDelay(index: Int, drive: Bool, reduceMotion: Bool) -> Double {
+        guard !drive, !reduceMotion, index > 0 else { return 0 }
+        return Double(min(index, staggerMaxIndex)) * staggerStep
+    }
+
+    /// The rise of an appearing item: a fade only while driving or with Reduce Motion.
+    static func riseOffset(drive: Bool, reduceMotion: Bool) -> CGFloat {
+        drive || reduceMotion ? 0 : rise
+    }
+
+    /// The primary button's morph between states: smooth when stopped, quicker while driving.
+    static func primaryMorph(drive: Bool) -> SaryMotion { drive ? .snappy : .smooth }
+
+    /// The people list re-ordering (who is nearest, who went quiet).
+    static func reorder(drive: Bool) -> SaryMotion { drive ? .snappy : .smooth }
+}
+
+/// One item of a row appearing in turn (`LiveMotion.staggerDelay`) when the row is inserted:
+/// a small rise and fade, once. It never re-runs on updates (only on insertion).
+struct LiveStaggerIn: ViewModifier {
+    var index: Int
+    @Environment(\.sary) private var theme
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let still = theme.reduceMotion
+        content
+            .opacity(shown || still ? 1 : 0)
+            .offset(y: shown ? 0 : LiveMotion.riseOffset(drive: theme.drive, reduceMotion: theme.reduceMotion))
+            .onAppear {
+                guard !shown else { return }
+                let delay = LiveMotion.staggerDelay(index: index, drive: theme.drive, reduceMotion: theme.reduceMotion)
+                withAnimation(theme.animation(theme.drive ? .snappy : .appear).delay(delay)) { shown = true }
+            }
+    }
+}
+
+extension View {
+    /// See `LiveStaggerIn`.
+    func liveStaggerIn(_ index: Int) -> some View { modifier(LiveStaggerIn(index: index)) }
+}
+
 /// Lovable's caption under a round button: 10 pt on a dark pill.
 struct LovableCaption: View {
     var text: String
@@ -62,7 +115,7 @@ struct LiveSideButtons: View {
     var body: some View {
         let p = theme.palette
         VStack(spacing: 10) {
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 let filled = item.id == "actions" || item.isActive
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
@@ -92,6 +145,8 @@ struct LiveSideButtons: View {
                     .accessibilityIdentifier(item.accessibilityID)
                     if captions { LovableCaption(text: item.label) }
                 }
+                /* The column comes back when the sheet settles at its peek: the buttons in turn. */
+                .liveStaggerIn(index)
             }
         }
         .animation(theme.animation(.snappy), value: items)
@@ -129,7 +184,9 @@ struct LovableSpeedBubble: View {
             Text(kmh.map { SaryFormat.number($0) } ?? "—")
                 .font(.sary(26, .heavy))
                 .foregroundStyle(ui.overLimit ? p.emergencyText : p.textPrimary)
-                .contentTransition(.numericText())
+                .contentTransition(SaryTransition.number(Double(kmh ?? 0), theme))
+                /* Rolls on the speed readings that already arrive (no extra updates). */
+                .animation(theme.animation(.snappy), value: kmh)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text("كم/س").font(.sary(11, .regular)).foregroundStyle(p.textSecondary)

@@ -51,6 +51,7 @@ struct OutingPrimaryCTA: View {
                     Button { tapped(c) } label: {
                         HStack(spacing: 6) {
                             Image(systemName: c.systemImage).font(.system(size: 16, weight: .heavy))
+                                .contentTransition(.symbolEffect(.replace))
                             Text(c.title).font(.sary(15, .heavy)).lineLimit(1)
                         }
                         .foregroundStyle(p.onAccent)
@@ -75,8 +76,11 @@ struct OutingPrimaryCTA: View {
                 }
             }
             .accessibilityIdentifier(c.id)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            .animation(theme.animation(.snappy), value: ui)
+            /* A new state morphs the same button: the title cross-morphs and the width follows
+             * (the dock animates its layout on the same change, `LiveOutingScreen`). */
+            .contentTransition(theme.reduceMotion ? .opacity : .interpolate)
+            .transition(SaryTransition.appear(theme))
+            .animation(theme.animation(LiveMotion.primaryMorph(drive: theme.drive)), value: ui)
         }
     }
 }
