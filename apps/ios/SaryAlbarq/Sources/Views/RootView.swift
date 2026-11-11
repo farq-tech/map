@@ -86,6 +86,14 @@ extension LiveOutingHost {
     /// has not started yet (never in the demo, which has no server).
     fileprivate func startIfAsked() {
         guard model.pendingStart == controller.session.id, let v = controller.session.view else { return }
+        /* A solo outing is already running: once the destination is in its plan, guidance starts by
+         * itself (one member: `offerGuidanceChoice` goes straight to `startGuidanceForMe`). */
+        if controller.session.isSolo {
+            guard controller.tripDestination != nil else { return }
+            model.pendingStart = nil
+            controller.offerGuidanceChoice()
+            return
+        }
         /* The destination is saved with the outing; wait until the plan has it (never start without one). */
         guard controller.tripDestination != nil || v.status != .created else { return }
         model.pendingStart = nil
@@ -113,7 +121,7 @@ struct LiveOutingHost: View {
 
     init(session: OutingSession, model: AppModel, appearance: AppearanceSettings) {
         _controller = StateObject(wrappedValue: {
-            let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend)
+            let c = LiveOutingController(session: session, location: model.location, appearance: appearance, featuresBackend: model.featuresBackend(for: session.id))
             c.onExit = { [weak model] in model?.closeSession() }
             c.onBackToList = { [weak model] in model?.parkSession() }
             /* «تخطيط الطلعة»: the weather reads the plan's destination and route. */
@@ -128,6 +136,12 @@ struct LiveOutingHost: View {
             c.openSummary = { [weak model] in model?.showSummaryAfterClose(session.id) }
             c.startReturnTrip = { [weak model, weak c] in
                 guard let model else { return }
+                /* A solo outing never creates a server outing: back along my trail, on this phone
+                 * (`ReturnRoute` / `BackTrack` as offline; the solo return trip is a later step). */
+                if session.isSolo {
+                    c?.startReturnOnPhone(offline: true)
+                    return
+                }
                 /* UI-AUDIT 0.3: no network (the desert): the return starts on this phone along my trail,
                  * instead of an error. With a network it is a new trip on the server, as before. */
                 guard model.online || model.isDemo else {

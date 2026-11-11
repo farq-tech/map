@@ -114,6 +114,8 @@ final class OutingSession: ObservableObject, Identifiable {
     nonisolated var isDemo: Bool { kind.isDemo }
     /// No server behind this session (demo or solo): never send, apply locally.
     nonisolated var isLocal: Bool { kind.isLocal }
+    /// «اتجه» on my own (docs/SOLO-OUTING.md): one member, on this phone only. Group-only UI hides.
+    nonisolated var isSolo: Bool { kind == .solo }
     let location: LocationSharer
     /// Return-timer and «غرّزت» events for `SafetyController`.
     let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
@@ -615,6 +617,8 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Call after the consent sheet was accepted. Consent is recorded only once
     /// iOS permission is really granted, and only for this identity.
     func beginSharing() async {
+        /* A solo outing has nobody to share with: no consent, no active share, the gate stays shut. */
+        guard kind != .solo else { return }
         guard let v = view, v.status == .active else {
             errorText = "المشاركة تبدأ عندما يبدأ أمير الطلعة الطلعة."
             return
@@ -945,6 +949,11 @@ final class OutingSession: ObservableObject, Identifiable {
         if recentRaw.count > 400 { recentRaw.removeFirst(recentRaw.count - 300) }
         let added = trail.add(raw)
         if added { trailUnsaved += 1 }
+        /* Solo: «ملخص رحلتي» (distance, time) from the trail's own fixes — `handleFix` never runs
+         * there, its gate stays closed (nothing is shared). On this device only, like the trail. */
+        if kind == .solo {
+            TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) }
+        }
         if rawPending.count >= 30 || (added && (trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5)) { saveTrail() }
         if added, env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail) }
     }
@@ -1550,6 +1559,28 @@ enum SoloOuting {
         )
         return OutingView(snap, deviceNow: now)
     }
+}
+
+/// What a solo outing says (Najdi; the convoy word is «الأصدقاء», never «الربع»).
+enum SoloCopy {
+    /// The outing's name: «مشوار إلى روضة الثمامة».
+    static func outingName(to place: String) -> String {
+        let p = place.trimmingCharacters(in: .whitespacesAndNewlines)
+        return p.isEmpty ? "مشوار" : "مشوار إلى \(p)"
+    }
+    /// The header, in place of the sharing state: nothing leaves the phone.
+    static let localOnly = "على جوالك فقط"
+    static let localOnlyLong = "على جوالك فقط · ما يوصل لأحد"
+    /// «أنهِ الطلعة» in a solo outing.
+    static let end = "أنهِ المشوار"
+    static let endTitle = "تنهي المشوار؟"
+    static let endMessage = "يوقف التوجيه والتسجيل ويطلع ملخص مشوارك. كل شي على جوالك فقط."
+    /// The SOS in a solo outing: nobody to send it to, so the call is the help.
+    static let sosTitle = "طوارئ"
+    static let sosNote = "ما فيه أحد معك يوصله التنبيه. اتصل على ٩١١، أو اطلب إنجاد."
+    static let call911 = "اتصل ٩١١"
+    /// «طلعة الرجعة» from a solo outing comes in a later build.
+    static let returnLater = "«مشوار الرجعة» جاي قريب. للحين استعمل «طريق الرجعة» من «المزيد» يرجّعك على مسارك."
 }
 
 extension OutingSession {
