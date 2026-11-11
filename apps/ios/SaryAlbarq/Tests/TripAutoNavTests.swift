@@ -247,6 +247,14 @@ final class NavBroadcastTests: XCTestCase {
         XCTAssertLessThanOrEqual(NavBroadcast.text(targetName: String(repeating: "ا", count: 200)).count, ServerRules.noteMax)
     }
 
+    /// UI-AUDIT ١-هـ: «للكل؟» is asked only when somebody else is in the trip.
+    func testAloneTheLeaderIsNotAskedForAll() {
+        XCTAssertFalse(NavBroadcast.asksForAll(memberCount: 0), "no snapshot yet")
+        XCTAssertFalse(NavBroadcast.asksForAll(memberCount: 1), "only me")
+        XCTAssertTrue(NavBroadcast.asksForAll(memberCount: 2))
+        XCTAssertTrue(NavBroadcast.asksForAll(memberCount: 9))
+    }
+
     func testLeaderForAllStartsAMember() {
         var s = TripAutoNavState()
         let r = NavBroadcast.receive(&s, text: cmd, at: "t1", senderId: owner, ownerId: owner, senderIsDeputy: false, myId: me, autoAccept: true)

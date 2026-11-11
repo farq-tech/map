@@ -27,6 +27,11 @@ extension LiveOutingController {
         return v.iOwn || (NavBroadcast.deputyMayBroadcast && v.members[v.myId]?.co_leader == true)
     }
 
+    /// Somebody besides me is in the trip, so «للكل» is a real choice (alone: just guide me).
+    var guideAllHasOthers: Bool {
+        NavBroadcast.asksForAll(memberCount: session.view?.members.count ?? 0)
+    }
+
     /// The trip's next target as this phone has reached it (for «وجّه الكل إلى …»).
     var autoNavNextTarget: NavTarget? {
         TripAutoNav.nextTarget(destination: tripDestination, stops: tripStops, reached: autoNavState.reachedStops)
@@ -166,6 +171,8 @@ extension LiveOutingController {
     /// After «ابدأ الطلعة»: the leader's choice («للكل» highlighted, or «لي فقط»).
     func offerGuidanceChoice() {
         guard autoNavAllowed, canGuideAll, tripDestination != nil else { return }
+        /* A leader alone in the trip is not asked «للكل؟»: guided like any member. */
+        guard guideAllHasOthers else { return startGuidanceForMe() }
         modal = .navStartChoice
     }
 

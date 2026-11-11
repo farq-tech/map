@@ -233,6 +233,10 @@ enum NavBroadcast {
         return n.isEmpty ? nil : n
     }
 
+    /// «للكل؟» only means something with somebody else in the trip: alone (or with nobody
+    /// joined yet) the leader is simply guided, never asked (UI-AUDIT ١-هـ).
+    static func asksForAll(memberCount: Int) -> Bool { memberCount > 1 }
+
     /// May this sender start guidance for everyone? Verified on receipt, on every phone.
     static func mayBroadcast(senderId: String, ownerId: String, senderIsDeputy: Bool) -> Bool {
         senderId == ownerId || (deputyMayBroadcast && senderIsDeputy)

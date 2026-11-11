@@ -142,7 +142,7 @@ extension LiveOutingController {
               hasRoute: planModel?.plan.hasRoute ?? false,
               stuck: safety.myStuck != nil,
               ended: tripEnded,
-              guideAllTarget: canGuideAll && session.view?.status == .active ? autoNavNextTarget?.name : nil,
+              guideAllTarget: canGuideAll && guideAllHasOthers && session.view?.status == .active ? autoNavNextTarget?.name : nil,
               chat: chat.isAvailable,
               channels: session.walkie.showsChannels,
               canHide: canHideLocation,
