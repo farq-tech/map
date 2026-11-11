@@ -38,6 +38,9 @@ struct MapNavDrawing: Equatable {
     /// «آخر موقع معروف · قبل ١٤ د» under the name for a last-known target (never shown as live).
     var targetNote: String? = nil
     var labels: [Label] = []
+    /// True only while a navigation leg is active. A route preview can fit the camera without
+    /// putting the map into the driving state.
+    var guidanceActive = false
     var camera: Camera? = nil
     /// Bumps to re-run a one-shot `fit`.
     var cameraKey = 0

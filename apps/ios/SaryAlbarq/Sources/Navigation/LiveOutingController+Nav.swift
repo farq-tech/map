@@ -220,6 +220,7 @@ extension LiveOutingController {
             d.camera = .fit(pts, bottomShare: 0.55)
             d.cameraKey = navCameraKey * 1000 + nav.routes.count
         case .guiding:
+            d.guidanceActive = true
             if let r = nav.active {
                 /* Traffic colours along what is left (Mapbox `driving-traffic`); none in the desert / Valhalla. */
                 let done = nav.progress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
@@ -230,6 +231,7 @@ extension LiveOutingController {
             d.camera = navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
         case .offRoad, .arrived:
+            d.guidanceActive = nav.phase == .offRoad
             d.camera = nav.phase == .arrived ? nil : navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
         case .idle:

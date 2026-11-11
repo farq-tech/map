@@ -37,6 +37,12 @@ struct VisualEffectsSettings: Equatable {
     }
 }
 
+enum MapVisualDriving {
+    static func isDriving(driveMode: Bool, guidanceActive: Bool, speedMps: Double?) -> Bool {
+        driveMode || guidanceActive || (speedMps ?? 0) > 4.2
+    }
+}
+
 /// Where the map is and what the phone is doing: what the budget decides from.
 struct VisualContext: Equatable {
     var driving = false
