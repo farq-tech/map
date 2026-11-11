@@ -93,4 +93,22 @@ final class QiblaTests: XCTestCase {
         XCTAssertEqual(Qibla.compassScale(page: .zero), 1)
         XCTAssertEqual(Qibla.compassScale(page: CGSize(width: 320, height: 900)), (320 - 40) / 300, accuracy: 0.0001)
     }
+
+    func testDialTurnsTheShortWayAcrossNorth() {
+        XCTAssertEqual(Qibla.unwrap(previous: nil, next: 370), 10, accuracy: 1e-9)
+        XCTAssertEqual(Qibla.unwrap(previous: 359, next: 1), 361, accuracy: 1e-9, "+2°, not −358°")
+        XCTAssertEqual(Qibla.unwrap(previous: 361, next: 355), 355, accuracy: 1e-9)
+        XCTAssertEqual(Qibla.unwrap(previous: 2, next: 358), -2, accuracy: 1e-9)
+        var d: Double? = nil
+        for h in [350.0, 355, 0, 5, 10, 5, 0, 355] { d = Qibla.unwrap(previous: d, next: h) }
+        XCTAssertEqual(d ?? 0, 355, accuracy: 1e-9, "a sweep back and forth over north stays continuous")
+    }
+
+    func testAlignedHasHysteresisSoTheHapticPlaysOnce() {
+        XCTAssertTrue(Qibla.aligned(turn: 4, was: false))
+        XCTAssertFalse(Qibla.aligned(turn: 6, was: false), "not in yet")
+        XCTAssertTrue(Qibla.aligned(turn: 6, was: true), "a tremble at the edge keeps it")
+        XCTAssertTrue(Qibla.aligned(turn: -7.9, was: true))
+        XCTAssertFalse(Qibla.aligned(turn: 9, was: true), "really turned away")
+    }
 }

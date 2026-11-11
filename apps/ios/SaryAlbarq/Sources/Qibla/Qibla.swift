@@ -93,6 +93,19 @@ enum Qibla {
         "\(SaryFormat.number(Int(d.rounded()) % 360))°"
     }
 
+    /// Continuous dial angle: the previous unwrapped value plus the shortest step to `next`.
+    static func unwrap(previous: Double?, next: Double) -> Double {
+        guard let p = previous else { return normalize(next) }
+        return p + turn(qibla: next, heading: p)
+    }
+
+    /// Facing the Qibla, with hysteresis: in at `alignedWithin`, out only past `alignedLeave`,
+    /// so a hand's tremble at the edge never buzzes again and again.
+    static let alignedLeave = 8.0
+    static func aligned(turn: Double, was: Bool) -> Bool {
+        abs(turn) <= (was ? alignedLeave : alignedWithin)
+    }
+
     static func turnHint(_ turn: Double) -> String {
         let a = abs(turn)
         if a <= alignedWithin { return "أنت مقابل القبلة" }
@@ -101,11 +114,22 @@ enum Qibla {
     }
 }
 
+/// The dial's motion: an interpolating spring keeps its velocity when the next reading
+/// retargets it mid-way, so a stream of compass readings reads as one smooth turn.
+enum QiblaDial {
+    static let spring: Animation = .interpolatingSpring(stiffness: 140, damping: 22)
+}
+
 /// Live heading (true north) and position for «القبلة». Uses its own `CLLocationManager`
 /// (When-In-Use is enough; the app already has it for the outing).
 @MainActor
 final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published private(set) var heading: Double?
+    @Published private(set) var heading: Double? {
+        didSet { dialHeading = heading.map { Qibla.unwrap(previous: dialHeading, next: $0) } }
+    }
+    /// `heading` made continuous (359° → 1° is +2°, never −358°), for the dial's rotation: a
+    /// spring then turns the rose and needle the short way instead of spinning round.
+    @Published private(set) var dialHeading: Double?
     @Published private(set) var accuracy: Double?
     /// True north when CoreLocation has a location fix; magnetic otherwise.
     @Published private(set) var isTrueNorth = false
@@ -262,6 +286,8 @@ struct QiblaView: View {
     @StateObject private var compass: QiblaCompass
     var close: () -> Void
     @Environment(\.sary) private var theme
+    /// Facing the Qibla (`Qibla.aligned`, with hysteresis).
+    @State private var facing = false
 
     init(fallback: CLLocationCoordinate2D?, close: @escaping () -> Void) {
         _compass = StateObject(wrappedValue: QiblaCompass(fallback: fallback))
@@ -318,8 +344,10 @@ struct QiblaView: View {
         let q = Qibla.bearing(from: c)
         let cal = Qibla.calibration(accuracy: compass.heading == nil ? nil : compass.accuracy)
         let heading = compass.heading ?? 0
+        /* Continuous: the spring turns the short way across north. */
+        let dial = compass.dialHeading ?? heading
         let turn = Qibla.turn(qibla: q, heading: heading)
-        let aligned = compass.heading != nil && abs(turn) <= Qibla.alignedWithin
+        let aligned = compass.heading != nil && facing
 
         VStack(spacing: theme.space(.xs)) {
             Text(Qibla.degreesLabel(q))
@@ -334,7 +362,7 @@ struct QiblaView: View {
         ZStack {
             /* The rose turns with the phone: north stays north. */
             QiblaRose(qibla: q, diameter: QiblaRose.designDiameter * scale)
-                .rotationEffect(.degrees(-heading))
+                .rotationEffect(.degrees(-dial))
             /* The fixed pointer at the top: line it up with the Kaaba. */
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 22, weight: .bold))
@@ -343,11 +371,19 @@ struct QiblaView: View {
             Image(systemName: "location.north.fill")
                 .font(.system(size: 64 * scale, weight: .bold))
                 .foregroundStyle(aligned ? p.liveText : p.accent)
-                .rotationEffect(.degrees(compass.heading == nil ? q : turn))
+                /* q − dial equals `turn` modulo 360 but never jumps at ±180°. */
+                .rotationEffect(.degrees(compass.heading == nil ? q : q - dial))
                 .accessibilityHidden(true)
         }
         .frame(width: Qibla.compassDesign.width * scale, height: Qibla.compassDesign.height * scale)
-        .animation(.easeOut(duration: 0.25), value: heading)
+        /* A damped spring per heading reading (not per frame): the needle settles instead of
+           twitching with each degree; a short fade-like ease under Reduce Motion. */
+        .animation(theme.reduceMotion ? SaryMotion.reduced : QiblaDial.spring, value: dial)
+        .saryAnimation(.snappy, value: aligned)
+        .onChange(of: turn) { _, t in facing = Qibla.aligned(turn: t, was: facing) }
+        .onAppear { facing = Qibla.aligned(turn: turn, was: false) }
+        /* Lined up: one soft tap (again only after leaving the Qibla past the hysteresis). */
+        .saryHaptic(.confirm, trigger: aligned) { was, now in !was && now }
         .accessibilityElement()
         .accessibilityLabel(Text(compass.heading == nil ? "اتجاه القبلة \(Qibla.degreesLabel(q)) من الشمال" : Qibla.turnHint(turn)))
         .accessibilityIdentifier("qibla.compass")
