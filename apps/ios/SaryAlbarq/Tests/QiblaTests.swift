@@ -123,4 +123,12 @@ final class QiblaTests: XCTestCase {
         XCTAssertTrue(Qibla.aligned(turn: -7.9, was: true))
         XCTAssertFalse(Qibla.aligned(turn: 9, was: true), "really turned away")
     }
+
+    /// Riyadh→Makkah: the qibla line lies on the road and looked like a second route, so guidance hides it.
+    func testQiblaLineIsHiddenWhileNavigatingOnly() {
+        XCTAssertTrue(QiblaMapOverlay.shows(userChoice: true, navigating: false))
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: true, navigating: true), "turn-by-turn: no second dashed line")
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: false), "the user's own off switch still wins")
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: true))
+    }
 }
