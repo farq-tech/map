@@ -44,6 +44,27 @@ enum StandaloneNavRules {
         return NavFixWait.isFresh(fix, now: now) ? .ready : .waitingForFix
     }
 
+    /// Owner report, Build 38: on a phone lying still iOS sends nothing new (distance filter), so
+    /// «اتجه» waited forever for a fix it never asked for. While waiting: ask the GPS for a fresh fix
+    /// at its best (no filter), re-check every `recheckS` (the gate depends on the clock, not only on
+    /// new fixes), and past `NavFixWait.slowAfterS` say «اطلع لمكان مكشوف», still trying.
+    static let recheckS: TimeInterval = 1
+
+    /// Ask for a fresh fix now: allowed, not started, no fresh fix, and not already asked.
+    static func needsFreshFixRequest(gate: Gate, started: Bool, alreadyAsked: Bool) -> Bool {
+        gate == .waitingForFix && !started && !alreadyAsked
+    }
+
+    /// The waiting line: «ننتظر موقعك… · الدقة ±N م», then the open-sky hint (the live screen's words).
+    static func waitText(accuracyM: Double?, waitingSince: Date?, now: Date) -> String {
+        NavFixWait.text(accuracyM: accuracyM, slow: waitSlow(waitingSince: waitingSince, now: now))
+    }
+
+    static func waitSlow(waitingSince: Date?, now: Date) -> Bool {
+        guard let since = waitingSince else { return false }
+        return now.timeIntervalSince(since) >= NavFixWait.slowAfterS
+    }
+
     /// The line on the map: what is left of the road route (and the straight last part to an
     /// off-road target), or the straight line still to go. Nothing while planning / arrived.
     static func line(phase: NavPhase, active: NavRoute?, progress: NavProgress?, offRoad: NavOffRoadLeg?, me: LngLat?, target: LngLat) -> [LngLat] {
@@ -92,13 +113,17 @@ struct StandaloneNavScreen: View {
     @State private var cameraAt: Date?
     @State private var followMe = true
     @State private var asking = false
+    /// When «اتجه» started waiting for a fix (the 45 s open-sky hint counts from here).
+    @State private var waitingSince: Date?
+    /// The clock the gate is read with: ticks every second while waiting.
+    @State private var now = Date()
     /// «سرعة المركبة» on this screen (the same smoothing as the live trip's speedometer).
     @StateObject private var speed = SpeedModel()
 
     var body: some View {
         let p = theme.palette
         let me = location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }
-        let gate = StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: Date())
+        let gate = StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: now)
         ZStack {
             PlanMapView(route: StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.shownProgress, offRoad: nav.offRoad,
                                                        me: me, target: target.position),
@@ -143,11 +168,25 @@ struct StandaloneNavScreen: View {
             .padding(theme.space(.m))
         }
         .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SaryParkedPhone") {
+                location.debugParkPhone(at: LngLat(lng: 46.6744, lat: 24.7113), ageS: 300)
+            }
+            #endif
             let sharer = location
             nav.myFix = { [weak sharer] in sharer?.lastFix }
             nav.toast = { t in show(t) }
             location.watchForeground()
             begin()
+        }
+        .task {
+            /* Re-check every second while waiting: the gate reads the clock, and a still phone sends
+             * no new fix to trigger `onChange` (owner report, Build 38). */
+            while !Task.isCancelled && !started {
+                try? await Task.sleep(for: .seconds(StandaloneNavRules.recheckS))
+                now = Date()
+                begin()
+            }
         }
         .onChange(of: location.lastFix) { _, f in
             guard let f else { return }
@@ -160,6 +199,7 @@ struct StandaloneNavScreen: View {
         .onChange(of: model.online) { was, now in if now && !was { nav.retryNow() } }
         .onDisappear {
             nav.end()
+            location.endFreshFixRequest()
             location.stopWatchingForeground()
         }
         .accessibilityElement(children: .contain)
@@ -197,7 +237,10 @@ struct StandaloneNavScreen: View {
         case .idle:
             switch gate {
             case .needsPermission: permissionCard
-            case .waitingForFix, .ready: status("ننتظر موقعك، ونبدأ على طول", busy: true)
+            case .waitingForFix, .ready:
+                let slow = StandaloneNavRules.waitSlow(waitingSince: waitingSince, now: now)
+                status(StandaloneNavRules.waitText(accuracyM: location.quality.lastAccuracyM ?? location.lastFix?.accuracy,
+                                                   waitingSince: waitingSince, now: now), busy: !slow)
             }
         }
     }
@@ -259,11 +302,17 @@ struct StandaloneNavScreen: View {
     /// Starts once: permission and a fresh fix first (the wait is said on screen, never silent).
     private func begin() {
         guard !started else { return }
-        guard StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: Date()) == .ready else {
-            if location.canLocate { location.watchForeground() }
+        let gate = StandaloneNavRules.gate(canLocate: location.canLocate, fix: location.lastFix, now: Date())
+        guard gate == .ready else {
+            if gate == .waitingForFix, waitingSince == nil { waitingSince = Date() }
+            /* The GPS at its best, no distance filter, until a fresh fix comes (as the live screen's wait). */
+            if StandaloneNavRules.needsFreshFixRequest(gate: gate, started: started, alreadyAsked: location.wantsFreshFix) {
+                location.requestFreshFix()
+            }
             return
         }
         started = true
+        waitingSince = nil
         nav.startImmediately(to: target)
         if let f = location.lastFix { follow(LngLat(lng: f.lng, lat: f.lat), force: true) }
     }

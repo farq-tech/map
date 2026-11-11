@@ -139,6 +139,33 @@ final class ScreensUITests: XCTestCase {
     }
 }
 
+/// «اتجه» without an outing on a phone lying still: iOS sends nothing new, my only fix is 5 minutes
+/// old. Guidance must ask for a fresh fix and start, never hang on «ننتظر موقعك» (owner, Build 38).
+final class StandaloneNavStaleFixUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    func testGoOnAParkedPhoneAsksForAFixAndStarts() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
+                               "-SaryParkedPhone", "-SaryNavDemo"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        /* A place away from me (the top of the map), not my own spot. */
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 1.3)
+        let go = any("home.place.go")
+        XCTAssertTrue(go.waitForExistence(timeout: 10), "«اتجه» on the place card")
+        go.tap()
+        XCTAssertTrue(any("standaloneNav.screen").waitForExistence(timeout: 5))
+        let started = any("nav.banner").waitForExistence(timeout: 15) || any("nav.instruction").exists || any("nav.offRoad").exists
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "standalone-parked-phone"; a.lifetime = .keepAlways; add(a)
+        let status = any("standaloneNav.status")
+        XCTAssertTrue(started, "guidance never started: «\(status.exists ? status.label : "-")»")
+    }
+}
+
 /// «اتجه» while driving (temporary until #157): my car (not a dot), my speed and the posted limit.
 final class StandaloneNavDriveShotsUITests: XCTestCase {
     func testCarAndSpeedWhileGuiding() {
