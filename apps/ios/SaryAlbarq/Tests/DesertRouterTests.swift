@@ -247,6 +247,36 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertFalse(options.isEmpty, "the measured grid contains a costed route from a mapped road to this pin")
     }
 
+    @MainActor func testSecondReportedThumamahPinGetsCityToDesertHybridRoute() async throws {
+        let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
+        let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
+        let origin = LngLat(lng: 46.6744, lat: 24.7113)
+        let target = LngLat(lng: 46.62866, lat: 25.15844)
+        let base = TestDesertRoadProvider { request in
+            guard request.target.name == "مدخل درب البر" else { throw NavRoutingError.noRoute }
+            let access = request.target.position
+            let distance = Vehicle.distanceMeters(origin, access)
+            return NavRoutePlan(routes: [NavRoute(id: "recorded-street-approach", coordinates: [origin, access],
+                                                   distanceM: distance, durationS: 1_200, steps: [], via: "street network")])
+        }
+        let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
+                                                regionForPoint: { DesertAwareRouteProvider.regionName(containing: $0) },
+                                                rainMayBePresent: { false })
+        let request = NavRouteRequest(origin: origin, heading: nil,
+                                      target: NavTarget(source: .point, name: "نقطة الثمامة الثانية", position: target),
+                                      options: NavRouteOptions())
+
+        let plan = try await provider.routes(request)
+        let route = try XCTUnwrap(plan.routes.first, "the second reported pin must continue from a routed street into the grid")
+        XCTAssertEqual(route.start, origin)
+        XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
+        XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), max(130, hypot(grid.dx, grid.dy) * 1.5))
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved }, "preserve the city-road approach")
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .terrain || $0.kind == .unpaved }, "continue over a classified desert surface")
+        XCTAssertGreaterThanOrEqual(route.timingProfile?.count ?? 0, 2, "keep separate road and off-road ETA legs")
+    }
+
     @MainActor func testRecordedMapboxSnapEndpointsConnectToBothReportedThumamahPins() throws {
         let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
