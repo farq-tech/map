@@ -36,9 +36,8 @@ final class MediaUITests: XCTestCase {
         let app = launch()
         any(app, "outing-sheet-summary").tap()
         /* «يوتيوب» (قناتي / قناة الطلعة) lives in the sheet's «المزيد» tab; also in «+» → الترفيه. */
-        let moreTab = app.buttons["tab.more"]
-        XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
-        moreTab.tap()
+        /* UI-AUDIT م3: «المزيد» → «الطلعة» → «الإعدادات» (the header's gear is gone). */
+        app.openLiveSettings()
         /* «الإعدادات» → «الإذاعة ويوتيوب» → «يوتيوب» (also «أدوات» → الترفيه). */
         let page = any(app, "settings.media")
         XCTAssertTrue(page.waitForExistence(timeout: 5))

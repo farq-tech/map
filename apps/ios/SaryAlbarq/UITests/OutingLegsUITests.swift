@@ -114,8 +114,10 @@ final class OutingLegsUITests: XCTestCase {
         for _ in 0..<8 where !(end.exists && end.isHittable) { app.swipeUp(); usleep(500_000) }
         XCTAssertTrue(end.waitForExistence(timeout: 6), "«أنهِ الطلعة» in the sheet")
         end.tap()
-        let confirm = app.buttons["أنهِ الطلعة للجميع"].firstMatch
+        /* ONE confirmation everywhere: «تنهي الطلعة للكل؟» → «أنهِها» / «لا». */
+        let confirm = app.buttons["أنهِها"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "asked first")
+        XCTAssertTrue(app.buttons["لا"].firstMatch.exists, "«لا» cancels")
         shot(app, "08-ending")
         confirm.tap()
         /* The ended screen offers «ملخص الطلعة» (some builds open the summary by themselves). */
@@ -134,15 +136,25 @@ final class OutingLegsUITests: XCTestCase {
         shot(app, "09-summary")
     }
 
-    func testInTripSearchOpensTheHomeDestinationSearch() {
+    /// UI-AUDIT م3: a dedicated search sheet — not the whole home screen (its profile, «المفضلة» and
+    /// «طلعة جديدة» did nothing here) — with a close button; a pick is the next leg's destination.
+    func testInTripSearchIsADedicatedSheet() {
         let app = launch([])
         tap(app, "flow.cta.startOuting")
         XCTAssertTrue(waitLine(app, contains: "الطلعة شغّالة"), line(app))
         tap(app, "outing-actions")
         tap(app, "outing-search")
 
-        XCTAssertTrue(el(app, "home.search").waitForExistence(timeout: 8), "in-trip search uses the home search bar")
-        XCTAssertFalse(el(app, "search.field").exists, "the old coordinate search screen is no longer used here")
+        XCTAssertTrue(el(app, "live.search.field").waitForExistence(timeout: 8), "the in-trip search field")
+        XCTAssertTrue(el(app, "live.search.close").exists, "a close button")
+        for id in ["home.search", "list.create", "home.profile", "home.favorites", "search.field"] {
+            XCTAssertFalse(el(app, id).exists, "\(id): the home screen is not stacked in the trip")
+        }
+        /* Earlier places are offered before typing; one tap sets the leg's destination. */
+        let recent = el(app, "live.search.recent")
+        XCTAssertTrue(recent.waitForExistence(timeout: 5), "«أماكن سابقة»")
+        recent.tap()
+        XCTAssertTrue(waitLine(app, contains: "الوجهة "), "picked: \(line(app))")
     }
 
     func testAfterArrivalCanChooseAndStartAnotherDestination() {
@@ -184,8 +196,13 @@ final class OutingLegsUITests: XCTestCase {
 
     func testMemberWaitsForTheLeader() {
         let app = launch(["-SaryDemoMe", "00000000-0000-4000-8000-000000000002"])
-        XCTAssertTrue(waitLine(app, contains: "ننتظر أمير الرحلة يبدأها"), line(app))
+        /* The member's waiting message once — on the button; the header only says the state. */
+        XCTAssertTrue(waitLine(app, contains: "ما بدأت الطلعة"), line(app))
         XCTAssertTrue(el(app, "flow.cta.waitLeader").exists)
+        XCTAssertTrue(el(app, "flow.cta.waitLeader").label.contains("ننتظر أمير الطلعة"), el(app, "flow.cta.waitLeader").label)
+        XCTAssertFalse(line(app).contains("ننتظر"), "not said twice")
+        XCTAssertFalse(el(app, "live.notStarted").exists, "no third copy in the sheet")
+        XCTAssertFalse(el(app, "sheet.quickRow").exists, "not started: no quick row")
         XCTAssertFalse(el(app, "flow.cta.startOuting").exists, "only the leader starts")
         shot(app, "02-not-started-member")
     }

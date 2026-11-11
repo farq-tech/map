@@ -64,7 +64,9 @@ final class TripAutoNavUITests: XCTestCase {
     func testLeaderStartTripForAll() {
         let app = launch(["-demoNotStarted"], sheet: "half")
         XCTAssertFalse(el(app, "nav.banner").exists, "nothing before the start")
-        let start = el(app, "live.start")
+        /* UI-AUDIT م3: one «ابدأ الطلعة» — the CTA (the sheet's second button is gone). */
+        XCTAssertFalse(el(app, "live.start").exists, "no second «ابدأ الطلعة» in the sheet")
+        let start = el(app, "flow.cta.startOuting")
         XCTAssertTrue(start.waitForExistence(timeout: 10), "«ابدأ الطلعة»")
         shot(app, "autonav-0-before-start")
         start.tap()
@@ -88,7 +90,7 @@ final class TripAutoNavUITests: XCTestCase {
 
     func testLeaderStartTripOnlyMe() {
         let app = launch(["-demoNotStarted"], sheet: "half")
-        let start = el(app, "live.start")
+        let start = el(app, "flow.cta.startOuting")
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         start.tap()
         XCTAssertTrue(el(app, "nav.choice.me").waitForExistence(timeout: 10))

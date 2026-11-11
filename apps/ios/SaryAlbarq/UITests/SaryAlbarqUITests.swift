@@ -306,7 +306,7 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         shot("3-in-trip-sharing-on", app)
 
-        app.buttons["tab.more"].tap()
+        app.openLiveSettings()
         let who = any(app, "settings.sharing")
         XCTAssertTrue(who.waitForExistence(timeout: 5))
         who.tap()

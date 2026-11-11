@@ -1,7 +1,7 @@
 import XCTest
 
-/// «طريق العودة»: entering and leaving back-track mode from the control cluster
-/// and from the sheet's «مساري» card (demo outing with a seeded trail).
+/// «طريق الرجعة»: entering it from «المزيد» → «الطريق» and leaving it from its panel's «إنهاء»
+/// (UI-AUDIT م3: one stop, no duplicate on the map or the quick row). Demo outing with a seeded trail.
 final class BackTrackUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -33,57 +33,33 @@ final class BackTrackUITests: XCTestCase {
         add(a)
     }
 
-    func testEnterAndLeaveFromTheControlCluster() {
+    func testEnterFromMoreAndLeaveFromThePanelOnly() {
         let app = launch()
-        /* «طريق العودة»: in the sheet's quick row (and by itself on the map after arrival / off the route). */
-        let button = app.buttons["trail.backtrack"]
-        XCTAssertTrue(button.waitForExistence(timeout: 10), "«طريق الرجعة» in the quick row")
-        XCTAssertFalse(panel(app).exists)
-        button.tap()
+        /* «طريق الرجعة»: «المزيد» → «الطريق» (and by itself on the map after arrival / off the route). */
+        XCTAssertFalse(app.buttons["trail.backtrack"].exists, "not in the quick row any more")
+        XCTAssertTrue(app.openTool("trail.backtrack"), "«طريق الرجعة» in «المزيد»")
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5), "back-track panel")
         XCTAssertTrue(app.staticTexts["backtrack.title"].exists)
         XCTAssertTrue(app.buttons["backtrack.exit"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["map.trailStart"].waitForExistence(timeout: 5), "«نقطة البداية» on the map")
+        /* While it runs its panel's «إنهاء» is the only stop: no map shortcut, no tile. */
+        XCTAssertFalse(app.buttons["outing-backtrack"].exists, "no second stop on the map")
         sleep(2)
         attach(app, "backtrack")
         app.buttons["backtrack.exit"].tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5), "«إنهاء» leaves back-track mode")
-        /* Again from the row; while it runs, «طريق العودة» sits on the map by itself and toggles it off. */
-        XCTAssertTrue(button.waitForExistence(timeout: 5))
-        button.tap()
-        XCTAssertTrue(panel(app).waitForExistence(timeout: 5))
-        let shortcut = app.buttons["outing-backtrack"]
-        XCTAssertTrue(shortcut.waitForExistence(timeout: 5), "the map shortcut while it runs")
-        shortcut.tap()
-        XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5))
     }
 
-    func testEnterFromTheSheetsTrailCard() {
+    func testEnterFromTheRaisedSheet() {
         let app = launch()
         sleep(1)
         app.descendants(matching: .any)["outing-sheet-summary"].tap()
-        let start = app.buttons["trail.backtrack"]
-        XCTAssertTrue(start.waitForExistence(timeout: 8), "«طريق الرجعة» in the sheet")
-        /* «مساري» sits below the trip card in «الرحلة», out of view at the sheet's middle height. Scroll it in
-           ourselves and tap only once it stopped moving: XCUITest's own scroll-to-visible taps while the sheet
-           is still decelerating, and a tap on a moving scroll view only stops it (the button never fires). */
-        for _ in 0..<5 where !start.isHittable {
-            /* A drag inside the sheet's lower part (below its middle-height top): grows the sheet, then scrolls it. */
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.86))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
-        }
-        var last = start.frame
-        for _ in 0..<20 {
-            usleep(250_000)
-            if start.frame == last { break }
-            last = start.frame
-        }
-        XCTAssertTrue(start.isHittable, "«طريق الرجعة» in the sheet's quick row, in view")
+        /* The raised sheet keeps the quick row: «المزيد» → «طريق الرجعة». */
+        XCTAssertTrue(app.openTool("trail.backtrack"), "«طريق الرجعة» from the raised sheet's «المزيد»")
         /* «أظهر مسارات العيال» moved to «الإعدادات» → «مساري» (UX simplification). */
         XCTAssertFalse(app.descendants(matching: .any)["trail.friends"].exists, "not stacked in the sheet any more")
-        attach(app, "trail-card")
-        start.tap()
         XCTAssertTrue(panel(app).waitForExistence(timeout: 5), "back-track from the sheet")
+        attach(app, "trail-card")
         app.buttons["backtrack.exit"].tap()
         XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5))
     }

@@ -24,9 +24,7 @@ final class NavVoiceSettingsUITests: XCTestCase {
         XCTAssertTrue(any(app, "outing-sheet-summary").waitForExistence(timeout: 15))
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
         any(app, "outing-sheet-summary").tap()
-        let moreTab = app.buttons["tab.more"]
-        XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
-        moreTab.tap()
+        app.openLiveSettings()
         let row = any(app, "settings.navVoice")
         for _ in 0..<4 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.waitForExistence(timeout: 5), "«صوت التوجيه» under «الصوت واللاسلكي»")

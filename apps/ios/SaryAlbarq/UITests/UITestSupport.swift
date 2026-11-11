@@ -104,6 +104,37 @@ extension XCUIApplication {
         return buttons["غادر"].firstMatch
     }
 
+    /// «المزيد» → «الطلعة» → «الإعدادات» (UI-AUDIT م3: the header's gear is gone; one way in).
+    func openLiveSettings(timeout: TimeInterval = 10) {
+        let more = buttons["outing-actions"]
+        if !more.waitForExistence(timeout: 3) { descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap() }
+        _ = more.waitForExistence(timeout: timeout)
+        more.tap()
+        let settings = descendants(matching: .any)["outing-settings"].firstMatch
+        _ = settings.waitForExistence(timeout: 5)
+        settings.scrollIntoView(in: self)
+        settings.tap()
+    }
+
+    /// «المزيد» → «الطلعة» → «أنهِ الطلعة» → the one confirmation (`EndOutingCopy`: «تنهي الطلعة للكل؟»
+    /// → «أنهِها»). UI-AUDIT م3: no red flag on the map, no end button on the trip card. Returns
+    /// whether the confirming button was there and tapped.
+    @discardableResult
+    func endOutingFromMore(timeout: TimeInterval = 10) -> Bool {
+        let more = buttons["outing-actions"]
+        if !more.waitForExistence(timeout: 3) { descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap() }
+        guard more.waitForExistence(timeout: timeout) else { return false }
+        more.tap()
+        let end = descendants(matching: .any)["settings-end"].firstMatch
+        guard end.waitForExistence(timeout: 5) else { return false }
+        for _ in 0..<8 where !(end.exists && end.isHittable) { swipeUp(); usleep(500_000) }
+        end.tap()
+        let confirm = buttons["أنهِها"].firstMatch
+        guard confirm.waitForExistence(timeout: 5) else { return false }
+        confirm.tap()
+        return true
+    }
+
     /// The home map's sheet raised, «طلعاتي» in view («طلعة جديدة», «انضم برابط»).
     func openHomeOutings(timeout: TimeInterval = 20) {
         let create = buttons["list.create"]
