@@ -53,7 +53,7 @@ struct WaypointsSection: View {
                     HStack {
                         Text("نقاط من طلعات سابقة").saryText(.subhead, weight: .bold).foregroundStyle(p.accentText)
                         Spacer()
-                        Image(systemName: "chevron.forward").font(.system(size: 12, weight: .bold)).foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).font(.system(size: 12, weight: .bold)).foregroundStyle(p.textTertiary)
                     }
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())
@@ -65,7 +65,7 @@ struct WaypointsSection: View {
     }
 
     private var footer: String {
-        "تظهر لكل أعضاء الطلعة، وتبقى بعد نهايتها. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
+        "تظهر لكل الربع، وتبقى بعد نهاية الطلعة. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
     }
 
     private var myPoint: Geo.LatLng? {
@@ -303,7 +303,7 @@ struct WaypointComposer: View {
                     .buttonStyle(.saryPrimary)
                     .disabled(ServerRules.cleanText(title, max: WaypointRules.titleMax) == nil || features.saving || photoBusy)
                     .accessibilityIdentifier("waypoint.save")
-                Text("تظهر النقطة واسمك لكل أعضاء الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                Text("تظهر النقطة واسمك لربع الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.l))
         }
@@ -464,7 +464,7 @@ struct WaypointCard: View {
         .confirmationDialog("تحذف «\(w.title)»؟", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("احذفها للجميع", role: .destructive) { Task { await features.delete(w.id) } }
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("تختفي النقطة من خريطة كل أعضاء الطلعة.") }
+        } message: { Text("تختفي النقطة من خريطة كل الربع.") }
     }
 
     private func subtitle(_ w: Waypoint) -> String {

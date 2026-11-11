@@ -37,10 +37,16 @@ final class ReachabilityUITests: XCTestCase {
     func testMapKeepsOnlyTheEssentials() {
         let app = launch()
         for id in ["outing-back", "trip.header", "outing-link-state", "weather.chip", "outing-locate", "outing-sos", "outing-ptt",
-                   "sheet.quickRow", "outing-actions", "sheet.chat", "sheet.rally", "trail.backtrack"] {
+                   "sheet.quickRow", "sheet.desert", "outing-actions", "sheet.chat", "sheet.rally"] {
             XCTAssertTrue(any(app, id).waitForExistence(timeout: 10), "\(id) on the map / quick row")
         }
-        XCTAssertTrue(any(app, "outing-navigate").exists || any(app, "outing-guide-all").exists, "the primary: «ملاحة» or «وجّه الكل»")
+        /* UI-AUDIT م3: the quick row is four («البر»، المحادثة، التجمع، المزيد) with no accent button; the
+         * state's one primary is the CTA. «ملاحة», «طريق الرجعة» and «أخفِ موقعي» are in «المزيد». */
+        for id in ["outing-navigate", "outing-guide-all", "trail.backtrack", "live.hideLocation", "outing-end", "tab.more"] {
+            XCTAssertFalse(any(app, id).exists, "\(id) is not on the map / quick row")
+        }
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'flow.cta.'")).firstMatch.exists,
+                      "the one primary: the CTA")
         /* UX simplification: one way into each thing. */
         for id in ["outing-more", "outing-note-open", "outing-search", "outing-nearest-open", "outing-stuck", "plan.follow", "plan.openSearch",
                    "trip.explore", "outing-fit", "tab.trip", "tab.group", "tab.map", "sheet.settings", "live.leave"] {
@@ -62,12 +68,12 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(more.waitForExistence(timeout: 10))
         more.tap()
         XCTAssertTrue(any(app, "outing-actions-sheet").waitForExistence(timeout: 5))
-        for group in ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة", "الطلعة"] {
+        for group in ["الطريق", "الربع", "السلامة", "المكان", "الخريطة", "الطلعة"] {
             XCTAssertTrue(app.staticTexts[group].exists, "group «\(group)»")
         }
         XCTAssertFalse(app.staticTexts["الترفيه"].exists, "radio / YouTube are in the settings")
-        for id in ["outing-route", "outing-search", "outing-invite", "outing-convoy", "outing-note-open", "outing-stuck", "outing-enjad",
-                   "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-nearest-open",
+        for id in ["outing-navigate", "outing-route", "outing-search", "trail.backtrack", "outing-invite", "outing-convoy", "outing-note-open",
+                   "outing-stuck", "outing-enjad", "outing-timer", "outing-location-tools", "outing-weather-tools", "outing-nearest-open",
                    "outing-explore", "outing-fit", "outing-settings", "settings-leave"] {
             XCTAssertTrue(any(app, id).exists, "\(id) in «المزيد»")
         }
@@ -129,8 +135,8 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(any(app, "rally-card").waitForExistence(timeout: 6))
         any(app, "panel.close").tap()
         sleep(2)
-        /* «الإعدادات» (the header's gear): five groups, one-line rows; the phone and the trail there. */
-        app.buttons["tab.more"].tap()
+        /* «الإعدادات» («المزيد» → «الطلعة»): five groups, one-line rows; the phone and the trail there. */
+        app.openLiveSettings()
         for id in ["settings.sharing", "settings.phone", "settings.lateAlert", "settings.defaultLayer", "settings.mapDirection", "settings.units",
                    "settings.driving", "settings.trail", "settings.defaultChannel", "settings.voiceAutoplay", "settings.volume", "settings.media",
                    "settings.clearHistory", "settings.gpsPrecise", "settings-offline", "settings.diagnostics"] {

@@ -296,4 +296,39 @@ final class TripLogTests: XCTestCase {
         TripLogStore.forgetAll(defaults: d)
         XCTAssertNil(TripLogStore.load("a", defaults: d))
     }
+
+    /// The per-fix fast path writes the same `[String: TripLog]` JSON the old full encode did.
+    func testStoreFastPathMatchesAFullDecode() throws {
+        let d = UserDefaults(suiteName: "trip-test-\(UUID().uuidString)")!
+        var expected: [String: TripLog] = [:]
+        for i in 0..<40 {
+            let id = ["a", "b", "c\"q"][i % 3]
+            let fix = { (l: inout TripLog) in l.add(lat: 24.7 + Double(i) * 0.0005, lng: 46.6, accuracy: 5, speed: 10, atMs: Double(i) * 1000) }
+            TripLogStore.update(id, defaults: d, fix)
+            var e = expected[id] ?? TripLog()
+            fix(&e)
+            expected[id] = e
+        }
+        let raw = try XCTUnwrap(d.data(forKey: TripLogStore.key))
+        XCTAssertEqual(try JSONDecoder().decode([String: TripLog].self, from: raw), expected)
+        for (id, log) in expected { XCTAssertEqual(TripLogStore.load(id, defaults: d), log) }
+    }
+
+    /// Another writer of the key (the settings clean-up, a wipe) is seen at once: nothing stale comes back.
+    func testStoreSeesOtherWritersOfTheKey() throws {
+        let d = UserDefaults(suiteName: "trip-test-\(UUID().uuidString)")!
+        TripLogStore.update("old", defaults: d) { _ in }
+        TripLogStore.update("now", defaults: d) { _ in }
+        var all = try JSONDecoder().decode([String: TripLog].self, from: XCTUnwrap(d.data(forKey: TripLogStore.key)))
+        all["old"] = nil
+        d.set(try JSONEncoder().encode(all), forKey: TripLogStore.key)
+        XCTAssertNil(TripLogStore.load("old", defaults: d))
+        TripLogStore.update("now", defaults: d) { $0.add(lat: 24.7, lng: 46.6, accuracy: 5, speed: 0, atMs: 5) }
+        XCTAssertNil(TripLogStore.load("old", defaults: d), "a write never brings back what another writer removed")
+        d.removeObject(forKey: TripLogStore.key)
+        XCTAssertNil(TripLogStore.load("now", defaults: d))
+        d.set(Data("not json".utf8), forKey: TripLogStore.key)
+        TripLogStore.update("x", defaults: d) { _ in }
+        XCTAssertNotNil(TripLogStore.load("x", defaults: d), "a broken value is replaced, as before")
+    }
 }

@@ -70,7 +70,7 @@ extension LiveOutingController {
         exploreAuto = auto
         sheetDetent = .peek
         exploreActive = true
-        if auto { toast("وضع الاستكشاف · «ارجع للرحلة» يرجعك") }
+        if auto { toast("وضع الاستكشاف · «ارجع للطلعة» يرجعك") }
     }
 
     /// «ارجع للرحلة»: back to the trip, the group framed again.

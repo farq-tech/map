@@ -33,25 +33,46 @@ extension SheetDetentUI {
     }
 }
 
+/// What decides the peek detent's height (`SheetDetentUI.peekHeight`). Owner report (Build 36,
+/// «اهتزاز النافذة السفلية»): it must not change because the sheet moved, nor while a finger is on
+/// the screen — SwiftUI re-snaps the native sheet whenever its detent SET changes, so a peek height
+/// that changed when the sheet was raised/lowered (or mid-drag) made the sheet jump by itself.
+struct LiveSheetShape: Equatable {
+    var drive: Bool
+    /// The quick row sits under the summary line at peek (`LiveScreenRules.peekShowsQuickRow`).
+    var trip: Bool
+
+    var peekHeight: CGFloat { SheetDetentUI.peekHeight(drive: drive, trip: trip) }
+
+    /// The shape the sheet uses now: the one frozen when a finger went down, else the live one.
+    static func resolve(live: LiveSheetShape, frozen: LiveSheetShape?) -> LiveSheetShape { frozen ?? live }
+}
+
 /// Native sheet styling for the live outing sheet: three detents, the map
 /// stays interactive up to «نصف», never dismissible by swipe, Liquid Glass
 /// background on iOS 26 (system default at partial heights), opaque surface
 /// in drive mode / solid panel look / fallback.
 private struct SarySheetPresentation: ViewModifier {
     @Binding var detent: SheetDetentUI
-    var trip = false
+    /// The live screen passes it (held still during a touch); nil: the theme's drive, no quick row.
+    var shape: LiveSheetShape?
     @Environment(\.sary) private var theme
 
     func body(content: Content) -> some View {
+        let drive = shape?.drive ?? theme.drive
+        let trip = shape?.trip ?? false
         let binding = Binding<PresentationDetent>(
-            get: { detent.presentationDetent(drive: theme.drive, trip: trip) },
-            set: { detent = SheetDetentUI($0, drive: theme.drive) }
+            get: { detent.presentationDetent(drive: drive, trip: trip) },
+            set: { detent = SheetDetentUI($0, drive: drive) }
         )
         content
-            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: theme.drive, trip: trip) }), selection: binding)
+            .presentationDetents(Set(SheetDetentUI.allCases.map { $0.presentationDetent(drive: drive, trip: trip) }), selection: binding)
             .presentationBackgroundInteraction(.enabled(upThrough: .medium))
             .presentationDragIndicator(.visible)
-            .presentationContentInteraction(.scrolls)
+            /* `.resizes` (was `.scrolls`): a drag on the content resizes the sheet until it reaches its
+             * largest detent, and only then scrolls. With `.scrolls` the half-height ScrollView took the
+             * drag, so the sheet followed the finger only on the summary / handle strip. */
+            .presentationContentInteraction(.resizes)
             .interactiveDismissDisabled()
             .modifier(SheetBackground())
             .sensoryFeedback(.selection, trigger: detent)
@@ -84,8 +105,8 @@ private struct SheetBackground: ViewModifier {
 
 extension View {
     /// Apply to the content of the live outing `.sheet`.
-    func sarySheetPresentation(detent: Binding<SheetDetentUI>, trip: Bool = false) -> some View {
-        modifier(SarySheetPresentation(detent: detent, trip: trip))
+    func sarySheetPresentation(detent: Binding<SheetDetentUI>, shape: LiveSheetShape? = nil) -> some View {
+        modifier(SarySheetPresentation(detent: detent, shape: shape))
     }
 }
 

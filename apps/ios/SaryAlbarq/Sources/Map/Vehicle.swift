@@ -65,6 +65,23 @@ enum Vehicle {
             : ("sary-vehicle-\(key)", "sary-vehicle-3d-\(key)", "sary-vehicle-spot-\(key)")
     }
 
+    /// The halo layer under my own car (`myHaloLayer`).
+    static func haloId(_ spot: String) -> String { spot + "-halo" }
+
+    /// My position, readable over pale sand and dark imagery alike: a soft dark disc (contrast on
+    /// sand) inside a white ring (contrast at night), about the car's on-screen size, flat on the map.
+    static func myHaloLayer(id: String, source: String) -> [String: Any] {
+        [
+            "id": id, "type": "circle", "source": source,
+            "paint": [
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 18, 16.5, 22, 19, 32] as [Any],
+                "circle-color": "#06101F", "circle-opacity": 0.28, "circle-blur": 0.1,
+                "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-stroke-opacity": 0.9,
+                "circle-pitch-alignment": "map", "circle-emissive-strength": 1,
+            ] as [String: Any],
+        ]
+    }
+
     static func carKey(_ userId: String) -> String {
         "peer-" + userId.filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
     }

@@ -50,9 +50,10 @@ enum LivePanel: String, Identifiable, Equatable {
 }
 
 /// «المزيد» (was «أدوات الطلعة», ~٢٢ tiles in ٦ sections): only what the sheet's quick row
-/// (ملاحة / وجّه الكل، المحادثة، التجمع، أخفِ موقعي، طريق الرجعة) does not already offer,
-/// and no tile that repeats another screen (high-res / realistic live in «الطبقات», the effects
-/// and radio / YouTube in «الإعدادات»). docs/ux-simplify-inventory.md.
+/// («البر»، المحادثة، التجمع) does not already offer, and no tile that repeats another screen
+/// (high-res / realistic live in «الطبقات», the effects and radio / YouTube in «الإعدادات»).
+/// UI-AUDIT م3: «ملاحة» and «طريق الرجعة» are here (the quick row has no accent button any more),
+/// and «أخفِ موقعي» moved here from the quick row. docs/ux-simplify-inventory.md.
 enum LiveActionCatalog {
     struct State: Equatable {
         var backTracking = false
@@ -67,34 +68,45 @@ enum LiveActionCatalog {
         var chat = true
         /// «الترددات» only when the server has walkie-talkie channels.
         var channels = false
+        /// «أخفِ موقعي» / «أظهر موقعي» (a running trip I share in).
+        var canHide = false
+        var hidden = false
     }
 
     /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
     static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll", "channels", "enjad",
-                                                "rally", "convoy", "timer", "invite"]
+                                                "rally", "convoy", "timer", "invite", "hide"]
 
-    /// What the quick row holds (never repeated as a tile; «ملاحة» is a tile only when «وجّه الكل» takes its place).
-    static let inQuickRow: Set<String> = ["navigate", "guideAll", "chat", "rally", "backtrack", "hide"]
+    /// What the quick row holds (never repeated as a tile). «البر» (camp sites, desert routes,
+    /// the Qibla, the weather) is the quick row's own menu.
+    static let inQuickRow: Set<String> = ["chat", "rally"]
 
     static func groups(_ s: State) -> [LiveActionGroup] {
         let all = [
-            LiveActionGroup(title: "الطريق", items: (s.guideAllTarget == nil && !s.ended ? [] : [
-                /* The leader's quick row leads with «وجّه الكل», and after the end there is no quick row:
-                 * then «ملاحة» (to a friend, the rally point, back) is here. */
+            LiveActionGroup(title: "الطريق", items: [
+                /* «ملاحة» (to a friend, the rally point, back) is a tile now: the quick row's accent button
+                 * is gone (one primary per state — the CTA). «وجّه الكل» is offered after «ابدأ الطلعة». */
                 LiveActionItem(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
-                               subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع"),
-            ]) + [
+                               subtitle: "لواحد من الربع، للوجهة أو لنقطة التجمع"),
                 .init(id: "route", title: "الوجهة والخطة", systemImage: "map", accessibilityID: "outing-route",
                       subtitle: s.following ? "تتبع الخطة الآن" : "سجل الطلعة، الخطة، اتبع المسار", isActive: s.following),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
-            ]),
-            LiveActionGroup(title: "الجماعة", items: (s.channels ? [
+            ] + (s.backTracking ? [] : [
+                /* While it runs, its panel's «أنهِ الرجعة» is the one way out (no second stop here). */
+                LiveActionItem(id: "backtrack", title: "طريق الرجعة", systemImage: SaryIcon.backTrack, accessibilityID: "trail.backtrack",
+                               subtitle: "ترجع على مسارك لين نقطة البداية · بدون إنترنت"),
+            ])),
+            LiveActionGroup(title: "الربع", items: (s.channels ? [
                 LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
             ] : []) + [
                 .init(id: "invite", title: "ادعُ ربعك", systemImage: "person.badge.plus", accessibilityID: "outing-invite"),
                 .init(id: "convoy", title: "القافلة", systemImage: "box.truck", accessibilityID: "outing-convoy", subtitle: "تنبيهات القافلة"),
                 .init(id: "note", title: "رسالة فوق سيارتي", systemImage: SaryIcon.note, accessibilityID: "outing-note-open"),
-            ]),
+            ] + (s.canHide ? [
+                LiveActionItem(id: "hide", title: s.hidden ? HideText.shownButton : HideText.hideButton, systemImage: s.hidden ? "eye" : "eye.slash",
+                               accessibilityID: "live.hideLocation", subtitle: s.hidden ? "يرجع موقعك يوصل للربع" : "تبقى في الطلعة بس موقعك ما يوصل",
+                               isActive: s.hidden),
+            ] : [])),
             LiveActionGroup(title: "السلامة", items: [
                 .init(id: "stuck", title: s.stuck ? "أنا مغرّز" : "غرّزت", systemImage: "car.side.rear.and.collision.and.car.side.front",
                       accessibilityID: "outing-stuck", isActive: s.stuck, tone: .emergency),
@@ -116,8 +128,9 @@ enum LiveActionCatalog {
                         .init(id: "weather", title: "الطقس", systemImage: "sun.max", accessibilityID: "outing-weather"),
                         .init(id: "qibla", title: "القبلة", systemImage: "location.north.circle", accessibilityID: "outing-qibla"),
                       ]),
-                .init(id: "explore", title: "الطبقات", systemImage: "square.3.layers.3d", accessibilityID: "outing-explore",
-                      subtitle: "قمر صناعي، طبوغرافي، صور عالية الوضوح، الوضع الواقعي"),
+                /* «الطبقات» is only the layers sheet (inside exploration); this tile enters exploration. */
+                .init(id: "explore", title: "استكشف الخريطة", systemImage: "binoculars", accessibilityID: "outing-explore",
+                      subtitle: "الطبقات، صور عالية الوضوح، الوضع الواقعي، الكشتة والدروب"),
                 .init(id: "fit", title: "شوف الكل", systemImage: SaryIcon.fitGroup, accessibilityID: "outing-fit"),
             ]),
         ]
@@ -132,17 +145,6 @@ enum LiveActionCatalog {
             }
             return g.items.isEmpty ? nil : g
         }
-    }
-
-    /// The quick row's first, accent button: «وجّه الكل إلى …» for the leader of a running trip
-    /// with a next stop, else «ملاحة» (to a friend, the destination or the rally point).
-    static func primary(_ s: State) -> LiveActionItem {
-        if !s.ended, let t = s.guideAllTarget {
-            return LiveActionItem(id: "guideAll", title: "وجّه الكل", systemImage: "location.north.line.fill", accessibilityID: "outing-guide-all",
-                                  subtitle: "وجّه الكل إلى \(t) · يبدأ التوجيه على جوال كل عضو")
-        }
-        return LiveActionItem(id: "navigate", title: "ملاحة", systemImage: "location.north.fill", accessibilityID: "outing-navigate",
-                              subtitle: "لواحد من العيال، للوجهة أو لنقطة التجمع")
     }
 
     /// The route actions of «الوجهة والخطة»: «اتبع الخطة» and, for the leader, «وجّه الكل».
@@ -191,13 +193,7 @@ struct LiveActionSheet: View {
                     Text("المزيد").font(.sary(18, .bold)).foregroundStyle(p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textPrimary)
-                            .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text("إغلاق"))
-                    .accessibilityIdentifier("outing-actions-close")
+                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "outing-actions-close", visual: 36, action: close)
                 }
                 ForEach(groups) { g in
                     VStack(alignment: .leading, spacing: 4) {
@@ -246,15 +242,15 @@ struct LiveActionSheet: View {
                             titleVisibility: .visible, presenting: confirm) { k in
             switch k {
             case .pause: Button(trip.paused ? "استأنف" : "أوقف مؤقتًا") { close(); trip.pauseOrResume() }
-            case .end: Button("أنهِ الطلعة للجميع", role: .destructive) { close(); trip.end() }
+            case .end: Button(EndOutingCopy.confirm, role: .destructive) { close(); trip.end() }
             case .leave: Button("غادر", role: .destructive) { close(); trip.leave() }
             }
-            Button("إلغاء", role: .cancel) {}
+            Button(k == .end ? EndOutingCopy.cancel : "إلغاء", role: .cancel) {}
         } message: { k in
             switch k {
             case .pause: Text(trip.paused ? "يرجع الأعضاء يشاركون مواقعهم." : "تتوقف مشاركة المواقع عند الجميع وتُحذف المواقع حتى تستأنف.")
-            case .end: Text("بتنتهي الطلعة عند الكل ويتوقف تتبع المواقع. ما تقدر ترجعها.")
-            case .leave: Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
+            case .end: Text(EndOutingCopy.message())
+            case .leave: Text("تتوقف مشاركة موقعك فورًا وينمسح آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
             }
         }
     }
@@ -262,7 +258,7 @@ struct LiveActionSheet: View {
     private var confirmTitle: String {
         switch confirm {
         case .pause?: return trip.paused ? "استئناف الطلعة؟" : "إيقاف الطلعة مؤقتًا؟"
-        case .end?: return "أنهِ الطلعة؟"
+        case .end?: return EndOutingCopy.title
         case .leave?: return "تغادر الطلعة؟"
         case nil: return ""
         }
@@ -283,7 +279,7 @@ struct LiveActionSheet: View {
                 }
                 if trip.canEnd {
                     SaryDivider()
-                    tripRow("أنهِ الطلعة", icon: "flag.checkered", destructive: true, id: "settings-end") { confirm = .end }
+                    tripRow("أنهِ الطلعة", icon: EndOutingCopy.systemImage, destructive: true, id: "settings-end") { confirm = .end }
                 }
                 if trip.canLeave {
                     SaryDivider()

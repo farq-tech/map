@@ -44,7 +44,7 @@ final class TrackFollowUITests: XCTestCase {
         reverse.tap()
         XCTAssertTrue(any(app, "follow.panel").exists)
         app.buttons["follow.exit"].tap()
-        XCTAssertTrue(any(app, "follow.panel").waitForNonExistence(timeout: 5), "«إنهاء» leaves follow mode")
+        XCTAssertTrue(any(app, "follow.panel").waitForNonExistence(timeout: 5), "«أوقف التتبع» leaves follow mode")
         XCTAssertTrue(follow.waitForExistence(timeout: 5), "back on the summary")
     }
 

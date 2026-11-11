@@ -310,12 +310,12 @@ final class PlanModel: ObservableObject {
 
     static func text(_ e: Error) -> String {
         if let e = e as? OutingAPIError {
-            if e.code == "leader_only" || e.code == "owner_only" { return "تعديل الخطة لأمير الرحلة أو نائبه فقط." }
+            if e.code == "leader_only" || e.code == "owner_only" { return "تعديل الخطة لأمير الطلعة أو نائبه فقط." }
             if e.code == "invalid_route" { return "المسار غير صالح." }
             if e.code == "invalid_title" { return "اكتب اسمًا أقصر للغرض." }
             return e.arabic
         }
-        return "حدث خطأ. أعد المحاولة."
+        return SaryCopy.genericError
     }
 }
 

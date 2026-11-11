@@ -27,6 +27,11 @@ extension LiveOutingController {
         return v.iOwn || (NavBroadcast.deputyMayBroadcast && v.members[v.myId]?.co_leader == true)
     }
 
+    /// Somebody besides me is in the trip, so «للكل» is a real choice (alone: just guide me).
+    var guideAllHasOthers: Bool {
+        NavBroadcast.asksForAll(memberCount: session.view?.members.count ?? 0)
+    }
+
     /// The trip's next target as this phone has reached it (for «وجّه الكل إلى …»).
     var autoNavNextTarget: NavTarget? {
         TripAutoNav.nextTarget(destination: tripDestination, stops: tripStops, reached: autoNavState.reachedStops)
@@ -129,7 +134,7 @@ extension LiveOutingController {
             let target = NavBroadcast.targetName(n.text) ?? tripDestination?.name ?? "الوجهة"
             switch r {
             case .start:
-                toast("أمير الرحلة بدأ التوجيه إلى \(target)")
+                toast("أمير الطلعة بدأ التوجيه إلى \(target)")
             case .offer:
                 UINotificationFeedback.warning()
             case .ignored, .none:
@@ -151,7 +156,7 @@ extension LiveOutingController {
 
     /// «ابدأ التوجيه للكل» (the leader): my own guidance, and the group command in my note.
     func startGuidanceForAll() {
-        guard canGuideAll else { return toast("التوجيه للكل لأمير الرحلة فقط") }
+        guard canGuideAll else { return toast("التوجيه للكل لأمير الطلعة فقط") }
         startGuidanceForMe()
         let name = autoNavNextTarget?.name ?? tripDestination?.name ?? "الوجهة"
         Task {
@@ -166,6 +171,8 @@ extension LiveOutingController {
     /// After «ابدأ الطلعة»: the leader's choice («للكل» highlighted, or «لي فقط»).
     func offerGuidanceChoice() {
         guard autoNavAllowed, canGuideAll, tripDestination != nil else { return }
+        /* A leader alone in the trip is not asked «للكل؟»: guided like any member. */
+        guard guideAllHasOthers else { return startGuidanceForMe() }
         modal = .navStartChoice
     }
 
@@ -183,6 +190,17 @@ extension LiveOutingController {
     func setAutoNavState(_ s: TripAutoNavState) {
         autoNavState = s
         s.save(session.id)
+    }
+
+    /// «أوقف التوجيه» tapped in the guidance bar (or the trip's off-road track panel): stops THIS
+    /// guidance and nothing else — never an arrival, never the leg, never the outing. When the trip's
+    /// own guidance is on for this phone it is paused too (`TripAutoNav.stopPausesTrip`), so it does
+    /// not start again by itself a second later; «استأنف التوجيه» brings it back.
+    func stopGuidanceTapped() {
+        if TripAutoNav.stopPausesTrip(autoNavState, navAuto: nav.auto, navPhase: nav.phase), !autoNavState.paused { pauseAutoNav() }
+        nav.end()
+        stopAutoFollow()
+        modal = nil
     }
 
     /// «أوقف التوجيه» (this phone only).
@@ -214,8 +232,17 @@ extension LiveOutingController {
         guard autoNavAllowed, !nav.isActive, nav.phase != .planning, session.view?.status == .active, session.closedReason == nil,
               tripDestination != nil, !autoNavState.arrived, !trip.record.me.arrived else { return nil }
         if autoNavState.offered && !autoNavState.active { return .leaderStarted }
-        if autoNavState.paused { return .resume }
+        /* On a leg, «استأنف التوجيه» is the screen's one primary button (`OutingFlow`): not twice. */
+        if autoNavState.paused { return flowUI.primary == .resumeGuidance ? nil : .resume }
         return autoNavState.active ? nil : .start
+    }
+
+    /// The guidance on this phone as one explicit state (`TripGuidanceState`): guiding, paused by
+    /// «أوقف التوجيه», arrived at the leg's destination, or off.
+    var guidanceState: TripGuidanceState {
+        TripGuidanceState.of(guiding: nav.phase == .guiding || nav.phase == .offRoad || nav.phase == .planning,
+                             paused: autoNavState.paused,
+                             arrived: autoNavState.arrived || trip.record.me.arrived)
     }
 
     // MARK: off-road along the plan's track
@@ -296,5 +323,5 @@ extension LiveOutingController {
 
 extension LiveOutingController {
     /// «أمير الرحلة» (the title the outing uses for its leader).
-    var leaderName: String { "أمير الرحلة" }
+    var leaderName: String { "أمير الطلعة" }
 }

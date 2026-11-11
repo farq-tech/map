@@ -38,7 +38,7 @@ struct GpsQualityRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("جودة GPS").font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary)
+            Text("جودة الموقع").font(.sary(14, .medium)).foregroundStyle(theme.palette.textPrimary)
             ForEach(Array((location.quality.lines + [NavVoiceStats.current.line]).enumerated()), id: \.offset) { _, line in
                 Text(line).font(.system(size: 12, design: .monospaced)).foregroundStyle(theme.palette.textSecondary)
                     .lineLimit(2).minimumScaleFactor(0.7)

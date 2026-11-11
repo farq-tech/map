@@ -77,7 +77,7 @@ enum ConvoyLeader {
     /// What the reference is called: «المقدمة» in convoy mode, else «أمير الرحلة».
     static func title(convoy: ConvoyInfo?) -> String {
         if let c = convoy, c.isOn, c.lead_user_id != nil { return "المقدمة" }
-        return "أمير الرحلة"
+        return "أمير الطلعة"
     }
 }
 

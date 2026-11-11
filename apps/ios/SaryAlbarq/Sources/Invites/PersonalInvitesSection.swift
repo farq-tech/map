@@ -20,8 +20,8 @@ struct PersonalInvitesSection<Legacy: View>: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             if !canLead {
-                SaryStateView(kind: .empty(title: "الدعوات عند أمير الرحلة",
-                                           message: "كل دعوة لشخص واحد باسمه. اطلب من أمير الرحلة يدعو من تبي.", systemImage: "person.badge.plus"))
+                SaryStateView(kind: .empty(title: "الدعوات عند أمير الطلعة",
+                                           message: "كل دعوة لشخص واحد باسمه. اطلب من أمير الطلعة يدعو من تبي.", systemImage: "person.badge.plus"))
             } else {
                 Text("كل دعوة لشخص واحد تعرفه: يظهر في الطلعة بالاسم اللي حفظته له، والرابط يدخله هو فقط مرة وحدة.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ struct PersonalInvitesSection<Legacy: View>: View {
                     SaryInviteStatusPill(text: PersonalInviteStatusText.label(i), tone: PersonalInviteStatusText.tone(i))
                         .accessibilityIdentifier("invite.status.\(i.status.rawValue)")
                     if let l4 = i.phone_last4 {
-                        Text("•••• \(l4)").saryNumber(.caption, weight: .medium).foregroundStyle(p.textSecondary)
+                        Text("•••• \(SaryFormat.digits(l4))").saryNumber(.caption, weight: .medium).foregroundStyle(p.textSecondary)
                             .environment(\.layoutDirection, .leftToRight)
                     }
                 }
@@ -227,7 +227,7 @@ struct SendPersonalInviteSheet: View {
         let p = theme.palette
         SaryPage(title: "أرسل لـ\(draft.invite.invitee_name)", close: done) {
             if let phone = draft.phone {
-                Text(KSAPhone.display(phone)).saryNumber(.callout, weight: .bold).foregroundStyle(p.textSecondary)
+                Text(SaryFormat.digits(KSAPhone.display(phone))).saryNumber(.callout, weight: .bold).foregroundStyle(p.textSecondary)
                     .environment(\.layoutDirection, .leftToRight)
                     .accessibilityIdentifier("invite.send.phone")
             }

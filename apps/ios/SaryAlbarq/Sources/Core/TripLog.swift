@@ -79,21 +79,100 @@ struct TripLog: Codable, Equatable {
 }
 
 /// Per-outing logs in UserDefaults (this device only; cleared on sign-out).
+///
+/// `update` runs on every shared GPS fix. It used to decode and re-encode every outing's log
+/// on the main thread each time. Now the decoded logs and each outing's encoded JSON member are
+/// kept in memory, keyed by the exact bytes last seen in UserDefaults: while those bytes are
+/// unchanged, nothing is decoded, and only the changed outing is encoded before the object is
+/// re-assembled. Any other writer of the key (a wipe, the settings clean-up) changes the bytes,
+/// so the next read decodes again. Every write is still immediate (nothing waits in memory, so
+/// nothing is lost if the app is killed), and the stored value is the same `[String: TripLog]` JSON.
 enum TripLogStore {
     static let key = "sary.trip.logs.v1"
 
+    private struct Cache {
+        /// The stored bytes these logs were decoded from or written as (nil: no value stored).
+        var data: Data?
+        var logs: [String: TripLog]
+        /// `"<id>":{…}` per outing, ready to join into the stored object.
+        var members: [String: Data]
+        /// False when a log could not be encoded alone (then `update` encodes everything, as before).
+        var complete: Bool
+    }
+
+    private static let lock = NSLock()
+    private static var cache: Cache?
+    private static let encoder = JSONEncoder()
+
+    /// The logs as stored now. Caller holds `lock`.
+    private static func current(_ defaults: UserDefaults) -> Cache {
+        let stored = defaults.data(forKey: key)
+        if let c = cache, c.data == stored { return c }
+        let logs = stored.flatMap { try? JSONDecoder().decode([String: TripLog].self, from: $0) } ?? [:]
+        var members: [String: Data] = [:]
+        var complete = true
+        for (id, log) in logs {
+            if let m = member(id, log) { members[id] = m } else { complete = false }
+        }
+        let c = Cache(data: stored, logs: logs, members: members, complete: complete)
+        cache = c
+        return c
+    }
+
+    /// One `"<id>":{…}` member of the stored JSON object. Caller holds `lock`.
+    private static func member(_ id: String, _ log: TripLog) -> Data? {
+        guard let k = try? encoder.encode(id), let v = try? encoder.encode(log) else { return nil }
+        var m = k
+        m.append(UInt8(ascii: ":"))
+        m.append(v)
+        return m
+    }
+
+    /// `{` members joined by `,` `}`: the same JSON object `JSONEncoder` writes for the dictionary.
+    static func joinObject(_ members: [Data]) -> Data {
+        var out = Data([UInt8(ascii: "{")])
+        out.reserveCapacity(members.reduce(2) { $0 + $1.count + 1 })
+        for (i, m) in members.enumerated() {
+            if i > 0 { out.append(UInt8(ascii: ",")) }
+            out.append(m)
+        }
+        out.append(UInt8(ascii: "}"))
+        return out
+    }
+
     static func load(_ outingId: String, defaults: UserDefaults = .standard) -> TripLog? {
-        guard let d = defaults.data(forKey: key), let all = try? JSONDecoder().decode([String: TripLog].self, from: d) else { return nil }
-        return all[outingId]
+        lock.lock()
+        defer { lock.unlock() }
+        return current(defaults).logs[outingId]
     }
 
     static func update(_ outingId: String, defaults: UserDefaults = .standard, _ f: (inout TripLog) -> Void) {
-        var all: [String: TripLog] = (defaults.data(forKey: key)).flatMap { try? JSONDecoder().decode([String: TripLog].self, from: $0) } ?? [:]
-        var log = all[outingId] ?? TripLog()
+        lock.lock()
+        defer { lock.unlock() }
+        var c = current(defaults)
+        let before = c.logs[outingId]
+        var log = before ?? TripLog()
         f(&log)
-        all[outingId] = log
-        if let d = try? JSONEncoder().encode(all) { defaults.set(d, forKey: key) }
+        /* Unchanged (a fix the log ignored): the stored value already says exactly this. */
+        if before == log { return }
+        c.logs[outingId] = log
+        guard c.complete, let m = member(outingId, log) else {
+            /* The old path: one encoder over everything (fails, and writes nothing, on a bad value). */
+            cache = nil
+            if let d = try? encoder.encode(c.logs) { defaults.set(d, forKey: key) }
+            return
+        }
+        c.members[outingId] = m
+        let data = joinObject(Array(c.members.values))
+        defaults.set(data, forKey: key)
+        c.data = data
+        cache = c
     }
 
-    static func forgetAll(defaults: UserDefaults = .standard) { defaults.removeObject(forKey: key) }
+    static func forgetAll(defaults: UserDefaults = .standard) {
+        lock.lock()
+        defer { lock.unlock() }
+        cache = nil
+        defaults.removeObject(forKey: key)
+    }
 }

@@ -210,13 +210,7 @@ struct VoiceNoteOfferCard: View {
                 Text(SaryFormat.clock(seconds: offer.seconds)).font(.sary(13, .medium)).monospacedDigit().foregroundStyle(p.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: dismiss) {
-                Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
-                    .frame(width: 44, height: 44).background(Circle().fill(p.sunken))
-            }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("لاحقًا"))
-            .accessibilityIdentifier("voice-note-offer-dismiss")
+            SaryIconButton(systemImage: SaryIcon.close, label: "لاحقًا", id: "voice-note-offer-dismiss", visual: 44, action: dismiss)
         }
         .padding(.horizontal, theme.space(.s))
         .padding(.vertical, 8)
@@ -291,6 +285,8 @@ struct VoiceNoteSection: View {
                     .foregroundStyle(SaryCarColors.ink(on: center.colorOf(n.user_id)))
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(Color(rgb: center.colorOf(n.user_id))))
+                    .frame(width: theme.minTarget, height: theme.minTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(isPlaying ? "أوقف رسالة \(name)" : "شغّل رسالة \(name)"))

@@ -83,7 +83,7 @@ struct RecoveryRestoreScreen: View {
                 SarySection(title: "من وين أجيب الرمز؟") {
                     VStack(alignment: .leading, spacing: theme.space(.s)) {
                         Text("في جوالك القديم: «ملفي» ← «رمز الاسترجاع». يظهر الرمز ورمز QR مرة واحدة عند إنشائه.")
-                        Text("إذا ما حفظت رمزًا من قبل، لا يمكن استرجاع الحساب — ابدأ باسم جديد، وأمير الرحلة يرسل لك دعوة.")
+                        Text("إذا ما حفظت رمزًا من قبل، لا يمكن استرجاع الحساب — ابدأ باسم جديد، وأمير الطلعة يرسل لك دعوة.")
                     }
                     .saryText(.subhead)
                     .foregroundStyle(p.textSecondary)
@@ -163,7 +163,7 @@ struct RecoveryCodeScreen: View {
                         if let at = ISODate.parse(model.recovery?.created_at) {
                             Text("أُنشئ \(SaryFormat.elapsed(since: at, now: Date()))").saryText(.footnote).foregroundStyle(p.textSecondary)
                         }
-                        Text("لا توجد كلمات مرور. إذا غيّرت جوالك أو حذفت التطبيق، هذا الرمز هو الطريقة الوحيدة لاسترجاع اسمك وطلعاتك.")
+                        Text("ما فيه كلمات مرور. إذا غيّرت جوالك أو حذفت التطبيق، هذا الرمز هو الطريقة الوحيدة لاسترجاع اسمك وطلعاتك.")
                             .saryText(.subhead).foregroundStyle(p.textSecondary)
                     }
                     .padding(.vertical, theme.space(.s))
@@ -210,7 +210,7 @@ struct QRScanSheet: View {
             VStack(spacing: theme.space(.l)) {
                 Group {
                     if AVCaptureDevice.default(for: .video) == nil {
-                        SaryStateView(kind: .error(title: "لا توجد كاميرا", message: "اكتب الرمز بيدك بدل المسح."))
+                        SaryStateView(kind: .error(title: "ما فيه كاميرا", message: "اكتب الرمز بيدك بدل المسح."))
                     } else if status == .denied || status == .restricted {
                         SaryStateView(kind: .error(title: "الكاميرا غير مسموحة", message: "اسمح بها من إعدادات iOS ← سَرى البارق، أو اكتب الرمز بيدك."),
                                       actionTitle: "افتح الإعدادات") {

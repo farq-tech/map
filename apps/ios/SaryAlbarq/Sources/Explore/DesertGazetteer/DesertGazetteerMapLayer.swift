@@ -52,6 +52,16 @@ enum DesertGazetteerMapLayer {
         return FeatureCollection(features: fs)
     }
 
+    /// Zoom from which the tint is gone and only the outline remains.
+    static let fillFadeEnd = 10.0
+
+    /// The area tint: it shows where a sand sea or a rawda is from afar; zoomed in, a flat orange
+    /// wash over the whole screen with a hard edge reads as a patch of different imagery, so it
+    /// fades out (the outline and the numbered marker stay at every zoom).
+    static let fillOpacity: [Any] = ["interpolate", ["linear"], ["zoom"],
+                                     7.0, ["case", ["get", "s"], 0.35, 0.22] as [Any],
+                                     fillFadeEnd, 0.0]
+
     static func apply(_ m: MapboxMap, _ o: DesertOverlay?) {
         if !m.sourceExists(withId: source) {
             var s = GeoJSONSource(id: source)
@@ -61,7 +71,7 @@ enum DesertGazetteerMapLayer {
         if !m.layerExists(withId: fill) {
             FXLog.add(m, [
                 "id": fill, "type": "fill", "source": source, "filter": ["==", ["get", "t"], "a"],
-                "paint": ["fill-color": ["get", "c"], "fill-opacity": ["case", ["get", "s"], 0.35, 0.22] as [Any],
+                "paint": ["fill-color": ["get", "c"], "fill-opacity": fillOpacity,
                           "fill-emissive-strength": 1] as [String: Any],
             ], layerPosition: nil)
         }

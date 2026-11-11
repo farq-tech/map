@@ -484,6 +484,44 @@ final class LocalGuidanceTests: XCTestCase {
         XCTAssertTrue(events.contains(.offRoute))
         await fulfillment(of: [exp], timeout: 2)
     }
+
+    func testRerouteBackoffDoublesToAMinute() {
+        XCTAssertEqual(LocalGuidanceEngine.rerouteBackoffS(failures: 0), 0)
+        XCTAssertEqual((1...7).map { LocalGuidanceEngine.rerouteBackoffS(failures: $0) }, [5, 10, 20, 40, 60, 60, 60])
+        XCTAssertEqual(LocalGuidanceEngine.rerouteBackoffS(failures: 1_000), 60)
+    }
+
+    /// Offline in the desert every reroute fails: the next try waits (5 s, 10 s …) instead of
+    /// re-running the routing chain three fixes later; back on the route, a new detour reroutes at once.
+    func testFailedRerouteWaitsBeforeTheNextTry() async throws {
+        let e = LocalGuidanceEngine()
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        e.now = { clock }
+        var events: [NavGuidanceEvent] = []
+        e.onEvent = { events.append($0) }
+        var asked = 0
+        e.reroute = { _, _ in asked += 1; return nil }
+        let r = route()
+        try await e.start(route: r, plan: .init(routes: [r]), target: NavTarget(source: .point, name: "هنا", position: r.end!))
+        func offThree() { for k in 0..<3 { e.ingest(fix(24.705, 46.685 + 0.0001 * Double(k))) } }
+        func settle() async { for _ in 0..<20 { await Task.yield() } }
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 1)
+        XCTAssertTrue(events.contains(.rerouteFailed("تعذّر حساب طريق جديد")))
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 1, "within the 5 s backoff: no new attempt")
+        clock = clock.addingTimeInterval(5)
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 2, "after the backoff it tries again")
+        /* Back on the route clears the backoff. */
+        e.ingest(fix(24.705, 46.68))
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 3)
+    }
 }
 
 /// Every «اتجه» (silent member, fuel station, waypoint) is OUR guidance: a nav target for
@@ -721,5 +759,294 @@ final class NavHUDTests: XCTestCase {
         XCTAssertNil(NavTraffic.runs(pts, congestion: nil, from: 0), "Valhalla / the desert: no annotation")
         XCTAssertNil(NavTraffic.runs(pts, congestion: [.low, .low, .low], from: 0), "all free: the plain route")
         XCTAssertNil(NavTraffic.runs(pts, congestion: [.heavy], from: 0), "a mismatched annotation is never drawn")
+    }
+}
+
+/// Build 36 report: the blue route was hard to tell from the desert imagery and turns were not
+/// marked on the line.
+final class RouteVisibilityTests: XCTestCase {
+    /// ~10 m per 0.0001° of latitude near Riyadh.
+    private let corner = LngLat(lng: 46.7, lat: 24.7)
+    /// North 200 m, then east 200 m (a right turn at `corner`).
+    private var lRoute: [LngLat] {
+        [LngLat(lng: 46.7, lat: 24.698), corner, LngLat(lng: 46.702, lat: 24.7)]
+    }
+
+    func testArrowRunsAlongTheRouteThroughTheTurn() throws {
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(lRoute, at: corner))
+        XCTAssertEqual(s.count, 3, "start, the corner, end")
+        XCTAssertEqual(Vehicle.distanceMeters(s[0], corner), NavManeuverArrow.beforeM, accuracy: 1)
+        XCTAssertEqual(Vehicle.distanceMeters(corner, s[2]), NavManeuverArrow.afterM, accuracy: 1)
+        XCTAssertEqual(s[1], corner)
+        let b = try XCTUnwrap(NavManeuverArrow.headBearing(s))
+        XCTAssertEqual(b, 90, accuracy: 1, "points east, the way the turn goes")
+    }
+
+    func testArrowSnapsAManeuverSlightlyOffTheLine() throws {
+        let off = LngLat(lng: 46.70005, lat: 24.69998)
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(lRoute, at: off))
+        XCTAssertGreaterThanOrEqual(s.count, 2)
+    }
+
+    func testNoArrowFarFromTheRouteOrAtItsEnd() {
+        XCTAssertNil(NavManeuverArrow.shaft(lRoute, at: LngLat(lng: 46.71, lat: 24.71)), "another route's maneuver")
+        XCTAssertNil(NavManeuverArrow.shaft(lRoute, at: lRoute.last!), "nothing after it to point along")
+        XCTAssertNil(NavManeuverArrow.shaft([corner], at: corner))
+    }
+
+    func testShortRouteClampsToItsEnds() throws {
+        let r = [LngLat(lng: 46.7, lat: 24.6999), corner, LngLat(lng: 46.7001, lat: 24.7)]
+        let s = try XCTUnwrap(NavManeuverArrow.shaft(r, at: corner))
+        XCTAssertEqual(s.first, r.first)
+        XCTAssertEqual(s.last, r.last)
+    }
+
+    func testOnlyRealTurnsGetAnArrow() {
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .turn, direction: .left)))
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .roundabout, direction: nil, exit: 2)))
+        XCTAssertTrue(NavManeuverArrow.shows(NavManeuver(kind: .offRamp, direction: .slightRight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .turn, direction: .straight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .continue, direction: .straight)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .arrive, direction: nil)))
+        XCTAssertFalse(NavManeuverArrow.shows(NavManeuver(kind: .depart, direction: .right)))
+    }
+
+    func testRouteHasADarkHaloAndATurnArrowLayer() {
+        for id in [NavMapDrawer.haloLayer, "sary-nav-maneuver-casing", "sary-nav-maneuver", "sary-nav-maneuver-head"] {
+            XCTAssertTrue(NavMapDrawer.layerIds.contains(id), id)
+        }
+        let halo = NavMapDrawer.layerIds.firstIndex(of: NavMapDrawer.haloLayer)!
+        XCTAssertLessThan(halo, NavMapDrawer.layerIds.firstIndex(of: "sary-nav-main-casing")!, "under the white casing")
+        XCTAssertGreaterThan(halo, NavMapDrawer.layerIds.firstIndex(of: "sary-nav-alt")!, "over the alternatives")
+        XCTAssertGreaterThanOrEqual(NavMapDrawer.haloOpacity, 0.5)
+        XCTAssertEqual(NavMapDrawer.arrowHead().size.width, 40)
+    }
+
+    func testRouteIsWiderAtGuidanceZooms() {
+        let e = NavMapDrawer.width(8)
+        var stops: [Double: Double] = [:]
+        var i = 3
+        while i + 1 < e.count {
+            if let z = e[i] as? Double, let v = e[i + 1] as? Double { stops[z] = v }
+            i += 2
+        }
+        XCTAssertGreaterThanOrEqual(stops[15] ?? 0, 8 * 1.15 - 0.01)
+        XCTAssertGreaterThanOrEqual(stops[17] ?? 0, 8 * 1.5 - 0.01, "Build 36 had ×1.3 at z17")
+    }
+
+    func testMyCarHasAHaloUnderIt() {
+        let l = Vehicle.myHaloLayer(id: Vehicle.haloId("sary-vehicle-spot"), source: "sary-vehicle")
+        XCTAssertEqual(l["id"] as? String, "sary-vehicle-spot-halo")
+        XCTAssertEqual(l["type"] as? String, "circle")
+        let p = l["paint"] as? [String: Any]
+        XCTAssertEqual(p?["circle-stroke-color"] as? String, "#ffffff")
+    }
+}
+
+/// Build 37 (owner's report item 7): the direction in words is the banner's big line, the road under it.
+final class NavHUDManeuverTests: XCTestCase {
+    private func step(_ m: NavManeuver, road: String? = nil, sign: String? = nil) -> NavStep {
+        NavStep(maneuver: m, roadName: road, signText: sign, location: riyadh, distanceM: 500, durationS: 30)
+    }
+
+    func testHeadlineIsTheDirectionAndTheRoadGoesUnder() {
+        let left = step(.init(kind: .turn, direction: .left), road: "طريق الملك فهد")
+        XCTAssertEqual(NavHUD.headline(left, targetName: nil), "انعطف يسارًا")
+        XCTAssertEqual(NavHUD.road(left), "طريق الملك فهد")
+        let ramp = step(.init(kind: .offRamp, direction: .right), sign: "مخرج 5")
+        XCTAssertEqual(NavHUD.headline(ramp, targetName: nil), NavText.action(ramp.maneuver))
+        XCTAssertEqual(NavHUD.road(ramp), NavText.arabicDigitsOnly("مخرج 5"))
+        XCTAssertNil(NavHUD.road(step(.init(kind: .turn, direction: .right))), "no road: one line only")
+        XCTAssertNil(NavHUD.road(step(.init(kind: .turn, direction: .right), road: "")))
+        let round = step(.init(kind: .roundabout, direction: .right, exit: 2), road: "طريق العليا")
+        XCTAssertTrue(NavHUD.headline(round, targetName: nil).contains("المخرج"), NavHUD.headline(round, targetName: nil))
+    }
+
+    func testArrivalShowsTheDestinationOnly() {
+        let end = step(.init(kind: .arrive, direction: nil), road: "شارع")
+        XCTAssertEqual(NavHUD.headline(end, targetName: "حطين"), "حطين")
+        XCTAssertEqual(NavHUD.headline(end, targetName: nil), "وجهتك")
+        XCTAssertNil(NavHUD.road(end))
+    }
+}
+
+/// Perf pass: the live map's route cuts and the local engine's matcher use cached / windowed
+/// geometry. They must give exactly what the old full-polyline loops gave.
+final class NavRouteMetricsTests: XCTestCase {
+    /// A wiggly `n`-vertex polyline with uneven segment lengths (and a zero-length one).
+    private func wiggly(_ n: Int, seed: Double = 1) -> [LngLat] {
+        var out: [LngLat] = []
+        var lng = 46.7, lat = 24.7
+        for i in 0..<n {
+            out.append(LngLat(lng: lng, lat: lat))
+            if i == n / 3 { continue } /* a repeated vertex: a zero-length segment */
+            lng += 0.0003 + 0.0002 * sin(Double(i) * 0.7 * seed)
+            lat += 0.0002 * cos(Double(i) * 1.3 * seed)
+        }
+        return out
+    }
+
+    /// The pre-cache cut (copied from the old `LiveOutingController.remaining`).
+    private func oldRemaining(_ r: NavRoute, progress: NavProgress?) -> [LngLat] {
+        guard let p = progress, r.distanceM > 0, r.coordinates.count > 2 else { return r.coordinates }
+        let done = max(0, r.distanceM - p.distanceRemainingM)
+        var acc = 0.0
+        for i in 1..<r.coordinates.count {
+            let seg = Vehicle.distanceMeters(r.coordinates[i - 1], r.coordinates[i])
+            if acc + seg >= done {
+                let u = seg > 0 ? (done - acc) / seg : 0
+                let a = r.coordinates[i - 1], b = r.coordinates[i]
+                return [LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)] + r.coordinates[i...]
+            }
+            acc += seg
+        }
+        return Array(r.coordinates.suffix(2))
+    }
+
+    private func progress(_ remaining: Double) -> NavProgress {
+        NavProgress(stepIndex: 1, distanceToManeuverM: 0, distanceRemainingM: remaining, durationRemainingS: 0)
+    }
+
+    @MainActor
+    func testCumulativeMatchesTheEngineTable() {
+        let c = wiggly(200)
+        XCTAssertEqual(NavRouteMetrics.cumulative(c), LocalGuidanceEngine.cumulative(c))
+        XCTAssertEqual(NavRouteMetrics.cumulative([LngLat]()), [0])
+        XCTAssertEqual(NavRouteMetrics.cumulative([c[0]]), [0])
+    }
+
+    @MainActor
+    func testRemainingIsBitIdenticalToTheOldCut() {
+        let c = wiggly(300)
+        let cums = LocalGuidanceEngine.cumulative(c)
+        let total = cums.last!
+        let r = NavRoute(id: "w", coordinates: c, distanceM: total, durationS: 600, steps: [])
+        for k in 0...40 {
+            let rem = total * (1 - Double(k) / 37) /* past the end too */
+            XCTAssertEqual(NavRouteMetrics.remaining(r, progress: progress(rem)), oldRemaining(r, progress: progress(rem)), "remaining \(rem)")
+        }
+        /* Exactly on vertices. */
+        for cum in cums.prefix(30) {
+            XCTAssertEqual(NavRouteMetrics.remaining(r, progress: progress(total - cum)), oldRemaining(r, progress: progress(total - cum)))
+        }
+        XCTAssertEqual(NavRouteMetrics.remaining(r, progress: nil), c)
+        XCTAssertEqual(LiveOutingController.remaining(r, progress: progress(total / 2)), oldRemaining(r, progress: progress(total / 2)))
+        XCTAssertEqual(StandaloneNavRules.remaining(r, progress: progress(total / 3)), oldRemaining(r, progress: progress(total / 3)))
+    }
+
+    func testTrafficRunsWithTheTableAreIdentical() {
+        let c = wiggly(120)
+        let palette: [NavCongestion] = [.low, .moderate, .heavy, .severe, .unknown]
+        let bands: [NavCongestion] = (0..<(c.count - 1)).map { palette[($0 / 7) % 5] }
+        let cum = NavRouteMetrics.cumulative(c)
+        for k in 0...30 {
+            let done = cum.last! * Double(k) / 28
+            XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: done, cum: cum), NavTraffic.runs(c, congestion: bands, from: done), "done \(done)")
+        }
+        for done in cum.prefix(20) {
+            XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: done, cum: cum), NavTraffic.runs(c, congestion: bands, from: done))
+        }
+        /* A table that does not fit is ignored. */
+        XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: 100, cum: [0, 1]), NavTraffic.runs(c, congestion: bands, from: 100))
+    }
+
+    func testSurfaceRemainingWithTheTableIsIdentical() {
+        let c = wiggly(150)
+        let runs = [
+            NavSurfaceRun(kind: .paved, coordinates: Array(c[0...40])),
+            NavSurfaceRun(kind: .gridSnap, coordinates: [c[40]]), /* too short: skipped by both */
+            NavSurfaceRun(kind: .gridSnap, coordinates: Array(c[40...42])),
+            NavSurfaceRun(kind: .terrain, coordinates: Array(c[42...100])),
+            NavSurfaceRun(kind: .rough, coordinates: Array(c[100...149])),
+        ]
+        let table = NavRouteMetrics.surfaceCumulative(runs)
+        let total = table.last!.last!
+        for k in 0...40 {
+            let done = total * Double(k) / 37
+            XCTAssertEqual(NavSurface.remaining(runs, from: done, cum: table), NavSurface.remaining(runs, from: done), "done \(done)")
+        }
+        for done in table.flatMap({ $0 }) {
+            XCTAssertEqual(NavSurface.remaining(runs, from: done, cum: table), NavSurface.remaining(runs, from: done))
+        }
+        XCTAssertEqual(NavSurface.remaining(runs, from: 50, cum: [[0]]), NavSurface.remaining(runs, from: 50), "a table that does not fit is ignored")
+    }
+
+    func testTablesAreCachedPerGeometryRevision() {
+        let a = NavRoute(id: "a", coordinates: wiggly(50), distanceM: 1, durationS: 1, steps: [])
+        let b = NavRoute(id: "a", coordinates: wiggly(80, seed: 2), distanceM: 1, durationS: 1, steps: [])
+        XCTAssertEqual(NavRouteMetrics.cumulative(a), NavRouteMetrics.cumulative(a.coordinates))
+        XCTAssertEqual(NavRouteMetrics.cumulative(b), NavRouteMetrics.cumulative(b.coordinates), "same id, new geometry: its own table")
+        let copy = a
+        XCTAssertEqual(NavRouteMetrics.cumulative(copy).count, 50)
+    }
+
+    // MARK: the local engine's windowed matcher
+
+    /// The old matcher: every segment from `from - 5` to the end.
+    private func fullLocate(_ p: LngLat, _ c: [LngLat], _ cum: [Double], from: Int) -> (along: Double, offset: Double, index: Int) {
+        var best = (d: Double.infinity, s: 0.0, i: 0)
+        for i in max(0, from - 5)..<(c.count - 1) {
+            let pr = TrailGeo.project(p, c[i], c[i + 1])
+            if pr.distM < best.d { best = (pr.distM, cum[i] + pr.u * (cum[i + 1] - cum[i]), i) }
+        }
+        return (best.s, best.d, best.i)
+    }
+
+    /// A long, nearly straight route east, ~33 m between vertices (~10 km).
+    private func longRoute() -> [LngLat] {
+        (0..<300).map { LngLat(lng: 46.7 + Double($0) * 0.00033, lat: 24.7 + 0.00002 * sin(Double($0))) }
+    }
+
+    @MainActor
+    func testWindowedLocateMatchesTheFullScanOnTheRoute() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        var from = 0
+        for k in stride(from: 0, to: 299, by: 3) {
+            /* Driving along, ~15 m off the line. */
+            let p = LngLat(lng: c[k].lng + 0.0001, lat: c[k].lat + 0.000135)
+            let w = LocalGuidanceEngine.locate(p, in: c, cum: cum, from: from)
+            let f = fullLocate(p, c, cum, from: from)
+            XCTAssertEqual(w.index, f.index, "fix \(k)")
+            XCTAssertEqual(w.along, f.along)
+            XCTAssertEqual(w.offset, f.offset)
+            from = w.index
+        }
+    }
+
+    @MainActor
+    func testWindowedLocateFallsBackForAJumpAndOffRoute() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        /* A GPS gap: 8 km further on, far outside the first window. */
+        let jump = c[250]
+        let w = LocalGuidanceEngine.locate(jump, in: c, cum: cum, from: 10)
+        XCTAssertEqual(w.index, fullLocate(jump, c, cum, from: 10).index)
+        XCTAssertGreaterThan(w.index, 200)
+        /* Well off the route: the same (large) offset as the full scan, so the reroute logic is unchanged. */
+        let off = LngLat(lng: c[20].lng, lat: c[20].lat + 0.003)
+        let o = LocalGuidanceEngine.locate(off, in: c, cum: cum, from: 15)
+        let fo = fullLocate(off, c, cum, from: 15)
+        XCTAssertEqual(o.offset, fo.offset)
+        XCTAssertEqual(o.index, fo.index)
+        /* Near the end (the window reaches the end): the full scan itself. */
+        let end = LocalGuidanceEngine.locate(c[298], in: c, cum: cum, from: 297)
+        XCTAssertEqual(end.index, fullLocate(c[298], c, cum, from: 297).index)
+    }
+
+    @MainActor
+    func testWindowEndIsNeverEmptyNorPastTheEnd() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        let hi = c.count - 1
+        for from in [0, 1, 50, 200, hi - 1, hi] {
+            let lo = min(max(0, from - 5), hi - 1)
+            let e = LocalGuidanceEngine.windowEnd(cum: cum, from: min(from, hi), lo: lo, hi: hi)
+            XCTAssertGreaterThan(e, lo)
+            XCTAssertLessThanOrEqual(e, hi)
+        }
+        /* ~2 km at ~33 m a segment: about 60 segments, not the whole route. */
+        let e0 = LocalGuidanceEngine.windowEnd(cum: cum, from: 0, lo: 0, hi: hi)
+        XCTAssertTrue((55...70).contains(e0), "\(e0)")
     }
 }

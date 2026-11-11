@@ -129,9 +129,13 @@ final class VisualsUITests: XCTestCase {
     func testCityTiltOffersRealisticAtTheSameCamera() {
         let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsClock", "2026-11-05T08:30:00Z",
                           "-SaryVisualsCamera", "21.4200,39.8262,15.3,58,170"])
-        let chip = app.buttons["explore.city-realistic"]
-        XCTAssertTrue(chip.waitForExistence(timeout: 20), "offered when tilted over a city")
-        XCTAssertTrue(chip.label.contains("اعرضها بالوضع الواقعي"))
+        /* UI-AUDIT م3: one entry — the side «واقعي» button opens the city at the map's camera. */
+        let chip = app.buttons["explore-realistic"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 20), "«واقعي» on the side")
+        let city = NSPredicate(format: "value == %@", "المدينة بزاوية الخريطة")
+        expectation(for: city, evaluatedWith: chip)
+        waitForExpectations(timeout: 20)
+        XCTAssertFalse(app.buttons["explore.city-realistic"].exists, "no second pill")
         sleep(8)
         shot(app, "city-makkah-buildings")
         chip.tap()
@@ -145,6 +149,7 @@ final class VisualsUITests: XCTestCase {
         let app = launch(["-SaryExplore", "-SaryLayer", "satellite", "-SaryVisualsCamera", "28.0,41.5,13.4,62,250"])
         XCTAssertTrue(any(app, "outing.map").waitForExistence(timeout: 10))
         sleep(8)
-        XCTAssertFalse(app.buttons["explore.city-realistic"].exists, "the desert: no offer")
+        XCTAssertFalse(app.buttons["explore.city-realistic"].exists, "no separate pill")
+        XCTAssertNotEqual(app.buttons["explore-realistic"].value as? String, "المدينة بزاوية الخريطة", "the desert: no city offer")
     }
 }

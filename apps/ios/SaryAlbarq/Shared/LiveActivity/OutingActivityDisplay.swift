@@ -145,15 +145,15 @@ struct OutingActivityDisplay: Equatable {
             switch (a.kind, a.isMe) {
             case (.sos, true): text = "طوارئك مفعّلة"
             case (.sos, false): text = "طوارئ: \(a.name) يحتاج مساعدة"
-            case (.stuck, true): text = "أبلغت المجموعة أنك غرّزت"
+            case (.stuck, true): text = "بلّغت الربع إنك غرّزت"
             case (.stuck, false): text = "\(a.name) غرّز"
             }
             return Banner(text: text + more, tone: .emergency)
         }
         switch (s.online, s.gpsOK) {
-        case (false, false): return Banner(text: "بلا اتصال ولا GPS", tone: .warning)
+        case (false, false): return Banner(text: "بلا اتصال ولا إشارة موقع", tone: .warning)
         case (false, true): return Banner(text: "بلا اتصال بالشبكة", tone: .warning)
-        case (true, false): return Banner(text: "انقطع GPS", tone: .warning)
+        case (true, false): return Banner(text: "انقطعت إشارة الموقع", tone: .warning)
         case (true, true): return nil
         }
     }

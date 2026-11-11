@@ -102,13 +102,7 @@ struct TrackDetailView: View {
                 .ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack(spacing: theme.space(.s)) {
-                    Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).frame(width: 44, height: 44)
-                    }
-                    .foregroundStyle(theme.palette.textPrimary)
-                    .saryGlass(Circle(), role: .control, interactive: true)
-                    .accessibilityLabel(Text("إغلاق"))
-                    .accessibilityIdentifier("track.close")
+                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "track.close", visual: 44, surface: .glass, action: close)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(subject.name).saryText(.headline, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(1)
                         Text(subject.origin).saryText(.caption).foregroundStyle(theme.palette.textSecondary)
@@ -150,19 +144,21 @@ struct FollowTrackPanel: View {
         let off = ui.phase == .offTrack
         let arrived = ui.phase == .arrived
         let arrowSize: CGFloat = theme.drive ? 88 : 64
-        let tone: Color = off ? p.emergency : (arrived ? p.live : (ui.phase == .far ? Color(rgb: 0x2B7BF0) : p.accent))
+        let tone: Color = off ? p.emergency : (arrived ? p.live : (ui.phase == .far ? p.navBlue : p.accent))
+        /* Ink that reads on each tone (dark on the accent, light on red / green / blue). */
+        let ink: Color = (off || arrived) ? p.onEmergency : (ui.phase == .far ? p.onNavBlue : p.onAccent)
         VStack(alignment: .leading, spacing: theme.space(.s)) {
             HStack(spacing: theme.space(.m)) {
                 ZStack {
                     Circle().fill(tone)
                     if arrived {
-                        Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(Color.white)
+                        Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(ink)
                     } else if ui.phase == .waitingFix {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(ink)
                     } else {
                         Image(systemName: "arrow.up")
                             .font(.system(size: arrowSize * 0.5, weight: .black))
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(ink)
                             .rotationEffect(.degrees(ui.arrowDegrees))
                             .animation(theme.animation(.smooth), value: ui.arrowDegrees)
                     }
@@ -193,7 +189,7 @@ struct FollowTrackPanel: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: exit) { Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold) }
+                Button(action: exit) { Text("أوقف التتبع").saryText(theme.drive ? .body : .callout, weight: .bold) }
                     .buttonStyle(.sary(.secondary, width: .hug, compact: !theme.drive))
                     .accessibilityIdentifier("follow.exit")
             }
@@ -257,7 +253,7 @@ struct FollowTrackPanel: View {
     private var detail: String {
         let dir = ui.reversed ? "بالاتجاه المعاكس" : "إلى نهايته"
         switch ui.phase {
-        case .waitingFix: return "ننتظر موقعك من GPS…"
+        case .waitingFix: return "ننتظر موقعك…"
         case .arrived: return ui.name
         case .far:
             return "أقرب نقطة منه على بعد \(ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? "") · \(ui.directionLabel)"

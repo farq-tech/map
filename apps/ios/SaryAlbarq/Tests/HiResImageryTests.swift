@@ -222,3 +222,88 @@ final class HiResImageryTests: XCTestCase {
         print("HIRES-BENCH steady \(times.map { Int($0) }) ms (simulator, CPU)")
     }
 }
+
+/// `HiResBlend`: an enhanced tile keeps the colour of the imagery it covers and fades out at its
+/// border (Build 36 report: tiles of different colour, visible seams).
+final class HiResBlendTests: XCTestCase {
+    private func solid(_ size: Int, _ r: UInt8, _ g: UInt8, _ b: UInt8) -> [UInt8] {
+        var px = [UInt8](repeating: 255, count: size * size * 4)
+        for i in stride(from: 0, to: px.count, by: 4) { px[i] = r; px[i + 1] = g; px[i + 2] = b }
+        return px
+    }
+
+    /// A ramp, so the channels have a spread (contrast) to match.
+    private func ramp(_ size: Int, offset: Int, scale: Double) -> [UInt8] {
+        var px = [UInt8](repeating: 255, count: size * size * 4)
+        for y in 0..<size {
+            for x in 0..<size {
+                let v = UInt8(min(255, max(0, Double(offset) + scale * Double(x * 255 / (size - 1)))))
+                let i = (y * size + x) * 4
+                px[i] = v; px[i + 1] = v; px[i + 2] = v
+            }
+        }
+        return px
+    }
+
+    func testEdgeFadesToTransparentAndInsideStaysOpaque() {
+        let n = 64, f = 8
+        XCTAssertLessThan(HiResBlend.edgeAlpha(x: 0, y: 30, size: n, feather: f), 0.05, "the border shows the imagery underneath")
+        XCTAssertLessThan(HiResBlend.edgeAlpha(x: 30, y: n - 1, size: n, feather: f), 0.05)
+        XCTAssertEqual(HiResBlend.edgeAlpha(x: 30, y: 30, size: n, feather: f), 1)
+        XCTAssertEqual(HiResBlend.edgeAlpha(x: f, y: 30, size: n, feather: f), 1)
+        var prev = 0.0
+        for x in 0...f {
+            let a = HiResBlend.edgeAlpha(x: x, y: 30, size: n, feather: f)
+            XCTAssertGreaterThanOrEqual(a, prev, "monotonic, no ring")
+            prev = a
+        }
+    }
+
+    func testSameImageComesBackUnchangedInside() {
+        let n = 32
+        let img = ramp(n, offset: 40, scale: 0.6)
+        let out = HiResBlend.blend(enhanced: img, base: img, size: n, feather: 4)
+        let i = (16 * n + 16) * 4
+        XCTAssertEqual(Int(out[i]), Int(img[i]), accuracy: 1)
+        XCTAssertEqual(out[i + 3], 255)
+    }
+
+    func testColourShiftOfTheModelIsPulledBackToTheImagery() {
+        let n = 32
+        let base = ramp(n, offset: 60, scale: 0.5)
+        /* The "model" made it brighter and more contrasted. */
+        let enhanced = ramp(n, offset: 110, scale: 0.6)
+        let out = HiResBlend.blend(enhanced: enhanced, base: base, size: n, feather: 0)
+        let mb = HiResBlend.stats(base).mean[0], mo = HiResBlend.stats(out).mean[0], me = HiResBlend.stats(enhanced).mean[0]
+        XCTAssertEqual(mo, mb, accuracy: 2, "same mean as the imagery under it")
+        XCTAssertGreaterThan(me - mb, 40, "the test really shifts it")
+    }
+
+    func testFlatModelPatchesKeepSomeOfTheRealTexture() {
+        let n = 32
+        let base = ramp(n, offset: 60, scale: 0.5)
+        let flat = solid(n, 120, 120, 120)
+        let out = HiResBlend.blend(enhanced: flat, base: base, size: n, feather: 0)
+        XCTAssertGreaterThan(HiResBlend.stats(out).std[0], HiResBlend.stats(base).std[0] * (1 - HiResBlend.detail) * 0.9,
+                             "a flat patch from the model does not wipe the ground's texture")
+    }
+
+    func testOutputIsPremultiplied() {
+        let n = 32
+        let img = solid(n, 200, 150, 100)
+        let out = HiResBlend.blend(enhanced: img, base: img, size: n, feather: 8)
+        for x in [0, 2, 5] {
+            let i = (16 * n + x) * 4
+            XCTAssertLessThanOrEqual(out[i], out[i + 3], "colour never exceeds alpha")
+        }
+    }
+
+    func testRoundTripThroughCGImage() throws {
+        let n = 16
+        let img = solid(n, 10, 20, 30)
+        let cg = try XCTUnwrap(HiResBlend.image(img, size: n))
+        let back = try XCTUnwrap(HiResBlend.rgba(cg, size: n))
+        XCTAssertEqual(Int(back[0]), 10, accuracy: 1)
+        XCTAssertEqual(Int(back[2]), 30, accuracy: 1)
+    }
+}

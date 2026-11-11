@@ -34,9 +34,61 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(leader.primary?.title, "ابدأ الطلعة")
 
         let member = OutingFlow.ui(input(.created, lead: false))
-        XCTAssertEqual(member.line, "انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها")
+        /* UI-AUDIT م3: the member's waiting message is said ONCE — on the button, not in the header too. */
+        XCTAssertEqual(member.line, "ما بدأت الطلعة")
         XCTAssertEqual(member.primary, .waitLeader)
-        XCTAssertEqual(member.primary?.title, "بانتظار بدء الطلعة")
+        XCTAssertEqual(member.primary?.title, "ننتظر أمير الطلعة")
+        XCTAssertFalse(member.line.contains("ننتظر"), "the header does not repeat the button")
+    }
+
+    // MARK: «ننتظر أمير الطلعة» with its facts (Build 36 item 9)
+
+    private func member(_ id: String, _ name: String, owner: Bool = false, online: Bool? = nil, away: Bool? = nil, seen: Date? = nil) -> Member {
+        Member(user_id: id, display_name: name, avatar: nil, phone: nil, role: owner ? "owner" : "member", sharing: false,
+               joined_at: ISODate.string(t0.addingTimeInterval(-3600)), online: online, away: away,
+               last_seen_at: seen.map { ISODate.string($0) })
+    }
+
+    func testWaitingShowsTheLeaderTheMembersAndMyLink() {
+        let all = [member("L", "فهد", owner: true, online: true), member("me", "أنا"), member("b", "سعد", online: true), member("c", "ناصر", online: false)]
+        let w = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(w.leader, "أمير الطلعة فهد متصل الآن")
+        XCTAssertTrue(w.leaderOnline)
+        XCTAssertEqual(w.members, "الربع ٤ · المتصلين ٣", "me (link up), the leader and سعد")
+        XCTAssertNil(w.connection)
+        XCTAssertEqual(w.line, "أمير الطلعة فهد متصل الآن · الربع ٤ · المتصلين ٣")
+        XCTAssertTrue(w.accessibility.hasPrefix("ما بدأت الطلعة، "))
+
+        let away = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: true, away: true)], myId: "me", clockOffsetMs: 0,
+                                      myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(away.leader, "أمير الطلعة فهد متصل (سرى بالخلفية عنده)")
+
+        /* Offline leader: when we last heard from him, measured on the server's clock. */
+        let seen = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: false, seen: t0.addingTimeInterval(-12 * 60 + 30))],
+                                      myId: "me", clockOffsetMs: 30_000, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(seen.leader, "أمير الطلعة فهد آخر ظهور قبل ١٢ د")
+        XCTAssertFalse(seen.leaderOnline)
+        let never = WaitingLeader.info(members: [member("L", "فهد", owner: true)], myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(never.leader, "أمير الطلعة فهد غير متصل الآن")
+
+        /* My link is down: the line says so first (what we show is the last state that reached us). */
+        let down = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: false, myLinkText: "بلا إنترنت", now: t0)
+        XCTAssertEqual(down.connection, "اتصالك: بلا إنترنت · آخر حالة وصلتنا")
+        XCTAssertEqual(down.members, "الربع ٤ · المتصلين ٢")
+        XCTAssertTrue(down.line.hasPrefix("اتصالك: بلا إنترنت"))
+    }
+
+    func testWaitingInfoReachesOnlyTheMembersButton() {
+        let w = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: true)], myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        var m = input(.created, lead: false)
+        m.waiting = w
+        XCTAssertEqual(OutingFlow.ui(m).waiting, w)
+        var l = input(.created)
+        l.waiting = w
+        XCTAssertNil(OutingFlow.ui(l).waiting, "the leader starts it: nothing to wait for")
+        var running = input(.active, lead: false)
+        running.waiting = w
+        XCTAssertNil(OutingFlow.ui(running).waiting)
     }
 
     func testRunningWithoutALegAsksWhereTo() {
@@ -44,7 +96,9 @@ final class OutingFlowTests: XCTestCase {
         i.liveCount = 4
         let ui = OutingFlow.ui(i)
         XCTAssertEqual(ui.state, .idle)
-        XCTAssertEqual(ui.line, "الطلعة شغّالة · ٤ مباشر")
+        /* «٤ مباشر» is the sheet's line (SarySheetSummary): the header does not repeat the live count. */
+        XCTAssertEqual(ui.line, "الطلعة شغّالة")
+        XCTAssertFalse(ui.line.contains("مباشر"))
         XCTAssertEqual(ui.primary?.title, "وين رايحين؟")
         XCTAssertEqual(OutingFlow.ui(input(.active, lead: false)).primary, .whereTo, "members start their own legs")
     }
@@ -80,6 +134,33 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertEqual(OutingFlow.ui(i).primary, .endOuting, "back near the start after hours: «أنهِ الطلعة» first")
         XCTAssertEqual(OutingFlowUI(state: .idle, line: "", primary: nil).primary, nil)
         XCTAssertEqual(OutingFlow.momentS, 4, "the arrival moment is a 4-second toast")
+    }
+
+    /// UI-AUDIT م3: «أنهِ الطلعة» is the CTA only for the owner (the server ends with `requireOwner`);
+    /// a co-leader who may start never gets it.
+    func testEndSuggestionFollowsTheServersOwnerRule() {
+        var arrived = leg("l1", camp)
+        arrived = LegLifecycle.arrive([arrived], id: "l1", at: t0.addingTimeInterval(-600), distanceM: 34_000)[0]
+        var i = input(.active, legs: [arrived])
+        i.endSuggested = true
+        i.iLead = true
+        i.iOwn = false
+        XCTAssertEqual(OutingFlow.ui(i).primary, .whereTo, "a co-leader cannot end: no «أنهِ الطلعة» CTA")
+        i.iOwn = true
+        XCTAssertEqual(OutingFlow.ui(i).primary, .endOuting)
+        XCTAssertEqual(OutingCTA.endOuting.systemImage, EndOutingCopy.systemImage, "one icon for ending")
+        XCTAssertEqual(OutingCTA.arrived.systemImage, "flag.checkered", "the flag stays «وصلنا»'s")
+        XCTAssertNotEqual(EndOutingCopy.systemImage, OutingCTA.arrived.systemImage)
+    }
+
+    /// ONE confirmation everywhere (UI-AUDIT §٢ word dictionary).
+    func testEndOutingConfirmationCopy() {
+        XCTAssertEqual(EndOutingCopy.title, "تنهي الطلعة للكل؟")
+        XCTAssertEqual(EndOutingCopy.confirm, "أنهِها")
+        XCTAssertEqual(EndOutingCopy.cancel, "لا")
+        XCTAssertEqual(EndOutingCopy.systemImage, "house.fill")
+        XCTAssertFalse(EndOutingCopy.message().contains("الرحلة"), "«الطلعة», never «الرحلة»")
+        XCTAssertNotEqual(EndOutingCopy.message(everyoneArrived: true), EndOutingCopy.message())
     }
 
     func testPausedAndEnded() {
@@ -202,5 +283,68 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertTrue(r.arrivals.isEmpty)
         XCTAssertNotNil(r.start)
         XCTAssertNotNil(r.groupStart)
+    }
+}
+
+/// Build 36 (owner's report item 10): stopping the guidance, arriving, ending and leaving are
+/// separate states; «أوقف التوجيه» brought the outing back with «وصلنا» as its one button.
+@MainActor
+final class OutingGuidanceStateTests: XCTestCase {
+    private let camp = OutingDestination(name: "مخيم النفود", lat: 24.7590, lng: 46.7491)
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func onLeg(_ g: TripGuidanceState, arrivedAt: Date? = nil) -> OutingFlowInput {
+        var i = OutingFlowInput()
+        i.status = .active
+        i.iLead = true
+        i.iOwn = true
+        i.legs = [OutingLeg(id: "l1", seq: 1, scope: .group, destination: camp, started_at: ISODate.string(t0))]
+        i.guidance = g
+        i.myArrivedAt = arrivedAt
+        i.now = t0
+        return i
+    }
+
+    func testStoppedGuidanceIsNotAnArrival() {
+        let ui = OutingFlow.ui(onLeg(.paused))
+        XCTAssertEqual(ui.state, .onLeg(onLeg(.paused).legs[0]), "the leg goes on")
+        XCTAssertEqual(ui.primary, .resumeGuidance)
+        XCTAssertEqual(ui.primary?.title, "استأنف التوجيه")
+        XCTAssertNotEqual(ui.primary, .arrived, "«وصلنا» is not what «أوقف التوجيه» leads to")
+        XCTAssertTrue(ui.line.hasPrefix("في الطريق إلى مخيم النفود"), ui.line)
+        XCTAssertTrue(ui.line.contains("التوجيه موقّف"), ui.line)
+        XCTAssertEqual(OutingCTA.resumeGuidance.id, "nav.auto.resume", "the identifier the guidance prompt had")
+    }
+
+    func testGuidingOrOffKeepsArrivedAsTheLegsAction() {
+        XCTAssertEqual(OutingFlow.ui(onLeg(.guiding)).primary, .arrived)
+        XCTAssertEqual(OutingFlow.ui(onLeg(.off)).primary, .arrived)
+        XCTAssertFalse(OutingFlow.ui(onLeg(.guiding)).line.contains("موقّف"))
+    }
+
+    func testArrivalStopsTheLegButNotTheOuting() {
+        let ui = OutingFlow.ui(onLeg(.arrived, arrivedAt: t0))
+        XCTAssertEqual(ui.state, .stopped(at: camp.name, since: t0))
+        XCTAssertEqual(ui.primary, .whereTo, "the outing goes on: «وين رايحين؟», never «أنهِ الطلعة» by itself")
+        var ended = onLeg(.paused)
+        ended.status = .ended
+        XCTAssertEqual(OutingFlow.ui(ended).primary, .summary, "an ended outing has no guidance button")
+    }
+
+    func testTheStateIsDerivedOnlyFromItsOwnFacts() {
+        XCTAssertEqual(TripGuidanceState.of(guiding: true, paused: false, arrived: false), .guiding)
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: true, arrived: false), .paused)
+        XCTAssertEqual(TripGuidanceState.of(guiding: true, paused: true, arrived: false), .guiding, "«استأنف» / a person's own guidance runs")
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: true, arrived: true), .arrived)
+        XCTAssertEqual(TripGuidanceState.of(guiding: false, paused: false, arrived: false), .off)
+    }
+
+    /// The header and the guidance bar count the minutes left the same way (build 36: «١٩ د» over «١٨ د»).
+    func testHeaderMinutesMatchTheGuidanceBar() {
+        let samples: [TimeInterval] = [1120, 1085, 3950, 3660] // 18m40s, 18m5s, 65m50s, 61m
+        for s in samples {
+            let line = OutingFlow.minutesLine(t0.addingTimeInterval(s), now: t0)
+            XCTAssertEqual(line, NavText.remaining(seconds: s), "\(s) s")
+        }
     }
 }

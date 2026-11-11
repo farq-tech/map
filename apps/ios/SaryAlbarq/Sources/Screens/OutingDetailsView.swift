@@ -37,7 +37,7 @@ struct OutingDetailsView: View {
                 SarySection(title: "الطلعة") {
                     infoRow("person.2.fill", "المشاركون", SaryFormat.number(s.members.count))
                     SaryDivider()
-                    infoRow(SaryIcon.crown, "أمير الرحلة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
+                    infoRow(SaryIcon.crown, "أمير الطلعة", s.members.first { $0.user_id == s.outing.owner_id }?.display_name ?? "—")
                     if let d = ISODate.parse(s.outing.started_at) {
                         SaryDivider()
                         infoRow("clock", "بدأت", SaryFormat.elapsed(since: d, now: Date()))
@@ -180,7 +180,7 @@ struct TripSummaryView: View {
                 }
                 TripLegsSection(outingId: outingId)
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                SarySection(title: "ملخصات شاركها الربع", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
                     }
@@ -199,13 +199,13 @@ struct TripSummaryView: View {
                     }
                 }
                 if let track {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
                                          open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
                             .padding(.vertical, theme.space(.s))
                     }
                 } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrailSketch(trail: trail, color: theme.palette.accent)
                             .frame(height: 180)
                             .padding(.vertical, theme.space(.s))
@@ -225,10 +225,10 @@ struct TripSummaryView: View {
                             Task {
                                 if await model.startReturnTrip(from: outingId) == nil { busy = false }
                             }
-                        } label: { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack, busy: busy) }
+                        } label: { SaryButtonLabel(title: SaryCopy.returnOuting, systemImage: SaryIcon.backTrack, busy: busy) }
                             .buttonStyle(.sary(.secondary))
                             .accessibilityIdentifier("summary.returnTrip")
-                        Text("رحلة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
+                        Text("«طلعة الرجعة» طلعة جديدة من الوجهة إلى نقطة بدايتك: على مسارك المسجّل أو بالملاحة.")
                             .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -284,10 +284,10 @@ struct TripSummaryView: View {
     @ViewBuilder
     private func mySummary(mine: TripShare?, local: TripTotals?, endedAt: Date?) -> some View {
         let open = endedAt.map { Date().timeIntervalSince($0) < 7 * 86400 } ?? false
-        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع أعضاء الطلعة (خلال أسبوع من نهايتها).") {
+        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع ربع الطلعة (خلال أسبوع من نهايتها).") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 if mine != nil {
-                    Label("شاركت ملخصك مع أعضاء الطلعة", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
+                    Label("شاركت ملخصك مع الربع", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
                     Button {
                         busy = true
                         Task { if await model.withdrawSummary(outingId) { await load() }; busy = false }
@@ -301,7 +301,7 @@ struct TripSummaryView: View {
                     Button {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
-                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الأعضاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
+                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الربع", systemImage: "square.and.arrow.up.on.square", busy: busy) }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("summary.shareMine")
                 }
@@ -478,14 +478,14 @@ struct TripSummarySection: View {
     var body: some View {
         let p = theme.palette
         let m = facts.motion
-        SarySection(title: "الرحلة", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوبة على جوالك فقط.") {
+        SarySection(title: "مشواري", footer: "من أول موقع لك بعد بداية الطلعة إلى \(facts.arrivedAt != nil ? "وصولك" : "نهايتها"). محسوب على جوالك فقط.") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 row("flag.fill", "البداية", facts.start.map { NavText.clock(Date(timeIntervalSince1970: $0.atMs / 1000)) } ?? "—")
                 SaryDivider()
                 row("flag.checkered", facts.arrivedAt != nil ? "الوصول إلى \(destination?.name ?? "الوجهة")" : "النهاية",
                     (facts.arrivedAt ?? facts.endedAt).map { NavText.clock($0) } ?? "—")
                 SaryDivider()
-                row("clock.fill", "مدة الرحلة", SaryFormat.duration(seconds: m.elapsedS))
+                row("clock.fill", "مدة المشوار", SaryFormat.duration(seconds: m.elapsedS))
                 SaryDivider()
                 row("car.side.fill", "وقت الحركة", SaryFormat.duration(seconds: m.movingS))
                 SaryDivider()

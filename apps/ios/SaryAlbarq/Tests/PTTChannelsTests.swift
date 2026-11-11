@@ -67,7 +67,7 @@ final class PTTChannelsTests: XCTestCase {
         XCTAssertEqual(PTTChannels.publicList.map(\.name), ["تردد ١", "تردد ٢", "تردد ٣", "تردد ٤", "تردد ٥"])
         XCTAssertEqual(PTTChannels.systemLabel("تردد ٣"), "قناة الطلعة · تردد ٣", "what the Lock Screen shows")
         XCTAssertEqual(PTTChannels.chipLabel(nil), "تردد ١")
-        XCTAssertEqual(PTTChannels.inviteText("الأمامية"), "أمير الرحلة دعاك إلى تردد خاص: الأمامية")
+        XCTAssertEqual(PTTChannels.inviteText("الأمامية"), "أمير الطلعة دعاك إلى تردد خاص: الأمامية")
         let names = ["a": "فهد", "b": "سعد", "c": "نورة", "d": "ريم"]
         let n: (String) -> String? = { names[$0] }
         var c = PTTChannelInfo(id: "2", kind: .public, name: "تردد ٢")
@@ -79,7 +79,7 @@ final class PTTChannelsTests: XCTestCase {
         c.listeners = ["a", "b", "c", "d"]
         XCTAssertEqual(PTTChannels.listenersLine(c, me: "a", name: n), "يسمع: سعد، نورة +١")
         XCTAssertTrue(PTTChannels.kickedText("closed", name: "الأمامية").contains("تردد ١"))
-        XCTAssertEqual(PTTChannels.errorText(OutingAPIError(code: "leader_only", status: 403)), "التردد الخاص لأمير الرحلة فقط")
+        XCTAssertEqual(PTTChannels.errorText(OutingAPIError(code: "leader_only", status: 403)), "التردد الخاص لأمير الطلعة فقط")
     }
 
     // MARK: the playout budget
@@ -287,7 +287,7 @@ final class PTTChannelsTests: XCTestCase {
         let list: [PTTChannelInfo] = PTTChannels.publicList + [PTTChannelInfo(id: priv, kind: .private, name: "الأمامية", members: ["a", "me"])]
         w.receiveChannel(.invited(channel: priv, name: "الأمامية", by: "a"))
         XCTAssertEqual(w.pendingInvite?.id, priv)
-        XCTAssertEqual(w.notice, "أمير الرحلة دعاك إلى تردد خاص: الأمامية")
+        XCTAssertEqual(w.notice, "أمير الطلعة دعاك إلى تردد خاص: الأمامية")
         w.receiveChannel(.list(current: "1", canCreate: false, channels: list))
         XCTAssertFalse(w.canCreatePrivate)
         w.switchChannel(priv)

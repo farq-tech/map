@@ -49,14 +49,14 @@ struct OutingAPIError: Error, Equatable {
     var arabic: String {
         let t: [String: String] = [
             "invite_invalid": "الرابط ناقص أو فيه خطأ.",
-            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من أمير الرحلة رابطًا جديدًا.",
-            "invite_revoked": "ألغى أمير الرحلة هذا الرابط. اطلب رابطًا جديدًا.",
+            "invite_expired": "انتهت صلاحية رابط الدعوة. اطلب من أمير الطلعة رابطًا جديدًا.",
+            "invite_revoked": "ألغى أمير الطلعة هذا الرابط. اطلب رابطًا جديدًا.",
             "outing_ended": "انتهت هذه الطلعة.",
             "outing_full": "اكتمل عدد المشاركين في هذه الطلعة.",
-            "removed_from_outing": "أزالك أمير الرحلة منها، فلا يمكنك الانضمام مرة ثانية.",
+            "removed_from_outing": "أزالك أمير الطلعة منها، فلا يمكنك الانضمام مرة ثانية.",
             "not_a_member": "لست عضوًا في هذه الطلعة.",
-            "owner_only": "هذا الإجراء لأمير الرحلة فقط.",
-            "invalid_name": "اكتب اسمًا يظهر للعيال.",
+            "owner_only": "هذا الإجراء لأمير الطلعة فقط.",
+            "invalid_name": "اكتب اسمًا يظهر للربع.",
             "invalid_outing_name": "اكتب اسمًا للطلعة.",
             "rate_limited": "محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.",
             "too_frequent": "انتظر ثانيتين ثم أرسل.",
@@ -67,7 +67,7 @@ struct OutingAPIError: Error, Equatable {
             "timeout": "الشبكة بطيئة. أعد المحاولة.",
             "outings_unconfigured": "الطلعات المشتركة غير مفعّلة على الخادم.",
             "unauthorized": "انتهت جلستك على هذا الجهاز. ادخل باسمك مرة ثانية.",
-            "leader_only": "هذا الإجراء لأمير الرحلة أو نائبه فقط.",
+            "leader_only": "هذا الإجراء لأمير الطلعة أو نائبه فقط.",
             "cannot_remove_self": "لا يمكنك إزالة نفسك. استخدم «غادر الطلعة».",
             "invalid_rally": "تعذّر وضع نقطة التجمع هنا.",
             "sos_fix_stale": "موقعك قديم، أُرسلت الطوارئ بدون موقع.",
@@ -75,16 +75,16 @@ struct OutingAPIError: Error, Equatable {
             "invalid_clip_duration": "التسجيل قصير جدًا.",
             "too_large": "التسجيل أطول من المسموح.",
             "clip_gone": "انتهت صلاحية هذا التسجيل.",
-            "join_locked": "أمير الرحلة قفل الانضمام.",
+            "join_locked": "أمير الطلعة قفل الانضمام.",
             "recovery_invalid": "رمز الاسترجاع غير صحيح أو استُخدم من قبل. تأكد منه وحاول مرة ثانية.",
             "invalid_avatar": "الصورة كبيرة أو بصيغة غير مدعومة. جرّب صورة ثانية.",
             "outing_not_ended": "تقدر تشارك ملخصك بعد ما تنتهي الطلعة.",
             "summary_window_closed": "مضى أكثر من أسبوع على نهاية الطلعة، فما عاد ممكن مشاركة الملخص.",
-            "implausible_summary": "أرقام الرحلة على هذا الجهاز غير منطقية، فلم نرسلها.",
+            "implausible_summary": "أرقام ملخصك على هذا الجوال غير منطقية، فما أرسلناها.",
             "invalid_summary": "تعذّر إرسال الملخص.",
             "server_busy": "الخادم مشغول. أعد المحاولة بعد قليل.",
-            "invite_taken": "هذه الدعوة لشخص آخر. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «حسابي» أو اطلب من أمير الرحلة دعوة جديدة باسمك.",
-            "open_links_disabled": "أوقف أمير الرحلة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
+            "invite_taken": "هذه الدعوة لشخص آخر. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» أو اطلب من أمير الطلعة دعوة جديدة باسمك.",
+            "open_links_disabled": "أوقف أمير الطلعة الرابط المفتوح. اطلب منه دعوة شخصية باسمك.",
             "invite_used": "استُخدمت هذه الدعوة، وصاحبها في الطلعة.",
             "invite_replaced": "أُرسلت لهذا الشخص دعوة أحدث.",
             "invite_not_found": "لم نجد هذه الدعوة.",
@@ -92,7 +92,7 @@ struct OutingAPIError: Error, Equatable {
             "too_many_invites": "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
             "invalid_open_links": "تعذّر تغيير الرابط المفتوح.",
         ]
-        return t[code] ?? "حدث خطأ. أعد المحاولة."
+        return t[code] ?? SaryCopy.genericError
     }
 }
 
@@ -218,6 +218,31 @@ enum IdentityStore {
     static func forgetCache() { lock.withLock { cached = nil; migrated = false } }
 }
 
+/// Shares one in-flight async run among concurrent callers asking for the same key: the second
+/// `GET /api/outings` while the first is still out waits for the first answer instead of sending
+/// its own. Once a run ends, the next call starts a fresh one (nothing is cached).
+/// A caller's cancellation does not cancel the shared run (another caller may still want it).
+final class InFlight<Key: Hashable, Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running: [Key: (id: UInt64, task: Task<Value, Error>)] = [:]
+    private var nextId: UInt64 = 0
+
+    /// Keys with a run still out (tests).
+    var count: Int { lock.withLock { running.count } }
+
+    func run(_ key: Key, _ work: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        let (id, task) = lock.withLock { () -> (UInt64, Task<Value, Error>) in
+            if let r = running[key] { return (r.id, r.task) }
+            nextId &+= 1
+            let t = Task { try await work() }
+            running[key] = (nextId, t)
+            return (nextId, t)
+        }
+        defer { lock.withLock { if running[key]?.id == id { running[key] = nil } } }
+        return try await task.value
+    }
+}
+
 /// REST client for `/api/outings`. Invite tokens travel in bodies, never URLs.
 final class OutingsAPI {
     var tokenProvider: () -> String?
@@ -226,6 +251,9 @@ final class OutingsAPI {
     private let session: URLSession
     /// Internal so the voice-note client (Sources/VoiceNotes) builds its raw-audio requests the same way.
     let base: URL
+    /// One response, shared by identical GETs that overlap (`InFlight`).
+    private struct Fetched: @unchecked Sendable { let data: Data; let response: URLResponse }
+    private let inFlightGets = InFlight<String, Fetched>()
 
     init(base: URL = Endpoints.apiBase, session: URLSession = .shared, tokenProvider: @escaping () -> String?) {
         self.base = base
@@ -254,7 +282,19 @@ final class OutingsAPI {
         if let t = sent { req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
         let data: Data, resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            /* The list, a snapshot, /me: several screens and timers ask at once (foreground, a
+             * push, a pull to refresh). Identical GETs (same URL, same token) ride one request. */
+            let fetch: @Sendable () async throws -> Fetched = { [session, req] in
+                let (d, r) = try await session.data(for: req)
+                return Fetched(data: d, response: r)
+            }
+            let got: Fetched
+            if method == "GET" && body == nil {
+                got = try await inFlightGets.run(url.absoluteString + "\n" + (sent ?? ""), fetch)
+            } else {
+                got = try await fetch()
+            }
+            (data, resp) = (got.data, got.response)
         } catch let e as URLError {
             throw OutingAPIError(code: e.code == .timedOut ? "timeout" : "network", status: 0)
         }

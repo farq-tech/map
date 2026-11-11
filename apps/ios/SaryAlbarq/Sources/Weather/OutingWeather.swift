@@ -172,13 +172,17 @@ final class OutingWeather: ObservableObject {
             /* No position at all yet: say what is missing instead of spinning forever. */
             return WeatherCardUI(title: title, phase: .unavailable(WeatherChipPresenter.noSourceText))
         }
-        return WeatherPresenter.card(title: title, report: area.report, refreshing: area.refreshing, failed: area.lastFailed, now: now, hours: hours)
+        /* «نقطة التوقع على بعد … منك» (Build 36 item 12); from the group's centre when my fix is unknown. */
+        let ref = mine.map { WeatherReference(point: $0, label: "منك") } ?? center.map { WeatherReference(point: $0, label: "من وسط الطلعة") }
+        return WeatherPresenter.card(title: title, report: area.report, refreshing: area.refreshing, failed: area.lastFailed, now: now, hours: hours,
+                                     reference: ref)
     }
 
     func destinationCard(now: Date, hours: Int = 8) -> WeatherCardUI {
         let name = destinationPoint?.name ?? ""
         return WeatherPresenter.card(title: name.isEmpty ? "الطقس في الوجهة" : "الطقس في الوجهة: \(name)", report: destination.report,
-                                     refreshing: destination.refreshing, failed: destination.lastFailed, now: now, hours: hours)
+                                     refreshing: destination.refreshing, failed: destination.lastFailed, now: now, hours: hours,
+                                     reference: destinationPoint.map { WeatherReference(point: Geo.LatLng(lat: $0.lat, lng: $0.lng), label: "من الوجهة") })
     }
 
     func arrival(now: Date) -> WeatherArrivalUI? {

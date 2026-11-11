@@ -36,7 +36,12 @@ Pipeline (`Sources/Map/AIEnhance/`):
 3. The parent tile is fetched from `api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90`
    through an **ephemeral** URLSession (no URL cache, no disk). Max 4 in flight.
 4. One serial `.utility` queue runs inference, newest visible tile first. The step is: crop
-   256 px (×2) or 128 px (×4, doubled to 256) → model 256→1024 → Lanczos to 512.
+   256 px (×2) or 128 px (×4, doubled to 256) → model 256→1024 → Lanczos to 512 →
+   `HiResBlend` (after the Build 36 report of patchy imagery): each channel matched to the
+   mean / contrast of a plain upscale of the same crop, 70 % of the model's detail kept over
+   that upscale, and the alpha feathered to 0 over the outer 14 px, so the original imagery
+   under the tile shows at every tile border. The layer's `SandGrade` follows the camera like
+   the basemap's (`syncGrade`), so enhanced and original tiles side by side share one grade.
 5. `HiResTileCache` is RAM-only LRU: 40 MB of enhanced tiles (≈40 tiles) and 8 MB of raw
    JPEG parents. Both are purged on memory warning. **Nothing is persisted.**
 

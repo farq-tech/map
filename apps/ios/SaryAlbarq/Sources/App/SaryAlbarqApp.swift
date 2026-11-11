@@ -151,16 +151,3 @@ extension AppearanceSettings {
 extension Notification.Name {
     static let saryModelReady = Notification.Name("sary.model.ready")
 }
-
-enum Theme {
-    /// Brand from the web's design tokens: brand-900 and mint.
-    static let ink = Color(red: 0x04 / 255, green: 0x34 / 255, blue: 0x34 / 255)
-    static let accent = Color(red: 0x18 / 255, green: 0xA6 / 255, blue: 0x6A / 255)
-    static let mint = Color(red: 0x83 / 255, green: 0xF1 / 255, blue: 0xB1 / 255)
-    static let amber = Color(red: 1, green: 0xCA / 255, blue: 0x3A / 255)
-    static let lost = Color(red: 0.55, green: 0.58, blue: 0.6)
-
-    static func car(_ rgb: UInt32) -> Color {
-        Color(red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255, blue: Double(rgb & 0xFF) / 255)
-    }
-}

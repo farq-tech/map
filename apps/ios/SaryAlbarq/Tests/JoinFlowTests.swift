@@ -110,14 +110,14 @@ final class JoinMachineTests: XCTestCase {
     }
 
     func testTheHonestWords() {
-        XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
+        XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف ربع الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertEqual(ShareMemory.joinStatement, JoinCopy.statement, "same line on the creator's last step and «انضم برابط»")
         XCTAssertEqual(JoinCopy.button, "انضم للطلعة")
         XCTAssertEqual(JoinCopy.prePromptTitle, "عشان الربع يشوفونك وتوصلهم الطوارئ", "the Najdi pre-prompt, before the system alert")
         XCTAssertTrue(JoinCopy.prePromptDetail.contains("السماح أثناء استخدام التطبيق"))
         XCTAssertNotEqual(JoinCopy.needsTitle(.denied), JoinCopy.needsTitle(.reduced))
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))
-        XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للعيال")
+        XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للربع")
         for t in [JoinCopy.statement, JoinCopy.prePromptDetail, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced)] {
             XCTAssertFalse(t.contains("أوقف"), "no stop switch is promised: \(t)")
             XCTAssertFalse(t.contains("شارك موقعي"), t)

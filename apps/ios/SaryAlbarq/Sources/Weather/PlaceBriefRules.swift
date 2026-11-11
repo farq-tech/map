@@ -188,12 +188,14 @@ enum PlaceBriefRules {
 
     // MARK: freshness / source
 
-    /// «المصدر: Open-Meteo · قبل ٥ د», never pretending old data is current.
-    static func sourceLine(_ w: PlaceWeather, now: Date, failed: WeatherFetchFailure?) -> (text: String, stale: Bool) {
+    /// «المصدر: Open-Meteo · ١١:٢٥ ص (قبل ٥ د)», never pretending old data is current. The clock time
+    /// is when the data arrived on this phone (Build 36 item 12: «when was this updated?»).
+    static func sourceLine(_ w: PlaceWeather, now: Date, failed: WeatherFetchFailure?, timeZone: TimeZone = .current) -> (text: String, stale: Bool) {
         let age = SaryFormat.elapsed(since: w.report.fetchedAt, now: now)
+        let clock = WeatherFormat.clock(w.report.fetchedAt, timeZone: timeZone)
         let stale = now.timeIntervalSince(w.report.fetchedAt) > WeatherThresholds.freshS
-        var parts = ["المصدر: \(w.provider.label)", age]
-        if stale { parts[1] = "بيانات محفوظة \(age) — ليست حالية" }
+        var parts = ["المصدر: \(w.provider.label)", "\(clock) (\(age))"]
+        if stale { parts[1] = "بيانات محفوظة \(clock) (\(age)) — ليست حالية" }
         if failed == .offline { parts.append("بلا إنترنت") } else if failed == .server { parts.append("تعذّر التحديث") }
         return (parts.joined(separator: " · "), stale)
     }
@@ -306,6 +308,8 @@ struct PlaceBriefUI: Equatable {
     var daylight = ""
     var assessment: PlaceAssessment?
     var source = ""
+    /// «نقطة التوقع على بعد أقل من ١ كم من النقطة».
+    var forecastPoint: String?
     var stale = false
     var offline = false
     var provider: WeatherProviderID?
@@ -321,7 +325,7 @@ enum PlaceBriefPresenter {
         ui.offline = failed == .offline
         guard let w else {
             if let failed {
-                ui.phase = .unavailable(failed == .offline ? "الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة" : "تعذّر جلب الطقس لهذه النقطة. حاول بعد قليل")
+                ui.phase = .unavailable(failed == .offline ? "الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة" : "تعذّر جلب الطقس لهذه النقطة. حاول بعد قليل")
             } else {
                 ui.phase = loading ? .loading : .unavailable("الطقس غير متاح")
             }
@@ -329,8 +333,9 @@ enum PlaceBriefPresenter {
         }
         let r = w.report
         ui.provider = w.provider
-        let src = PlaceBriefRules.sourceLine(w, now: now, failed: failed)
+        let src = PlaceBriefRules.sourceLine(w, now: now, failed: failed, timeZone: timeZone)
         ui.source = src.text
+        ui.forecastPoint = WeatherProvenance.point(r, reference: WeatherReference(point: Geo.LatLng(lat: point.lat, lng: point.lng), label: "من النقطة"))
         ui.stale = src.stale
         guard let (h, observed) = WeatherRules.nowValue(r, now: now) else {
             ui.phase = .unavailable("آخر توقعات محفوظة لهذه النقطة انتهت (\(SaryFormat.elapsed(since: r.fetchedAt, now: now))). اتصل بالإنترنت لتحديثها")

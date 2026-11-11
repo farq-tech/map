@@ -87,7 +87,7 @@ final class AlwaysLiveTests: XCTestCase {
         }
         XCTAssertEqual(SilenceText.title(name: "عبيص", since: since, now: now, reason: .web), "عبيص: يتابع من المتصفح")
         /* Server and app speak the same words (apps/api/lib/outings/presence.js REASON_TEXT). */
-        XCTAssertEqual(PresenceReason(rawValue: "no_gps")?.text, "ما فيه إشارة GPS")
+        XCTAssertEqual(PresenceReason(rawValue: "no_gps")?.text, "ما فيه إشارة موقع")
     }
 
     func testHintFollowsScreenAndPermission() {

@@ -127,6 +127,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var onProjection: (MapProjection) -> Void = { _ in }
     /// The person moved the map by hand (keep-group is off until «المجموعة»).
     var onUserGesture: () -> Void = {}
+    /// That gesture has settled: true when it left the camera where it was (`FollowCameraState.gestureEnded`).
+    var onGestureEnd: (Bool) -> Void = { _ in }
     /// Shared waypoints (pins join the chip declutter, see `WaypointLayout`).
     var waypoints: [MapWaypoint] = []
     var onWaypointTap: (String) -> Void = { _ in }
@@ -193,6 +195,7 @@ struct OutingMapboxView: UIViewRepresentable {
         c.onEmptyTap = onEmptyTap
         c.onProjection = onProjection
         c.onUserGesture = onUserGesture
+        c.onGestureEnd = onGestureEnd
         c.waypointPins.onTap = onWaypointTap
         c.onLongPress = onLongPress
         c.onWaterways = onWaterways
@@ -206,9 +209,9 @@ struct OutingMapboxView: UIViewRepresentable {
         }
         c.setChrome(chrome)
         #if DEBUG
-        if MotionDemo.active { c.syncDemo() } else { c.sync(members) }
+        if MotionDemo.active { c.syncDemo() } else { c.syncIfChanged(members) }
         #else
-        c.sync(members)
+        c.syncIfChanged(members)
         #endif
         c.setRally(rally)
         c.setWaypoints(waypoints)
@@ -291,6 +294,10 @@ struct OutingMapboxView: UIViewRepresentable {
         private var farqApplied = false
         var onProjection: (MapProjection) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
+        var onGestureEnd: (Bool) -> Void = { _ in }
+        /// The camera when the current hand gesture began, and how many of its recognizers still run.
+        private var gestureStartCamera: CameraState?
+        private var gesturesRunning = 0
         var onWaterways: ([WaterwayLine]) -> Void = { _ in }
         private var waterQuery: Cancelable?
         let navDrawer = NavMapDrawer()
@@ -318,6 +325,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private var rallyPin: (point: MapRallyPoint, annotation: ViewAnnotation, host: UIHostingController<RallyPin>)?
         private var trails = MapTrails()
         private var trailLayerKey: String?
+        /// The friends' lines last sent to `trailFriends` (nil: send again).
+        private var drawnFriends: [MapTrails.Line]?
         let mineDrawer = TrackLineDrawer(id: "sary-track-mine")
         let followDrawer = TrackLineDrawer(id: "sary-track-follow")
         var labels: SatelliteLabels = .standard
@@ -361,6 +370,11 @@ struct OutingMapboxView: UIViewRepresentable {
             /// The vehicle layer is the 2D icon (symbol), not the 3D model.
             var icon = false
             var layersReady = false
+            /// The position and heading last sent to the car's source / layer, and the presence its
+            /// opacity was set for (nil: send again). Every member's fix re-syncs every car, and most
+            /// of them have not moved or changed state.
+            var sent: (position: LngLat, heading: Double?)?
+            var sentPresence: Policy.Freshness?
             /// Name chip and note bubble, drawn in the declutter overlay (see `ChipLayout`).
             var chipBox: HostBox<MapChip>?
             var noteBox: HostBox<MapNote>?
@@ -397,9 +411,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 self.refreshWaterways()
             }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
-                self?.layoutChips()
-                self?.project()
-                self?.reportCenter()
+                guard let self else { return }
+                /* A display-link frame that moves the camera lays the chips out itself once it is done. */
+                if !self.inFrame { self.layoutChips() }
+                self.project()
+                self.reportCenter()
             }.store(in: &cancelables)
             /* Chips live in our own overlay (over the map, under Mapbox's ornaments) so the
              * declutter layout can move, stack and fold them in the same frame as the camera. */
@@ -531,6 +547,8 @@ struct OutingMapboxView: UIViewRepresentable {
             /* Farq's streets (weekly OSM) and Atlas places replace Mapbox's older roads on satellite. */
             farqApplied = FarqTiles.available
             FarqTiles.install(m, layer: layer, labels: labels)
+            /* Every building as a light flat footprint on satellite (the 3D layer raises the tall ones when tilted). */
+            if layer == .satellite { BuildingFootprints.install(m) }
             light = nil
             applyLight()
             if let r = rallyPin?.point {
@@ -608,6 +626,11 @@ struct OutingMapboxView: UIViewRepresentable {
             roadsCamera = nil
             refreshRoads()
             FarqTiles.install(m, layer: layer, labels: labels)
+            /* The Farq archive arrived after the style: footprints switch to the Atlas buildings. */
+            if layer == .satellite, FarqTiles.hasBuildings {
+                if m.layerExists(withId: BuildingFootprints.layerId) { try? m.removeLayer(withId: BuildingFootprints.layerId) }
+                BuildingFootprints.install(m)
+            }
         }
 
         func setLabels(_ l: SatelliteLabels) {
@@ -768,12 +791,40 @@ struct OutingMapboxView: UIViewRepresentable {
 
         // MARK: cars
 
+        /// `updateUIView` runs for every change of the host's SwiftUI state (timers, sheets, banners…),
+        /// mostly with the very same members. A full `sync` then re-matched every car to its road,
+        /// re-sent every car's GeoJSON source and paint, rebuilt every chip and re-laid the declutter
+        /// for nothing. With unchanged members (and chrome) only the cheap, state-driven parts run.
+        func syncIfChanged(_ cars: [MapMember]) {
+            guard synced, cars == lastCars, chrome == syncedChrome, map != nil else {
+                sync(cars)
+                return
+            }
+            refreshRoadsIfDue()
+            applyLight()
+            frameGroupIfNeeded(cars)
+        }
+        /// `sync` ran at least once with a map, and the chrome it laid the chips out for.
+        private var synced = false
+        private var syncedChrome: UIEdgeInsets = .zero
+
+        /// While following a moving car the map is never idle: refresh the streets every few seconds too.
+        private func refreshRoadsIfDue() {
+            let t = CACurrentMediaTime()
+            if t - lastRoadRefresh > 3, roadsCameraMoved() { lastRoadRefresh = t; refreshRoads() }
+        }
+
+        /// Guidance camera, or the group framing (first fix, newcomers, someone drifting out of view).
+        private func frameGroupIfNeeded(_ cars: [MapMember]) {
+            if navDrawer.ownsCamera { navTick() } else if followMode == .free { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
+        }
+
         func sync(_ cars: [MapMember]) {
             lastCars = cars
             guard let map else { return }
-            /* While following a moving car the map is never idle: refresh the streets every few seconds too. */
-            let t = CACurrentMediaTime()
-            if t - lastRoadRefresh > 3, roadsCameraMoved() { lastRoadRefresh = t; refreshRoads() }
+            synced = true
+            syncedChrome = chrome
+            refreshRoadsIfDue()
             applyLight()
             let now = CACurrentMediaTime()
             var seen = Set<String>()
@@ -832,7 +883,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             fx.keep(seen)
             startLink()
-            if navDrawer.ownsCamera { navTick() } else if followMode == .free { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
+            frameGroupIfNeeded(cars)
             layoutChips()
             project()
         }
@@ -845,6 +896,9 @@ struct OutingMapboxView: UIViewRepresentable {
             compass.active = m == .heading
             compass.onChange = { [weak self] in self?.startLink() }
             guard m != .free, let map else { return }
+            /* Following again: a hand gesture whose end never came cannot block the next one's report. */
+            gesturesRunning = 0
+            gestureStartCamera = nil
             keepGroup = false
             map.camera.cancelAnimations()
             let st = map.mapboxMap.cameraState
@@ -953,6 +1007,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 src.data = .geometry(.point(Point(r.shown.coordinate)))
                 try? m.addSource(src)
                 let spot = r.item.isMe ? Vehicle.mySpotHex : r.item.color
+                if r.item.isMe {
+                    /* My position over sand: a soft dark disc with a white ring under my car, so a
+                       sand- or white-painted car still stands out from the imagery and the route. */
+                    try? m.addLayer(with: Vehicle.myHaloLayer(id: Vehicle.haloId(ids.spot), source: ids.source), layerPosition: nil)
+                }
                 try? m.addLayer(with: [
                     "id": ids.spot, "type": "circle", "source": ids.source,
                     "paint": [
@@ -992,13 +1051,18 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 r.layersReady = true
                 r.greyed = false // fresh layers are drawn in the car's own colour
+                r.sent = nil
+                r.sentPresence = nil
             }
             setPosition(r, on: m)
-            if r.model {
-                try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
-                                        value: Vehicle.opacity(r.item.presence))
+            if r.sentPresence != r.item.presence {
+                r.sentPresence = r.item.presence
+                if r.model {
+                    try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
+                                            value: Vehicle.opacity(r.item.presence))
+                }
+                try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
             }
-            try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
             /* Not live: grey, not only faded (the spot, the 2D car or the 3D model's paint). */
             let shown = Vehicle.displayColor(r.item.isMe ? Vehicle.mySpotHex : r.item.color, r.item.presence)
             if r.greyed != (r.item.presence != .live) {
@@ -1015,6 +1079,8 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func setPosition(_ r: Rec, on m: MapboxMap) {
+            if let s = r.sent, s.position == r.shown, s.heading == r.heading { return }
+            r.sent = (r.shown, r.heading)
             let ids = Vehicle.ids(r.key)
             m.updateGeoJSONSource(withId: ids.source, geoJSON: .geometry(.point(Point(r.shown.coordinate))))
             if r.model {
@@ -1055,7 +1121,7 @@ struct OutingMapboxView: UIViewRepresentable {
         private func removeLayers(_ r: Rec, on map: MapView) {
             let m: MapboxMap = map.mapboxMap!
             let ids = Vehicle.ids(r.key)
-            for l in [ids.layer, ids.spot] where m.layerExists(withId: l) { try? m.removeLayer(withId: l) }
+            for l in [ids.layer, ids.spot, Vehicle.haloId(ids.spot)] where m.layerExists(withId: l) { try? m.removeLayer(withId: l) }
             if m.sourceExists(withId: ids.source) { try? m.removeSource(withId: ids.source) }
         }
 
@@ -1374,16 +1440,23 @@ struct OutingMapboxView: UIViewRepresentable {
                 addTrailLayers(m, myColor: myColor)
                 trailLayerKey = key
             }
-            m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
-            /* Build 10: my trail and a followed track in the shared track style (casing, speed gradient, dots). */
-            let ids = m.allLayerIdentifiers.map(\.id)
-            let below = ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
+            /* My trail grows with every fix; the friends' source is only re-sent when their lines changed. */
+            if drawnFriends != trails.friends {
+                m.updateGeoJSONSource(withId: Self.trailFriends, geoJSON: .featureCollection(Self.collection(trails.friends)))
+                drawnFriends = trails.friends
+            }
+            /* Build 10: my trail and a followed track in the shared track style (casing, speed gradient, dots).
+             * The layer order is only read when a drawer (re)adds its layers, not on every new fix. */
+            let below: () -> String? = {
+                let ids = m.allLayerIdentifiers.map(\.id)
+                return ids.first { $0.hasPrefix("sary-nav-") } ?? ids.first { $0.hasPrefix("sary-vehicle") }
+            }
             let w = (theme.drive ? TrackLineStyle.width + 1 : TrackLineStyle.width) + (trails.highlight ? 1.5 : 0)
             mineDrawer.update(m, line: trails.mineTrack, style: TrackLineStyle(width: w, color: myColor, speedColours: true,
                                                                                 casing: Self.casing(for: myColor), showEnds: false,
-                                                                                glow: trails.highlight), below: below)
+                                                                                glow: trails.highlight), below: below())
             followDrawer.update(m, line: trails.followed, style: TrackLineStyle(width: TrackLineStyle.width + 1, glow: true),
-                                below: below)
+                                below: below())
             placeStart(trails.start)
             placeGapLabels(trails.gapLabels)
         }
@@ -1407,6 +1480,8 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func addTrailLayers(_ m: MapboxMap, myColor: UInt32) {
+            /* The source may be new (a new style): send the friends' lines again. */
+            drawnFriends = nil
             for id in Self.trailLayerIds where m.layerExists(withId: id) { try? m.removeLayer(withId: id) }
             for src in [Self.trailFriends, Self.trailMine] where !m.sourceExists(withId: src) {
                 var s = GeoJSONSource(id: src)
@@ -1489,8 +1564,13 @@ struct OutingMapboxView: UIViewRepresentable {
             link = l
         }
 
+        /// True inside `step()`: it ends with `layoutChips()`, so camera changes it causes need no layout of their own.
+        private var inFrame = false
+
         @objc private func step() {
             guard let m = map?.mapboxMap else { return }
+            inFrame = true
+            defer { inFrame = false }
             let now = CACurrentMediaTime()
             var moving = false
             var cars: [MotionFX.Car] = []
@@ -1600,6 +1680,8 @@ struct OutingMapboxView: UIViewRepresentable {
         func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
             /* A tap (on a car, a name, or empty map) is not "let me look"; drag, pinch, rotate and tilt are. */
             if gestureType != .singleTap {
+                if gesturesRunning == 0, let map { gestureStartCamera = map.mapboxMap.cameraState }
+                gesturesRunning += 1
                 keepGroup = false
                 /* The camera is the person's from this touch: stop driving it now (the screen
                    hears it through `onUserGesture` and offers «رجّعني للتوجيه»). */
@@ -1612,8 +1694,28 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
             }
         }
-        func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {}
-        func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {}
+        func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {
+            guard gestureType != .singleTap, !willAnimate else { return }
+            gestureFinished()
+        }
+        func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {
+            guard gestureType != .singleTap else { return }
+            gestureFinished()
+        }
+
+        /// One recognizer of the hand gesture is done (its deceleration included); when the last one
+        /// is, report whether the camera really moved (a drifting tap in a moving car did not).
+        private func gestureFinished() {
+            gesturesRunning = max(0, gesturesRunning - 1)
+            guard gesturesRunning == 0, let start = gestureStartCamera, let map else { return }
+            gestureStartCamera = nil
+            let now = map.mapboxMap.cameraState
+            let a = map.mapboxMap.point(for: start.center), b = map.mapboxMap.point(for: now.center)
+            let shift = Double(hypot(a.x - b.x, a.y - b.y))
+            onGestureEnd(FollowCameraState.negligibleGesture(shiftPt: shift, zoomDelta: Double(now.zoom - start.zoom),
+                                                             bearingDelta: FollowMath.delta(Double(start.bearing), Double(now.bearing)),
+                                                             pitchDelta: Double(now.pitch - start.pitch)))
+        }
     }
 }
 

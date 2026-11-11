@@ -552,7 +552,7 @@ final class SafetyEndToEndTests: XCTestCase {
 
     func testReturnTimerAndStuckAgainstTheRealServer() async throws {
         let b = try base()
-        let (apiA, a) = try await client(b, "أمير الرحلة")
+        let (apiA, a) = try await client(b, "أمير الطلعة")
         let (apiB, bId) = try await client(b, "أبو فهد")
         let created = try await apiA.create(name: "طلعة اختبار", personal: false)
         let oid = created.outing_id

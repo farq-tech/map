@@ -116,6 +116,8 @@ struct PlanMapView: UIViewRepresentable {
                 try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
             }
             PlanMapStyle.ensureLayers(m, emphasised: true, night: parent?.theme.night ?? false)
+            /* Every building, flat and light, from a neighbourhood zoom (the home map is satellite). */
+            BuildingFootprints.install(m)
             drawnRoute = nil
             drawnHandles = nil
             drawnDesert = nil

@@ -37,7 +37,7 @@ final class LiveCalmTests: XCTestCase {
     }
 
     func testBackTrackShortcutOnlyWhenItFitsAndNoToolsAfterTheEnd() {
-        let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق العودة", accessibilityID: "outing-backtrack")
+        let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق الرجعة", accessibilityID: "outing-backtrack")
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: back, plusBadge: nil, driving: false, ended: false).map(\.id),
                        ["locate", "backtrack"])
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: false, ended: true).map(\.id), ["locate"],
@@ -54,13 +54,15 @@ final class LiveCalmTests: XCTestCase {
 
     func testToolsGridSectionsAndNothingLost() {
         let groups = LiveActionCatalog.groups(.init(guideAllTarget: "الوجهة", channels: true))
-        XCTAssertEqual(groups.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
+        XCTAssertEqual(groups.map(\.title), ["الطريق", "الربع", "السلامة", "المكان", "الخريطة"])
         let grid = Set(groups.flatMap(\.items).map(\.id))
-        XCTAssertLessThanOrEqual(grid.count, 15, "even with PTT channels and a leader navigation action, «المزيد» stays short")
+        /* UI-AUDIT م3: «ملاحة», «طريق الرجعة» and «أخفِ موقعي» moved in from the quick row (16 with channels). */
+        XCTAssertLessThanOrEqual(grid.count, 16, "even with PTT channels, «المزيد» stays short")
         XCTAssertEqual(groups.first { $0.title == "السلامة" }?.items.map(\.title), ["غرّزت", "اتصل بإنجاد", "مؤقت الرجوع"])
         /* What left the grid is still reachable: the quick row, «الطبقات», the settings. */
-        let quick: Set<String> = ["navigate", "chat", "rally", "backtrack"]
+        let quick: Set<String> = ["chat", "rally"]
         XCTAssertTrue(quick.isSubset(of: LiveActionCatalog.inQuickRow))
+        XCTAssertTrue(grid.isSuperset(of: ["navigate", "backtrack"]), "the quick row's old buttons are tiles now")
         XCTAssertTrue(grid.isDisjoint(with: ["hires", "realistic", "effects", "radio", "youtube"]), "duplicates of «الطبقات» / settings are gone")
         XCTAssertTrue(grid.isSuperset(of: ["channels", "fit", "enjad", "convoy", "timer", "locationTools", "search", "note", "stuck",
                                            "nearest", "weatherTools", "explore", "route", "invite"]))

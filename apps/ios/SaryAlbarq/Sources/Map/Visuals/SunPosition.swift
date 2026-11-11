@@ -64,6 +64,45 @@ struct HillshadeLight: Equatable {
     static let nightDirection = 315.0
 
     static func from(_ sun: SunPosition, satellite: Bool) -> HillshadeLight {
+        let l = unveiled(sun, satellite: satellite)
+        return satellite ? l.overImagery : l
+    }
+
+    /// Over the satellite photo the shade is a veil on a picture that already has its own light:
+    /// Build 36 painted whole sun-facing slopes cream (highlight up to 58 %) and the others
+    /// brown, so neighbouring areas of the same desert read as different colours. Lighter here.
+    var overImagery: HillshadeLight {
+        var l = self
+        l.shadow.a *= 0.75
+        l.highlight.a *= 0.5
+        l.accent.a *= 0.6
+        return l
+    }
+
+    /// Over the satellite imagery the shade only helps from afar: the DEM (~30 m, tiles to z14,
+    /// the broad pass to z11) is coarser than the photo from z13, and over-zoomed it shades flat
+    /// facets and tile-shaped patches that are not on the ground. So over satellite it fades out
+    /// by z15 (z13.5 for the broad pass); on the vector maps it stays as before.
+    static let satelliteFadeEnd = 15.0
+    static let satelliteBroadFadeEnd = 13.5
+
+    /// `hillshade-exaggeration` of the detail pass (crisper as you come closer).
+    static func detailExaggeration(_ ex: Double, satellite: Bool) -> [Any] {
+        if satellite {
+            return ["interpolate", ["linear"], ["zoom"], 9.0, ex * 0.6, 12.0, ex, 13.5, ex * 0.5, satelliteFadeEnd, 0.0]
+        }
+        return ["interpolate", ["linear"], ["zoom"], 9.0, ex * 0.6, 12.0, ex, 15.0, min(1, ex * 1.12)]
+    }
+
+    /// `hillshade-exaggeration` of the broad pass (the big dune forms).
+    static func broadExaggeration(_ ex: Double, satellite: Bool) -> [Any] {
+        if satellite {
+            return ["interpolate", ["linear"], ["zoom"], 8.0, ex, 11.5, ex * 0.8, satelliteBroadFadeEnd, 0.0]
+        }
+        return ["interpolate", ["linear"], ["zoom"], 8.0, ex, 15.0, ex * 0.75]
+    }
+
+    private static func unveiled(_ sun: SunPosition, satellite: Bool) -> HillshadeLight {
         /* Imagery already carries its own shadows: keep ours a little lighter over satellite. */
         let k = satellite ? 0.9 : 1.0
         let a = sun.altitudeDeg

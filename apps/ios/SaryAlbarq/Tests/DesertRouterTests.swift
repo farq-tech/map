@@ -107,6 +107,111 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertNil(DesertGrid.covering(LngLat(lng: 46.67, lat: 24.71), LngLat(lng: 41.5, lat: 28.5)))
     }
 
+    func testGroundEffortSwitchMatchesTheTable() {
+        for g in [DesertGrid.Ground.firm, .sand, .crest, .sabkha, .wadi, .forbidden, .rock] {
+            XCTAssertEqual(DesertRouter.groundEffortValue(g), DesertRouter.groundEffort[g] ?? 1, "\(g)")
+        }
+    }
+
+    /// Perf pass: the A* keeps the orthogonal results for the diagonal corner test and reads the
+    /// ground effort without a dictionary. Every path must be exactly the old router's.
+    func testOptimisedAStarFindsExactlyTheOldPaths() {
+        var g = DesertGrid(rows: 48, cols: 52, ground: .sand)
+        /* Deterministic mixed terrain: every ground, tracks, roads, big wadis, ridges, slopes. */
+        var x: UInt64 = 0x9E37_79B9_7F4A_7C15
+        func next() -> UInt64 { x ^= x << 13; x ^= x >> 7; x ^= x << 17; return x }
+        let grounds: [DesertGrid.Ground] = [.firm, .sand, .sand, .crest, .sabkha, .wadi, .rock, .forbidden, .firm, .sand]
+        for i in 0..<(g.rows * g.cols) {
+            let v = next()
+            var cell = grounds[Int(v % UInt64(grounds.count))].rawValue
+            if v % 17 == 0 { cell = DesertGrid.Ground.sand.rawValue | DesertGrid.track }
+            if v % 41 == 0 { cell = DesertGrid.Ground.firm.rawValue | DesertGrid.road }
+            if v % 23 == 0 { cell = DesertGrid.Ground.wadi.rawValue | DesertGrid.bigWadi }
+            g.cell[i] = cell
+            g.ridge[i] = v % 3 == 0 ? 255 : UInt8((v >> 8) % 180)
+            g.elev[i] = 500 + Float((v >> 16) % 40)
+        }
+        let pairs = [(2 * 52 + 3, 45 * 52 + 48), (40 * 52 + 1, 3 * 52 + 50), (24 * 52 + 0, 24 * 52 + 51), (0, 47 * 52 + 51)]
+        var found = 0
+        for (a, b) in pairs {
+            for mode in DesertRouter.Mode.allCases {
+                for rain in [false, true] {
+                    let new = DesertRouter.route(g, from: a, to: b, mode: mode, rain: rain)
+                    let old = Self.referenceRoute(g, from: a, to: b, mode: mode, rain: rain)
+                    XCTAssertEqual(new, old, "\(a)→\(b) \(mode) rain=\(rain)")
+                    if new != nil { found += 1 }
+                }
+            }
+        }
+        XCTAssertGreaterThan(found, 0, "the terrain must leave some routes to compare")
+    }
+
+    /// The A* exactly as it was before the perf pass (dictionary corner lookups, recomputed moves).
+    private static func referenceRoute(_ g: DesertGrid, from a: Int, to b: Int, mode: DesertRouter.Mode, rain: Bool) -> [Int]? {
+        let n = g.rows * g.cols
+        guard a >= 0, a < n, b >= 0, b < n else { return nil }
+        func isBlocked(_ i: Int) -> Bool {
+            let flags = g.cell[i] & 0xF0
+            return g.ground(i) == .forbidden || (rain && flags & DesertGrid.bigWadi != 0 && flags & DesertGrid.road == 0)
+        }
+        let startsInBlockedCell = isBlocked(a)
+        guard !isBlocked(b) else { return nil }
+        var best = [Double](repeating: .infinity, count: n)
+        var prev = [Int32](repeating: -1, count: n)
+        let floor: Double
+        switch mode {
+        case .short: floor = 1
+        case .balanced: floor = min(DesertRouter.trackEffort, DesertRouter.roadEffort).squareRoot()
+        case .easy: floor = min(DesertRouter.trackEffort, DesertRouter.roadEffort)
+        }
+        let br = b / g.cols, bc = b % g.cols
+        func h(_ i: Int) -> Double { floor * hypot(Double(i / g.cols - br) * g.dy, Double(i % g.cols - bc) * g.dx) }
+        var heap = MinHeap()
+        best[a] = 0
+        heap.push(h(a), a)
+        let nb: [(Int, Int)] = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+        let geo = nb.map { (dr, dc) -> (Int, Int, Double, Double) in
+            let d = hypot(Double(dr) * g.dy, Double(dc) * g.dx)
+            let bearing = (atan2(Double(dc) * g.dx, Double(-dr) * g.dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+            return (dr, dc, d, bearing)
+        }
+        let geoByDelta = Dictionary(uniqueKeysWithValues: geo.map { ($0.0 * 3 + $0.1, ($0.2, $0.3)) })
+        func canMove(from i: Int, to j: Int, distance: Double, bearing: Double) -> Double? {
+            let grade = Double(g.elev[j] - g.elev[i]) / distance
+            return DesertRouter.effort(ground: g.ground(j), flags: g.cell[j] & 0xF0, ridge: g.ridge[j], bearing: bearing, grade: grade, rain: rain).0
+        }
+        while let top = heap.pop() {
+            let (f, i) = top
+            if i == b {
+                var path = [b], k = b
+                while prev[k] >= 0 { k = Int(prev[k]); path.append(k) }
+                return path.reversed()
+            }
+            let gi = best[i]
+            if f - h(i) > gi + 1e-6 { continue }
+            let r = i / g.cols, c = i % g.cols
+            for (dr, dc, d, bearing) in geo {
+                let rr = r + dr, cc = c + dc
+                guard rr >= 0, rr < g.rows, cc >= 0, cc < g.cols else { continue }
+                let j = rr * g.cols + cc
+                if dr != 0 && dc != 0 && !(i == a && startsInBlockedCell) {
+                    guard let (hd, hb) = geoByDelta[dc], let (vd, vb) = geoByDelta[dr * 3] else { continue }
+                    let hp = canMove(from: i, to: r * g.cols + cc, distance: hd, bearing: hb) != nil
+                    let vp = canMove(from: i, to: rr * g.cols + c, distance: vd, bearing: vb) != nil
+                    guard hp || vp else { continue }
+                }
+                guard let e = canMove(from: i, to: j, distance: d, bearing: bearing) else { continue }
+                let ng = gi + DesertRouter.stepCost(mode, effort: e, dist: d)
+                if ng < best[j] {
+                    best[j] = ng
+                    prev[j] = Int32(i)
+                    heap.push(ng + h(j), j)
+                }
+            }
+        }
+        return nil
+    }
+
     func testHeap() {
         var h = MinHeap()
         for v in [5, 1, 4, 2, 3] { h.push(Double(v), v) }
@@ -171,7 +276,7 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertTrue(route.via?.contains("درب بري محسوب") == true,
                       "a nearby router snap must not degrade to a street-only route")
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved })
-        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain })
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain || $0.kind == .rough })
         let snap = try XCTUnwrap(route.surfaceRuns.first { $0.kind == .gridSnap },
                                  "the unsourced road-to-grid connector must be identified as an approximate snap")
         let pavedEnd = try XCTUnwrap(route.surfaceRuns.last(where: { $0.kind == .paved })?.coordinates.last,
@@ -343,7 +448,7 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertGreaterThan(route.distanceM, Vehicle.distanceMeters(origin, target))
         XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.end!, target), max(130, hypot(grid.dx, grid.dy) * 1.5))
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved }, "preserve the city-road approach")
-        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .terrain || $0.kind == .unpaved }, "continue over a classified desert surface")
+        XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .terrain || $0.kind == .rough || $0.kind == .unpaved }, "continue over a classified desert surface")
         XCTAssertGreaterThanOrEqual(route.timingProfile?.count ?? 0, 2, "keep separate road and off-road ETA legs")
     }
 
@@ -749,5 +854,38 @@ private final class ConcurrencyProbeProvider: NavRoutingProvider {
         try? await Task.sleep(nanoseconds: 100_000_000)
         await probe.leave()
         return try handler(request)
+    }
+}
+
+/// Route surfaces read as three materials: asphalt, dirt track, open terrain and rough ground.
+final class NavSurfaceStyleTests: XCTestCase {
+    func testRoughGroundIsCrestRockSabkhaWadi() {
+        for g in [DesertGrid.Ground.crest, .rock, .sabkha, .wadi] { XCTAssertTrue(DesertAwareRouteProvider.isRough(g), "\(g)") }
+        for g in [DesertGrid.Ground.firm, .sand, .forbidden] { XCTAssertFalse(DesertAwareRouteProvider.isRough(g), "\(g)") }
+    }
+
+    func testLegendSumsEachSurfaceAndSkipsTheApproximateJoin() {
+        let a = LngLat(lng: 46.60, lat: 25.10), b = LngLat(lng: 46.61, lat: 25.10)
+        let c = LngLat(lng: 46.62, lat: 25.10), d = LngLat(lng: 46.63, lat: 25.10)
+        let runs = [NavSurfaceRun(kind: .paved, coordinates: [a, b]),
+                    NavSurfaceRun(kind: .gridSnap, coordinates: [b, c]),
+                    NavSurfaceRun(kind: .rough, coordinates: [c, d]),
+                    NavSurfaceRun(kind: .paved, coordinates: [d, LngLat(lng: 46.64, lat: 25.10)])]
+        let rows = NavSurfaceLegend.rows(runs)
+        XCTAssertEqual(rows.map(\.kind), [.paved, .rough])
+        XCTAssertEqual(rows[0].meters, 2 * Vehicle.distanceMeters(a, b), accuracy: 5)
+        XCTAssertTrue(NavSurfaceLegend.shows(runs))
+        XCTAssertFalse(NavSurfaceLegend.shows([NavSurfaceRun(kind: .paved, coordinates: [a, b])]), "all asphalt: no legend")
+        XCTAssertEqual(NavSurfaceLegend.label(.unpaved), "ترابي")
+        XCTAssertEqual(NavSurfaceLegend.label(.rough), "وعر")
+    }
+
+    func testEachSurfaceHasItsOwnMapLayers() {
+        for id in ["sary-nav-dirt", "sary-nav-dirt-ruts", "sary-nav-terrain", "sary-nav-rough", "sary-nav-rough-ticks"] {
+            XCTAssertTrue(NavMapDrawer.layerIds.contains(id), id)
+        }
+        XCTAssertEqual(NavMapDrawer.SurfaceStyle.dirt, "#D6A15A")
+        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.dirt, NavMapDrawer.SurfaceStyle.terrain)
+        XCTAssertNotEqual(NavMapDrawer.SurfaceStyle.terrain, NavMapDrawer.SurfaceStyle.rough)
     }
 }

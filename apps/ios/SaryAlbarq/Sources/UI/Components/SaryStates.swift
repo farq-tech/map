@@ -122,7 +122,15 @@ struct SaryBanner: View {
             Text(text).saryText(.footnote, weight: .bold).multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(tone == .warning ? p.warningText : (tone == .error ? p.emergencyText : c))
+        .foregroundStyle({ () -> Color in
+            switch tone {
+            case .info: return c
+            /* Text tones keep ≥ 4.5:1; the fills above are only for the tinted background. */
+            case .success: return p.liveText
+            case .warning: return p.warningText
+            case .error: return p.emergencyText
+            }
+        }())
         .padding(.horizontal, theme.space(.m))
         .padding(.vertical, theme.space(.s))
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(c.opacity(0.14)))

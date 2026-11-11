@@ -120,7 +120,7 @@ struct ParticipantUI: Equatable, Identifiable {
     /// This member is the one distances are measured from («القائد»).
     var isConvoyLeader: Bool = false
     /// «أمير الرحلة» or «المقدمة»: what the reference is called on the rows.
-    var leaderTitle: String = "أمير الرحلة"
+    var leaderTitle: String = "أمير الطلعة"
     /// Live and standing still since (≤ 3 km/h), from this phone's watch; nil while moving / not live.
     var stoppedSince: Date? = nil
     /// «دعوة شخصية»: their own name, shown secondarily beside the name the leader gave them.
@@ -132,7 +132,7 @@ struct ParticipantUI: Equatable, Identifiable {
     var roleLabel: String? {
         var parts: [String] = []
         switch role {
-        case .leader: parts.append("أمير الرحلة")
+        case .leader: parts.append("أمير الطلعة")
         case .coLeader: parts.append("نائب الأمير")
         case .member: break
         }

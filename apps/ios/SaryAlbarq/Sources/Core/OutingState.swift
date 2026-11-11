@@ -281,34 +281,26 @@ struct OutingView: Equatable {
     var colors: [String: UInt32] { CarColors.assign(Array(members.values)) }
 }
 
-/// Arabic display formatting (Arabic-Indic digits, as `toLocaleString("ar-SA")`).
+/// Arabic display formatting for Core / CarPlay callers. A thin shim over
+/// `SaryFormat` so every screen (phone, CarPlay, notifications) shows the same
+/// digits, rounding and units (the «وحدات المسافة» miles setting included).
 enum ArabicFormat {
-    private static let nf: NumberFormatter = {
-        let f = NumberFormatter()
-        f.locale = Locale(identifier: "ar-SA")
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 1
-        return f
-    }()
-
-    static func number(_ v: Double) -> String { nf.string(from: NSNumber(value: v)) ?? String(v) }
-
-    static func distance(_ m: Double) -> String {
-        if m < 1000 {
-            let v = max(10, (m / 10).rounded() * 10)
-            return "\(number(v)) م"
-        }
-        let km = m < 10_000 ? (m / 100).rounded() / 10 : (m / 1000).rounded()
-        return "\(number(km)) كم"
+    /// 3 → «٣», 2.34 → «٢٫٣» (at most one decimal, no thousands separator).
+    static func number(_ v: Double) -> String {
+        guard v.isFinite, abs(v) < 1e15 else { return SaryFormat.digits(String(v)) }
+        let one = (v * 10).rounded() / 10
+        if one == one.rounded() { return SaryFormat.number(Int(one)) }
+        return SaryFormat.digits(String(format: "%.1f", one))
     }
 
+    /// Same as the phone: `SaryFormat.distance(meters:)`.
+    static func distance(_ m: Double) -> String { SaryFormat.distance(meters: m) }
+
+    /// Age of a fix in milliseconds: «الآن» under a minute, then «قبل ٤ د» / «قبل ٢ س» / «قبل ٣ ي»
+    /// (`SaryFormat.elapsed`).
     static func ago(_ ms: Double) -> String {
-        let s = max(0, (ms / 1000).rounded())
-        if s < 10 { return "الآن" }
-        if s < 60 { return "قبل \(number(s)) ث" }
-        let m = (s / 60).rounded()
-        if m < 60 { return "قبل \(number(m)) د" }
-        return "قبل \(number((m / 60).rounded())) س"
+        let s = ms.isFinite ? max(0, ms / 1000) : 0
+        return SaryFormat.elapsed(since: Date(timeIntervalSince1970: 0), now: Date(timeIntervalSince1970: s))
     }
 
     static func freshnessLabel(_ f: Policy.Freshness) -> String {

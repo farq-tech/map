@@ -17,7 +17,7 @@ enum SheetDetentUI: Equatable, CaseIterable {
 }
 
 enum LiveTabUI: Equatable, CaseIterable, Hashable {
-    /// Lovable: «الخريطة» · «العيال» · «الرحلة» in the sheet; «المزيد» (the settings) behind the
+    /// Lovable: «الخريطة» · «الربع» · «الطلعة» in the sheet; «المزيد» (the settings) behind the
     /// header's gear.
     case trip, group, more, map
 
@@ -27,8 +27,8 @@ enum LiveTabUI: Equatable, CaseIterable, Hashable {
     var label: String {
         switch self {
         case .map: return "الخريطة"
-        case .trip: return "الرحلة"
-        case .group: return "العيال"
+        case .trip: return "الطلعة"
+        case .group: return "الربع"
         case .more: return "الإعدادات"
         }
     }
@@ -53,7 +53,7 @@ enum LiveWarningUI: Equatable, Hashable {
         case .weakGPS: return "إشارة الموقع ضعيفة"
         case .noInternet: return "بلا إنترنت · نرسل موقعك أول ما يرجع الاتصال"
         case .keepScreenOn: return "تتوقف المشاركة إذا قفلت الشاشة · اختر «دائمًا»"
-        case .locationOff: return "موقعك مو ظاهر للعيال · افتح الإعدادات"
+        case .locationOff: return "موقعك مو ظاهر للربع · افتح الإعدادات"
         case .preciseOff: return "فعّل الموقع الدقيق · مسارك تقريبي الآن"
         }
     }
@@ -72,7 +72,7 @@ enum ShareBackgroundHint: Equatable {
 
     var text: String {
         switch self {
-        case .denied: return "ما سمحت بالموقع، فأعضاء الطلعة ما يشوفونك. افتح الإعدادات ← الموقع ← «أثناء الاستخدام»."
+        case .denied: return "ما سمحت بالموقع، فالربع ما يشوفونك. افتح الإعدادات ← الموقع ← «أثناء الاستخدام»."
         case .needsAlways: return "تتوقف المشاركة إذا قفلت الشاشة. اختر «دائمًا» من الإعدادات لتستمر."
         case .dontForceQuit: return "تستمر والشاشة مقفلة. لا تقفل التطبيق من قائمة التطبيقات أثناء الطلعة."
         case .lowPower: return "وضع توفير الطاقة: تستمر والشاشة مقفلة، لكن أقل تكرارًا (كل ٣٠ ثانية تقريبًا)."

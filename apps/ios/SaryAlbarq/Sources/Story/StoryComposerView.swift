@@ -28,11 +28,11 @@ struct StoryComposerView: View {
             previewCard
             SarySegmented(options: StoryFormat.allCases, selection: $options.format, label: \.label,
                           systemImage: { $0 == .vertical ? "rectangle.portrait" : "square" }, id: "story.format")
-            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد العيال بدل أسمائهم.") {
+            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد الربع بدل أسمائهم.") {
                 SaryToggleRow(title: "أظهر نقطة البداية", subtitle: "يظهر المسار كاملًا من أول نقطة لآخر نقطة",
                               systemImage: "mappin.and.ellipse", isOn: $options.showStartEnd, id: "story.showStart")
                 SaryDivider()
-                SaryToggleRow(title: "أظهر أسماء العيال", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
+                SaryToggleRow(title: "أظهر أسماء الربع", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
                               systemImage: "person.2.fill", isOn: $options.showNames, id: "story.showNames")
             }
             SarySection(title: "صور من الطلعة", footer: "حتى ٣ صور التُقطت وقت الطلعة. تُرسم داخل القصة فقط وتبقى على جوالك، ولا يدخل القصة موقع الصورة ولا بياناتها.") {
@@ -42,7 +42,7 @@ struct StoryComposerView: View {
                         Text(photos.isEmpty ? "أضف صورًا" : "غيّر الصور (\(SaryFormat.number(photos.count)))")
                             .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                         Spacer()
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
                     }
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())
@@ -137,9 +137,17 @@ struct StoryComposerView: View {
         var outside = 0, undated = 0
         for item in picks {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            switch StoryPhotoReader.check(data, window: facts.photoWindow) {
+            /* Reading EXIF and decoding + downscaling a 12 MP photo (ImageIO) took the main thread
+             * for each pick; it runs off it now. */
+            let window = facts.photoWindow
+            let read = await Task.detached(priority: .userInitiated) { () -> (StoryPhotoReader.Outcome, UIImage?) in
+                let outcome = StoryPhotoReader.check(data, window: window)
+                guard case .ok = outcome else { return (outcome, nil) }
+                return (outcome, StoryPhotoReader.image(data))
+            }.value
+            switch read.0 {
             case .ok(let d):
-                if let img = StoryPhotoReader.image(data) { out.append(StoryPhoto(image: img, takenAt: d)) }
+                if let img = read.1 { out.append(StoryPhoto(image: img, takenAt: d)) }
             case .outsideWindow: outside += 1
             case .noDate, .unreadable: undated += 1
             }

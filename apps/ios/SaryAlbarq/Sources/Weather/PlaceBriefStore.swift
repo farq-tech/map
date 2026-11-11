@@ -173,8 +173,12 @@ final class PlaceBriefModel: ObservableObject {
         do {
             let w = try await provider.fetch(a, now: clock())
             limiter.end(a, failed: false, now: clock())
-            cache.save(w)
-            cache.prune(now: clock())
+            /* Encoding, the write and the prune (which reads every cached cell) stay off the main thread. */
+            let pruneAt = clock()
+            await Task.detached(priority: .utility) { [cache] in
+                cache.save(w)
+                cache.prune(now: pruneAt)
+            }.value
             guard area == a else { return }
             weather = w
             failure = nil

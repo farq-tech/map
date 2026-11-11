@@ -104,6 +104,34 @@ final class LivePresenterTests: XCTestCase {
         XCTAssertEqual(LiveOutingPresenter.sos(i).mine, .sending)
     }
 
+    /// UI-AUDIT 0.1: the full-screen alert is the newest unacknowledged SOS, and a NEW one clears
+    /// the sheets / settings over the map (the same one staying up does not, again and again).
+    func testFriendSOSFullScreenAndClearsTheScreenOnce() {
+        let older = SosInfo(at: iso(120), fix: nil)
+        let newer = SosInfo(at: iso(30), fix: nil)
+        let v = view(members: [member("me", "أنا", role: "owner", joined: 0),
+                               member("a", "فهد", joined: 1, sos: older), member("b", "سعد", joined: 2, sos: newer)], positions: [])
+        var i = base(v)
+        let first = LiveOutingPresenter.fullScreenSOS(LiveOutingPresenter.sos(i))
+        XCTAssertEqual(first?.participantId, "b", "the newest first")
+        XCTAssertTrue(LiveOutingPresenter.sosClearsScreen(current: first?.id, previous: nil), "arrives: sheets close")
+        XCTAssertFalse(LiveOutingPresenter.sosClearsScreen(current: first?.id, previous: first?.id), "still up: leave the screen alone")
+        i.acknowledgedSOS = [first!.id]
+        let second = LiveOutingPresenter.fullScreenSOS(LiveOutingPresenter.sos(i))
+        XCTAssertEqual(second?.participantId, "a", "acknowledged: the next one shows")
+        XCTAssertTrue(LiveOutingPresenter.sosClearsScreen(current: second?.id, previous: first?.id))
+        i.acknowledgedSOS.insert(second!.id)
+        XCTAssertNil(LiveOutingPresenter.fullScreenSOS(LiveOutingPresenter.sos(i)))
+        XCTAssertFalse(LiveOutingPresenter.sosClearsScreen(current: nil, previous: second?.id), "none left: nothing to clear")
+    }
+
+    /// UI-AUDIT 0.2: the leader's explainer at «ابدأ الطلعة» only when iOS has not asked and ours was never shown.
+    func testLeaderNotifyOfferAtStart() {
+        XCTAssertTrue(LiveOutingController.offersNotifyAtStart(explained: false, undecided: true))
+        XCTAssertFalse(LiveOutingController.offersNotifyAtStart(explained: true, undecided: true), "never twice")
+        XCTAssertFalse(LiveOutingController.offersNotifyAtStart(explained: false, undecided: false), "iOS already asked (allowed or refused)")
+    }
+
     func testRallyArrivedCountsOnlyLiveFixesNearby() {
         let rally = RallyInfo(lat: 24.7010, lng: 46.7000, label: "الطعس", set_at: nil, set_by: nil)
         let v = view(members: [member("me", "أنا", role: "owner", joined: 0), member("a", "فهد", joined: 1), member("b", "سعد", joined: 2)],

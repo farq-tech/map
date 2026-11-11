@@ -77,10 +77,10 @@ struct LiveSideButtons: View {
                             .saryGlass(Circle(), role: .chrome, interactive: true)
                             .overlay(alignment: .topTrailing) {
                                 if let b = item.badge, b > 0 {
-                                    Text(SaryFormat.number(b)).font(.sary(10, .heavy)).foregroundStyle(Color.white)
+                                    Text(SaryFormat.number(b)).font(.sary(10, .heavy)).foregroundStyle(p.onEmergency)
                                         .frame(minWidth: 17, minHeight: 17)
                                         .background(Circle().fill(p.emergency))
-                                        .offset(x: 3, y: -3)
+                                        .saryBadgeOutset(trailing: 3, top: 3)
                                 }
                             }
                     }
@@ -166,7 +166,7 @@ struct ConvoyLinePill: View {
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("القافلة: \(text)"))
-        .accessibilityHint(Text("يفتح الجماعة"))
+        .accessibilityHint(Text("يفتح الربع"))
         .accessibilityIdentifier("convoy.line")
     }
 }

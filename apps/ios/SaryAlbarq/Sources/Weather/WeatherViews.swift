@@ -74,7 +74,7 @@ struct WeatherCardView: View {
             Text(ui.title).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary).lineLimit(1)
             Spacer(minLength: 4)
             if tap != nil {
-                Image(systemName: "chevron.backward").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
             }
         }
     }
@@ -125,16 +125,25 @@ struct WeatherCardView: View {
         }
     }
 
+    /// When and where (Build 36 item 12): «تعذّر التحديث · آخر تحديث ٤:١٢ م (قبل ٣ د) · بيانات الطقس: Open-Meteo»,
+    /// then «نقطة التوقع على بعد ٢ كم منك».
     private var footer: some View {
         let p = theme.palette
-        return HStack(spacing: theme.space(.xs)) {
-            if ui.offline || ui.stale {
-                Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold))
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: theme.space(.xs)) {
+                if ui.offline || ui.stale {
+                    Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold))
+                }
+                Text(footerText).saryNumber(.caption, weight: ui.stale || ui.offline ? .bold : .regular).lineLimit(2)
             }
-            Text(footerText).saryNumber(.caption, weight: ui.stale || ui.offline ? .bold : .regular).lineLimit(2)
+            .foregroundStyle(ui.stale || ui.offline ? p.warningText : p.textTertiary)
+            .accessibilityIdentifier("weather.updated")
+            if let point = ui.forecastPoint {
+                Label(point, systemImage: "scope")
+                    .saryNumber(.caption).foregroundStyle(p.textTertiary).lineLimit(2)
+                    .accessibilityIdentifier("weather.forecastPoint")
+            }
         }
-        .foregroundStyle(ui.stale || ui.offline ? p.warningText : p.textTertiary)
-        .accessibilityIdentifier("weather.updated")
     }
 
     private var footerText: String {
@@ -322,7 +331,7 @@ struct WeatherSheet: View {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 Label(weather.wadiStatus, systemImage: "water.waves").saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن أعضاء الطلعة ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
+                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن الربع ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.vertical, theme.space(.s))
@@ -351,7 +360,8 @@ struct WeatherPointSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     WeatherCardView(ui: WeatherPresenter.card(title: point.name.isEmpty ? "الطقس هنا" : "الطقس في \(point.name)", report: store.report,
-                                                              refreshing: store.refreshing, failed: store.lastFailed, now: Date(), hours: 24))
+                                                              refreshing: store.refreshing, failed: store.lastFailed, now: Date(), hours: 24,
+                                                              reference: WeatherReference(point: Geo.LatLng(lat: point.lat, lng: point.lng), label: "من النقطة")))
                     Link(destination: NCM.url) { SaryButtonLabel(title: "التحذيرات الرسمية: \(NCM.name)", systemImage: "exclamationmark.shield.fill") }
                         .buttonStyle(.sary(.secondary))
                     Text("نرسل لـOpen-Meteo إحداثيات هذه النقطة فقط، بلا اسمك أو حسابك أو موقعك.")

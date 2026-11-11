@@ -3,7 +3,7 @@ import XCTest
 
 /// «رحلة كاملة» end to end on the demo outing: a simulated drive from 2 km out to the
 /// destination («روضة الثمامة») → the progress grows → parked inside 150 m for 30 s →
-/// «وصلت 🎉» → the leader «أنهِ الرحلة» → «ملخص الرحلة» with the trip section.
+/// «وصلت 🎉» → the leader «أنهِ الطلعة» («المزيد» → «الطلعة») → «اعرض الملخص» with the trip section.
 /// (The screenshots in the PR were taken with `xcrun simctl location … start` over the same path.)
 final class TripUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -79,17 +79,23 @@ final class TripUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["trip.arrivalOrder"].exists, "who arrived first")
         attach(app, "arrived")
 
-        /* The demo me leads: «أنهِ الرحلة» → confirm. */
-        let end = app.buttons["trip.end"]
-        XCTAssertTrue(end.waitForExistence(timeout: 5))
-        end.tap()
-        let confirm = app.buttons["أنهِ الطلعة للجميع"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        confirm.tap()
+        /* UI-AUDIT م3: the trip card never ends the outing; the demo me owns it: «المزيد» → «الطلعة» →
+         * «أنهِ الطلعة» → «أنهِها». */
+        XCTAssertFalse(app.buttons["trip.end"].exists, "no end button on the trip card")
+        app.descendants(matching: .any)["panel.close"].firstMatch.tap()
+        XCTAssertTrue(app.endOutingFromMore(), "«تنهي الطلعة للكل؟» → «أنهِها»")
 
-        let summary = app.buttons["trip.summary"]
-        XCTAssertTrue(summary.waitForExistence(timeout: 10), "«ملخص الرحلة» once it ended")
-        XCTAssertTrue(app.buttons["trip.return"].exists, "«طريق الرجعة» as a new trip")
+        let summary = app.buttons["live.ended.summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 10), "«اعرض الملخص» once it ended")
+        XCTAssertFalse(app.buttons["trip.summary"].exists, "the summary is offered once")
+        /* The ended screen leaves the sheet open, so «طلعة الرجعة» is already in it: the handle toggles, so
+         * tap it only when the sheet is folded (a tap on an open sheet would fold it and hide the button). */
+        if !app.buttons["trip.return"].waitForExistence(timeout: 3) {
+            app.descendants(matching: .any)["outing-sheet-summary"].firstMatch.tap()
+        }
+        XCTAssertTrue(app.buttons["trip.return"].waitForExistence(timeout: 5), "«طلعة الرجعة» as a new outing")
+        XCTAssertTrue(app.buttons["trip.return"].label.contains("طلعة الرجعة"), app.buttons["trip.return"].label)
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
         summary.tap()
         let trip = app.descendants(matching: .any)["summary.trip"]
         XCTAssertTrue(trip.waitForExistence(timeout: 15), "the trip section in the summary")
@@ -99,11 +105,16 @@ final class TripUITests: XCTestCase {
     func testLeaderCanEndOutingWhileItIsStillUnderway() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-demoSharing", "-SaryWeatherDemo", "calm",
-                               "-SaryScheme", "light", "-SaryDrive", "0", "-SaryLiveSheet", "peek"]
+                               "-SaryScheme", "light", "-SaryDrive", "0", "-SaryLiveSheet", "peek", "-SaryContext", "stopped"]
         app.launch()
 
-        let end = app.buttons["outing-end"]
-        XCTAssertTrue(end.waitForExistence(timeout: 20), "the owner can end the outing before arrival")
+        /* UI-AUDIT م3: no red flag on the map; «المزيد» → «الطلعة» → «أنهِ الطلعة» (the owner only). */
+        XCTAssertTrue(app.buttons["outing-actions"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["outing-end"].exists, "no end flag on the map")
+        app.buttons["outing-actions"].tap()
+        let end = app.descendants(matching: .any)["settings-end"].firstMatch
+        XCTAssertTrue(end.waitForExistence(timeout: 5), "the owner can end the outing before arrival")
+        for _ in 0..<8 where !end.isHittable { app.swipeUp(); usleep(500_000) }
         XCTAssertTrue(end.isHittable, "the end-outing action is reachable while the route is underway")
         let windowsBeforeConfirmation = app.windows.count
         end.tap()

@@ -285,6 +285,30 @@ final class TrailStoreTests: XCTestCase {
     func testFileNameCannotEscapeTheFolder() {
         XCTAssertEqual(TrailStore.fileName("../../etc/x"), "etcx.json")
     }
+
+    /// Saves leave the main thread (`TrailIO`), yet a read right after always sees the last one.
+    func testQueuedSavesAreReadInOrder() {
+        let f = TFix()
+        var tr = Trail()
+        for i in 0..<12 {
+            tr.add(f.fix(Double(i) * 50, t: Double(i) * 5))
+            TrailStore.save(tr, outingId: "o-q", in: dir)
+            TrailRawLog.append([RawFix(t: Double(i) * 1000, lat: 24.7, lng: 46.6, acc: 5, spd: nil, crs: nil)], outingId: "o-q", in: dir)
+        }
+        XCTAssertEqual(TrailStore.load("o-q", in: dir)?.points.count, tr.points.count)
+        XCTAssertEqual(TrailRawLog.load("o-q", in: dir).count, 12, "appends land in order, none lost")
+        TrailStore.save(tr, outingId: "o-q", in: dir)
+        TrailStore.delete("o-q", in: dir)
+        XCTAssertNil(TrailStore.load("o-q", in: dir), "a pending save never resurrects a deleted trail")
+        XCTAssertTrue(TrailRawLog.load("o-q", in: dir).isEmpty)
+    }
+
+    func testTrailIOIsReentrant() {
+        var ran = false
+        TrailIO.sync { TrailIO.sync { TrailIO.async { ran = true } } }
+        XCTAssertTrue(ran, "work started on the queue runs inline instead of deadlocking")
+        XCTAssertFalse(TrailIO.onQueue)
+    }
 }
 
 /// Counts every HTTP request the app makes while installed.
@@ -522,5 +546,45 @@ final class TrailSessionTests: XCTestCase {
         s2.clearTrail()
         XCTAssertTrue(s2.trail.isEmpty)
         XCTAssertNil(TrailStore.load("o1", in: dir))
+    }
+}
+
+/// `DisplayTrailMemo`: the composed trail is rebuilt only when the trail or the match cache changes.
+final class DisplayTrailMemoTests: XCTestCase {
+    private func pts(_ n: Int) -> [TrailPoint] {
+        (0..<n).map { TrailPoint(lat: 24.7 + Double($0) * 1e-4, lng: 46.6, t: 1_800_000_000_000 + Double($0) * 1000) }
+    }
+
+    func testUnchangedInputsComposeOnce() {
+        var memo = DisplayTrailMemo()
+        let p = pts(5)
+        let c = TrailMatchCache()
+        let a = memo.value(points: p, cache: c, compose: { pts, _ in pts.reversed() })
+        let b = memo.value(points: p, cache: c, compose: { pts, _ in pts.reversed() })
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a, Array(p.reversed()))
+        XCTAssertEqual(memo.composeCount, 1)
+    }
+
+    func testNewPointOrNewCacheComposesAgain() {
+        var memo = DisplayTrailMemo()
+        var p = pts(3)
+        _ = memo.value(points: p, cache: nil, compose: { pts, _ in pts })
+        p.append(pts(4)[3])
+        XCTAssertEqual(memo.value(points: p, cache: nil, compose: { pts, _ in pts }).count, 4)
+        XCTAssertEqual(memo.composeCount, 2)
+        var c = TrailMatchCache()
+        c.doneUpToT = 42
+        _ = memo.value(points: p, cache: c, compose: { pts, _ in pts })
+        XCTAssertEqual(memo.composeCount, 3)
+        /* Equal contents in another array still hit. */
+        _ = memo.value(points: p.map { $0 }, cache: c, compose: { pts, _ in pts })
+        XCTAssertEqual(memo.composeCount, 3)
+    }
+
+    func testMatchesComposeDirectly() {
+        var memo = DisplayTrailMemo()
+        let p = pts(6)
+        XCTAssertEqual(memo.value(points: p, cache: nil, compose: TrailDisplay.compose), TrailDisplay.compose(p, nil))
     }
 }

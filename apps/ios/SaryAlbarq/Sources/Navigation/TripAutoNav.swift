@@ -186,6 +186,16 @@ enum TripAutoNav {
         }
     }
 
+    /// «أوقف التوجيه» pauses the trip's guidance on this phone: when it is the trip's guidance being
+    /// stopped, and also when it is a person's own guidance («اتجه» to a station, «روح له») while the
+    /// trip's guidance is on — otherwise `decide` sees nothing running and starts the trip's guidance
+    /// again a second later: one action triggering another (owner's build 36 report, item 10).
+    /// Nothing to pause once arrived, or with nothing running.
+    static func stopPausesTrip(_ s: TripAutoNavState, navAuto: Bool, navPhase: NavPhase) -> Bool {
+        guard navPhase != .arrived, navPhase != .idle else { return false }
+        return navAuto || (s.active && !s.paused && !s.arrived)
+    }
+
     /// Guidance would start (or move on) right now if only my fix were fresh: the wait is shown
     /// («ننتظر موقعك…») instead of doing nothing in silence.
     static func waitsForFix(_ i: Input) -> Bool {
@@ -232,6 +242,10 @@ enum NavBroadcast {
         let n = text[r.upperBound...].trimmingCharacters(in: .whitespaces)
         return n.isEmpty ? nil : n
     }
+
+    /// «للكل؟» only means something with somebody else in the trip: alone (or with nobody
+    /// joined yet) the leader is simply guided, never asked (UI-AUDIT ١-هـ).
+    static func asksForAll(memberCount: Int) -> Bool { memberCount > 1 }
 
     /// May this sender start guidance for everyone? Verified on receipt, on every phone.
     static func mayBroadcast(senderId: String, ownerId: String, senderIsDeputy: Bool) -> Bool {

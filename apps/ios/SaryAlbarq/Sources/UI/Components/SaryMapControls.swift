@@ -75,7 +75,7 @@ struct SaryMapControlFace: View {
                     .frame(minWidth: 18, minHeight: 18)
                     .background(Capsule().fill(theme.palette.accent))
                     .overlay(Capsule().stroke(theme.palette.background, lineWidth: 1.5))
-                    .offset(x: 4, y: -4)
+                    .saryBadgeOutset(trailing: 4, top: 4)
                     .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             }
         }
@@ -158,7 +158,7 @@ extension SaryMapControlItem {
         [
             .init(id: "locate", systemImage: following ? SaryIcon.locateFollow : SaryIcon.locate,
                   label: "موقعي", accessibilityID: "outing-locate", isActive: following),
-            .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "المجموعة", accessibilityID: "outing-fit"),
+            .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "شوف الكل", accessibilityID: "outing-fit"),
             .init(id: "note", systemImage: SaryIcon.note, label: "رسالة", accessibilityID: "outing-note-open", badge: unreadNotes),
             .init(id: "nearest", systemImage: SaryIcon.nearest, label: "أقرب محطة", accessibilityID: "outing-nearest-open"),
             .init(id: "backtrack", systemImage: SaryIcon.backTrack, label: "طريق الرجعة", accessibilityID: "outing-backtrack", isActive: backTracking),

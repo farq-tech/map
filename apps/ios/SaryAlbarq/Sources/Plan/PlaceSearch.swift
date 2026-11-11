@@ -40,6 +40,67 @@ enum PlaceSearch {
             let parts = [altName, category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
             return parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
+
+        /// The result row's detail line WITHOUT the other-language name (that one has its own small
+        /// line, Build 36 item 11: Arabic and English mixed in one line): «مقهى · العليا، الرياض».
+        var rowDetail: String? {
+            let parts = [category, detail].compactMap { $0?.isEmpty == false ? $0 : nil }
+            return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        }
+
+        /// The name in the other language, shown small under the Arabic one; nil when the same.
+        var secondaryName: String? {
+            guard let a = altName?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty,
+                  PlaceSearch.normalize(a) != PlaceSearch.normalize(name) else { return nil }
+            return a
+        }
+
+        /// Metres from `me` as the rows show it: to the nearest edge for an area (sand sea), else to the point.
+        func meters(from me: LngLat?) -> Double? {
+            areaDistanceM ?? me.map { PlanGeo.meters($0, point) }
+        }
+    }
+
+    /// How a result list is ordered (the row of choices above it).
+    enum ListOrder: String, CaseIterable, Equatable, Hashable {
+        /// `rank`'s order: what you typed by name first, then near you, then the Kingdom.
+        case relevance
+        /// Nearest first.
+        case nearest
+        /// Grouped by kind («مقهى», «روضة»…), the kind with the nearest place first, nearest first inside.
+        case kind
+
+        var title: String {
+            switch self {
+            case .relevance: return "الأنسب"
+            case .nearest: return "الأقرب"
+            case .kind: return "حسب النوع"
+            }
+        }
+    }
+
+    /// The list in `order`. Stable: equal distances (and places with no distance, kept last) keep their
+    /// relevance order. Without a position only `.kind` changes anything (groups in relevance order).
+    static func ordered(_ places: [Place], by order: ListOrder, near: LngLat?) -> [Place] {
+        let indexed: [(i: Int, p: Place, d: Double)] = places.enumerated().map { (i: $0.offset, p: $0.element, d: $0.element.meters(from: near) ?? .infinity) }
+        func closer(_ a: (i: Int, p: Place, d: Double), _ b: (i: Int, p: Place, d: Double)) -> Bool {
+            a.d == b.d ? a.i < b.i : a.d < b.d
+        }
+        switch order {
+        case .relevance:
+            return places
+        case .nearest:
+            return indexed.sorted(by: closer).map { $0.p }
+        case .kind:
+            /* Places with no kind form one group, always last. */
+            var groups: [String: [(i: Int, p: Place, d: Double)]] = [:]
+            var none: [(i: Int, p: Place, d: Double)] = []
+            for x in indexed {
+                if let c = x.p.category?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { groups[c, default: []].append(x) } else { none.append(x) }
+            }
+            let sortedGroups = groups.values.map { $0.sorted(by: closer) }.sorted { a, b in closer(a[0], b[0]) }
+            return (sortedGroups.flatMap { $0 } + none.sorted(by: closer)).map { $0.p }
+        }
     }
 
     enum SearchError: Error, Equatable {
@@ -51,7 +112,7 @@ enum PlaceSearch {
             switch self {
             case .noToken: return "البحث عن الأماكن غير مفعّل في هذه النسخة. أدخل إحداثية بدلًا منه."
             case .network: return "لا يوجد اتصال بالإنترنت. تقدر تدخل إحداثية بدون إنترنت."
-            case .http: return "تعذّر البحث الآن. أعد المحاولة."
+            case .http: return "البحث متعطّل من طرفنا الحين. جرّب بعد شوي، أو اضغط مطوّلًا على الخريطة."
             }
         }
     }

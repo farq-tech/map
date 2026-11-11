@@ -63,7 +63,7 @@ struct SaryRallyCard: View {
                     SaryRallyGlyph(size: 40, muted: true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("ما فيه نقطة تجمع").saryText(.headline).foregroundStyle(p.textPrimary)
-                        Text(canManage ? "حدد مكانًا يتجمع عنده الكل" : "أمير الرحلة يقدر يحددها")
+                        Text(canManage ? "حدد مكانًا يتجمع عنده الكل" : "أمير الطلعة يقدر يحددها")
                             .saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,7 +80,7 @@ struct SaryRallyCard: View {
             Button("أزلها", role: .destructive, action: actions.rallyRemove)
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("بتختفي النقطة عند كل أعضاء الطلعة")
+            Text("بتختفي النقطة عند كل الربع")
         }
     }
 

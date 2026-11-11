@@ -89,7 +89,8 @@ struct SaryAvatar: View {
                     .frame(width: size * 0.42, height: size * 0.42)
                     .background(Circle().fill(theme.palette.surface))
                     .overlay(Circle().stroke(theme.palette.stale, lineWidth: 1.5))
-                    .offset(x: 2, y: 2)
+                    /* Outward on the trailing side in RTL and LTR alike (not `.offset(x:)`). */
+                    .padding(.trailing, -2).padding(.bottom, -2)
             }
         }
         .accessibilityHidden(true)
@@ -235,7 +236,7 @@ struct SaryRoleChip: View {
             HStack(spacing: 3) {
                 Image(systemName: role == .leader ? SaryIcon.crown : SaryIcon.shield)
                     .font(.system(size: 9, weight: .bold))
-                Text(role == .leader ? "أمير الرحلة" : "نائب الأمير").saryText(.micro)
+                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro)
             }
             .foregroundStyle(theme.palette.accentText)
             .padding(.horizontal, 6)

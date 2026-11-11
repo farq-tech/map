@@ -93,13 +93,9 @@ final class DeclutterShotsUITests: XCTestCase {
 
     func test5Ended() {
         let app = launch(["-SaryContext", "stopped", "-SaryTrip", "arrived", "-SarySheetHalf"])
-        let end = app.buttons["trip.end"]
-        guard end.waitForExistence(timeout: 30) else { return XCTFail("trip.end") }
-        end.tap()
-        let confirm = app.buttons["أنهِ الطلعة للجميع"]
-        guard confirm.waitForExistence(timeout: 5) else { return XCTFail("confirm") }
-        confirm.tap()
-        _ = app.buttons["trip.summary"].waitForExistence(timeout: 10)
+        guard app.buttons["outing-actions"].waitForExistence(timeout: 30) else { return XCTFail("outing-actions") }
+        guard app.endOutingFromMore() else { return XCTFail("end from «المزيد»") }
+        _ = app.buttons["trip.return"].waitForExistence(timeout: 10)
         let summary = app.descendants(matching: .any)["outing-sheet-summary"]
         if summary.waitForExistence(timeout: 5) { summary.tap() }
         sleep(3)

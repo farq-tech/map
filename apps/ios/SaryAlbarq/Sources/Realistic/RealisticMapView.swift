@@ -134,13 +134,9 @@ struct RealisticMapView: View {
 
     private var header: some View {
         HStack(spacing: theme.space(.s)) {
-            Button(action: { stopDrone(); close() }) {
-                Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).frame(width: 44, height: 44)
-            }
-            .foregroundStyle(.white)
-            .saryGlass(Circle(), role: .control, interactive: true)
-            .accessibilityLabel(Text("أغلق الوضع الواقعي"))
-            .accessibilityIdentifier("realistic-close")
+            /* The imagery is always dark: the glyph stays white like the rest of this header. */
+            SaryIconButton(systemImage: SaryIcon.close, label: "أغلق الوضع الواقعي", id: "realistic-close",
+                           visual: 44, surface: .glass, ink: .white) { stopDrone(); close() }
             VStack(alignment: .leading, spacing: 0) {
                 Text("الوضع الواقعي").saryText(.headline, weight: .bold).foregroundStyle(.white).lineLimit(1)
                 Text(scene.title).saryText(.caption).foregroundStyle(.white.opacity(0.8)).lineLimit(1)

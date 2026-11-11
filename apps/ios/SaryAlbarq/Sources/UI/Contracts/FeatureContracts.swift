@@ -23,7 +23,7 @@ struct ConvoyAlertUI: Equatable {
     /// Whole minutes stopped (unexpected stop).
     var minutes: Int? = nil
     /// «أمير الرحلة» or «المقدمة» (separation).
-    var leaderTitle = "أمير الرحلة"
+    var leaderTitle = "أمير الطلعة"
 
     var title: String {
         switch kind {
@@ -32,7 +32,7 @@ struct ConvoyAlertUI: Equatable {
         case .tailFar: return "المؤخرة بعيدة عن المقدمة"
         case .separated: return name == "أنت" ? "ابتعدت عن \(leaderTitle)" : "\(name) ابتعد عن \(leaderTitle)"
         case .unexpectedStop: return "\(name) وقف فجأة"
-        case .returnToRally: return "\(otherName ?? "أمير الرحلة"): ارجعوا لنقطة التجمع"
+        case .returnToRally: return "\(otherName ?? "أمير الطلعة"): ارجعوا لنقطة التجمع"
         }
     }
 
@@ -43,7 +43,7 @@ struct ConvoyAlertUI: Equatable {
         case .aheadOfLead: return "قدّام المقدمة بـ \(d)"
         case .tailFar: return "بين المقدمة والمؤخرة \(d)"
         case .separated: return "على بعد \(d) من \(otherName ?? leaderTitle)"
-        case .unexpectedStop: return "واقف منذ \(SaryFormat.number(minutes ?? 0)) د والمجموعة تتحرك"
+        case .unexpectedStop: return "واقف منذ \(SaryFormat.number(minutes ?? 0)) د والربع يتحركون"
         case .returnToRally: return meters >= 0 ? "نقطة التجمع على بعد \(d) (خط مستقيم)" : "اضغط «اتجه» للطريق والوقت المتوقع"
         }
     }

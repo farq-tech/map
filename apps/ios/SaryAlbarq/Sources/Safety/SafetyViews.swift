@@ -200,7 +200,7 @@ struct MyStuckStrip: View {
             if let enjad {
                 Button(action: enjad) {
                     Text("إنجاد").saryText(.callout, weight: .heavy)
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(p.onEmergency)
                         .padding(.horizontal, theme.space(.m))
                         .frame(minHeight: theme.minTarget)
                         .background(Capsule().fill(p.emergency))
@@ -290,7 +290,7 @@ struct SafetySection: View {
                 SaryRowIcon(systemImage: SafetyIcon.stuck, color: p.warning)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("غرّزت؟").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                    Text("ضغطة وحدة تنبّه العيال، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Text("ضغطة وحدة تنبّه الربع، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button { safety.askStuck() } label: { SaryButtonLabel(title: "غرّزت", busy: safety.stuckBusy) }
@@ -506,8 +506,8 @@ struct SafetyPrompts: View {
                     Button("إلغاء", role: .cancel) {}
                 } message: {
                     Text(safety.isSharingNow()
-                         ? "يوصل للعيال في الطلعة إنك غرّزت، ويشوفون مكانك على الخريطة."
-                         : "يوصل للعيال في الطلعة إنك غرّزت. موقعك غير مُشارَك، فما يشوفون مكانك إلا إذا شاركته.")
+                         ? "يوصل للربع في الطلعة إنك غرّزت، ويشوفون مكانك على الخريطة."
+                         : "يوصل للربع في الطلعة إنك غرّزت. موقعك غير مُشارَك، فما يشوفون مكانك إلا إذا شاركته.")
                 }
             Color.clear
                 .alert("تأخرت عن وقت الرجوع", isPresented: Binding(get: { settled && safety.overduePrompt }, set: { safety.overduePrompt = $0 })) {

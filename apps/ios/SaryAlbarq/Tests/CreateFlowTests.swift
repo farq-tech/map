@@ -61,6 +61,26 @@ final class CreateFlowStateTests: XCTestCase {
         XCTAssertNil(f.issue(now: t0))
     }
 
+    /// Quick mode («مين معك؟» from the home map) may go back and pick another place: the flow
+    /// returns to step ١ with the place and its suggested name kept, and a new choice replaces them.
+    func testQuickModeCanGoBackToChangeThePlace() {
+        var f = CreateFlowState(now: t0)
+        XCTAssertTrue(f.choose(thumama))
+        XCTAssertTrue(f.canGoBack, "«غيّر المكان» is offered in «مين معك؟» too")
+        f.back()
+        XCTAssertEqual(f.step, .destination)
+        let khuraim = OutingDestination(name: "روضة خريم", lat: 25.38, lng: 47.27)
+        XCTAssertTrue(f.choose(khuraim))
+        XCTAssertEqual(f.destination, khuraim)
+        XCTAssertEqual(f.step, .weather)
+    }
+
+    /// Offline the outing cannot be created (nothing is queued): the text says so, never «later».
+    func testOfflineTextIsHonest() {
+        XCTAssertEqual(CreateCopy.offline, "تحتاج إنترنت لإنشاء الطلعة.")
+        XCTAssertFalse(CreateCopy.offline.contains("أول ما يرجع"), "no promise to create it when the network is back")
+    }
+
     func testApproveSuppliesDefaultNameAndValidatesDeparture() {
         var f = CreateFlowState(now: t0)
         f.choose(OutingDestination(name: "", lat: 24.7, lng: 46.7))
@@ -351,5 +371,69 @@ final class LocalDestinationTests: XCTestCase {
         XCTAssertEqual(all.map(\.name), ["الثمامة مرة ثانية", "العارض"])
         for i in 0..<10 { RecentPlaces.add(OutingDestination(name: "\(i)", lat: 20 + Double(i), lng: 45), defaults: defaults) }
         XCTAssertEqual(RecentPlaces.load(defaults: defaults).count, RecentPlaces.max)
+    }
+}
+
+/// Build 36 report, item 8: «نجهّز الطلعة…» showed a spinner with no progress, no end and no retry.
+final class CreateProgressTests: XCTestCase {
+    private func ready() -> CreateFlowState {
+        var f = CreateFlowState(now: t0)
+        f.choose(thumama)
+        f.departure = t0.addingTimeInterval(3600)
+        return f
+    }
+
+    func testCreatingSaysWhatItWaitsOnWithSecondsThenSlow() {
+        var f = ready()
+        XCTAssertNil(f.waitingText(now: t0), "nothing runs: no line")
+        XCTAssertTrue(f.approve(now: t0))
+        XCTAssertEqual(f.stage, .outing)
+        XCTAssertEqual(f.waitingText(now: t0.addingTimeInterval(3)), "ننشئ الطلعة على الخادم… ٣ ث")
+        let slow = f.waitingText(now: t0.addingTimeInterval(12)) ?? ""
+        XCTAssertTrue(slow.hasPrefix("ننشئ الطلعة على الخادم…\n"), slow)
+        XCTAssertTrue(slow.hasSuffix("الشبكة بطيئة، ما زلنا نحاول · ١٢ ث"), slow)
+        f.advance(.destination)
+        XCTAssertEqual(f.waitingText(now: t0.addingTimeInterval(5)), "انحفظت الطلعة. نحفظ الوجهة فيها… ٥ ث")
+    }
+
+    func testFailureOffersRetryAndRetryClearsIt() {
+        var f = ready()
+        XCTAssertTrue(f.approve(now: t0))
+        f.createFailed("الشبكة بطيئة. أعد المحاولة.")
+        XCTAssertFalse(f.creating)
+        XCTAssertNil(f.stage)
+        XCTAssertEqual(f.failure, CreateFlowState.Failure(message: "الشبكة بطيئة. أعد المحاولة."))
+        XCTAssertEqual(f.error, "الشبكة بطيئة. أعد المحاولة.")
+        XCTAssertNil(f.waitingText(now: t0.addingTimeInterval(30)))
+        XCTAssertTrue(f.approve(now: t0.addingTimeInterval(40)), "the same button retries")
+        XCTAssertNil(f.failure)
+        XCTAssertEqual(f.waitingText(now: t0.addingTimeInterval(41)), "ننشئ الطلعة على الخادم… ١ ث", "the counter restarts")
+        f.created("o1")
+        XCTAssertEqual(f.step, .invite)
+        XCTAssertNil(f.stage)
+        XCTAssertNil(f.failure)
+        f.advance(.verifying)
+        XCTAssertNil(f.stage, "advance does nothing once done")
+    }
+
+    func testRecoversTheOutingATimedOutCreateMadeAnyway() {
+        func o(_ id: String, _ name: String, role: String = "owner", status: OutingStatus = .created, at: Date?) -> OutingSummary {
+            OutingSummary(id: id, name: name, status: status, role: role, my_status: "joined", member_count: 1,
+                          created_at: at.map { ISODate.string($0) }, started_at: nil, ended_at: nil)
+        }
+        let now = t0.addingTimeInterval(20)
+        let list = [
+            o("old", "طلعة روضة الثمامة", at: t0.addingTimeInterval(-60)),               // on the list before the first try
+            o("other", "طلعة ثانية", at: t0),                                             // another name
+            o("member", "طلعة روضة الثمامة", role: "member", at: t0),                     // not mine
+            o("started", "طلعة روضة الثمامة", status: .active, at: t0),                   // already running
+            o("stale", "طلعة روضة الثمامة", at: t0.addingTimeInterval(-3 * 3600)),       // too old
+            o("new", "طلعة روضة الثمامة", at: t0.addingTimeInterval(2)),
+        ]
+        XCTAssertEqual(CreateFlowState.recovered(name: " طلعة روضة الثمامة ", current: list, knownBefore: ["old"], now: now), "new")
+        XCTAssertNil(CreateFlowState.recovered(name: "طلعة روضة الثمامة", current: list, knownBefore: ["old", "new"], now: now))
+        XCTAssertNil(CreateFlowState.recovered(name: "", current: list, knownBefore: [], now: now))
+        XCTAssertNil(CreateFlowState.recovered(name: "طلعة روضة الثمامة", current: [o("x", "طلعة روضة الثمامة", at: nil)], knownBefore: [], now: now),
+                     "no creation time: never guessed")
     }
 }

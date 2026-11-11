@@ -484,6 +484,7 @@ enum TrailGPX {
 
     /// Outings with a trail on this device, newest first.
     static func outings(in dir: URL? = TrailStore.directory) -> [String] {
+        TrailIO.drain()
         guard let dir, let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return [] }
         let trails = files.filter { $0.pathExtension == "json" && !$0.lastPathComponent.hasSuffix(".match.json") }
         let dated = trails.map { u in (u, (try? u.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }

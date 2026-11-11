@@ -46,8 +46,10 @@ struct WeatherCardUI: Equatable {
     var visibility: String = "—"
     var rainText: String = ""
     var hours: [WeatherHourUI] = []
-    /// «آخر تحديث قبل ٢٠ د».
+    /// «آخر تحديث ٤:١٢ م (قبل ٢٠ د)».
     var updated: String = ""
+    /// Where the forecast is for, against what the card is about: «نقطة التوقع على بعد ٢ كم منك».
+    var forecastPoint: String?
     /// Data is older than an hour: shown in amber, never as current.
     var stale = false
     /// The last refresh failed.
@@ -55,16 +57,48 @@ struct WeatherCardUI: Equatable {
     var arrival: WeatherArrivalUI?
 }
 
+/// What a weather card is about, to measure the forecast point against: me («منك»),
+/// the destination («من الوجهة»), a picked point («من النقطة»).
+struct WeatherReference: Equatable {
+    var point: Geo.LatLng
+    /// «منك» / «من الوجهة» / «من النقطة».
+    var label: String
+}
+
+/// Build 36 report, item 12: a card showed the numbers and «Open-Meteo» but not WHEN they came
+/// nor WHERE the forecast is for. Both are said, from data we already have: the device time the
+/// answer arrived (`fetchedAt`) and the grid cell Open-Meteo answered for (`modelLat/Lng`).
+enum WeatherProvenance {
+    /// «آخر تحديث ٤:١٢ م (قبل ٣ د)»; under a minute «آخر تحديث ٤:١٢ م (الآن)».
+    static func updated(_ fetchedAt: Date, now: Date, timeZone: TimeZone = .current) -> String {
+        "آخر تحديث \(WeatherFormat.clock(fetchedAt, timeZone: timeZone)) (\(SaryFormat.elapsed(since: fetchedAt, now: now)))"
+    }
+
+    /// «نقطة التوقع على بعد ٢٫٤ كم منك» / «… على بعد أقل من ١ كم من الوجهة». An outing-area
+    /// card (rounded to ~11 km for privacy) says so: «· منطقة تقريبية». Nil without a reference.
+    static func point(_ r: WeatherReport, reference: WeatherReference?) -> String? {
+        guard let reference else { return nil }
+        let d = Geo.haversineMeters(r.forecastPoint, reference.point)
+        var s = d < 1000
+            ? "نقطة التوقع على بعد أقل من ١ كم \(reference.label)"
+            : "نقطة التوقع على بعد \(SaryFormat.distance(meters: d)) \(reference.label)"
+        if r.area.precision == .area { s += " · منطقة تقريبية" }
+        return s
+    }
+}
+
 enum WeatherPresenter {
-    static func card(title: String, report r: WeatherReport?, refreshing: Bool, failed: Bool, now: Date, hours count: Int = 8) -> WeatherCardUI {
+    static func card(title: String, report r: WeatherReport?, refreshing: Bool, failed: Bool, now: Date, hours count: Int = 8,
+                     reference: WeatherReference? = nil) -> WeatherCardUI {
         guard let r else {
-            if failed { return WeatherCardUI(title: title, phase: .unavailable("تعذّر جلب الطقس، ولا توجد بيانات محفوظة لهذه المنطقة"), offline: true) }
+            if failed { return WeatherCardUI(title: title, phase: .unavailable("تعذّر جلب الطقس، وما فيه بيانات محفوظة لهذه المنطقة"), offline: true) }
             return WeatherCardUI(title: title, phase: .loading)
         }
         let fresh = WeatherFreshness.of(r, now: now)
         var ui = WeatherCardUI(title: title, phase: .ready)
         ui.offline = failed
-        ui.updated = SaryFormat.lastUpdate(since: r.fetchedAt, now: now)
+        ui.updated = WeatherProvenance.updated(r.fetchedAt, now: now)
+        ui.forecastPoint = WeatherProvenance.point(r, reference: reference)
         guard let (h, observed) = WeatherRules.nowValue(r, now: now) else {
             ui.phase = .unavailable("آخر توقعات محفوظة انتهت (\(SaryFormat.elapsed(since: r.fetchedAt, now: now))). اتصل بالإنترنت لتحديثها")
             ui.stale = true

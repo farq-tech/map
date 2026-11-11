@@ -5,12 +5,9 @@ import SwiftUI
 /// itself only carries a few hooks.
 extension LiveOutingController {
     static func navProvider(session: OutingSession) -> NavRoutingProvider {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
-        #endif
-        /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla. */
-        let streets = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
-        return DesertAwareRouteProvider(base: streets)
+        /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla.
+         * The same chain guides «اتجه» from the home map without an outing (`StandaloneNavScreen`). */
+        NavProviders.standard()
     }
 
     // MARK: starting points
@@ -22,7 +19,7 @@ extension LiveOutingController {
         func away(_ p: LngLat) -> String? { my.map { SaryFormat.distance(meters: Vehicle.distanceMeters($0, p)) } }
         if case let .success(t) = NavTargets.destination(navDestination()) {
             rows.append(.init(id: "destination", title: "الوجهة", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),
-                              icon: "flag.checkered", color: Color(rgb: 0x2B7BF0), result: .success(t)))
+                              icon: "flag.checkered", color: Color(rgb: SaryPalette.navBlueDay), result: .success(t)))
         }
         if case let .success(t) = NavTargets.rally(rallyPoint) {
             rows.append(.init(id: "rally", title: "نقطة التجمع", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),
@@ -115,7 +112,9 @@ extension LiveOutingController {
     }
 
     static func retargetHint(wasAuto: Bool) -> String {
-        wasAuto ? "يرجع توجيه الرحلة للوجهة لما تنهي هذا التوجيه" : "ترجع للوجهة من أدوات ← الطريق"
+        /* «أوقف التوجيه» on this one pauses the trip's guidance too (`stopGuidanceTapped`): it comes
+         * back on arrival here, or with «استأنف التوجيه» — never by itself after a stop. */
+        wasAuto ? "يرجع توجيه الطلعة لما توصل هنا، أو من «استأنف التوجيه»" : "ترجع للوجهة من أدوات ← الطريق"
     }
 
     /// «روح له»: refused in the card itself (with the reason) when their position is old.
@@ -127,7 +126,13 @@ extension LiveOutingController {
         }
         cardMessage[id] = nil
         modal = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.navigate(r) }
+        /* Guiding somewhere else: ask first, like «اتجه» («نغيّر الوجهة إلى …؟»); refreshing the same
+         * friend's moved position («حدّث الطريق») does not ask. */
+        let ask = LiveScreenRules.memberGoNeedsConfirm(phase: nav.phase, currentMemberId: nav.target?.memberId, memberId: id)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            if ask, case let .success(t) = r { self.confirm = .retarget(t) } else { self.navigate(r) }
+        }
     }
 
     /// A long press on the map: «ابدأ الملاحة إلى هنا».
@@ -223,12 +228,19 @@ extension LiveOutingController {
             d.guidanceActive = true
             if let r = nav.active {
                 /* Traffic colours along what is left (Mapbox `driving-traffic`); none in the desert / Valhalla. */
-                let done = nav.progress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
-                let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done)
+                let done = nav.shownProgress.map { max(0, r.distanceM - $0.distanceRemainingM) } ?? 0
+                /* This runs on every body evaluation of the live screen: the route's cumulative
+                 * metres come from `NavRouteMetrics` (once per geometry), not a fresh pass each time. */
+                let metrics = NavRouteMetrics.tables(r)
+                let traffic = NavTraffic.runs(r.coordinates, congestion: r.congestion, from: done, cum: metrics.cum)
                 /* Surfaces are drawn only without traffic colours; like traffic, only what is left. */
-                let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done)
-                d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.progress), selected: true,
+                let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
+                d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.shownProgress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
+                /* The next turn as an arrow on the line (the banner's maneuver, `currentStep`). */
+                if let step = nav.currentStep, NavManeuverArrow.shows(step.maneuver) {
+                    d.maneuver = Self.maneuverShaft(r, at: step.location)
+                }
             }
             d.camera = navCamera()
             d.cameraKey = navCameraKey * 1000 + 500
@@ -252,7 +264,7 @@ extension LiveOutingController {
         /* Following my car is the map's own frame-by-frame camera («باتجاهي», `mapFollowMode`). */
         case .follow, .free: return nil
         case .overview:
-            var pts = nav.active.map { Self.remaining($0, progress: nav.progress) } ?? []
+            var pts = nav.active.map { Self.remaining($0, progress: nav.shownProgress) } ?? []
             if let t = nav.target { pts.append(t.position) }
             if let f = location.lastFix { pts.append(LngLat(lng: f.lng, lat: f.lat)) }
             return .fit(pts, bottomShare: 0.2)
@@ -261,20 +273,18 @@ extension LiveOutingController {
 
     /// The part of the route still ahead (the line shrinks behind the car).
     static func remaining(_ r: NavRoute, progress: NavProgress?) -> [LngLat] {
-        guard let p = progress, r.distanceM > 0, r.coordinates.count > 2 else { return r.coordinates }
-        let done = max(0, r.distanceM - p.distanceRemainingM)
-        var acc = 0.0
-        for i in 1..<r.coordinates.count {
-            let seg = Vehicle.distanceMeters(r.coordinates[i - 1], r.coordinates[i])
-            if acc + seg >= done {
-                let u = seg > 0 ? (done - acc) / seg : 0
-                let a = r.coordinates[i - 1], b = r.coordinates[i]
-                let cut = LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
-                return [cut] + r.coordinates[i...]
-            }
-            acc += seg
-        }
-        return Array(r.coordinates.suffix(2))
+        NavRouteMetrics.remaining(r, progress: progress)
+    }
+
+    /// The last maneuver arrow, by route geometry and maneuver point: the shaft only depends on
+    /// those, and the projection scans the whole polyline, so it is not redone on every redraw.
+    private static var shaftMemo: (revision: UUID, at: LngLat, shaft: [LngLat]?)?
+
+    static func maneuverShaft(_ r: NavRoute, at: LngLat) -> [LngLat]? {
+        if let m = shaftMemo, m.revision == r.geometryRevision, m.at == at { return m.shaft }
+        let shaft = NavManeuverArrow.shaft(r.coordinates, at: at)
+        shaftMemo = (r.geometryRevision, at, shaft)
+        return shaft
     }
 
     /// Where to hang an alternative's label: a point on it far from the other routes.
@@ -292,21 +302,16 @@ extension LiveOutingController {
 
     // MARK: the control cluster while navigating
 
-    /// The round buttons on the right while guiding (v2, four at most): the camera (compass /
-    /// recentre), «على الطريق» (the nearest station), the voice, «مسارات». SOS keeps its own place.
+    /// The round buttons on the right while guiding (UI-AUDIT م3, two at most): the camera (compass /
+    /// recentre) and «على الطريق» (the nearest station). «الصوت» and «المسارات» are in the pulled-up
+    /// guidance sheet (`NavTripOptions`) only. SOS keeps its own place.
     var navSideItems: [SaryMapControlItem] {
-        var items = [
+        let all = [
             cameraModeItem,
             SaryMapControlItem(id: "nav.search", systemImage: "fuelpump.fill", label: "على الطريق", accessibilityID: "nav.search",
                                hint: "أقرب محطة على طريقك"),
-            SaryMapControlItem(id: "nav.mute", systemImage: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                               label: nav.muted ? "الصوت مكتوم" : "الصوت", accessibilityID: "nav.mute", isActive: nav.muted),
         ]
-        if navCanShowRoutes {
-            items.append(SaryMapControlItem(id: "nav.routes", systemImage: "arrow.triangle.branch", label: "مسارات",
-                                            accessibilityID: "nav.routes", hint: "الطرق البديلة"))
-        }
-        return Array(items.prefix(4))
+        return LiveScreenRules.navSideIDs.compactMap { id in all.first { $0.id == id } }
     }
 
     /// While guiding: the camera button («تتبعني» / «باتجاهي») and «نظرة عامة» (voice and steps sit in the guidance bar).
