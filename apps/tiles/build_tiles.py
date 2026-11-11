@@ -200,8 +200,16 @@ def load_buildings(db, path: str, bbox=None) -> int:
     use = col(cols, 'building_use')
     key = 'p."HouseId"::varchar' if 'HouseId' in cols else ('p.source_feature_id::varchar' if 'source_feature_id' in cols else 'cast(row_number() over () as varchar)')
     db.execute(f"""create or replace temp table b_src as
-        select {key} fid, ST_GeomFromWKB(from_hex(p.geometry_wkb_hex)) g, {use} use, {elevation} elevation
-        from read_parquet('{path}') p where coalesce(p.geometry_wkb_hex, '') <> ''""")
+        with decoded as (
+            select {key} fid, ST_GeomFromWKB(from_hex(p.geometry_wkb_hex)) original_g,
+                   {use} as "use", {elevation} elevation
+            from read_parquet('{path}') p where coalesce(p.geometry_wkb_hex, '') <> ''
+        )
+        select fid,
+               case when ST_IsValid(original_g) then original_g
+                    else ST_CollectionExtract(ST_MakeValid(original_g), 3) end g,
+               use, elevation
+        from decoded""")
     # Elevation is storeys in some vendor layers and metres in others (build_building_population.decide_elevation_mode)
     median = db.execute('select median(elevation) from b_src where elevation > 0').fetchone()[0]
     as_metres = median is not None and median >= 8
