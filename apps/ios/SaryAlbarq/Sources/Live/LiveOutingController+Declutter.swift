@@ -32,6 +32,12 @@ extension LiveOutingController {
         return false
     }
 
+    /// After the end, «طريق الرجعة» stays on the map (UI-AUDIT 0.3): it runs on this phone along my
+    /// trail (`BackTrack`), so it needs no network — while it runs, or while there is a trail to retrace.
+    var showsBackTrackAfterEnd: Bool {
+        tripEnded && (backTrack != nil || session.trail.points.count >= 2)
+    }
+
     /// The outing has ended («انتهت الطلعة»): the screen shows the end, not live controls.
     var tripEnded: Bool { session.displayView?.status == .ended || session.closedReason == .outingEnded }
 

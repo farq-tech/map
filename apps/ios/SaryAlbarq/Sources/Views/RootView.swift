@@ -102,11 +102,26 @@ struct LiveOutingHost: View {
                 Task { await model.push.setEnabled(on, signedIn: model.signedIn) }
             }
             c.pushExplained = { [weak model] in model?.push.explained ?? true }
+            /* UI-AUDIT 0.2: iOS has not asked about notifications yet (the leader's explainer at «ابدأ الطلعة»). */
+            c.pushUndecided = { [weak model] in model?.push.state == .notAsked }
             c.openSummary = { [weak model] in model?.showSummaryAfterClose(session.id) }
             c.startReturnTrip = { [weak model, weak c] in
                 guard let model else { return }
+                /* UI-AUDIT 0.3: no network (the desert): the return starts on this phone along my trail,
+                 * instead of an error. With a network it is a new trip on the server, as before. */
+                guard model.online || model.isDemo else {
+                    c?.startReturnOnPhone(offline: true)
+                    return
+                }
                 Task {
-                    if await model.startReturnTrip(from: session.id) == nil, let e = model.errorText { c?.toast(e); model.errorText = nil }
+                    guard await model.startReturnTrip(from: session.id) == nil else { return }
+                    if !model.isDemo, ReturnTripStore.failedOffline(online: model.online, errorText: model.errorText) {
+                        model.errorText = nil
+                        c?.startReturnOnPhone(offline: true)
+                    } else if let e = model.errorText {
+                        c?.toast(e)
+                        model.errorText = nil
+                    }
                 }
             }
             c.savePhone = { [weak model, weak c] phone in

@@ -300,6 +300,18 @@ struct SOSCountdownView: View {
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityIdentifier("sos-countdown-send")
+                /* UI-AUDIT 0.5: the official line, one tap. The SOS to the group still goes out. */
+                Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                    Label("اتصل ٩١١", systemImage: SaryIcon.phone)
+                        .font(.sary(17, .bold))
+                        .foregroundStyle(p.onEmergency)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(Capsule().fill(Color.black.opacity(0.22)))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("اتصل ٩١١"))
+                .accessibilityHint(Text("الطوارئ الرسمية. تنبيهك للربع يكمل"))
+                .accessibilityIdentifier("sos.call911")
             }
             .padding(theme.space(.xl))
             .frame(maxWidth: 360)
@@ -361,6 +373,19 @@ struct SaryMySOSStrip: View {
                 .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
                 .accessibilityIdentifier("sos-enjad")
             }
+            /* UI-AUDIT 0.5: «اتصل ٩١١» (the official line; Enjad is volunteers). Short on the strip. */
+            Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                Label("٩١١", systemImage: SaryIcon.phone)
+                    .saryText(.callout, weight: .heavy)
+                    .lineLimit(1)
+                    .foregroundStyle(p.emergency)
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: theme.minTarget)
+                    .background(Capsule().fill(Color.white.opacity(0.85)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("اتصل ٩١١"))
+            .accessibilityIdentifier("sos.call911")
         }
         .foregroundStyle(p.onEmergency)
         .padding(.leading, theme.space(.l))

@@ -89,6 +89,10 @@ enum Enjad {
     static func whatsappURL(_ text: String) -> URL { URL(string: "https://wa.me/\(phoneIntl)?text=\(encode(text))")! }
     static func smsURL(_ text: String) -> URL { URL(string: "sms:\(phoneLocal)&body=\(encode(text))")! }
     static var callURL: URL { URL(string: "tel:\(phoneLocal)")! }
+    /// The official emergency number (UI-AUDIT 0.5): «اتصل ٩١١» in the SOS countdown and the
+    /// «أرسلت طوارئ» strip. Enjad is volunteers; 911 is the state's unified emergency line.
+    static let officialEmergency = "911"
+    static var officialCallURL: URL { URL(string: "tel:\(officialEmergency)")! }
     /// Is WhatsApp installed? (`LSApplicationQueriesSchemes` lists `whatsapp`.)
     static let whatsappScheme = URL(string: "whatsapp://")!
 

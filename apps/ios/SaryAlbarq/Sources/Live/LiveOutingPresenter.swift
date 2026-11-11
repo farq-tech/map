@@ -292,6 +292,13 @@ enum LiveOutingPresenter {
 
     static func sosKey(_ uid: String, _ s: SosInfo) -> String { "\(uid)|\(s.at)" }
 
+    /// The friend's SOS shown full screen: the newest one not acknowledged yet (`incoming` is newest first).
+    static func fullScreenSOS(_ s: SOSUIState) -> IncomingSOSUI? { s.incoming.first { !$0.acknowledged } }
+
+    /// UI-AUDIT 0.1: a full-screen SOS that was not up before clears what covers the map (sheets,
+    /// settings); the same one staying up, or none, leaves the screen alone.
+    static func sosClearsScreen(current: String?, previous: String?) -> Bool { current != nil && current != previous }
+
     static func sos(_ i: LivePresenterInput) -> SOSUIState {
         guard let v = i.view else { return SOSUIState() }
         var mine: MySOSUI = .none

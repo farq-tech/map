@@ -3,8 +3,9 @@ import SwiftUI
 
 /// The native 3-detent sheet: ONE summary line, then the tabs الرحلة / المجموعة /
 /// المزيد (docs/IA-REDESIGN.md §2.4). Everything presented over the live screen (participant card,
-/// note composer, stations, consent, rally label, a friend's SOS) is presented
-/// from here, because the sheet is the top-most presentation.
+/// note composer, stations, consent, rally label) is presented from here, because the sheet is
+/// the top-most presentation. A friend's SOS is the exception: it has its own window
+/// (`FriendSOSAlertHost`), so nothing presented here can hold it back.
 struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
     @Environment(\.sary) private var theme
@@ -64,11 +65,9 @@ struct LiveSheet: View {
             SettingsPushHost { close in LiveSettingsPage(controller: controller, close: close) }
                 .saryAppearance(appearance)
         }
-        .fullScreenCover(item: Binding(get: { ui.sos.incoming.first { !$0.acknowledged } }, set: { _ in })) { a in
-            SaryFriendSOSAlert(alert: a, now: Date(), show: { controller.showSOS(a.id) }, call: { actions.sos.call(a.id) })
-                .saryAppearance(appearance)
-                .accessibilityIdentifier("friend-sos-alert")
-        }
+        /* A friend's SOS is NOT presented from here (UI-AUDIT 0.1): with a sheet or the settings page
+         * up, a second presentation from this view silently did not appear. It has its own window
+         * (`FriendSOSAlertHost`, on the live screen). */
         .sheet(item: $invite, onDismiss: { if model.pendingInvite == invite?.id { model.pendingInvite = nil } }) { inv in
             InviteJoinSheet(token: inv.id).saryPresented(appearance)
         }

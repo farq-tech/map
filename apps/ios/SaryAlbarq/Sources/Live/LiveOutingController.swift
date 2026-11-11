@@ -161,11 +161,15 @@ final class LiveOutingController: ObservableObject {
     var setPush: (Bool) -> Void = { _ in }
     /// The notification explainer was already shown on this device.
     var pushExplained: () -> Bool = { true }
+    /// iOS has not asked about notifications yet (UI-AUDIT 0.2: the leader's explainer at «ابدأ الطلعة»).
+    var pushUndecided: () -> Bool = { false }
 
     @Published var sheetDetent: SheetDetentUI = .peek
     @Published var selectedTab: LiveTabUI = .trip
     @Published var alerts: [LiveAlertUI] = []
     @Published var acknowledgedSOS: Set<String> = []
+    /// The friend's SOS that last cleared the screen (UI-AUDIT 0.1, `clearCoversForIncomingSOS`).
+    private var lastFullScreenSOS: String?
     @Published var heardClips: Set<String> = []
     @Published var clipPlayback: [String: VoicePlaybackUI] = [:]
     @Published var camera: MapCameraRequest?
@@ -193,6 +197,8 @@ final class LiveOutingController: ObservableObject {
         didSet {
             if oldValue == .navOptions, modal != .navOptions { navOptionsClosed() }
             if case .participant = oldValue, !cardMessage.isEmpty { cardMessage = [:] }
+            /* The leader's notifications explainer waited for this sheet (UI-AUDIT 0.2). */
+            if modal == nil, oldValue != nil, leaderNotifyPending { showLeaderNotifyWhenFree() }
         }
     }
     @Published var inviteLink: String?
@@ -562,6 +568,7 @@ final class LiveOutingController: ObservableObject {
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
         ingestFriends(v)
+        clearCoversForIncomingSOS()
         defer { lastView = v }
         guard let prev = lastView else { return }
         /* New notes from friends and new clips become cards in the alert lane. The
@@ -1012,23 +1019,40 @@ final class LiveOutingController: ObservableObject {
     }
 
     func back() {
+        /* No «أوقف المشاركة»: back to the list keeps the trip's session (and sharing) running
+         * (build 15); stopping is «غادر الطلعة» or the trip's end. Say so before leaving the map.
+         * The guidance keeps going until the person actually leaves (UI-AUDIT 0.4): «ابقَ في الطلعة»
+         * must not find it stopped. */
+        if session.isSharingNow || (session.wantsToShare && session.view?.status == .active) {
+            confirm = .backWhileSharing
+        } else {
+            endGuidanceForLeaving()
+            onExit()
+        }
+    }
+
+    /// Leaving this screen for good («ارجع للقائمة», «غادر الطلعة», or back with nothing shared):
+    /// the guidance stops, and the automatic one does not start again from here.
+    private func endGuidanceForLeaving() {
         autoNavLeft = true
         if nav.isActive || nav.phase == .planning { nav.end() }
-        /* No «أوقف المشاركة»: back to the list keeps the trip's session (and sharing) running
-         * (build 15); stopping is «غادر الطلعة» or the trip's end. Say so before leaving the map. */
-        if session.isSharingNow || (session.wantsToShare && session.view?.status == .active) { confirm = .backWhileSharing } else { onExit() }
     }
 
     /// «ارجع للقائمة» from the back dialog: still a member, sharing keeps going off the map.
     func backToList() {
         confirm = nil
+        endGuidanceForLeaving()
         onBackToList()
     }
 
     /// «غادر الطلعة» — the only way to stop sharing (confirmed first by the caller's dialog).
     func leaveOuting() {
         confirm = nil
-        Task { if await session.leave() { onExit() } }
+        Task {
+            guard await session.leave() else { return }
+            endGuidanceForLeaving()
+            onExit()
+        }
     }
 
     /// The first alert worth a notification, after an invite join: our explainer, then iOS's prompt.
@@ -1046,6 +1070,48 @@ final class LiveOutingController: ObservableObject {
             guard let self, self.modal == nil, !self.pushExplained() else { return }
             self.modal = .notify
         }
+    }
+
+    /// The leader's explainer is waiting for the sheet on top (the guidance choice) to close.
+    private var leaderNotifyPending = false
+
+    /// UI-AUDIT 0.2: «ابدأ الطلعة» (the leader). A friend's SOS must reach the leader with the
+    /// screen locked, so our explainer comes now when iOS has not asked yet — joiners get it with
+    /// their first alert (`offerNotificationsInContext`). Shown once: never on top of another sheet,
+    /// and never again once explained.
+    func offerNotificationsAtStart() {
+        guard Self.offersNotifyAtStart(explained: pushExplained(), undecided: pushUndecided()) else { return }
+        /* One explainer, not two: the in-context offer is this one now. */
+        notifyOfferPending = false
+        leaderNotifyPending = true
+        showLeaderNotifyWhenFree()
+    }
+
+    /// The rule: our explainer has not been shown on this device and iOS has not asked yet.
+    nonisolated static func offersNotifyAtStart(explained: Bool, undecided: Bool) -> Bool { !explained && undecided }
+
+    private func showLeaderNotifyWhenFree() {
+        guard leaderNotifyPending, modal == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            /* Something else opened meanwhile: wait for it to close (`modal`'s didSet comes back here). */
+            guard let self, self.leaderNotifyPending, self.modal == nil, !self.settingsOpen, self.lastFullScreenSOS == nil else { return }
+            self.leaderNotifyPending = false
+            guard !self.pushExplained() else { return }
+            self.modal = .notify
+        }
+    }
+
+    /// UI-AUDIT 0.1: a friend's NEW SOS clears what covers the map (a sheet, the settings page, the
+    /// share sheet, the «أنت» menu), so «أظهره على الخريطة» lands on the map. The alert itself shows
+    /// in its own window over everything (`FriendSOSAlertHost`), whatever is open.
+    private func clearCoversForIncomingSOS() {
+        let current = LiveOutingPresenter.fullScreenSOS(LiveOutingPresenter.sos(input))?.id
+        defer { lastFullScreenSOS = current }
+        guard LiveOutingPresenter.sosClearsScreen(current: current, previous: lastFullScreenSOS) else { return }
+        modal = nil
+        shareItem = nil
+        meMenuOpen = false
+        if settingsOpen { closeSettings() }
     }
 
     /// Asked once per device (the same key the trail explainer uses: one «دائمًا» covers both).
@@ -1128,8 +1194,12 @@ final class LiveOutingController: ObservableObject {
         }
         Task {
             await session.setStatus("start")
-            /* Guidance is the leader's choice: for everyone, or only for him. */
-            if session.view?.status == .active { offerGuidanceChoice() }
+            /* Guidance is the leader's choice: for everyone, or only for him. Then (once that sheet
+             * closes) the notifications explainer, so a friend's SOS reaches him (UI-AUDIT 0.2). */
+            if session.view?.status == .active {
+                offerGuidanceChoice()
+                offerNotificationsAtStart()
+            }
         }
     }
 

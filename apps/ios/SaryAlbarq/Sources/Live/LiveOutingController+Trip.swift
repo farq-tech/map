@@ -137,6 +137,21 @@ extension LiveOutingController {
         startBackTrack(along: t.points)
     }
 
+    /// «طريق الرجعة» on this phone, with no server (UI-AUDIT 0.3): back along my trail of this
+    /// outing to where I started (`BackTrack`: works with no network, the usual case in the desert).
+    /// Used when the new return trip cannot be made on the server because there is no network.
+    func startReturnOnPhone(offline: Bool) {
+        guard backTrack == nil else { return }
+        guard session.trail.points.count >= 2 else {
+            toast(offline ? "ما فيه نت، وما عندنا مسار محفوظ لهذه الطلعة على جوالك"
+                          : "ما عندنا مسار محفوظ لهذه الطلعة على جوالك")
+            return
+        }
+        returnGuide.cancel()
+        startBackTrack()
+        if offline, backTrack != nil { toast("ما فيه نت · نرجّعك على مسارك من جوالك") }
+    }
+
     // MARK: «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road
 
     /// The trip's guidance is about to start to `t` (`TripAutoNav` said `.start`). On a return

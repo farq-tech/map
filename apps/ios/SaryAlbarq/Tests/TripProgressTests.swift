@@ -76,6 +76,16 @@ final class TripProgressTests: XCTestCase {
         XCTAssertNil(ReturnTripStore.origin(of: "o2", defaults: d))
     }
 
+    /// UI-AUDIT 0.3: «طريق الرجعة» with no network starts on this phone; other refusals stay errors.
+    func testReturnTripOfflineFallsBackToThePhone() {
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: false, errorText: nil), "no network path")
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "network", status: 0).arabic))
+        XCTAssertTrue(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "timeout", status: 0).arabic))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: OutingAPIError(code: "rate_limited", status: 429).arabic))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: "ما عندنا نقطة بداية محفوظة لهذه الرحلة على هذا الجوال."))
+        XCTAssertFalse(ReturnTripStore.failedOffline(online: true, errorText: nil))
+    }
+
     func testArrivalBelongsOnlyToTheDestinationThatWasReached() {
         var r = TripRecord()
         r.bindArrivalDestination(dest)

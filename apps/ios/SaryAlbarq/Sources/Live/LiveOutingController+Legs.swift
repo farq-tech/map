@@ -127,6 +127,8 @@ extension LiveOutingController {
         Task {
             await session.setStatus("start")
             guard session.view?.status == .active else { return }
+            /* The leader is offered the notifications explainer (UI-AUDIT 0.2; waits for any sheet). */
+            offerNotificationsAtStart()
             if let d = legs.picked ?? planModel?.plan.destination {
                 await beginLeg(to: d)
             } else {

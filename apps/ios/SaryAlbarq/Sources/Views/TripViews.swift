@@ -297,7 +297,7 @@ struct TripCard: View {
         Button(action: actions.returnTrip) { SaryButtonLabel(title: "طريق الرجعة", systemImage: SaryIcon.backTrack) }
             .buttonStyle(.sarySecondary)
             .accessibilityIdentifier("trip.return")
-        Text("«طريق الرجعة» رحلة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+        Text("«طريق الرجعة» رحلة جديدة من هنا إلى نقطة بدايتك، على مسارك أو بالملاحة. وبدون نت نرجّعك على مسارك من جوالك.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
     }
 

@@ -63,6 +63,9 @@ final class EnjadTests: XCTestCase {
         XCTAssertTrue(sms.hasPrefix("sms:0507911999&body="))
         XCTAssertEqual(String(sms.dropFirst("sms:0507911999&body=".count)).removingPercentEncoding, text)
         XCTAssertEqual(Enjad.callURL.absoluteString, "tel:0507911999")
+        /* UI-AUDIT 0.5: «اتصل ٩١١» dials the official emergency line, never Enjad's number. */
+        XCTAssertEqual(Enjad.officialCallURL.absoluteString, "tel:911")
+        XCTAssertEqual(Enjad.officialCallURL.scheme, "tel")
         XCTAssertEqual(Enjad.sendURL(text, whatsappInstalled: true, online: true).host, "wa.me")
         XCTAssertEqual(Enjad.sendURL(text, whatsappInstalled: false, online: true).scheme, "sms")
         XCTAssertEqual(Enjad.sendURL(text, whatsappInstalled: true, online: false).scheme, "sms", "no data: SMS")

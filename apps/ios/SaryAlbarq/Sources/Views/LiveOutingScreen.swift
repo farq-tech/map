@@ -116,6 +116,9 @@ struct LiveOutingScreen: View {
         .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
                                    frame: frames["sos"], size: controller.liveContext(drive: theme.drive) == .driving ? 60 : 52))
+        /* A friend's SOS: full screen in its own window, over every sheet, page and dialog (UI-AUDIT 0.1). */
+        .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
+                                       show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
         .sheet(isPresented: .constant(true)) {
             LiveSheet(controller: controller)
                 .realisticCover($realistic)
@@ -193,7 +196,8 @@ struct LiveOutingScreen: View {
         /* Guiding (v2): up to four round buttons on the right, my speed and the limit bottom-left. */
         let guidingHUD = controller.nav.phase == .guiding && !exploring && !ended
         let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
-        let showSide = controller.sheetDetent == .peek && !side.isEmpty && !ended
+        /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
+        let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
         ZStack {
             /* TOP (Lovable): the header (or the guidance header, or the end card), then the one alert
              * with SOS on its left, then «تتبعني» / «أدوات» on the right. */
@@ -419,7 +423,13 @@ struct LiveOutingScreen: View {
     /// «المجموعة» (fit everyone) is in «أدوات» → الخريطة; «نظرة عامة» in the guidance bar.
     private func sideItems(driving: Bool, ended: Bool) -> [SaryMapControlItem] {
         let all = SaryMapControlItem.liveDefaults(following: controller.following, backTracking: controller.backTrack != nil)
-        let back = controller.showsBackTrackShortcut && !ended ? all.first { $0.id == "backtrack" } : nil
+        /* After the end: «طريق الرجعة» alone, on this phone along my trail (works with no network,
+         * UI-AUDIT 0.3). Never while driving (the calm rule). */
+        if ended {
+            guard !driving, controller.showsBackTrackAfterEnd, let b = all.first(where: { $0.id == "backtrack" }) else { return [] }
+            return [b]
+        }
+        let back = controller.showsBackTrackShortcut ? all.first { $0.id == "backtrack" } : nil
         /* I am stuck: «غرّزت» is in there. */
         let items = LiveCalmRules.sideItems(camera: controller.cameraModeItem, backTrack: back,
                                             plusBadge: controller.safety.myStuck != nil ? 1 : nil, driving: driving, ended: ended)
