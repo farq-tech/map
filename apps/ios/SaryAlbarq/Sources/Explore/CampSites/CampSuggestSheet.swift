@@ -140,6 +140,7 @@ struct CampSuggestSheet: View {
                     ForEach(Array(model.ranked.enumerated()), id: \.element.id) { i, r in
                         CampSiteCard(rank: i + 1, ranked: r, night: model.nights[r.site.region], go: { go(r.site, rank: i + 1) },
                                      routes: DesertGrid.bboxes[r.site.region] == nil ? nil : { routes(r.site, rank: i + 1) })
+                            .transition(.opacity.combined(with: .offset(y: 12)))
                     }
                 }
             }
@@ -149,6 +150,10 @@ struct CampSuggestSheet: View {
                 .accessibilityIdentifier("camp.estimateNote")
         }
         .task { await model.start(me: host.myPoint()) }
+        /* A new radius re-ranks: cards move to their places (stable ids), new ones fade in. */
+        .saryAnimation(.smooth, value: model.ranked.map(\.id))
+        .saryAnimation(.smooth, value: model.phase)
+        .saryAnimation(.snappy, value: model.radiusKm)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("camp.sheet")
     }

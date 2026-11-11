@@ -164,6 +164,17 @@ final class CampSitesTests: XCTestCase {
         XCTAssertTrue(CampSitesMapLayer.visible(layerOn: false, highlighted: ["x": 1]), "tonight's five show while suggested")
     }
 
+    func testRoutePreviewRevealsFromZeroAndThePickPops() {
+        for k in [RouteReveal.Kind.selected, .other, .hard] {
+            XCTAssertEqual(RouteReveal.opacity(k, shown: false), 0, "no preview: zero, so the next one fades in")
+            XCTAssertGreaterThan(RouteReveal.opacity(k, shown: true), 0)
+        }
+        XCTAssertGreaterThan(RouteReveal.opacity(.selected, shown: true), RouteReveal.opacity(.other, shown: true), "the pick stands out")
+        XCTAssertGreaterThan(RouteReveal.popWidth, RouteReveal.selectedWidth)
+        XCTAssertLessThanOrEqual(RouteReveal.popSeconds, 0.25, "a pop, not a wait")
+        XCTAssertEqual(RouteReveal.popTransition["duration"] as? Int, 180)
+    }
+
     private func night(from: Double, gust: Double) -> CampNight {
         CampNight(windKmh: gust * 0.7, gustKmh: gust, fromDeg: from, rainProbability: 0, rainMm: 0, dust: nil, pm10: nil, sunset: nil)
     }

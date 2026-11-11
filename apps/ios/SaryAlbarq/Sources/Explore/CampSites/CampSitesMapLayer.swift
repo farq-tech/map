@@ -31,6 +31,8 @@ final class CampSitesMapLayer {
     static let routeSource = "sary-desert-routes"
     static let routeLayer = "sary-desert-routes-line"
     static let routeHardLayer = "sary-desert-routes-hard"
+    /// The routes not picked (thinner, softer), under the picked one.
+    static let routeAltLayer = "sary-desert-routes-alt"
 
     private weak var map: MapView?
     private var bag = Set<AnyCancellable>()
@@ -131,29 +133,71 @@ final class CampSitesMapLayer {
             s.data = .featureCollection(Self.routeCollection(DesertRoutesHub.shared.options, selected: DesertRoutesHub.shared.selected))
             try? m.addSource(s)
         }
+        /* Constant opacities and widths (the selected route and the others are separate layers), so
+           Mapbox can ease them: the preview fades in when it arrives, the picked line pops. */
+        let shownNow = !DesertRoutesHub.shared.options.isEmpty
         if !m.layerExists(withId: Self.routeHardLayer) {
             FXLog.add(m, [
                 "id": Self.routeHardLayer, "type": "line", "source": Self.routeSource, "filter": ["get", "hard"],
                 "layout": ["line-join": "round", "line-cap": "round"],
-                "paint": ["line-color": ["get", "c"], "line-width": 11, "line-opacity": 0.55, "line-emissive-strength": 1] as [String: Any],
+                "paint": ["line-color": ["get", "c"], "line-width": 11, "line-opacity": RouteReveal.opacity(.hard, shown: shownNow),
+                          "line-opacity-transition": RouteReveal.transition, "line-emissive-strength": 1] as [String: Any],
             ], layerPosition: m.layerExists(withId: Self.circleLayer) ? .below(Self.circleLayer) : nil)
         }
         if !m.layerExists(withId: Self.routeLayer) {
             FXLog.add(m, [
-                "id": Self.routeLayer, "type": "line", "source": Self.routeSource, "filter": ["!", ["get", "hard"]],
+                "id": Self.routeLayer, "type": "line", "source": Self.routeSource, "filter": ["all", ["!", ["get", "hard"]], ["get", "s"]] as [Any],
                 "layout": ["line-join": "round", "line-cap": "round"],
-                "paint": ["line-color": ["get", "c"], "line-width": ["case", ["get", "s"], 5.5, 3] as [Any],
-                          "line-opacity": ["case", ["get", "s"], 1, 0.6] as [Any], "line-emissive-strength": 1] as [String: Any],
+                "paint": ["line-color": ["get", "c"], "line-width": RouteReveal.selectedWidth,
+                          "line-width-transition": RouteReveal.popTransition,
+                          "line-opacity": RouteReveal.opacity(.selected, shown: shownNow),
+                          "line-opacity-transition": RouteReveal.transition, "line-emissive-strength": 1] as [String: Any],
             ], layerPosition: .below(Self.routeHardLayer))
         }
+        if !m.layerExists(withId: Self.routeAltLayer) {
+            FXLog.add(m, [
+                "id": Self.routeAltLayer, "type": "line", "source": Self.routeSource, "filter": ["all", ["!", ["get", "hard"]], ["!", ["get", "s"]]] as [Any],
+                "layout": ["line-join": "round", "line-cap": "round"],
+                "paint": ["line-color": ["get", "c"], "line-width": 3, "line-opacity": RouteReveal.opacity(.other, shown: shownNow),
+                          "line-opacity-transition": RouteReveal.transition, "line-emissive-strength": 1] as [String: Any],
+            ], layerPosition: .below(Self.routeLayer))
+        }
+        routesShown = shownNow
+        drawnSelection = DesertRoutesHub.shared.selected
         refresh()
         refreshRoutes()
     }
+
+    /// The preview is on the map (its layers at full opacity), and the route drawn as picked.
+    private var routesShown = false
+    private var drawnSelection: DesertRouter.Mode?
+    private var popWork: DispatchWorkItem?
 
     private func refreshRoutes() {
         guard let m = map?.mapboxMap, m.sourceExists(withId: Self.routeSource) else { return }
         let r = DesertRoutesHub.shared
         m.updateGeoJSONSource(withId: Self.routeSource, geoJSON: .featureCollection(Self.routeCollection(r.options, selected: r.selected)))
+        let shown = !r.options.isEmpty
+        let reduce = MapCameraMotion.reduceMotionNow
+        if shown != routesShown {
+            routesShown = shown
+            /* Reveal: from the zero the empty preview left (eased by the paint transition). */
+            for (id, kind) in [(Self.routeLayer, RouteReveal.Kind.selected), (Self.routeAltLayer, .other), (Self.routeHardLayer, .hard)]
+                where m.layerExists(withId: id) {
+                try? m.setLayerProperty(for: id, property: "line-opacity", value: RouteReveal.opacity(kind, shown: shown))
+            }
+        } else if shown, r.selected != drawnSelection, !reduce, m.layerExists(withId: Self.routeLayer) {
+            /* Another route picked: its line swells a moment, then settles. */
+            popWork?.cancel()
+            try? m.setLayerProperty(for: Self.routeLayer, property: "line-width", value: RouteReveal.popWidth)
+            let w = DispatchWorkItem { [weak self] in
+                guard let m = self?.map?.mapboxMap, m.layerExists(withId: Self.routeLayer) else { return }
+                try? m.setLayerProperty(for: Self.routeLayer, property: "line-width", value: RouteReveal.selectedWidth)
+            }
+            popWork = w
+            DispatchQueue.main.asyncAfter(deadline: .now() + RouteReveal.popSeconds, execute: w)
+        }
+        drawnSelection = r.selected
     }
 
     private func refresh() {
@@ -164,6 +208,31 @@ final class CampSitesMapLayer {
         let vis = Self.visible(layerOn: hub.layerOn, highlighted: hub.highlighted) ? "visible" : "none"
         for id in [Self.circleLayer, Self.labelLayer] where m.layerExists(withId: id) {
             try? m.setLayerProperty(for: id, property: "visibility", value: vis)
+        }
+    }
+}
+
+/// «مخطط دروب البر» on the map: how the route preview reveals and how a pick pops.
+/// Pure (`CampSitesTests`); Mapbox paint transitions do the easing, never a frame loop.
+enum RouteReveal {
+    enum Kind { case selected, other, hard }
+
+    static let selectedWidth = 5.5
+    /// The picked line swells to this, then settles back.
+    static let popWidth = 8.0
+    static let popSeconds: TimeInterval = 0.18
+    static let revealMs = 450
+
+    static var transition: [String: Any] { ["duration": revealMs, "delay": 0] }
+    static var popTransition: [String: Any] { ["duration": Int(popSeconds * 1000), "delay": 0] }
+
+    /// Each layer's opacity: zero while there is no preview, so the next one fades in from nothing.
+    static func opacity(_ k: Kind, shown: Bool) -> Double {
+        guard shown else { return 0 }
+        switch k {
+        case .selected: return 1
+        case .other: return 0.6
+        case .hard: return 0.55
         }
     }
 }

@@ -61,6 +61,8 @@ struct DesertRouteSheet: View {
     var weatherAvailable: Bool
     @ObservedObject private var hub = DesertRoutesHub.shared
     @State private var phase: Phase = .working
+    /// Bumped by a tap that picks another route (the selection tick).
+    @State private var pickTick = 0
     @Environment(\.sary) private var theme
 
     enum Phase: Equatable { case working, ready, outside, noFix, none }
@@ -107,13 +109,19 @@ struct DesertRouteSheet: View {
                               actionTitle: "اتجه", actionID: "routes.direct", actionIcon: SaryIcon.directions, action: direct)
                     .sarySurface(radius: SaryRadius.l)
             case .ready:
-                ForEach(hub.options) { o in card(o) }
+                ForEach(hub.options) { o in
+                    card(o).transition(.opacity.combined(with: .offset(y: 12)))
+                }
             }
             Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("routes.note")
         }
         .task { await compute() }
+        /* The computed routes arrive with a soft entrance; picking one pops it (and a tick). */
+        .saryAnimation(.smooth, value: phase)
+        .saryAnimation(.snappy, value: hub.selected)
+        .sensoryFeedback(.selection, trigger: pickTick)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("routes.sheet")
     }
@@ -183,9 +191,15 @@ struct DesertRouteSheet: View {
         }
         .padding(theme.space(.m))
         .contentShape(Rectangle())
-        .onTapGesture { hub.selected = o.mode }
+        .onTapGesture {
+            guard hub.selected != o.mode else { return }
+            hub.selected = o.mode
+            pickTick &+= 1
+        }
         .sarySurface(radius: SaryRadius.l)
         .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(on ? Self.color(o.mode) : .clear, lineWidth: 2))
+        /* Visual only (no layout change): the picked card sits a hair forward. */
+        .scaleEffect(on ? 1 : 0.985)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("routes.card.\(o.mode.rawValue)")
     }
