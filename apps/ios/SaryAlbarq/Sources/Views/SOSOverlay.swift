@@ -97,7 +97,10 @@ final class SOSOverlayWindow: UIWindow {
         let disc = m.size ?? m.theme.bigButton
         let side = disc + 16
         let screen = windowScene?.coordinateSpace.bounds ?? UIScreen.main.bounds
-        let safeBottom = windowScene?.windows.first(where: { $0 !== self && $0.isKeyWindow })?.safeAreaInsets.bottom ?? 34
+        /* The app window's real inset (0 on an iPhone SE, 34 with a home indicator); was a fixed
+         * 34 pt whenever no key window was found, which floated the disc 34 pt high on an SE. */
+        let others = windowScene?.windows.filter { $0 !== self } ?? []
+        let safeBottom = (others.first(where: \.isKeyWindow) ?? others.first)?.safeAreaInsets.bottom ?? safeAreaInsets.bottom
         /* Over a full sheet the map's spot (top left, under the header) is where sheets put their
          * search field and first row (QA: it covered «ابحث أو أدخل إحداثية»): the copy sits in the
          * bottom-left corner instead, the least used part of a sheet. On the map itself the real
