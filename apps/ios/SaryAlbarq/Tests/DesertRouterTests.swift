@@ -247,13 +247,13 @@ final class DesertRouterTests: XCTestCase {
         XCTAssertFalse(options.isEmpty, "the measured grid contains a costed route from a mapped road to this pin")
     }
 
-    @MainActor func testLiveMapboxSnapEndpointsConnectToBothReportedThumamahPins() throws {
+    @MainActor func testRecordedMapboxSnapEndpointsConnectToBothReportedThumamahPins() throws {
         let resource = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("../Resources/CampSites/routes-thumamah.bin").standardizedFileURL
         let grid = try XCTUnwrap(DesertGrid.load(try Data(contentsOf: resource)))
-        // These are the actual final coordinates returned by Mapbox Directions for the
-        // city-origin test on 2026-11-10. Mapbox snapped to a nearby road; the offline grid
-        // must continue from that endpoint instead of treating it as the destination.
+        // Recorded endpoints from a Mapbox Directions request on 2026-11-10. This test
+        // deliberately validates only the bundled grid continuation; it makes no live
+        // Mapbox request and does not prove a live end-to-end route.
         let cases: [(name: String, roadEnd: LngLat, target: LngLat)] = [
             ("25.26679,46.53676",
              LngLat(lng: 46.55734, lat: 25.27551),
@@ -265,7 +265,7 @@ final class DesertRouterTests: XCTestCase {
 
         for item in cases {
             let options = DesertRouter.options(grid, from: item.roadEnd, to: item.target, rain: false)
-            let route = try XCTUnwrap(options.first, "the bundled desert grid must connect Mapbox's snapped road endpoint to \(item.name)")
+            let route = try XCTUnwrap(options.first, "the bundled desert grid must connect the recorded snapped road endpoint to \(item.name)")
             XCTAssertGreaterThan(route.distanceM, 0)
             XCTAssertGreaterThanOrEqual(route.points.count, 2)
             XCTAssertLessThanOrEqual(Vehicle.distanceMeters(route.points.last!, item.target), max(130, hypot(grid.dx, grid.dy) * 1.5))
