@@ -240,7 +240,7 @@ enum CarPlayDestinations {
                                     symbol: "flag.fill", action: .trip(.rally)))
             case .wayBack:
                 let d = trail.start.flatMap { st in i.myPosition.map { Vehicle.distanceMeters($0, st.position) } }
-                outing.append(.init(title: "طريق العودة", detail: "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
+                outing.append(.init(title: SaryCopy.backTrack, detail: "على مسارك المسجّل" + (d.map { " · البداية على بعد \(ArabicFormat.distance($0))" } ?? ""),
                                     symbol: "arrow.uturn.backward", action: .trip(.wayBack)))
             case .place: break
             }

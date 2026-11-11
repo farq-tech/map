@@ -92,7 +92,7 @@ enum LiveActionCatalog {
                       subtitle: s.following ? "تتبع الخطة الآن" : "سجل الطلعة، الخطة، اتبع المسار", isActive: s.following),
                 .init(id: "search", title: "ابحث أو إحداثية", systemImage: "magnifyingglass", accessibilityID: "outing-search"),
             ] + (s.backTracking ? [] : [
-                /* While it runs, its panel's «إنهاء» is the one way out (no second stop here). */
+                /* While it runs, its panel's «أنهِ الرجعة» is the one way out (no second stop here). */
                 LiveActionItem(id: "backtrack", title: "طريق الرجعة", systemImage: SaryIcon.backTrack, accessibilityID: "trail.backtrack",
                                subtitle: "ترجع على مسارك لين نقطة البداية · بدون إنترنت"),
             ])),

@@ -189,7 +189,7 @@ struct FollowTrackPanel: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: exit) { Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold) }
+                Button(action: exit) { Text("أوقف التتبع").saryText(theme.drive ? .body : .callout, weight: .bold) }
                     .buttonStyle(.sary(.secondary, width: .hug, compact: !theme.drive))
                     .accessibilityIdentifier("follow.exit")
             }

@@ -228,7 +228,7 @@ final class CarPlayCoordinator: NSObject {
     private func updateButtons(_ i: CarPlayInput) {
         let mySOS = i.view?.me?.sos != nil
         let recording = session?.voiceNotes.carPlayRecording == true
-        let leading = preview != nil ? "إلغاء" : (tripKind != nil ? "إنهاء" : "طريق العودة")
+        let leading = preview != nil ? SaryCopy.cancel : (tripKind == .wayBack ? SaryCopy.endBackTrack : tripKind != nil ? SaryCopy.stopGuidance : SaryCopy.backTrack)
         let talk = recording ? "أرسل" : "اضغط وسجّل"
         let sos = mySOS ? "ألغِ النداء" : "نداء"
         let key = "\(leading)|\(talk)|\(sos)"
@@ -236,11 +236,12 @@ final class CarPlayCoordinator: NSObject {
         buttonKey = key
         let first: CPBarButton
         if preview != nil {
-            first = bar("إلغاء") { $0.cancelPreview() }
+            first = bar(leading) { $0.cancelPreview() }
         } else if tripKind != nil {
-            first = bar("إنهاء") { $0.endTrip(cancelled: true) }
+            /* Name the action (the word dictionary): «أنهِ الرجعة» / «أوقف التوجيه», never a bare «إنهاء». */
+            first = bar(leading) { $0.endTrip(cancelled: true) }
         } else {
-            first = bar("طريق العودة") { $0.startTrip(.wayBack) }
+            first = bar(leading) { $0.startTrip(.wayBack) }
         }
         /* «اضغط وسجّل» → «أرسل»: the phone's own talk button (tap, talk, tap). */
         mapTemplate.leadingNavigationBarButtons = [first, bar(talk) { $0.talkPressed() }]

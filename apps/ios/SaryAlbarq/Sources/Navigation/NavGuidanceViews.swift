@@ -398,7 +398,7 @@ struct NavArrivalCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: end) { Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold) }
+            Button(action: end) { Text(SaryCopy.stopGuidance).saryText(theme.drive ? .body : .callout, weight: .bold) }
                 .buttonStyle(.sary(.primary, width: .hug, compact: !theme.drive))
                 .accessibilityIdentifier("nav.arrived.end")
         }

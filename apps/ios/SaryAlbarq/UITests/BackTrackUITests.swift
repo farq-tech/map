@@ -47,7 +47,7 @@ final class BackTrackUITests: XCTestCase {
         sleep(2)
         attach(app, "backtrack")
         app.buttons["backtrack.exit"].tap()
-        XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5), "«إنهاء» leaves back-track mode")
+        XCTAssertTrue(panel(app).waitForNonExistence(timeout: 5), "«أنهِ الرجعة» leaves back-track mode")
     }
 
     func testEnterFromTheRaisedSheet() {

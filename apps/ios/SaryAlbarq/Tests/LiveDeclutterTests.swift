@@ -87,7 +87,7 @@ final class LiveScreenRulesTests: XCTestCase {
         XCTAssertTrue(LiveScreenRules.backTrackShortcut(running: false, arrived: true, offRoute: false))
         XCTAssertTrue(LiveScreenRules.backTrackShortcut(running: false, arrived: false, offRoute: true))
         XCTAssertFalse(LiveScreenRules.backTrackShortcut(running: false, arrived: false, offRoute: false), "only when it fits the moment")
-        XCTAssertFalse(LiveScreenRules.backTrackShortcut(running: true, arrived: true, offRoute: true), "running: the panel's «إنهاء» only")
+        XCTAssertFalse(LiveScreenRules.backTrackShortcut(running: true, arrived: true, offRoute: true), "running: the panel's «أنهِ الرجعة» only")
     }
 
     func testGuidingKeepsTwoSideCircles() {

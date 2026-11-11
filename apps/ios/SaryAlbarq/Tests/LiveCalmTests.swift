@@ -37,7 +37,7 @@ final class LiveCalmTests: XCTestCase {
     }
 
     func testBackTrackShortcutOnlyWhenItFitsAndNoToolsAfterTheEnd() {
-        let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق العودة", accessibilityID: "outing-backtrack")
+        let back = SaryMapControlItem(id: "backtrack", systemImage: "x", label: "طريق الرجعة", accessibilityID: "outing-backtrack")
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: back, plusBadge: nil, driving: false, ended: false).map(\.id),
                        ["locate", "backtrack"])
         XCTAssertEqual(LiveCalmRules.sideItems(camera: camera, backTrack: nil, plusBadge: nil, driving: false, ended: true).map(\.id), ["locate"],

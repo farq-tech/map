@@ -744,7 +744,7 @@ struct BackTrackPanel: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: exit) {
-                Text("إنهاء").saryText(theme.drive ? .body : .callout, weight: .bold)
+                Text(SaryCopy.endBackTrack).saryText(theme.drive ? .body : .callout, weight: .bold)
             }
             .buttonStyle(.sary(.secondary, width: .hug, compact: !theme.drive))
             .accessibilityIdentifier("backtrack.exit")

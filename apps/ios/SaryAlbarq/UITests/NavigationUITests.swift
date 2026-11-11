@@ -106,7 +106,7 @@ final class NavigationUITests: XCTestCase {
                 shot(app, "nav-steps-light")
                 app.buttons["nav.steps.close"].tap()
                 app.buttons["nav.end"].tap()
-                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«إنهاء» ends guidance")
+                XCTAssertTrue(el(app, "nav.banner").waitForNonExistence(timeout: 5), "«أوقف التوجيه» ends guidance")
             }
             app.terminate()
         }
