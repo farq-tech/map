@@ -423,6 +423,28 @@ final class TripProgressTests: XCTestCase {
         XCTAssertEqual(CarPlayPresenter.tripLine(i), "وصلنا الوجهة")
         XCTAssertEqual(CarPlayPresenter.destination(i)?.label, "روضة خريم · وصلنا")
     }
+
+    /// The driven distance is walked once per trail and start, and a precomputed value is what the
+    /// panel shows (the live controller memoizes it across the screen's several panel reads).
+    func testDrivenMetersMemoWalksOncePerTrail() {
+        var trail = (0..<7).map { k in TrailPoint(lat: south(10_000 - Double(k) * 1000).lat, lng: dest.lng, t: t0 + Double(k) * 60_000) }
+        var memo = DrivenMetersMemo()
+        let a = memo.value(trail: trail, sinceMs: t0)
+        XCTAssertEqual(a, TripMath.drivenMeters(trail: trail, sinceMs: t0))
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0), a)
+        XCTAssertEqual(memo.computeCount, 1)
+        /* A later start, then a changed trail: walked again, never a stale number. */
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
+        XCTAssertEqual(memo.computeCount, 2)
+        trail[3].lng += 0.01
+        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
+        XCTAssertEqual(memo.computeCount, 3)
+
+        var i = input(fixAt: south(4000), trail: trail)
+        let plain = TripPresenter.panel(i)
+        i.drivenMeters = memo.value(trail: trail, sinceMs: t0)
+        XCTAssertEqual(TripPresenter.panel(i), plain)
+    }
 }
 
 /// `StoredBytesMemo`: the stored trip logs are decoded again only when their bytes change.
@@ -469,28 +491,6 @@ final class StoredBytesMemoTests: XCTestCase {
         XCTAssertEqual(read()?.distanceM, 300)
         XCTAssertEqual(memo.decodeCount, 3)
         defaults.removePersistentDomain(forName: suite)
-    }
-
-    /// The driven distance is walked once per trail and start, and a precomputed value is what the
-    /// panel shows (the live controller memoizes it across the screen's several panel reads).
-    func testDrivenMetersMemoWalksOncePerTrail() {
-        var trail = (0..<7).map { k in TrailPoint(lat: south(10_000 - Double(k) * 1000).lat, lng: dest.lng, t: t0 + Double(k) * 60_000) }
-        var memo = DrivenMetersMemo()
-        let a = memo.value(trail: trail, sinceMs: t0)
-        XCTAssertEqual(a, TripMath.drivenMeters(trail: trail, sinceMs: t0))
-        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0), a)
-        XCTAssertEqual(memo.computeCount, 1)
-        /* A later start, then a changed trail: walked again, never a stale number. */
-        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
-        XCTAssertEqual(memo.computeCount, 2)
-        trail[3].lng += 0.01
-        XCTAssertEqual(memo.value(trail: trail, sinceMs: t0 + 3 * 60_000), TripMath.drivenMeters(trail: trail, sinceMs: t0 + 3 * 60_000))
-        XCTAssertEqual(memo.computeCount, 3)
-
-        var i = input(fixAt: south(4000), trail: trail)
-        let plain = TripPresenter.panel(i)
-        i.drivenMeters = memo.value(trail: trail, sinceMs: t0)
-        XCTAssertEqual(TripPresenter.panel(i), plain)
     }
 }
 
