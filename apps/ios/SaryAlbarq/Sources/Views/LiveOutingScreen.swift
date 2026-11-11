@@ -33,6 +33,9 @@ struct LiveOutingScreen: View {
     /// must not shift or cover what the person is touching); it catches up just after.
     @State private var frozenAlerts: [LiveAlertUI]?
     @State private var touching = false
+    /// The sheet's detent shape held still while a finger is down and through the settle after it
+    /// (`LiveSheetShape`): a detent set changing mid-gesture makes SwiftUI re-snap the sheet.
+    @State private var frozenSheetShape: LiveSheetShape?
     @ObservedObject private var savedPlaces = SavedPlacesStore.shared
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
@@ -127,12 +130,24 @@ struct LiveOutingScreen: View {
                     GeometryReader { g in
                         Color.clear
                             .onAppear { sheetTop = g.frame(in: .global).minY }
-                            .onChange(of: g.frame(in: .global).minY) { _, y in sheetTop = y }
+                            .onChange(of: g.frame(in: .global).minY) { _, y in
+                                /* A finger on the sheet: the chrome above it follows 1:1 (no spring chasing the
+                                 * finger). Otherwise (a tap on the summary, a programmatic lower, the settle)
+                                 * it eases to the new edge. */
+                                var t = Transaction()
+                                if touching { t.disablesAnimations = true } else { t.animation = theme.animation(.smooth) }
+                                withTransaction(t) { sheetTop = y }
+                            }
                     }
                 }
                 .saryAppearance(appearance)
-                .sarySheetPresentation(detent: $controller.sheetDetent, trip: controller.showsQuickRow(drive: theme.drive))
+                .sarySheetPresentation(detent: $controller.sheetDetent, shape: sheetShape)
         }
+    }
+
+    /// The live sheet's detent shape: frozen during a touch, else from the context at peek.
+    private var sheetShape: LiveSheetShape {
+        LiveSheetShape.resolve(live: controller.sheetShape(drive: theme.drive), frozen: frozenSheetShape)
     }
 
     private func touchChanged(_ down: Bool) {
@@ -140,9 +155,14 @@ struct LiveOutingScreen: View {
         controller.cameraTouch(down: down)
         if down {
             if frozenAlerts == nil { frozenAlerts = controller.ui.alerts }
+            if frozenSheetShape == nil { frozenSheetShape = controller.sheetShape(drive: theme.drive) }
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 if !touching { frozenAlerts = nil }
+            }
+            /* After the native settle animation (~0.4 s) the sheet may take a changed shape. */
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                if !touching { frozenSheetShape = nil }
             }
         }
     }
@@ -153,7 +173,7 @@ struct LiveOutingScreen: View {
     private var bottomInset: CGFloat {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
-        return max(measured, SheetDetentUI.peekHeight(drive: theme.drive, trip: controller.showsQuickRow(drive: theme.drive)))
+        return max(measured, sheetShape.peekHeight)
     }
 
     private var topChromeBottom: CGFloat {
@@ -361,7 +381,8 @@ struct LiveOutingScreen: View {
         }
         .animation(theme.animation(.smooth), value: controller.sheetDetent)
         .animation(theme.animation(.smooth), value: controller.tripEnded)
-        .animation(theme.animation(.smooth), value: sheetTop)
+        /* No `.animation(value: sheetTop)`: during a drag it sprang the dock after the finger every
+         * frame. The sheet-top update itself carries its transaction (see the sheet's GeometryReader). */
         .animation(theme.animation(.smooth), value: driving)
         .animation(theme.animation(.smooth), value: exploring)
         .animation(theme.animation(.snappy), value: controller.recenterTitle)

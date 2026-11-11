@@ -59,6 +59,22 @@ struct MotionHysteresis: Equatable {
     }
 }
 
+/// The automatic drive appearance (`AppearanceSettings.autoDrive`): on above 7 m/s (~25 km/h)
+/// as before, off again only at 4 m/s (~14 km/h) or less. With one threshold, a car cruising near
+/// 25 km/h (or GPS speed noise) flipped `theme.drive` on every fix — and with it the live sheet's
+/// peek height (70 ↔ 88, 140 ↔ 172), so the sheet rose and fell by itself (owner report, Build 36).
+enum AutoDriveRule {
+    static let onAboveMps = 7.0
+    static let offAtOrBelowMps = 4.0
+
+    static func next(current: Bool, speedMps: Double?) -> Bool {
+        let v = max(0, speedMps ?? 0)
+        if v > onAboveMps { return true }
+        if v <= offAtOrBelowMps { return false }
+        return current
+    }
+}
+
 enum LiveContextRule {
     /// The mode the screen shows.
     /// - Parameters:

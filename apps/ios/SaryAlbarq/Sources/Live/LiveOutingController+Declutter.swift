@@ -18,6 +18,20 @@ enum LiveScreenRules {
         !ended && !notStarted && !navigating && !driving && !sosFocused
     }
 
+    /// Whether the quick row shows AT PEEK — what sizes the peek detent. Unlike `showsQuickRow`
+    /// for the content, it never depends on where the sheet is: the raised sheet always reads
+    /// «stopped» (`LiveContextRule`), so sizing the peek from the live context made raising the
+    /// sheet change the detent set (88 → 172 in drive mode) and lowering it change it back, and
+    /// SwiftUI re-snapped the sheet by itself each time (owner report, Build 36).
+    static func peekShowsQuickRow(override o: LiveContextOverride, navigating: Bool, moving: Bool, driveMode: Bool,
+                                  exploring: Bool, ended: Bool, notStarted: Bool, sosFocused: Bool) -> Bool {
+        guard !ended, !navigating else { return false }
+        let context = LiveContextRule.resolve(override: o, navigating: navigating, moving: moving, driveMode: driveMode,
+                                              sheetRaised: false, exploring: exploring)
+        return showsQuickRow(ended: ended, notStarted: notStarted, navigating: navigating, driving: context == .driving,
+                             sosFocused: sosFocused)
+    }
+
     /// My SOS is on: the focused mode — the SOS strip, the walkie-talkie and the map; no CTA,
     /// quick row or side buttons until «أنا بخير».
     static func sosFocused(_ mine: MySOSUI) -> Bool {
@@ -91,6 +105,19 @@ extension LiveOutingController {
         let ui = self.ui
         return LiveScreenRules.showsQuickRow(ended: false, notStarted: ui.status == .notStarted, navigating: false,
                                              driving: false, sosFocused: LiveScreenRules.sosFocused(ui.sos.mine))
+    }
+
+    /// The live sheet's detent shape (`LiveSheetShape`): the peek height from the context the screen
+    /// has AT PEEK, so raising / lowering the sheet never changes its own detent set.
+    func sheetShape(drive: Bool) -> LiveSheetShape {
+        /* Cheap checks first: `ui` runs the whole presenter. */
+        guard !tripEnded, !nav.isActive else { return LiveSheetShape(drive: drive, trip: false) }
+        let ui = self.ui
+        let trip = LiveScreenRules.peekShowsQuickRow(override: contextOverride, navigating: false, moving: motion.moving,
+                                                     driveMode: drive, exploring: exploreActive, ended: false,
+                                                     notStarted: ui.status == .notStarted,
+                                                     sosFocused: LiveScreenRules.sosFocused(ui.sos.mine))
+        return LiveSheetShape(drive: drive, trip: trip)
     }
 
     /// «طريق الرجعة» on the map by itself: after arrival or off the planned route — not while it

@@ -105,11 +105,23 @@ enum HomeSheetRules {
         return min(available, max(160, desired - offset))
     }
 
-    /// Where the sheet settles after a drag: `translation` > 0 is downwards.
-    static func settle(expanded: Bool, translation: Double, velocity: Double) -> Bool {
-        let push = translation + velocity * 0.15
-        if expanded { return push < 90 }
-        return push < -60
+    /// The finger's offset since the drag was recognized: `DragGesture` reports its first change only
+    /// after `minimumDistance`, and applying that whole translation made the sheet jump that far at once.
+    static func dragOffset(translation: Double, origin: Double) -> Double {
+        guard translation.isFinite else { return 0 }
+        return translation - (origin.isFinite ? origin : 0)
+    }
+
+    /// Where the sheet settles after a drag (true = expanded): the rest height nearest to where the
+    /// release would carry it — the start height moved by the gesture's predicted end translation
+    /// (> 0 is downwards; includes the release velocity). A slow drag stopped short goes back; a
+    /// drag past the middle, or a flick, goes on.
+    static func settle(expanded: Bool, collapsedHeight: Double, expandedHeight: Double, predictedTranslation: Double) -> Bool {
+        /* One rest height (the picked-place card, a tiny screen): nothing to choose, keep the state. */
+        guard abs(expandedHeight - collapsedHeight) > 0.5 else { return expanded }
+        let start = expanded ? expandedHeight : collapsedHeight
+        let projected = start - (predictedTranslation.isFinite ? predictedTranslation : 0)
+        return abs(projected - expandedHeight) < abs(projected - collapsedHeight)
     }
 }
 

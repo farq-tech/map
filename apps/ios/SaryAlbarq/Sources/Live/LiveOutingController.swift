@@ -637,7 +637,7 @@ final class LiveOutingController: ObservableObject {
     /// Feed the automatic drive / night modes from the real fix.
     private func updateAuto() {
         guard let f = location.lastFix else { return }
-        let drive = (f.speed ?? 0) > 7
+        let drive = AutoDriveRule.next(current: appearance.autoDrive, speedMps: f.speed)
         if appearance.autoDrive != drive { appearance.autoDrive = drive }
         let night = SunLight.preset(Date(), lat: f.lat, lng: f.lng) == .night
         if appearance.autoNight != night { appearance.autoNight = night }

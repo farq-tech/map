@@ -77,6 +77,52 @@ final class LiveScreenRulesTests: XCTestCase {
                        "my SOS on: the focused mode")
     }
 
+    /// Owner report (Build 36, «اهتزاز النافذة السفلية»): the peek detent's height must not depend on
+    /// where the sheet is. Raising it reads «stopped» (`LiveContextRule`), which used to add the quick
+    /// row to the PEEK height too (88 → 172 in drive mode), so the detent set changed under the
+    /// finger and SwiftUI re-snapped the sheet by itself.
+    func testPeekQuickRowIgnoresTheSheetPosition() {
+        let peek = { (o: LiveContextOverride, moving: Bool, drive: Bool) in
+            LiveScreenRules.peekShowsQuickRow(override: o, navigating: false, moving: moving, driveMode: drive,
+                                              exploring: false, ended: false, notStarted: false, sosFocused: false)
+        }
+        XCTAssertTrue(peek(.auto, false, false), "stopped: the quick row is part of the peek")
+        XCTAssertFalse(peek(.auto, false, true), "drive mode at peek: no quick row, whatever the raised sheet reads")
+        XCTAssertFalse(peek(.auto, true, false), "moving at peek: no quick row")
+        XCTAssertFalse(peek(.driving, false, false))
+        XCTAssertTrue(peek(.stopped, true, true))
+        /* It is exactly the content rule as it stands AT PEEK (sheet not raised). */
+        for o in LiveContextOverride.allCases {
+            for moving in [false, true] {
+                for drive in [false, true] {
+                    let atPeek = LiveContextRule.resolve(override: o, navigating: false, moving: moving, driveMode: drive, sheetRaised: false)
+                    XCTAssertEqual(peek(o, moving, drive),
+                                   LiveScreenRules.showsQuickRow(ended: false, notStarted: false, navigating: false,
+                                                                 driving: atPeek == .driving, sosFocused: false))
+                }
+            }
+        }
+        XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: true, moving: false, driveMode: false,
+                                                         exploring: false, ended: false, notStarted: false, sosFocused: false),
+                       "guiding: the peek is the guidance bar")
+        XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: false, moving: false, driveMode: false,
+                                                         exploring: false, ended: true, notStarted: false, sosFocused: false))
+        XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: false, moving: false, driveMode: false,
+                                                         exploring: false, ended: false, notStarted: true, sosFocused: false))
+        XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: false, moving: false, driveMode: false,
+                                                         exploring: false, ended: false, notStarted: false, sosFocused: true))
+    }
+
+    /// The detent shape a finger went down with stays until the settle is over.
+    func testSheetShapeHoldsStillWhileFrozen() {
+        let stopped = LiveSheetShape(drive: false, trip: true)
+        let driving = LiveSheetShape(drive: true, trip: false)
+        XCTAssertEqual(LiveSheetShape.resolve(live: driving, frozen: stopped), stopped)
+        XCTAssertEqual(LiveSheetShape.resolve(live: driving, frozen: nil), driving)
+        XCTAssertEqual(stopped.peekHeight, SheetDetentUI.peekHeight(drive: false, trip: true))
+        XCTAssertEqual(driving.peekHeight, SheetDetentUI.peekHeight(drive: true, trip: false))
+    }
+
     func testSOSFocusOnlyOnceSent() {
         XCTAssertFalse(LiveScreenRules.sosFocused(.none))
         XCTAssertFalse(LiveScreenRules.sosFocused(.sending))

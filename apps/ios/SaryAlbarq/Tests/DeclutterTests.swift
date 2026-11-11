@@ -25,6 +25,27 @@ final class DeclutterTests: XCTestCase {
         XCTAssertFalse(m.moving)
     }
 
+    /// The automatic drive appearance has a gap between on and off: speed hovering near 25 km/h
+    /// no longer flips `theme.drive` (and the live sheet's peek height) on every fix.
+    func testAutoDriveHysteresis() {
+        XCTAssertFalse(AutoDriveRule.next(current: false, speedMps: 6.9))
+        XCTAssertTrue(AutoDriveRule.next(current: false, speedMps: 7.1), "on above 7 m/s, as before")
+        XCTAssertTrue(AutoDriveRule.next(current: true, speedMps: 6.5), "a dip under 7 m/s keeps it on")
+        XCTAssertTrue(AutoDriveRule.next(current: true, speedMps: 4.1))
+        XCTAssertFalse(AutoDriveRule.next(current: true, speedMps: 4.0), "off at 4 m/s or less")
+        XCTAssertFalse(AutoDriveRule.next(current: false, speedMps: 5.5), "between the two: unchanged")
+        XCTAssertFalse(AutoDriveRule.next(current: true, speedMps: nil), "no speed: off")
+        XCTAssertFalse(AutoDriveRule.next(current: true, speedMps: -1))
+        /* Noise around 25 km/h: one flip, not one per fix. */
+        var on = false, flips = 0
+        for v in [6.8, 7.2, 6.9, 7.1, 6.6, 7.3, 6.7, 7.0] {
+            let n = AutoDriveRule.next(current: on, speedMps: v)
+            if n != on { flips += 1 }
+            on = n
+        }
+        XCTAssertEqual(flips, 1)
+    }
+
     func testContextRule() {
         let r = LiveContextRule.resolve
         XCTAssertEqual(r(.auto, false, false, false, false, false), .stopped)

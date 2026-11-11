@@ -18,6 +18,11 @@ struct MapHomeScreen: View {
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
+    /// The translation when the sheet drag was recognized (after its minimum distance).
+    @State private var dragOrigin: Double?
+    /// True while a sheet drag is live; resets by itself if the system cancels the gesture
+    /// (then `onEnded` never runs — see the `onChange` that settles the sheet back).
+    @GestureState private var sheetDragging = false
     @State private var query = ""
     @FocusState private var searchFocused: Bool
     @State private var category: HomeCategory?
@@ -95,7 +100,7 @@ struct MapHomeScreen: View {
                 }
                 .padding(.top, theme.space(.s))
                 .padding(.bottom, sheetH)
-                sheet(height: sheetH)
+                sheet(height: sheetH, screen: screen)
             }
             .ignoresSafeArea(edges: .bottom)
         }
@@ -214,6 +219,16 @@ struct MapHomeScreen: View {
     // MARK: the sheet
 
     private func sheetHeight(screen: CGFloat) -> CGFloat {
+        CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(baseHeight(screen: screen, expanded: expanded)),
+                                           drag: Double(drag)))
+    }
+
+    /// The sheet's resting height (no finger on it), clamped like the frame.
+    private func restingHeight(screen: CGFloat, expanded e: Bool) -> Double {
+        HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(baseHeight(screen: screen, expanded: e)), drag: 0)
+    }
+
+    private func baseHeight(screen: CGFloat, expanded: Bool) -> CGFloat {
         let base: CGFloat
         if selected != nil {
             // The picked-point card has only its title, coordinates, and two actions.
@@ -227,10 +242,10 @@ struct MapHomeScreen: View {
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard))
         }
-        return CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(base), drag: Double(drag)))
+        return base
     }
 
-    private func sheet(height: CGFloat) -> some View {
+    private func sheet(height: CGFloat, screen: CGFloat) -> some View {
         let p = theme.palette
         let shape = UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
         return VStack(spacing: 0) {
@@ -242,7 +257,7 @@ struct MapHomeScreen: View {
                 /* The raised sheet contains a vertical ScrollView: there only the handle resizes it,
                  * so scrolling «طلعاتي» / recent places never collapses the sheet. Collapsed (nothing
                  * scrolls), the whole sheet drags too (`collapsedDraggable` below). */
-                .gesture(sheetDrag)
+                .gesture(sheetDrag(screen: screen))
                 .accessibilityElement()
                 .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى لطلعاتك"))
                 .accessibilityAddTraits(.isButton)
@@ -278,7 +293,7 @@ struct MapHomeScreen: View {
                     .accessibilityIdentifier("home.sheet.content")
                 }
                 /* Collapsed nothing scrolls: drag the sheet up from anywhere on it, not only the handle. */
-                .gesture(sheetDrag, including: collapsedDraggable ? .all : .subviews)
+                .gesture(sheetDrag(screen: screen), including: collapsedDraggable ? .all : .subviews)
             }
         }
         .frame(height: height, alignment: .top)
@@ -288,6 +303,16 @@ struct MapHomeScreen: View {
         .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
+        .onChange(of: sheetDragging) { _, dragging in
+            guard !dragging else { return }
+            /* A cancelled drag (no `onEnded`): settle back instead of staying where the finger left it.
+             * Next run loop, so a normal end (which clears `dragOrigin`) always goes first. */
+            DispatchQueue.main.async {
+                guard dragOrigin != nil else { return }
+                dragOrigin = nil
+                withAnimation(theme.animation(.smooth)) { drag = 0 }
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(expanded ? "home.sheet.expanded" : "home.sheet")
     }
@@ -295,14 +320,38 @@ struct MapHomeScreen: View {
     private var showingResults: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
 
     /// Resizes the sheet: on the handle always, on the whole sheet while it is collapsed.
-    private var sheetDrag: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { v in drag = v.translation.height }
+    /// Owner report (Build 36, «اهتزاز النافذة السفلية»): the gesture used the default `.local`
+    /// coordinate space of a view that the drag itself moves (the sheet is bottom-anchored, so its
+    /// top — and the handle — rise as it grows). Each frame the local translation came out short by
+    /// the previous frame's growth, so the height alternated between "followed the finger" and
+    /// "back near the start": the sheet shook and never tracked. `.global` translation is the
+    /// finger's own movement on screen: 1:1.
+    private func sheetDrag(screen: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
+            .updating($sheetDragging) { _, dragging, _ in dragging = true }
+            .onChanged { v in
+                /* Start from where the gesture was recognized (no 12 pt jump on the first frame). */
+                let origin = dragOrigin ?? Double(v.translation.height)
+                if dragOrigin == nil { dragOrigin = origin }
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { drag = CGFloat(HomeSheetRules.dragOffset(translation: Double(v.translation.height), origin: origin)) }
+            }
             .onEnded { v in
-                let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
-                                                 velocity: Double(v.predictedEndTranslation.height - v.translation.height))
-                drag = 0
-                setExpanded(next)
+                let origin = dragOrigin ?? 0
+                dragOrigin = nil
+                let next = HomeSheetRules.settle(expanded: expanded,
+                                                 collapsedHeight: restingHeight(screen: screen, expanded: false),
+                                                 expandedHeight: restingHeight(screen: screen, expanded: true),
+                                                 predictedTranslation: HomeSheetRules.dragOffset(translation: Double(v.predictedEndTranslation.height),
+                                                                                                origin: origin))
+                /* One animated change: the finger's offset back to 0 AND the new rest height (a release
+                 * that stays put used to drop `drag` without animation and jump back). */
+                withAnimation(theme.animation(.smooth)) {
+                    drag = 0
+                    expanded = next
+                }
+                if !next { searchFocused = false }
             }
     }
 

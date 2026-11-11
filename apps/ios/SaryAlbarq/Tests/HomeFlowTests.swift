@@ -37,13 +37,39 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(HomeCategory.city.contains(where: \.desert))
     }
 
-    func testSheetSettles() {
-        XCTAssertTrue(HomeSheetRules.settle(expanded: false, translation: -120, velocity: 0), "pulled up: raise")
-        XCTAssertFalse(HomeSheetRules.settle(expanded: false, translation: -20, velocity: 0), "a nudge: stays")
-        XCTAssertFalse(HomeSheetRules.settle(expanded: true, translation: 140, velocity: 0), "pulled down: lower")
-        XCTAssertTrue(HomeSheetRules.settle(expanded: true, translation: 30, velocity: 0))
-        XCTAssertFalse(HomeSheetRules.settle(expanded: true, translation: 10, velocity: 900), "a flick down lowers it")
-        XCTAssertGreaterThan(HomeSheetRules.expandedHeight(screen: 874), HomeSheetRules.collapsedHeight)
+    /// Owner report (Build 36, «اهتزاز النافذة السفلية»): on release the sheet goes to the rest height
+    /// nearest to where the gesture's predicted end carries it (velocity included).
+    func testSheetSettlesToTheNearestRestHeight() {
+        let low = HomeSheetRules.frameHeight(screen: 874, preferred: HomeSheetRules.collapsedHeight(card: .active("a")), drag: 0)
+        let high = HomeSheetRules.frameHeight(screen: 874, preferred: HomeSheetRules.expandedHeight(screen: 874), drag: 0)
+        XCTAssertGreaterThan(high, low)
+        let settle = { (expanded: Bool, predicted: Double) in
+            HomeSheetRules.settle(expanded: expanded, collapsedHeight: low, expandedHeight: high, predictedTranslation: predicted)
+        }
+        XCTAssertFalse(settle(false, -20), "a nudge: stays down")
+        XCTAssertFalse(settle(false, -120), "a slow pull stopped short of the middle: back down")
+        XCTAssertTrue(settle(false, -300), "pulled past the middle: up")
+        XCTAssertTrue(settle(false, -450), "a flick up (large predicted end): up")
+        XCTAssertTrue(settle(true, 30), "a nudge down: stays up")
+        XCTAssertTrue(settle(true, 140), "a slow pull down short of the middle: back up")
+        XCTAssertFalse(settle(true, 300), "pulled down past the middle: down")
+        XCTAssertFalse(settle(true, 500), "a flick down lowers it")
+        XCTAssertTrue(settle(true, -200), "pushed further up: stays up (no flip)")
+        XCTAssertFalse(settle(false, 200), "pushed further down: stays down")
+        /* One rest height (the picked-place card): the state does not flip. */
+        XCTAssertTrue(HomeSheetRules.settle(expanded: true, collapsedHeight: 232, expandedHeight: 232, predictedTranslation: 400))
+        XCTAssertFalse(HomeSheetRules.settle(expanded: false, collapsedHeight: 232, expandedHeight: 232, predictedTranslation: -400))
+        XCTAssertTrue(settle(true, .nan), "an invalid prediction keeps the state")
+        XCTAssertFalse(settle(false, .infinity))
+    }
+
+    /// The drag starts from where it was recognized: no jump by the gesture's minimum distance.
+    func testSheetDragOffsetStartsAtRecognition() {
+        XCTAssertEqual(HomeSheetRules.dragOffset(translation: -12, origin: -12), 0)
+        XCTAssertEqual(HomeSheetRules.dragOffset(translation: -52, origin: -12), -40, "1:1 with the finger after that")
+        XCTAssertEqual(HomeSheetRules.dragOffset(translation: 30, origin: 12), 18)
+        XCTAssertEqual(HomeSheetRules.dragOffset(translation: -20, origin: .nan), -20)
+        XCTAssertEqual(HomeSheetRules.dragOffset(translation: .nan, origin: -12), 0)
     }
 
     func testSheetFrameStaysValidForInitialAndInvalidGeometry() {
