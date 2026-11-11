@@ -475,3 +475,17 @@ final class MetricsSummaryTests: XCTestCase {
         XCTAssertEqual(store.load().map(\.id), ["s4"])
     }
 }
+
+/// Review finding on #181: MetricKit value strings may carry the phone's number format.
+final class MetricsQuantityLocaleTests: XCTestCase {
+    func testLocalisedNumbersParse() {
+        XCTAssertEqual(MetricsExtract.Quantity("1,234 ms")?.value, 1234, "comma grouping")
+        XCTAssertEqual(MetricsExtract.Quantity("1,5 sec")?.value, 1.5, "decimal comma")
+        XCTAssertEqual(MetricsExtract.Quantity("1.234,5 ms")?.value, 1234.5, "period grouping, decimal comma")
+        XCTAssertEqual(MetricsExtract.Quantity("١٢٣٫٥ ms")?.value, 123.5, "Arabic-Indic digits and decimal sign")
+        XCTAssertEqual(MetricsExtract.Quantity("۱۲۳ kB")?.value, 123, "Persian digits")
+        XCTAssertEqual(MetricsExtract.Quantity("1\u{00A0}234 ms")?.value, 1234, "NBSP grouping")
+        XCTAssertEqual(MetricsExtract.Quantity("200 ms")?.seconds, 0.2)
+        XCTAssertEqual(MetricsExtract.Quantity("١٬٠٠٠ kB")?.megabytes ?? 0, 1000.0 / 1024, accuracy: 1e-9)
+    }
+}
