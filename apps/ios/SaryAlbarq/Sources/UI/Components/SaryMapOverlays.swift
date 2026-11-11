@@ -57,7 +57,7 @@ struct SaryNameChip: View {
                 } else if NameChipAge.shows(chip.presence, now: chip.now) {
                     /* «تخفيف الزحمة» ٩ (Lovable: «خالد · قبل ٤ د»): the age only once it is worth saying. */
                     Text(style.label(now: chip.now))
-                        .saryText(.micro, weight: .medium)
+                        .saryText(.caption, weight: .medium)
                         .foregroundStyle(p.textSecondary)
                         .lineLimit(1)
                 }
@@ -246,7 +246,7 @@ struct SaryEdgeArrowChip: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(chip.name).saryText(.caption).foregroundStyle(p.textPrimary).lineLimit(1)
                     if let d = chip.distanceMeters {
-                        Text(SaryFormat.distance(meters: d)).saryNumber(.micro).foregroundStyle(p.textSecondary)
+                        Text(SaryFormat.distance(meters: d)).saryNumber(.caption).foregroundStyle(p.textSecondary)
                     }
                 }
             }

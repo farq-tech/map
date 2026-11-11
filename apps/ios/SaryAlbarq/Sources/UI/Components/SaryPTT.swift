@@ -247,7 +247,7 @@ struct SaryPTTButton: View {
             if let c = channelLabel, openChannels != nil {
                 Button { openChannels?() } label: {
                     Text(c)
-                        .font(.sary(10, .medium))
+                        .font(.sary(12, .medium, relativeTo: .caption))
                         .foregroundStyle(captionColor)
                         .lineLimit(1)
                         .fixedSize()

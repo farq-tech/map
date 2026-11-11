@@ -566,7 +566,7 @@ struct MapHomeScreen: View {
                     .frame(width: 28, height: 28).background(Circle().fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(.sary(14, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.75)
-                    if let detail { Text(detail).font(.sary(11, .regular)).foregroundStyle(p.textSecondary).lineLimit(1) }
+                    if let detail { Text(detail).font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
                 Spacer(minLength: 0)
             }
