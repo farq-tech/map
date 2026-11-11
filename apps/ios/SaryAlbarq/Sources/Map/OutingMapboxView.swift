@@ -209,9 +209,9 @@ struct OutingMapboxView: UIViewRepresentable {
         }
         c.setChrome(chrome)
         #if DEBUG
-        if MotionDemo.active { c.syncDemo() } else { c.sync(members) }
+        if MotionDemo.active { c.syncDemo() } else { c.syncIfChanged(members) }
         #else
-        c.sync(members)
+        c.syncIfChanged(members)
         #endif
         c.setRally(rally)
         c.setWaypoints(waypoints)
@@ -782,12 +782,40 @@ struct OutingMapboxView: UIViewRepresentable {
 
         // MARK: cars
 
+        /// `updateUIView` runs for every change of the host's SwiftUI state (timers, sheets, banners…),
+        /// mostly with the very same members. A full `sync` then re-matched every car to its road,
+        /// re-sent every car's GeoJSON source and paint, rebuilt every chip and re-laid the declutter
+        /// for nothing. With unchanged members (and chrome) only the cheap, state-driven parts run.
+        func syncIfChanged(_ cars: [MapMember]) {
+            guard synced, cars == lastCars, chrome == syncedChrome, map != nil else {
+                sync(cars)
+                return
+            }
+            refreshRoadsIfDue()
+            applyLight()
+            frameGroupIfNeeded(cars)
+        }
+        /// `sync` ran at least once with a map, and the chrome it laid the chips out for.
+        private var synced = false
+        private var syncedChrome: UIEdgeInsets = .zero
+
+        /// While following a moving car the map is never idle: refresh the streets every few seconds too.
+        private func refreshRoadsIfDue() {
+            let t = CACurrentMediaTime()
+            if t - lastRoadRefresh > 3, roadsCameraMoved() { lastRoadRefresh = t; refreshRoads() }
+        }
+
+        /// Guidance camera, or the group framing (first fix, newcomers, someone drifting out of view).
+        private func frameGroupIfNeeded(_ cars: [MapMember]) {
+            if navDrawer.ownsCamera { navTick() } else if followMode == .free { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
+        }
+
         func sync(_ cars: [MapMember]) {
             lastCars = cars
             guard let map else { return }
-            /* While following a moving car the map is never idle: refresh the streets every few seconds too. */
-            let t = CACurrentMediaTime()
-            if t - lastRoadRefresh > 3, roadsCameraMoved() { lastRoadRefresh = t; refreshRoads() }
+            synced = true
+            syncedChrome = chrome
+            refreshRoadsIfDue()
             applyLight()
             let now = CACurrentMediaTime()
             var seen = Set<String>()
@@ -846,7 +874,7 @@ struct OutingMapboxView: UIViewRepresentable {
             }
             fx.keep(seen)
             startLink()
-            if navDrawer.ownsCamera { navTick() } else if followMode == .free { keepGroupInView(newcomers: Set(cars.map(\.id)).subtracting(fittedIds)) }
+            frameGroupIfNeeded(cars)
             layoutChips()
             project()
         }
