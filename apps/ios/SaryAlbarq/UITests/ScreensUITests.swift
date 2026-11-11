@@ -247,3 +247,52 @@ final class StandaloneNavRestartUITests: XCTestCase {
         XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
     }
 }
+
+/// Owner, Build 40 (7:10 pm): in «استكشف الخريطة» inside the trip «the buttons cannot be pressed».
+/// Taps every control of the explore header and side, each must answer.
+final class ExploreTapsUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = true }
+
+    private func shot(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name; a.lifetime = .keepAlways; add(a)
+    }
+
+    func testExploreControlsAnswer() {
+        let app = XCUIApplication()
+        let extra = (ProcessInfo.processInfo.environment["SARY_EXPLORE_ARGS"] ?? "").split(separator: " ").map(String.init)
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0",
+                               "-SaryContext", "stopped", "-SaryExplore"] + extra
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("explore.header").waitForExistence(timeout: 30))
+        sleep(3)
+        shot("explore-open")
+        /* The layer bar. */
+        let topo = any("explore.layer.topo")
+        XCTAssertTrue(topo.isHittable, "«طبوغرافي» hittable")
+        topo.tap()
+        XCTAssertTrue(NSPredicate(format: "isSelected == true").evaluate(with: topo) || topo.isSelected, "«طبوغرافي» selected after the tap")
+        sleep(3)
+        shot("explore-topo")
+        any("explore.layer.satellite").tap()
+        /* «الكشتة» opens its sheet. */
+        let camp = any("explore.camp")
+        XCTAssertTrue(camp.isHittable, "«الكشتة» hittable")
+        camp.tap()
+        sleep(3)
+        shot("explore-after-camp")
+        let opened = app.sheets.count > 0 || any("camp.suggest").exists || app.otherElements["camp.sheet"].exists
+            || app.buttons["page-close"].exists || app.buttons["sheet-close"].exists
+        XCTAssertTrue(opened, "«الكشتة» answered")
+        if app.buttons["page-close"].exists { app.buttons["page-close"].tap() } else { app.swipeDown() }
+        sleep(2)
+        /* The side buttons. */
+        for id in ["explore-drone", "explore-realistic", "explore-layers"] {
+            let b = any(id)
+            XCTAssertTrue(b.exists && b.isHittable, "\(id) hittable")
+        }
+        /* The peek sheet under the map in explore: what it holds. */
+        shot("explore-sheet")
+    }
+}

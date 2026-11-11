@@ -118,6 +118,10 @@ final class LiveScreenRulesTests: XCTestCase {
                                                          exploring: false, ended: false, notStarted: true, sosFocused: false))
         XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: false, moving: false, driveMode: false,
                                                          exploring: false, ended: false, notStarted: false, sosFocused: true))
+        /* Owner, Build 40: exploring hides the quick row, so the peek is not sized for it (no tall empty sheet). */
+        XCTAssertFalse(LiveScreenRules.peekShowsQuickRow(override: .auto, navigating: false, moving: false, driveMode: false,
+                                                         exploring: true, ended: false, notStarted: false, sosFocused: false),
+                       "exploring: no quick row at peek")
     }
 
     /// The detent shape a finger went down with stays until the settle is over.
