@@ -341,7 +341,8 @@ final class OutingGuidanceStateTests: XCTestCase {
 
     /// The header and the guidance bar count the minutes left the same way (build 36: «١٩ د» over «١٨ د»).
     func testHeaderMinutesMatchTheGuidanceBar() {
-        for s in [18 * 60 + 40.0, 18 * 60 + 5, 65 * 60 + 50, 61 * 60] {
+        let samples: [TimeInterval] = [1120, 1085, 3950, 3660] // 18m40s, 18m5s, 65m50s, 61m
+        for s in samples {
             let line = OutingFlow.minutesLine(t0.addingTimeInterval(s), now: t0)
             XCTAssertEqual(line, NavText.remaining(seconds: s), "\(s) s")
         }
