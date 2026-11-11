@@ -22,6 +22,8 @@ struct CreateOutingWizard: View {
     @State private var solo = false
     /// Quick mode, then «غيّر المكان» / back: the full steps from step ١ (UI-AUDIT ١-هـ).
     @State private var quickChangedPlace = false
+    /// The outing ids on the list before the first create attempt (to recognise ours after a timeout).
+    @State private var knownBefore: Set<String>?
 
     /// «مين معك؟» for a place picked on the home map, until the person goes back to change it.
     private var isQuick: Bool { quick != nil && !quickChangedPlace }
@@ -45,7 +47,7 @@ struct CreateOutingWizard: View {
                 }
             case .weather:
                 if isQuick {
-                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo,
+                    CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo, solo: solo,
                                    withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
                 } else {
                     WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
@@ -126,22 +128,55 @@ struct CreateOutingWizard: View {
         }
     }
 
+    /// Create the outing, saying at each call what we wait on (`CreateStage`), and never leaving the
+    /// spinner without an answer: success → step ٣; failure → the reason and «أعد المحاولة». A create
+    /// that failed (timeout) may still have reached the server: before saying «تعذّر» and before a retry
+    /// posts again, the list is checked for it (`CreateFlowState.recovered`), so a retry never makes two.
     private func approve() {
+        let retrying = flow.failure != nil
         guard flow.approve(now: Date()) else { return }
         let name = flow.trimmedName
         let dest = flow.destination
+        /* The outings that existed before the FIRST attempt: anything new with this name is ours. */
+        if knownBefore == nil { knownBefore = Set(model.current.map(\.id)) }
+        let known = knownBefore ?? []
         Task {
-            guard let id = await model.createOuting(name: name, openNow: false) else {
-                flow.createFailed(model.errorText ?? "تعذّر إنشاء الطلعة.")
+            var id: String?
+            if retrying, !model.isDemo {
+                flow.advance(.verifying)
+                await model.refresh()
+                id = CreateFlowState.recovered(name: name, current: model.current, knownBefore: known, now: Date())
+                flow.advance(.outing)
+            }
+            if id == nil { id = await model.createOuting(name: name, openNow: false) }
+            if id == nil, !model.isDemo {
+                let message = model.errorText ?? "تعذّر إنشاء الطلعة."
                 model.errorText = nil
+                flow.advance(.verifying)
+                await model.refresh()
+                id = CreateFlowState.recovered(name: name, current: model.current, knownBefore: known, now: Date())
+                if id == nil {
+                    flow.createFailed(message)
+                    return
+                }
+            }
+            guard let id else {
+                flow.createFailed("تعذّر إنشاء الطلعة.")
                 return
             }
             if let dest {
+                flow.advance(.destination)
                 RecentPlaces.add(dest)
                 let plan = model.plans.model(id)
                 if plan.planPhase == .loading { await plan.loadPlan() }
-                _ = await plan.setDestination(dest)
-                destinationLocalOnly = plan.destinationLocalOnly
+                if await plan.setDestination(dest) {
+                    destinationLocalOnly = plan.destinationLocalOnly
+                } else {
+                    /* The outing exists; only the destination did not reach the server (slow network).
+                     * Keep it on this phone: `PlanModel.loadPlan` sends it when the live screen loads the plan. */
+                    LocalDestinationStore.save(id, .init(destination: dest, pending: true, savedAt: Date()))
+                    destinationLocalOnly = true
+                }
             }
             withAnimation(theme.animation(.smooth)) { flow.created(id) }
             if solo { finish(start: true) }
@@ -399,6 +434,36 @@ struct MapPointPicker: View {
     }
 }
 
+// MARK: - Creating: what we wait on, with the seconds
+
+/// Under the busy button while the outing is being created: the call we wait on
+/// («ننشئ الطلعة على الخادم… ٥ ث»), and past 8 s that the network is slow and we are still trying.
+/// Every call has its own timeout (12 s), so this always ends in step ٣ or an error with «أعد المحاولة».
+private struct CreateProgressLine: View {
+    var flow: CreateFlowState
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        if flow.creating {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let text = flow.waitingText(now: ctx.date) ?? ""
+                let slow = text.contains("\n")
+                HStack(alignment: .firstTextBaseline, spacing: theme.space(.s)) {
+                    Image(systemName: slow ? "wifi.exclamationmark" : "hourglass")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(text).saryNumber(.footnote, weight: .medium)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(slow ? theme.palette.warningText : theme.palette.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("create.progressLine")
+        }
+    }
+}
+
 // MARK: - Quick start: «مين معك؟»
 
 /// After «ابدأ» on a place: who comes along. Inviting is optional — «لحالي» starts at once.
@@ -406,6 +471,8 @@ private struct CompanionsStep: View {
     var flow: CreateFlowState
     @ObservedObject var weather: WizardWeather
     var online: Bool
+    /// The running (or last failed) attempt is «لحالي»: that button shows the progress / retry.
+    var solo = false
     var withFriends: () -> Void
     var alone: () -> Void
     /// Back to step ١ to pick another place (the full steps from there).
@@ -436,13 +503,20 @@ private struct CompanionsStep: View {
         if let e = flow.error { SaryInlineMessage(text: e, tone: .error) }
         /* Honest: the server creates the outing, nothing is queued, so both buttons wait for the network. */
         if !online { SaryOfflineStrip(text: CreateCopy.offline) }
+        CreateProgressLine(flow: flow)
         Button(action: withFriends) {
-            SaryButtonLabel(title: "ادعُ ربعك", systemImage: "person.2.fill", busy: flow.creating, busyTitle: "نجهّز الطلعة…")
+            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ ربعك",
+                            systemImage: flow.failure != nil && !solo ? SaryIcon.retry : "person.2.fill",
+                            busy: flow.creating && !solo, busyTitle: "ننشئ الطلعة…")
         }
         .buttonStyle(.sary(.primary))
         .disabled(flow.creating || !online)
         .accessibilityIdentifier("start.withFriends")
-        Button(action: alone) { SaryButtonLabel(title: "لحالي، ابدأ الآن", systemImage: SaryIcon.play) }
+        Button(action: alone) {
+            SaryButtonLabel(title: flow.failure != nil && solo ? CreateFlowState.retryTitle : "لحالي، ابدأ الآن",
+                            systemImage: flow.failure != nil && solo ? SaryIcon.retry : SaryIcon.play,
+                            busy: flow.creating && solo, busyTitle: "ننشئ الطلعة…")
+        }
             .buttonStyle(.sary(.secondary))
             .disabled(flow.creating || !online)
             .accessibilityIdentifier("start.solo")
@@ -484,8 +558,11 @@ private struct WeatherStep: View {
                 if let e = flow.error, e != CreateFlowState.Issue.nameEmpty.arabic { SaryInlineMessage(text: e, tone: .error) }
                 /* Honest: nothing is queued (the server creates the outing), the button waits for the network. */
                 if !online { SaryOfflineStrip(text: CreateCopy.offline) }
+                CreateProgressLine(flow: flow)
                 Button(action: approve) {
-                    SaryButtonLabel(title: "يناسبنا الجو، كمّل", systemImage: "checkmark", busy: flow.creating, busyTitle: "ننشئ الطلعة…")
+                    SaryButtonLabel(title: flow.failure != nil ? CreateFlowState.retryTitle : "يناسبنا الجو، كمّل",
+                                    systemImage: flow.failure != nil ? SaryIcon.retry : "checkmark",
+                                    busy: flow.creating, busyTitle: "ننشئ الطلعة…")
                 }
                 .buttonStyle(.sary(.primary))
                 .disabled(flow.creating || !online || flow.destination == nil)

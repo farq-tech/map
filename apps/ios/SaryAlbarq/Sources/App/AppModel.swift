@@ -501,7 +501,9 @@ final class AppModel: ObservableObject {
             let r = try await api.create(name: clean)
             /* Personal-only trips have no open link: people are invited one by one (PersonalInvites). */
             InviteTokenStore.save(r.outing_id, r.invite?.token)
-            await refresh()
+            /* The wizard and «طلعة الرجعة» go on with their own calls (plan, destination): the list
+             * refresh is not on their path (it was one more 12 s wait under «ننشئ الطلعة…»). */
+            if openNow { await refresh() } else { Task { await refresh() } }
             if openNow {
                 /* The quick create (no wizard): the creator joins it, same default as «انضم». */
                 consentByJoining(r.outing_id)
