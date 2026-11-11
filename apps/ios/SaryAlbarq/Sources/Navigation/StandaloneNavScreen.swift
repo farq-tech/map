@@ -9,7 +9,7 @@ enum NavProviders {
         if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
         #endif
         let streets = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
-        return DesertAwareRouteProvider(base: streets)
+        return RestrictedZoneGuardProvider(base: DesertAwareRouteProvider(base: streets))
     }
 }
 
