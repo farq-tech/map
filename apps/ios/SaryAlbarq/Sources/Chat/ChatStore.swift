@@ -530,7 +530,11 @@ final class ChatStore: ObservableObject {
         flushOutbox()
         Task {
             await refresh()
-            for (w, t) in threads where t.loaded { await load(w) }
+            /* Every open conversation catches up at once (each page is independent), not one after another. */
+            let open = threads.filter { $0.value.loaded }.map(\.key)
+            await withTaskGroup(of: Void.self) { g in
+                for w in open { g.addTask { await self.load(w) } }
+            }
         }
     }
 
