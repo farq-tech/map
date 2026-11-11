@@ -433,36 +433,69 @@ enum TrailStore {
         dir?.appendingPathComponent(fileName(outingId))
     }
 
+    /// Waits for queued writes (`TrailIO`), so it always reads the last save.
     static func load(_ outingId: String, in dir: URL? = directory) -> Trail? {
-        guard let u = url(outingId, in: dir), let d = try? Data(contentsOf: u) else { return nil }
+        guard let u = url(outingId, in: dir), let d = TrailIO.sync({ try? Data(contentsOf: u) }) else { return nil }
         return try? JSONDecoder().decode(Trail.self, from: d)
     }
 
+    /// Encodes and writes on `TrailIO`'s serial queue: a long drive's trail is re-saved every
+    /// few seconds, and that JSON encode + atomic write used to run on the main thread.
     static func save(_ trail: Trail, outingId: String, in dir: URL? = directory) {
         guard let dir, let u = url(outingId, in: dir) else { return }
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            var values = URLResourceValues()
-            values.isExcludedFromBackup = true
-            var d = dir
-            try? d.setResourceValues(values)
-            let data = try JSONEncoder().encode(trail)
-            try data.write(to: u, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        } catch {}
+        TrailIO.async {
+            do {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                var d = dir
+                try? d.setResourceValues(values)
+                let data = try JSONEncoder().encode(trail)
+                try data.write(to: u, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            } catch {}
+        }
     }
 
-    /// The trail, its raw fixes and its road-matched geometry.
+    /// The trail, its raw fixes and its road-matched geometry. Runs after every queued write,
+    /// so a pending save never brings a deleted trail back.
     static func delete(_ outingId: String, in dir: URL? = directory) {
         guard let u = url(outingId, in: dir) else { return }
-        try? FileManager.default.removeItem(at: u)
-        TrailRawLog.delete(outingId, in: dir)
-        TrailMatchStore.delete(outingId, in: dir)
+        TrailIO.sync {
+            try? FileManager.default.removeItem(at: u)
+            TrailRawLog.delete(outingId, in: dir)
+            TrailMatchStore.delete(outingId, in: dir)
+        }
     }
 
     static func forgetAll(in dir: URL? = directory) {
         guard let dir else { return }
-        try? FileManager.default.removeItem(at: dir)
+        TrailIO.sync { _ = try? FileManager.default.removeItem(at: dir) }
     }
+}
+
+/// One serial queue for the trail files (trail JSON, raw log): writes leave the main thread in
+/// order; reads, deletes and wipes wait for the writes queued before them. Re-entrant: work
+/// started from inside the queue runs inline (no deadlock).
+enum TrailIO {
+    private static let key = DispatchSpecificKey<Bool>()
+    private static let queue: DispatchQueue = {
+        let q = DispatchQueue(label: "sary.trail.io", qos: .utility)
+        q.setSpecific(key: key, value: true)
+        return q
+    }()
+
+    static var onQueue: Bool { DispatchQueue.getSpecific(key: key) == true }
+
+    static func async(_ work: @escaping () -> Void) {
+        if onQueue { work() } else { queue.async(execute: work) }
+    }
+
+    static func sync<T>(_ work: () -> T) -> T {
+        onQueue ? work() : queue.sync(execute: work)
+    }
+
+    /// Waits until every write queued so far is on disk.
+    static func drain() { sync {} }
 }
 
 /// The person's trail switches (this device).

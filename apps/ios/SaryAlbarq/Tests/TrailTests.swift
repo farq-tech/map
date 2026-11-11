@@ -285,6 +285,30 @@ final class TrailStoreTests: XCTestCase {
     func testFileNameCannotEscapeTheFolder() {
         XCTAssertEqual(TrailStore.fileName("../../etc/x"), "etcx.json")
     }
+
+    /// Saves leave the main thread (`TrailIO`), yet a read right after always sees the last one.
+    func testQueuedSavesAreReadInOrder() {
+        let f = TFix()
+        var tr = Trail()
+        for i in 0..<12 {
+            tr.add(f.fix(Double(i) * 50, t: Double(i) * 5))
+            TrailStore.save(tr, outingId: "o-q", in: dir)
+            TrailRawLog.append([RawFix(t: Double(i) * 1000, lat: 24.7, lng: 46.6, acc: 5, spd: nil, crs: nil)], outingId: "o-q", in: dir)
+        }
+        XCTAssertEqual(TrailStore.load("o-q", in: dir)?.points.count, tr.points.count)
+        XCTAssertEqual(TrailRawLog.load("o-q", in: dir).count, 12, "appends land in order, none lost")
+        TrailStore.save(tr, outingId: "o-q", in: dir)
+        TrailStore.delete("o-q", in: dir)
+        XCTAssertNil(TrailStore.load("o-q", in: dir), "a pending save never resurrects a deleted trail")
+        XCTAssertTrue(TrailRawLog.load("o-q", in: dir).isEmpty)
+    }
+
+    func testTrailIOIsReentrant() {
+        var ran = false
+        TrailIO.sync { TrailIO.sync { TrailIO.async { ran = true } } }
+        XCTAssertTrue(ran, "work started on the queue runs inline instead of deadlocking")
+        XCTAssertFalse(TrailIO.onQueue)
+    }
 }
 
 /// Counts every HTTP request the app makes while installed.

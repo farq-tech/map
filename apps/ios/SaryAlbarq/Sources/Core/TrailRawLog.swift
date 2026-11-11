@@ -39,6 +39,11 @@ enum TrailRawLog {
 
     static func append(_ fixes: [RawFix], outingId: String, in dir: URL? = TrailStore.directory) {
         guard !fixes.isEmpty, let dir, let u = url(outingId, in: dir) else { return }
+        /* Off the main thread, in order with the trail's own saves (`TrailIO`). */
+        TrailIO.async { appendNow(fixes, outingId: outingId, dir: dir, u: u) }
+    }
+
+    private static func appendNow(_ fixes: [RawFix], outingId: String, dir: URL, u: URL) {
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let data = Data(fixes.map(line).joined().utf8)
@@ -60,17 +65,20 @@ enum TrailRawLog {
         } catch {}
     }
 
+    /// Waits for queued appends (`TrailIO`).
     static func load(_ outingId: String, in dir: URL? = TrailStore.directory) -> [RawFix] {
-        guard let u = url(outingId, in: dir), let d = try? Data(contentsOf: u) else { return [] }
+        guard let u = url(outingId, in: dir), let d = TrailIO.sync({ try? Data(contentsOf: u) }) else { return [] }
         return parse(String(decoding: d, as: UTF8.self))
     }
 
     /// Thin the older half to every other fix when over the cap.
     static func compact(_ outingId: String, in dir: URL? = TrailStore.directory) {
-        let all = load(outingId, in: dir)
-        guard all.count > cap, let u = url(outingId, in: dir) else { return }
-        let thinned = thin(all)
-        try? Data(thinned.map(line).joined().utf8).write(to: u, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        TrailIO.sync {
+            let all = load(outingId, in: dir)
+            guard all.count > cap, let u = url(outingId, in: dir) else { return }
+            let thinned = thin(all)
+            try? Data(thinned.map(line).joined().utf8).write(to: u, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
     }
 
     static func thin(_ all: [RawFix]) -> [RawFix] {
@@ -81,7 +89,7 @@ enum TrailRawLog {
 
     static func delete(_ outingId: String, in dir: URL? = TrailStore.directory) {
         guard let u = url(outingId, in: dir) else { return }
-        try? FileManager.default.removeItem(at: u)
+        TrailIO.sync { _ = try? FileManager.default.removeItem(at: u) }
     }
 }
 
