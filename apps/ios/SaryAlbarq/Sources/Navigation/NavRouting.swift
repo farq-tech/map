@@ -22,6 +22,9 @@ struct NavRouteRequest: Equatable {
     var heading: Double?
     var target: NavTarget
     var options: NavRouteOptions
+    /// Rings the route must not enter (restricted facilities, see `RestrictedZoneGuardProvider`).
+    /// Valhalla: `exclude_polygons`. Mapbox has no polygon exclusion: its routes are only checked.
+    var avoidPolygons: [[LngLat]] = []
 }
 
 enum NavRoutingError: Error, Equatable {
@@ -31,12 +34,18 @@ enum NavRoutingError: Error, Equatable {
     /// No Mapbox token in the build.
     case notConfigured
     case failed(String)
+    /// The destination is inside an airport / military facility (name for the alert).
+    case restrictedDestination(String)
+    /// Every route found drives through a restricted facility (name for the alert).
+    case restrictedRoute(String)
 
     var message: String {
         switch self {
         case .noRoute: return "ما لقينا طريقًا إلى هنا."
         case .offline: return "ما فيه إنترنت لحساب الطريق. جرّب بعد شوي."
         case .notConfigured: return "الملاحة غير مفعّلة في هذه النسخة."
+        case let .restrictedDestination(n): return "الوجهة داخل منطقة مقيّدة (\(n)). ما نوجّهك لها، اختر موقعًا خارج السور."
+        case let .restrictedRoute(n): return "كل الطرق المتاحة تمر عبر منطقة مقيّدة (\(n)). ما نوجّهك منها، جرّب وجهة أو مسارًا ثانيًا."
         case let .failed(m): return m.isEmpty ? "تعذّر حساب الطريق، حاول مرة ثانية." : m
         }
     }

@@ -108,7 +108,7 @@ struct TrackFollowScreen: View {
         guard let target = model.approachTarget, let f = location.lastFix else { return }
         approaching = true
         defer { approaching = false }
-        let provider = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
+        let provider = RestrictedZoneGuardProvider(base: SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider()))
         let req = NavRouteRequest(origin: LngLat(lng: f.lng, lat: f.lat), heading: f.heading,
                                   target: NavTarget(source: .point, name: "أقرب نقطة من المسار", position: target), options: .load())
         do {

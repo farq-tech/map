@@ -185,6 +185,18 @@ test('translate: the exact Valhalla /route body (snapshot)', () => {
   assert.equal('alternates' in timed, false, 'nor on time-dependent ones');
 });
 
+test('exclude_polygons: validated, passed to Valhalla only when present', () => {
+  const ring = [[46.6, 25.2], [46.7, 25.2], [46.7, 25.3], [46.6, 25.3], [46.6, 25.2]];
+  const p = (extra) => parseRouteRequest(okBody(extra));
+  assert.equal(p({}).value.excludePolygons, undefined);
+  assert.equal('exclude_polygons' in valhallaRouteBody(p({}).value), false);
+  assert.deepEqual(valhallaRouteBody(p({ exclude_polygons: [ring] }).value).exclude_polygons, [ring]);
+  assert.equal(p({ exclude_polygons: 'x' }).reason, 'invalid_exclude_polygons');
+  assert.equal(p({ exclude_polygons: [ring, ring, ring, ring, ring] }).reason, 'invalid_exclude_polygons');
+  assert.equal(p({ exclude_polygons: [[[46.6, 25.2]]] }).reason, 'invalid_exclude_polygons');
+  assert.equal(p({ exclude_polygons: [[[46.6, 'a'], [1, 2], [3, 4], [5, 6]]] }).reason, 'invalid_exclude_polygons');
+});
+
 test('error mapping: Valhalla json codes, OSRM codes, gateway statuses', () => {
   assert.deepEqual(mapUpstreamError(400, { error_code: 442, error: 'No path could be found for input' }), { status: 422, code: 'no_route' });
   assert.deepEqual(mapUpstreamError(400, { error_code: 170 }), { status: 422, code: 'no_route' });
