@@ -110,7 +110,7 @@ enum PlaceSearch {
 
         var arabic: String {
             switch self {
-            case .noToken: return "البحث عن الأماكن غير مفعّل في هذه النسخة. أدخل إحداثية بدلًا منه."
+            case .noToken: return "البحث عن الأماكن مو شغال في هذي النسخة. اكتب إحداثية بداله."
             case .network: return "ما فيه إنترنت. تقدر تدخل إحداثية بدونه."
             case .http: return "البحث متعطّل من طرفنا الحين. جرّب بعد شوي، أو اضغط مطوّلًا على الخريطة."
             }

@@ -324,7 +324,7 @@ struct ChecklistRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(item.done ? "تم: \(item.title)" : "لم يتم: \(item.title)")
+            .accessibilityLabel(item.done ? "خلص: \(item.title)" : "باقي: \(item.title)")
             .accessibilityIdentifier("checklist.toggle")
             Text(item.title)
                 .saryText(.body, weight: .medium)
