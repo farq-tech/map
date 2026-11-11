@@ -1,4 +1,4 @@
-# حالة سَرى البارق — آخر تحديث 2026-11-09
+# حالة سَرى البارق — آخر تحديث 2026-11-11
 
 هذا السجل هو قائمة العمل المشتركة. اقرأه قبل البدء وحدّثه عند تغيّر حالة أي بند.
 
@@ -21,6 +21,15 @@
 - #135: تحديث هذا السجل قبل إضافة تغييرات Build 26.
 
 ## العمل المفتوح — لكل بند مالك وموعد مستهدف
+
+### 🔒 قيد التنفيذ (2026-11-11): تحسين الواجهة الجذري — محجوز لجلسة Claude «serene-fermi»
+
+- **المالك:** جلسة Claude السحابية، فرع `claude/serene-fermi-5262xr` (PR #147). الخطة والتدقيق في `docs/UI-AUDIT.md`.
+- **قرار المالك (2026-11-11):** تنفيذ كل مراحل `docs/UI-AUDIT.md`، واعتماد قاموس الكلمات فيها («الطلعة» بدل «الرحلة»، «أمير الطلعة»، «طريق الرجعة» للرجوع على المسار، «طلعة الرجعة» للطلعة الجديدة).
+- **المراحل:** م1 السلامة ← م5 نظام التصميم ← م3 شاشة الطلعة وم4 الرئيسية والرحلات ← م6 البر في الواجهة ← م2 الكلمات (آخرها لأنها تمس كل الملفات).
+- **قاعدة للوكلاء الآخرين:** لا تعدّل هذه الملفات قبل التنسيق مع هذه الجلسة (تعليق على PR #147): `Views/LiveOutingScreen.swift`، `Views/LiveSheet.swift`، `Views/LiveActionSheet.swift`، `Views/TripHeader.swift`، `Views/TripViews.swift`، `Views/OutingFlowViews.swift`، `Core/OutingFlow.swift`، `Live/LiveOutingController*.swift`، `Home/*`، `Navigation/NavGuidanceViews.swift`، `UI/DesignSystem/*`، `UI/Components/*`، `Screens/OnboardingFlow.swift`، `Create/CreateOutingWizard.swift`، `Plan/LivePlan.swift`، `Explore/ExploreViews.swift`. إصلاح عاجل فيها: commit صغير ومنفصل، واذكره في PR #147.
+- **التحقق:** الكود يُكتب بدون Swift في السحابة؛ كل مرحلة تحتاج بناءً واختبارًا على الماك قبل دمجها وقبل أي بناء TestFlight.
+
 
 ### تحديث تنفيذ 2026-11-08 — استرداد حالة بدء الطلعة
 
