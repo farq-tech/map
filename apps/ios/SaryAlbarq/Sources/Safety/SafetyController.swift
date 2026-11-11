@@ -87,6 +87,9 @@ final class SafetyController: ObservableObject {
     var isLocal: Bool { backend == nil }
     /// The demo outing's seeded states are allowed (never in a solo outing, docs/SOLO-OUTING.md).
     let seedsDemo: Bool
+    /// A solo outing: nobody else hears the safety pack. «غرّزت» only marks the trail and the return
+    /// timer is an alarm on this phone (no contact, no link); the copy never promises an alert.
+    var localOnly: Bool { isLocal && !seedsDemo }
 
     /// Wire to the open session: its view changes, its safety events, my GPS, and a 15 s tick.
     func bind(events: AnyPublisher<SafetyEvent, Never>, viewChanged: AnyPublisher<Void, Never>, locationChanged: AnyPublisher<Void, Never>, timers: Bool = true) {
@@ -185,6 +188,17 @@ final class SafetyController: ObservableObject {
     /// «اضبط المؤقت» from the editor. Opens the share sheet with the message when it worked.
     func arm(due: Date, contact raw: String) async {
         let n = now()
+        if localOnly {
+            /* An alarm on this phone: no contact (empty marks a local timer everywhere), nothing to share. */
+            if ReturnTimerLogic.validate(due: due, contact: "-", now: n) != nil {
+                errorText = "اختر وقتًا بعد ١٠ دقائق على الأقل، وخلال ٢٤ ساعة."
+                return
+            }
+            guard await save(due: due, contact: "") else { return }
+            editorOpen = false
+            toast("ضبطنا منبّه الرجوع على جوالك · ما يوصل لأحد")
+            return
+        }
         guard let contact = ReturnTimerLogic.cleanContact(raw) else { errorText = "اكتب اسم اللي يتابعك."; return }
         if ReturnTimerLogic.validate(due: due, contact: contact, now: n) != nil {
             errorText = "اختر وقتًا بعد ١٠ دقائق على الأقل، وخلال ٢٤ ساعة."
@@ -200,7 +214,9 @@ final class SafetyController: ObservableObject {
         guard let t = timer, let due = ReturnTimerLogic.due(t) else { return }
         let next = ReturnTimerLogic.extended(due: due, byMinutes: minutes, now: now())
         if await save(due: next, contact: t.contact_name) {
-            toast("مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) · الرابط اللي عند \(t.contact_name) يبقى شغال")
+            toast(t.contact_name.isEmpty
+                  ? "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now()))"
+                  : "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) · الرابط اللي عند \(t.contact_name) يبقى شغال")
         }
     }
 
@@ -229,7 +245,7 @@ final class SafetyController: ObservableObject {
     }
 
     func offerShare() {
-        guard let t = timer, let due = ReturnTimerLogic.due(t) else { return }
+        guard let t = timer, !t.contact_name.isEmpty, let due = ReturnTimerLogic.due(t) else { return }
         shareText = ReturnTimerLogic.shareMessage(contact: t.contact_name, outingName: view()?.snapshot.outing.name ?? "طلعة", due: due, url: watchURL, now: now())
     }
 
@@ -247,7 +263,7 @@ final class SafetyController: ObservableObject {
             }
             forgetLink()
             setTimer(next, link: nil)
-            toast("الحمد لله على السلامة. وصل الخبر لـ\(t.contact_name)")
+            toast(t.contact_name.isEmpty ? "الحمد لله على السلامة" : "الحمد لله على السلامة. وصل الخبر لـ\(t.contact_name)")
         } catch let e as OutingAPIError where e.code == "no_timer" {
             forgetLink()
             setTimer(nil, link: nil)
@@ -303,7 +319,11 @@ final class SafetyController: ObservableObject {
             try await backend?.reportStuck(outingId, note: clean)
             stuckAvailability = .available
             stuck[myId] = StuckReport(userId: myId, at: now(), note: clean)
-            toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
+            if localOnly {
+                toast("علّمنا مكان التغريز على مسارك · ما فيه أحد معك يوصله التنبيه")
+            } else {
+                toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
+            }
         } catch let e as OutingAPIError where e.isNotDeployed {
             stuckAvailability = .notDeployed
             toast("«غرّزت» غير متاح بعد")

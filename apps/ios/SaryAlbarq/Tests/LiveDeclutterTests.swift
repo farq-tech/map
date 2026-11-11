@@ -127,6 +127,28 @@ final class LiveScreenRulesTests: XCTestCase {
         XCTAssertTrue(SafetyController(outingId: DemoData.outingId, myId: "u1", backend: nil, scheduler: FakeReminders()).seedsDemo, "the demo as before")
     }
 
+    /// Solo (#191 review): nobody hears the safety pack, so the return timer is an alarm on this
+    /// phone (no contact, no link to share) and nothing in its copy promises an alert to anyone.
+    @MainActor
+    func testSoloReturnTimerIsALocalAlarmThatPromisesNoOne() async {
+        let solo = SafetyController(outingId: "solo-x", myId: "u1", backend: nil, seedsDemo: false, scheduler: FakeReminders())
+        XCTAssertTrue(solo.localOnly)
+        XCTAssertFalse(SafetyController(outingId: DemoData.outingId, myId: "u1", backend: nil, scheduler: FakeReminders()).localOnly, "the demo keeps its group copy")
+        let due = Date().addingTimeInterval(3 * 3600)
+        await solo.arm(due: due, contact: "")
+        XCTAssertNil(solo.errorText, "no contact needed")
+        XCTAssertEqual(solo.timer?.state, .armed)
+        XCTAssertEqual(solo.timer?.contact_name, "")
+        XCTAssertNil(solo.shareText, "no link to send")
+        solo.offerShare()
+        XCTAssertNil(solo.shareText)
+        let local = ReturnTimerLogic.reminders(outingId: "solo-x", due: due, contact: "", now: Date())
+        XCTAssertFalse(local.isEmpty)
+        for r in local { XCTAssertFalse(r.body.contains("تنبيه لـ"), r.body) }
+        let group = ReturnTimerLogic.reminders(outingId: "o1", due: due, contact: "أم فهد", now: Date())
+        XCTAssertTrue(group.contains { $0.body.contains("أم فهد") }, "a group outing as before")
+    }
+
     /// Owner report (Build 36, «اهتزاز النافذة السفلية»): the peek detent's height must not depend on
     /// where the sheet is. Raising it reads «stopped» (`LiveContextRule`), which used to add the quick
     /// row to the PEEK height too (88 → 172 in drive mode), so the detent set changed under the
