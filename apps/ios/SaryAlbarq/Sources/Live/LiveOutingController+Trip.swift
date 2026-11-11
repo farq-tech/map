@@ -146,19 +146,60 @@ extension LiveOutingController {
         startBackTrack(along: t.points)
     }
 
-    /// «طريق الرجعة» on this phone, with no server (UI-AUDIT 0.3): back along my trail of this
-    /// outing to where I started (`BackTrack`: works with no network, the usual case in the desert).
-    /// Used when the new return trip cannot be made on the server because there is no network.
+    /// «طريق الرجعة» on this phone, with no server (UI-AUDIT 0.3), by the owner's rule: the desert
+    /// part of this outing's trail back to its saved city ↔ desert junction (`ReturnRoute.phonePlan`,
+    /// `BackTrack`: works with no network), then the city part (`startReturnCityLeg`). Nothing told
+    /// the city from the desert: the whole trail, said as «طريق رحتك».
     func startReturnOnPhone(offline: Bool) {
         guard backTrack == nil else { return }
-        guard session.trail.points.count >= 2 else {
+        let trail = session.displayTrail
+        guard session.trail.points.count >= 2, trail.count >= 2 else {
             toast(offline ? "ما فيه نت، وما عندنا مسار محفوظ لهذه الطلعة على جوالك"
                           : "ما عندنا مسار محفوظ لهذه الطلعة على جوالك")
             return
         }
-        returnGuide.cancel()
-        startBackTrack()
-        if offline, backTrack != nil { toast("ما فيه نت · نرجّعك على مسارك من جوالك") }
+        guard let f = location.lastFix else {
+            /* No position to decide from: the whole trail, as before. */
+            returnGuide.cancel()
+            startBackTrack()
+            if offline, backTrack != nil { toast("ما فيه نت · نرجّعك على مسارك من جوالك") }
+            return
+        }
+        let online = !offline && followOnline
+        let split = ReturnRoute.split(trail, saved: OutboundJunctionStore.load(session.id), match: TrailMatchStore.load(session.id))
+        let mode = ReturnRoute.mode(online: online, outingEnded: session.view?.status == .ended, trail: trail, split: split,
+                                    me: LngLat(lng: f.lng, lat: f.lat))
+        guard case let .onPhone(plan) = mode else {
+            /* Online after the end: the server's return trip (it applies the same rule). */
+            startReturnTrip()
+            return
+        }
+        let roadRouting = ReturnRoute.roadRouting(online: online)
+        if returnGuide.beginOnPhone(plan) {
+            startBackTrack(along: plan.desertLeg)
+            /* Arrived at once and already handed over to the city leg. */
+            guard returnGuide.phase == .desert else { return }
+            if backTrack != nil {
+                toast(ReturnRoute.desertNote(plan, roadRouting: roadRouting))
+                return
+            }
+        }
+        startReturnCityLeg(roadRouting: roadRouting)
+    }
+
+    /// The city part of an on-phone return: the fastest road to the start point when a road route
+    /// can be had, else the outbound city part retraced, said as the road we came by.
+    func startReturnCityLeg(roadRouting: Bool) {
+        let leg = returnGuide.cityLeg(roadRouting: roadRouting)
+        switch leg {
+        case .none:
+            return
+        case let .fastestRoad(home):
+            navLongPressed(home, name: "نقطة البداية")
+        case let .outboundTrail(pts):
+            startBackTrack(along: pts)
+        }
+        if let note = ReturnRoute.cityNote(leg) { toast(note) }
     }
 
     // MARK: «طريق الرجعة»: the desert on the outbound trail, the city by the fastest road
@@ -192,6 +233,14 @@ extension LiveOutingController {
     /// (fastest, reroutes) takes the city part to the start point.
     func handOverReturnToRoad() {
         stopBackTrack()
+        /* An on-phone return has no trip guidance of its own back to the start: its city leg. */
+        if returnGuide.phone != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.startReturnCityLeg(roadRouting: ReturnRoute.roadRouting(online: self.followOnline))
+            }
+            return
+        }
         toast("وصلت طرف البر · نكمل بأسرع طريق")
         DispatchQueue.main.async { [weak self] in self?.autoNavTick() }
     }
