@@ -6,10 +6,10 @@ import XCTest
 final class CampSitesUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func launch(_ extra: [String]) -> XCUIApplication {
+    private func launch(_ extra: [String], from: String = "24.7113,46.6744") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryDrive", "0", "-SaryContext", "stopped",
-                               "-SaryCampFrom", "24.7113,46.6744"] + extra
+                               "-SaryCampFrom", from] + extra
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
                 alert.buttons[label].tap()
@@ -88,5 +88,46 @@ final class CampSitesUITests: XCTestCase {
         XCTAssertTrue(suggest.waitForExistence(timeout: 5))
         suggest.tap()
         XCTAssertTrue(app.descendants(matching: .any)["camp.sheet"].waitForExistence(timeout: 10))
+    }
+
+    private func attach(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+    }
+
+    /// Every card carries a geographic name or the plain «موقع كشتة»; never «جلسة N».
+    func testCardsAreNamedNotJalsa() {
+        let app = launch(["-SaryCampNight", "0,20", "-SaryExplore", "-SaryLiveModal", "camp"])
+        XCTAssertTrue(app.descendants(matching: .any)["camp.card.5"].waitForExistence(timeout: 20))
+        sleep(2)
+        for i in 1...5 {
+            let t = app.staticTexts["camp.title.\(i)"]
+            XCTAssertTrue(t.exists, "title \(i)")
+            XCTAssertFalse(t.label.contains("جلسة"), t.label)
+            XCTAssertFalse(app.staticTexts["camp.reasons.\(i)"].label.contains("محمية"))
+        }
+        attach("camp-names-riyadh")
+    }
+
+    /// Nafud: every bundled site is inside a royal reserve, so nothing is suggested and the empty state says why.
+    func testOnlyProtectedAreasShowsTheReserveEmptyState() {
+        let app = launch(["-SaryCampNight", "0,20", "-SaryExplore", "-SaryLiveModal", "camp"], from: "28.54,41.45")
+        let empty = app.descendants(matching: .any)["camp.empty"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["كل الأماكن القريبة داخل محميات"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["camp.card.1"].exists)
+        attach("camp-only-protected")
+    }
+
+    /// «ما لقينا درب آمن»: the destination keeps its name and no «مسار مقترح» line is shown.
+    func testNoSafeRouteHidesTheSatelliteRouteNote() {
+        let app = launch(["-SaryLiveModal", "routes", "-SaryRouteTo", "25.23,46.74", "-SaryRouteName", "روضة نورة",
+                          "-SaryRouteFrom", "24.7113,46.6744", "-SaryRouteForceNone"])
+        XCTAssertTrue(app.descendants(matching: .any)["routes.none"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.staticTexts["إلى روضة نورة"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["routes.note"].exists)
+        attach("routes-none")
     }
 }
