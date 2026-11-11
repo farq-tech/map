@@ -98,3 +98,44 @@ final class DemoPlanBackend: PlanBackend {
 
     func setRally(_ id: String, lat: Double, lng: Double, label: String?) async throws -> RallyInfo? { nil }
 }
+
+/// A solo outing's plan (docs/SOLO-OUTING.md (ب)3): on this phone only, never the server. Like
+/// `DemoPlanBackend` but with no seeded demo data; kept in `UserDefaults` so the destination
+/// survives a relaunch (wiped with the account: a `sary.` key). No checklist, no rally point.
+final class LocalPlanBackend: PlanBackend {
+    static let key = "sary.solo.plans.v1"
+    private let defaults: UserDefaults
+    private var plans: [String: TripPlan]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        plans = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode([String: TripPlan].self, from: $0) } ?? [:]
+    }
+
+    private func persist() {
+        if let d = try? JSONEncoder().encode(plans) { defaults.set(d, forKey: Self.key) }
+    }
+
+    func plan(_ id: String) async throws -> TripPlan { plans[id] ?? .empty }
+
+    func putPlan(_ id: String, _ plan: TripPlan) async throws -> TripPlan {
+        var p = plan
+        p.updated_at = ISODate.string(Date())
+        plans[id] = p
+        persist()
+        return p
+    }
+
+    func checklist(_ id: String) async throws -> [ChecklistItem] { [] }
+
+    /* A checklist and a rally point are for a group: answered like a server without them (hidden calmly). */
+    func addItem(_ id: String, title: String) async throws -> ChecklistReply { throw OutingAPIError(code: "http_404", status: 404) }
+
+    func patchItem(_ id: String, _ itemId: String, done: Bool?, assignee: AssigneeChange?) async throws -> ChecklistReply {
+        throw OutingAPIError(code: "http_404", status: 404)
+    }
+
+    func deleteItem(_ id: String, _ itemId: String) async throws -> ChecklistReply { throw OutingAPIError(code: "http_404", status: 404) }
+
+    func setRally(_ id: String, lat: Double, lng: Double, label: String?) async throws -> RallyInfo? { nil }
+}

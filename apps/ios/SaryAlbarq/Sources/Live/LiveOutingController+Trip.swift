@@ -115,7 +115,11 @@ extension LiveOutingController {
         if session.isDemo { let l = speed.local; TripLogStore.update(session.id) { $0 = l } }
         /* #173: ending is for everyone, so the server decides (never faked); this line answers the tap now. */
         if !session.isLocal { toast("جاري إنهاء الطلعة…") }
-        Task { await session.setStatus("end") }
+        Task {
+            await session.setStatus("end")
+            /* «أنهِ المشوار» (solo): ended on this phone at once, then its summary (docs/SOLO-OUTING.md (ج)). */
+            if session.isSolo, session.closedReason == .outingEnded { openSummary() }
+        }
     }
 
     /// The trip is over on this phone (ended here or by the leader's phone, or I left / was

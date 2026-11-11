@@ -323,13 +323,23 @@ final class PlanModel: ObservableObject {
 @MainActor
 final class PlanCenter {
     private let backend: PlanBackend
+    /// Solo outings (`solo-…`, docs/SOLO-OUTING.md): their plan lives on this phone only.
+    private let local: PlanBackend
     private var models: [String: PlanModel] = [:]
 
-    init(backend: PlanBackend) { self.backend = backend }
+    init(backend: PlanBackend, local: PlanBackend = LocalPlanBackend()) {
+        self.backend = backend
+        self.local = local
+    }
+
+    /// The server (or the demo's) for an outing, this phone's own store for a solo one.
+    func backend(for outingId: String) -> PlanBackend {
+        SoloOuting.isSoloId(outingId) ? local : backend
+    }
 
     func model(_ outingId: String) -> PlanModel {
         if let m = models[outingId] { return m }
-        let m = PlanModel(outingId: outingId, backend: backend)
+        let m = PlanModel(outingId: outingId, backend: backend(for: outingId))
         models[outingId] = m
         return m
     }

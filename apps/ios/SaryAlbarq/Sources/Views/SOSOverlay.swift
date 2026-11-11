@@ -12,12 +12,14 @@ struct SOSOverlayHost: UIViewRepresentable {
     /// Where the map's own SOS is (window points): the floating copy sits exactly there.
     var frame: CGRect? = nil
     var size: CGFloat? = nil
+    /// False in a solo outing (`SarySOSButton.countdown`).
+    var countdown = true
 
     func makeUIView(context: Context) -> UIView { SOSAnchorView() }
 
     func updateUIView(_ v: UIView, context: Context) {
         guard let anchor = v as? SOSAnchorView else { return }
-        anchor.model = .init(visible: visible, state: state, theme: theme, trigger: trigger, frame: frame, size: size)
+        anchor.model = .init(visible: visible, state: state, theme: theme, trigger: trigger, frame: frame, size: size, countdown: countdown)
     }
 
     static func dismantleUIView(_ v: UIView, coordinator: ()) {
@@ -34,6 +36,7 @@ final class SOSAnchorView: UIView {
         var trigger: () -> Void
         var frame: CGRect? = nil
         var size: CGFloat? = nil
+        var countdown = true
     }
 
     var model: Model? { didSet { apply() } }
@@ -117,7 +120,7 @@ final class SOSOverlayWindow: UIWindow {
         let f = CGRect(x: m.theme.space(.l) - 8, y: screen.height - safeBottom - m.theme.space(.s) - side, width: side, height: side)
         if frame != f { frame = f }
         host.rootView = AnyView(
-            SarySOSButton(state: m.state, trigger: m.trigger, size: m.size, compactLabel: m.size != nil)
+            SarySOSButton(state: m.state, trigger: m.trigger, size: m.size, compactLabel: m.size != nil, countdown: m.countdown)
                 .accessibilityIdentifier("sos.overlay")
                 .frame(width: side, height: side)
                 .environment(\.sary, m.theme)

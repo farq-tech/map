@@ -70,17 +70,23 @@ final class SafetyController: ObservableObject {
 
     static let warnedStoreKey = "sary.safety.sunsetWarned.v1"
 
-    init(outingId: String, myId: String, backend: SafetyBackend?, scheduler: ReminderScheduling = LocalReminderScheduler(), defaults: UserDefaults = .standard) {
+    /// `seedsDemo`: the `-demo` outing's screenshot states (`-SarySafety`) may be seeded. nil = as before
+    /// (any local pack, `backend == nil`); a solo outing passes false: local, but never demo data.
+    init(outingId: String, myId: String, backend: SafetyBackend?, seedsDemo: Bool? = nil, scheduler: ReminderScheduling = LocalReminderScheduler(), defaults: UserDefaults = .standard) {
         self.outingId = outingId
         self.myId = myId
         self.backend = backend
+        self.seedsDemo = seedsDemo ?? (backend == nil)
         self.scheduler = scheduler
         self.defaults = defaults
         watchURL = WatchLinkStore.load(outingId, defaults: defaults)
         if backend == nil { timerAvailability = .available; stuckAvailability = .available }
     }
 
-    var isDemo: Bool { backend == nil }
+    /// No server behind the safety pack (the demo, a solo outing): timers and «غرّزت» stay on this phone.
+    var isLocal: Bool { backend == nil }
+    /// The demo outing's seeded states are allowed (never in a solo outing, docs/SOLO-OUTING.md).
+    let seedsDemo: Bool
 
     /// Wire to the open session: its view changes, its safety events, my GPS, and a 15 s tick.
     func bind(events: AnyPublisher<SafetyEvent, Never>, viewChanged: AnyPublisher<Void, Never>, locationChanged: AnyPublisher<Void, Never>, timers: Bool = true) {
@@ -123,7 +129,7 @@ final class SafetyController: ObservableObject {
     // MARK: return timer
 
     func load() async {
-        if isDemo { return }
+        if isLocal { return }
         guard let backend else { return }
         do {
             let box = try await backend.returnTimer(outingId)
@@ -520,7 +526,7 @@ final class SafetyController: ObservableObject {
     #if DEBUG
     /// Screenshot / UI-test states on the demo outing (`-SarySafety <state>`).
     func seedDemo(_ state: String) {
-        guard isDemo else { return }
+        guard seedsDemo else { return }
         let n = now()
         let friend = "00000000-0000-4000-8000-000000000003"
         let other = "00000000-0000-4000-8000-000000000002"
