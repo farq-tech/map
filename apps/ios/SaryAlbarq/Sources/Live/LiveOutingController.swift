@@ -1046,7 +1046,7 @@ final class LiveOutingController: ObservableObject {
             copyLink: { [weak self] in
                 guard let self, let l = self.inviteLink else { return }
                 UIPasteboard.general.string = l
-                self.toast("تم نسخ الرابط")
+                self.toast("نسخنا الرابط")
             },
             shareLink: { [weak self] in
                 guard let self, let l = self.inviteLink else { return }
@@ -1368,7 +1368,7 @@ final class LiveOutingController: ObservableObject {
         modal = nil
         let clean = ServerRules.cleanText(label, max: 40)
         Task {
-            if await session.setRally(lat: p.lat, lng: p.lng, label: clean) { toast("تم تحديد نقطة التجمع") }
+            if await session.setRally(lat: p.lat, lng: p.lng, label: clean) { toast("حددنا نقطة التجمع") }
         }
     }
 

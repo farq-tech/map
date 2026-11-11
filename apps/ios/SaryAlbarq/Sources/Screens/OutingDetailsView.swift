@@ -294,7 +294,7 @@ struct TripSummaryView: View {
                     } label: { SaryButtonLabel(title: "اسحب ملخصي", busy: busy) }
                         .buttonStyle(.sary(.plainDestructive))
                 } else if local == nil {
-                    Text("ما شاركت موقعك في هذه الطلعة من هذا الجهاز، فلا يوجد ملخص لك.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
+                    Text("ما شاركت موقعك في هذه الطلعة من هذا الجوال، فما فيه ملخص لك.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
                 } else if !open {
                     Text("مضى أكثر من أسبوع على نهاية الطلعة؛ يبقى ملخصك على جوالك فقط.").saryText(.subhead).foregroundStyle(theme.palette.textSecondary)
                 } else {

@@ -257,7 +257,7 @@ struct WeatherSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("تم", action: close).accessibilityIdentifier("weather.close")
+                    Button("خلاص", action: close).accessibilityIdentifier("weather.close")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await weather.refresh(force: true); now = Date() } } label: {
@@ -372,7 +372,7 @@ struct WeatherPointSheet: View {
             .background(p.elevated.ignoresSafeArea())
             .navigationTitle("الطقس هنا")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("تم", action: close) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("خلاص", action: close) } }
         }
         .task { await store.update(WeatherArea(point: point.lat, lng: point.lng)) }
     }

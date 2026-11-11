@@ -137,7 +137,7 @@ struct LiveOutingHost: View {
                 guard let model else { return }
                 Task {
                     let ok = await model.updateProfile(name: model.identity?.user.display_name ?? "", phone: phone ?? "")
-                    if ok { c?.toast("تم حفظ رقمك") }
+                    if ok { c?.toast("حفظنا رقمك") }
                 }
             }
             return c

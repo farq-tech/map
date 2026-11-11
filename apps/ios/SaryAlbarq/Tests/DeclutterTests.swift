@@ -150,7 +150,7 @@ final class DeclutterTests: XCTestCase {
         let line = TripHeaderPresenter.line(status: .active, trip: t, follow: nil, connection: .connected, nearbyCars: 0) ?? ""
         XCTAssertTrue(line.hasPrefix("إلى روضة الثمامة · باقي ١٢ كم"), line)
         XCTAssertTrue(line.contains(" · نوصل "), line)
-        XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "لم تبدأ")
+        XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "ما بدأت")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: t, follow: "على المسار", connection: .connected, nearbyCars: 0), "على المسار")
         XCTAssertEqual(TripHeaderPresenter.line(status: .paused, trip: t, follow: nil, connection: .connected, nearbyCars: 0), "الطلعة متوقفة مؤقتًا")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: nil, follow: nil, connection: .offline, nearbyCars: 0), "بلا إنترنت")

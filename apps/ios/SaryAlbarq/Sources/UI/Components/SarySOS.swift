@@ -95,7 +95,7 @@ struct SarySOSButton: View {
         }
         .saryHaptic(.warning, trigger: fired)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(active ? "تم إرسال طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
+        .accessibilityLabel(Text(active ? "أرسلت طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
         .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الربع"))
         .accessibilityAddTraits(.isButton)
         /* VoiceOver: the system already confirms a custom action, so this one sends at once. */

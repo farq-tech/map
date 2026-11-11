@@ -215,7 +215,7 @@ private struct ButtonsBlocks: View {
             HStack(spacing: 12) {
                 SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "sheet-close") {}
                 SaryIconButton(systemImage: SaryIcon.share, label: "مشاركة") {}
-                SaryIconButton(systemImage: SaryIcon.check, label: "تم", tinted: true) {}
+                SaryIconButton(systemImage: SaryIcon.check, label: "خلاص", tinted: true) {}
             }
         }
     }

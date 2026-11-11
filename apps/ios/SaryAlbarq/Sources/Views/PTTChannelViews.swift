@@ -124,7 +124,7 @@ struct PTTChannelSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("تم", action: close).accessibilityIdentifier("ptt-channels-done")
+                    Button("خلاص", action: close).accessibilityIdentifier("ptt-channels-done")
                 }
             }
             .sheet(item: $editing) { e in

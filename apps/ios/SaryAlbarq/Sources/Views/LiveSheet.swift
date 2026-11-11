@@ -901,7 +901,7 @@ private struct InviteTab: View {
                         actions.copyLink()
                         copied = true
                         Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
-                    } label: { SaryButtonLabel(title: copied ? "تم النسخ" : "نسخ", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
+                    } label: { SaryButtonLabel(title: copied ? "نسخناه" : "نسخ", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
                         .buttonStyle(.sarySecondary)
                         .accessibilityIdentifier("invite-copy")
                     Button(action: actions.shareLink) { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
@@ -913,7 +913,7 @@ private struct InviteTab: View {
                     .foregroundStyle(theme.palette.textSecondary)
                     .multilineTextAlignment(.center)
             } else if s.canRevoke {
-                SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
+                SaryStateView(kind: .empty(title: "ما فيه رابط على هذا الجوال",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
                 SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))

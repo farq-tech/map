@@ -91,7 +91,7 @@ struct TripPeekStrip: View {
     private var line: String {
         switch ui.phase {
         case let .needsDestination(canSet): return canSet ? "حدّد الوجهة قبل ما تبدأ" : "بانتظار الوجهة"
-        case .notStarted: return "إلى \(ui.destinationName) · لم تبدأ"
+        case .notStarted: return "إلى \(ui.destinationName) · ما بدأت"
         case .waitingFix: return "بدأت الطلعة · ننتظر موقعك"
         case .arrived: return "وصلت \(ui.destinationName) 🎉"
         case .ended: return "انتهت الطلعة"

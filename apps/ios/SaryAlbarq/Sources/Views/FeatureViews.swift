@@ -173,7 +173,7 @@ struct ConvoySection: View {
                 .foregroundStyle(p.onAccent)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(p.accent))
-            Text(m.map { $0.user_id == v.myId ? "أنت" : $0.display_name } ?? "لم تُحدَّد")
+            Text(m.map { $0.user_id == v.myId ? "أنت" : $0.display_name } ?? "ما تحدد")
                 .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
             Spacer()
             if m != nil {

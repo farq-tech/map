@@ -159,7 +159,7 @@ struct SaryNavRow: View {
     }
 }
 
-/// «جارية» / «متوقفة مؤقتًا» / «لم تبدأ» / «انتهت», in words and colour.
+/// «جارية» / «متوقفة مؤقتًا» / «ما بدأت» / «انتهت», in words and colour.
 struct SaryOutingStatusPill: View {
     var status: OutingStatus
     @Environment(\.sary) private var theme
@@ -170,7 +170,7 @@ struct SaryOutingStatusPill: View {
             switch status {
             case .active: return ("جارية", "dot.radiowaves.left.and.right", p.liveText)
             case .paused: return ("متوقفة مؤقتًا", SaryIcon.pause, p.warningText)
-            case .created: return ("لم تبدأ", "clock", p.textSecondary)
+            case .created: return ("ما بدأت", "clock", p.textSecondary)
             case .ended: return ("انتهت", "flag.checkered", p.textTertiary)
             }
         }()

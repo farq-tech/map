@@ -46,13 +46,13 @@ struct ProfileView: View {
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
                           help: "يظهر لأعضاء طلعاتك فقط (اتصال وواتساب). امسحه واحفظ لتحذفه من الخادم.")
             if let error { SaryInlineMessage(text: error, tone: .error) }
-            if saved { SaryInlineMessage(text: "تم الحفظ", tone: .success) }
+            if saved { SaryInlineMessage(text: "حفظناه", tone: .success) }
             Button { save() } label: { SaryButtonLabel(title: "احفظ", busy: busy) }
                 .buttonStyle(.sary(.primary))
                 .disabled(!dirty || !phoneOK || name.trimmingCharacters(in: .whitespaces).isEmpty || busy)
                 .accessibilityIdentifier("profile.save")
             SarySection(title: "الحساب") {
-                SaryNavRow(title: "رمز الاسترجاع", detail: model.recovery?.active == true ? "محفوظ" : "لم تحفظه بعد — احفظه قبل ما تغيّر جوالك",
+                SaryNavRow(title: "رمز الاسترجاع", detail: model.recovery?.active == true ? "محفوظ" : "ما حفظته للحين — احفظه قبل ما تغيّر جوالك",
                            systemImage: "key.fill", tint: model.recovery?.active == true ? nil : p.warning, id: "profile.recovery") { open(.recoveryCode) }
                 SaryDivider()
                 SaryNavRow(title: "الإعدادات", systemImage: SaryIcon.settings) { open(.settings) }
@@ -134,7 +134,7 @@ struct SettingsView: View {
             SarySection(title: "الحساب") {
                 SaryNavRow(title: "ملفي", detail: model.identity?.user.display_name, systemImage: "person.fill", id: "settings.profile") { open(.profile) }
                 SaryDivider()
-                SaryNavRow(title: "رمز الاسترجاع", detail: model.recovery?.active == true ? "محفوظ" : "لم تحفظه بعد",
+                SaryNavRow(title: "رمز الاسترجاع", detail: model.recovery?.active == true ? "محفوظ" : "ما حفظته للحين",
                            systemImage: "key.fill", tint: model.recovery?.active == true ? nil : theme.palette.warning, id: "settings.recovery") { open(.recoveryCode) }
                 SaryDivider()
                 SaryNavRow(title: "التنبيهات", detail: pushDetail, systemImage: "bell.fill", id: "settings.notifications") { open(.notifications) }
@@ -198,7 +198,7 @@ struct SettingsView: View {
         case .registered: return "مفعّلة"
         case .off: return "متوقفة"
         case .denied: return "مرفوضة في إعدادات iOS"
-        case .notAsked: return "لم تُفعّل بعد"
+        case .notAsked: return "ما فعّلتها للحين"
         case .serverNotReady: return "داخل التطبيق فقط حاليًا"
         case .waitingForToken: return "نجهّزها…"
         case .failed: return "تعذّر التفعيل"
@@ -468,7 +468,7 @@ struct NotificationSettingsView: View {
             switch push.state {
             case .registered: return (.success, "مفعّلة: يصلك التنبيه حتى والتطبيق مغلق.")
             case .off: return (.info, "متوقفة. لن يصلك شيء والتطبيق مغلق.")
-            case .notAsked: return (.info, "لم تُفعّل بعد. فعّلها ليصلك نداء الطوارئ والتطبيق مغلق.")
+            case .notAsked: return (.info, "ما فعّلتها للحين. فعّلها عشان يوصلك نداء الطوارئ والتطبيق مقفل.")
             case .denied: return (.warning, "رفضتها في إعدادات iOS. فعّلها من الإعدادات ← سَرى البارق ← الإشعارات.")
             case .waitingForToken: return (.info, "نجهّز التنبيهات مع Apple…")
             case .serverNotReady: return (.warning, "سمحت بالتنبيهات، لكن إرسالها والتطبيق مغلق لم يُفعّل على الخادم بعد. الآن تصلك داخل التطبيق فقط، وتشتغل تلقائيًا أول ما تُفعّل.")

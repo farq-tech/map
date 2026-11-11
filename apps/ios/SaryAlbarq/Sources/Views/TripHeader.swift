@@ -23,7 +23,7 @@ enum TripHeaderPresenter {
         if let t = trip {
             switch t.phase {
             case let .needsDestination(canSet): return canSet ? "حدّد الوجهة" : "بانتظار الوجهة"
-            case .notStarted: return "لم تبدأ"
+            case .notStarted: return "ما بدأت"
             case .waitingFix: return "ننتظر موقعك"
             case .arrived: return t.destinationName.isEmpty ? "وصلت" : "وصلت \(t.destinationName)"
             case .ended: return "انتهت الطلعة"
@@ -36,7 +36,7 @@ enum TripHeaderPresenter {
         }
         if let n = LiveOutingPresenter.nearbyLabel(nearbyCars) { return n }
         if connection != .connected { return connection.label }
-        return status == .notStarted ? "لم تبدأ" : nil
+        return status == .notStarted ? "ما بدأت" : nil
     }
 
     /// «اتبع الخطة» status as the header's second line.
@@ -252,7 +252,7 @@ struct TripHeader: View {
 
     private var levelText: String {
         switch ui.level {
-        case .good: return "كل شيء تمام"
+        case .good: return "كل شي تمام"
         case .degraded: return "فيه تنبيه"
         case .bad: return "مشكلة في الاتصال أو الموقع"
         case .unknown: return "مشاركة موقعك متوقفة"
