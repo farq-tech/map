@@ -335,6 +335,9 @@ final class LiveOutingController: ObservableObject {
     /// A `sessionChanged` / `locationChanged` pass is already queued on the main queue.
     private var sessionPassQueued = false
     private var locationPassQueued = false
+    /// The same for the guidance session's and the shared features' forwarding passes.
+    private var navPassQueued = false
+    private var featuresPassQueued = false
 
     init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings, featuresBackend: OutingFeaturesBackend? = nil) {
         self.session = session
@@ -414,8 +417,16 @@ final class LiveOutingController: ObservableObject {
         /* «فهد يتكلم الآن — انتظر دورك» and friends, as the usual toast. */
         session.walkie.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
         session.voiceNotes.$notice.compactMap { $0 }.sink { [weak self] t in self?.toast(t) }.store(in: &bag)
+        /* Coalesced like the passes above: every queued block ran after the same publishes and read
+         * the same state, so one block per burst does the same work once. */
         features.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.objectWillChange.send() }
+            guard let self, !self.featuresPassQueued else { return }
+            self.featuresPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.featuresPassQueued = false
+                self.objectWillChange.send()
+            }
         }.store(in: &bag)
         features.start()
         wireChatToasts()
@@ -439,8 +450,15 @@ final class LiveOutingController: ObservableObject {
             UINotificationFeedback.warning()
             self?.toast(t)
         }
+        /* One guidance update publishes several properties (progress, remaining, phase…). */
         nav.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.exploreDrivingCheck(); self?.followCamGuidanceCheck(); self?.objectWillChange.send() }
+            guard let self, !self.navPassQueued else { return }
+            self.navPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.navPassQueued = false
+                self.exploreDrivingCheck(); self.followCamGuidanceCheck(); self.objectWillChange.send()
+            }
         }.store(in: &bag)
         #if DEBUG
         if session.isDemo, ProcessInfo.processInfo.arguments.contains("-demoTrail") { seedDemoTrails() }
