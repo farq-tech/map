@@ -76,8 +76,11 @@ enum Vehicle {
             "paint": [
                 "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 18, 16.5, 22, 19, 32] as [Any],
                 "circle-color": "#06101F", "circle-opacity": 0.28, "circle-blur": 0.1,
-                "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5, "circle-stroke-opacity": 0.9,
+                "circle-stroke-color": "#ffffff", "circle-stroke-width": LivePulse.restRingWidth, "circle-stroke-opacity": LivePulse.restRingOpacity,
                 "circle-pitch-alignment": "map", "circle-emissive-strength": 1,
+                /* The live breath (`LivePulse`): Mapbox eases the ring between beats. */
+                "circle-stroke-width-transition": ["duration": LivePulse.transitionMs, "delay": 0] as [String: Any],
+                "circle-stroke-opacity-transition": ["duration": LivePulse.transitionMs, "delay": 0] as [String: Any],
             ] as [String: Any],
         ]
     }
@@ -233,4 +236,49 @@ enum GroupFraming {
             p.lng < view.west + dx || p.lng > view.east - dx || p.lat < view.south + dy || p.lat > view.north - dy
         }
     }
+}
+
+// MARK: - Live markers
+
+/// The breathing ring on live things only (my position while my fix is live, the rally flag
+/// while the outing runs). One slow beat timer drives it, never a per-frame loop: each beat
+/// sets a style value and Mapbox's own paint transition (or one SwiftUI phase cycle for the
+/// flag) eases it. The breath is inhale → exhale → hold, so the map idles a third of the time.
+/// Stopped in the background, under Reduce Motion and in Low Power Mode. Pure (`FollowCameraTests`).
+enum LivePulse {
+    enum Phase: Equatable { case inhale, exhale, hold }
+
+    /// One beat, seconds (also the paint transition length).
+    static let beat: TimeInterval = 1.4
+    static var transitionMs: Int { Int(beat * 1000) }
+
+    static func phase(_ beat: Int) -> Phase {
+        switch ((beat % 3) + 3) % 3 {
+        case 1: return .inhale
+        case 2: return .exhale
+        default: return .hold
+        }
+    }
+
+    static func shouldRun(live: Bool, foreground: Bool, reduceMotion: Bool, lowPower: Bool) -> Bool {
+        live && foreground && !reduceMotion && !lowPower
+    }
+
+    /// My halo's white ring: at rest as `Vehicle.myHaloLayer` draws it; on the inhale it widens and softens.
+    static func haloRing(_ p: Phase) -> (width: Double, opacity: Double) {
+        p == .inhale ? (4.5, 0.5) : (restRingWidth, restRingOpacity)
+    }
+
+    static let restRingWidth = 2.5
+    static let restRingOpacity = 0.9
+}
+
+/// A member joining or leaving: the car fades (and its ground spot scales) in or out through
+/// Mapbox paint transitions, never a frame loop. Instant under Reduce Motion.
+enum MemberFade {
+    static let seconds: TimeInterval = 0.35
+    /// The fresh layers render once at zero before the fade-in target is set (a transition
+    /// needs a drawn starting value).
+    static let revealDelay: TimeInterval = 0.06
+    static var transition: [String: Any] { ["duration": Int(seconds * 1000), "delay": 0] }
 }

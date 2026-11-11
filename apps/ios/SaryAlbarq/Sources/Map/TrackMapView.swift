@@ -144,7 +144,7 @@ struct TrackMapView: UIViewRepresentable {
                 fit(p)
             } else if p.followMe, !userMoved, let me = p.me {
                 map.camera.ease(to: CameraOptions(center: me.coordinate, padding: p.padding, zoom: max(m.cameraState.zoom, 16)),
-                                duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.6)
+                                duration: MapCameraMotion.recenter.duration(reduceMotion: MapCameraMotion.reduceMotionNow))
             }
         }
 

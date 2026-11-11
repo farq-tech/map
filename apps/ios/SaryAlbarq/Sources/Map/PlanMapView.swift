@@ -204,16 +204,20 @@ struct PlanMapView: UIViewRepresentable {
 
         private func move(_ c: PlanCamera, on map: MapView) {
             let pad = UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40)
+            let reduce = parent?.theme.reduceMotion ?? MapCameraMotion.reduceMotionNow
             switch c.kind {
             case let .point(p, zoom):
-                map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: zoom), duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.6)
+                let a = map.mapboxMap.point(for: p.coordinate)
+                let shift: Double? = (a.x >= 0 && a.y >= 0) ? Double(hypot(a.x - map.bounds.midX, a.y - map.bounds.midY)) : nil
+                let d = MapCameraMotion.focus.duration(reduceMotion: reduce, shiftPt: shift, zoomDelta: zoom - Double(map.mapboxMap.cameraState.zoom))
+                map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: zoom), duration: d)
             case let .fit(pts):
                 guard pts.count >= 2, map.bounds.height > 0 else {
                     if let p = pts.first { map.camera.ease(to: CameraOptions(center: p.coordinate, zoom: 13), duration: 0) }
                     return
                 }
                 if let cam = try? map.mapboxMap.camera(for: pts.map(\.coordinate), camera: CameraOptions(), coordinatesPadding: pad, maxZoom: 15, offset: nil) {
-                    map.camera.ease(to: cam, duration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.6)
+                    map.camera.ease(to: cam, duration: MapCameraMotion.fit.duration(reduceMotion: reduce))
                 }
             }
         }
