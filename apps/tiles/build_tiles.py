@@ -71,8 +71,6 @@ def connect(memory: str | None = None, temp_directory: str | None = None) -> duc
         escaped = temp_directory.replace("'", "''")
         db.execute(f"SET temp_directory='{escaped}'")
     db.execute('SET preserve_insertion_order=false')
-    db.create_function('_pmtiles_tile_id', lambda z, x, y: zxy_to_tileid(int(z), int(x), int(y)),
-                       [BIGINT, BIGINT, BIGINT], UBIGINT)
     # XYZ tile index of a lon/lat at zoom z (web mercator, latitude clamped to its valid range).
     db.execute("""create or replace macro tile_x(lon, z) as
         least((1 << z) - 1, greatest(0, cast(floor((lon + 180.0) / 360.0 * (1 << z)) as integer)))""")
@@ -295,9 +293,31 @@ def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds,
                 continue
             # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
             union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
-            cursor = db.execute(f"""select x, y, list(blob order by li) blobs
-                                     from ({union}) group by x, y
-                                     order by _pmtiles_tile_id({z}, x, y)""")
+            cursor = db.execute(f"""with recursive tiles as (
+                                     select x, y from ({union}) group by x, y
+                                 ), hilbert as (
+                                     select x tile_x, y tile_y, {z - 1}::integer a, x::bigint hx, y::bigint hy,
+                                            (((1::bigint << ({z * 2})) - 1) // 3)::ubigint acc
+                                     from tiles
+                                     union all
+                                     select tile_x, tile_y, a - 1,
+                                            case when ry = 0 then case when rx <> 0 then s - 1 - hy else hy end else hx end,
+                                            case when ry = 0 then case when rx <> 0 then s - 1 - hx else hx end else hy end,
+                                            acc + case when rx = 0 and ry = 0 then 0
+                                                       when rx = 0 and ry = s then 1::bigint << (2 * a)
+                                                       when rx = s and ry = 0 then 3::bigint << (2 * a)
+                                                       else 2::bigint << (2 * a) end
+                                     from (select *, (1::bigint << a) s, ((1::bigint << a) & hx) rx,
+                                                  ((1::bigint << a) & hy) ry
+                                           from hilbert where a >= 0) state
+                                 ), ordered as (
+                                     select tile_x, tile_y, acc from hilbert where a = -1
+                                 )
+                                 select ordered.tile_x x, ordered.tile_y y, list(blob order by li) blobs
+                                 from ({union}) tile_blobs
+                                 join ordered on ordered.tile_x = tile_blobs.x and ordered.tile_y = tile_blobs.y
+                                 group by ordered.tile_x, ordered.tile_y, ordered.acc
+                                 order by ordered.acc""")
             zoom_tiles = 0
             while rows := cursor.fetchmany(256):
                 for x, y, blobs in rows:
