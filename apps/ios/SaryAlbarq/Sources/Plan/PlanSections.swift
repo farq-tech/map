@@ -35,7 +35,7 @@ struct PlanDetailsSections: View {
             case .loading:
                 SarySkeletonRow().padding(.vertical, theme.space(.s))
             case .unavailable:
-                unavailable("تخطيط الطلعة غير متاح بعد", "الخادم لم يُحدَّث لهذه الميزة. جرّب لاحقًا.")
+                unavailable("تخطيط الطلعة غير متاح بعد", "الخادم ما يدعمها للحين. جرّب بعدين.")
             case .failed(let m):
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     SaryInlineMessage(text: m, tone: .error)
@@ -187,7 +187,7 @@ struct ChecklistSection: View {
                     SaryRowIcon(systemImage: "clock.badge.questionmark")
                     VStack(alignment: .leading, spacing: 2) {
                         Text("قائمة التجهيز غير متاحة بعد").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                        Text("الخادم لم يُحدَّث لهذه الميزة. جرّب لاحقًا.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                        Text("الخادم ما يدعمها للحين. جرّب بعدين.").saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                 }
                 .padding(.vertical, theme.space(.s))

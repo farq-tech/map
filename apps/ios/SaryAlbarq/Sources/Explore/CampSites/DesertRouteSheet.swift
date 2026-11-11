@@ -25,7 +25,7 @@ struct DesertToolsHost {
     var directions: @MainActor (Result<NavTarget, NavRefusal>) -> Void
     /// «دروب البر» to a point: target, name, rain tonight, weather known.
     var openRoutes: @MainActor (LngLat, String, Bool, Bool) -> Void
-    /// «امشِ عليه»: follow the picked desert route («اسلك هذا المسار»).
+    /// «اتجه» (was «امشِ عليه»): follow the picked desert route («اسلك هذا المسار»).
     var follow: @MainActor (FollowSubject) -> Void
     /// Frame the routes on the host's map (the home map has none drawn: nothing to do).
     var fitTrack: @MainActor ([LngLat]) -> Void = { _ in }
@@ -163,7 +163,7 @@ struct DesertRouteSheet: View {
                 Spacer(minLength: 0)
                 Button {
                     go(o)
-                } label: { SaryButtonLabel(title: "امشِ عليه", systemImage: SaryIcon.directions) }
+                } label: { SaryButtonLabel(title: SaryCopy.go, systemImage: SaryIcon.directions) }
                     .buttonStyle(.sary(on ? .primary : .secondary, width: .hug, compact: true))
                     .accessibilityIdentifier("routes.go.\(o.mode.rawValue)")
             }

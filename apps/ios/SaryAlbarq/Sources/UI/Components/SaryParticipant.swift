@@ -455,8 +455,8 @@ struct SaryParticipantCard: View {
                 Button(action: actions.showOnMap) { SaryButtonLabel(title: "أظهره على الخريطة", systemImage: SaryIcon.showOnMap) }
                     .buttonStyle(.saryPrimary)
                 if !p.isMe {
-                    /* «روح له»: only to a live position; an old one explains why instead of guiding. */
-                    Button(action: actions.navigate) { SaryButtonLabel(title: "روح له", systemImage: SaryIcon.directions) }
+                    /* «اتجه» (was «روح له»): only to a live position; an old one explains why instead of guiding. */
+                    Button(action: actions.navigate) { SaryButtonLabel(title: SaryCopy.go, systemImage: SaryIcon.directions) }
                         .buttonStyle(.sary(.secondary))
                         .opacity(p.presence.isLive ? 1 : 0.55)
                         .accessibilityIdentifier("participant.navigate")
