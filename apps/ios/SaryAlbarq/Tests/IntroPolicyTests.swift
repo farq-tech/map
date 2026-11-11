@@ -126,6 +126,7 @@ final class IntroPolicyTests: XCTestCase {
         let phones: [(CGSize, CGFloat, CGFloat)] = [
             (CGSize(width: 375, height: 667), 20, 0), (CGSize(width: 375, height: 812), 50, 34),
             (CGSize(width: 393, height: 852), 59, 34), (CGSize(width: 440, height: 956), 62, 34),
+            (CGSize(width: 320, height: 693), 48, 28), (CGSize(width: 320, height: 568), 20, 0),  // Display Zoom
         ]
         for (screen, top, bottom) in phones {
             let v = IntroScene.visibleRect(screen: screen)
@@ -138,6 +139,7 @@ final class IntroPolicyTests: XCTestCase {
     }
 
     func testTitleWidthFitsTheVisibleScreen() {
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 320), 272, accuracy: 0.001)
         XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 375), 327, accuracy: 0.001)
         XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 393), 345, accuracy: 0.001)
         XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 600), 392, accuracy: 0.001)
