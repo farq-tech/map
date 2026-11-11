@@ -68,6 +68,26 @@ extension SaryPage where Trailing == EmptyView {
     }
 }
 
+/// A full-height column that lays out exactly like a plain `VStack` filling the screen (its
+/// `Spacer`s spread out) whenever it fits, and scrolls instead of clipping or overlapping when
+/// it does not: a 375×667 SE, or large Dynamic Type. `bottom` stays pinned above the home
+/// indicator and the keyboard (primary buttons never scroll away).
+struct SaryFitColumn<Content: View, Bottom: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var bottom: Bottom
+
+    var body: some View {
+        GeometryReader { geo in
+            ScrollView {
+                content.frame(maxWidth: .infinity, minHeight: geo.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
+    }
+}
+
 /// A tappable settings-style row: icon, title, optional detail, chevron.
 struct SaryNavRow: View {
     var title: String

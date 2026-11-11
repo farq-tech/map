@@ -154,35 +154,40 @@ private struct IntroStep: View {
 
     var body: some View {
         let p = theme.palette
-        VStack(spacing: 0) {
-            if model.deferredInviteHint {
-                deferredInvite
-                    .padding(.horizontal, theme.space(.l))
-                    .padding(.top, theme.space(.l))
+        /* Scrolls on an SE / large text (the idea, three points and the invite card no longer
+           overlap the buttons); identical to the old full-height column when it fits. */
+        SaryFitColumn {
+            VStack(spacing: 0) {
+                if model.deferredInviteHint {
+                    deferredInvite
+                        .padding(.horizontal, theme.space(.l))
+                        .padding(.top, theme.space(.l))
+                }
+                Spacer(minLength: theme.space(.xl))
+                SaryMark(size: 120)
+                Text("سَرى البارق")
+                    .font(.sary(36, .heavy))
+                    .foregroundStyle(p.textPrimary)
+                    .padding(.top, theme.space(.xl))
+                Text("شوف الربع على الخريطة في الطلعة، وكل سيارة بلونها.")
+                    .saryText(.title2, weight: .medium)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, theme.space(.s))
+                    .padding(.horizontal, theme.space(.xl))
+                    .accessibilityIdentifier("onboarding.idea")
+                Spacer(minLength: theme.space(.xl))
+                VStack(alignment: .leading, spacing: theme.space(.m)) {
+                    point("location.fill", "موقعك يُشارك فقط مع ربع الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
+                    point("person.crop.circle.badge.checkmark", "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
+                    point("sos", "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
+                }
+                .padding(theme.space(.l))
+                .sarySurface(radius: SaryRadius.l)
+                .padding(.horizontal, theme.space(.l))
+                Spacer(minLength: theme.space(.xl))
             }
-            Spacer(minLength: theme.space(.xl))
-            SaryMark(size: 120)
-            Text("سَرى البارق")
-                .font(.sary(36, .heavy))
-                .foregroundStyle(p.textPrimary)
-                .padding(.top, theme.space(.xl))
-            Text("شوف الربع على الخريطة في الطلعة، وكل سيارة بلونها.")
-                .saryText(.title2, weight: .medium)
-                .foregroundStyle(p.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, theme.space(.s))
-                .padding(.horizontal, theme.space(.xl))
-                .accessibilityIdentifier("onboarding.idea")
-            Spacer(minLength: theme.space(.xl))
-            VStack(alignment: .leading, spacing: theme.space(.m)) {
-                point("location.fill", "موقعك يُشارك فقط مع ربع الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
-                point("person.crop.circle.badge.checkmark", "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
-                point("sos", "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
-            }
-            .padding(theme.space(.l))
-            .sarySurface(radius: SaryRadius.l)
-            .padding(.horizontal, theme.space(.l))
-            Spacer(minLength: theme.space(.xl))
+        } bottom: {
             VStack(spacing: theme.space(.s)) {
                 /* Came from an invite: «لصق» in the card above is the one primary action; «ابدأ»
                  * steps back (the card stays on the home afterwards, the invite is not lost). */
@@ -195,6 +200,7 @@ private struct IntroStep: View {
             }
             .padding(.horizontal, theme.space(.l))
             .padding(.bottom, theme.space(.l))
+            .background(p.background)
         }
     }
 
@@ -315,37 +321,45 @@ private struct LocationStep: View {
 
     var body: some View {
         let p = theme.palette
-        VStack(spacing: theme.space(.l)) {
-            Spacer(minLength: theme.space(.l))
-            Image(systemName: "location.circle.fill")
-                .font(.system(size: 64, weight: .semibold))
-                .foregroundStyle(p.accentText)
-                .accessibilityHidden(true)
-            Text("موقعك للطلعة بس")
-                .saryText(.title, weight: .bold)
-                .foregroundStyle(p.textPrimary)
-                .multilineTextAlignment(.center)
-                .accessibilityIdentifier("onboarding.location.title")
-            VStack(alignment: .leading, spacing: theme.space(.m)) {
-                line("map.fill", "يشوفك ربعك على الخريطة وتشوفهم، وقت الطلعة بس.")
-                line("hand.raised.fill", "تطلع من الطلعة أو تخلص، يوقف. وبرّا الطلعات ما نتتبعك.")
+        SaryFitColumn {
+            VStack(spacing: theme.space(.l)) {
+                Spacer(minLength: theme.space(.l))
+                Image(systemName: "location.circle.fill")
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(p.accentText)
+                    .accessibilityHidden(true)
+                Text("موقعك للطلعة بس")
+                    .saryText(.title, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("onboarding.location.title")
+                VStack(alignment: .leading, spacing: theme.space(.m)) {
+                    line("map.fill", "يشوفك ربعك على الخريطة وتشوفهم، وقت الطلعة بس.")
+                    line("hand.raised.fill", "تطلع من الطلعة أو تخلص، يوقف. وبرّا الطلعات ما نتتبعك.")
+                }
+                .padding(theme.space(.l))
+                .sarySurface(radius: SaryRadius.l)
+                Text("بعدها يسألك iOS: اختر «السماح أثناء استخدام التطبيق».")
+                    .saryText(.footnote)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                Spacer(minLength: 0)
             }
-            .padding(theme.space(.l))
-            .sarySurface(radius: SaryRadius.l)
-            Text("بعدها يسألك iOS: اختر «السماح أثناء استخدام التطبيق».")
-                .saryText(.footnote)
-                .foregroundStyle(p.textSecondary)
-                .multilineTextAlignment(.center)
-            Spacer(minLength: theme.space(.l))
-            Button(action: allow) { SaryButtonLabel(title: "اسمح بالموقع", systemImage: SaryIcon.locate) }
-                .buttonStyle(.sary(.primary))
-                .accessibilityIdentifier("onboarding.allowLocation")
-            Button("لاحقًا", action: skip)
-                .buttonStyle(.sary(.plain))
-                .accessibilityIdentifier("onboarding.skipLocation")
+            .padding(.horizontal, theme.space(.l))
+        } bottom: {
+            VStack(spacing: theme.space(.l)) {
+                Button(action: allow) { SaryButtonLabel(title: "اسمح بالموقع", systemImage: SaryIcon.locate) }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("onboarding.allowLocation")
+                Button("لاحقًا", action: skip)
+                    .buttonStyle(.sary(.plain))
+                    .accessibilityIdentifier("onboarding.skipLocation")
+            }
+            .padding(.top, theme.space(.l))
+            .padding(.horizontal, theme.space(.l))
+            .padding(.bottom, theme.space(.l))
+            .background(p.background)
         }
-        .padding(.horizontal, theme.space(.l))
-        .padding(.bottom, theme.space(.l))
     }
 
     private func line(_ icon: String, _ t: String) -> some View {
