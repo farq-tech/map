@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// «جودة GPS»: a developer-only readout under «الإعدادات › متقدم › تشخيص». Hidden for everyone
+/// «جودة GPS» (and «أداء التطبيق», `MetricsEntryRow`): developer-only readouts under «الإعدادات › متقدم › تشخيص». Hidden for everyone
 /// else; shown in Debug builds, with `-SaryDevGPS`, or after a 3-second press on the diagnostics
 /// content (toggles `sary.dev.unlocked`, kept across account wipes like every `sary.dev.` key).
 enum GpsDevAccess {
@@ -27,6 +27,8 @@ struct GpsDevGate<Content: View>: View {
                 .onLongPressGesture(minimumDuration: 3) { unlocked.toggle() }
             if unlocked || GpsDevAccess.enabled() {
                 GpsQualityRow(location: location)
+                /* «أداء التطبيق»: MetricKit summaries stored on this phone (docs/METRICS.md). */
+                MetricsEntryRow()
             }
         }
     }
