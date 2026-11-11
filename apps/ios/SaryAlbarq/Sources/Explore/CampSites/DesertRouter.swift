@@ -422,20 +422,35 @@ final class DesertTileStore: @unchecked Sendable {
         guard !ids.isEmpty, ids.count <= 16,
               box.n - box.s <= DesertTiles.maxSpanDeg + 1e-9, box.e - box.w <= DesertTiles.maxSpanDeg + 1e-9 else { return nil }
         let pilots = seeds(box)
-        var tiles: [DesertGrid] = []
-        var manifest: Manifest?
-        var askedManifest = false
+        /* In tile order: a grid already in memory, or the index of a tile still to load. */
+        var slots: [DesertGrid?] = []
+        var missing: [(slot: Int, id: DesertTiles.TileID)] = []
         for id in ids {
             guard let part = id.bbox.intersection(box) else { continue }
             if pilots.contains(where: { $0.bbox.covers(part) }) { continue }
-            if let g = memoryTile(id) { tiles.append(g); continue }
-            if !askedManifest { manifest = await currentManifest(); askedManifest = true }
-            switch await loadTile(id, manifest: manifest) {
-            case let .loaded(g): tiles.append(g)
-            case .absent: continue
-            case .unavailable: return nil
+            if let g = memoryTile(id) { slots.append(g); continue }
+            missing.append((slots.count, id))
+            slots.append(nil)
+        }
+        if !missing.isEmpty {
+            let manifest = await currentManifest()
+            /* The tiles of one corridor (up to 16, each a disk read or a download plus a checksum)
+             * load together instead of one after another; the result keeps tile order. */
+            let states = await withTaskGroup(of: (Int, TileState).self) { g -> [Int: TileState] in
+                for m in missing { g.addTask { (m.slot, await self.loadTile(m.id, manifest: manifest)) } }
+                var out: [Int: TileState] = [:]
+                for await (slot, state) in g { out[slot] = state }
+                return out
+            }
+            for m in missing {
+                switch states[m.slot] {
+                case let .loaded(g)?: slots[m.slot] = g
+                case .absent?: continue
+                case .unavailable?, nil: return nil
+                }
             }
         }
+        let tiles = slots.compactMap { $0 }
         // Tiles are the national build (consistent across their edges); pilots fill what they lack.
         return DesertGrid.stitch(tiles + pilots, bbox: box)
     }
