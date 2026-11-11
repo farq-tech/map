@@ -458,6 +458,21 @@ final class TrailSessionTests: XCTestCase {
         XCTAssertTrue(s.trail.isEmpty, "and nothing more is recorded")
     }
 
+    /// Build 36 field bug (the blue arrow after the trip ended): the socket's 4410 reaches `closed`
+    /// without `reconcileSharing`; «مساري»'s GPS and its activity session must stop there too.
+    func testTrailGPSStopsWhenTheSocketSaysTheOutingEnded() async {
+        location.testAuthorization = .authorizedWhenInUse
+        let s = session()
+        serverReady(sockets[0])
+        XCTAssertTrue(location.trailActive, "recording on screen: the GPS at its best")
+        sockets[0].onClose(4410)
+        let end = Date().addingTimeInterval(2)
+        while s.closedReason == nil, Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(s.closedReason, .outingEnded)
+        XCTAssertFalse(location.trailActive, "the ended trip keeps no GPS of its own")
+        XCTAssertFalse(location.backgroundTrail)
+    }
+
     func testBackgroundRecordingStopsOnLeaveSwitchOffAndClose() {
         let s = session()
         serverReady(sockets[0])

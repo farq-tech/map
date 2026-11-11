@@ -74,3 +74,63 @@ scripts/camp-sites/regen.sh /path/to/work-dir nafud      # one
 
 Tests: `python -m pytest scripts/camp-sites/tests -q` (rules, wadi-bed exclusion, shelter by wind,
 router). Pictures: `render.py` (sites over Sentinel-2 + hillshade), `render_routes.py`.
+
+## Routes for the whole Kingdom (national tiles)
+
+The three pilot grids stay bundled in the app (offline seed). The rest of the Kingdom is served as
+1° × 1° tiles of the same SARYRT1 grid (3″, ~90 m) that the app downloads only for the corridor it
+routes through.
+
+- **Names**: `routes-t{lat}_{lng}.bin`, the tile's south-west corner in integer degrees
+  (`t25_46` = 25–26 N, 46–47 E). `tiles.py list` gives the tiles that touch the Kingdom
+  (a coarse outline in `regions.py`, buffered 0.5°; `--boundary ksa.geojson` for an exact one):
+  **240 tiles** with the built-in outline.
+- **No overlap, haloed computation**: each tile is computed on its bbox grown by 0.05°
+  (`TILE_HALO_DEG`: 60 route cells) so slopes, ridge axes, distances to tracks and the 2×2
+  coarsening see their neighbours, then cropped to the exact degree square. Every tile sits on one
+  global lattice (cell edges at multiples of 1/1200°), as do the pilot grids, so the app stitches
+  any set of them by lattice index (`DesertGrid.stitch`). Known limit: flow accumulation only sees
+  the halo, so a very large wadi can be under-sized right at a tile edge.
+- **manifest.json** (`tiles.py manifest`): format, version, arcsec, tile_deg, halo_deg, attribution
+  (Copernicus, ESA WorldCover, Sentinel-2, © OpenStreetMap contributors), built_from (datasets, OSM
+  extract md5), and per tile `id`, `bbox`, `bytes`, `sha256` (of the served zlib file), `rows`, `cols`.
+  The app refuses a tile whose sha256 differs from the manifest.
+- **Tiles only route**: `build.py --route-layers` computes just what `routes.py` reads (no
+  camp-site shelter / sunset / dark-sky layers).
+
+### Run it (cloud machine)
+
+```sh
+scripts/camp-sites/national.sh /mnt/work 16 2026-11-10    # work dir, parallel tiles, version
+```
+
+`national.sh` (bash, Linux) creates a venv from `requirements.txt`, downloads and md5-checks the
+Geofabrik `gcc-states` extract, lists the tiles, extracts OSM for all of them in one pass, then per
+tile (in parallel, resumable: an existing `routes-<tile>.bin` is skipped) runs `fetch_rasters.py` →
+`build.py --route-layers` → `tiles.py build`, deletes that tile's rasters, and finally writes
+`manifest.json` and runs the tests. Failed tiles are listed in `logs/failed.txt`; rerun to resume.
+
+Sizing (**estimates**, not measured on a national run):
+
+| | estimate |
+|---|---|
+| machine | 16–32 vCPU, 64 GB RAM, Linux x86_64, good bandwidth to AWS eu-central-1 (where the COGs live) |
+| memory per tile | ~3–4 GB peak (11 880² WorldCover read, priority flood on ~2 000² cells); `jobs` ≈ RAM / 4 GB, ≤ vCPU/2 |
+| OSM pass | ~8–16 GB RAM, 20–60 min for all tiles at once |
+| time per tile | 10–25 min (network reads of DEM / WorldCover / Sentinel-2 + pure-Python priority flood) |
+| total | 240 tiles × ~15 min / 16 jobs ≈ **4–6 h** |
+| disk | ≥ 40 GB free (OSM extract 0.3 GB, per-tile cache up to ~1 GB while it runs, deleted after) |
+| output | ~2.5–4 MB per tile (pilots: 0.5–1.5 MB for 0.2–0.5 deg²) → **~0.6–1 GB** in total |
+
+### Upload
+
+The tiles server (`apps/tiles/serve.py`) serves `GET /desert/manifest.json` and
+`GET /desert/tiles/<id>.bin` from `DESERT_DATA_DIR` (default `$TILES_DATA_DIR/desert`, i.e.
+`/data/desert` on the Railway volume). Either
+
+1. copy `out/desert/` onto the service's volume at `/data/desert/` (tiles first, `manifest.json`
+   last, so the app never reads a manifest naming a tile that is not there yet); or
+2. sync it to an object bucket that serves public HTTPS (tiles first, then `manifest.json`) and set
+   `DESERT_PUBLIC_BASE=https://<bucket-host>/desert` on the service: both endpoints then redirect there.
+
+The app derives the base URL from `FarqTilesURL` (`…/farq.json` → `…/desert/`).

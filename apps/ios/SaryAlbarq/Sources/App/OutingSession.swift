@@ -1057,6 +1057,10 @@ final class OutingSession: ObservableObject, Identifiable {
         PTTDiagnosticsLog.shared.add("session", "closed for good: \(r.rawValue)")
         closedReason = r
         stopBackgroundTrail()
+        /* «مساري» stops recording now (its best-accuracy GPS and the iOS 17 activity session that keeps
+         * the blue arrow): the socket's 4410 / an `outing_ended` ack / «removed» reach here without
+         * `reconcileSharing`, and the screen may stay open on the ended trip for a long time. */
+        syncTrailGPS()
         saveTrail()
         stopSharingLocally()
         if r == .outingEnded { view?.apply(.outingStatus(.ended)) }

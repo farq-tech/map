@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import UIKit
 
 // «مخطط دروب البر»: the easiest / shortest / balanced way across the desert to a point, on the
 // phone and offline, over a bundled cost grid (~90 m) built from open data by
@@ -76,10 +78,15 @@ struct DesertGrid {
         try? (d as NSData).decompressed(using: .zlib) as Data
     }
 
+    /// The bundled grid for `region`, read and inflated once and then kept in memory (routing,
+    /// reroutes and the planner sheet all ask for it; parsing costs a 0.4–1.5 MB read and a full
+    /// inflate each time). Thread-safe: callers run off the main thread. A memory warning drops it.
     static func bundled(_ region: String) -> DesertGrid? {
-        guard let url = Bundle.main.url(forResource: "routes-\(region)", withExtension: "bin"),
-              let data = try? Data(contentsOf: url) else { return nil }
-        return load(data)
+        BundledGridCache.grid(region) {
+            guard let url = Bundle.main.url(forResource: "routes-\(region)", withExtension: "bin"),
+                  let data = try? Data(contentsOf: url) else { return nil }
+            return load(data)
+        }
     }
 
     /// The bundled region that holds both points.
@@ -132,6 +139,444 @@ struct DesertGrid {
             if chosen.count == limit { break }
         }
         return chosen
+    }
+}
+
+/// Per-region cache behind `DesertGrid.bundled`. The arrays are copy-on-write, so handing out
+/// the cached struct shares its storage instead of copying megabytes.
+private enum BundledGridCache {
+    private static let lock = NSLock()
+    private static var grids: [String: DesertGrid] = [:]
+    private static let memoryWarning: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+    ) { _ in
+        BundledGridCache.clear()
+    }
+
+    static func grid(_ region: String, load: () -> DesertGrid?) -> DesertGrid? {
+        _ = memoryWarning
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = grids[region] { return cached }
+        // Loaded under the lock so two concurrent first requests do not both parse the file.
+        // A missing grid is not cached (cheap to look up, and never expected in a release build).
+        guard let grid = load() else { return nil }
+        grids[region] = grid
+        return grid
+    }
+
+    static func clear() {
+        lock.lock()
+        grids.removeAll()
+        lock.unlock()
+    }
+}
+
+// MARK: - National tiles («دروب البر» for the whole Kingdom)
+//
+// Beyond the three bundled pilots, the same grid is built for the Kingdom as 1°×1° tiles
+// (scripts/camp-sites/tiles.py) and served by apps/tiles (`/desert/manifest.json`,
+// `/desert/tiles/<id>.bin`). Tiles do not overlap: every tile, and every pilot grid, sits on one
+// global 3-arc-second lattice (cell edges at multiples of 1/1200°), so a corridor grid is cut out
+// of any of them by lattice index (`DesertGrid.stitch`).
+
+extension DesertGrid.BBox: Equatable {
+    func intersects(_ o: DesertGrid.BBox) -> Bool { s < o.n && o.s < n && w < o.e && o.w < e }
+
+    /// `o` lies inside (edges included, to a lattice-rounding tolerance).
+    func covers(_ o: DesertGrid.BBox) -> Bool {
+        let t = 1e-7
+        return o.s >= s - t && o.n <= n + t && o.w >= w - t && o.e <= e + t
+    }
+
+    func intersection(_ o: DesertGrid.BBox) -> DesertGrid.BBox? {
+        let r = DesertGrid.BBox(s: max(s, o.s), w: max(w, o.w), n: min(n, o.n), e: min(e, o.e))
+        return r.s < r.n && r.w < r.e ? r : nil
+    }
+}
+
+extension DesertGrid {
+    var bbox: BBox { BBox(s: header.south, w: header.west, n: header.north, e: header.east) }
+
+    /// One grid over `bbox` (snapped outward to the lattice) from `sources`, the first source
+    /// winning where they overlap. Sources with another resolution or off the lattice are skipped.
+    /// Cells no source covers are forbidden ground (no data is never a way through). nil when the
+    /// box is empty, larger than `maxCells`, or no source covers any of it.
+    static func stitch(_ sources: [DesertGrid], bbox: BBox, arcsec: Double = DesertTiles.arcsec,
+                       maxCells: Int = DesertTiles.maxCorridorCells) -> DesertGrid? {
+        let k = 3600 / arcsec
+        let kS = Int((bbox.s * k + 1e-6).rounded(.down)), kN = Int((bbox.n * k - 1e-6).rounded(.up))
+        let jW = Int((bbox.w * k + 1e-6).rounded(.down)), jE = Int((bbox.e * k - 1e-6).rounded(.up))
+        let rows = kN - kS, cols = jE - jW
+        guard rows > 0, cols > 0, rows <= maxCells / cols else { return nil }
+        let count = rows * cols
+        var cell = [UInt8](repeating: Ground.forbidden.rawValue, count: count)
+        var ridge = [UInt8](repeating: 255, count: count)
+        var elev = [Float](repeating: 0, count: count)
+        var filled = [Bool](repeating: false, count: count)
+        // Lowest priority first: a later (higher-priority) source overwrites.
+        for src in sources.reversed() {
+            let h = src.header
+            guard abs(h.arcsec - arcsec) < 1e-9, src.rows > 0, src.cols > 0,
+                  src.cell.count == src.rows * src.cols, src.ridge.count == src.cell.count, src.elev.count == src.cell.count
+            else { continue }
+            let north = h.north * k, west = h.west * k
+            let iN = Int(north.rounded()), iW = Int(west.rounded())
+            guard abs(north - Double(iN)) < 1e-4, abs(west - Double(iW)) < 1e-4 else { continue }
+            let c0 = max(0, iW - jW), c1 = min(cols, iW + src.cols - jW)
+            guard c1 > c0 else { continue }
+            let len = c1 - c0
+            for r in 0..<rows {
+                // Output row r has its north edge at lattice line kN - r; source row rs at iN - rs.
+                let rs = iN - kN + r
+                guard rs >= 0, rs < src.rows else { continue }
+                let o = r * cols + c0, so = rs * src.cols + (jW + c0 - iW)
+                cell.replaceSubrange(o..<(o + len), with: src.cell[so..<(so + len)])
+                ridge.replaceSubrange(o..<(o + len), with: src.ridge[so..<(so + len)])
+                elev.replaceSubrange(o..<(o + len), with: src.elev[so..<(so + len)])
+                filled.replaceSubrange(o..<(o + len), with: repeatElement(true, count: len))
+            }
+        }
+        guard filled.contains(true) else { return nil }
+        let header = Header(region: "corridor", rows: rows, cols: cols,
+                            south: Double(kS) / k, west: Double(jW) / k, north: Double(kN) / k, east: Double(jE) / k,
+                            arcsec: arcsec, z0: 0)
+        return DesertGrid(header: header, cell: cell, ridge: ridge, elev: elev)
+    }
+}
+
+/// Tile names and corridor geometry (mirrors scripts/camp-sites/regions.py).
+enum DesertTiles {
+    static let arcsec = 3.0
+    /// The Kingdom's land bbox (generous; the manifest says which tiles really exist).
+    static let kingdom = DesertGrid.BBox(s: 16, w: 34, n: 33, e: 56)
+    /// A corridor is at most this many degrees on a side (≤ 3×3 tiles, ≤ ~2.1 M cells: the A*
+    /// arrays stay ~30 MB). Larger asks fall back to the road route + final bearing.
+    static let maxSpanDeg = 1.2
+    /// Around the destination: mapped access points are looked for within 30 km of it.
+    static let aroundTargetDeg = 0.3
+    /// Around the road end / origin, so its cell and a few neighbours are inside.
+    static let padDeg = 0.05
+    static var maxCorridorCells: Int {
+        let side = Int((maxSpanDeg * 3600 / arcsec).rounded()) + 2
+        return side * side
+    }
+
+    /// `t{lat}_{lng}`: the south-west corner in integer degrees.
+    struct TileID: Hashable {
+        var lat: Int, lng: Int
+        init(lat: Int, lng: Int) { self.lat = lat; self.lng = lng }
+        init?(_ name: String) {
+            guard name.hasPrefix("t") else { return nil }
+            let parts = name.dropFirst().split(separator: "_", omittingEmptySubsequences: false)
+            guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0.count <= 3 && $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }),
+                  let la = Int(parts[0]), let lo = Int(parts[1]) else { return nil }
+            self.init(lat: la, lng: lo)
+        }
+        var name: String { "t\(lat)_\(lng)" }
+        var bbox: DesertGrid.BBox { DesertGrid.BBox(s: Double(lat), w: Double(lng), n: Double(lat + 1), e: Double(lng + 1)) }
+    }
+
+    static func tile(containing p: LngLat) -> TileID { TileID(lat: Int(p.lat.rounded(.down)), lng: Int(p.lng.rounded(.down))) }
+
+    /// Every tile intersecting `b`; an edge exactly on a degree does not pull in the neighbour.
+    static func tiles(covering b: DesertGrid.BBox) -> [TileID] {
+        guard b.n > b.s, b.e > b.w else { return [] }
+        let la0 = Int(b.s.rounded(.down)), la1 = Int(b.n.rounded(.up))
+        let lo0 = Int(b.w.rounded(.down)), lo1 = Int(b.e.rounded(.up))
+        return (la0..<la1).flatMap { la in (lo0..<lo1).map { TileID(lat: la, lng: $0) } }
+    }
+
+    static func inKingdom(_ p: LngLat) -> Bool {
+        p.lat >= kingdom.s && p.lat <= kingdom.n && p.lng >= kingdom.w && p.lng <= kingdom.e
+    }
+
+    /// The grid box to route to `target` from `hint` (the road route's end, or nil): the target with
+    /// `aroundTargetDeg` around it, grown to take in the hint, then cut to `maxSpanDeg` on the
+    /// hint's side (the target always keeps its margin). nil outside the Kingdom.
+    static func corridor(from hint: LngLat?, to target: LngLat) -> DesertGrid.BBox? {
+        guard inKingdom(target) else { return nil }
+        var s = target.lat - aroundTargetDeg, n = target.lat + aroundTargetDeg
+        var w = target.lng - aroundTargetDeg, e = target.lng + aroundTargetDeg
+        if let h = hint {
+            s = min(s, h.lat - padDeg); n = max(n, h.lat + padDeg)
+            w = min(w, h.lng - padDeg); e = max(e, h.lng + padDeg)
+        }
+        func cut(_ lo: inout Double, _ hi: inout Double, keep t: Double) {
+            guard hi - lo > maxSpanDeg else { return }
+            if t - lo > hi - t { lo = hi - maxSpanDeg } else { hi = lo + maxSpanDeg }
+        }
+        cut(&s, &n, keep: target.lat)
+        cut(&w, &e, keep: target.lng)
+        return DesertGrid.BBox(s: s, w: w, n: n, e: e)
+    }
+
+    /// A box holding both points (padded), or nil when they are too far apart for one grid.
+    static func corridor(spanning a: LngLat, _ b: LngLat) -> DesertGrid.BBox? {
+        guard inKingdom(a), inKingdom(b) else { return nil }
+        let box = DesertGrid.BBox(s: min(a.lat, b.lat) - padDeg, w: min(a.lng, b.lng) - padDeg,
+                                  n: max(a.lat, b.lat) + padDeg, e: max(a.lng, b.lng) + padDeg)
+        return box.n - box.s <= maxSpanDeg && box.e - box.w <= maxSpanDeg ? box : nil
+    }
+}
+
+/// Finds, verifies and caches the national tiles, and stitches the corridor grid a route needs.
+/// Order per tile: a bundled pilot grid that already covers that part (no download), the memory
+/// cache, the disk cache (Application Support/DesertTiles, checked against the manifest's
+/// sha256), then the tiles server. A tile from the server is used only if its size and sha256
+/// match the manifest. All work runs in the caller's async context, never on the main thread's
+/// critical path (`corridor` is async; callers are the route provider and a detached task).
+final class DesertTileStore: @unchecked Sendable {
+    struct Manifest: Decodable, Equatable {
+        struct Tile: Decodable, Equatable { var id: String; var bytes: Int; var sha256: String }
+        var version: String
+        var arcsec: Double
+        var tiles: [Tile]
+        func entry(_ id: DesertTiles.TileID) -> Tile? { tiles.first { $0.id == id.name } }
+    }
+
+    /// GET → (body, HTTP status).
+    typealias Fetch = (URL) async throws -> (Data, Int)
+
+    static let shared = DesertTileStore()
+    static let memoryTiles = 4
+    static let manifestTTL: TimeInterval = 6 * 3600
+    static let retryAfterFailure: TimeInterval = 60
+
+    let baseURL: URL?
+    let cacheDir: URL?
+    private let fetch: Fetch
+    private let seeds: (DesertGrid.BBox) -> [DesertGrid]
+    private let now: () -> Date
+
+    private let lock = NSLock()
+    private var memory: [DesertTiles.TileID: DesertGrid] = [:]
+    private var recent: [DesertTiles.TileID] = []
+    private var manifest: Manifest?
+    private var manifestFetched: Date?
+    private var lastFailure: Date?
+    private var memoryWarning: NSObjectProtocol?
+
+    /// `FarqTilesURL` (`https://host/farq.json`) → `https://host/desert/`.
+    static var configuredBaseURL: URL? {
+        guard let raw = FarqTiles.configuredURL, let u = URL(string: raw) else { return nil }
+        return u.deletingLastPathComponent().appendingPathComponent("desert", isDirectory: true)
+    }
+
+    static var defaultCacheDir: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("DesertTiles", isDirectory: true)
+    }
+
+    static let urlSessionFetch: Fetch = { url in
+        let req = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 20)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+    }
+
+    /// The bundled pilot grids that touch `box` (offline seed).
+    static let bundledSeeds: (DesertGrid.BBox) -> [DesertGrid] = { box in
+        DesertGrid.bboxes.filter { $0.value.intersects(box) }.keys.sorted().compactMap { DesertGrid.bundled($0) }
+    }
+
+    init(baseURL: URL? = DesertTileStore.configuredBaseURL,
+         cacheDir: URL? = DesertTileStore.defaultCacheDir,
+         fetch: @escaping Fetch = DesertTileStore.urlSessionFetch,
+         seeds: @escaping (DesertGrid.BBox) -> [DesertGrid] = DesertTileStore.bundledSeeds,
+         now: @escaping () -> Date = Date.init) {
+        self.baseURL = baseURL
+        self.cacheDir = cacheDir
+        self.fetch = fetch
+        self.seeds = seeds
+        self.now = now
+        memoryWarning = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+        ) { [weak self] _ in
+            self?.purgeMemory()
+        }
+    }
+
+    deinit {
+        if let memoryWarning { NotificationCenter.default.removeObserver(memoryWarning) }
+    }
+
+    func purgeMemory() {
+        lock.lock()
+        memory.removeAll()
+        recent.removeAll()
+        lock.unlock()
+    }
+
+    /// The decoded tiles held in memory (tests, diagnostics).
+    var memoryTileNames: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recent.map(\.name)
+    }
+
+    /// One grid over `box` from the tiles and pilot grids it needs; nil when the box is too big,
+    /// a needed tile is unavailable (offline, missing, failed its checksum) and no pilot covers
+    /// that part, or nothing covers it at all. The caller then keeps the road route + bearing.
+    func corridor(_ box: DesertGrid.BBox) async -> DesertGrid? {
+        let ids = DesertTiles.tiles(covering: box)
+        guard !ids.isEmpty, ids.count <= 16,
+              box.n - box.s <= DesertTiles.maxSpanDeg + 1e-9, box.e - box.w <= DesertTiles.maxSpanDeg + 1e-9 else { return nil }
+        let pilots = seeds(box)
+        var tiles: [DesertGrid] = []
+        var manifest: Manifest?
+        var askedManifest = false
+        for id in ids {
+            guard let part = id.bbox.intersection(box) else { continue }
+            if pilots.contains(where: { $0.bbox.covers(part) }) { continue }
+            if let g = memoryTile(id) { tiles.append(g); continue }
+            if !askedManifest { manifest = await currentManifest(); askedManifest = true }
+            switch await loadTile(id, manifest: manifest) {
+            case let .loaded(g): tiles.append(g)
+            case .absent: continue
+            case .unavailable: return nil
+            }
+        }
+        // Tiles are the national build (consistent across their edges); pilots fill what they lack.
+        return DesertGrid.stitch(tiles + pilots, bbox: box)
+    }
+
+    /// Save to disk the tiles covering `box` (an offline map area), so desert routing works there
+    /// without signal. Pilot-covered parts are skipped. Returns how many tiles are now on disk.
+    @discardableResult
+    func prefetch(_ box: DesertGrid.BBox) async -> Int {
+        let ids = DesertTiles.tiles(covering: box)
+        guard !ids.isEmpty, ids.count <= 16 else { return 0 }
+        let pilots = seeds(box)
+        let manifest = await currentManifest()
+        var ready = 0
+        for id in ids {
+            guard let part = id.bbox.intersection(box), !pilots.contains(where: { $0.bbox.covers(part) }) else { continue }
+            if case .loaded = await loadTile(id, manifest: manifest) { ready += 1 }
+        }
+        return ready
+    }
+
+    enum TileState { case loaded(DesertGrid), absent, unavailable }
+
+    func loadTile(_ id: DesertTiles.TileID, manifest: Manifest?) async -> TileState {
+        if let g = memoryTile(id) { return .loaded(g) }
+        let entry = manifest?.entry(id)
+        // Not in the national set (sea, abroad): nothing to fetch; its cells stay forbidden.
+        if manifest != nil, entry == nil { return .absent }
+        let file = cacheDir?.appendingPathComponent("routes-\(id.name).bin")
+        var stale: Data?
+        if let file, let data = try? Data(contentsOf: file) {
+            // Without a manifest (offline since install) a cached file is trusted: it was checked when saved.
+            if entry.map({ Self.sha256Hex(data) == $0.sha256 }) ?? true, let g = Self.decode(data, id) {
+                remember(id, g)
+                return .loaded(g)
+            }
+            stale = data
+        }
+        if let entry, let baseURL, !recentlyFailed() {
+            let res = try? await fetch(baseURL.appendingPathComponent("tiles/\(id.name).bin"))
+            if let res, (200..<300).contains(res.1), res.0.count == entry.bytes,
+               Self.sha256Hex(res.0) == entry.sha256, let g = Self.decode(res.0, id) {
+                save(res.0, to: file)
+                remember(id, g)
+                return .loaded(g)
+            }
+            // No answer at all (offline): do not ask again for a minute (reroutes come often).
+            if res == nil { noteFailure() }
+        }
+        // An older build of the tile is still real data: better than nothing in the desert.
+        if let stale, let g = Self.decode(stale, id) {
+            remember(id, g)
+            return .loaded(g)
+        }
+        return .unavailable
+    }
+
+    /// The manifest: from memory while fresh, else the server, else the last one saved on disk.
+    func currentManifest() async -> Manifest? {
+        lock.lock()
+        let held = manifest, fetched = manifestFetched
+        lock.unlock()
+        if let held, let fetched, now().timeIntervalSince(fetched) < Self.manifestTTL { return held }
+        if let baseURL, !recentlyFailed() {
+            let res = try? await fetch(baseURL.appendingPathComponent("manifest.json"))
+            if let res, (200..<300).contains(res.1), let m = Self.decodeManifest(res.0) {
+                lock.lock()
+                manifest = m
+                manifestFetched = now()
+                lock.unlock()
+                save(res.0, to: cacheDir?.appendingPathComponent("manifest.json"))
+                return m
+            }
+            noteFailure()
+        }
+        if let held { return held }
+        if let file = cacheDir?.appendingPathComponent("manifest.json"),
+           let data = try? Data(contentsOf: file), let m = Self.decodeManifest(data) {
+            lock.lock()
+            manifest = m  // manifestFetched stays nil: the server is asked again next time
+            lock.unlock()
+            return m
+        }
+        return nil
+    }
+
+    static func decodeManifest(_ data: Data) -> Manifest? {
+        guard let m = try? JSONDecoder().decode(Manifest.self, from: data), abs(m.arcsec - DesertTiles.arcsec) < 1e-9 else { return nil }
+        return m
+    }
+
+    /// A tile file, refused unless its header is exactly that tile on the 3″ lattice.
+    static func decode(_ data: Data, _ id: DesertTiles.TileID) -> DesertGrid? {
+        guard let g = DesertGrid.load(data) else { return nil }
+        let h = g.header, b = id.bbox, t = 1e-7
+        guard abs(h.arcsec - DesertTiles.arcsec) < 1e-9, abs(h.south - b.s) < t, abs(h.west - b.w) < t,
+              abs(h.north - b.n) < t, abs(h.east - b.e) < t else { return nil }
+        return g
+    }
+
+    static func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func memoryTile(_ id: DesertTiles.TileID) -> DesertGrid? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let g = memory[id] else { return nil }
+        recent.removeAll { $0 == id }
+        recent.append(id)
+        return g
+    }
+
+    private func remember(_ id: DesertTiles.TileID, _ g: DesertGrid) {
+        lock.lock()
+        memory[id] = g
+        recent.removeAll { $0 == id }
+        recent.append(id)
+        while recent.count > Self.memoryTiles { memory[recent.removeFirst()] = nil }
+        lock.unlock()
+    }
+
+    private func recentlyFailed() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return lastFailure.map { now().timeIntervalSince($0) < Self.retryAfterFailure } ?? false
+    }
+
+    private func noteFailure() {
+        lock.lock()
+        lastFailure = now()
+        lock.unlock()
+    }
+
+    private func save(_ data: Data, to file: URL?) {
+        guard let file else { return }
+        var dir = file.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true  // re-downloadable
+        try? dir.setResourceValues(values)
+        try? data.write(to: file, options: .atomic)
     }
 }
 

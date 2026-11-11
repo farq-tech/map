@@ -166,8 +166,23 @@ struct DesertHit: Equatable, Identifiable {
 }
 
 struct DesertGazetteer {
-    var places: [DesertPlace]
+    var places: [DesertPlace] { didSet { searchNames = Self.normalizedNames(places) } }
     var attribution: [String] = []
+    /// Each place's names, normalized once (`DesertName.normalize`) when the gazetteer is built, in
+    /// the order of `places`; empty for camp suggestions (not names). Free text reads these.
+    private(set) var searchNames: [[String]]
+
+    init(places: [DesertPlace], attribution: [String] = []) {
+        self.places = places
+        self.attribution = attribution
+        searchNames = Self.normalizedNames(places)
+    }
+
+    static func normalizedNames(_ places: [DesertPlace]) -> [[String]] {
+        places.map { p in
+            p.kind == .camp ? [] : ([p.nameAr, p.nameEn].compactMap { $0 } + p.alt).map(DesertName.normalize).filter { !$0.isEmpty }
+        }
+    }
 
     private struct File: Decodable {
         var version: Int
@@ -195,15 +210,47 @@ struct DesertGazetteer {
         return g
     }()
 
+    /// Reads the bundled file on a background thread shortly after launch, so neither the launch
+    /// nor the first search pays for it (`static let` is initialised once, thread-safely).
+    static func prewarm(afterNanoseconds delay: UInt64 = 1_500_000_000) {
+        Task.detached(priority: .utility) {
+            try? await Task.sleep(nanoseconds: delay)
+            _ = DesertGazetteer.bundled
+        }
+    }
+
     static let defaultAttribution = ["© OpenStreetMap contributors (ODbL 1.0)", "GeoNames (geonames.org), CC BY 4.0"]
 
     /// The places of one kind, nearest first (edge distance for outlines), at most `limit`.
     func nearest(_ kind: DesertKind, from me: LngLat, limit: Int = 30, maxMeters: Double = .infinity) -> [DesertHit] {
-        places.lazy.filter { $0.kind == kind }
-            .map { DesertHit(place: $0, meters: $0.distance(from: me)) }
-            .filter { $0.meters <= maxMeters }
-            .sorted { ($0.meters, $0.place.id) < ($1.meters, $1.place.id) }
-            .prefix(limit).map { $0 }
+        guard limit > 0 else { return [] }
+        /* A cheap lower bound first (an outline lies inside its bbox), nearest first, so only the
+         * outlines that can still make the list get the exact edge distance. */
+        let candidates = places.filter { $0.kind == kind }
+            .map { (place: $0, bound: Self.lowerBound($0, from: me)) }
+            .filter { $0.bound <= maxMeters }
+            .sorted { $0.bound < $1.bound }
+        var hits: [DesertHit] = []
+        for c in candidates {
+            if hits.count >= limit, c.bound > hits[limit - 1].meters { break }
+            let meters = c.place.polygon == nil ? c.bound : c.place.distance(from: me)
+            guard meters <= maxMeters else { continue }
+            hits.append(DesertHit(place: c.place, meters: meters))
+            hits.sort { ($0.meters, $0.place.id) < ($1.meters, $1.place.id) }
+            if hits.count > limit { hits.removeLast() }
+        }
+        return hits
+    }
+
+    /// Never more than `p.distance(from: me)`: the exact distance for a point; for an outline, the
+    /// distance to its bbox in the same plane geometry, less a margin for the bbox's rounding.
+    static func lowerBound(_ p: DesertPlace, from me: LngLat) -> Double {
+        guard p.polygon != nil else { return p.distance(from: me) }
+        guard let b = p.bbox, b.count == 4 else { return 0 }
+        let k = cos(me.lat * .pi / 180)
+        let x = (min(max(me.lng, b[0]), b[2]) - me.lng) * k
+        let y = min(max(me.lat, b[1]), b[3]) - me.lat
+        return max(0, (x * x + y * y).squareRoot() * .pi / 180 * DesertGeo.earth - 200)
     }
 
     /// Free text: a known desert name in Arabic or Latin («الدهناء»، «نفود الثويرات»، «Rawdat Khuraym»).
@@ -212,10 +259,9 @@ struct DesertGazetteer {
         let q = DesertName.normalize(query)
         guard q.count >= 3 else { return [] }
         var scored: [(Int, DesertHit)] = []
-        for p in places where p.kind != .camp {
-            let names = ([p.nameAr, p.nameEn].compactMap { $0 } + p.alt).map(DesertName.normalize)
+        for (i, p) in places.enumerated() where p.kind != .camp {
             var best = Int.max
-            for n in names where !n.isEmpty {
+            for n in searchNames[i] {
                 if n == q { best = min(best, 0) } else if n.hasPrefix(q) { best = min(best, 1) } else if n.contains(q) { best = min(best, 2) }
             }
             guard best < Int.max else { continue }
@@ -228,8 +274,10 @@ struct DesertGazetteer {
 /// Matching names across spellings: «الروضه» = «روضة», «Nafūd ath Thuwayrāt» = «nafud thuwayrat».
 /// Mirrors `norm_ar` / `norm_en` in scripts/desert-gazetteer/gazetteer.py.
 enum DesertName {
+    private static let foldLocale = Locale(identifier: "en")
+
     static func normalize(_ s: String) -> String {
-        var t = s.folding(options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive], locale: Locale(identifier: "en"))
+        var t = s.folding(options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive], locale: foldLocale)
         t = t.replacingOccurrences(of: "[\u{064B}-\u{065F}\u{0670}\u{0640}]", with: "", options: .regularExpression)
         for (a, b) in [("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ٱ", "ا"), ("ة", "ه"), ("ى", "ي"), ("ؤ", "و"), ("ئ", "ي")] {
             t = t.replacingOccurrences(of: a, with: b)

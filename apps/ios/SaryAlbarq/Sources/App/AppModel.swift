@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
             TripLogStore.forgetAll()
             TripStore.forgetAll()
             ReturnTripStore.forgetAll()
+            OutboundJunctionStore.forgetAll()
             WaypointCache.wipeAll()
             TrailStore.forgetAll()
             LocalDestinationStore.forgetAll()
@@ -452,6 +453,7 @@ final class AppModel: ObservableObject {
         /* «الرحلة» (start point, arrivals) is about where I went: it goes with the identity too. */
         TripStore.forgetAll()
         ReturnTripStore.forgetAll()
+        OutboundJunctionStore.forgetAll()
         /* Outing data of this identity (shared waypoints read offline) goes with it. */
         WaypointCache.wipeAll()
         /* «مساري» is about where I went: it goes with the identity. */

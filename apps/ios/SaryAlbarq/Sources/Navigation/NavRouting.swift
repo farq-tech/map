@@ -51,6 +51,10 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     let base: NavRoutingProvider
     let gridForRegion: (String) -> DesertGrid?
     let regionForPoint: (LngLat) -> String?
+    /// Everywhere else in the Kingdom: one grid stitched from the national tiles for a corridor box
+    /// (`DesertTileStore`). nil disables it (pilot regions only). Returns nil when the tiles are
+    /// missing / offline / the box is too big; the road route + final bearing are kept then.
+    let corridorGrid: ((DesertGrid.BBox) async -> DesertGrid?)?
     let rainMayBePresent: () -> Bool
 
     var name: String { base.name + " + دروب البر" }
@@ -58,11 +62,45 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     init(base: NavRoutingProvider,
          gridForRegion: @escaping (String) -> DesertGrid? = DesertGrid.bundled,
          regionForPoint: @escaping (LngLat) -> String? = { DesertAwareRouteProvider.regionName(containing: $0) },
+         corridorGrid: ((DesertGrid.BBox) async -> DesertGrid?)? = { await DesertTileStore.shared.corridor($0) },
          rainMayBePresent: @escaping () -> Bool = { true }) {
         self.base = base
         self.gridForRegion = gridForRegion
         self.regionForPoint = regionForPoint
+        self.corridorGrid = corridorGrid
         self.rainMayBePresent = rainMayBePresent
+    }
+
+    /// A grid to route on and a key for the per-grid caches: a bundled pilot region, or a corridor
+    /// stitched from national tiles.
+    private struct DesertArea {
+        var key: String
+        var grid: DesertGrid
+    }
+
+    /// The grid for a destination: its pilot region when it has one (bundled, offline), else a
+    /// corridor from `hint` (the road route's end) to the target from the national tiles.
+    private func desertArea(for target: LngLat, near hint: LngLat?, tiles: Bool = true) async -> DesertArea? {
+        if let region = regionForPoint(target), let grid = gridForRegion(region) {
+            return DesertArea(key: region, grid: grid)
+        }
+        guard tiles, let corridorGrid, let box = DesertTiles.corridor(from: hint, to: target) else { return nil }
+        return await corridorArea(corridorGrid, box)
+    }
+
+    /// One grid holding both points: a shared pilot region, or a corridor when they are close enough.
+    private func sharedArea(_ a: LngLat, _ b: LngLat) async -> DesertArea? {
+        if let region = sharedRegion(a, b) {
+            return gridForRegion(region).map { DesertArea(key: region, grid: $0) }
+        }
+        guard regionForPoint(b) == nil, let corridorGrid, let box = DesertTiles.corridor(spanning: a, b) else { return nil }
+        return await corridorArea(corridorGrid, box)
+    }
+
+    private func corridorArea(_ load: (DesertGrid.BBox) async -> DesertGrid?, _ box: DesertGrid.BBox) async -> DesertArea? {
+        guard let grid = await load(box) else { return nil }
+        let h = grid.header
+        return DesertArea(key: "tiles|\(h.south)|\(h.west)|\(h.north)|\(h.east)", grid: grid)
     }
 
     func routes(_ request: NavRouteRequest) async throws -> NavRoutePlan {
@@ -70,13 +108,12 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         do {
             roadPlan = try await base.routes(request)
         } catch let error as NavRoutingError {
-            let region = sharedRegion(request.origin, request.target.position)
-            if let complete = gridRoutes(from: request.origin, to: request.target.position, region: region) {
+            let shared = await sharedArea(request.origin, request.target.position)
+            if let complete = gridRoutes(from: request.origin, to: request.target.position, area: shared) {
                 return NavRoutePlan(routes: complete)
             }
-            if error == .noRoute, let targetRegion = regionForPoint(request.target.position),
-               let grid = gridForRegion(targetRegion),
-               let access = await routesViaMappedAccess(request, region: targetRegion, grid: grid) {
+            if error == .noRoute, let area = await desertArea(for: request.target.position, near: nil),
+               let access = await routesViaMappedAccess(request, region: area.key, grid: area.grid) {
                 if !access.connected.isEmpty { return NavRoutePlan(routes: access.connected) }
                 if let best = access.roadApproaches.first { return NavRoutePlan(routes: [best.route], native: best.native) }
             }
@@ -89,7 +126,12 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         }) { return roadPlan }
 
         let target = request.target.position
-        if let region = regionForPoint(target), let grid = gridForRegion(region) {
+        // Outside the pilots, only when the road route stops short of the pin (an off-road last
+        // leg): a city route that reaches its destination never loads tiles or gains a desert leg.
+        let roadEnd = roadPlan.routes.first?.end
+        let offRoadLeft = roadPlan.routes.isEmpty || NavOffRoad.lastLeg(routeEnd: roadEnd, target: target) != nil
+        if let area = await desertArea(for: target, near: roadEnd, tiles: offRoadLeft) {
+            let region = area.key, grid = area.grid
             let combined = roadPlan.routes.first.flatMap { hybridRoutes(road: $0, target: target, region: region, grid: grid) } ?? []
             if !combined.isEmpty { return NavRoutePlan(routes: combined) }
             if let access = await routesViaMappedAccess(request, region: region, grid: grid) {
@@ -99,7 +141,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
             // Map routing can still provide a legitimate city/street segment even when the
             // desert grid has a gap. Keep it. NavSession derives the final arrow from route.end,
             // so the driver follows streets first instead of receiving a 50 km origin-to-pin arrow.
-            if !roadPlan.routes.isEmpty { return roadPlan }
+            if !roadPlan.routes.isEmpty || area.key.hasPrefix("tiles|") { return roadPlan }
             throw NavRoutingError.noRoute
         }
 
@@ -124,11 +166,16 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     }
 
     private func routesViaMappedAccess(_ request: NavRouteRequest, region: String, grid: DesertGrid) async -> MappedAccessResult? {
+        let accesses = accessPoints(grid, region: region, near: request.target.position)
+        guard !accesses.isEmpty else { return nil }
+        // The street requests are independent network calls: send them together instead of one
+        // after another (up to 4 round trips per route and reroute). The answers are then
+        // evaluated in the original preference order, and the raster legs (3 A* each) only until
+        // the first access that connects, exactly as the sequential loop did.
+        let roads = await streetRoutes(request, to: accesses)
         var result = MappedAccessResult()
-        for access in grid.accessPoints(near: request.target.position) {
-            var accessRequest = request
-            accessRequest.target = NavTarget(source: .point, name: "مدخل درب البر", position: access)
-            guard let road = try? await base.routes(accessRequest), !road.routes.isEmpty else { continue }
+        for (access, fetched) in zip(accesses, roads) {
+            guard let road = fetched, !road.routes.isEmpty else { continue }
             var combined: [NavRoute] = []
             for route in road.routes {
                 guard let end = route.end else { continue }
@@ -161,6 +208,46 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     }
 
 
+    /// One street route request per access point, all in flight at once. Answers come back in
+    /// the accesses' order; a failed request is nil (as `try?` was in the sequential loop).
+    private func streetRoutes(_ request: NavRouteRequest, to accesses: [LngLat]) async -> [NavRoutePlan?] {
+        let base = UncheckedSendable(self.base)
+        return await withTaskGroup(of: UncheckedSendable<(Int, NavRoutePlan?)>.self) { group in
+            for (i, access) in accesses.enumerated() {
+                var accessRequest = request
+                accessRequest.target = NavTarget(source: .point, name: "مدخل درب البر", position: access)
+                let job = UncheckedSendable(accessRequest)
+                group.addTask {
+                    let plan = try? await base.value.routes(job.value)
+                    return UncheckedSendable((i, plan))
+                }
+            }
+            var out = [NavRoutePlan?](repeating: nil, count: accesses.count)
+            for await answer in group { out[answer.value.0] = answer.value.1 }
+            return out
+        }
+    }
+
+    /// `DesertGrid.accessPoints` scans every cell of the raster. A reroute asks again for the
+    /// same destination, so keep the last few answers on this provider (whose `gridForRegion`
+    /// gives the same grid for a region).
+    private let accessLock = NSLock()
+    private var accessCache: [String: [LngLat]] = [:]
+
+    private func accessPoints(_ grid: DesertGrid, region: String, near target: LngLat) -> [LngLat] {
+        let key = "\(region)|\(grid.rows)x\(grid.cols)|\(target.lat)|\(target.lng)"
+        accessLock.lock()
+        let cached = accessCache[key]
+        accessLock.unlock()
+        if let cached { return cached }
+        let points = grid.accessPoints(near: target)
+        accessLock.lock()
+        if accessCache.count >= 16 { accessCache.removeAll() }
+        accessCache[key] = points
+        accessLock.unlock()
+        return points
+    }
+
     static func regionName(containing point: LngLat) -> String? {
         DesertGrid.bboxes.first { $0.value.contains(point) }?.key
     }
@@ -175,8 +262,8 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return ra
     }
 
-    private func gridRoutes(from a: LngLat, to b: LngLat, region: String?) -> [NavRoute]? {
-        guard let region, let grid = gridForRegion(region) else { return nil }
+    private func gridRoutes(from a: LngLat, to b: LngLat, area: DesertArea?) -> [NavRoute]? {
+        guard let grid = area?.grid else { return nil }
         guard Self.contains(grid, a), Self.contains(grid, b) else { return nil }
         let options = DesertRouter.options(grid, from: a, to: b, rain: rainMayBePresent())
         guard !options.isEmpty else { return nil }
@@ -273,7 +360,8 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return NavRoute(id: "\(idPrefix)-desert-\(option.mode.rawValue)", coordinates: coordinates,
                         distanceM: total, durationS: duration, steps: steps,
                         hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile,
-                        surfaceRuns: streetSurfaces + gridSnap + desertSurfaces)
+                        surfaceRuns: streetSurfaces + gridSnap + desertSurfaces,
+                        roadEnd: prefix.count >= 2 ? ReturnRoute.pavedEnd(streetSurfaces, fallback: prefix.last) : nil)
     }
 
     private static func surfaceRuns(_ points: [LngLat], grid: DesertGrid) -> [NavSurfaceRun] {
@@ -388,6 +476,13 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
 }
 
 
+
+/// Carries a value the compiler cannot prove `Sendable` (a provider, a plan with its native
+/// SDK object) into or out of a child task. Each value goes to exactly one task.
+private struct UncheckedSendable<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
 
 /// Provider-neutral request parameters, from the options sheet.
 /// Mapbox: `profile`, `exclude`, `language`, `voice_units`; Valhalla: costing + `exclude_unpaved` / `use_tolls`.

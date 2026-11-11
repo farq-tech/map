@@ -31,15 +31,16 @@ struct MapHomeScreen: View {
     @State private var desertNote: String?
     /// The desert result picked (its outline stays drawn under the place card).
     @State private var desertPicked: DesertCategoryItem?
-    private let desertService: DesertCategoryService = DesertCategoryRouter()
+    private let desertService: DesertCategoryService = DesertCategoryRouter.shared
     @State private var selected: SelectedPlace?
     @State private var selectedPointNameTask: Task<Void, Never>?
     @State private var camera: PlanCamera?
     @State private var cameraSeq = 1
-    @State private var shortcuts = HomeShortcutStore.load()
+    /* Loaded in onAppear: a @State initialiser runs on every re-init of this struct (each parent re-render). */
+    @State private var shortcuts: [HomeShortcut: OutingDestination] = [:]
     /// Choosing a place for «البيت» / «الشغل» (the next pick is saved there).
     @State private var assigning: HomeShortcut?
-    @State private var recent = RecentPlaces.load()
+    @State private var recent: [OutingDestination] = []
     @State private var profileOpen = false
     @State private var startFor: StartTarget?
     @State private var creating = false
@@ -675,8 +676,10 @@ struct MapHomeScreen: View {
         results = []
         searching = true
         let near = myPoint
+        let service = desertService
         job = Task {
-            let r = await desertService.search(c, near: near)
+            /* Edge distances to thousands of outlines: off the main thread, then the state on it. */
+            let r = await Task.detached(priority: .userInitiated) { await service.search(c, near: near) }.value
             guard !Task.isCancelled, category == c else { return }
             searching = false
             switch r {
@@ -786,9 +789,13 @@ struct MapHomeScreen: View {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
             /* «دليل البر» first: a known desert name answers offline too. */
-            let desert = HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near)
+            /* Matched off the main thread (thousands of names, edge distances), shown on it. */
+            let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
+                (HomeDesertRules.searchPlaces(DesertGazetteer.bundled, t, near: near), HomeDesertRules.categoryKind(t) != nil)
+            }.value
+            guard !Task.isCancelled else { return }
             results = desert
-            if HomeDesertRules.categoryKind(t) != nil {
+            if desertOnly {
                 /* Category intent is entirely answered by the bundled gazetteer. Avoid waiting on
                  * geocoders or leaking a query that cannot improve these type-filtered results. */
                 searching = false
