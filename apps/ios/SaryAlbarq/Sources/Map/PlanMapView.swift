@@ -31,6 +31,8 @@ struct PlanMapView: UIViewRepresentable {
     var desert: DesertOverlay? = nil
     /// A desert marker tapped (its id).
     var onDesertTap: (String) -> Void = { _ in }
+    /// Fresh location for the optional always-visible Qibla ray (used on the home map).
+    var qiblaOrigin: LngLat? = nil
 
     /// More vertices than this are not drawn as handles (an imported track); the line still is.
     static let maxHandles = 150
@@ -60,6 +62,7 @@ struct PlanMapView: UIViewRepresentable {
 
     static func dismantleUIView(_ map: MapView, coordinator: Coordinator) { coordinator.detach() }
 
+    @MainActor
     final class Coordinator {
         private weak var map: MapView?
         private var parent: PlanMapView?
@@ -137,6 +140,7 @@ struct PlanMapView: UIViewRepresentable {
         func update(_ p: PlanMapView) {
             parent = p
             guard let map else { return }
+            QiblaMapOverlay.of(map).update(origin: p.qiblaOrigin)
             if styleReady, let m = map.mapboxMap, !dragging, drawnRoute != p.route {
                 PlanMapStyle.update(m, route: p.route)
                 drawnRoute = p.route

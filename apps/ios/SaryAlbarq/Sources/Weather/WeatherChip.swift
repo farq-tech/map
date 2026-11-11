@@ -181,6 +181,7 @@ struct DestinationWeatherBadge: View {
 @MainActor
 final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var fix: Geo.LatLng?
+    @Published private(set) var measuredLocation: CLLocation?
     private let manager = CLLocationManager()
     private var asked = false
 
@@ -189,6 +190,7 @@ final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegat
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
         if let l = manager.location, -l.timestamp.timeIntervalSinceNow < 6 * 3600 {
+            measuredLocation = l
             fix = Geo.LatLng(lat: l.coordinate.latitude, lng: l.coordinate.longitude)
         }
     }
@@ -203,7 +205,10 @@ final class OneShotLocator: NSObject, ObservableObject, CLLocationManagerDelegat
     nonisolated func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
         guard let l = locs.last else { return }
         let c = Geo.LatLng(lat: l.coordinate.latitude, lng: l.coordinate.longitude)
-        Task { @MainActor in self.fix = c }
+        Task { @MainActor in
+            self.measuredLocation = l
+            self.fix = c
+        }
     }
 
     nonisolated func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {}

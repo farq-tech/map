@@ -65,6 +65,7 @@ struct MapHomeScreen: View {
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
+    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
 
     struct SelectedPlace: Equatable {
         var destination: OutingDestination
@@ -88,14 +89,18 @@ struct MapHomeScreen: View {
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
-                            onDesertTap: { id in pinTapped(id) })
+                            onDesertTap: { id in pinTapped(id) },
+                            qiblaOrigin: qiblaMapOrigin)
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
                 VStack(spacing: theme.space(.s)) {
                     if selected == nil { categoryChips }
                     HStack {
                         Spacer()
-                        locateButton
+                        VStack(spacing: theme.space(.s)) {
+                            locateButton
+                            qiblaMapButton
+                        }
                     }
                     .padding(.horizontal, theme.space(.l))
                     Spacer()
@@ -216,6 +221,20 @@ struct MapHomeScreen: View {
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text("موقعي"))
         .accessibilityIdentifier("home.locate")
+    }
+
+    private var qiblaMapButton: some View {
+        Button { showQiblaOnMap.toggle() } label: {
+            Image(systemName: showQiblaOnMap ? "location.north.fill" : "location.north")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(showQiblaOnMap ? theme.palette.onAccent : theme.palette.accentText)
+                .frame(width: 46, height: 46)
+                .background(Circle().fill(showQiblaOnMap ? theme.palette.accent : theme.palette.elevated))
+                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text(showQiblaOnMap ? "إخفاء اتجاه القبلة من الخريطة" : "إظهار اتجاه القبلة على الخريطة"))
+        .accessibilityIdentifier("home.qibla.toggle")
     }
 
     // MARK: the sheet
@@ -899,6 +918,21 @@ struct MapHomeScreen: View {
 
     private var myPoint: LngLat? {
         location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) } ?? locator.fix.map { LngLat(lng: $0.lng, lat: $0.lat) }
+    }
+
+    private var qiblaMapOrigin: LngLat? {
+        guard showQiblaOnMap else { return nil }
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        if let fix = location.lastFix {
+            let ageMs = nowMs - fix.atMs
+            if ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 {
+                return LngLat(lng: fix.lng, lat: fix.lat)
+            }
+        }
+        guard let fix = locator.measuredLocation else { return nil }
+        let age = Date().timeIntervalSince(fix.timestamp)
+        guard age >= 0, age <= 900, fix.horizontalAccuracy >= 0, fix.horizontalAccuracy <= 3_000 else { return nil }
+        return LngLat(lng: fix.coordinate.longitude, lat: fix.coordinate.latitude)
     }
 
     private var activeOuting: OutingSummary? { sortedCurrent.first { $0.status == .active } }

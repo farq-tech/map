@@ -55,6 +55,17 @@ final class ScreensUITests: XCTestCase {
                       "the dedicated handle still collapses the sheet")
     }
 
+    func testHomeQiblaDirectionCanBeHiddenAndRestored() {
+        let app = launch(["-demo", "-SaryScreen", "home"])
+        let toggle = app.buttons["home.qibla.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "إظهار اتجاه القبلة على الخريطة")
+        toggle.tap()
+        XCTAssertEqual(toggle.label, "إخفاء اتجاه القبلة من الخريطة")
+    }
+
     func testSettingsReachEveryPage() {
         let app = launch(["-demo", "-SaryScreen", "settings"])
         for (row, title) in [("settings.appearance", "المظهر"), ("settings.privacy", "الخصوصية"), ("settings.notifications", "التنبيهات"), ("settings.about", "حول سَرى البارق")] {

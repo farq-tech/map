@@ -40,6 +40,7 @@ struct LiveOutingScreen: View {
     @ObservedObject private var trackLibrary = TrackLibrary.shared
     /// «الوضع الواقعي» (Apple 3D imagery), presented over the live sheet.
     @State private var realistic: RealisticScene?
+    @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
     /// Tilted over a city: «اعرضها بالوضع الواقعي».
     @ObservedObject private var visuals = MapVisualsHub.shared
 
@@ -90,7 +91,8 @@ struct LiveOutingScreen: View {
                     /* Build 10: clean imagery when a track is the subject; road names while navigating. */
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
-                    hiRes: controller.hiResRequest(ui, exploring: exploring)
+                    hiRes: controller.hiResRequest(ui, exploring: exploring),
+                    qiblaOrigin: qiblaMapOrigin
                 )
                 }
                 .ignoresSafeArea()
@@ -178,6 +180,14 @@ struct LiveOutingScreen: View {
         if controller.sheetDetent == .full { return 0 }
         let measured = sheetTop > 0 && screenHeight > 0 ? screenHeight - sheetTop + SaryRadius.sheet * 0.25 : 0
         return max(measured, sheetShape.peekHeight)
+    }
+
+    /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
+    private var qiblaMapOrigin: LngLat? {
+        guard showQiblaOnMap, let fix = controller.location.lastFix else { return nil }
+        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
+        guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
+        return LngLat(lng: fix.lng, lat: fix.lat)
     }
 
     private var topChromeBottom: CGFloat {

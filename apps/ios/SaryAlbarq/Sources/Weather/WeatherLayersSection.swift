@@ -34,7 +34,7 @@ struct WeatherLayersSection: View {
                     .accessibilityIdentifier("weather.layer.\(k.rawValue)")
                     if k == .rain && on {
                         SarySegmented(options: WeatherLayers.allowedDays, selection: $layers.rainDays,
-                                      label: { WeatherLayers.daysLabel($0) }, id: "weather.rain.days",
+                                      label: { WeatherLayers.daysLabel($0) },
                                       optionID: { "weather.rain.days.\($0)" })
                             .padding(.bottom, theme.space(.s))
                     }
