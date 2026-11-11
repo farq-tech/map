@@ -3,6 +3,12 @@ import Foundation
 // «طلعة جديدة»: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ ربعك.
 // Pure state and text, no UI (tested in CreateFlowTests).
 
+enum CreateCopy {
+    /// The server creates the outing and nothing is queued on the phone, so offline we say it
+    /// plainly (the buttons wait) — never «ننشئها أول ما يرجع الاتصال» (UI-AUDIT ١-هـ).
+    static let offline = "تحتاج إنترنت لإنشاء الطلعة."
+}
+
 enum CreateStep: Int, CaseIterable, Equatable {
     case destination = 1
     case weather = 2

@@ -20,48 +20,90 @@ struct CreateOutingWizard: View {
     var quick: OutingDestination? = nil
     /// «لحالي، ابدأ»: once the outing exists, open it and start (no invite step).
     @State private var solo = false
+    /// Quick mode, then «غيّر المكان» / back: the full steps from step ١ (UI-AUDIT ١-هـ).
+    @State private var quickChangedPlace = false
+
+    /// «مين معك؟» for a place picked on the home map, until the person goes back to change it.
+    private var isQuick: Bool { quick != nil && !quickChangedPlace }
 
     private var title: String {
-        if quick != nil, flow.step != .invite { return "مين معك؟" }
+        if isQuick, flow.step != .invite { return "مين معك؟" }
         return flow.step.title
     }
 
     var body: some View {
-        SaryPage(title: title, back: flow.canGoBack && quick == nil ? { withAnimation(theme.animation(.smooth)) { flow.back() } } : nil,
+        SaryPage(title: title, back: flow.canGoBack ? { changePlace() } : nil,
                  close: { finish(start: false) }) {
-            if quick == nil { progress }
+            if !isQuick { progress }
             switch flow.step {
             case .destination:
-                if quick != nil {
+                if isQuick {
                     ProgressView().frame(maxWidth: .infinity, minHeight: 120)
                 } else {
                     DestinationStep(near: weather.origin.map { LngLat(lng: $0.lng, lat: $0.lat) }, initialText: initialText,
                                     choose: { d in withAnimation(theme.animation(.smooth)) { _ = flow.choose(d) } })
                 }
             case .weather:
-                if quick != nil {
+                if isQuick {
                     CompanionsStep(flow: flow, weather: weather, online: model.online || model.isDemo,
-                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() })
+                                   withFriends: { solo = false; approve() }, alone: { solo = true; approve() }, changePlace: changePlace)
                 } else {
                     WeatherStep(flow: $flow, weather: weather, online: model.online || model.isDemo, approve: approve)
                 }
             case .invite:
-                InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly,
-                           start: { finish(start: true) }, later: { finish(start: false) })
+                InviteStep(flow: flow, weather: weather, link: flow.outingId.flatMap(model.inviteURL), localOnly: destinationLocalOnly)
             }
+        }
+        /* «ابدأ الطلعة» pinned at the bottom of step ٣: never under the fold (UI-AUDIT ١-هـ). */
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if flow.step == .invite { inviteBar }
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(flow.creating)
         .onAppear {
             weather.myFix = location.lastFix.map { Geo.LatLng(lat: $0.lat, lng: $0.lng) }
             weather.locator.request()
-            if let q = quick, flow.step == .destination {
+            if let q = quick, !quickChangedPlace, flow.step == .destination {
                 _ = flow.choose(q)
                 flow.departure = Date()
                 weather.setDestination(flow.destination)
             }
         }
         .onChange(of: flow.destination) { _, d in weather.setDestination(d) }
+    }
+
+    /// Back / «غيّر المكان»: to step ١, keeping the name and the time; quick mode becomes the full steps.
+    private func changePlace() {
+        withAnimation(theme.animation(.smooth)) {
+            if quick != nil { quickChangedPlace = true }
+            flow.back()
+        }
+    }
+
+    /// Step ٣'s actions, pinned: «ابدأ الطلعة» (the one primary) and «لاحقًا».
+    private var inviteBar: some View {
+        let p = theme.palette
+        return VStack(spacing: theme.space(.xs)) {
+            /* Said right above the button: finishing here is the creator's consent (shares by default). */
+            Label(ShareMemory.joinStatement, systemImage: "location.fill")
+                .saryText(.caption, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("create.shareStatement")
+            Button { finish(start: true) } label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
+                .buttonStyle(.sary(.primary))
+                .accessibilityIdentifier("create.start")
+            Button("لاحقًا") { finish(start: false) }
+                .buttonStyle(.sary(.plain, compact: true))
+                .accessibilityIdentifier("create.later")
+        }
+        .padding(.horizontal, theme.space(.l))
+        .padding(.top, theme.space(.s))
+        .padding(.bottom, theme.space(.xs))
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
+        .background(p.background.shadow(color: .black.opacity(0.12), radius: 8, y: -2).ignoresSafeArea(edges: .bottom))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("create.bar")
     }
 
     private var progress: some View {
@@ -366,6 +408,8 @@ private struct CompanionsStep: View {
     var online: Bool
     var withFriends: () -> Void
     var alone: () -> Void
+    /// Back to step ١ to pick another place (the full steps from there).
+    var changePlace: () -> Void
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -390,7 +434,8 @@ private struct CompanionsStep: View {
         Text("تبي أحد معك؟ أرسل لهم الدعوة في واتساب، ويشوفون موقعك وتشوفهم طول الطريق. أو امشِ لحالك.")
             .saryText(.subhead).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
         if let e = flow.error { SaryInlineMessage(text: e, tone: .error) }
-        if !online { SaryOfflineStrip(text: "بلا إنترنت — نبدأ أول ما يرجع الاتصال.") }
+        /* Honest: the server creates the outing, nothing is queued, so both buttons wait for the network. */
+        if !online { SaryOfflineStrip(text: CreateCopy.offline) }
         Button(action: withFriends) {
             SaryButtonLabel(title: "ادعُ ربعك", systemImage: "person.2.fill", busy: flow.creating, busyTitle: "نجهّز الطلعة…")
         }
@@ -401,6 +446,10 @@ private struct CompanionsStep: View {
             .buttonStyle(.sary(.secondary))
             .disabled(flow.creating || !online)
             .accessibilityIdentifier("start.solo")
+        Button(action: changePlace) { SaryButtonLabel(title: "غيّر المكان", systemImage: "mappin.and.ellipse") }
+            .buttonStyle(.sary(.plain, compact: true))
+            .disabled(flow.creating)
+            .accessibilityIdentifier("start.changePlace")
         Label(ShareMemory.joinStatement, systemImage: "location.fill")
             .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
     }
@@ -433,7 +482,8 @@ private struct WeatherStep: View {
                 }
                 Text("يناسبنا الجو؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 if let e = flow.error, e != CreateFlowState.Issue.nameEmpty.arabic { SaryInlineMessage(text: e, tone: .error) }
-                if !online { SaryOfflineStrip(text: "بلا إنترنت — ننشئ الطلعة أول ما يرجع الاتصال.") }
+                /* Honest: nothing is queued (the server creates the outing), the button waits for the network. */
+                if !online { SaryOfflineStrip(text: CreateCopy.offline) }
                 Button(action: approve) {
                     SaryButtonLabel(title: "يناسبنا الجو، كمّل", systemImage: "checkmark", busy: flow.creating, busyTitle: "ننشئ الطلعة…")
                 }
@@ -574,12 +624,12 @@ private struct InviteStep: View {
     @ObservedObject var weather: WizardWeather
     var link: URL?
     var localOnly: Bool
-    var start: () -> Void
-    var later: () -> Void
     @Environment(\.sary) private var theme
     @Environment(\.openURL) private var openURL
     @State private var sharing = false
     @State private var copied = false
+    /// «خيارات أخرى»: QR, share, copy and the message itself (WhatsApp is how most invite).
+    @State private var more = false
 
     var body: some View {
         let p = theme.palette
@@ -598,56 +648,86 @@ private struct InviteStep: View {
                 .accessibilityIdentifier("create.destinationLocal")
         }
         if let link, let message {
-            VStack(spacing: theme.space(.m)) {
-                SaryQRCode(text: link.absoluteString, size: 170)
-                    .accessibilityIdentifier("create.qr")
-                Text(link.absoluteString).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1).truncationMode(.middle)
-                    .environment(\.layoutDirection, .leftToRight)
-                    .textSelection(.enabled)
+            whatsAppCard(message)
+                .sheet(isPresented: $sharing) { ShareSheet(items: [message]).presentationDetents([.medium, .large]) }
+            Button {
+                withAnimation(theme.animation(.smooth)) { more.toggle() }
+            } label: {
+                HStack {
+                    Text("خيارات أخرى").saryText(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text("رمز QR، مشاركة، نسخ").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                        .rotationEffect(.degrees(more ? 180 : 0))
+                }
+                .frame(minHeight: theme.minTarget)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity)
-            .padding(theme.space(.l))
-            .sarySurface(radius: SaryRadius.l)
-            Button { if let u = InviteMessage.whatsAppURL(message) { openURL(u) } } label: {
-                SaryButtonLabel(title: "أرسل في واتساب", systemImage: "message.fill")
+            .buttonStyle(.plain)
+            .accessibilityValue(Text(more ? "مفتوحة" : "مقفلة"))
+            .accessibilityIdentifier("create.more")
+            if more {
+                VStack(spacing: theme.space(.m)) {
+                    SaryQRCode(text: link.absoluteString, size: 170)
+                        .accessibilityIdentifier("create.qr")
+                    Text(link.absoluteString).saryText(.caption).foregroundStyle(p.textSecondary).lineLimit(1).truncationMode(.middle)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(theme.space(.l))
+                .sarySurface(radius: SaryRadius.l)
+                HStack(spacing: theme.space(.s)) {
+                    Button { sharing = true } label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
+                        .buttonStyle(.sary(.secondary))
+                        .accessibilityIdentifier("create.share")
+                    Button {
+                        UIPasteboard.general.string = message
+                        copied = true
+                    } label: { SaryButtonLabel(title: copied ? "نُسخت" : "انسخ الرسالة", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
+                        .buttonStyle(.sary(.secondary))
+                        .accessibilityIdentifier("create.copy")
+                }
+                SarySection(title: "نص الدعوة") {
+                    Text(message).saryText(.footnote).foregroundStyle(p.textPrimary).fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, theme.space(.s))
+                        .accessibilityIdentifier("create.message")
+                }
             }
-            .buttonStyle(.sary(.primary))
-            .accessibilityIdentifier("create.whatsapp")
-            HStack(spacing: theme.space(.s)) {
-                Button { sharing = true } label: { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
-                    .buttonStyle(.sary(.secondary))
-                    .accessibilityIdentifier("create.share")
-                Button {
-                    UIPasteboard.general.string = message
-                    copied = true
-                } label: { SaryButtonLabel(title: copied ? "نُسخت" : "انسخ الرسالة", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
-                    .buttonStyle(.sary(.secondary))
-                    .accessibilityIdentifier("create.copy")
-            }
-            SarySection(title: "نص الدعوة") {
-                Text(message).saryText(.footnote).foregroundStyle(p.textPrimary).fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, theme.space(.s))
-                    .accessibilityIdentifier("create.message")
-            }
-            .sheet(isPresented: $sharing) { ShareSheet(items: [message]).presentationDetents([.medium, .large]) }
         } else if let id = flow.outingId {
             /* «دعوة شخصية» (build 12+): no open link — invite each person by name. */
             WizardPersonalInvites(outingId: id, outingName: flow.trimmedName)
         } else {
             SaryBanner(text: "ما عندنا رابط الدعوة على هذا الجوال. افتح الطلعة وأنشئ رابطًا جديدًا من «الدعوة».", tone: .warning)
         }
-        /* Said right above the buttons: finishing here is the creator's consent (shares by default). */
-        Label(ShareMemory.joinStatement, systemImage: "location.fill")
-            .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
-            .accessibilityIdentifier("create.shareStatement")
-        Button(action: start) { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: SaryIcon.play) }
-            .buttonStyle(.sary(.primary))
-            .accessibilityIdentifier("create.start")
-        Button("لاحقًا", action: later)
-            .buttonStyle(.sary(.plain))
-            .accessibilityIdentifier("create.later")
-        Text("«ابدأ الطلعة» تفتح الخريطة وتبدأ الطلعة للجميع.")
+        Text("«ابدأ الطلعة» تحت تفتح الخريطة وتبدأ الطلعة للجميع.")
             .saryText(.footnote).foregroundStyle(p.textTertiary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The first card: WhatsApp (the destination, the weather at arrival and the link in one message).
+    private func whatsAppCard(_ message: String) -> some View {
+        let p = theme.palette
+        return Button { if let u = InviteMessage.whatsAppURL(message) { openURL(u) } } label: {
+            HStack(spacing: theme.space(.m)) {
+                Image(systemName: "message.fill").font(.system(size: 20, weight: .semibold)).foregroundStyle(p.onAccent)
+                    .frame(width: 48, height: 48)
+                    .background(Circle().fill(p.live))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("أرسل الدعوة في واتساب").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                    Text("توصلهم الوجهة والجو وقت الوصول والرابط في رسالة وحدة.")
+                        .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+            }
+            .padding(theme.space(.m))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.elevated))
+            .overlay(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.live.opacity(0.6), lineWidth: 1.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityIdentifier("create.whatsapp")
     }
 }
 

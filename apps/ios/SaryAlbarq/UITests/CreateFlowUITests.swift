@@ -71,9 +71,13 @@ final class CreateFlowUITests: XCTestCase {
         let whatsapp = app.buttons["create.whatsapp"]
         XCTAssertTrue(whatsapp.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["ادعُ ربعك"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["create.qr"].exists)
+        XCTAssertTrue(app.buttons["create.start"].isHittable, "«ابدأ الطلعة» is pinned at the bottom, never under the fold")
+        /* WhatsApp first; QR, share, copy and the message under «خيارات أخرى». */
+        XCTAssertFalse(app.descendants(matching: .any)["create.qr"].exists)
+        app.buttons["create.more"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["create.qr"].waitForExistence(timeout: 3))
         let message = app.staticTexts["create.message"]
-        XCTAssertTrue(message.exists)
+        XCTAssertTrue(message.waitForExistence(timeout: 3))
         XCTAssertTrue(message.label.contains("الجو هناك وقت وصولنا"), message.label)
         XCTAssertTrue(message.label.contains("https://"), "the link is in the message")
         shot("3-invite")

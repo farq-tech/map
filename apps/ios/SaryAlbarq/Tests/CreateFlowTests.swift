@@ -61,6 +61,26 @@ final class CreateFlowStateTests: XCTestCase {
         XCTAssertNil(f.issue(now: t0))
     }
 
+    /// Quick mode («مين معك؟» from the home map) may go back and pick another place: the flow
+    /// returns to step ١ with the place and its suggested name kept, and a new choice replaces them.
+    func testQuickModeCanGoBackToChangeThePlace() {
+        var f = CreateFlowState(now: t0)
+        XCTAssertTrue(f.choose(thumama))
+        XCTAssertTrue(f.canGoBack, "«غيّر المكان» is offered in «مين معك؟» too")
+        f.back()
+        XCTAssertEqual(f.step, .destination)
+        let khuraim = OutingDestination(name: "روضة خريم", lat: 25.38, lng: 47.27)
+        XCTAssertTrue(f.choose(khuraim))
+        XCTAssertEqual(f.destination, khuraim)
+        XCTAssertEqual(f.step, .weather)
+    }
+
+    /// Offline the outing cannot be created (nothing is queued): the text says so, never «later».
+    func testOfflineTextIsHonest() {
+        XCTAssertEqual(CreateCopy.offline, "تحتاج إنترنت لإنشاء الطلعة.")
+        XCTAssertFalse(CreateCopy.offline.contains("أول ما يرجع"), "no promise to create it when the network is back")
+    }
+
     func testApproveSuppliesDefaultNameAndValidatesDeparture() {
         var f = CreateFlowState(now: t0)
         f.choose(OutingDestination(name: "", lat: 24.7, lng: 46.7))
