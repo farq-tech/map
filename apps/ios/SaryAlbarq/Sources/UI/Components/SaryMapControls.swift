@@ -158,7 +158,7 @@ extension SaryMapControlItem {
         [
             .init(id: "locate", systemImage: following ? SaryIcon.locateFollow : SaryIcon.locate,
                   label: "موقعي", accessibilityID: "outing-locate", isActive: following),
-            .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "المجموعة", accessibilityID: "outing-fit"),
+            .init(id: "fit", systemImage: SaryIcon.fitGroup, label: "شوف الكل", accessibilityID: "outing-fit"),
             .init(id: "note", systemImage: SaryIcon.note, label: "رسالة", accessibilityID: "outing-note-open", badge: unreadNotes),
             .init(id: "nearest", systemImage: SaryIcon.nearest, label: "أقرب محطة", accessibilityID: "outing-nearest-open"),
             .init(id: "backtrack", systemImage: SaryIcon.backTrack, label: "طريق الرجعة", accessibilityID: "outing-backtrack", isActive: backTracking),

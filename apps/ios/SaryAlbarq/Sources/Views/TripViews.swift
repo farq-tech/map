@@ -227,7 +227,7 @@ struct TripCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         if let g = ui.groupStartMeters, g > 200, !theme.drive {
-            Text("نقطة انطلاق المجموعة على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textTertiary)
+            Text("نقطة انطلاق الربع على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textTertiary)
         }
         HStack(spacing: theme.space(.s)) {
             if ui.isReturnTrip {

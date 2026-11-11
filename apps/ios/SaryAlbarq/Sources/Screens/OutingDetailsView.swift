@@ -284,10 +284,10 @@ struct TripSummaryView: View {
     @ViewBuilder
     private func mySummary(mine: TripShare?, local: TripTotals?, endedAt: Date?) -> some View {
         let open = endedAt.map { Date().timeIntervalSince($0) < 7 * 86400 } ?? false
-        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع أعضاء الطلعة (خلال أسبوع من نهايتها).") {
+        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع ربع الطلعة (خلال أسبوع من نهايتها).") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 if mine != nil {
-                    Label("شاركت ملخصك مع أعضاء الطلعة", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
+                    Label("شاركت ملخصك مع الربع", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
                     Button {
                         busy = true
                         Task { if await model.withdrawSummary(outingId) { await load() }; busy = false }

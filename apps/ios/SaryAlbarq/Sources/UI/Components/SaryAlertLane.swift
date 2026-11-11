@@ -152,13 +152,13 @@ struct SaryAlertCard: View {
                 }
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(name) ابتعد عن المجموعة").saryText(.callout, weight: .bold)
+                    Text("\(name) ابتعد عن الربع").saryText(.callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
                     Text("على بعد \(SaryFormat.distance(meters: meters))").saryNumber(.footnote, weight: .medium)
                         .foregroundStyle(theme.palette.textSecondary)
                 }
             }
-            .accessibilityLabel(Text("\(name) ابتعد عن المجموعة، على بعد \(SaryFormat.distance(meters: meters))"))
+            .accessibilityLabel(Text("\(name) ابتعد عن الربع، على بعد \(SaryFormat.distance(meters: meters))"))
         case .weather(let w):
             card {
                 WeatherAlertLeading(alert: w)

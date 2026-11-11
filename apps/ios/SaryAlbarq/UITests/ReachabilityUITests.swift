@@ -68,7 +68,7 @@ final class ReachabilityUITests: XCTestCase {
         XCTAssertTrue(more.waitForExistence(timeout: 10))
         more.tap()
         XCTAssertTrue(any(app, "outing-actions-sheet").waitForExistence(timeout: 5))
-        for group in ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة", "الطلعة"] {
+        for group in ["الطريق", "الربع", "السلامة", "المكان", "الخريطة", "الطلعة"] {
             XCTAssertTrue(app.staticTexts[group].exists, "group «\(group)»")
         }
         XCTAssertFalse(app.staticTexts["الترفيه"].exists, "radio / YouTube are in the settings")

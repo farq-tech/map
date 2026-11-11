@@ -253,7 +253,7 @@ enum CarPlayDestinations {
             /* Never drive anyone to where somebody WAS. */
             return .init(title: r.shortName, detail: r.detail, symbol: "car", action: .disabled)
         }
-        if !members.isEmpty { out.append(("العيال", members)) }
+        if !members.isEmpty { out.append(("الربع", members)) }
         let recent = recents.places.map { p in
             CarPlayDestinationRow(title: p.name, detail: CarPlayPresenter.distanceAndDirection(from: i.myPosition, to: p.position)?.text ?? "",
                                   symbol: "clock.arrow.circlepath", action: .place(name: p.name, position: p.position))

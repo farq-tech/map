@@ -148,7 +148,7 @@ final class DeclutterTests: XCTestCase {
     func testActionCatalogHoldsEveryFeature() {
         /* UX simplification: «المزيد» holds only what the quick row and other screens do not. */
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "الجماعة", "السلامة", "المكان", "الخريطة"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "الربع", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
         /* UI-AUDIT م3: «ملاحة» and «طريق الرجعة» are tiles (the quick row has no accent button and no
          * back-track button any more). */
@@ -184,7 +184,7 @@ final class DeclutterTests: XCTestCase {
     /// «أخفِ موقعي» moved from the quick row into «المزيد» → «الجماعة»; «طريق الرجعة» leaves «المزيد»
     /// while it runs (its panel's «إنهاء» is the one stop).
     func testHideAndBackTrackTiles() {
-        let group = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الجماعة" }?.items ?? [] }
+        let group = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الربع" }?.items ?? [] }
         XCTAssertFalse(group(.init()).contains { $0.id == "hide" }, "only when I can hide")
         let hide = group(.init(canHide: true)).first { $0.id == "hide" }
         XCTAssertEqual(hide?.accessibilityID, "live.hideLocation")

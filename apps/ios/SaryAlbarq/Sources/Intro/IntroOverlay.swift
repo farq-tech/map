@@ -63,7 +63,7 @@ struct IntroFrameView: View {
                     .shadow(color: IntroScene.c(IntroScene.gold, 0.55), radius: 14)
                     .opacity(nameA)
                     .offset(y: CGFloat(1 - nameA) * 10)
-                Text("طلعات البر مع العيال")
+                Text("طلعات البر مع الربع")
                     .font(.sary(17, .medium, relativeTo: .callout))
                     .foregroundStyle(IntroScene.c(0xC9BBA4))
                     .opacity(tagA * 0.9)

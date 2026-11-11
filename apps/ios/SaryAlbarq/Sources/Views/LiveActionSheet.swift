@@ -96,7 +96,7 @@ enum LiveActionCatalog {
                 LiveActionItem(id: "backtrack", title: "طريق الرجعة", systemImage: SaryIcon.backTrack, accessibilityID: "trail.backtrack",
                                subtitle: "ترجع على مسارك لين نقطة البداية · بدون إنترنت"),
             ])),
-            LiveActionGroup(title: "الجماعة", items: (s.channels ? [
+            LiveActionGroup(title: "الربع", items: (s.channels ? [
                 LiveActionItem(id: "channels", title: "الترددات", systemImage: "dot.radiowaves.left.and.right", accessibilityID: "outing-ptt-channels"),
             ] : []) + [
                 .init(id: "invite", title: "ادعُ ربعك", systemImage: "person.badge.plus", accessibilityID: "outing-invite"),

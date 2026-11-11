@@ -162,14 +162,14 @@ enum JoinMachine {
 enum JoinCopy {
     static let button = "انضم للطلعة"
     /// The honest line under the button (also on the creator's last step and «انضم برابط»).
-    static let statement = "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
+    static let statement = "بانضمامك يشوف ربع الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها"
 
     /// The Najdi pre-prompt, right above «انضم للطلعة» while iOS has not asked yet.
     static let prePromptTitle = "عشان الربع يشوفونك وتوصلهم الطوارئ"
     static let prePromptDetail = "بعد «انضم» يسألك الآيفون عن موقعك: اختر «السماح أثناء استخدام التطبيق» وخلّ «الموقع الدقيق» شغّال."
 
     static func needsTitle(_ p: JoinPermission) -> String {
-        p == .reduced ? "موقعك تقريبي بالكيلومترات" : "موقعك مقفل، والعيال ما راح يشوفونك"
+        p == .reduced ? "موقعك تقريبي بالكيلومترات" : "موقعك مقفل، والربع ما راح يشوفونك"
     }
 
     static func needsMessage(_ p: JoinPermission) -> String {

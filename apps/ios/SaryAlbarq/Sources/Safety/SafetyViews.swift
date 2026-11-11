@@ -290,7 +290,7 @@ struct SafetySection: View {
                 SaryRowIcon(systemImage: SafetyIcon.stuck, color: p.warning)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("غرّزت؟").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                    Text("ضغطة وحدة تنبّه العيال، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Text("ضغطة وحدة تنبّه الربع، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button { safety.askStuck() } label: { SaryButtonLabel(title: "غرّزت", busy: safety.stuckBusy) }

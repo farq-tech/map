@@ -80,7 +80,7 @@ struct SaryRallyCard: View {
             Button("أزلها", role: .destructive, action: actions.rallyRemove)
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("بتختفي النقطة عند كل أعضاء الطلعة")
+            Text("بتختفي النقطة عند كل الربع")
         }
     }
 

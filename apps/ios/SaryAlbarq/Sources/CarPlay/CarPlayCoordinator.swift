@@ -330,7 +330,7 @@ final class CarPlayCoordinator: NSObject {
 
     private func showMembers() {
         guard let s = session else { return }
-        let t = CPListTemplate(title: "العيال", sections: memberSections(input(s)))
+        let t = CPListTemplate(title: "الربع", sections: memberSections(input(s)))
         t.emptyViewTitleVariants = ["ما فيه أحد غيرك في الطلعة"]
         membersTemplate = t
         interface.pushTemplate(t, animated: true, completion: nil)
@@ -415,7 +415,7 @@ final class CarPlayCoordinator: NSObject {
             MainActor.assumeIsolated { self?.showSearch() }
             done()
         }
-        let members = CPListItem(text: "العيال", detailText: CarPlayPresenter.mySharingLine(i), image: UIImage(systemName: "person.3.fill"))
+        let members = CPListItem(text: "الربع", detailText: CarPlayPresenter.mySharingLine(i), image: UIImage(systemName: "person.3.fill"))
         members.handler = { [weak self] _, done in
             MainActor.assumeIsolated { self?.showMembers() }
             done()
@@ -528,7 +528,7 @@ final class CarPlayCoordinator: NSObject {
         let no = CPAlertAction(title: "لا", style: .cancel) { [weak self] _ in
             MainActor.assumeIsolated { self?.interface.dismissTemplate(animated: true, completion: nil) }
         }
-        interface.presentTemplate(CPAlertTemplate(titleVariants: ["تبلّغ العيال إنك غرّزت؟"], actions: [yes, no]), animated: true, completion: nil)
+        interface.presentTemplate(CPAlertTemplate(titleVariants: ["تبلّغ الربع إنك غرّزت؟"], actions: [yes, no]), animated: true, completion: nil)
     }
 
     private func targetFor(_ kind: CarPlayTripKind, _ i: CarPlayInput) -> (position: LngLat, label: String)? {

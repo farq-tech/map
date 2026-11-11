@@ -335,7 +335,7 @@ private struct VolumePage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت العيال من السماعة الخارجية.") {
+            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت الربع من السماعة الخارجية.") {
                 SarySegmented(options: PTTVoiceLevel.allCases, selection: $voiceLevel, label: { $0.label }, id: "settings.voiceLevel")
                     .padding(10)
             }
@@ -367,7 +367,7 @@ private struct WhoSeesPage<H: View>: View {
                     Toggle("", isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-battery")
-                SettingsRow(title: "الإشعارات: رسائل وطوارئ العيال", last: true) {
+                SettingsRow(title: "الإشعارات: رسائل وطوارئ الربع", last: true) {
                     Toggle("", isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-notify")

@@ -145,7 +145,7 @@ struct OutingActivityDisplay: Equatable {
             switch (a.kind, a.isMe) {
             case (.sos, true): text = "طوارئك مفعّلة"
             case (.sos, false): text = "طوارئ: \(a.name) يحتاج مساعدة"
-            case (.stuck, true): text = "أبلغت المجموعة أنك غرّزت"
+            case (.stuck, true): text = "بلّغت الربع إنك غرّزت"
             case (.stuck, false): text = "\(a.name) غرّز"
             }
             return Banner(text: text + more, tone: .emergency)

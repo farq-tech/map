@@ -166,7 +166,7 @@ struct ConvoyLinePill: View {
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("القافلة: \(text)"))
-        .accessibilityHint(Text("يفتح الجماعة"))
+        .accessibilityHint(Text("يفتح الربع"))
         .accessibilityIdentifier("convoy.line")
     }
 }

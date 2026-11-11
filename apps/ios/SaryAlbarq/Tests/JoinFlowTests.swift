@@ -110,7 +110,7 @@ final class JoinMachineTests: XCTestCase {
     }
 
     func testTheHonestWords() {
-        XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف أعضاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
+        XCTAssertEqual(JoinCopy.statement, "بانضمامك يشوف ربع الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertEqual(ShareMemory.joinStatement, JoinCopy.statement, "same line on the creator's last step and «انضم برابط»")
         XCTAssertEqual(JoinCopy.button, "انضم للطلعة")
         XCTAssertEqual(JoinCopy.prePromptTitle, "عشان الربع يشوفونك وتوصلهم الطوارئ", "the Najdi pre-prompt, before the system alert")

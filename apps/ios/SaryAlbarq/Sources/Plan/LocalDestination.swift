@@ -83,5 +83,5 @@ enum RecentPlaces {
 
 /// The one honest sentence for a destination that is only on this phone.
 enum LocalDestinationCopy {
-    static let note = "الوجهة محفوظة في جوالك فقط حتى يتوفر حفظها على الخادم، والعيال ما يشوفونها في التطبيق بعد. نرسلها تلقائيًا أول ما يتوفر."
+    static let note = "الوجهة محفوظة في جوالك فقط حتى يتوفر حفظها على الخادم، والربع ما يشوفونها في التطبيق بعد. نرسلها تلقائيًا أول ما يتوفر."
 }

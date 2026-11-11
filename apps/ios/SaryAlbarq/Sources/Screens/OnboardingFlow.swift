@@ -21,7 +21,7 @@ struct SplashView: View {
                         Text("سَرى البارق")
                             .font(.sary(34, .heavy))
                             .foregroundStyle(Color(rgb: 0xF4EFE6))
-                        Text("طلعات البر مع العيال")
+                        Text("طلعات البر مع الربع")
                             .saryText(.callout)
                             .foregroundStyle(Color(rgb: 0xB9AE9C))
                     }
@@ -166,7 +166,7 @@ private struct IntroStep: View {
                 .font(.sary(36, .heavy))
                 .foregroundStyle(p.textPrimary)
                 .padding(.top, theme.space(.xl))
-            Text("شوف العيال على الخريطة في الطلعة، وكل سيارة بلونها.")
+            Text("شوف الربع على الخريطة في الطلعة، وكل سيارة بلونها.")
                 .saryText(.title2, weight: .medium)
                 .foregroundStyle(p.textSecondary)
                 .multilineTextAlignment(.center)
@@ -175,7 +175,7 @@ private struct IntroStep: View {
                 .accessibilityIdentifier("onboarding.idea")
             Spacer(minLength: theme.space(.xl))
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                point("location.fill", "موقعك يُشارك فقط مع أعضاء الطلعة التي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
+                point("location.fill", "موقعك يُشارك فقط مع ربع الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
                 point("person.crop.circle.badge.checkmark", "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
                 point("sos", "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
             }
@@ -247,7 +247,7 @@ struct ProfileStep: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let phoneOK = phone.trimmingCharacters(in: .whitespaces).isEmpty || SaryFormat.normalizeSaudiMobile(phone) != nil
-        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه العيال في الطلعة فقط", back: back) {
+        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه الربع في الطلعة فقط", back: back) {
             VStack(spacing: theme.space(.s)) {
                 PhotosPicker(selection: $item, matching: .images) {
                     ZStack(alignment: .bottomTrailing) {

@@ -212,7 +212,7 @@ struct InviteJoinSheet: View {
                 } else {
                     if needsTypedName(inv) {
                         /* An open link and no identity yet: the only thing we cannot know is your name. */
-                        SaryTextField(title: "اسمك", placeholder: "كما يراه العيال", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                        SaryTextField(title: "اسمك", placeholder: "كما يشوفه الربع", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
                     }
                     if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
                     if showsPrePrompt { JoinPrePrompt() }
@@ -525,7 +525,7 @@ struct NotifyExplainerSheet: View {
             Text("نبّهك إذا احتاجك أحد؟").saryText(.title, weight: .bold).foregroundStyle(p.textPrimary)
             VStack(alignment: .leading, spacing: theme.space(.m)) {
                 line(SaryIcon.sos, p.emergency, "طوارئ من أحد في طلعتك — تنبيه عاجل بصوت.")
-                line(SaryIcon.note, nil, "رسالة قصيرة أو مقطع صوتي من المجموعة — بهدوء.")
+                line(SaryIcon.note, nil, "رسالة قصيرة أو مقطع صوتي من الربع، بهدوء.")
                 line("lock.fill", nil, "لا إعلانات، ولا شيء خارج طلعاتك. توقفها من الإعدادات متى شئت.")
             }
             .padding(theme.space(.l))

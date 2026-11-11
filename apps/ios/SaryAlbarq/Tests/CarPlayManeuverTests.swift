@@ -198,7 +198,7 @@ final class CarPlayManeuverTests: XCTestCase {
         var rec = CarPlayRecents()
         rec.add(name: "برج المملكة", at: LngLat(lng: 46.6753, lat: 24.7114))
         let secs = CarPlayDestinations.sections(input(crew), trail: Trail(), recents: rec)
-        XCTAssertEqual(secs.map(\.header), ["الطلعة", "العيال", "الأخيرة"])
+        XCTAssertEqual(secs.map(\.header), ["الطلعة", "الربع", "الأخيرة"])
         XCTAssertEqual(secs[0].rows.map(\.action), [.trip(.rally), .trip(.destination)])
         XCTAssertEqual(secs[0].rows[0].title, "نقطة التجمع: عند الطلحة")
         XCTAssertEqual(secs[0].rows[1].title, "الوجهة: روضة خريم")
