@@ -171,14 +171,18 @@ final class OutingSession: ObservableObject, Identifiable {
     static let modeKey = "sary.outings.mode.v1"
     static let batteryKey = "sary.outings.battery.v1"
 
-    init(id: String, myUserId: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil, env: SessionEnv = SessionEnv()) {
+    /// `demo`: the local session's own picture (no server sends one). `kind`: nil = `.demo` with a
+    /// `demo` view, `.server` without; `.solo` comes from `OutingSession.solo(...)`.
+    init(id: String, myUserId: String, api: OutingsAPI, token: String, location: LocationSharer, demo: OutingView? = nil, kind: Kind? = nil, env: SessionEnv = SessionEnv()) {
+        let resolved: Kind = kind ?? (demo != nil ? .demo : .server)
+        assert(resolved.isLocal == (demo != nil), "a local session starts from its own view; a server session from the server's")
         self.id = id
         self.myUserId = myUserId
         self.api = api
         self.token = token
         self.location = location
         self.env = env
-        self.kind = demo != nil ? .demo : .server
+        self.kind = resolved
         self.view = demo
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
@@ -186,12 +190,15 @@ final class OutingSession: ObservableObject, Identifiable {
         walkie = OutingWalkieTalkie(
             outingId: id,
             me: myUserId,
-            tokenBackend: demo == nil ? api : nil,
-            demo: demo != nil,
-            demoCanCreatePrivate: demo?.snapshot.me.role == "owner",
+            tokenBackend: resolved.isLocal ? nil : api,
+            demo: resolved.isDemo,
+            demoCanCreatePrivate: resolved.isDemo && demo?.snapshot.me.role == "owner",
             defaults: env.defaults
         )
-        if let demo {
+        if resolved == .solo {
+            /* Solo: nobody to send a note to, and nobody answers. */
+            voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: LocalVoiceNoteBackend(), walkie: walkie, defaults: env.defaults)
+        } else if let demo {
             /* The demo has no server: «أبو فهد» (or the first friend) answers each note with the same recording. */
             let friend = demo.members.keys.sorted().first { $0 != myUserId } ?? "demo-friend"
             let b = DemoVoiceNoteBackend(friendId: friend, me: myUserId)
@@ -200,7 +207,10 @@ final class OutingSession: ObservableObject, Identifiable {
         } else {
             voiceNotes = VoiceNoteCenter(outingId: id, me: myUserId, backend: env.voiceNoteBackend ?? api, walkie: walkie, defaults: env.defaults)
         }
-        if let demo {
+        if resolved == .solo {
+            /* Solo: no chat (the store reads it as "not here" and hides it calmly). */
+            chat = ChatStore(outingId: id, me: myUserId, backend: LocalChatBackend(), defaults: env.defaults)
+        } else if let demo {
             let friends = Dictionary(demo.members.values.filter { $0.user_id != myUserId }.map { ($0.user_id, $0.display_name) }, uniquingKeysWith: { a, _ in a })
             let backend = DemoChatBackend(outingId: id, me: myUserId, friends: friends)
             chat = ChatStore(outingId: id, me: myUserId, backend: backend, defaults: env.defaults)
@@ -212,12 +222,13 @@ final class OutingSession: ObservableObject, Identifiable {
         trail = TrailStore.load(id, in: env.trailDirectory) ?? Trail()
         /* Whatever happened since the last kept point (app closed, phone restarted) was not seen. */
         trail.markGap()
-        if demo == nil || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
+        /* Road matching runs for real outings and solo (as on a real trip); the demo only with -SaryTrailMatch. */
+        if !resolved.isDemo || ProcessInfo.processInfo.arguments.contains("-SaryTrailMatch"), let svc = env.trailMatching {
             let m = TrailMatchCoordinator(outingId: id, dir: env.trailDirectory, service: svc)
             matcher = m
         }
         #if DEBUG
-        if demo != nil, Self.forcedOffline { link = .offline }
+        if resolved.isDemo, Self.forcedOffline { link = .offline }
         #endif
         mesh.myFix = { [weak self] in
             guard let self, self.gate.allowsPosition else { return nil }
@@ -228,7 +239,7 @@ final class OutingSession: ObservableObject, Identifiable {
         walkie.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
         walkie.outingName = { [weak self] in self?.view?.snapshot.outing.name ?? "" }
         /* «ترددات»: private channels over REST; the demo keeps them on this phone (its owner is the leader). */
-        walkie.channelBackend = demo == nil ? api : nil
+        walkie.channelBackend = resolved.isLocal ? nil : api
         walkie.demoLeader = { [weak self] in self?.view?.snapshot.me.role == "owner" }
         walkieSink = walkie.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
         voiceNotes.nameOf = { [weak self] uid in self?.view?.members[uid]?.display_name }
@@ -1362,4 +1373,71 @@ struct DisplayTrailMemo {
         result = r
         return r
     }
+}
+
+// MARK: - solo («اتجه» on my own, docs/SOLO-OUTING.md)
+
+/// A solo outing: one member (me), on this phone only. Its id is `solo-<uuid>`, which
+/// `OutingsAPI` refuses before anything reaches the network.
+enum SoloOuting {
+    static let idPrefix = "solo-"
+
+    static func newId() -> String { idPrefix + UUID().uuidString.lowercased() }
+
+    static func isSoloId(_ id: String) -> Bool { id.hasPrefix(idPrefix) }
+
+    /// The session's own picture (no server sends one): me alone, owner, active, not sharing,
+    /// no positions, no invite. No phone number: it is never put in an outing picture here.
+    static func view(id: String, me: PublicUser, name: String, now: Date = Date()) -> OutingView {
+        let t = ISODate.string(now)
+        let member = Member(user_id: me.id, display_name: me.display_name, avatar: me.avatar, phone: nil, role: "owner", sharing: false,
+                            joined_at: t, online: true, last_seen_at: t)
+        let snap = OutingSnapshot(
+            outing: OutingInfo(id: id, name: name, status: .active, owner_id: me.id, created_at: t, started_at: t, ended_at: nil),
+            me: SnapshotMe(user_id: me.id, role: "owner", sharing: false),
+            members: [member], positions: [], invite: InviteState(active: false, expires_at: nil),
+            server_now: t
+        )
+        return OutingView(snap, deviceNow: now)
+    }
+}
+
+extension OutingSession {
+    /// «اتجه» without an outing (docs/SOLO-OUTING.md (ب)2): one member (me), no server, nothing
+    /// sent. The demo's construction path with a one-member view and `kind: .solo`: no live
+    /// channel, no background sender, no heartbeat, walkie-talkie never attached, nearby link off,
+    /// and `SendGate` stays closed (no consent, no share press, server flag off).
+    /// Nothing calls it yet (the «اتجه» entry point is a later step).
+    static func solo(id: String = SoloOuting.newId(), me: PublicUser, name: String, location: LocationSharer, env: SessionEnv = SessionEnv()) -> OutingSession {
+        assert(SoloOuting.isSoloId(id), "a solo outing id starts with \(SoloOuting.idPrefix)")
+        var env = env
+        env.nearbyMesh = false
+        /* No token: the client is only here because the session holds one; it refuses `solo-` ids anyway. */
+        return OutingSession(id: id, myUserId: me.id, api: OutingsAPI(tokenProvider: { nil }), token: "", location: location,
+                             demo: SoloOuting.view(id: id, me: me, name: name), kind: .solo, env: env)
+    }
+}
+
+/// Solo voice notes: nobody to send to, nobody answers. A 4xx error, so the outbox drops a note
+/// instead of retrying (the talk button is not offered in a solo outing).
+final class LocalVoiceNoteBackend: VoiceNoteBackend {
+    func uploadVoiceNote(_ outingId: String, audio: Data, durationMs: Int, channel: String, clientId: String, ageMs: Int) async throws -> VoiceNote {
+        throw OutingAPIError.localOuting
+    }
+
+    func listVoiceNotes(_ outingId: String, channel: String) async throws -> [VoiceNote] { [] }
+
+    func fetchVoiceNote(_ note: VoiceNote) async throws -> Data { throw OutingAPIError(code: "clip_gone", status: 404) }
+}
+
+/// Solo chat: there is none. Answers like a route the server does not have (405), which
+/// `ChatStore` reads as `.notDeployed`: the chat is hidden calmly and nothing is queued.
+final class LocalChatBackend: ChatBackend {
+    private var noChat: OutingAPIError { OutingAPIError(code: "local_outing", status: 405) }
+
+    func chatOverview(_ outingId: String) async throws -> ChatOverview { throw noChat }
+    func chatPage(_ outingId: String, with: ChatWith, before: Int?, after: Int?, limit: Int) async throws -> ChatPage { throw noChat }
+    func chatSend(_ outingId: String, draft: ChatDraft) async throws -> ChatMessage { throw noChat }
+    func chatRead(_ outingId: String, with: ChatWith, seq: Int) async throws { throw noChat }
+    func chatDelete(_ outingId: String, messageId: String) async throws -> ChatMessage { throw noChat }
 }
