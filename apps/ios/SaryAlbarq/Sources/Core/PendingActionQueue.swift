@@ -66,6 +66,12 @@ struct PendingActionQueue: Codable, Equatable {
     static let leaveMaxAgeMs = 7 * 24 * 3_600_000.0
     static let maxAgeMs = 2 * 3_600_000.0
 
+    /// How long `kind` may wait. A leave and a hide keep for days: dropping either before the
+    /// server heard it would let the next snapshot share my location again without my say.
+    static func maxAgeMs(for kind: PendingOutingAction.Kind) -> Double {
+        kind == .leave || kind == .hide ? leaveMaxAgeMs : maxAgeMs
+    }
+
     private(set) var items: [PendingOutingAction] = []
 
     var isEmpty: Bool { items.isEmpty }
@@ -148,7 +154,7 @@ struct PendingActionQueue: Codable, Equatable {
     @discardableResult
     mutating func prune(nowMs: Double) -> Bool {
         let before = items.count
-        items.removeAll { nowMs - $0.createdMs > ($0.kind == .leave ? Self.leaveMaxAgeMs : Self.maxAgeMs) }
+        items.removeAll { nowMs - $0.createdMs > Self.maxAgeMs(for: $0.kind) }
         return items.count != before
     }
 
@@ -236,6 +242,8 @@ final class OutingActionOutbox: ObservableObject {
     private var draining: Task<Void, Never>?
     private var generation = 0
     private var sleeping = false
+    /// The action being sent right now (its request may already be on the wire).
+    private(set) var inFlight: PendingOutingAction?
     private var traces: [String: ActionTrace.Interval] = [:]
 
     init(deps: Deps) {
@@ -287,6 +295,8 @@ final class OutingActionOutbox: ObservableObject {
         save()
         endSupersededTraces()
         if let trace { traces[a.id] = trace }
+        /* A loop asleep behind an earlier action's backoff must not hold this one for minutes. */
+        if sleeping { stop() }
         kick()
         return true
     }
@@ -294,6 +304,8 @@ final class OutingActionOutbox: ObservableObject {
     /// Take back a queued action that was not sent yet. True when there was one.
     @discardableResult
     func discard(user: String, outing: String, kind: PendingOutingAction.Kind) -> Bool {
+        /* Already sent (its answer may still be coming): taking it back would only lie on the phone. */
+        if isInFlight(user: user, outing: outing, kind: kind) { return false }
         guard queue.has(user: user, outing: outing, kind: kind) else { return false }
         queue.discard(user: user, outing: outing, kind: kind)
         save()
@@ -311,6 +323,24 @@ final class OutingActionOutbox: ObservableObject {
 
     func has(user: String, outing: String, kind: PendingOutingAction.Kind) -> Bool {
         queue.has(user: user, outing: outing, kind: kind)
+    }
+
+    func isInFlight(user: String, outing: String, kind: PendingOutingAction.Kind) -> Bool {
+        guard let a = inFlight else { return false }
+        return a.user == user && a.outing == outing && a.kind == kind
+    }
+
+    /// Waits (at most `timeoutMs`) until that action is no longer on the wire, so a request that
+    /// must land after it (show after hide, SOS after «أنا بخير») does. True when it cleared.
+    @discardableResult
+    func waitUntilNotInFlight(user: String, outing: String, kind: PendingOutingAction.Kind, timeoutMs: Double) async -> Bool {
+        var waited = 0.0
+        while isInFlight(user: user, outing: outing, kind: kind) {
+            guard waited < timeoutMs else { return false }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            waited += 50
+        }
+        return true
     }
 
     /// The device has a network path again: everything waiting goes now.
@@ -356,12 +386,14 @@ final class OutingActionOutbox: ObservableObject {
         while !Task.isCancelled && generation == gen {
             guard let user = currentUser() else { return }
             let now = deps.now()
-            if queue.items.contains(where: { now - $0.createdMs > ($0.kind == .leave ? PendingActionQueue.leaveMaxAgeMs : PendingActionQueue.maxAgeMs) }) {
+            if queue.items.contains(where: { now - $0.createdMs > PendingActionQueue.maxAgeMs(for: $0.kind) }) {
                 queue.prune(nowMs: now)
                 save()
             }
             if let a = queue.next(nowMs: now, user: user) {
                 let done = deps.keepAlive()
+                inFlight = a
+                defer { if inFlight?.id == a.id { inFlight = nil } }
                 let outcome: Outcome
                 do {
                     try await deps.perform(a)

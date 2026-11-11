@@ -793,3 +793,21 @@ final class BackgroundSessionTests: XCTestCase {
         XCTAssertNil(location.plan, "no consumer left: the manager is stopped")
     }
 }
+
+/// Review findings on #179: an undelivered hide must outlive the 2 h cap, like a leave.
+final class PendingActionAgeTests: XCTestCase {
+    func testHideAndLeaveKeepForDaysOthersForTwoHours() {
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .hide), PendingActionQueue.leaveMaxAgeMs)
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .leave), PendingActionQueue.leaveMaxAgeMs)
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .setRally), PendingActionQueue.maxAgeMs)
+    }
+
+    func testPruneKeepsAnUndeliveredHideAfterThreeHours() {
+        var q = PendingActionQueue()
+        q.enqueue(PendingOutingAction(user: "u", outing: "o", kind: .hide, createdMs: 0))
+        q.enqueue(PendingOutingAction(user: "u", outing: "o2", kind: .note, text: "x", createdMs: 0))
+        q.prune(nowMs: 3 * 3_600_000)
+        XCTAssertTrue(q.has(user: "u", outing: "o", kind: .hide), "hide still waits: dropping it could share again")
+        XCTAssertFalse(q.has(user: "u", outing: "o2", kind: .note), "a note is moot after 2 h")
+    }
+}
