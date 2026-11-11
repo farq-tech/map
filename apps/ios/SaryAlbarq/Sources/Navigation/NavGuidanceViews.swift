@@ -31,6 +31,9 @@ struct NavManeuverGlyph: View {
             Image(systemName: NavGlyph.symbol(maneuver))
                 .font(.system(size: size * (tint == .clear ? 0.78 : 0.56), weight: .heavy))
                 .foregroundStyle(ink)
+                /* A new maneuver swaps the arrow with the system's symbol replace (only inside an
+                 * animated transaction: the banner's maneuver key; still everywhere else). */
+                .contentTransition(.symbolEffect(.replace))
             if maneuver.kind == .roundabout, let e = maneuver.exit {
                 Text(SaryFormat.number(e))
                     .font(.system(size: size * 0.22, weight: .black))
@@ -111,6 +114,56 @@ enum NavHUD {
     }
 }
 
+/// Motion on the guidance surfaces (pure, unit-tested in `NavigationTests`). It explains a change
+/// (a new maneuver, a new route) and stays calm while driving; nothing loops.
+enum NavMotion {
+    /// How far (pt) the banner's instruction travels as it swaps: a short nudge, not a full slide.
+    static let swapDistance: CGFloat = 36
+
+    /// Identity of the maneuver on the banner: changes with a new step or a new route. Without a
+    /// progress yet the banner shows step 1 (`NavSession.currentStep`), so nil counts as 1 and the
+    /// first progress on the same step does not swap the instruction again.
+    static func stepKey(route: UUID?, stepIndex: Int?) -> String {
+        "\(route?.uuidString ?? "-")#\(stepIndex ?? 1)"
+    }
+
+    /// Horizontal offset of the instruction swap. The next instruction comes in from the trailing
+    /// side (the way reading goes on: the left in Arabic) and the old one leaves toward the
+    /// leading side. `insertion`: where the new one starts; otherwise where the old one ends.
+    static func swapOffset(insertion: Bool, rtl: Bool) -> CGFloat {
+        let trailing: CGFloat = rtl ? -swapDistance : swapDistance
+        return insertion ? trailing : -trailing
+    }
+
+    /// Reduce Motion: a crossfade, no travel.
+    static func swapTravels(reduceMotion: Bool) -> Bool { !reduceMotion }
+}
+
+/// The guidance bar's fit in the sheet's 70 pt peek and at 320 pt (pure, unit-tested in
+/// `NavigationTests`). The full row (big numbers, «غيّر الوجهة», «المزيد», «أوقف التوجيه») is
+/// tried first and the compact row (an icon-only stop circle) when it does not fit; on a narrow
+/// window or at accessibility text sizes the compact row is used outright and «غيّر الوجهة»
+/// moves to the pulled-up sheet (`NavTripOptions`).
+enum NavBarLayout {
+    /// The two big numbers follow Dynamic Type up to here: beyond it they outgrow the peek.
+    static let numbersTypeCap: DynamicTypeSize = .xLarge
+
+    /// The icon-only stop circle: the full pill's height.
+    static func stopCircle(drive: Bool) -> CGFloat { drive ? 60 : 52 }
+
+    static func forcesCompact(width: SaryWidthClass, typeSize: DynamicTypeSize) -> Bool {
+        width == .narrow || typeSize.isAccessibilitySize
+    }
+
+    /// «غيّر الوجهة» is a tile in the pulled-up sheet when the bar has no room for it.
+    static func changeDestinationInSheet(width: SaryWidthClass, typeSize: DynamicTypeSize) -> Bool {
+        forcesCompact(width: width, typeSize: typeSize)
+    }
+
+    /// The stale-target note («آخر موقع معروف…») is a third line: only with the sheet raised.
+    static func showsStaleNote(peek: Bool) -> Bool { !peek }
+}
+
 /// Top banner (v2): a big arrow with the distance under it, the road on one big line beside them,
 /// lanes near the turn, and «ثم …» only when the next turn is close. Time and distance left are in the
 /// bottom bar now.
@@ -118,6 +171,16 @@ struct NavManeuverBanner: View {
     @ObservedObject var nav: NavSession
     @StateObject private var pip = NavPictureInPicture()
     @Environment(\.sary) private var theme
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    /// The instruction's swap: a short nudge in from the trailing side, out toward the leading side
+    /// (`NavMotion.swapOffset`), with a fade; a plain crossfade with Reduce Motion.
+    private var instructionSwap: AnyTransition {
+        guard NavMotion.swapTravels(reduceMotion: theme.reduceMotion) else { return .opacity }
+        let rtl = layoutDirection == .rightToLeft
+        return .asymmetric(insertion: .offset(x: NavMotion.swapOffset(insertion: true, rtl: rtl)).combined(with: .opacity),
+                           removal: .offset(x: NavMotion.swapOffset(insertion: false, rtl: rtl)).combined(with: .opacity))
+    }
 
     var body: some View {
         let p = theme.palette
@@ -131,9 +194,11 @@ struct NavManeuverBanner: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(theme.space(.m))
+                .transition(.opacity)
             } else if let step = nav.currentStep {
                 let d = nav.maneuverDistanceM ?? step.distanceM
                 let parts = NavHUD.distanceParts(d)
+                let key = NavMotion.stepKey(route: nav.active?.geometryRevision, stepIndex: nav.shownProgress?.stepIndex)
                 HStack(alignment: .center, spacing: theme.space(.m)) {
                     /* The arrow and the distance: the two things read at a glance (bigger in build 37). */
                     VStack(spacing: 0) {
@@ -141,6 +206,9 @@ struct NavManeuverBanner: View {
                         HStack(alignment: .firstTextBaseline, spacing: 3) {
                             Text(parts.value).font(.sary(theme.drive ? 38 : 32, .heavy)).foregroundStyle(p.textPrimary)
                                 .monospacedDigit()
+                                /* Rolls on the progress updates that already change it (about 1 Hz). */
+                                .contentTransition(.numericText(countsDown: true))
+                                .animation(theme.animation(.snappy), value: parts.value)
                             Text(parts.unit).font(.sary(theme.drive ? 18 : 15, .bold)).foregroundStyle(p.textSecondary)
                         }
                         .lineLimit(1)
@@ -150,7 +218,10 @@ struct NavManeuverBanner: View {
                         .accessibilityIdentifier("nav.distance")
                     }
                     .frame(minWidth: glyph + 8)
-                    /* The direction in words, big; the road under it, smaller (one line). */
+                    /* The direction in words, big; the road under it, smaller (one line). A new maneuver
+                     * swaps it (`instructionSwap`); the ZStack keeps the old and new one in one place
+                     * while they cross. */
+                    ZStack(alignment: .leading) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(NavHUD.headline(step, targetName: nav.target?.name))
                             .font(.sary(theme.drive ? 28 : 24, .heavy))
@@ -172,9 +243,17 @@ struct NavManeuverBanner: View {
                     /* VoiceOver hears the whole instruction («بعد ٣٫٣ كم انعطف يسارًا إلى …»). */
                     .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
                     .accessibilityIdentifier("nav.instruction")
+                    .id(key)
+                    .transition(instructionSwap)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
+                /* One animated transaction per new maneuver: the words swap, the arrow's symbol is
+                 * replaced. Quicker while driving. */
+                .animation(theme.animation(theme.drive ? .snappy : .smooth), value: key)
+                .transition(.opacity)
                 if !step.lanes.isEmpty, d < 1500 {
                     NavLanesView(lanes: step.lanes)
                         .padding(.horizontal, theme.space(.m))
@@ -185,7 +264,11 @@ struct NavManeuverBanner: View {
                 }
             }
         }
+        /* «نعيد حساب الطريق…» and back: a crossfade, so the reroute reads as one change. */
+        .animation(theme.animation(.smooth), value: nav.rerouting)
         .navPanel(theme)
+        /* A reroute gets one haptic tap outside drive mode; in drive mode the voice says it. */
+        .sensoryFeedback(.impact(weight: .medium), trigger: nav.rerouting) { was, now in now && !was && !theme.drive }
         .overlay(alignment: .topLeading) {
             Button { pip.start() } label: {
                 Image(systemName: pip.active ? "pip.exit" : "pip.enter")
@@ -265,16 +348,25 @@ struct NavETARow: View {
                 Rectangle().fill(p.separator).frame(height: 0.75).padding(.horizontal, 13)
                 HStack(spacing: 4) {
                     if let eta = nav.etaDate {
-                        Text("توصل \(NavText.clock(eta))").font(.sary(size, .bold)).foregroundStyle(p.liveText)
+                        let clock = NavText.clock(eta)
+                        Text("توصل \(clock)").font(.sary(size, .bold)).foregroundStyle(p.liveText)
+                            .contentTransition(.numericText())
+                            .animation(theme.animation(.snappy), value: clock)
                             .accessibilityIdentifier("nav.eta")
                     }
                     if let s = nav.remainingSeconds {
-                        Text("· باقي \(NavText.remaining(seconds: s))").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                        let left = NavText.remaining(seconds: s)
+                        Text("· باقي \(left)").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(theme.animation(.snappy), value: left)
                             .accessibilityIdentifier("nav.remainingTime")
                     }
                     Spacer(minLength: theme.space(.s))
                     if let m = nav.remainingMeters {
-                        Text(SaryFormat.distance(meters: m)).font(.sary(size, .bold)).foregroundStyle(p.textPrimary)
+                        let far = SaryFormat.distance(meters: m)
+                        Text(far).font(.sary(size, .bold)).foregroundStyle(p.textPrimary)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(theme.animation(.snappy), value: far)
                             .accessibilityIdentifier("nav.remainingDistance")
                     }
                 }
@@ -407,6 +499,11 @@ struct NavArrivalCard: View {
     @ObservedObject var nav: NavSession
     var end: () -> Void
     @Environment(\.sary) private var theme
+    /// The one-shot arrival moment: up on appear, then settles (never loops).
+    @State private var celebrate = false
+    /// Bumped once on appear for the success haptic (the card only exists once arrived, so a
+    /// trigger on `phase == .arrived` never saw a change).
+    @State private var arrivedTap = 0
 
     var body: some View {
         let p = theme.palette
@@ -416,6 +513,8 @@ struct NavArrivalCard: View {
                 Image(systemName: "flag.checkered").font(.system(size: theme.drive ? 34 : 26, weight: .heavy)).foregroundStyle(Color.white)
             }
             .frame(width: theme.drive ? 76 : 60, height: theme.drive ? 76 : 60)
+            .scaleEffect(celebrate ? 1.12 : 1)
+            .shadow(color: p.live.opacity(celebrate ? 0.75 : 0), radius: celebrate ? 14 : 0)
             VStack(alignment: .leading, spacing: 2) {
                 Text(nav.auto ? "وصلتوا" : "وصلت").saryText(theme.drive ? .title : .title2, weight: .heavy).foregroundStyle(p.textPrimary)
                     .accessibilityIdentifier("nav.arrived.title")
@@ -433,14 +532,28 @@ struct NavArrivalCard: View {
         }
         .padding(theme.space(.m))
         .navPanel(theme, stroke: p.live)
-        .sensoryFeedback(.success, trigger: nav.phase == .arrived) { was, now in now && !was }
+        /* A soft green glow around the card for the same moment. */
+        .shadow(color: p.live.opacity(celebrate ? 0.45 : 0), radius: celebrate ? 18 : 0)
+        .scaleEffect(celebrate ? 1.02 : 1)
+        .onAppear {
+            /* «وصلت»: a success haptic outside drive mode (in drive mode the voice says it). */
+            if !theme.drive { arrivedTap += 1 }
+            guard !theme.reduceMotion else { return }
+            withAnimation(theme.animation(.snappy)) { celebrate = true } completion: {
+                withAnimation(theme.animation(.smooth)) { celebrate = false }
+            }
+        }
+        .sensoryFeedback(.success, trigger: arrivedTap)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.arrived")
     }
 }
 
 /// The bottom bar in the sheet's peek (v2): the time left big and coloured, «١٩ كم · ١٢:٥٦ ص» under it,
-/// and a clear red «إنهاء». Drag the sheet up for «المسارات»، «مشاركة الوصول»، «الصوت» (`NavTripOptions`).
+/// and a clear red «أوقف التوجيه». Drag the sheet up for «المسارات»، «مشاركة الوصول»، «الصوت» (`NavTripOptions`).
+/// It fits the 70 pt peek and a 320 pt window (`NavBarLayout`): the numbers are capped at xLarge,
+/// the stale note waits for the sheet raised, and a compact row replaces the full one when it
+/// does not fit.
 struct NavBottomBar: View {
     @ObservedObject var nav: NavSession
     var end: () -> Void
@@ -448,65 +561,121 @@ struct NavBottomBar: View {
     var more: (() -> Void)? = nil
     /// «غيّر الوجهة» without stopping the guidance first.
     var changeDestination: (() -> Void)? = nil
+    /// The bar is the sheet's 70 pt peek (the live screen): no room for a third line.
+    var peek = false
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let p = theme.palette
-        HStack(spacing: theme.space(.m)) {
+        Group {
             if nav.phase == .arrived {
-                Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
-                Spacer(minLength: 0)
+                HStack(spacing: theme.space(.m)) {
+                    Text(nav.auto ? "وصلتوا إلى \(nav.target?.name ?? "وجهتكم")" : "وصلت إلى \(nav.target?.name ?? "وجهتك")").saryText(.headline).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+            } else if NavBarLayout.forcesCompact(width: widthClass, typeSize: typeSize) {
+                /* 320 pt or accessibility text: the compact row outright; «غيّر الوجهة» is in the raised sheet. */
+                row(compact: true, change: false)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    if let s = nav.remainingSeconds {
-                        Text(NavText.remaining(seconds: s))
-                            .font(.sary(theme.drive ? 34 : 30, .heavy))
-                            .foregroundStyle(p.accentText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .accessibilityIdentifier("nav.remainingTime")
-                    }
-                    Text(NavHUD.tripLine(meters: nav.remainingMeters, eta: nav.etaDate))
-                        .font(.sary(theme.drive ? 18 : 16, .medium))
-                        .foregroundStyle(p.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .accessibilityIdentifier("nav.eta")
-                    if let note = nav.target?.staleNote() {
-                        Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warningText).lineLimit(1)
-                            .accessibilityIdentifier("nav.target.stale")
-                    }
+                /* The full row when its natural width fits, else the compact one (still with «غيّر الوجهة»). */
+                ViewThatFits(in: .horizontal) {
+                    row(compact: false, change: true)
+                    row(compact: true, change: true)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text(label))
-                .accessibilityIdentifier("nav.banner.eta")
-                Spacer(minLength: 0)
-                if let changeDestination {
-                    barIcon("arrow.triangle.swap", label: "غيّر الوجهة", id: "nav.changeDestination", action: changeDestination)
-                }
-                if let more {
-                    barIcon("ellipsis", label: "المزيد", id: "nav.more", action: more)
-                }
-                Button(action: end) {
-                    /* The trip's guidance pauses on this phone only («استأنف» brings it back). One verb for
-                     * both (the word dictionary): «أوقف التوجيه». */
-                    Text("أوقف التوجيه")
-                        .font(.sary(theme.drive ? 20 : 18, .heavy))
-                        .foregroundStyle(p.onEmergency)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .padding(.horizontal, theme.drive ? 30 : 26)
-                        .frame(minHeight: theme.drive ? 60 : 52)
-                        .background(Capsule().fill(p.emergency))
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityIdentifier(nav.auto ? "nav.auto.pause" : "nav.end")
             }
         }
         .padding(.horizontal, theme.space(.l))
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.bottomBar")
+    }
+
+    private func row(compact: Bool, change: Bool) -> some View {
+        HStack(spacing: theme.space(.m)) {
+            numbers
+            Spacer(minLength: 0)
+            if change, let changeDestination {
+                barIcon("arrow.triangle.swap", label: "غيّر الوجهة", id: "nav.changeDestination", action: changeDestination)
+            }
+            if let more {
+                barIcon("ellipsis", label: "المزيد", id: "nav.more", action: more)
+            }
+            stopButton(compact: compact)
+        }
+    }
+
+    /// The time left, big, and «١٩ كم · ١٢:٥٦ ص» under it (both roll as they change).
+    private var numbers: some View {
+        let p = theme.palette
+        let left = nav.remainingSeconds.map { NavText.remaining(seconds: $0) }
+        let trip = NavHUD.tripLine(meters: nav.remainingMeters, eta: nav.etaDate)
+        return VStack(alignment: .leading, spacing: 0) {
+            if let left {
+                Text(left)
+                    .font(.sary(theme.drive ? 34 : 30, .heavy))
+                    .foregroundStyle(p.accentText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
+                    .contentTransition(.numericText(countsDown: true))
+                    .animation(theme.animation(.snappy), value: left)
+                    .accessibilityIdentifier("nav.remainingTime")
+            }
+            Text(trip)
+                .font(.sary(theme.drive ? 18 : 16, .medium))
+                .foregroundStyle(p.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
+                .contentTransition(.numericText(countsDown: true))
+                .animation(theme.animation(.snappy), value: trip)
+                .accessibilityIdentifier("nav.eta")
+            if NavBarLayout.showsStaleNote(peek: peek), let note = nav.target?.staleNote() {
+                Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warningText).lineLimit(1)
+                    .accessibilityIdentifier("nav.target.stale")
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(label))
+        .accessibilityIdentifier("nav.banner.eta")
+    }
+
+    /// «أوقف التوجيه»: the red pill, or (compact) a red stop circle with the same name and identifier.
+    @ViewBuilder
+    private func stopButton(compact: Bool) -> some View {
+        let p = theme.palette
+        /* The trip's guidance pauses on this phone only («استأنف» brings it back). One verb for
+         * both (the word dictionary): «أوقف التوجيه». */
+        let id = nav.auto ? "nav.auto.pause" : "nav.end"
+        if compact {
+            let side = NavBarLayout.stopCircle(drive: theme.drive)
+            Button(action: end) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: theme.drive ? 22 : 20, weight: .heavy))
+                    .foregroundStyle(p.onEmergency)
+                    .frame(width: side, height: side)
+                    .background(Circle().fill(p.emergency))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("أوقف التوجيه"))
+            .accessibilityIdentifier(id)
+        } else {
+            Button(action: end) {
+                Text("أوقف التوجيه")
+                    .font(.sary(theme.drive ? 20 : 18, .heavy))
+                    .foregroundStyle(p.onEmergency)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, theme.drive ? 30 : 26)
+                    .frame(minHeight: theme.drive ? 60 : 52)
+                    .background(Capsule().fill(p.emergency))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier(id)
+        }
     }
 
     /// A round 48 pt (56 in drive mode) secondary button of the guidance bar.
@@ -543,11 +712,18 @@ struct NavTripOptions: View {
     var overviewOn: Bool
     /// The map camera's mode (free / north / heading): VoiceOver value of «نظرة عامة».
     var cameraMode = ""
+    /// «غيّر الوجهة»: a tile here only when the compact guidance bar has no room for it (`NavBarLayout`).
+    var changeDestination: (() -> Void)? = nil
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let cols = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         LazyVGrid(columns: cols, spacing: 10) {
+            if let changeDestination, NavBarLayout.changeDestinationInSheet(width: widthClass, typeSize: typeSize) {
+                tile("arrow.triangle.swap", "غيّر الوجهة", id: "nav.changeDestination", action: changeDestination)
+            }
             if let routes {
                 tile("arrow.triangle.branch", "المسارات", id: "nav.opt.routes", action: routes)
             }
@@ -612,6 +788,8 @@ struct NavSpeedCluster: View {
                     .font(.sary(d * 0.36, .heavy))
                     .foregroundStyle(over ? p.onEmergency : p.textPrimary)
                     .contentTransition(.numericText())
+                    /* Rolls on the speed readings that already arrive (no extra updates). */
+                    .animation(theme.animation(.snappy), value: kmh)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 Text("كم/س").font(.sary(11, .bold)).foregroundStyle(over ? p.onEmergency.opacity(0.9) : p.textSecondary)

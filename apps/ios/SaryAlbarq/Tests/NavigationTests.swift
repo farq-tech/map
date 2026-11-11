@@ -1,6 +1,7 @@
 import MapboxDirections
 @_spi(MapboxInternal) import MapboxNavigationCore
 import CoreMedia
+import SwiftUI
 import UIKit
 import XCTest
 @testable import SaryAlbarq
@@ -1048,5 +1049,60 @@ final class NavRouteMetricsTests: XCTestCase {
         /* ~2 km at ~33 m a segment: about 60 segments, not the whole route. */
         let e0 = LocalGuidanceEngine.windowEnd(cum: cum, from: 0, lo: 0, hi: hi)
         XCTAssertTrue((55...70).contains(e0), "\(e0)")
+    }
+}
+
+/// Motion on the guidance banner: the maneuver key and the RTL-aware swap direction.
+final class NavMotionTests: XCTestCase {
+    func testStepKeyChangesWithStepAndRouteOnly() {
+        let a = UUID(), b = UUID()
+        XCTAssertEqual(NavMotion.stepKey(route: a, stepIndex: nil), NavMotion.stepKey(route: a, stepIndex: 1),
+                       "no progress yet shows step 1: the first progress does not swap the banner again")
+        XCTAssertNotEqual(NavMotion.stepKey(route: a, stepIndex: 1), NavMotion.stepKey(route: a, stepIndex: 2), "a new maneuver")
+        XCTAssertNotEqual(NavMotion.stepKey(route: a, stepIndex: 2), NavMotion.stepKey(route: b, stepIndex: 2), "a new route (reroute)")
+        XCTAssertEqual(NavMotion.stepKey(route: a, stepIndex: 3), NavMotion.stepKey(route: a, stepIndex: 3))
+    }
+
+    func testSwapComesFromTheTrailingSideAndFollowsRTL() {
+        let d = NavMotion.swapDistance
+        XCTAssertGreaterThan(d, 0)
+        XCTAssertLessThanOrEqual(d, 48, "a nudge, not a full slide across the banner")
+        /* Arabic: the next instruction comes in from the left, the old one leaves to the right. */
+        XCTAssertEqual(NavMotion.swapOffset(insertion: true, rtl: true), -d)
+        XCTAssertEqual(NavMotion.swapOffset(insertion: false, rtl: true), d)
+        /* LTR mirrors it. */
+        XCTAssertEqual(NavMotion.swapOffset(insertion: true, rtl: false), d)
+        XCTAssertEqual(NavMotion.swapOffset(insertion: false, rtl: false), -d)
+        XCTAssertTrue(NavMotion.swapTravels(reduceMotion: false))
+        XCTAssertFalse(NavMotion.swapTravels(reduceMotion: true), "Reduce Motion: a crossfade")
+    }
+}
+
+/// The guidance bar in the 70 pt peek and at 320 pt: when the compact row is used outright.
+final class NavBarLayoutTests: XCTestCase {
+    func testCompactOnNarrowOrAccessibilityText() {
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .narrow, typeSize: .large), "320 pt: «أوقف التوجيه» does not fit")
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .regular, typeSize: .accessibility1))
+        XCTAssertTrue(NavBarLayout.forcesCompact(width: .wide, typeSize: .accessibility5))
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .regular, typeSize: .large), "a standard phone: the full row")
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .regular, typeSize: .xxxLarge), "ViewThatFits decides below accessibility sizes")
+        XCTAssertFalse(NavBarLayout.forcesCompact(width: .wide, typeSize: .large))
+    }
+
+    func testChangeDestinationMovesToTheSheetOnlyWhenTheBarDropsIt() {
+        for w in [SaryWidthClass.narrow, .regular, .wide] {
+            for t in [DynamicTypeSize.large, .xxxLarge, .accessibility2] {
+                XCTAssertEqual(NavBarLayout.changeDestinationInSheet(width: w, typeSize: t), NavBarLayout.forcesCompact(width: w, typeSize: t),
+                               "«غيّر الوجهة» is always in exactly one place (\(w), \(t))")
+            }
+        }
+    }
+
+    func testPeekFitRules() {
+        XCTAssertFalse(NavBarLayout.showsStaleNote(peek: true), "no third line in the 70 pt peek")
+        XCTAssertTrue(NavBarLayout.showsStaleNote(peek: false))
+        XCTAssertEqual(NavBarLayout.numbersTypeCap, .xLarge)
+        XCTAssertEqual(NavBarLayout.stopCircle(drive: false), 52)
+        XCTAssertGreaterThanOrEqual(NavBarLayout.stopCircle(drive: true), 60, "the drive-mode target")
     }
 }

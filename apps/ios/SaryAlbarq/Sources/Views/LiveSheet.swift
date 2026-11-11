@@ -25,13 +25,16 @@ struct LiveSheet: View {
                  * «غيّر الوجهة», «أوقف التوجيه»). */
                 NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
                              more: { controller.modal = .actions },
-                             changeDestination: controller.navChangeDestination)
+                             changeDestination: controller.navChangeDestination,
+                             peek: ui.sheetDetent == .peek)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
-                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة». */
+                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
+                     * when the compact bar has no room for it). */
                     NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
                                    steps: { controller.modal = .navSteps },
                                    overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
-                                   cameraMode: controller.mapFollowMode.rawValue)
+                                   cameraMode: controller.mapFollowMode.rawValue,
+                                   changeDestination: controller.navChangeDestination)
                         .padding(.top, theme.space(.s))
                 }
             } else {
