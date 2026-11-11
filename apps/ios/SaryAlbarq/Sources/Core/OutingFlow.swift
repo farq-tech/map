@@ -261,10 +261,12 @@ struct WaitingLeaderInfo: Equatable {
     var connection: String?
 
     /// The one line under the button.
-    var line: String { [connection == nil ? leader : connection, members].compactMap { $0 }.joined(separator: " · ") }
+    var line: String { "\(connection ?? leader) · \(members)" }
     /// Everything, for VoiceOver.
     var accessibility: String {
-        (["ما بدأت الطلعة", leader, members] + (connection.map { [$0] } ?? [])).joined(separator: "، ")
+        var parts = ["ما بدأت الطلعة", leader, members]
+        if let connection { parts.append(connection) }
+        return parts.joined(separator: "، ")
     }
 }
 
