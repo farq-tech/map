@@ -115,8 +115,13 @@ final class WeatherStore: ObservableObject {
             let (fd, ad) = try await (f, air)
             let at = clock()
             let parsed = try OpenMeteo.parse(forecast: fd, air: ad, area: a, fetchedAt: at)
-            cache.save(.init(area: a, fetchedAt: at, forecast: fd, air: ad))
-            cache.prune(now: at)
+            /* Encoding, the write and the prune (which reads and decodes every cached area) used to
+             * run on the main thread after each refresh. Awaited, so the file is there on return. */
+            let entry = WeatherCache.Entry(area: a, fetchedAt: at, forecast: fd, air: ad)
+            await Task.detached(priority: .utility) { [cache] in
+                cache.save(entry)
+                cache.prune(now: at)
+            }.value
             /* The area may have changed while we waited. */
             guard area == a else { return }
             report = parsed
