@@ -34,6 +34,9 @@ GDAL_ENV = dict(
     CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif,.TIF",
     GDAL_HTTP_MAX_RETRY="4",
     GDAL_HTTP_RETRY_DELAY="2",
+    # A stalled connection must fail (and be retried by read_into) instead of hanging a tile for an hour.
+    GDAL_HTTP_CONNECTTIMEOUT="30",
+    GDAL_HTTP_TIMEOUT="120",
 )
 
 DEM_URL = ("https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/"
