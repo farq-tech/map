@@ -127,3 +127,26 @@ test('HTTP: /weather/clouds/outlook — bad point 400; fake WMS gives a motion e
     clouds._reset();
   }
 });
+
+test('clouds.warm: fetches the Kingdom tiles of the newest frames once, newest first', async () => {
+  const nowMs = Date.parse('2026-11-11T19:59:00Z');
+  clouds._reset();
+  const seen = [];
+  fetcher.setFetch(async (url) => {
+    if (/GetCapabilities/.test(url)) {
+      return { status: 200, type: 'text/xml', body: Buffer.from('<Dimension name="time">2026-11-10T00:00:00Z/2026-11-11T19:00:00.000Z/PT10M</Dimension>') };
+    }
+    seen.push(/time=([^&]+)/.exec(url)[1]);
+    return { status: 200, type: 'image/png', body: textured(0) };
+  });
+  try {
+    const r = await clouds.warm(nowMs, { frames: 2 });
+    assert.equal(r.frames, 2);
+    assert.ok(r.tiles >= 10 && r.tiles <= 60, `tiles ${r.tiles}`);
+    assert.equal(seen.length, r.frames * r.tiles);
+    assert.match(decodeURIComponent(seen[0]), /T19:00:00Z/); // newest first
+  } finally {
+    fetcher.setFetch(null);
+    clouds._reset();
+  }
+});

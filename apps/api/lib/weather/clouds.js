@@ -21,7 +21,7 @@
 
 const { PNG } = require('pngjs');
 const { fetchBuffer, Lru, memo } = require('./fetcher');
-const { tileBbox3857, tileBox, intersects } = require('./mercator');
+const { tileBbox3857, tileBox, intersects, tilesFor } = require('./mercator');
 
 const WMS = process.env.EUMETSAT_WMS_URL || 'https://view.eumetsat.int/geoserver/wms';
 const LAYER = 'mtg_fd:ir105_hrfi';
@@ -205,9 +205,25 @@ async function tile(id, z, x, y, nowMs = Date.now()) {
   return { status: 200, body };
 }
 
+/**
+ * Warm the tile cache for the newest frames over the Kingdom (z3–z5, ~25 tiles a frame), so the first
+ * person to open «السحاب الآن» after a new picture does not watch the map fill in square by square
+ * (EUMETView takes ~20 s a tile). The fetcher's concurrency cap keeps us a polite client.
+ */
+async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
+  const latest = await latestImageTime(nowMs);
+  const plan = planFrames(latest, nowMs).slice(-frames).reverse(); // newest first
+  const KSA_BOX = { west: 34, south: 16, east: 56, north: 33 };
+  const tiles = [3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
+  for (const f of plan) {
+    await Promise.all(tiles.map((t) => tile(f.id, t.z, t.x, t.y, nowMs).catch(() => null)));
+  }
+  return { frames: plan.length, tiles: tiles.length };
+}
+
 module.exports = {
   LAYER, REGION, MIN_ZOOM, MAX_ZOOM,
-  frameId, parseFrameId, frameAllowed, planFrames, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
+  frameId, parseFrameId, frameAllowed, planFrames, warm, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
   _reset() {
     capsCache = { at: 0, latest: null };
   },

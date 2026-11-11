@@ -111,7 +111,7 @@ function createWeatherRouter() {
 
 module.exports = createWeatherRouter;
 /**
- * Background warm-up: greenness first (≈ 220 GIBS tiles), then the 7-day rain window (≈ 1,300
+ * Background warm-up: cloud frames (every 5 min), greenness first (≈ 220 GIBS tiles), then the 7-day rain window (≈ 1,300
  * tiles); rain again every 20 min, greenness every 6 h. Off with WEATHER_WARM=0.
  */
 module.exports.startWarm = () => {
@@ -123,4 +123,8 @@ module.exports.startWarm = () => {
   };
   setTimeout(run, 3_000).unref();
   setInterval(run, 20 * 60_000).unref();
+  /* Clouds: a new picture every 10 min; warm the newest few so the loop plays whole, not square by square. */
+  const runClouds = () => clouds.warm().catch(() => {});
+  setTimeout(runClouds, 5_000).unref();
+  setInterval(runClouds, 5 * 60_000).unref();
 };

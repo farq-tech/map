@@ -26,6 +26,9 @@ const R = 6378137;
 
 const cache = new Lru(Number(process.env.WEATHER_OUTLOOK_CACHE) || 300);
 const inflight = new Map();
+/* Last good window per 1° cell: served (with its true, older age) while a fresh one is being read. */
+const lastGood = new Map();
+const STALE_MAX_MIN = 35;
 
 function toMercator(lat, lng) {
   const x = (R * lng * Math.PI) / 180;
@@ -78,10 +81,14 @@ async function loadFields(box, tMs) {
   const url = clouds.wmsMapUrl(box, WINDOW_PX, WINDOW_PX, tMs);
   /* EUMETView answers 504 or a blank picture now and then: retry twice. */
   for (let k = 0; k < 3; k++) {
-    const r = await fetchBuffer(url, { timeoutMs: 60_000 });
-    if (r.status === 200 && /png/.test(r.type)) {
-      const f = fieldsFromPng(r.body);
-      if (f) return f;
+    try {
+      const r = await fetchBuffer(url, { timeoutMs: 60_000 });
+      if (r.status === 200 && /png/.test(r.type)) {
+        const f = fieldsFromPng(r.body);
+        if (f) return f;
+      }
+    } catch {
+      /* timeout / reset: try again */
     }
   }
   return null;
@@ -116,7 +123,7 @@ async function outlook(lat, lng, nowMs = Date.now()) {
   if (!sel) return { ok: false, error: 'not_enough_frames' };
   const cell = cellOf(lat, lng);
   const key = `${sel.newer.id}/${sel.older.id}/${sel.oldest ? sel.oldest.id : '-'}/${cell.lat}/${cell.lng}`;
-  const win = await memo(cache, inflight, key, async () => {
+  const load = () => memo(cache, inflight, key, async () => {
     const [cx, cy] = toMercator(cell.lat, cell.lng);
     const half = (WINDOW_KM * 1000) / Math.cos((cell.lat * Math.PI) / 180) / 2;
     const box = [cx - half, cy - half, cx + half, cy + half];
@@ -124,17 +131,29 @@ async function outlook(lat, lng, nowMs = Date.now()) {
     const got = [];
     for (const f of ts) got.push(await loadFields(box, Date.parse(f.time))); // one at a time: EUMETView is slow and fragile
     if (!got[0] || !got[1]) return null;
-    return { box, newer: got[0], older: got[1], oldest: got[2] || null };
+    const w = { box, newer: got[0], older: got[1], oldest: got[2] || null, sel };
+    lastGood.set(`${cell.lat}/${cell.lng}`, w);
+    return w;
   });
+  let win = cache.get(key);
+  if (!win) {
+    const prev = lastGood.get(`${cell.lat}/${cell.lng}`);
+    if (prev && (nowMs - Date.parse(prev.sel.newer.time)) / 60000 <= STALE_MAX_MIN + 70) {
+      load().catch(() => {}); // refresh in the background
+      win = prev;
+    } else {
+      win = await load();
+    }
+  }
   if (!win) return { ok: false, error: 'upstream_unavailable' };
   const [x, y] = toMercator(lat, lng);
   const px = ((x - win.box[0]) / (win.box[2] - win.box[0])) * (WINDOW_PX - 1);
   const py = ((win.box[3] - y) / (win.box[3] - win.box[1])) * (WINDOW_PX - 1);
   const pxKm = WINDOW_KM / WINDOW_PX;
-  const ageMin = Math.max(0, (nowMs - Date.parse(sel.newer.time)) / 60000);
+  const ageMin = Math.max(0, (nowMs - Date.parse(win.sel.newer.time)) / 60000);
   const a = analyse({
     grays: { newer: win.newer.gray, older: win.older.gray, oldest: win.oldest ? win.oldest.gray : null },
-    opacityNewer: win.newer.opacity, dtMin: sel.dtMin, dt2Min: sel.dt2Min, pxKm, ageMin, px, py,
+    opacityNewer: win.newer.opacity, dtMin: win.sel.dtMin, dt2Min: win.sel.dt2Min, pxKm, ageMin, px, py,
   });
   const mv = a.motion;
   const o = a.outlook;
@@ -158,10 +177,10 @@ async function outlook(lat, lng, nowMs = Date.now()) {
     margin_minutes: o.marginMin ?? null,
     distance_km: o.distanceKm == null ? null : Math.round(o.distanceKm),
     scanned_km: o.scannedKm ?? null,
-    image_time: sel.newer.time,
+    image_time: win.sel.newer.time,
     image_age_min: Math.round(ageMin),
-    compared_with: [sel.older.time, sel.oldest ? sel.oldest.time : null].filter(Boolean),
-    dt_minutes: Math.round(sel.dtMin),
+    compared_with: [win.sel.older.time, win.sel.oldest ? win.sel.oldest.time : null].filter(Boolean),
+    dt_minutes: Math.round(win.sel.dtMin),
     cross_check: a.consistency == null ? null : Math.round(a.consistency * 100) / 100,
     method: 'NCC block matching on MTG FCI IR frames 30 min apart, cross-checked on the pair before; linear advection assumed',
     caveats_ar: 'تقدير من حركة السحاب فقط بين صور متأخرة؛ ما يتنبأ بالمطر، والسحب قد تتكوّن أو تتبدد.',
