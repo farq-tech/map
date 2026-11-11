@@ -127,7 +127,26 @@ final class WeatherOverlay {
 
     // MARK: install
 
+    #if DEBUG
+    private var debugCameraDone = false
+    /// Screenshots: `-SaryWeatherCamera 24.5,45,5` frames the map (lat,lng,zoom) a few seconds after the layer opens.
+    private func debugCamera() {
+        guard !debugCameraDone, effectiveKind != .none, styleReady else { return }
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryWeatherCamera"), i + 1 < a.count else { return }
+        let n = a[i + 1].split(separator: ",").compactMap { Double($0) }
+        guard n.count == 3 else { return }
+        debugCameraDone = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.map?.mapboxMap.setCamera(to: CameraOptions(center: CLLocationCoordinate2D(latitude: n[0], longitude: n[1]), zoom: n[2]))
+        }
+    }
+    #endif
+
     private func apply() {
+        #if DEBUG
+        defer { debugCamera() }
+        #endif
         let kind = effectiveKind
         legend.kind = kind
         legend.days = layers.rainDays
@@ -321,20 +340,23 @@ final class WeatherOverlay {
             /* Thin, half-transparent white with a faint dark edge so it reads on bright desert and dark sea. */
             var casing = LineLayer(id: id + "-casing", source: id)
             casing.lineColor = .constant(StyleColor(.black))
-            casing.lineOpacity = .constant(0.16)
-            casing.lineWidth = .constant(2.6)
+            casing.lineOpacity = .constant(0.3)
+            casing.lineWidth = .constant(3.4)
             casing.lineBlur = .constant(1.5)
+            casing.lineEmissiveStrength = .constant(1)
             casing.lineCap = .constant(.round)
             casing.lineJoin = .constant(.round)
             var line = LineLayer(id: id, source: id)
             line.lineColor = .constant(StyleColor(.white))
-            line.lineOpacity = .constant(0.62)
+            line.lineOpacity = .constant(0.9)
             line.lineWidth = .expression(Exp(.interpolate) {
                 Exp(.linear)
                 Exp(.get) { "speed_ms" }
-                0; 0.8
-                12; 2.0
+                0; 1.0
+                12; 2.2
             })
+            /* The Standard style lights its slots; full emissive keeps the lines white at night too. */
+            line.lineEmissiveStrength = .constant(1)
             line.lineCap = .constant(.round)
             line.lineJoin = .constant(.round)
             do {
