@@ -1753,6 +1753,7 @@ function createOutingsService({ pool, events = noopEvents(), push = noopPush(), 
     goingOffline,
     sweepSilence,
     sweep,
+    drainBackgroundTasks: () => chat.drainPushes(),
   };
 }
 

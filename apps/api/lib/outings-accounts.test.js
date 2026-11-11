@@ -82,7 +82,7 @@ test('accounts, co-leaders and join lock', { skip, timeout: 60_000 }, async (t) 
   const base = `http://127.0.0.1:${server.address().port}`;
   const wsUrl = `ws://127.0.0.1:${server.address().port}/api/outings/live`;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

@@ -39,11 +39,20 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
   const apns = createApnsNotifier({ pool, config: apnsOpts.config || apnsConfigFromEnv(), sender: apnsOpts.sender, viewers, maxPerUser: apnsOpts.maxPerUser });
   const fanout = combineNotifiers(push, apns);
   const service = pool ? createOutingsService({ pool, events: hub, push: fanout, webPush: push, config, ...(now ? { now } : {}) }) : null;
+  const pendingTasks = new Set();
+  function trackTask(work) {
+    const task = Promise.resolve(work);
+    pendingTasks.add(task);
+    task.then(() => pendingTasks.delete(task), () => pendingTasks.delete(task));
+  }
+  async function drainTasks() {
+    while (pendingTasks.size) await Promise.allSettled([...pendingTasks]);
+  }
   if (service && fanout.enabled) {
     const emit = hub.emit;
     hub.emit = (outingId, event, opts) => {
       emit(outingId, event, opts);
-      if (PUSHED_EVENTS.has(event?.type)) void service.announce(outingId, event.user_id, event);
+      if (PUSHED_EVENTS.has(event?.type)) trackTask(service.announce(outingId, event.user_id, event));
     };
   }
   /* «قناة الطلعة»: live walkie-talkie relay on the same socket (relay only, nothing stored),
@@ -143,33 +152,36 @@ function setupOutings({ pool = getOutingsPool(), config, limits, now, ptt: pttOp
       if (!service) return;
       socket = attachOutingsSocket(server, { service, hub, ptt });
       sweepTimer = setInterval(() => {
-        service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message));
-        voiceNotes?.sweep().catch((e) => console.warn('[outings] voice notes sweep:', e.code || e.message));
+        trackTask(service.sweep().catch((e) => console.warn('[outings] sweep:', e.code || e.message)));
+        if (voiceNotes) trackTask(voiceNotes.sweep().catch((e) => console.warn('[outings] voice notes sweep:', e.code || e.message)));
       }, 10 * 60_000);
       sweepTimer.unref?.();
       /* Return timers: armed + past due → overdue, snapshot, pushes. Every minute. */
       timerSweep = setInterval(() => {
-        service.sweepReturnTimers().catch((e) => console.warn('[outings] timer sweep:', e.code || e.message));
+        trackTask(service.sweepReturnTimers().catch((e) => console.warn('[outings] timer sweep:', e.code || e.message)));
       }, 60_000);
       timerSweep.unref?.();
       /* «انقطع الإرسال»: sharing on, no fix for 10 / 30 min → alert the others once each. Every minute. */
       silenceSweep = setInterval(() => {
-        service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message));
+        trackTask(service.sweepSilence().catch((e) => console.warn('[outings] silence sweep:', e.code || e.message)));
       }, 60_000);
       silenceSweep.unref?.();
       /* «مباشر / متأخر / منقطع» + reason: re-judged every 30 s for outings someone watches. */
       presenceSweep = setInterval(() => {
-        service.sweepPresence().catch((e) => console.warn('[outings] presence sweep:', e.code || e.message));
+        trackTask(service.sweepPresence().catch((e) => console.warn('[outings] presence sweep:', e.code || e.message)));
       }, 30_000);
       presenceSweep.unref?.();
     },
-    close() {
+    async close() {
       ptt?.close(); // release any held floor while sockets can still hear it
       clearInterval(sweepTimer);
       clearInterval(timerSweep);
       clearInterval(silenceSweep);
       clearInterval(presenceSweep);
       socket?.close();
+      /* Drain notification and scheduled work before callers close the pool or
+       * APNs sessions during graceful shutdown. */
+      await Promise.all([service?.drainBackgroundTasks(), drainTasks()]);
       apns.close();
     },
   };

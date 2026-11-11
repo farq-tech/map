@@ -66,7 +66,11 @@ async function fakeApns(t, reply) {
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  t.after(() => new Promise((r) => server.close(r)));
+  /* `t.after` hooks run in registration order, so this one runs before the test's own
+   * `sender.close()`; http2.Server#close waits for every open session, so close ours first. */
+  const sessions = new Set();
+  server.on('session', (s) => { sessions.add(s); s.on('close', () => sessions.delete(s)); });
+  t.after(() => new Promise((r) => { for (const s of sessions) s.destroy(); server.close(r); }));
   return { seen, origin: `http://127.0.0.1:${server.address().port}` };
 }
 

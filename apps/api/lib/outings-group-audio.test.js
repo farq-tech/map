@@ -132,7 +132,7 @@ test('group audio end to end: permissions, state, ws, late join, restart, cleanu
   }
   let srv = await boot();
   t.after(async () => {
-    srv.outings.close();
+    await srv.outings.close();
     await new Promise((r) => srv.server.close(r));
     await pool.end();
   });
@@ -265,7 +265,7 @@ test('group audio end to end: permissions, state, ws, late join, restart, cleanu
   /* --- a server restart keeps it (sary.group_audio) --- */
   const [row] = (await pool.query('SELECT state FROM sary.group_audio WHERE outing_id = $1', [O])).rows;
   assert.equal(row.state.item.id, 'panorama-fm');
-  srv.outings.close();
+  await srv.outings.close();
   await new Promise((r) => srv.server.close(r));
   srv = await boot();
   const after = await api('GET', `/${O}/group-audio`, L.token);

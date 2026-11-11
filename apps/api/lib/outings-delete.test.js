@@ -56,7 +56,7 @@ test('account deletion — owned + joined outings, hand-over, token dead, others
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -245,7 +245,7 @@ test('account deletion — a lone owner of an active outing ends it, members of 
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

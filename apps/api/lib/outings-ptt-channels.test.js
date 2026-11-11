@@ -132,7 +132,7 @@ test('private channels end to end: leader-only routes, invited-only join/listen/
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
