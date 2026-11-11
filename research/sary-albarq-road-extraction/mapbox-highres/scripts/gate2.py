@@ -4,7 +4,8 @@ Compared against 1000 random translations of the same line set (control)."""
 import sys, os, json, math, cv2, numpy as np
 sys.path.insert(0, os.path.dirname(__file__)); import tiles
 HERE = os.path.dirname(__file__); OUT = os.path.join(HERE, "..", "out")
-LAT, LON, NT = 25.50, 47.10, 11
+LAT, LON, NT = float(os.environ.get("AOI_LAT", 25.50)), float(os.environ.get("AOI_LON", 47.10)), 11
+TAG = os.environ.get("AOI_TAG", "")
 OSM = os.environ.get("OSM_TRK", os.path.expanduser("~/code/map-wt/desert-scout/trk_thumamah.json"))
 img, meta = tiles.mosaic(LAT, LON, 17, NT, NT)
 gray = cv2.GaussianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 0.8)
@@ -69,9 +70,9 @@ for _ in range(1000):
 R["random_translations"] = dict(n=len(rr), ratio_p50=float(np.median(rr)), ratio_p95=float(np.percentile(rr, 95)), ratio_max=float(max(rr)),
                                 frac_ge_real=float(np.mean(np.array(rr) >= r0)))
 R["pass_gate2_raw"] = bool(r0 >= 2.0 and r0 > np.percentile(rr, 95))
-json.dump(R, open(os.path.join(OUT, "gate2.json"), "w"), indent=1)
+json.dump(R, open(os.path.join(OUT, f"gate2{TAG}.json"), "w"), indent=1)
 print(json.dumps(R, indent=1)); print("tiles fetched", tiles.N_FETCHED)
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
 fig, ax = plt.subplots(figsize=(8, 4)); ax.plot(D, prof0, label="OSM tracks raw (n=%d)" % len(P0)); ax.plot(D, prof1, label="aligned ±8 m (biased)", alpha=.7)
 ax.axvline(0, c="k", lw=.5); ax.set_xlabel("m from line"); ax.set_ylabel("gray − flank mean"); ax.legend(); ax.set_title("Gate 2 pooled cross-section (OSM proxy)")
-fig.savefig(os.path.join(OUT, "gate2_profile.png"), dpi=110, bbox_inches="tight")
+fig.savefig(os.path.join(OUT, f"gate2_profile{TAG}.png"), dpi=110, bbox_inches="tight")

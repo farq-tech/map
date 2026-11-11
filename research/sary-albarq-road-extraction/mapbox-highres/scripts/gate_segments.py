@@ -28,4 +28,4 @@ for s in segs:
 sc = np.array(sc); ctrl = np.array(ctrl); thr = np.percentile(np.abs(ctrl), 95)
 R = dict(n_segments=len(sc), thr_abs_z_p95_control=float(thr), frac_real_above=float(np.mean(np.abs(sc) > thr)),
          frac_control_above=float(np.mean(np.abs(ctrl) > thr)), median_abs_z_real=float(np.median(np.abs(sc))), median_abs_z_control=float(np.median(np.abs(ctrl))))
-json.dump(R, open(os.path.join(OUT, "segments.json"), "w"), indent=1); print(json.dumps(R, indent=1))
+json.dump(R, open(os.path.join(OUT, f"segments{TAG}.json"), "w"), indent=1); print(json.dumps(R, indent=1))
