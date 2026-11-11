@@ -100,29 +100,37 @@ extension LiveOutingController {
     }
 
     /// My SOS is on: the focused mode (`LiveScreenRules.sosFocused`).
-    var sosFocused: Bool { LiveScreenRules.sosFocused(ui.sos.mine) }
+    /// Read several times per render: `mySOS` is `ui.sos.mine` without a presenter pass.
+    var sosFocused: Bool { LiveScreenRules.sosFocused(mySOS) }
+
+    /// `ui.status == .notStarted` and `ui.sos.mine`, all the focused-mode checks below read, from
+    /// the same merged view the presenter's input uses, without building the input or running the
+    /// presenter (`sheetShape` alone is read several times per render).
+    private var focusFacts: (notStarted: Bool, mySOS: MySOSUI) {
+        let v = session.meshOverlay.view
+        return (LiveOutingPresenter.status(v?.status) == .notStarted,
+                LiveOutingPresenter.mySOS(view: v, sending: session.sosSending, now: Date()))
+    }
 
     /// The sheet's row of key actions shows under the summary line (stopped / looking; never
     /// before the start, while driving, guiding, after the end, or while my SOS is on).
     func showsQuickRow(drive: Bool) -> Bool {
-        /* Cheap checks first: `ui` runs the whole presenter. */
         guard !tripEnded, !nav.isActive, liveContext(drive: drive) != .driving else { return false }
-        let ui = self.ui
+        let f = focusFacts
         /* «طريق الرجعة» running is focused like my SOS (UI-AUDIT: the panel, SOS and the walkie-talkie only). */
-        return LiveScreenRules.showsQuickRow(ended: false, notStarted: ui.status == .notStarted, navigating: false,
-                                             driving: false, sosFocused: LiveScreenRules.sosFocused(ui.sos.mine) || backTrack != nil)
+        return LiveScreenRules.showsQuickRow(ended: false, notStarted: f.notStarted, navigating: false,
+                                             driving: false, sosFocused: LiveScreenRules.sosFocused(f.mySOS) || backTrack != nil)
     }
 
     /// The live sheet's detent shape (`LiveSheetShape`): the peek height from the context the screen
     /// has AT PEEK, so raising / lowering the sheet never changes its own detent set.
     func sheetShape(drive: Bool) -> LiveSheetShape {
-        /* Cheap checks first: `ui` runs the whole presenter. */
         guard !tripEnded, !nav.isActive else { return LiveSheetShape(drive: drive, trip: false) }
-        let ui = self.ui
+        let f = focusFacts
         let trip = LiveScreenRules.peekShowsQuickRow(override: contextOverride, navigating: false, moving: motion.moving,
                                                      driveMode: drive, exploring: exploreActive, ended: false,
-                                                     notStarted: ui.status == .notStarted,
-                                                     sosFocused: LiveScreenRules.sosFocused(ui.sos.mine) || backTrack != nil)
+                                                     notStarted: f.notStarted,
+                                                     sosFocused: LiveScreenRules.sosFocused(f.mySOS) || backTrack != nil)
         return LiveSheetShape(drive: drive, trip: trip)
     }
 

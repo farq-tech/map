@@ -310,7 +310,7 @@ struct LiveOutingScreen: View {
                     /* ONE big button at a time (ux/الطلعة-والمشوار.md): stopped — the outing's primary action
                      * («ابدأ الطلعة» / «وين رايحين؟» / «ابدأ المشوار») is big and the walkie-talkie is a round
                      * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
-                    let flow = controller.flowUI
+                    let flow = controller.flowUI(ui: ui)
                     /* My SOS on (focused mode): the CTA steps aside; the SOS strip has «أنا بخير». */
                     /* «طريق الرجعة» running: its panel is the one action (UI-AUDIT, device test of PR #149). */
                     let hasCTA = flow.primary != nil && !controller.sosFocused && controller.backTrack == nil
@@ -644,7 +644,7 @@ private struct LiveTopStack: View {
             let follow = plan.following && plan.plan.hasRoute ? TripHeaderPresenter.follow(plan.followStatus(fix: location.lastFix, now: ctx.date)) : nil
             let h = TripHeaderUI(title: TripHeaderPresenter.title(outingName: ui.outingName, trip: trip, ended: controller.tripEnded),
                                  /* «الطلعة» و«المشوار»: the state, unmistakable (ux/الطلعة-والمشوار.md). */
-                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI.line
+                                 line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI(ui: ui).line
                                      : TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars)),
                                  level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
                                  bell: bell)

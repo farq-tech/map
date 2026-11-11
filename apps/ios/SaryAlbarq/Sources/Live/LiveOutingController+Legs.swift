@@ -72,7 +72,18 @@ extension LiveOutingController {
         return OutingLeg(id: "plan", seq: 0, scope: .group, destination: d, started_at: v.snapshot.outing.started_at ?? ISODate.string(Date()))
     }
 
-    var flowInput: OutingFlowInput {
+    var flowInput: OutingFlowInput { flowInput(ui: nil) }
+
+    /// `ui`: the presenter state already built for this render (the live screen's), so the live
+    /// count and the link state do not run the presenter again. Nil: built here, at most once.
+    func flowInput(ui prebuilt: LiveOutingUIState?) -> OutingFlowInput {
+        var built = prebuilt
+        func presented() -> LiveOutingUIState {
+            if let u = built { return u }
+            let u = self.ui
+            built = u
+            return u
+        }
         let v = session.displayView
         var i = OutingFlowInput()
         i.status = v?.status
@@ -86,7 +97,7 @@ extension LiveOutingController {
         if let v {
             let others = v.positions.keys.filter { $0 != v.myId && v.members[$0]?.sharing == true && v.freshness(of: $0, deviceNow: i.now) == .live }
             /* The same count as the sheet's «… مباشر». */
-            i.liveCount = ui.participantsTab.participants.filter { $0.presence.isLive }.count
+            i.liveCount = presented().participantsTab.participants.filter { $0.presence.isLive }.count
             let livePts = v.positions.filter { others.contains($0.key) }.map { LngLat(lng: $0.value.lng, lat: $0.value.lat) }
                 + (location.lastFix.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])
             i.endSuggested = OutingEndSuggest.shouldSuggest(
@@ -95,7 +106,7 @@ extension LiveOutingController {
             if v.status == .created, !i.iLead {
                 /* «ننتظر أمير الطلعة» with what it waits on: the leader, «الربع», and my own link. */
                 /* `.limited` = polling: each poll's snapshot carries the server's `online` too. */
-                let link = ui.connection
+                let link = presented().connection
                 i.waiting = WaitingLeader.info(members: Array(v.members.values), myId: v.myId, clockOffsetMs: v.clockOffsetMs,
                                                myLinkUp: link == .connected || link == .limited, myLinkText: link.label, now: i.now)
             }
@@ -110,6 +121,9 @@ extension LiveOutingController {
     }
 
     var flowUI: OutingFlowUI { OutingFlow.ui(flowInput) }
+
+    /// The same from the presenter state already built for this render.
+    func flowUI(ui: LiveOutingUIState) -> OutingFlowUI { OutingFlow.ui(flowInput(ui: ui)) }
 
     // MARK: actions
 
