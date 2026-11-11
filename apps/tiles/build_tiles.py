@@ -24,6 +24,7 @@ import gzip
 import json
 import math
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 import duckdb
 from pmtiles.tile import Compression, TileType, zxy_to_tileid
 from pmtiles.writer import Writer
+from duckdb.sqltypes import BIGINT, UBIGINT
 
 EXTENT = 4096
 BUFFER = 64
@@ -59,11 +61,15 @@ BUILDING_MIN_ZOOM = 14
 ARABIC_RE = '[؀-ۿ]'
 
 
-def connect(memory: str | None = None) -> duckdb.DuckDBPyConnection:
+def connect(memory: str | None = None, temp_directory: str | None = None) -> duckdb.DuckDBPyConnection:
     db = duckdb.connect()
     db.execute('LOAD spatial')
     if memory:
         db.execute(f"SET memory_limit='{memory}'")
+    if temp_directory:
+        os.makedirs(temp_directory, exist_ok=True)
+        escaped = temp_directory.replace("'", "''")
+        db.execute(f"SET temp_directory='{escaped}'")
     db.execute('SET preserve_insertion_order=false')
     # XYZ tile index of a lon/lat at zoom z (web mercator, latitude clamped to its valid range).
     db.execute("""create or replace macro tile_x(lon, z) as
@@ -200,8 +206,16 @@ def load_buildings(db, path: str, bbox=None) -> int:
     use = col(cols, 'building_use')
     key = 'p."HouseId"::varchar' if 'HouseId' in cols else ('p.source_feature_id::varchar' if 'source_feature_id' in cols else 'cast(row_number() over () as varchar)')
     db.execute(f"""create or replace temp table b_src as
-        select {key} fid, ST_GeomFromWKB(from_hex(p.geometry_wkb_hex)) g, {use} use, {elevation} elevation
-        from read_parquet('{path}') p where coalesce(p.geometry_wkb_hex, '') <> ''""")
+        with decoded as (
+            select {key} fid, ST_GeomFromWKB(from_hex(p.geometry_wkb_hex)) original_g,
+                   {use} as "use", {elevation} elevation
+            from read_parquet('{path}') p where coalesce(p.geometry_wkb_hex, '') <> ''
+        )
+        select fid,
+               case when ST_IsValid(original_g) then original_g
+                    else ST_CollectionExtract(ST_MakeValid(original_g), 3) end g,
+               use, elevation
+        from decoded""")
     # Elevation is storeys in some vendor layers and metres in others (build_building_population.decide_elevation_mode)
     median = db.execute('select median(elevation) from b_src where elevation > 0').fetchone()[0]
     as_metres = median is not None and median >= 8
@@ -233,7 +247,7 @@ def prepare_layer(db, table: str) -> None:
         from {table}""")
 
 
-def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
+def layer_tiles_sql(table: str, z: int, max_zoom: int, tile_bounds=None) -> str:
     """One (x, y, blob) row per tile of this layer at zoom z."""
     # roads carry the OSM way id as the feature id, so a road cut at a tile edge is one road to the apps
     names = LAYER_ATTRS[table] + (['fid'] if table == 'roads' else [])
@@ -246,14 +260,21 @@ def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
     cap = PLACE_CAP.get(z) if table == 'places' and z < max_zoom else None
     order = 'rank desc, fid' if table == 'places' else ('rank desc' if table == 'roads' else 'fid')
     ranked = f"""select *, row_number() over (partition by x, y order by {order}) n from t""" if cap else 'select * from t'
+    bounds_filter = ''
+    x0, y0, x1, y1 = tile_bounds or (0, 0, 1 << z, 1 << z)
+    if tile_bounds:
+        bounds_filter = f"""and tile_x(x0, {z}) < {x1} and tile_x(x1, {z}) >= {x0}
+                          and tile_y(y1, {z}) < {y1} and tile_y(y0, {z}) >= {y0}"""
     return f"""
         with f as (
-            select *, {geom} gz from {table}_m where minzoom <= {z}
+            select *, {geom} gz from {table}_m where minzoom <= {z} {bounds_filter}
         ), t as (
             select tx.x, ty.y, f.*
             from f,
-                 lateral (select unnest(range(tile_x(f.x0, {z}), tile_x(f.x1, {z}) + 1)) x) tx,
-                 lateral (select unnest(range(tile_y(f.y1, {z}), tile_y(f.y0, {z}) + 1)) y) ty
+                 lateral (select unnest(range(greatest(tile_x(f.x0, {z}), {x0}),
+                                                     least(tile_x(f.x1, {z}), {x1 - 1}) + 1)) x) tx,
+                 lateral (select unnest(range(greatest(tile_y(f.y1, {z}), {y0}),
+                                                     least(tile_y(f.y0, {z}), {y1 - 1}) + 1)) y) ty
         ), r as ({ranked}), c as (
             select x, y, {attrs},
                    ST_AsMVTGeom(gz, ST_Extent(ST_TileEnvelope({z}, x::integer, y::integer)), {EXTENT}, {BUFFER}, true) geom
@@ -264,7 +285,41 @@ def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
         group by x, y"""
 
 
-def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds, log=print) -> dict:
+def hilbert_index(x: int, y: int, z: int) -> int:
+    """PMTiles Hilbert order for a tile coordinate."""
+    d = 0
+    s = 1 << (z - 1)
+    while s:
+        rx = 1 if x & s else 0
+        ry = 1 if y & s else 0
+        d += s * s * ((3 * rx) ^ ry)
+        if ry == 0:
+            if rx == 1:
+                x = (1 << z) - 1 - x
+                y = (1 << z) - 1 - y
+            x, y = y, x
+        s >>= 1
+    return d
+
+
+def tile_batches(db, bounds, z: int, batch_size: int = 512):
+    """Return aligned spatial cells in PMTiles Hilbert order."""
+    lon0, lat0, lon1, lat1 = bounds
+    x0, x1 = db.execute(f'select tile_x({lon0}, {z}), tile_x({lon1}, {z}) + 1').fetchone()
+    y0, y1 = db.execute(f'select tile_y({lat1}, {z}), tile_y({lat0}, {z}) + 1').fetchone()
+    world = 1 << z
+    start_x = (x0 // batch_size) * batch_size
+    start_y = (y0 // batch_size) * batch_size
+    batches = []
+    for by in range(start_y, y1, batch_size):
+        for bx in range(start_x, x1, batch_size):
+            cell = (bx, by, min(bx + batch_size, world), min(by + batch_size, world))
+            batches.append((hilbert_index(bx, by, z), cell))
+    yield from (cell for _, cell in sorted(batches))
+
+
+def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds, log=print,
+          batch_size: int = 512) -> dict:
     for t in layers:
         prepare_layer(db, t)
     tmp = out + '.partial'
@@ -273,22 +328,52 @@ def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds,
     with open(tmp, 'wb') as fh:
         writer = Writer(fh)
         for z in range(min_zoom, max_zoom + 1):
-            parts = [layer_tiles_sql(t, z, max_zoom) for t in layers
-                     if db.execute(f'select count(*) from {t}_m where minzoom <= {z}').fetchone()[0]]
-            if not parts:
+            available = [t for t in layers
+                         if db.execute(f'select count(*) from {t}_m where minzoom <= {z}').fetchone()[0]]
+            if not available:
                 continue
-            # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
-            union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
-            rows = db.execute(f"""select x, y, list(blob order by li) blobs
-                                  from ({union}) group by x, y""").fetchall()
-            rows.sort(key=lambda r: zxy_to_tileid(z, r[0], r[1]))
-            for x, y, blobs in rows:
-                data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
-                writer.write_tile(zxy_to_tileid(z, x, y), data)
-                stats['bytes'] += len(data)
-            stats['tiles'] += len(rows)
-            stats['per_zoom'][z] = len(rows)
-            log(f'  z{z}: {len(rows)} tiles ({time.time() - started:.0f}s)')
+            cells = list(tile_batches(db, bounds, z, batch_size)) if z >= 14 else [None]
+            zoom_tiles = 0
+            for cell_index, cell in enumerate(cells, 1):
+                parts = [layer_tiles_sql(t, z, max_zoom, cell) for t in available]
+                # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
+                union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
+                cursor = db.execute(f"""with recursive tiles as (
+                                     select x, y from ({union}) group by x, y
+                                 ), hilbert as (
+                                     select x tile_x, y tile_y, {z - 1}::integer a, x::bigint hx, y::bigint hy,
+                                            (((1::bigint << ({z * 2})) - 1) // 3)::ubigint acc
+                                     from tiles
+                                     union all
+                                     select tile_x, tile_y, a - 1,
+                                            case when ry = 0 then case when rx <> 0 then s - 1 - hy else hy end else hx end,
+                                            case when ry = 0 then case when rx <> 0 then s - 1 - hx else hx end else hy end,
+                                            acc + case when rx = 0 and ry = 0 then 0
+                                                       when rx = 0 and ry = s then 1::bigint << (2 * a)
+                                                       when rx = s and ry = 0 then 3::bigint << (2 * a)
+                                                       else 2::bigint << (2 * a) end
+                                     from (select *, (1::bigint << a) s, ((1::bigint << a) & hx) rx,
+                                                  ((1::bigint << a) & hy) ry
+                                           from hilbert where a >= 0) state
+                                 ), ordered as (
+                                     select tile_x, tile_y, acc from hilbert where a = -1
+                                 )
+                                 select ordered.tile_x x, ordered.tile_y y, list(blob order by li) blobs
+                                 from ({union}) tile_blobs
+                                 join ordered on ordered.tile_x = tile_blobs.x and ordered.tile_y = tile_blobs.y
+                                 group by ordered.tile_x, ordered.tile_y, ordered.acc
+                                 order by ordered.acc""")
+                while rows := cursor.fetchmany(256):
+                    for x, y, blobs in rows:
+                        data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
+                        writer.write_tile(zxy_to_tileid(z, x, y), data)
+                        stats['bytes'] += len(data)
+                        zoom_tiles += 1
+                if len(cells) > 1:
+                    log(f'  z{z}: batch {cell_index}/{len(cells)} ({zoom_tiles} tiles; {time.time() - started:.0f}s)')
+            stats['tiles'] += zoom_tiles
+            stats['per_zoom'][z] = zoom_tiles
+            log(f'  z{z}: {zoom_tiles} tiles ({time.time() - started:.0f}s)')
         built = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         metadata = {
             'name': 'farq', 'attribution': ATTRIBUTION, 'built_at': built, 'format': 'pbf',
@@ -322,20 +407,25 @@ def main(argv=None) -> int:
     ap.add_argument('--memory', default=os.environ.get('TILES_MEMORY_LIMIT', '6GB'))
     a = ap.parse_args(argv)
     bbox = tuple(float(v) for v in a.bbox.split(',')) if a.bbox else None
-    db = connect(a.memory)
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(a.out)), '.farq-duckdb-tmp')
+    db = connect(a.memory, temp_dir)
     t = time.time()
-    layers = []
-    n = load_roads(db, a.osm, bbox); layers.append('roads'); print(f'roads: {n:,} ({time.time() - t:.0f}s)')
-    if a.places:
-        n = load_places(db, a.places, bbox); layers.append('places'); print(f'places: {n:,}')
-    if a.buildings:
-        n = load_buildings(db, a.buildings, bbox); layers.append('buildings'); print(f'buildings: {n:,}')
-    stats = build(db, layers, a.out, a.min_zoom, a.max_zoom, bbox or SAUDI)
-    report = {'layers': layers, **stats, 'osm': os.path.basename(a.osm), 'seconds': round(time.time() - t)}
-    with open(a.out + '.report.json', 'w') as fh:
-        json.dump(report, fh, ensure_ascii=False, indent=2)
-    print(json.dumps({k: v for k, v in report.items() if k != 'per_zoom'}, ensure_ascii=False))
-    return 0
+    try:
+        layers = []
+        n = load_roads(db, a.osm, bbox); layers.append('roads'); print(f'roads: {n:,} ({time.time() - t:.0f}s)')
+        if a.places:
+            n = load_places(db, a.places, bbox); layers.append('places'); print(f'places: {n:,}')
+        if a.buildings:
+            n = load_buildings(db, a.buildings, bbox); layers.append('buildings'); print(f'buildings: {n:,}')
+        stats = build(db, layers, a.out, a.min_zoom, a.max_zoom, bbox or SAUDI)
+        report = {'layers': layers, **stats, 'osm': os.path.basename(a.osm), 'seconds': round(time.time() - t)}
+        with open(a.out + '.report.json', 'w') as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=2)
+        print(json.dumps({k: v for k, v in report.items() if k != 'per_zoom'}, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == '__main__':
