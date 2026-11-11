@@ -531,6 +531,8 @@ struct OutingMapboxView: UIViewRepresentable {
             /* Farq's streets (weekly OSM) and Atlas places replace Mapbox's older roads on satellite. */
             farqApplied = FarqTiles.available
             FarqTiles.install(m, layer: layer, labels: labels)
+            /* Every building as a light flat footprint on satellite (the 3D layer raises the tall ones when tilted). */
+            if layer == .satellite { BuildingFootprints.install(m) }
             light = nil
             applyLight()
             if let r = rallyPin?.point {
@@ -608,6 +610,11 @@ struct OutingMapboxView: UIViewRepresentable {
             roadsCamera = nil
             refreshRoads()
             FarqTiles.install(m, layer: layer, labels: labels)
+            /* The Farq archive arrived after the style: footprints switch to the Atlas buildings. */
+            if layer == .satellite, FarqTiles.hasBuildings {
+                if m.layerExists(withId: BuildingFootprints.layerId) { try? m.removeLayer(withId: BuildingFootprints.layerId) }
+                BuildingFootprints.install(m)
+            }
         }
 
         func setLabels(_ l: SatelliteLabels) {

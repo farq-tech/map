@@ -545,3 +545,22 @@ final class FarqTilesTests: XCTestCase {
         XCTAssertTrue(FarqTiles.roadLayers().allSatisfy { ($0["slot"] as? String) == "middle" })
     }
 }
+
+/// Flat footprints of every building on satellite, under the roads, from a neighbourhood zoom.
+final class BuildingFootprintsTests: XCTestCase {
+    func testAtlasFootprintsHaveNoHeightFilterAndSitUnderTheRoads() {
+        let l = BuildingFootprints.layer(source: "farq", sourceLayer: "buildings", atlas: true)
+        XCTAssertEqual(l["id"] as? String, BuildingFootprints.layerId)
+        XCTAssertEqual(l["type"] as? String, "fill")
+        XCTAssertEqual(l["source-layer"] as? String, "buildings")
+        XCTAssertEqual(l["slot"] as? String, "bottom")
+        XCTAssertEqual(l["minzoom"] as? Double, BuildingFootprints.minZoom)
+        XCTAssertNil(l["filter"], "every Atlas building, low-rise included")
+    }
+
+    func testMapboxFootprintsSkipUnderground() {
+        let l = BuildingFootprints.layer(source: "wow-buildings-streets", sourceLayer: "building", atlas: false)
+        XCTAssertNotNil(l["filter"])
+        XCTAssertEqual(l["source-layer"] as? String, "building")
+    }
+}

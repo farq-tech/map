@@ -1,4 +1,5 @@
 import Foundation
+import MapboxMaps
 
 /// Cities on the satellite map (`MapVisualsDirector.applyBuildings`): neutral 3D buildings from
 /// Mapbox Streets' own footprints and heights (OSM), and when to offer «الوضع الواقعي».
@@ -52,5 +53,45 @@ enum CityBuildings {
                 "fill-extrusion-cutoff-fade-range": 0.5,
             ] as [String: Any],
         ]
+    }
+}
+
+/// Every building as a light, flat footprint on the satellite map — the home map and the live map —
+/// from a neighbourhood zoom in, so the city reads even looking straight down (the 3D layer above
+/// only raises tall buildings, and only when the map is tilted). Farq Atlas footprints when the
+/// Farq archive carries them (`FarqTiles.buildingSource`), else Mapbox Streets'.
+enum BuildingFootprints {
+    static let layerId = "sary-building-footprints"
+    /// A city block reads from here; fully drawn half a level later.
+    static let minZoom = 14.5
+
+    static func layer(source: String, sourceLayer: String, atlas: Bool) -> [String: Any] {
+        var l: [String: Any] = [
+            "id": layerId,
+            "type": "fill",
+            "source": source,
+            "source-layer": sourceLayer,
+            "minzoom": minZoom,
+            /* Under the roads, routes and pins: a hint of the city, never a slab over the imagery. */
+            "slot": "bottom",
+            "paint": [
+                "fill-color": "hsl(36, 45%, 92%)",
+                "fill-outline-color": "hsl(32, 28%, 58%)",
+                "fill-opacity": ["interpolate", ["linear"], ["zoom"], minZoom, 0, minZoom + 0.5, 0.22, 17, 0.32] as [Any],
+                "fill-emissive-strength": 0.6,
+            ] as [String: Any],
+        ]
+        if !atlas { l["filter"] = ["!=", ["get", "underground"], "true"] as [Any] }
+        return l
+    }
+
+    /// Adds the footprints to a freshly loaded satellite style (idempotent).
+    static func install(_ m: MapboxMap) {
+        guard !m.layerExists(withId: layerId) else { return }
+        let src = FarqTiles.buildingSource
+        if !m.sourceExists(withId: src.source) {
+            try? m.addSource(withId: src.source, properties: ["type": "vector", "url": src.url])
+        }
+        try? m.addLayer(with: layer(source: src.source, sourceLayer: src.sourceLayer, atlas: src.atlas), layerPosition: nil)
     }
 }
