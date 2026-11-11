@@ -84,6 +84,49 @@ final class LiveScreenRulesTests: XCTestCase {
                        "my SOS on: the focused mode")
     }
 
+    /// docs/SOLO-OUTING.md (ج): a solo outing hides everything that needs others; a real or demo
+    /// outing keeps all of it.
+    func testSoloHidesTheGroupsUI() {
+        let s = LiveScreenRules.solo
+        XCTAssertFalse(s.walkieTalkie, "no «اضغط وتكلم»")
+        XCTAssertFalse(s.voiceNotes, "no recording: it would be uploaded, refused and deleted")
+        XCTAssertFalse(s.chat)
+        XCTAssertFalse(s.rally)
+        XCTAssertFalse(s.invite)
+        XCTAssertFalse(s.friendAlerts)
+        XCTAssertFalse(s.friends, "no «الأصدقاء»")
+        XCTAssertFalse(s.serverSOS, "SOS is a 911 call")
+        XCTAssertFalse(s.leaveAndPause)
+        XCTAssertEqual(LiveScreenRules.groupUI(solo: false), LiveScreenRules.group)
+        XCTAssertEqual(LiveScreenRules.groupUI(solo: true), LiveScreenRules.solo)
+        let g = LiveScreenRules.group
+        XCTAssertTrue(g.walkieTalkie && g.voiceNotes && g.chat && g.rally && g.invite && g.friendAlerts && g.friends && g.serverSOS && g.leaveAndPause,
+                      "real and demo outings unchanged")
+        XCTAssertEqual(LiveScreenRules.quickRow(chat: false, rally: false), ["desert", "more"], "solo: «البر» and «المزيد» only")
+    }
+
+    func testSoloMoreSheetHasNoFriendsGroup() {
+        let groups = LiveActionCatalog.groups(.init(chat: false, channels: false, solo: true))
+        XCTAssertFalse(groups.contains { $0.title == "الأصدقاء" }, "«الأصدقاء» goes whole")
+        let ids = Set(groups.flatMap(\.items).flatMap { [$0.id] + $0.children.map(\.id) })
+        for hidden in ["chat", "rally", "invite", "convoy", "note", "hide", "channels", "fit", "waypoint"] {
+            XCTAssertFalse(ids.contains(hidden), "\(hidden) is not offered in a solo outing")
+        }
+        for kept in ["navigate", "route", "search", "backtrack", "stuck", "enjad", "timer", "nearest", "weather", "qibla", "explore", "brief", "savePlace"] {
+            XCTAssertTrue(ids.contains(kept), "\(kept) stays: it is the driver's, not the group's")
+        }
+        XCTAssertEqual(groups.flatMap(\.items).first { $0.id == "navigate" }?.subtitle, "للوجهة أو لأي مكان تختاره", "no «لواحد من الأصدقاء»")
+        /* A real outing keeps its friends. */
+        XCTAssertTrue(LiveActionCatalog.groups(.init()).contains { $0.title == "الأصدقاء" })
+    }
+
+    @MainActor
+    func testSoloSafetyNeverSeedsDemoData() {
+        XCTAssertFalse(SafetyController(outingId: "solo-x", myId: "u1", backend: nil, seedsDemo: false, scheduler: FakeReminders()).seedsDemo)
+        XCTAssertTrue(SafetyController(outingId: "solo-x", myId: "u1", backend: nil, seedsDemo: false, scheduler: FakeReminders()).isLocal)
+        XCTAssertTrue(SafetyController(outingId: DemoData.outingId, myId: "u1", backend: nil, scheduler: FakeReminders()).seedsDemo, "the demo as before")
+    }
+
     /// Owner report (Build 36, «اهتزاز النافذة السفلية»): the peek detent's height must not depend on
     /// where the sheet is. Raising it reads «stopped» (`LiveContextRule`), which used to add the quick
     /// row to the PEEK height too (88 → 172 in drive mode), so the detent set changed under the

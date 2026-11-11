@@ -40,6 +40,7 @@ struct LiveSheet: View {
             } else {
                 /* One line: the people (the trip's numbers are in the header above), then the key actions. */
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
+                                 localOnly: controller.isSolo,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
                 if controller.showsQuickRow(drive: theme.drive) && !controller.exploreActive {
                     LiveQuickRow(controller: controller, hasRally: ui.participantsTab.rally != nil)
@@ -91,7 +92,7 @@ struct LiveSheet: View {
             ShareSheet(items: [s.url]).presentationDetents([.medium, .large])
         }
         .confirmationDialog("أنت", isPresented: $controller.meMenuOpen, titleVisibility: .visible) {
-            if !controller.tripEnded {
+            if !controller.tripEnded, controller.groupUI.friendAlerts {
                 Button("رسالة فوق سيارتي") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.modal = .note } }
             }
             Button("انسخ أو شارك موقعي") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.modal = .plan(.me) } }
@@ -251,7 +252,9 @@ struct LiveSheet: View {
         case let .enjad(situation):
             EnjadSheet(input: controller.enjadInput(situation), online: controller.followOnline,
                        addPhone: { controller.modal = nil; controller.actions.participantsTab.addMyPhone() },
-                       close: { controller.modal = nil })
+                       close: { controller.modal = nil },
+                       /* A solo outing's SOS: nobody to alert, so the 911 call comes first. */
+                       official911First: !controller.groupUI.serverSOS)
                 .presentationDetents([.large])
         case .tracks:
             PlacesAndTracksSheet(controller: controller, part: .tracks)
@@ -269,10 +272,12 @@ struct LiveSheet: View {
         let s = ui.settingsTab
         let a = controller.actions.settingsTab
         let running = s.outingStatus != .ended
-        return LiveTripRows(canPause: s.isLeader && running && s.outingStatus != .notStarted,
+        let g = controller.groupUI
+        return LiveTripRows(solo: controller.isSolo,
+                            canPause: s.isLeader && running && s.outingStatus != .notStarted && g.leaveAndPause,
                             paused: s.outingStatus == .paused,
                             canEnd: s.isLeader && running,
-                            canLeave: controller.session.closedReason == nil,
+                            canLeave: controller.session.closedReason == nil && g.leaveAndPause,
                             pauseOrResume: a.pauseOrResumeOuting, end: a.endOuting, leave: a.leaveOuting,
                             settings: { controller.openSettings() })
     }
@@ -298,7 +303,7 @@ struct LiveQuickRow: View {
     var body: some View {
         let s = controller.actionState
         HStack(alignment: .top, spacing: 4) {
-            ForEach(Array(LiveScreenRules.quickRow(chat: s.chat).enumerated()), id: \.element) { index, id in
+            ForEach(Array(LiveScreenRules.quickRow(chat: s.chat, rally: controller.groupUI.rally).enumerated()), id: \.element) { index, id in
                 Group {
                 switch id {
                 case "desert": desertMenu
@@ -438,38 +443,41 @@ private struct LiveSheetBody: View {
             if shouldShowTripCard {
                 TripCard(ui: controller.tripPanel, actions: controller.tripActions)
             }
-            VStack(spacing: 0) {
-                let list = ui.participantsTab.participants
-                ForEach(list) { p in
-                    SaryParticipantRow(participant: p, now: ui.now) { actions.participantsTab.openParticipant(p.id) }
-                        .accessibilityIdentifier("participant-row")
-                    if p.id != list.last?.id { SaryDivider().padding(.leading, 60) }
-                }
-                if ui.status != .ended, controller.session.closedReason == nil {
-                    SaryDivider()
-                    Button { controller.modal = .panel(.invite) } label: {
-                        HStack(spacing: theme.space(.m)) {
-                            SaryRowIcon(systemImage: "person.badge.plus", color: theme.palette.accent)
-                            Text("ادعُ أصدقاءك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, theme.space(.m))
-                        .frame(minHeight: theme.minTarget + 6)
-                        .contentShape(Rectangle())
+            /* A solo outing: no people list, invite, convoy or shared points («الأصدقاء» hidden). */
+            if controller.groupUI.friends {
+                VStack(spacing: 0) {
+                    let list = ui.participantsTab.participants
+                    ForEach(list) { p in
+                        SaryParticipantRow(participant: p, now: ui.now) { actions.participantsTab.openParticipant(p.id) }
+                            .accessibilityIdentifier("participant-row")
+                        if p.id != list.last?.id { SaryDivider().padding(.leading, 60) }
                     }
-                    .buttonStyle(SaryRowPressStyle())
-                    .accessibilityIdentifier("sheet.invite")
+                    if ui.status != .ended, controller.session.closedReason == nil, controller.groupUI.invite {
+                        SaryDivider()
+                        Button { controller.modal = .panel(.invite) } label: {
+                            HStack(spacing: theme.space(.m)) {
+                                SaryRowIcon(systemImage: "person.badge.plus", color: theme.palette.accent)
+                                Text("ادعُ أصدقاءك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.horizontal, theme.space(.m))
+                            .frame(minHeight: theme.minTarget + 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(SaryRowPressStyle())
+                        .accessibilityIdentifier("sheet.invite")
+                    }
                 }
-            }
-            .padding(.vertical, theme.space(.xs))
-            /* The people re-order (nearest first, who went quiet) in place: the rows keep their ids. */
-            .animation(theme.animation(LiveMotion.reorder(drive: theme.drive)), value: ui.participantsTab.participants.map(\.id))
-            .sarySurface(radius: SaryRadius.l)
-            ConvoySection(controller: controller, features: features, participants: ui.participantsTab.participants)
-            // Keep the section available for the first waypoint and show the honest
-            // unavailable state when the server has not deployed its routes.
-            if !features.waypoints.isEmpty || features.phase != .loading {
-                WaypointsSection(controller: controller, features: features)
+                .padding(.vertical, theme.space(.xs))
+                /* The people re-order (nearest first, who went quiet) in place: the rows keep their ids. */
+                .animation(theme.animation(LiveMotion.reorder(drive: theme.drive)), value: ui.participantsTab.participants.map(\.id))
+                .sarySurface(radius: SaryRadius.l)
+                ConvoySection(controller: controller, features: features, participants: ui.participantsTab.participants)
+                // Keep the section available for the first waypoint and show the honest
+                // unavailable state when the server has not deployed its routes.
+                if !features.waypoints.isEmpty || features.phase != .loading {
+                    WaypointsSection(controller: controller, features: features)
+                }
             }
         }
     }
@@ -504,9 +512,11 @@ private struct TripStatusCallout: View {
                     /* One quiet line (was a strip with «أخفِ موقعي» and «غادر الطلعة»: those are in the
                      * quick row and «المزيد» now). */
                     let hidden = controller.isLocationHidden
+                    /* A solo outing shares with nobody: say where the location stays, not «جارٍ…». */
+                    let solo = controller.isSolo
                     HStack(spacing: theme.space(.s)) {
-                        Circle().fill(hidden ? theme.palette.textTertiary : ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
-                        Text(hidden ? HideText.hiddenStrip : ui.sharing == .sharing ? "موقعك مُشارَك مع الطلعة" : "جارٍ تحديد موقعك…")
+                        Circle().fill(solo || hidden ? theme.palette.textTertiary : ui.sharing == .sharing ? theme.palette.live : theme.palette.warning).frame(width: 8, height: 8)
+                        Text(solo ? SoloCopy.localOnlyLong : hidden ? HideText.hiddenStrip : ui.sharing == .sharing ? "موقعك مُشارَك مع الطلعة" : "جارٍ تحديد موقعك…")
                             .saryText(.footnote, weight: .bold)
                             .foregroundStyle(theme.palette.textSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)

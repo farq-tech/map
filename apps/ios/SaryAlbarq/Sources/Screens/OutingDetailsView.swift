@@ -179,23 +179,27 @@ struct TripSummaryView: View {
                                        trail: model.myTrailPoints(outingId), online: model.online || model.isDemo)
                 }
                 TripLegsSection(outingId: outingId)
-                TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
-                    if shares.isEmpty {
-                        Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
-                    }
-                    ForEach(Array(shares.enumerated()), id: \.element.id) { i, t in
-                        if i > 0 { SaryDivider() }
-                        HStack(spacing: theme.space(.m)) {
-                            Text(SaryFormat.number(i + 1)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textTertiary).frame(width: 18)
-                            Text(t.user_id == s.me.user_id ? "\(t.display_name) (أنت)" : t.display_name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(SaryFormat.distance(meters: t.distance_m)).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                                Text(SaryFormat.duration(seconds: Int(t.moving_s)) + " حركة").saryText(.caption).foregroundStyle(p.textSecondary)
-                            }
+                /* A solo outing (docs/SOLO-OUTING.md): on this phone only — no shared points, nobody's
+                 * summaries, nothing to share with friends, no server return trip (yet). */
+                if !solo {
+                    TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
+                    SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                        if shares.isEmpty {
+                            Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
                         }
-                        .padding(.vertical, theme.space(.xs))
+                        ForEach(Array(shares.enumerated()), id: \.element.id) { i, t in
+                            if i > 0 { SaryDivider() }
+                            HStack(spacing: theme.space(.m)) {
+                                Text(SaryFormat.number(i + 1)).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textTertiary).frame(width: 18)
+                                Text(t.user_id == s.me.user_id ? "\(t.display_name) (أنت)" : t.display_name).saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(SaryFormat.distance(meters: t.distance_m)).saryNumber(.body, weight: .bold).foregroundStyle(p.textPrimary)
+                                    Text(SaryFormat.duration(seconds: Int(t.moving_s)) + " حركة").saryText(.caption).foregroundStyle(p.textSecondary)
+                                }
+                            }
+                            .padding(.vertical, theme.space(.xs))
+                        }
                     }
                 }
                 if let track {
@@ -218,8 +222,8 @@ struct TripSummaryView: View {
                     }
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("summary.story")
-                    mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at))
-                    if model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
+                    if !solo { mySummary(mine: mine, local: local, endedAt: ISODate.parse(s.outing.ended_at)) }
+                    if !solo, model.tripFacts(outingId)?.start != nil || (model.myTrailPoints(outingId)?.points.count ?? 0) >= 2 {
                         Button {
                             busy = true
                             Task {
@@ -314,6 +318,9 @@ struct TripSummaryView: View {
         if case .loaded(let s) = phase { return s.outing.name }
         return nil
     }
+
+    /// A solo outing («اتجه» on my own): its summary is on this phone only.
+    private var solo: Bool { SoloOuting.isSoloId(outingId) }
 
     private func spanSeconds(_ s: OutingSnapshot) -> Int? {
         guard let a = ISODate.parse(s.outing.started_at), let b = ISODate.parse(s.outing.ended_at) ?? (s.outing.status == .ended ? nil : Date()) else { return nil }

@@ -6,7 +6,7 @@ import Foundation
 /// controller only gains a property and one call.
 extension LiveOutingController {
     static func makeSafety(for session: OutingSession) -> SafetyController {
-        SafetyController(outingId: session.id, myId: session.myUserId, backend: session.safetyBackend)
+        SafetyController(outingId: session.id, myId: session.myUserId, backend: session.safetyBackend, seedsDemo: session.isDemo)
     }
 
     func attachSafety(timers: Bool = true) {

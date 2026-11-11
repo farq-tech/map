@@ -16,6 +16,9 @@ struct SarySOSButton: View {
     var size: CGFloat? = nil
     /// The calm live screen (Lovable): «SOS» in the disc instead of the icon + «طوارئ».
     var compactLabel = false
+    /// The 3 s «نرسل طوارئ…» with «تراجع» before `trigger`. Off in a solo outing: nothing is sent,
+    /// the hold opens the 911 call (docs/SOLO-OUTING.md (ج)).
+    var countdown = true
 
     @Environment(\.sary) private var theme
     @State private var holding = false
@@ -96,7 +99,8 @@ struct SarySOSButton: View {
         .saryHaptic(.warning, trigger: fired)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(active ? "أرسلت طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
-        .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الأصدقاء"))
+        .accessibilityHint(Text(countdown ? "امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الأصدقاء"
+                                          : "امسك الزر ثانية وحدة يفتح لك اتصال ٩١١ وإنجاد"))
         .accessibilityAddTraits(.isButton)
         /* VoiceOver: the system already confirms a custom action, so this one sends at once. */
         .accessibilityAction(named: Text("أرسل طوارئ الآن")) { fired += 1; trigger() }
@@ -136,7 +140,7 @@ struct SarySOSButton: View {
     /// UX ٢١: a held SOS does not go out at once — «نرسل طوارئ بعد ٣…» with a big «تراجع».
     private func fire() {
         fired += 1
-        SOSCountdown.shared.begin(theme: theme, send: trigger)
+        if countdown { SOSCountdown.shared.begin(theme: theme, send: trigger) } else { trigger() }
     }
 }
 

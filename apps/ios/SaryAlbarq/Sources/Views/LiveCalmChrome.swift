@@ -164,10 +164,12 @@ struct LovableSOS: View {
     var state: MySOSUI
     var size: CGFloat
     var trigger: () -> Void
+    /// False in a solo outing: no «نرسل طوارئ…» countdown (`SarySOSButton.countdown`).
+    var countdown = true
 
     var body: some View {
         VStack(spacing: 4) {
-            SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true)
+            SarySOSButton(state: state, trigger: trigger, size: size, compactLabel: true, countdown: countdown)
                 .padding(4)
                 .chromeFrame("sos")
             LovableCaption(text: "اضغط مطوّل")
