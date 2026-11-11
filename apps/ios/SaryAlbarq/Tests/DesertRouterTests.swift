@@ -129,12 +129,14 @@ final class DesertRouterTests: XCTestCase {
         set(&grid, rows: 18..<42, cols: 30..<31, .firm, flags: DesertGrid.track)
         let target = grid.point(42 * grid.cols + 30)
         let origin = LngLat(lng: 45.9, lat: 24.7)
+        var snappedEnd: LngLat?
         let base = TestDesertRoadProvider { request in
             guard request.target.name == "مدخل درب البر" else { throw NavRoutingError.noRoute }
             let access = request.target.position
-            let snappedEnd = LngLat(lng: access.lng + 0.002, lat: access.lat)
-            return NavRoutePlan(routes: [NavRoute(id: "street-snapped", coordinates: [origin, snappedEnd],
-                                                   distanceM: Vehicle.distanceMeters(origin, snappedEnd),
+            let streetEnd = LngLat(lng: access.lng + 0.002, lat: access.lat)
+            snappedEnd = streetEnd
+            return NavRoutePlan(routes: [NavRoute(id: "street-snapped", coordinates: [origin, streetEnd],
+                                                   distanceM: Vehicle.distanceMeters(origin, streetEnd),
                                                    durationS: 600, steps: [])])
         }
         let provider = DesertAwareRouteProvider(base: base, gridForRegion: { _ in grid },
@@ -149,6 +151,12 @@ final class DesertRouterTests: XCTestCase {
                       "a nearby router snap must not degrade to a street-only route")
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .paved })
         XCTAssertTrue(route.surfaceRuns.contains { $0.kind == .unpaved || $0.kind == .terrain })
+        let snap = try XCTUnwrap(route.surfaceRuns.first { $0.kind == .gridSnap },
+                                 "the unsourced road-to-grid connector must be identified as an approximate snap")
+        XCTAssertEqual(snap.coordinates.first, try XCTUnwrap(snappedEnd))
+        XCTAssertLessThanOrEqual(Vehicle.distanceMeters(try XCTUnwrap(snap.coordinates.first),
+                                                        try XCTUnwrap(snap.coordinates.last)),
+                                  max(60, hypot(grid.dx, grid.dy) * 0.75))
     }
 
     func testDesertAwareProviderPreservesStreetRouteIfGridCannotComplete() async throws {

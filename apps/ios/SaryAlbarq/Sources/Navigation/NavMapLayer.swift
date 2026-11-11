@@ -61,7 +61,8 @@ final class NavMapDrawer {
 
     static let source = "sary-nav-routes"
     static let offSource = "sary-nav-offroad"
-    static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main", "sary-nav-off-casing", "sary-nav-off"]
+    static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main",
+                           "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off"]
     static let routeBlue = "#2B7BF0"
     /// Traffic bands on the chosen route: free (blue), slow (orange), heavy (red), standstill (dark red).
     static let trafficColors = ["#F08A24", "#E0362C", "#8E1B1B"]
@@ -103,18 +104,28 @@ final class NavMapDrawer {
         let round: [String: Any] = ["line-join": "round", "line-cap": "round"]
         let sel: [Any] = ["==", ["get", "s"], 1]
         let alt: [Any] = ["==", ["get", "s"], 0]
+        let knownSurface: [Any] = ["all", sel, ["!", ["has", "k"]]]
+        let nonSnapSurface: [Any] = ["all", sel, ["has", "k"], ["!=", ["get", "k"], NavSurfaceKind.gridSnap.rawValue]]
+        let gridSnap: [Any] = ["all", sel, ["==", ["get", "k"], NavSurfaceKind.gridSnap.rawValue]]
         let layers: [[String: Any]] = [
             ["id": "sary-nav-alt-casing", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#1b2a44", "line-width": width(9), "line-opacity": 0.55, "line-emissive-strength": 1] as [String: Any]],
             ["id": "sary-nav-alt", "type": "line", "source": Self.source, "filter": alt, "layout": round,
              "paint": ["line-color": "#9db8e6", "line-width": width(6), "line-opacity": 0.9, "line-emissive-strength": 1] as [String: Any]],
-            ["id": "sary-nav-main-casing", "type": "line", "source": Self.source, "filter": sel, "layout": round,
+            ["id": "sary-nav-main-casing", "type": "line", "source": Self.source, "filter": ["any", knownSurface, nonSnapSurface], "layout": round,
              "paint": ["line-color": "#ffffff", "line-width": width(12), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
-            ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": sel, "layout": round,
+            ["id": "sary-nav-main", "type": "line", "source": Self.source, "filter": ["any", knownSurface, nonSnapSurface], "layout": round,
              /* Still visible behind 3D buildings (Olaya towers would hide the turn otherwise). */
              "paint": ["line-color": ["match", ["get", "k"], "unpaved", "#E6A430", "terrain", "#F5B83D",
                                         ["match", ["coalesce", ["get", "c"], 0], 1, Self.trafficColors[0], 2, Self.trafficColors[1], 3, Self.trafficColors[2], Self.routeBlue]] as [Any],
                        "line-width": width(8), "line-occlusion-opacity": 0.8, "line-emissive-strength": 1] as [String: Any]],
+            /* The road-to-grid cell-center join is approximate by definition, never a solid road. */
+            ["id": "sary-nav-grid-snap-casing", "type": "line", "source": Self.source, "filter": gridSnap, "layout": round,
+             "paint": ["line-color": "#21180d", "line-width": width(7), "line-opacity": 0.8,
+                       "line-dasharray": [1.2, 1.4], "line-emissive-strength": 1] as [String: Any]],
+            ["id": "sary-nav-grid-snap", "type": "line", "source": Self.source, "filter": gridSnap, "layout": round,
+             "paint": ["line-color": "#F2D18A", "line-width": width(3.5), "line-dasharray": [1.2, 1.4],
+                       "line-emissive-strength": 1] as [String: Any]],
             /* The off-road remainder: dashed, amber, thin — visibly NOT a road. */
             ["id": "sary-nav-off-casing", "type": "line", "source": Self.offSource, "layout": ["line-cap": "round"],
              "paint": ["line-color": "#16110b", "line-width": width(6), "line-opacity": 0.7, "line-dasharray": [1.4, 1.4], "line-emissive-strength": 1] as [String: Any]],
