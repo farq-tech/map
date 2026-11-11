@@ -570,6 +570,8 @@ struct OutingMapboxView: UIViewRepresentable {
         private func styleLoaded() {
             guard let map else { return }
             styleReady = true
+            /* «أداء التطبيق»: the launch interval ends at the first map (a no-op after that). */
+            PerfSignpost.end(.launchToMap)
             addedModels.removeAll()
             /* A new style: query its roads again even if the camera did not move. */
             roadsCamera = nil
@@ -1198,6 +1200,8 @@ struct OutingMapboxView: UIViewRepresentable {
                     r.icon = false
                 }
                 r.layersReady = true
+                /* «أداء التطبيق»: the live screen's first car is on the map (a no-op after that). */
+                PerfSignpost.end(.liveFirstCar)
                 r.greyed = false // fresh layers are drawn in the car's own colour
                 r.sent = nil
                 r.sentPresence = nil

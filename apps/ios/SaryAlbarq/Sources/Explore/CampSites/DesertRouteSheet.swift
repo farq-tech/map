@@ -131,6 +131,9 @@ struct DesertRouteSheet: View {
     }
 
     private func compute() async {
+        /* «أداء التطبيق»: route asked → options (or none) shown. */
+        let perf = PerfSignpost.begin(.desertRoute)
+        defer { perf.end() }
         var me = host.myPoint()
         #if DEBUG
         let a = ProcessInfo.processInfo.arguments

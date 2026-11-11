@@ -134,6 +134,8 @@ struct PlanMapView: UIViewRepresentable {
         private func styleLoaded() {
             guard let map, let m = map.mapboxMap else { return }
             styleReady = true
+            /* «أداء التطبيق»: the launch interval ends at the first map (a no-op after that). */
+            PerfSignpost.end(.launchToMap)
             for (k, v) in [("show3dObjects", false), ("showPointOfInterestLabels", true), ("showTransitLabels", false), ("showRoadLabels", true)] as [(String, Bool)] {
                 try? m.setStyleImportConfigProperty(for: "basemap", config: k, value: v)
             }

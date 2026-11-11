@@ -1248,6 +1248,9 @@ struct MapHomeScreen: View {
         job = Task {
             if !now { try? await Task.sleep(nanoseconds: 350_000_000) }
             guard !Task.isCancelled else { return }
+            /* «أداء التطبيق»: the search runs (after the typing pause) → results shown. */
+            let perf = PerfSignpost.begin(.search)
+            defer { perf.end() }
             /* «دليل البر» first: a known desert name answers offline too. */
             /* Matched off the main thread (thousands of names, edge distances), shown on it. */
             let (desert, desertOnly) = await Task.detached(priority: .userInitiated) {
