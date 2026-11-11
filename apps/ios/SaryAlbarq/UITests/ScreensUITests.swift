@@ -138,3 +138,24 @@ final class ScreensUITests: XCTestCase {
         }
     }
 }
+
+/// «اتجه» while driving (temporary until #157): my car (not a dot), my speed and the posted limit.
+final class StandaloneNavDriveShotsUITests: XCTestCase {
+    func testCarAndSpeedWhileGuiding() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home", "-SaryNavDemo"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).press(forDuration: 1.3)
+        XCTAssertTrue(any("home.place.go").waitForExistence(timeout: 10))
+        any("home.place.go").tap()
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 20), "guiding")
+        sleep(12)
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "standalone-drive"; a.lifetime = .keepAlways; add(a)
+        XCTAssertTrue(any("map.user-car").exists, "my car, not the dot")
+        XCTAssertTrue(any("standaloneNav.speed").exists || any("standaloneNav.speedLimit").exists, "speed or the posted limit")
+    }
+}

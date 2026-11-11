@@ -596,6 +596,8 @@ final class LiveOutingController: ObservableObject {
         stopGuidanceWhenTripOver()
         /* The server's picture with nearby cars' news laid over it. */
         guard let v = session.displayView else { return }
+        /* «اتجه» without an outing draws my car in the colour the live map last gave me (temporary, #157). */
+        if !session.isDemo, let myColor = v.colors[v.myId] { MyCarColor.remember(myColor) }
         ingestFriends(v)
         clearCoversForIncomingSOS()
         defer { lastView = v }
