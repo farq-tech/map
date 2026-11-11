@@ -29,6 +29,10 @@ struct RootView: View {
                 SplashView().transition(.opacity)
             } else if model.identity == nil || needsOnboarding {
                 OnboardingFlow(start: model.identity == nil ? .intro : .locationExplainer)
+                    /* iPad: one centred form column instead of «ابدأ» stretched across 1000+ pt.
+                     * Every iPhone is narrower than the cap, so nothing changes there. */
+                    .saryReadableWidth(SaryLayout.formWidth)
+                    .background(theme.palette.background.ignoresSafeArea())
                     .transition(.opacity)
                     .alert(model.accountNotice?.notice?.title ?? "", isPresented: Binding(get: { model.accountNotice?.notice != nil }, set: { if !$0 { model.accountNotice = nil } })) {
                         Button("حسنًا", role: .cancel) {}
