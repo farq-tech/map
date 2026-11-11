@@ -42,6 +42,18 @@ struct RootView: View {
             }
         }
         .animation(theme.animation(.smooth), value: model.launching)
+        /* #173: I left (or changed something) on this phone and the server has not heard yet. The
+         * live screen says it with a toast; outside it, this one quiet line until it went through. */
+        .overlay(alignment: .top) {
+            if !model.launching, model.session == nil, let notice = model.outboxNotice {
+                SaryBanner(text: notice, tone: .info, systemImage: "wifi.slash")
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
+                    .padding(.horizontal, theme.space(.m))
+                    .padding(.top, theme.space(.xs))
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
         .onReceive(model.location.$authorization.removeDuplicates()) { locationAuthorization = $0 }
         /* During a trip the live sheet is always presented: the invite is shown from inside it
          * (`LiveSheet`), never from here, where a second sheet would silently not appear. */

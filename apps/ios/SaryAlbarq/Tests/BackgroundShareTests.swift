@@ -1,3 +1,4 @@
+import Combine
 import CoreLocation
 import XCTest
 @testable import SaryAlbarq
@@ -276,7 +277,7 @@ final class BackgroundSessionTests: XCTestCase {
     private var backfills: [[WireFix]] = []
     private var backfillAccepts = true
 
-    private func session(always: Bool = true, bgSession: Bool = false) -> OutingSession {
+    private func session(always: Bool = true, bgSession: Bool = false, outbox: OutingActionOutbox? = nil) -> OutingSession {
         location.testAuthorization = always ? .authorizedAlways : .authorizedWhenInUse
         var env = SessionEnv()
         env.makeSocket = { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s }
@@ -297,6 +298,7 @@ final class BackgroundSessionTests: XCTestCase {
             if let e = self.postError { throw e }
             self.posted.append(w)
         }
+        env.outbox = outbox
         let s = OutingSession(id: "o1", myUserId: "u1", api: api(), token: String(repeating: "t", count: 43), location: location, env: env)
         s.open()
         return s
@@ -318,10 +320,10 @@ final class BackgroundSessionTests: XCTestCase {
     }
 
     /// Consent + «شارك موقعي» on screen, then the screen locks.
-    private func sharingInBackground(always: Bool = true, bgSession: Bool = false) async -> OutingSession {
+    private func sharingInBackground(always: Bool = true, bgSession: Bool = false, outbox: OutingActionOutbox? = nil) async -> OutingSession {
         ShareMemory.recordConsent(user: "u1", outing: "o1", defaults: defaults)
         ShareMemory.setActiveShare(user: "u1", outing: "o1", defaults: defaults)
-        let s = session(always: always, bgSession: bgSession)
+        let s = session(always: always, bgSession: bgSession, outbox: outbox)
         ready(sockets[0])
         s.resumeIfPreviouslySharing()
         XCTAssertTrue(s.isSharingNow, "sharing on screen")
@@ -425,7 +427,7 @@ final class BackgroundSessionTests: XCTestCase {
         postError = OutingAPIError(code: "network", status: 0)
         s.handleFix(fix(0))
         await settle()
-        _ = await s.leave()
+        s.leave()
         XCTAssertTrue(s.offlineQueue.isEmpty)
         XCTAssertTrue(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty)
     }
@@ -453,25 +455,228 @@ final class BackgroundSessionTests: XCTestCase {
 
     func testLeaveStops() async {
         let s = await sharingInBackground()
-        _ = await s.leave()
+        s.leave()
         await assertStopped(s, "leave")
         XCTAssertTrue(StubAPIProtocol.requests.contains { $0.path.hasSuffix("/o1/leave") || $0.path.hasSuffix("/o1/me") && $0.method == "DELETE" } || s.closedReason == .left)
     }
 
-    /// A failed «غادر الطلعة» (no network, server error): still a member, so still sharing.
-    func testFailedLeaveKeepsSharingUntilTheServerAgrees() async {
+    /// #173: a failed «غادر الطلعة» (no network, server error) still stops at once — on this phone
+    /// I have left — and the request is retried through the persisted outbox until the server agrees.
+    /// (Before #173 the screen waited for the server, and a failure kept me sharing.)
+    func testFailedLeaveStillStopsAtOnceAndIsRetried() async {
         let s = await sharingInBackground()
         StubAPIProtocol.failing = ["/leave"]
         defer { StubAPIProtocol.failing = [] }
-        let ok = await s.leave()
-        XCTAssertFalse(ok)
-        XCTAssertNil(s.closedReason, "still a member")
-        XCTAssertTrue(s.wantsToShare, "sharing is not stopped before the server confirms")
-        XCTAssertTrue(s.gate.allowsBackgroundPosition)
+        XCTAssertTrue(s.leave())
+        XCTAssertEqual(s.closedReason, .left, "left on this phone right away")
+        XCTAssertFalse(s.wantsToShare, "sharing stops before the server answers")
+        await assertStopped(s, "leave while the server fails")
+        await waitUntil { (s.outbox.queue.items.first?.attempts ?? 0) >= 1 }
+        XCTAssertEqual(s.outbox.queue.items.map(\.kind), [.leave], "kept for another try")
+        XCTAssertFalse(PendingActionQueue.load(defaults: defaults).isEmpty, "on disk: survives the app being killed")
+        XCTAssertFalse(s.wantsToShare, "a failure never resumes sharing")
+        XCTAssertFalse(s.gate.allowsBackgroundPosition)
         StubAPIProtocol.failing = []
-        let ok2 = await s.leave()
-        XCTAssertTrue(ok2)
-        await assertStopped(s, "leave once the server agreed")
+        s.outbox.networkBack()
+        await waitUntil { s.outbox.queue.isEmpty }
+        XCTAssertGreaterThanOrEqual(StubAPIProtocol.requests.filter { $0.method == "POST" && $0.path == "/api/outings/o1/leave" }.count, 2,
+                                    "sent again once the network was back")
+        XCTAssertTrue(PendingActionQueue.load(defaults: defaults).isEmpty)
+        await assertStopped(s, "still stopped after the server agreed")
+    }
+
+    // MARK: #173 — instant actions over a slow server
+
+    /// A server that answers after `delay` (2 s: slower than the 0.4–0.6 s measured from a Mac,
+    /// like a weak cellular link), failing the first `failuresLeft` requests with "no network".
+    @MainActor
+    private final class SlowServer {
+        var delay: UInt64 = 2_000_000_000
+        var failuresLeft = 0
+        private(set) var calls = 0
+        private(set) var done: [PendingOutingAction] = []
+
+        func perform(_ a: PendingOutingAction) async throws {
+            calls += 1
+            try await Task.sleep(nanoseconds: delay)
+            if failuresLeft > 0 {
+                failuresLeft -= 1
+                throw OutingAPIError(code: "network", status: 0)
+            }
+            done.append(a)
+        }
+    }
+
+    /// An outbox over `server`; backoff waits move the test clock instead of sleeping.
+    private func slowOutbox(_ server: SlowServer) -> OutingActionOutbox {
+        let o = OutingActionOutbox(deps: .init(
+            perform: { a in try await server.perform(a) },
+            defaults: defaults,
+            now: { [unowned self] in self.clock },
+            sleep: { [unowned self] ms in
+                self.clockOffset += ms
+                await Task.yield()
+            }
+        ))
+        o.currentUser = { "u1" }
+        return o
+    }
+
+    private func waitUntil(timeout: TimeInterval = 8, _ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        let end = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(condition(), "timed out after \(timeout) s", file: file, line: line)
+    }
+
+    func testLeaveChangesTheScreenAtOnceAndTheServerHearsLater() async {
+        let server = SlowServer()
+        let outbox = slowOutbox(server)
+        let s = await sharingInBackground(outbox: outbox)
+        let tap = Date()
+        s.leave()
+        XCTAssertLessThan(Date().timeIntervalSince(tap), 0.1, "< 100 ms: nothing waits for the network")
+        XCTAssertEqual(s.closedReason, .left)
+        XCTAssertFalse(s.wantsToShare)
+        XCTAssertFalse(location.isSharing, "my location stops at once")
+        XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults), "no resume after a relaunch")
+        XCTAssertEqual(outbox.queue.items.map(\.kind), [.leave])
+        XCTAssertTrue(server.done.isEmpty, "the server has not answered yet")
+        await assertStopped(s, "left, the server still thinking")
+        await waitUntil { !server.done.isEmpty }
+        XCTAssertEqual(server.done.map(\.kind), [.leave])
+        XCTAssertEqual(server.done.first?.outing, "o1")
+        XCTAssertTrue(outbox.queue.isEmpty)
+        XCTAssertTrue(PendingActionQueue.load(defaults: defaults).isEmpty)
+    }
+
+    func testAFailedLeaveIsQueuedAndRetriedWithoutEverResumingSharing() async {
+        let server = SlowServer()
+        server.failuresLeft = 1
+        let outbox = slowOutbox(server)
+        var outcomes: [OutingActionOutbox.Outcome] = []
+        let sink = outbox.reports.sink { outcomes.append($0.outcome) }
+        defer { sink.cancel() }
+        let s = await sharingInBackground(outbox: outbox)
+        s.leave()
+        await waitUntil { outcomes.contains(.willRetry) }
+        XCTAssertEqual(outbox.queue.items.first?.attempts, 1, "queued again with a backoff")
+        XCTAssertFalse(PendingActionQueue.load(defaults: defaults).isEmpty, "persisted while it waits")
+        XCTAssertFalse(s.wantsToShare, "a failure never resumes sharing")
+        XCTAssertFalse(location.isSharing)
+        await assertStopped(s, "a failed leave")
+        await waitUntil { outcomes.contains(.sent) }
+        XCTAssertEqual(server.calls, 2, "tried again and went through")
+        XCTAssertTrue(outbox.queue.isEmpty)
+        XCTAssertFalse(s.wantsToShare)
+    }
+
+    func testAQueuedLeaveSurvivesARestart() async {
+        let offline = SlowServer()
+        offline.delay = 20_000_000
+        offline.failuresLeft = .max
+        let before = slowOutbox(offline)
+        let s = await sharingInBackground(outbox: before)
+        s.leave()
+        await waitUntil { (before.queue.items.first?.attempts ?? 0) >= 1 }
+        /* The app is killed: the outbox in memory is gone, the disk keeps the leave. */
+        before.stop()
+        s.close()
+        let online = SlowServer()
+        online.delay = 20_000_000
+        let after = slowOutbox(online)
+        XCTAssertEqual(after.queue.items.map(\.kind), [.leave], "read back from disk after the restart")
+        XCTAssertEqual(after.queue.items.first?.outing, "o1")
+        after.kick()
+        await waitUntil { !online.done.isEmpty }
+        XCTAssertEqual(online.done.map(\.kind), [.leave])
+        XCTAssertTrue(after.queue.isEmpty)
+        XCTAssertTrue(PendingActionQueue.load(defaults: defaults).isEmpty)
+    }
+
+    func testRallyAndImOKChangeTheScreenAtOnce() async {
+        let server = SlowServer()
+        let outbox = slowOutbox(server)
+        let s = session(outbox: outbox)
+        ready(sockets[0])
+        let tap = Date()
+        let rallied = await s.setRally(lat: 24.7, lng: 46.6, label: "الطعس")
+        XCTAssertTrue(rallied)
+        XCTAssertEqual(s.view?.snapshot.outing.rally?.lat, 24.7, "the rally is on the map before the server answers")
+        await s.cancelSOS()
+        XCTAssertLessThan(Date().timeIntervalSince(tap), 0.1)
+        XCTAssertNil(s.view?.members["u1"]?.sos)
+        XCTAssertEqual(Set(outbox.queue.items.map(\.kind)), [.setRally, .cancelSOS])
+        XCTAssertTrue(server.done.isEmpty)
+        /* A snapshot from before the server heard must not take the rally off the map. */
+        ready(sockets[0])
+        XCTAssertEqual(s.view?.snapshot.outing.rally?.lat, 24.7)
+        await waitUntil(timeout: 10) { server.done.count == 2 }
+        XCTAssertTrue(outbox.queue.isEmpty)
+    }
+
+    /// Privacy: a «أخفِ موقعي» on its way keeps the gate closed, even when a snapshot from before
+    /// it says "shown", and after it failed; showing again takes back a hide the server never got.
+    func testAPendingHideKeepsTheGateClosed() async {
+        let server = SlowServer()
+        server.failuresLeft = .max
+        let outbox = slowOutbox(server)
+        let s = await sharingInBackground(outbox: outbox)
+        foreground = true
+        s.foreground(true)
+        XCTAssertTrue(s.gate.allowsPosition)
+        let hid = await s.setHidden(true)
+        XCTAssertTrue(hid)
+        XCTAssertFalse(s.gate.allowsPosition, "hidden at once")
+        ready(sockets[0])
+        XCTAssertEqual(s.view?.me?.hidden, true, "a snapshot from before the hide does not show me again")
+        XCTAssertFalse(s.gate.allowsPosition, "a pending hide never resumes sharing")
+        await waitUntil { (outbox.queue.items.first?.attempts ?? 0) >= 1 }
+        XCTAssertFalse(s.gate.allowsPosition, "nor a failed one")
+        let shown = await s.setHidden(false)
+        XCTAssertTrue(shown)
+        XCTAssertTrue(outbox.queue.isEmpty, "the hide is taken back, not sent")
+        XCTAssertFalse(StubAPIProtocol.requests.contains { $0.path.hasSuffix("/hidden") }, "nothing to undo on the server")
+        outbox.stop()
+    }
+
+    /// Demo and solo have no server: every action applies on this phone and nothing is queued.
+    func testLocalSessionsNeverQueueServerWork() async {
+        let server = SlowServer()
+        let outbox = slowOutbox(server)
+        var env = SessionEnv()
+        env.makeSocket = { [unowned self] url in let s = FakeSocket(url: url); self.sockets.append(s); return s }
+        env.scheduler = sched
+        env.isForeground = { true }
+        env.defaults = defaults
+        env.timers = false
+        env.authorizationOverride = true
+        env.alwaysOverride = false
+        env.backgroundSessionOverride = false
+        env.trailMatching = nil
+        env.keepAlive = { {} }
+        env.trailDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("local-\(UUID().uuidString)")
+        env.outbox = outbox
+        location.testAuthorization = .authorizedWhenInUse
+        let solo = OutingSession.solo(me: PublicUser(id: "u1", display_name: "أنا"), name: "مشوار", location: location, env: env)
+        let demo = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: api(), token: "", location: location,
+                                 demo: DemoData.view(me: DemoData.meId), env: env)
+        for s in [solo, demo] {
+            s.open()
+            _ = await s.setRally(lat: 24.7, lng: 46.6, label: nil)
+            await s.clearRally()
+            await s.cancelSOS()
+            _ = await s.setHidden(true)
+            _ = await s.sendNote("هلا", deferred: true)
+            s.leave()
+            XCTAssertEqual(s.closedReason, .left, "\(s.kind): left on this phone")
+            s.close()
+        }
+        XCTAssertTrue(outbox.queue.isEmpty, "nothing queued for a local session")
+        XCTAssertTrue(PendingActionQueue.load(defaults: defaults).isEmpty)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(server.calls, 0, "no server work at all")
+        XCTAssertTrue(sockets.isEmpty, "no live channel either")
+        XCTAssertTrue(StubAPIProtocol.requests.isEmpty)
     }
 
     func testRemovedStops() async {

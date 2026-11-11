@@ -212,7 +212,7 @@ final class ForcedShareSessionTests: XCTestCase {
         StubAPIProtocol.snapshot = BackgroundSessionTests.snapshotJSON()
         let t = joined()
         ready()
-        _ = await t.leave()
+        t.leave()
         XCTAssertFalse(t.gate.allowsPosition, "«غادر الطلعة» is the way to stop")
         XCTAssertNil(ShareMemory.activeShare(user: "u1", defaults: defaults))
     }

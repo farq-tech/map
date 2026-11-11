@@ -63,6 +63,10 @@ final class AppModel: ObservableObject {
     /// The outing's Live Activity (Lock Screen + Dynamic Island), follows `session`.
     let activity: OutingActivityCoordinator
     let isDemo: Bool
+    /// Server requests of actions already done on this phone (leave, rally, «أنا بخير»…), persisted
+    /// and retried in the background (#173, docs/RESPONSIVENESS.md). Shared by every session.
+    let outbox: OutingActionOutbox
+    private var outboxSink: AnyCancellable?
     /// «تخطيط الطلعة»: one plan + checklist model per outing (demo data under `-demo`).
     lazy var plans = PlanCenter(backend: isDemo ? DemoPlanBackend() : api)
     private let monitor = NWPathMonitor()
@@ -106,6 +110,8 @@ final class AppModel: ObservableObject {
             if !arguments.contains("-SaryAPIBase") { UserDefaults.standard.removeObject(forKey: Endpoints.debugKey) }
             #endif
         }
+        /* After the -resetState wipe, so it reads what is really left on disk. */
+        outbox = OutingActionOutbox.live(api: api)
         /* v1 consent was not tied to an identity: never honour it. */
         ShareMemory.dropLegacy()
         if isDemo {
@@ -116,6 +122,14 @@ final class AppModel: ObservableObject {
         api.onUnauthorized = { [weak self] sent in
             Task { @MainActor in self?.serverRejected(sent) }
         }
+        /* Only the signed-in identity's own actions go out, and never in the demo (no server). */
+        outbox.currentUser = { [weak self] in
+            guard let self, !self.isDemo else { return nil }
+            return self.identity?.user.id
+        }
+        outboxSink = outbox.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+        /* A leave (or any action) queued before the app was killed goes out now. */
+        outbox.kick()
         /* The Keychain could not answer at launch (started by iOS before protected data is
          * available): read again as soon as it is, never fall back to onboarding meanwhile. */
         observers.append(NotificationCenter.default.addObserver(forName: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil, queue: .main) { [weak self] _ in
@@ -128,7 +142,7 @@ final class AppModel: ObservableObject {
              * StateObject graph. Publish on the next main-loop turn, and skip duplicate states. */
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.online != now else { return }
-                if now { self.session?.networkBack(); self.parkedSession?.networkBack() }
+                if now { self.session?.networkBack(); self.parkedSession?.networkBack(); self.outbox.networkBack() }
                 self.online = now
             }
         }
@@ -434,6 +448,7 @@ final class AppModel: ObservableObject {
     private func wipeAccountLocally() {
         signedOutLocally()
         LocalAccountData.wipe()
+        outbox.forgetAll()
     }
 
     private func signedOutByServer() {
@@ -469,16 +484,20 @@ final class AppModel: ObservableObject {
     // MARK: outings
 
     func refresh() async {
-        guard identity != nil, !isDemo else {
+        guard let me = identity?.user.id, !isDemo else {
             if isDemo, listPhase != .loaded { listPhase = .loaded }
             return
         }
+        outbox.kick()
         if current.isEmpty && history.isEmpty, case .failed = listPhase { listPhase = .loading }
         do {
             let r = try await api.list()
+            /* An outing I left on this phone stays gone while the server has not heard yet (#173). */
+            let left = outbox.queue.pendingLeaves(user: me)
+            let cur = left.isEmpty ? r.current : r.current.filter { !left.contains($0.id) }
             /* Refreshed on every return to the list: skip unchanged values so the home screen
              * (which observes this whole model) is not redrawn for nothing. */
-            if current != r.current { current = r.current }
+            if current != cur { current = cur }
             if history != r.history { history = r.history }
             if listPhase != .loaded { listPhase = .loaded }
         } catch let e as OutingAPIError {
@@ -613,6 +632,8 @@ final class AppModel: ObservableObject {
         do {
             let r = try await api.join(token: token)
             pendingInvite = nil
+            /* Back in by a new invite: a leave still queued from before must not take me out again. */
+            if let me = identity?.user.id { outbox.discard(user: me, outing: r.outing_id, kind: .leave) }
             /* Tapping «انضم» (under ShareMemory.joinStatement) is the consent: sharing is on, forced. */
             consentByJoining(r.outing_id)
             await refresh()
@@ -631,16 +652,35 @@ final class AppModel: ObservableObject {
         return try await api.get(id)
     }
 
+    /// «غادر الطلعة» from the outing's page. Instant (#173): whatever runs for it stops now, the
+    /// outing leaves the list, and `POST /leave` goes through the persisted outbox. Always true.
+    @discardableResult
     func leave(_ id: String) async -> Bool {
         if isDemo { return true }
-        do {
-            try await api.leave(id)
-            if session?.id == id { closeSession() }
-            if parkedSession?.id == id { closeParked() }
-            await refresh()
-            return true
-        } catch let e as OutingAPIError { errorText = e.arabic } catch {}
-        return false
+        guard let me = identity?.user.id else { return false }
+        if let s = session, s.id == id {
+            s.leave()
+            closeSession()
+        } else if let p = parkedSession, p.id == id {
+            p.leave()
+            closeParked()
+        } else {
+            let t = ActionTrace.begin("leave")
+            /* No session runs for it: nothing is being sent; make sure nothing resumes or uploads later. */
+            if ShareMemory.activeShare(user: me) == id { ShareMemory.setActiveShare(user: me, outing: nil) }
+            OfflineFixQueue().save(user: me, outing: id)
+            ActionTrace.uiShown(t)
+            outbox.enqueue(PendingOutingAction(user: me, outing: id, kind: .leave, createdMs: Date().timeIntervalSince1970 * 1000), trace: t)
+        }
+        current.removeAll { $0.id == id }
+        Task { await refresh() }
+        return true
+    }
+
+    /// «نكمل المغادرة لما يرجع النت»: something done on this phone still waits for the network.
+    var outboxNotice: String? {
+        guard !isDemo, let me = identity?.user.id else { return nil }
+        return PendingActionCopy.banner(outbox.queue.items.filter { $0.user == me })
     }
 
     /// My own totals for this outing, from this device (nil when I never shared here).
@@ -704,12 +744,16 @@ final class AppModel: ObservableObject {
         }
         guard let id = identity else { return }
         if session?.id == outingId { return }
+        /* Left on this phone, the server not told yet (#173): it does not open (and never shares) again. */
+        if outbox.has(user: id.user.id, outing: outingId, kind: .leave) { return }
         session?.close()
         /* Build 14: a member of a trip shares while it runs — opening it is the same as joining
          * (no «شارك موقعي»). The gate still needs iOS permission, an active trip and the server's
          * sharing flag; ended / left / removed close the session and stop it. */
         consentByJoining(outingId)
-        let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location)
+        var env = SessionEnv()
+        env.outbox = outbox
+        let s = OutingSession(id: outingId, myUserId: id.user.id, api: api, token: id.token, location: location, env: env)
         session = s
         s.open()
         s.resumeIfPreviouslySharing()
