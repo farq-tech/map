@@ -24,6 +24,7 @@ import gzip
 import json
 import math
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 import duckdb
 from pmtiles.tile import Compression, TileType, zxy_to_tileid
 from pmtiles.writer import Writer
+from duckdb.sqltypes import BIGINT, UBIGINT
 
 EXTENT = 4096
 BUFFER = 64
@@ -59,12 +61,18 @@ BUILDING_MIN_ZOOM = 14
 ARABIC_RE = '[؀-ۿ]'
 
 
-def connect(memory: str | None = None) -> duckdb.DuckDBPyConnection:
+def connect(memory: str | None = None, temp_directory: str | None = None) -> duckdb.DuckDBPyConnection:
     db = duckdb.connect()
     db.execute('LOAD spatial')
     if memory:
         db.execute(f"SET memory_limit='{memory}'")
+    if temp_directory:
+        os.makedirs(temp_directory, exist_ok=True)
+        escaped = temp_directory.replace("'", "''")
+        db.execute(f"SET temp_directory='{escaped}'")
     db.execute('SET preserve_insertion_order=false')
+    db.create_function('_pmtiles_tile_id', lambda z, x, y: zxy_to_tileid(int(z), int(x), int(y)),
+                       [BIGINT, BIGINT, BIGINT], UBIGINT)
     # XYZ tile index of a lon/lat at zoom z (web mercator, latitude clamped to its valid range).
     db.execute("""create or replace macro tile_x(lon, z) as
         least((1 << z) - 1, greatest(0, cast(floor((lon + 180.0) / 360.0 * (1 << z)) as integer)))""")
@@ -287,16 +295,19 @@ def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds,
                 continue
             # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
             union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
-            rows = db.execute(f"""select x, y, list(blob order by li) blobs
-                                  from ({union}) group by x, y""").fetchall()
-            rows.sort(key=lambda r: zxy_to_tileid(z, r[0], r[1]))
-            for x, y, blobs in rows:
-                data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
-                writer.write_tile(zxy_to_tileid(z, x, y), data)
-                stats['bytes'] += len(data)
-            stats['tiles'] += len(rows)
-            stats['per_zoom'][z] = len(rows)
-            log(f'  z{z}: {len(rows)} tiles ({time.time() - started:.0f}s)')
+            cursor = db.execute(f"""select x, y, list(blob order by li) blobs
+                                     from ({union}) group by x, y
+                                     order by _pmtiles_tile_id({z}, x, y)""")
+            zoom_tiles = 0
+            while rows := cursor.fetchmany(256):
+                for x, y, blobs in rows:
+                    data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
+                    writer.write_tile(zxy_to_tileid(z, x, y), data)
+                    stats['bytes'] += len(data)
+                    zoom_tiles += 1
+            stats['tiles'] += zoom_tiles
+            stats['per_zoom'][z] = zoom_tiles
+            log(f'  z{z}: {zoom_tiles} tiles ({time.time() - started:.0f}s)')
         built = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         metadata = {
             'name': 'farq', 'attribution': ATTRIBUTION, 'built_at': built, 'format': 'pbf',
@@ -330,20 +341,25 @@ def main(argv=None) -> int:
     ap.add_argument('--memory', default=os.environ.get('TILES_MEMORY_LIMIT', '6GB'))
     a = ap.parse_args(argv)
     bbox = tuple(float(v) for v in a.bbox.split(',')) if a.bbox else None
-    db = connect(a.memory)
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(a.out)), '.farq-duckdb-tmp')
+    db = connect(a.memory, temp_dir)
     t = time.time()
-    layers = []
-    n = load_roads(db, a.osm, bbox); layers.append('roads'); print(f'roads: {n:,} ({time.time() - t:.0f}s)')
-    if a.places:
-        n = load_places(db, a.places, bbox); layers.append('places'); print(f'places: {n:,}')
-    if a.buildings:
-        n = load_buildings(db, a.buildings, bbox); layers.append('buildings'); print(f'buildings: {n:,}')
-    stats = build(db, layers, a.out, a.min_zoom, a.max_zoom, bbox or SAUDI)
-    report = {'layers': layers, **stats, 'osm': os.path.basename(a.osm), 'seconds': round(time.time() - t)}
-    with open(a.out + '.report.json', 'w') as fh:
-        json.dump(report, fh, ensure_ascii=False, indent=2)
-    print(json.dumps({k: v for k, v in report.items() if k != 'per_zoom'}, ensure_ascii=False))
-    return 0
+    try:
+        layers = []
+        n = load_roads(db, a.osm, bbox); layers.append('roads'); print(f'roads: {n:,} ({time.time() - t:.0f}s)')
+        if a.places:
+            n = load_places(db, a.places, bbox); layers.append('places'); print(f'places: {n:,}')
+        if a.buildings:
+            n = load_buildings(db, a.buildings, bbox); layers.append('buildings'); print(f'buildings: {n:,}')
+        stats = build(db, layers, a.out, a.min_zoom, a.max_zoom, bbox or SAUDI)
+        report = {'layers': layers, **stats, 'osm': os.path.basename(a.osm), 'seconds': round(time.time() - t)}
+        with open(a.out + '.report.json', 'w') as fh:
+            json.dump(report, fh, ensure_ascii=False, indent=2)
+        print(json.dumps({k: v for k, v in report.items() if k != 'per_zoom'}, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == '__main__':

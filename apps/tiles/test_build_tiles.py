@@ -131,6 +131,34 @@ class PlacesTests(Fixture):
 
 
 class BuildingTests(Fixture):
+    def test_tile_writer_streams_more_than_one_result_batch_in_id_order(self):
+        z = 15
+        x0, y0 = tile_of(*RIYADH, z)
+        n = 1 << z
+        positions = []
+        rows = []
+        for index in range(300):
+            x, y = x0 + index % 30, y0 + index // 30
+            lon = (x + 0.5) / n * 360 - 180
+            lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 0.5) / n))))
+            positions.append((x, y))
+            rows.append(f"({index}, {lon:.8f}, {lat:.8f})")
+
+        path = os.path.join(self.dir, 'many-building-tiles.parquet')
+        self.db.execute(f"""copy (
+            select id as "HouseId", 'residential' as building_use, 2.0 as "Elevation",
+                   hex(ST_AsWKB(ST_MakeEnvelope(lon, lat, lon + 0.0002, lat + 0.0002))) as geometry_wkb_hex
+            from (values {', '.join(rows)}) t(id, lon, lat)
+        ) to '{path}' (format parquet)""")
+        self.assertEqual(bt.load_buildings(self.db, path), 300)
+
+        out = os.path.join(self.dir, 'many-building-tiles.pmtiles')
+        stats = bt.build(self.db, ['buildings'], out, z, z, (46.6, 24.6, 46.9, 24.9), log=lambda *_: None)
+        self.assertEqual(stats['tiles'], 300)
+        with open(out, 'rb') as fh:
+            reader = Reader(MmapSource(fh))
+            self.assertTrue(all(reader.get(z, x, y) for x, y in positions), 'each batch is written in PMTiles tile-id order')
+
     def test_invalid_footprints_are_repaired_before_high_zoom_tiling(self):
         path = os.path.join(self.dir, 'invalid-building.parquet')
         invalid = 'POLYGON ((46.67 24.71, 46.68 24.72, 46.68 24.71, 46.67 24.72, 46.67 24.71))'
