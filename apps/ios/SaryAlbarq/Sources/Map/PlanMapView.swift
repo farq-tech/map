@@ -75,16 +75,32 @@ struct PlanMapView: UIViewRepresentable {
         private let destination = PinSlot<PlanDestinationPin>()
         private let picked = PinSlot<PlanPickedPin>()
         private let user = PinSlot<PlanUserLocationPin>()
+        /// `onCenter` writes the host's SwiftUI state («اختر من الخريطة»'s readout): at most ~30 times
+        /// a second instead of every camera frame, and the latest centre always lands (trailing report).
+        private var centerThrottle = ReportThrottle(interval: 1.0 / 30)
+        private var centerPending = false
+
+        private func reportCenter() {
+            guard let map, let report = parent?.onCenter else { return }
+            let now = CACurrentMediaTime()
+            guard centerThrottle.take(now) else {
+                guard !centerPending else { return }
+                centerPending = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + centerThrottle.wait(now)) { [weak self] in
+                    self?.centerPending = false
+                    self?.reportCenter()
+                }
+                return
+            }
+            let c = map.mapboxMap.cameraState.center
+            report(LngLat(lng: c.longitude, lat: c.latitude))
+        }
 
         func attach(_ map: MapView, parent: PlanMapView) {
             self.map = map
             self.parent = parent
             map.mapboxMap.onStyleLoaded.observe { [weak self] _ in self?.styleLoaded() }.store(in: &bag)
-            map.mapboxMap.onCameraChanged.observe { [weak self, weak map] _ in
-                guard let map, let report = self?.parent?.onCenter else { return }
-                let c = map.mapboxMap.cameraState.center
-                report(LngLat(lng: c.longitude, lat: c.latitude))
-            }.store(in: &bag)
+            map.mapboxMap.onCameraChanged.observe { [weak self] _ in self?.reportCenter() }.store(in: &bag)
             guard parent.interactive else { return }
             map.gestures.onLayerTap(DesertGazetteerMapLayer.marker) { [weak self] feature, _ in
                 guard let v = feature.feature.properties?["id"], case let .string(id)? = v else { return false }
@@ -221,4 +237,23 @@ struct PlanCamera: Equatable {
         if let d = destination { return LngLat(lng: d.lng, lat: d.lat) }
         return LngLat(lng: 46.6753, lat: 24.7136)
     }
+}
+
+/// At most one report per `interval` seconds. A report asked for sooner is refused, and is
+/// due again after `wait(now)` (the caller schedules that trailing report).
+struct ReportThrottle {
+    let interval: Double
+    private(set) var last = -Double.infinity
+
+    init(interval: Double) { self.interval = interval }
+
+    /// True (and the report counted) when `interval` has passed since the last one.
+    mutating func take(_ now: Double) -> Bool {
+        guard now - last >= interval else { return false }
+        last = now
+        return true
+    }
+
+    /// Seconds until a report is allowed again (0 when it already is).
+    func wait(_ now: Double) -> Double { max(0, interval - (now - last)) }
 }

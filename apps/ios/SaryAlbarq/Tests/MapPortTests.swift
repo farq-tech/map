@@ -630,3 +630,24 @@ final class MapFeatureConversionTests: XCTestCase {
         XCTAssertNil(WadiProximity.watercourseClass(cls: nil, type: nil))
     }
 }
+
+/// The plan map's centre reports (`PlanMapView` → «اختر من الخريطة») are throttled per frame.
+final class ReportThrottleTests: XCTestCase {
+    func testFirstReportPassesThenOnePerInterval() {
+        /* Binary-exact times (eighths of a second), so the window edges are exact. */
+        var t = ReportThrottle(interval: 0.125)
+        XCTAssertTrue(t.take(5))
+        XCTAssertFalse(t.take(5.0625))
+        XCTAssertEqual(t.wait(5.0625), 0.0625, accuracy: 1e-9)
+        XCTAssertTrue(t.take(5.125))
+        XCTAssertEqual(t.wait(5.5), 0)
+    }
+
+    func testRefusedReportDoesNotMoveTheWindow() {
+        var t = ReportThrottle(interval: 0.125)
+        XCTAssertTrue(t.take(1))
+        XCTAssertFalse(t.take(1.0625))
+        /* The trailing report scheduled after `wait` is allowed. */
+        XCTAssertTrue(t.take(1.125))
+    }
+}
