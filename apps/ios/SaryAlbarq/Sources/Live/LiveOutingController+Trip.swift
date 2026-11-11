@@ -72,6 +72,7 @@ extension LiveOutingController {
         i.groupStart = trip.record.groupStart
         i.isReturnTrip = returnOrigin != nil
         i.now = Date()
+        if let start = i.record.start { i.drivenMeters = drivenMemo.value(trail: i.trail, sinceMs: start.atMs) }
         return i
     }
 

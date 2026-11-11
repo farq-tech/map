@@ -330,6 +330,8 @@ final class LiveOutingController: ObservableObject {
     private var alertedNotes: [String: (text: String, at: Date)] = [:]
     /// This outing's stored trip log, decoded once per change of the stored bytes (`tripInput`).
     var tripLogMemo = StoredBytesMemo<TripLog?>()
+    /// My driven distance on the trip panel, walked once per change of the trail (`tripInput`).
+    var drivenMemo = DrivenMetersMemo()
     /// A `sessionChanged` / `locationChanged` pass is already queued on the main queue.
     private var sessionPassQueued = false
     private var locationPassQueued = false

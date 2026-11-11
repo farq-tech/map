@@ -22,6 +22,30 @@ struct TripPresenterInput {
     var groupStart: TripStartPoint?
     var isReturnTrip = false
     var now = Date()
+    /// `TripMath.drivenMeters(trail:sinceMs:)` for this `trail` since `record.start`, when the caller
+    /// already has it (`DrivenMetersMemo`); nil: worked out here.
+    var drivenMeters: Double?
+}
+
+/// `TripMath.drivenMeters(trail:sinceMs:)` walks the whole trail; the live screen asks for the trip
+/// panel several times per render with the same trail. Recomputed only when the trail or the start
+/// changes (array equality: the session hands out the same memoized trail until it changes, so the
+/// common case is the buffer-identity fast path).
+struct DrivenMetersMemo {
+    private var trail: [TrailPoint] = []
+    private var sinceMs = Double.nan
+    private var meters = 0.0
+    /// How many times the trail was actually walked (tests).
+    private(set) var computeCount = 0
+
+    mutating func value(trail: [TrailPoint], sinceMs: Double) -> Double {
+        if sinceMs == self.sinceMs, trail == self.trail { return meters }
+        meters = TripMath.drivenMeters(trail: trail, sinceMs: sinceMs)
+        computeCount += 1
+        self.trail = trail
+        self.sinceMs = sinceMs
+        return meters
+    }
 }
 
 /// Pure: the trip's numbers and words. Every rule is unit-tested (TripProgressTests).
@@ -57,7 +81,7 @@ enum TripPresenter {
         }
 
         guard let start = r.start else { return ui }
-        ui.drivenMeters = max(TripMath.drivenMeters(trail: i.trail, sinceMs: start.atMs), 0)
+        ui.drivenMeters = max(i.drivenMeters ?? TripMath.drivenMeters(trail: i.trail, sinceMs: start.atMs), 0)
         if ui.drivenMeters == 0, let l = i.log { ui.drivenMeters = l.distanceM }
         let motion = TripMotion.make(log: i.log, startMs: start.atMs, endMs: endMs)
         ui.elapsedSeconds = motion.elapsedS
