@@ -51,6 +51,24 @@ struct MapNavDrawing: Equatable {
     var isEmpty: Bool { routes.isEmpty && offRoad == nil && target == nil }
 }
 
+/// Which navigation GeoJSON sources must be sent again (pure, unit-tested). During guidance the
+/// drawing changes with nearly every fix (the off-road remainder, the turn arrow, the target's
+/// «قبل … د» note), but the routes — thousands of points — rarely; only changed sources are re-sent.
+struct NavSourceChanges: Equatable {
+    var routes: Bool
+    var offRoad: Bool
+    var maneuver: Bool
+
+    static let all = NavSourceChanges(routes: true, offRoad: true, maneuver: true)
+
+    /// `drawn`: what the sources hold now; nil when unknown (new style, new layers): everything.
+    static func between(drawn: MapNavDrawing?, next: MapNavDrawing) -> NavSourceChanges {
+        guard let drawn else { return .all }
+        return NavSourceChanges(routes: drawn.routes != next.routes, offRoad: drawn.offRoad != next.offRoad,
+                                maneuver: drawn.maneuver != next.maneuver)
+    }
+}
+
 /// Draws `MapNavDrawing` on the outing's `MapView`; owned by the map's coordinator (main thread, like it).
 final class NavMapDrawer {
     private weak var map: MapView?
@@ -59,6 +77,8 @@ final class NavMapDrawer {
     private var targetPin: (point: LngLat, annotation: ViewAnnotation, host: UIHostingController<NavTargetPin>)?
     private var labelPins: [String: (label: MapNavDrawing.Label, annotation: ViewAnnotation, host: UIHostingController<NavRouteLabel>)] = [:]
     private var lastCameraKey = -1
+    /// What the GeoJSON sources hold (nil: unknown, send everything).
+    private var drawnSources: MapNavDrawing?
     var theme: SaryTheme = .default
     var onSelectRoute: (String) -> Void = { _ in }
 
@@ -112,6 +132,7 @@ final class NavMapDrawer {
 
     func styleLoaded() {
         styleReady = true
+        drawnSources = nil
         addLayers()
         targetPin?.annotation.remove()
         targetPin = nil
@@ -249,7 +270,26 @@ final class NavMapDrawer {
     private func draw() {
         guard styleReady, let map else { return }
         let m: MapboxMap = map.mapboxMap
-        if !m.layerExists(withId: "sary-nav-main") { addLayers() }
+        if !m.layerExists(withId: "sary-nav-main") {
+            addLayers()
+            drawnSources = nil
+        }
+        let changes = NavSourceChanges.between(drawn: drawnSources, next: drawing)
+        drawnSources = drawing
+        if changes.routes { drawRoutes(m) }
+        if changes.offRoad {
+            var off: [Feature] = []
+            if let o = drawing.offRoad, o.count >= 2 { off.append(Feature(geometry: .lineString(LineString(o.map(\.coordinate))))) }
+            m.updateGeoJSONSource(withId: Self.offSource, geoJSON: .featureCollection(FeatureCollection(features: off)))
+        }
+        if changes.maneuver {
+            m.updateGeoJSONSource(withId: Self.maneuverSource, geoJSON: .featureCollection(FeatureCollection(features: maneuverFeatures())))
+        }
+        placeTarget()
+        placeLabels()
+    }
+
+    private func drawRoutes(_ m: MapboxMap) {
         var feats: [Feature] = []
         /* Alternatives first, the chosen route last (drawn on top by its own layer anyway). */
         for r in drawing.routes.sorted(by: { !$0.selected && $1.selected }) where r.coordinates.count >= 2 {
@@ -275,12 +315,6 @@ final class NavMapDrawer {
             feats.append(f)
         }
         m.updateGeoJSONSource(withId: Self.source, geoJSON: .featureCollection(FeatureCollection(features: feats)))
-        var off: [Feature] = []
-        if let o = drawing.offRoad, o.count >= 2 { off.append(Feature(geometry: .lineString(LineString(o.map(\.coordinate))))) }
-        m.updateGeoJSONSource(withId: Self.offSource, geoJSON: .featureCollection(FeatureCollection(features: off)))
-        m.updateGeoJSONSource(withId: Self.maneuverSource, geoJSON: .featureCollection(FeatureCollection(features: maneuverFeatures())))
-        placeTarget()
-        placeLabels()
     }
 
     /// The turn arrow's shaft and its head (turned by the last segment's bearing).
