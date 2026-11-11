@@ -102,11 +102,15 @@ enum ReturnTimerLogic {
             let at = due.addingTimeInterval(TimeInterval(-m * 60))
             guard at > now.addingTimeInterval(30) else { continue }
             out.append(Reminder(id: reminderId(outingId, minutes: m), fireAt: at, title: "مؤقت الرجوع",
-                                body: "باقي \(SafetyFormat.span(minutes: m)) على وقت رجوعك. إذا تأخرت يوصل تنبيه لـ\(contact). مدّد من الطلعة إذا تحتاج."))
+                                body: contact.isEmpty
+                                    ? "باقي \(SafetyFormat.span(minutes: m)) على وقت رجوعك. مدّد من المشوار إذا تحتاج."
+                                    : "باقي \(SafetyFormat.span(minutes: m)) على وقت رجوعك. إذا تأخرت يوصل تنبيه لـ\(contact). مدّد من الطلعة إذا تحتاج."))
         }
         if due > now.addingTimeInterval(30) {
             out.append(Reminder(id: reminderId(outingId, minutes: 0), fireAt: due, title: "حان وقت رجوعك",
-                                body: "اضغط «وصلت» إذا رجعت، أو مدّد الوقت. بعد دقيقة يوصل تنبيه التأخير لـ\(contact)."))
+                                body: contact.isEmpty
+                                    ? "اضغط «وصلت» إذا رجعت، أو مدّد الوقت. ما يوصل تنبيه لأحد: إذا تحتاج مساعدة اتصل بـ٩١١."
+                                    : "اضغط «وصلت» إذا رجعت، أو مدّد الوقت. بعد دقيقة يوصل تنبيه التأخير لـ\(contact)."))
         }
         return out
     }
