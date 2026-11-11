@@ -293,7 +293,7 @@ struct NavSurfaceLegend: View {
             ForEach(rows) { r in
                 HStack(spacing: theme.space(.s)) {
                     swatch(r.kind)
-                    Text(Self.label(r.kind)).saryText(.footnote, weight: .semibold).foregroundStyle(p.textPrimary)
+                    Text(Self.label(r.kind)).saryText(.footnote, weight: .medium).foregroundStyle(p.textPrimary)
                     Spacer(minLength: 0)
                     Text(SaryFormat.distance(meters: r.meters)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                 }
