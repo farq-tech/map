@@ -90,7 +90,8 @@ struct SaryAppearancePanel: View {
     }
 
     private var accentPicker: some View {
-        HStack(spacing: theme.space(.m)) {
+        /* Wraps instead of pushing «ورد طائفي» past the edge (320 pt Display Zoom, large text). */
+        SaryFlowLayout(spacing: theme.space(.m), lineSpacing: theme.space(.s)) {
             ForEach(SaryAccent.allCases) { a in
                 let selected = settings.prefs.accent == a
                 Button { settings.prefs.accent = a } label: {

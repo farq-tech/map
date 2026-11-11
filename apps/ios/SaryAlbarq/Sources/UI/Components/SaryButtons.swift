@@ -66,6 +66,8 @@ private struct SaryButtonBody: View {
         configuration.label
             .saryText(compact ? .callout : .headline)
             .lineLimit(2)
+            /* Only when two lines still do not fit (320 pt Display Zoom, two buttons in a row). */
+            .minimumScaleFactor(0.85)
             .multilineTextAlignment(.center)
             .padding(.horizontal, compact ? theme.space(.m) : theme.space(.l))
             .padding(.vertical, theme.space(.s))

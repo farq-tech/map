@@ -170,10 +170,13 @@ struct SarySegmented<Value: Hashable>: View {
 
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.saryWidthClass) private var widthClass
     @Namespace private var ns
 
     var body: some View {
         let p = theme.palette
+        /* Four or more segments on a 320 pt screen: the words matter more than the icons. */
+        let showIcons = !(widthClass == .narrow && options.count >= 4)
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 2))
             : AnyLayout(HStackLayout(spacing: 2))
@@ -184,7 +187,7 @@ struct SarySegmented<Value: Hashable>: View {
                     selection = option
                 } label: {
                     HStack(spacing: 5) {
-                        if let s = systemImage?(option) {
+                        if showIcons, let s = systemImage?(option) {
                             Image(systemName: s).font(.system(size: 13, weight: .semibold))
                         }
                         Text(label(option))

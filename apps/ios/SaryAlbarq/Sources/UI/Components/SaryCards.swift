@@ -8,13 +8,15 @@ struct SaryRallyCard: View {
     var actions: ParticipantsTabActions = .init()
     @Environment(\.sary) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.saryWidthClass) private var widthClass
     @State private var confirmRemove = false
 
     var body: some View {
         let p = theme.palette
         let ax = typeSize.isAccessibilitySize
         let row = ax ? AnyLayout(VStackLayout(alignment: .leading, spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.m)))
-        let buttons = ax ? AnyLayout(VStackLayout(spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.s)))
+        /* «اتجه» + «أظهرها» + the menu need ~300 pt: stacked on a 320 pt screen (Display Zoom) too. */
+        let buttons = ax || widthClass == .narrow ? AnyLayout(VStackLayout(spacing: theme.space(.s))) : AnyLayout(HStackLayout(spacing: theme.space(.s)))
         Group {
             if let rally {
                 VStack(alignment: .leading, spacing: theme.space(.m)) {

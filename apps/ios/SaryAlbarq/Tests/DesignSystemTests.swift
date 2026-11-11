@@ -310,3 +310,22 @@ final class SaryScreenFitTests: XCTestCase {
         XCTAssertEqual(t.minTarget, 44)
     }
 }
+
+/// The friend-SOS hero shrinks on short windows but keeps its proportions.
+final class SarySOSHeroFitTests: XCTestCase {
+    func testRegularIsTheDesign() {
+        XCTAssertEqual(SarySOSHeroMetrics.regular, SarySOSHeroMetrics(ring: 190, disc: 150, avatar: 104))
+        XCTAssertEqual(SarySOSHeroMetrics.regular.scaled(1), .regular)
+    }
+
+    func testCompactKeepsProportionsAndAFaceSizedAvatar() {
+        let c = SarySOSHeroMetrics.compact
+        XCTAssertLessThan(c.ring, SarySOSHeroMetrics.regular.ring)
+        XCTAssertLessThan(c.avatar, c.disc)
+        XCTAssertLessThan(c.disc, c.ring)
+        XCTAssertGreaterThanOrEqual(c.avatar, 64, "still a recognisable face")
+        XCTAssertEqual(c.disc / c.ring, 150.0 / 190.0, accuracy: 0.02)
+        // Saves at least 60 pt of height on an iPhone SE.
+        XCTAssertGreaterThanOrEqual(SarySOSHeroMetrics.regular.ring - c.ring, 60)
+    }
+}

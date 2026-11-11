@@ -48,7 +48,8 @@ struct SaryStateView: View {
             }
         }
         .padding(theme.space(.xxl))
-        .frame(maxWidth: .infinity)
+        /* Centred column on iPad: the message never runs across a 1000 pt line. */
+        .saryReadableWidth(SaryLayout.formWidth)
         .accessibilityElement(children: .contain)
     }
 
@@ -154,6 +155,7 @@ struct SaryDialog: View {
     var confirm: () -> Void = {}
     var cancel: () -> Void = {}
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
 
     var body: some View {
         let p = theme.palette
@@ -177,11 +179,12 @@ struct SaryDialog: View {
                 Button(cancelTitle, action: cancel).buttonStyle(.sary(.secondary))
             }
         }
-        .padding(theme.space(.xxl))
+        /* 24 pt inside + 16 pt outside leave 240 pt of text on a 320 pt screen: tighter there. */
+        .padding(theme.space(widthClass == .narrow ? .l : .xxl))
         .background(RoundedRectangle(cornerRadius: SaryRadius.xl, style: .continuous).fill(p.elevated))
         .overlay(RoundedRectangle(cornerRadius: SaryRadius.xl, style: .continuous).stroke(p.stroke, lineWidth: 0.5))
         .saryShadow(.overlay, theme)
-        .frame(maxWidth: 400)
+        .frame(maxWidth: SaryLayout.dialogWidth)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
     }

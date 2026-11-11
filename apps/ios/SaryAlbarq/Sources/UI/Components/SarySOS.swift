@@ -231,9 +231,19 @@ struct SOSCountdownView: View {
         let p = theme.palette
         ZStack {
             Color.black.opacity(0.55).ignoresSafeArea()
-            if center.askingStop { stopCard } else { countdownCard(p) }
+            /* Centred as designed; scrolls instead of clipping «تراجع» when the card is taller than
+             * the window (a short phone at a large text size, Display Zoom). */
+            ViewThatFits(in: .vertical) {
+                card(p)
+                ScrollView { card(p) }
+            }
         }
         .environment(\.layoutDirection, .rightToLeft)
+    }
+
+    @ViewBuilder
+    private func card(_ p: SaryPalette) -> some View {
+        if center.askingStop { stopCard } else { countdownCard(p) }
     }
 
     private var stopCard: some View {
@@ -331,56 +341,27 @@ struct SaryMySOSStrip: View {
     /// «اطلب إنجاد» (nil: not offered).
     var enjad: (() -> Void)? = nil
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
 
     var body: some View {
         let p = theme.palette
-        HStack(spacing: theme.space(.m)) {
-            Image(systemName: SaryIcon.sos)
-                .font(.system(size: 16, weight: .heavy))
-                .symbolEffect(.pulse, isActive: !theme.reduceMotion)
-            VStack(alignment: .leading, spacing: 0) {
-                Text("أرسلت طوارئ").saryText(.headline)
-                Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل · بدون موقع") · \(SaryFormat.elapsed(since: since, now: now))")
-                    .saryText(.footnote, weight: .medium).opacity(0.9)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            /* UX ٢١: stopping a sent SOS asks first (one slip must not call it off). The question lives
-             * in its own top window: this strip is rebuilt every second and would drop a local alert. */
-            Button { SOSCountdown.shared.confirmStop(theme: theme, stop: imOK) } label: {
-                Text("أنا بخير").saryText(.callout, weight: .heavy)
-                    .foregroundStyle(p.emergency)
-                    .padding(.horizontal, theme.space(.l))
-                    .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(p.onEmergency))
-            }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityIdentifier("outing-sos-ok")
-            .accessibilityHint(Text("يسألك قبل ما يوقف الطوارئ"))
-            if let enjad {
-                Button(action: enjad) {
-                    Text("إنجاد").saryText(.callout, weight: .heavy)
-                        .foregroundStyle(p.emergency)
-                        .padding(.horizontal, theme.space(.m))
-                        .frame(minHeight: theme.minTarget)
-                        .background(Capsule().fill(p.onEmergency.opacity(0.85)))
+        Group {
+            if widthClass == .narrow {
+                /* 320 pt (Display Zoom): three buttons in the row would leave the text no room at
+                 * all. The words on top, the buttons under them at the trailing edge. */
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    HStack(spacing: theme.space(.m)) { message }
+                    HStack(spacing: theme.space(.s)) {
+                        Spacer(minLength: 0)
+                        buttons(p)
+                    }
                 }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
-                .accessibilityIdentifier("sos-enjad")
+            } else {
+                HStack(spacing: theme.space(.m)) {
+                    message
+                    buttons(p)
+                }
             }
-            /* UI-AUDIT 0.5: «اتصل ٩١١» (the official line; Enjad is volunteers). Short on the strip. */
-            Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
-                Label("٩١١", systemImage: SaryIcon.phone)
-                    .saryText(.callout, weight: .heavy)
-                    .lineLimit(1)
-                    .foregroundStyle(p.emergency)
-                    .padding(.horizontal, theme.space(.m))
-                    .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(p.onEmergency.opacity(0.9)))
-            }
-            .buttonStyle(SaryPressStyle())
-            .accessibilityLabel(Text("اتصل ٩١١"))
-            .accessibilityIdentifier("sos.call911")
         }
         .foregroundStyle(p.onEmergency)
         .padding(.leading, theme.space(.l))
@@ -389,6 +370,60 @@ struct SaryMySOSStrip: View {
         .background(RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).fill(p.emergency))
         .saryShadow(.floating, theme)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var message: some View {
+        Image(systemName: SaryIcon.sos)
+            .font(.system(size: 16, weight: .heavy))
+            .symbolEffect(.pulse, isActive: !theme.reduceMotion)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("أرسلت طوارئ").saryText(.headline)
+            Text("\(withLocation ? "الكل يشوف موقعك" : "وصل التنبيه للكل · بدون موقع") · \(SaryFormat.elapsed(since: since, now: now))")
+                .saryText(.footnote, weight: .medium).opacity(0.9)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func buttons(_ p: SaryPalette) -> some View {
+        /* UX ٢١: stopping a sent SOS asks first (one slip must not call it off). The question lives
+         * in its own top window: this strip is rebuilt every second and would drop a local alert. */
+        Button { SOSCountdown.shared.confirmStop(theme: theme, stop: imOK) } label: {
+            Text("أنا بخير").saryText(.callout, weight: .heavy)
+                .foregroundStyle(p.emergency)
+                .padding(.horizontal, theme.space(.l))
+                .frame(minHeight: theme.minTarget)
+                .background(Capsule().fill(p.onEmergency))
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityIdentifier("outing-sos-ok")
+        .accessibilityHint(Text("يسألك قبل ما يوقف الطوارئ"))
+        if let enjad {
+            Button(action: enjad) {
+                Text("إنجاد").saryText(.callout, weight: .heavy)
+                    .foregroundStyle(p.emergency)
+                    .padding(.horizontal, theme.space(.m))
+                    .frame(minHeight: theme.minTarget)
+                    .background(Capsule().fill(p.onEmergency.opacity(0.85)))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
+            .accessibilityIdentifier("sos-enjad")
+        }
+        /* UI-AUDIT 0.5: «اتصل ٩١١» (the official line; Enjad is volunteers). Short on the strip. */
+        Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+            Label("٩١١", systemImage: SaryIcon.phone)
+                .saryText(.callout, weight: .heavy)
+                .lineLimit(1)
+                .foregroundStyle(p.emergency)
+                .padding(.horizontal, theme.space(.m))
+                .frame(minHeight: theme.minTarget)
+                .background(Capsule().fill(p.onEmergency.opacity(0.9)))
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text("اتصل ٩١١"))
+        .accessibilityIdentifier("sos.call911")
     }
 }
 
@@ -439,6 +474,21 @@ struct SaryFriendSOSStrip: View {
     }
 }
 
+/// Sizes of the friend-SOS hero (pulse ring, disc, avatar). `regular` is the
+/// design; `compact` keeps the same proportions for windows too short for it.
+struct SarySOSHeroMetrics: Equatable {
+    var ring: CGFloat
+    var disc: CGFloat
+    var avatar: CGFloat
+
+    static let regular = SarySOSHeroMetrics(ring: 190, disc: 150, avatar: 104)
+    static let compact = regular.scaled(0.66)
+
+    func scaled(_ f: CGFloat) -> SarySOSHeroMetrics {
+        SarySOSHeroMetrics(ring: (ring * f).rounded(), disc: (disc * f).rounded(), avatar: (avatar * f).rounded())
+    }
+}
+
 /// Full-screen alert for a friend's SOS. Always opaque red (no glass), large
 /// type, the two actions that matter. Repeating haptic on appear.
 struct SaryFriendSOSAlert: View {
@@ -457,90 +507,14 @@ struct SaryFriendSOSAlert: View {
             LinearGradient(colors: [Color(rgb: theme.night ? 0x7A2216 : 0xC23A25), Color(rgb: theme.night ? 0x3E120B : 0x8E2414)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-            VStack(spacing: theme.space(.xl)) {
-                Spacer(minLength: 0)
-                ZStack {
-                    Circle().stroke(p.onEmergency.opacity(0.25), lineWidth: 2)
-                        .frame(width: 190, height: 190)
-                        .scaleEffect(pulse ? 1.12 : 0.92)
-                        .opacity(pulse ? 0 : 1)
-                    Circle().fill(p.onEmergency.opacity(0.1)).frame(width: 150, height: 150)
-                    SaryAvatar(name: alert.name, color: alert.color, size: 104)
-                }
-                .accessibilityHidden(true)
-                VStack(spacing: theme.space(.s)) {
-                    Label("طوارئ", systemImage: SaryIcon.sos)
-                        .saryText(.headline)
-                        .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(Capsule().fill(p.onEmergency.opacity(0.18)))
-                    Text(alert.name)
-                        .saryText(.display)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                    Text("يحتاج مساعدة · \(SaryFormat.elapsed(since: alert.since, now: now))")
-                        .saryText(.title2, weight: .medium)
-                        .opacity(0.92)
-                }
-                .multilineTextAlignment(.center)
-
-                if alert.distanceMeters != nil || alert.bearingDegrees != nil {
-                    HStack(spacing: theme.space(.m)) {
-                        if let b = alert.bearingDegrees {
-                            SaryBearingArrow(degrees: b, color: p.onEmergency, size: 34)
-                        }
-                        if let d = alert.distanceMeters {
-                            Text(SaryFormat.distance(meters: d)).saryNumber(.title)
-                        }
-                    }
-                    .padding(.horizontal, theme.space(.xl))
-                    .padding(.vertical, theme.space(.m))
-                    .background(Capsule().fill(Color.black.opacity(0.18)))
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(Text([alert.distanceMeters.map { "على بعد \(SaryFormat.distance(meters: $0))" },
-                                              alert.bearingDegrees.map { SaryFormat.relativeDirection($0) }]
-                        .compactMap { $0 }.joined(separator: "، ")))
-                }
-                Spacer(minLength: 0)
-                VStack(spacing: theme.space(.m)) {
-                    Button(action: show) {
-                        Label("أظهره على الخريطة", systemImage: SaryIcon.showOnMap)
-                            .saryText(.headline)
-                            .foregroundStyle(p.emergency)
-                            .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
-                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(p.onEmergency))
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityIdentifier("sos-alert-show")
-                    if alert.hasPhone {
-                        Button(action: call) {
-                            Label("اتصل به", systemImage: SaryIcon.phone)
-                                .saryText(.headline)
-                                .foregroundStyle(p.onEmergency)
-                                .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
-                                .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.black.opacity(0.22)))
-                                .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
-                        }
-                        .buttonStyle(SaryPressStyle())
-                        .accessibilityIdentifier("sos-alert-call")
-                    }
-                    /* UI-AUDIT 0.5: a friend's SOS may need the official line too (device test of PR #149). */
-                    Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
-                        Label("اتصل ٩١١", systemImage: SaryIcon.phone)
-                            .saryText(.headline)
-                            .foregroundStyle(p.onEmergency)
-                            .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
-                            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text("اتصل ٩١١"))
-                    .accessibilityHint(Text("الطوارئ الرسمية"))
-                    .accessibilityIdentifier("sos-alert-911")
-                }
+            /* The design where it fits (standard iPhones); a smaller hero on short windows
+             * (iPhone SE, Display Zoom, large text); scrolling as the last resort, so the
+             * buttons never overlap the name or fall off the screen. */
+            ViewThatFits(in: .vertical) {
+                content(p, hero: .regular)
+                content(p, hero: .compact)
+                ScrollView { content(p, hero: .compact) }
             }
-            .foregroundStyle(p.onEmergency)
-            .padding(.horizontal, theme.space(.xxl))
-            .padding(.vertical, theme.space(.xl))
         }
         .onAppear {
             buzz += 1
@@ -550,5 +524,95 @@ struct SaryFriendSOSAlert: View {
         .sensoryFeedback(.error, trigger: buzz)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+    }
+
+    private func content(_ p: SaryPalette, hero: SarySOSHeroMetrics) -> some View {
+        VStack(spacing: theme.space(.xl)) {
+            Spacer(minLength: 0)
+            ZStack {
+                Circle().stroke(p.onEmergency.opacity(0.25), lineWidth: 2)
+                    .frame(width: hero.ring, height: hero.ring)
+                    .scaleEffect(pulse ? 1.12 : 0.92)
+                    .opacity(pulse ? 0 : 1)
+                Circle().fill(p.onEmergency.opacity(0.1)).frame(width: hero.disc, height: hero.disc)
+                SaryAvatar(name: alert.name, color: alert.color, size: hero.avatar)
+            }
+            .accessibilityHidden(true)
+            VStack(spacing: theme.space(.s)) {
+                Label("طوارئ", systemImage: SaryIcon.sos)
+                    .saryText(.headline)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Capsule().fill(p.onEmergency.opacity(0.18)))
+                Text(alert.name)
+                    .saryText(.display)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                Text("يحتاج مساعدة · \(SaryFormat.elapsed(since: alert.since, now: now))")
+                    .saryText(.title2, weight: .medium)
+                    .opacity(0.92)
+            }
+            .multilineTextAlignment(.center)
+
+            if alert.distanceMeters != nil || alert.bearingDegrees != nil {
+                HStack(spacing: theme.space(.m)) {
+                    if let b = alert.bearingDegrees {
+                        SaryBearingArrow(degrees: b, color: p.onEmergency, size: 34)
+                    }
+                    if let d = alert.distanceMeters {
+                        Text(SaryFormat.distance(meters: d)).saryNumber(.title)
+                    }
+                }
+                .padding(.horizontal, theme.space(.xl))
+                .padding(.vertical, theme.space(.m))
+                .background(Capsule().fill(Color.black.opacity(0.18)))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text([alert.distanceMeters.map { "على بعد \(SaryFormat.distance(meters: $0))" },
+                                          alert.bearingDegrees.map { SaryFormat.relativeDirection($0) }]
+                    .compactMap { $0 }.joined(separator: "، ")))
+            }
+            Spacer(minLength: 0)
+            VStack(spacing: theme.space(.m)) {
+                Button(action: show) {
+                    Label("أظهره على الخريطة", systemImage: SaryIcon.showOnMap)
+                        .saryText(.headline)
+                        .foregroundStyle(p.emergency)
+                        .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
+                        .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(p.onEmergency))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityIdentifier("sos-alert-show")
+                if alert.hasPhone {
+                    Button(action: call) {
+                        Label("اتصل به", systemImage: SaryIcon.phone)
+                            .saryText(.headline)
+                            .foregroundStyle(p.onEmergency)
+                            .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
+                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.black.opacity(0.22)))
+                            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
+                    }
+                    .buttonStyle(SaryPressStyle())
+                    .accessibilityIdentifier("sos-alert-call")
+                }
+                /* UI-AUDIT 0.5: a friend's SOS may need the official line too (device test of PR #149). */
+                Button { UIApplication.shared.open(Enjad.officialCallURL) } label: {
+                    Label("اتصل ٩١١", systemImage: SaryIcon.phone)
+                        .saryText(.headline)
+                        .foregroundStyle(p.onEmergency)
+                        .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
+                        .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
+                }
+                .buttonStyle(SaryPressStyle())
+                .accessibilityLabel(Text("اتصل ٩١١"))
+                .accessibilityHint(Text("الطوارئ الرسمية"))
+                .accessibilityIdentifier("sos-alert-911")
+            }
+        }
+        /* iPad: one centred column, not buttons 1000 pt wide (the red stays full-bleed). */
+        .frame(maxWidth: SaryLayout.formWidth)
+        .foregroundStyle(p.onEmergency)
+        .padding(.horizontal, theme.space(.xxl))
+        .padding(.vertical, theme.space(.xl))
+        .frame(maxWidth: .infinity)
     }
 }
