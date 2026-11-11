@@ -19,6 +19,9 @@ struct SaryPTTButton: View {
     /// target ABOVE the capsule (a sibling, not a child), so the talk gesture never sees that touch.
     var channelLabel: String? = nil
     var openChannels: (() -> Void)? = nil
+    /// The pill's minimum width when the dock is short of room (`LiveFit.dock`); nil: 200 / 178.
+    /// Below the regular width the side padding tightens and the title scales down (never wraps).
+    var pillMinWidth: CGFloat? = nil
 
     @Environment(\.sary) private var theme
     @State private var pressing = false
@@ -85,8 +88,14 @@ struct SaryPTTButton: View {
                 pillFace(h: h, d: d, fill: nil, ink: ink, placeholder: true)
             }
         }
-        .fixedSize()
+        /* Vertical only (was both): fixed horizontally the pill kept its full title width and pushed
+         * the dock's row off a 375 pt screen; now it narrows down to its minimum width and the
+         * title scales (`minimumScaleFactor`). With room it is exactly as wide as before. */
+        .fixedSize(horizontal: false, vertical: true)
     }
+
+    private var regularPillWidth: CGFloat { big ? 200 : 178 }
+    private var pillNarrow: Bool { (pillMinWidth ?? regularPillWidth) < regularPillWidth }
 
     /// The capsule's content. `placeholder`: the same layout, invisible, with only the channel
     /// label live (the sibling layer that takes the label's taps).
@@ -101,9 +110,9 @@ struct SaryPTTButton: View {
                 }
             }
         }
-        .padding(.leading, big ? 26 : 20)
-        .padding(.trailing, big ? 28 : 20)
-        .frame(minWidth: big ? 200 : 178, minHeight: h, maxHeight: h)
+        .padding(.leading, pillNarrow ? 16 : (big ? 26 : 20))
+        .padding(.trailing, pillNarrow ? 16 : (big ? 28 : 20))
+        .frame(minWidth: pillMinWidth ?? regularPillWidth, minHeight: h, maxHeight: h)
         if placeholder {
             content.allowsHitTesting(true)
         } else {

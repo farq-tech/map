@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import SaryAlbarq
 
@@ -171,5 +172,100 @@ final class LiveScreenRulesTests: XCTestCase {
         XCTAssertFalse(LiveScreenRules.memberGoNeedsConfirm(phase: .guiding, currentMemberId: "fahad", memberId: "fahad"), "«حدّث الطريق»")
         XCTAssertFalse(LiveScreenRules.memberGoNeedsConfirm(phase: .idle, currentMemberId: nil, memberId: "fahad"))
         XCTAssertFalse(LiveScreenRules.memberGoNeedsConfirm(phase: .arrived, currentMemberId: nil, memberId: "fahad"))
+    }
+}
+
+/// Screen-size adaptation (`LiveFit`): the regular design on a standard phone, the compact one
+/// only on short / narrow screens or with large text.
+final class LiveFitTests: XCTestCase {
+    /// iPhone SE 2/3, 13 mini, 15/16, 16 Pro Max (points, portrait).
+    let se = CGSize(width: 375, height: 667)
+    let mini = CGSize(width: 375, height: 812)
+    let standard = CGSize(width: 393, height: 852)
+    let proMax = CGSize(width: 440, height: 956)
+
+    func testOnlyTheSEIsShort() {
+        XCTAssertTrue(LiveFit.compactHeight(se.height))
+        XCTAssertFalse(LiveFit.compactHeight(mini.height))
+        XCTAssertFalse(LiveFit.compactHeight(standard.height))
+        XCTAssertFalse(LiveFit.compactHeight(proMax.height))
+        XCTAssertFalse(LiveFit.compactHeight(0), "not measured yet: the regular layout")
+    }
+
+    func testHeaderWeatherFollowsTheRealWidth() {
+        XCTAssertFalse(LiveFit.showsHeaderWeather(width: se.width, largeText: false), "375 pt: the state line needs the width")
+        XCTAssertFalse(LiveFit.showsHeaderWeather(width: mini.width, largeText: false))
+        XCTAssertTrue(LiveFit.showsHeaderWeather(width: standard.width, largeText: false), "unchanged on a standard phone")
+        XCTAssertTrue(LiveFit.showsHeaderWeather(width: proMax.width, largeText: false))
+        XCTAssertFalse(LiveFit.showsHeaderWeather(width: standard.width, largeText: true), "large text: only the widest phones keep it")
+        XCTAssertTrue(LiveFit.showsHeaderWeather(width: proMax.width, largeText: true))
+        XCTAssertTrue(LiveFit.showsHeaderWeather(width: 0, largeText: false), "not measured yet")
+    }
+
+    func testAlertListStaysAboveTheDockOnTheSE() {
+        XCTAssertEqual(LiveFit.alertListMaxHeight(screenHeight: standard.height), standard.height * 0.42, accuracy: 0.01, "unchanged")
+        XCTAssertEqual(LiveFit.alertListMaxHeight(screenHeight: proMax.height), proMax.height * 0.42, accuracy: 0.01)
+        XCTAssertEqual(LiveFit.alertListMaxHeight(screenHeight: se.height), 200)
+        /* SE stopped, list open: 20 status + 4 + 70 header + 8 + list + 8 + 106 side (no captions)
+         * must end above the dock (667 − 142 peek − 8 − 84 disc row ≈ 433). */
+        XCTAssertLessThanOrEqual(20 + 4 + 70 + 8 + LiveFit.alertListMaxHeight(screenHeight: se.height) + 8 + 106, 433)
+    }
+
+    func testSideCaptionsDropOnlyWhenShortOrGuiding() {
+        XCTAssertTrue(LiveFit.sideCaptions(guiding: false, screenHeight: standard.height))
+        XCTAssertTrue(LiveFit.sideCaptions(guiding: false, screenHeight: mini.height))
+        XCTAssertFalse(LiveFit.sideCaptions(guiding: false, screenHeight: se.height))
+        XCTAssertFalse(LiveFit.sideCaptions(guiding: true, screenHeight: standard.height))
+    }
+
+    func testDockKeepsTheDesignWhenThereIsRoom() {
+        /* Stopped, no primary: the 178 pt pill alone. */
+        let alone = LiveFit.dock(width: standard.width - 32, ptt: LiveFit.pillPTTWidth, speed: 0, cta: nil, cluster: 0)
+        XCTAssertEqual(alone, LiveFit.Dock(pttMinWidth: LiveFit.pillPTTWidth, ctaOwnRow: false))
+        /* Driving, speed + big pill, no primary. */
+        let speed = LiveFit.dock(width: se.width - 32, ptt: LiveFit.bigPTTWidth, speed: LiveFit.speedBubbleWidth, cta: nil, cluster: 0)
+        XCTAssertEqual(speed, LiveFit.Dock(pttMinWidth: LiveFit.bigPTTWidth, ctaOwnRow: false))
+        /* Pro Max: speed + big pill + «وصلنا» all fit at full size. */
+        let wide = LiveFit.dock(width: proMax.width - 32, ptt: LiveFit.bigPTTWidth, speed: LiveFit.speedBubbleWidth,
+                                cta: LiveFit.compactCTAWidth(title: "وصلنا"), cluster: 0)
+        XCTAssertEqual(wide, LiveFit.Dock(pttMinWidth: LiveFit.bigPTTWidth, ctaOwnRow: false))
+    }
+
+    func testDockNeverOverflowsANarrowPhone() {
+        for size in [se, mini, standard, proMax] {
+            let width = size.width - 32
+            for title in ["وصلنا", "وين رايحين؟", "استأنف التوجيه", "ننتظر أمير الطلعة"] {
+                for (speed, cluster) in [(LiveFit.speedBubbleWidth, CGFloat(0)), (0, LiveFit.navSpeedClusterWidth(drive: true, limit: true))] {
+                    let cta = LiveFit.compactCTAWidth(title: title)
+                    let fit = LiveFit.dock(width: width, ptt: LiveFit.bigPTTWidth, speed: speed, cta: cta, cluster: cluster)
+                    XCTAssertGreaterThanOrEqual(fit.pttMinWidth, LiveFit.minPTTWidth)
+                    let row = (speed > 0 ? speed + 8 : 0) + fit.pttMinWidth + (cluster > 0 ? cluster + 8 : 0) + (fit.ctaOwnRow ? 0 : cta + 8)
+                    XCTAssertLessThanOrEqual(row, width, "\(size) «\(title)»: the row fits")
+                    if fit.ctaOwnRow { XCTAssertLessThanOrEqual(cta, width, "its own row fits it") }
+                }
+            }
+        }
+    }
+
+    func testDockOnTheSE() {
+        let width = se.width - 32
+        /* Speed + pill + «وصلنا»: the pill narrows, the primary stays in the row. */
+        let arrived = LiveFit.dock(width: width, ptt: LiveFit.bigPTTWidth, speed: LiveFit.speedBubbleWidth,
+                                   cta: LiveFit.compactCTAWidth(title: "وصلنا"), cluster: 0)
+        XCTAssertFalse(arrived.ctaOwnRow)
+        XCTAssertLessThan(arrived.pttMinWidth, LiveFit.bigPTTWidth)
+        /* Guiding: pill + primary + speed and limit do not fit: the primary moves up a row. */
+        let guiding = LiveFit.dock(width: width, ptt: LiveFit.bigPTTWidth, speed: 0,
+                                   cta: LiveFit.compactCTAWidth(title: "وصلنا"), cluster: LiveFit.navSpeedClusterWidth(drive: true, limit: true))
+        XCTAssertTrue(guiding.ctaOwnRow)
+        XCTAssertEqual(guiding.pttMinWidth, LiveFit.bigPTTWidth)
+        XCTAssertEqual(LiveFit.dock(width: 0, ptt: 200, speed: 76, cta: 100, cluster: 0), LiveFit.Dock(pttMinWidth: 200, ctaOwnRow: false), "not measured yet")
+    }
+
+    func testTextScaleGrowsAndIsCappedAtTheDockCap() {
+        XCTAssertEqual(LiveFit.textScale(.large), 1)
+        XCTAssertLessThan(LiveFit.textScale(.small), 1)
+        XCTAssertEqual(LiveFit.textScale(.xxLarge), LiveFit.textScale(.accessibility5), "the dock is capped at xxLarge")
+        XCTAssertGreaterThan(LiveFit.compactCTAWidth(title: "وصلنا", textScale: 1.24), LiveFit.compactCTAWidth(title: "وصلنا"))
     }
 }

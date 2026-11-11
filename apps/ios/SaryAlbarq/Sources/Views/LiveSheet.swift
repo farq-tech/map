@@ -314,6 +314,9 @@ struct LiveQuickRow: View {
             }
         }
         .padding(.horizontal, theme.space(.m))
+        /* Captions of round buttons in the fixed-height peek (`SheetDetentUI.peekHeight`), not body
+         * text: uncapped they grew taller than the peek and were cut off at accessibility sizes. */
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sheet.quickRow")
     }

@@ -269,3 +269,95 @@ extension LiveOutingController {
         if nav.auto || legs.current != nil { flowTapped(.changeDestination) } else { openNavPicker() }
     }
 }
+
+/// Screen-size adaptation of the live screen's chrome, as pure rules (unit-tested in
+/// `LiveDeclutterTests`). Everything here returns the regular design on a standard phone
+/// (390–402 × 844–874 pt, default text) and only steps in when the room is short: the iPhone SE
+/// (375 × 667, 20 pt status bar, no home indicator), the 375 pt wide minis, or large Dynamic Type.
+enum LiveFit {
+    /// Below this height the screen is «short» (iPhone SE 2/3: 667 pt): secondary pieces drop out.
+    static let compactHeightBelow: CGFloat = 700
+
+    /// A short screen. 0 (not measured yet) is never short.
+    static func compactHeight(_ height: CGFloat) -> Bool { height > 0 && height < compactHeightBelow }
+
+    /// The header's weather pill: on a narrow phone the outing's state line needs the width more
+    /// (the weather stays in the sheet and in its own alerts). Large text needs a wider phone.
+    /// Replaces `UIScreen.main.bounds.width < 380` with the real container width.
+    static func showsHeaderWeather(width: CGFloat, largeText: Bool) -> Bool {
+        guard width > 0 else { return true }
+        return width >= (largeText ? 420 : 380)
+    }
+
+    /// The alerts' list under the header (the bell): 42 % of the screen, at least 220 pt — on a
+    /// short screen at most 30 % (≥ 160 pt), so the list and the side buttons under it stay above
+    /// the dock and the peeking sheet.
+    static func alertListMaxHeight(screenHeight h: CGFloat) -> CGFloat {
+        let regular = max(220, h * 0.42)
+        guard compactHeight(h) else { return regular }
+        return min(regular, max(160, (h * 0.30).rounded()))
+    }
+
+    /// Captions under the map's side buttons: off while guiding (as before) and on a short screen,
+    /// where the two 19 pt captions are what pushes the side column into the dock.
+    static func sideCaptions(guiding: Bool, screenHeight: CGFloat) -> Bool {
+        !guiding && !compactHeight(screenHeight)
+    }
+
+    // MARK: The dock (bottom row over the sheet)
+
+    /// «اضغط وتكلم» pill: 200 pt big (driving), 178 pt stopped, never under 150 pt.
+    static let bigPTTWidth: CGFloat = 200
+    static let pillPTTWidth: CGFloat = 178
+    static let minPTTWidth: CGFloat = 150
+    /// `LovableSpeedBubble`.
+    static let speedBubbleWidth: CGFloat = 76
+
+    /// `NavSpeedCluster`: the speed disc, and the limit sign overlapping it by 6 pt.
+    static func navSpeedClusterWidth(drive: Bool, limit: Bool) -> CGFloat {
+        let d: CGFloat = drive ? 72 : 64
+        return limit ? d + d * 0.72 - 6 : d
+    }
+
+    /// The compact primary pill (`OutingPrimaryCTA(compact: true)`): 16 pt icon, 6 pt gap, 2 × 16 pt
+    /// padding and the 15 pt heavy title (≈ 8.5 pt a character at the default size).
+    static func compactCTAWidth(title: String, textScale: CGFloat = 1) -> CGFloat {
+        (16 + 6 + 32 + CGFloat(title.count) * 8.5 * textScale).rounded(.up)
+    }
+
+    /// Roughly how much the chrome's text grows at a Dynamic Type size (body 17 pt = 1), up to the
+    /// dock's `xxLarge` cap.
+    static func textScale(_ size: DynamicTypeSize) -> CGFloat {
+        switch size {
+        case .xSmall: return 0.82
+        case .small: return 0.88
+        case .medium: return 0.94
+        case .large: return 1
+        case .xLarge: return 1.12
+        default: return 1.24
+        }
+    }
+
+    struct Dock: Equatable {
+        /// The talk pill's minimum width (its regular width when the row has room).
+        var pttMinWidth: CGFloat
+        /// The compact primary moves to its own row just above the dock (same side), so neither
+        /// it nor «اضغط وتكلم» is squeezed into a truncated label.
+        var ctaOwnRow: Bool
+    }
+
+    /// Fits the driving dock's row — [speed] «اضغط وتكلم» [compact primary] [guiding speed] — in
+    /// `width`. The pill gives way first (down to `minPTTWidth`); if that is not enough the
+    /// primary takes its own row. `speed` / `cluster` are 0 when not shown; `cta` is nil when
+    /// there is no compact primary in the row.
+    static func dock(width: CGFloat, ptt: CGFloat, speed: CGFloat, cta: CGFloat?, cluster: CGFloat, spacing: CGFloat = 8) -> Dock {
+        guard width > 0 else { return Dock(pttMinWidth: ptt, ctaOwnRow: false) }
+        let others = (speed > 0 ? speed + spacing : 0) + (cluster > 0 ? cluster + spacing : 0)
+        if let cta {
+            let room = width - others - cta - spacing
+            if room >= min(ptt, minPTTWidth) { return Dock(pttMinWidth: min(ptt, room), ctaOwnRow: false) }
+        }
+        let room = width - others
+        return Dock(pttMinWidth: min(ptt, max(minPTTWidth, room)), ctaOwnRow: cta != nil)
+    }
+}

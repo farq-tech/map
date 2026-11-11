@@ -133,7 +133,12 @@ struct LovableSpeedBubble: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text("كم/س").font(.sary(11, .regular)).foregroundStyle(p.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
+        .padding(.horizontal, 8)
+        /* A fixed 76 pt disc: its text follows Dynamic Type only as far as `SarySpeedometer` does. */
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .frame(width: 76, height: 76)
         .background(Circle().fill(p.chromeOpaque.opacity(0.88)))
         .saryGlass(Circle(), role: .chrome)
