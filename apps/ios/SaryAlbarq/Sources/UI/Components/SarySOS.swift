@@ -381,7 +381,7 @@ struct SaryMySOSStrip: View {
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.m))
                     .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(Color.white.opacity(0.85)))
+                    .background(Capsule().fill(p.onEmergency.opacity(0.9)))
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text("اتصل ٩١١"))
