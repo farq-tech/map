@@ -332,3 +332,45 @@ final class TripLogTests: XCTestCase {
         XCTAssertNotNil(TripLogStore.load("x", defaults: d), "a broken value is replaced, as before")
     }
 }
+
+/// `OutingSession.Kind` (docs/SOLO-OUTING.md (ب)): "no server" (`isLocal`) and "demo data"
+/// (`isDemo`) are separate questions. A solo session is local without being the demo.
+@MainActor
+final class OutingSessionKindTests: XCTestCase {
+    func testKindMapping() {
+        XCTAssertFalse(OutingSession.Kind.server.isLocal, "a real outing talks to the server")
+        XCTAssertFalse(OutingSession.Kind.server.isDemo)
+        XCTAssertTrue(OutingSession.Kind.demo.isLocal, "the demo never talks to the server")
+        XCTAssertTrue(OutingSession.Kind.demo.isDemo)
+        XCTAssertTrue(OutingSession.Kind.solo.isLocal, "solo never talks to the server")
+        XCTAssertFalse(OutingSession.Kind.solo.isDemo, "solo has no demo data or demo behaviour")
+    }
+
+    private func env() -> SessionEnv {
+        var e = SessionEnv()
+        e.defaults = UserDefaults(suiteName: "session-kind-\(UUID().uuidString)")!
+        e.timers = false
+        e.nearbyMesh = false
+        e.trailMatching = nil
+        e.trailDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("kind-\(UUID().uuidString)")
+        return e
+    }
+
+    func testSessionWithoutDemoViewIsServer() {
+        let s = OutingSession(id: "o1", myUserId: "u1", api: OutingsAPI(tokenProvider: { "t" }), token: String(repeating: "t", count: 43),
+                              location: LocationSharer(), env: env())
+        XCTAssertEqual(s.kind, .server)
+        XCTAssertFalse(s.isLocal)
+        XCTAssertFalse(s.isDemo)
+        XCTAssertNotNil(s.safetyBackend, "a real outing keeps the server's safety pack")
+    }
+
+    func testSessionWithDemoViewIsDemoAndLocal() {
+        let s = OutingSession(id: DemoData.outingId, myUserId: DemoData.meId, api: OutingsAPI(tokenProvider: { nil }), token: "",
+                              location: LocationSharer(), demo: DemoData.view(), env: env())
+        XCTAssertEqual(s.kind, .demo)
+        XCTAssertTrue(s.isLocal)
+        XCTAssertTrue(s.isDemo)
+        XCTAssertNil(s.safetyBackend, "the demo's safety pack is all local")
+    }
+}

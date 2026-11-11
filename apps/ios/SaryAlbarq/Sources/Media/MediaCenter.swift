@@ -452,7 +452,7 @@ enum MediaCenters {
         if let c = centers[session.id] { return c }
         let iLead = { [weak session] in session?.view?.iLead == true }
         let backend: MediaBackend
-        if session.isDemo {
+        if session.isLocal {
             let seeded: SharedMediaState? = ProcessInfo.processInfo.arguments.contains("-SaryMediaShared")
                 ? SharedMediaState(video_id: "M7lc1UVf-VE", title: "YouTube Developers Live: Embedded Web Player Customization",
                                    controller_user_id: "00000000-0000-4000-8000-000000000002", position_s: 42, playing: true,

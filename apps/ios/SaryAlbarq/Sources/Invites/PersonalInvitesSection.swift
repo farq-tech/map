@@ -281,14 +281,14 @@ struct LivePersonalInvites<Legacy: View>: View {
         self.legacy = legacy()
         let snap = session.view?.snapshot
         _model = StateObject(wrappedValue: PersonalInvitesModel(
-            outingId: session.id, outingName: snap?.outing.name ?? "", api: session.isDemo ? nil : session.api, isDemo: session.isDemo,
+            outingId: session.id, outingName: snap?.outing.name ?? "", api: session.isLocal ? nil : session.api, isDemo: session.isDemo,
             initial: snap?.personal_invites, openLinks: snap?.invite?.open_links ?? (session.isDemo ? false : nil)))
     }
 
     var body: some View {
         let v = session.view
         if PersonalInvitesSupport.serverHasPersonal(loaded: v != nil, invite: v?.snapshot.invite, personalInvites: v?.snapshot.personal_invites,
-                                                  iLead: v?.iLead == true, isDemo: session.isDemo), !model.serverLacksPersonal {
+                                                  iLead: v?.iLead == true, isDemo: session.isLocal), !model.serverLacksPersonal {
             PersonalInvitesSection(model: model, canLead: v?.iLead == true, ended: v?.status == .ended) { legacy }
                 .onChange(of: v?.members.count ?? 0) { _, _ in Task { await model.load() } }
         } else {

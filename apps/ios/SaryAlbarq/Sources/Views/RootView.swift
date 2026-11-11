@@ -73,7 +73,7 @@ extension LiveOutingHost {
         /* The destination is saved with the outing; wait until the plan has it (never start without one). */
         guard controller.tripDestination != nil || v.status != .created else { return }
         model.pendingStart = nil
-        if v.status == .created, !controller.session.isDemo { controller.startOuting() }
+        if v.status == .created, !controller.session.isLocal { controller.startOuting() }
     }
 
     fileprivate func startPendingMapDestination() {

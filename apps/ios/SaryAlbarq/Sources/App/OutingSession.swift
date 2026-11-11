@@ -92,12 +92,29 @@ final class OutingSession: ObservableObject, Identifiable {
     /// The GPS is kept on with the screen locked, for the trail only.
     @Published private(set) var recordingInBackground = false
 
-    let isDemo: Bool
+    /// Where this session's outing lives.
+    /// - `server`: a real outing; everything goes through `api` and the live channel.
+    /// - `demo`: `-demo`, seeded friends and canned replies, on this phone only.
+    /// - `solo`: «اتجه» on my own (docs/SOLO-OUTING.md), one member (me), on this phone only.
+    enum Kind: Equatable, Sendable {
+        case server, demo, solo
+
+        /// No server: nothing is sent, every action applies on this phone.
+        var isLocal: Bool { self != .server }
+        /// Demo data and demo behaviour (seeded members, «أبو فهد» answering, auto-nav off…).
+        var isDemo: Bool { self == .demo }
+    }
+
+    nonisolated let kind: Kind
+    /// `-demo` data or behaviour. For "is there a server?" ask `isLocal`.
+    nonisolated var isDemo: Bool { kind.isDemo }
+    /// No server behind this session (demo or solo): never send, apply locally.
+    nonisolated var isLocal: Bool { kind.isLocal }
     let location: LocationSharer
     /// Return-timer and «غرّزت» events for `SafetyController`.
     let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
     /// The server side of the safety pack (nil in the demo: all local).
-    var safetyBackend: SafetyBackend? { isDemo ? nil : api }
+    var safetyBackend: SafetyBackend? { isLocal ? nil : api }
     /// Internal so the per-person invites model (Sources/Invites) shares this client.
     let api: OutingsAPI
     private let token: String
@@ -161,7 +178,7 @@ final class OutingSession: ObservableObject, Identifiable {
         self.token = token
         self.location = location
         self.env = env
-        self.isDemo = demo != nil
+        self.kind = demo != nil ? .demo : .server
         self.view = demo
         self.mode = ShareMode(rawValue: env.defaults.string(forKey: Self.modeKey) ?? "") ?? .balanced
         self.batterySharing = env.defaults.bool(forKey: Self.batteryKey)
@@ -299,18 +316,22 @@ final class OutingSession: ObservableObject, Identifiable {
             ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
             Task { await self.beginSharing() }
         }
-        if Self.forcedOffline, !isDemo {
+        if Self.forcedOffline, !isLocal {
             link = .offline
             location.onFix = { [weak self] f in self?.handleFix(f) }
             return
         }
         #endif
-        /* The demo has no server: the walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
         voiceNotes.attach()
-        guard !isDemo else {
-            walkie.attach(channel: nil, mesh: mesh)
-            debugKeepDemoFixLive()
-            return debugAutoTalk()
+        /* A local session (demo, solo) has no server: no live channel, no background sender, no heartbeat. */
+        guard !isLocal else {
+            /* The demo's walkie-talkie still works phone to phone (two simulators, -SaryMeshTest). */
+            if isDemo {
+                walkie.attach(channel: nil, mesh: mesh)
+                debugKeepDemoFixLive()
+                debugAutoTalk()
+            }
+            return
         }
         let ch = LiveChannel(outingId: id, token: token, deps: .init(
             makeSocket: env.makeSocket,
@@ -497,7 +518,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// about to be suspended), so the others read «الموقع «أثناء الاستخدام» بس» right away
     /// instead of «انقطع» ten minutes later.
     func sendPresenceHint(foreground: Bool) {
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil else { return }
+        guard !isLocal, wantsToShare, view?.status == .active, closedReason == nil else { return }
         let hint = currentHint(foreground: foreground), low = env.lowPower(), outing = id
         if let post = env.postHint {
             Task { await post(outing, hint, low) }
@@ -515,13 +536,13 @@ final class OutingSession: ObservableObject, Identifiable {
     /// With «دائمًا» iOS relaunches it on the next significant move and sharing resumes by itself.
     func appWillTerminate() {
         saveOfflineQueue()
-        guard !isDemo, wantsToShare, view?.status == .active, closedReason == nil, env.postHint == nil else { return }
+        guard !isLocal, wantsToShare, view?.status == .active, closedReason == nil, env.postHint == nil else { return }
         api.heartbeatTerminatingNow(id, gps: location.gpsState)
     }
 
     /// A fix that could not reach the server: kept (thinned, capped, persisted) for the batch.
     func queueOffline(_ f: DeviceFix, mode: ShareMode) {
-        guard !isDemo, gate.allowsPosition || gate.allowsBackgroundPosition else { return }
+        guard !isLocal, gate.allowsPosition || gate.allowsBackgroundPosition else { return }
         if offlineQueue.enqueue(f, mode: mode) { saveOfflineQueue() }
     }
 
@@ -531,7 +552,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// The network is back (socket live, a background POST went through): upload what waited, once.
     func flushBackfill() {
-        guard !isDemo, !offlineQueue.isEmpty, view?.status == .active || view == nil, closedReason == nil, hasConsent else { return }
+        guard !isLocal, !offlineQueue.isEmpty, view?.status == .active || view == nil, closedReason == nil, hasConsent else { return }
         let now = env.now()
         offlineQueue.prune(nowMs: now)
         guard let b = offlineQueue.batch(nowMs: now) else { return saveOfflineQueue() }
@@ -570,7 +591,7 @@ final class OutingSession: ObservableObject, Identifiable {
         }
         ShareMemory.recordConsent(user: myUserId, outing: id, defaults: env.defaults)
         pendingServerStop = false
-        if !v.snapshot.me.sharing, !isDemo {
+        if !v.snapshot.me.sharing, !isLocal {
             do { _ = try await api.setSharing(id, sharing: true) } catch let e as OutingAPIError {
                 errorText = e.arabic
                 return
@@ -609,7 +630,7 @@ final class OutingSession: ObservableObject, Identifiable {
         /* Tell nearby cars too, so a relay never keeps showing where you were. */
         mesh.stop(farewell: .stop)
         stopSharingLocally()
-        guard !isDemo else { return }
+        guard !isLocal else { return }
         /* Off screen (e.g. from the lock screen / CarPlay later): finish telling the server. */
         let done = env.keepAlive()
         defer { done() }
@@ -644,7 +665,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard ShareMemory.activeShare(user: myUserId, defaults: env.defaults) == id, hasConsent else { return }
         wantsToShare = true
         if let v = view { reassertServerShare(v) } else { reassertOnSnapshot = true }
-        if !visible && hasAlwaysPermission && !isDemo && view == nil {
+        if !visible && hasAlwaysPermission && !isLocal && view == nil {
             if env.authorizationOverride ?? location.canLocate { location.startSharing(mode: mode) }
             let done = env.keepAlive()
             Task { [weak self, api, id] in
@@ -659,7 +680,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// switched back on when the trip opens. Once only per open: a later «off» from the server is
     /// respected (the gate closes) — it can only come from elsewhere.
     private func reassertServerShare(_ v: OutingView) {
-        guard !isDemo, !v.snapshot.me.sharing, v.status != .ended, closedReason == nil, !reassertingServerShare else { return }
+        guard !isLocal, !v.snapshot.me.sharing, v.status != .ended, closedReason == nil, !reassertingServerShare else { return }
         reassertingServerShare = true
         Task { [weak self] in
             guard let self else { return }
@@ -792,14 +813,14 @@ final class OutingSession: ObservableObject, Identifiable {
         let m = location.effectiveMode
         if !gate.foreground {
             /* Off screen («دائمًا»): the HTTP sender keeps only the latest fix and decides when. */
-            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isDemo else { return }
+            guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok, !isLocal else { return }
             backgroundSender?.offer(f, mode: m)
             return
         }
         guard Policy.shouldSend(f, last: lastSent, mode: m, nowMs: now) else { return }
         guard ServerRules.check(Policy.wireFix(f, mode: m, nowMs: now)) == .ok else { return }
         lastSent = .init(fix: f, sentAtMs: now)
-        if isDemo { return }
+        if isLocal { return }
         /* No link at all (dead zone): keep it for the batch upload when the network is back. */
         if link == .offline || link == .connecting { queueOffline(f, mode: m) }
         channel?.sendFix(f, mode: m)
@@ -993,7 +1014,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Reconcile the waiting state with the authoritative outing snapshot.
     /// This is also exposed through the waiting banner as an immediate recovery action.
     func refreshWaitingStatus() async {
-        guard !isDemo, view?.status == .created, !refreshingWaitingStatus else { return }
+        guard !isLocal, view?.status == .created, !refreshingWaitingStatus else { return }
         refreshingWaitingStatus = true
         defer { refreshingWaitingStatus = false }
         guard let snapshot = try? await api.poll(id) else { return }
@@ -1099,7 +1120,7 @@ final class OutingSession: ObservableObject, Identifiable {
     @discardableResult
     func sendNote(_ text: String) async -> Bool {
         let clean = text.isEmpty ? "" : (ServerRules.cleanText(text, max: ServerRules.noteMax) ?? "")
-        if isDemo {
+        if isLocal {
             if let me = view?.myId { view?.apply(.memberNote(userId: me, note: clean.isEmpty ? nil : MemberNote(text: clean, at: ISODate.string(Date())))) }
             return true
         }
@@ -1113,7 +1134,7 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func setStatus(_ action: String) async {
-        if isDemo {
+        if isLocal {
             /* `-demo`: no server; the demo outing changes state on this phone only. */
             let st: OutingStatus = action == "end" ? .ended : action == "pause" ? .paused : .active
             view?.apply(.outingStatus(st))
@@ -1132,7 +1153,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Leave the outing (also after it ended). True when the server agreed.
     @discardableResult
     func leave() async -> Bool {
-        if isDemo { stopSharingLocally(); closed(.left); return true }
+        if isLocal { stopSharingLocally(); closed(.left); return true }
         /* Stop only once the server agreed: a failed request (no network) leaves me a member,
          * and a member keeps sharing — the error says so and «غادر الطلعة» can be tried again. */
         let ok = await run("leave") { try await api.leave(id) }
@@ -1157,7 +1178,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func setHidden(_ on: Bool) async -> Bool {
         guard let me = view?.myId, view?.status != .ended else { return false }
         let ok: Bool
-        if isDemo {
+        if isLocal {
             view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
             ok = true
         } else {
@@ -1178,7 +1199,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// «نبّهه» (leader): nil when sent, else the line to show.
     func nudge(_ uid: String) async -> String? {
-        if isDemo { return nil }
+        if isLocal { return nil }
         do {
             try await api.nudge(id, member: uid)
             return nil
@@ -1212,7 +1233,7 @@ final class OutingSession: ObservableObject, Identifiable {
             if w.age_ms <= 25 * 60_000, (f.accuracy ?? 0) <= ServerRules.maxAccuracyM { wire = w }
         }
         mesh.announce(.sos, sosFix: wire == nil ? nil : location.lastFix)
-        if isDemo {
+        if isLocal {
             view?.apply(.sos(userId: me, sos: SosInfo(at: ISODate.string(Date()), fix: nil), refresh: false))
             return wasHidden
         }
@@ -1231,7 +1252,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func cancelSOS() async {
         guard let me = view?.myId else { return }
         mesh.announce(.sosClear)
-        if isDemo { view?.apply(.sos(userId: me, sos: nil, refresh: false)); return }
+        if isLocal { view?.apply(.sos(userId: me, sos: nil, refresh: false)); return }
         let ok = await run("sos") {
             try await api.cancelSos(id)
             view?.apply(.sos(userId: me, sos: nil, refresh: false))
@@ -1241,7 +1262,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     @discardableResult
     func setRally(lat: Double, lng: Double, label: String?) async -> Bool {
-        if isDemo { view?.apply(.rally(RallyInfo(lat: lat, lng: lng, label: label, set_at: ISODate.string(Date()), set_by: myUserId))); return true }
+        if isLocal { view?.apply(.rally(RallyInfo(lat: lat, lng: lng, label: label, set_at: ISODate.string(Date()), set_by: myUserId))); return true }
         return await run("rally") {
             let r = try await api.setRally(id, lat: lat, lng: lng, label: label)
             view?.apply(.rally(r))
@@ -1249,7 +1270,7 @@ final class OutingSession: ObservableObject, Identifiable {
     }
 
     func clearRally() async {
-        if isDemo { view?.apply(.rally(nil)); return }
+        if isLocal { view?.apply(.rally(nil)); return }
         _ = await run("rally") {
             try await api.clearRally(id)
             view?.apply(.rally(nil))
@@ -1258,14 +1279,14 @@ final class OutingSession: ObservableObject, Identifiable {
 
     func setCoLeader(_ member: String, on: Bool) async {
         _ = await run("member:\(member)") {
-            if !isDemo { try await api.setCoLeader(id, member: member, on: on) }
+            if !isLocal { try await api.setCoLeader(id, member: member, on: on) }
             view?.apply(.memberRole(userId: member, coLeader: on))
         }
     }
 
     func removeMember(_ member: String) async {
         _ = await run("member:\(member)") {
-            if !isDemo { try await api.removeMember(id, member: member) }
+            if !isLocal { try await api.removeMember(id, member: member) }
             view?.apply(.memberLeft(userId: member))
         }
     }
@@ -1288,7 +1309,7 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// Push-to-talk upload. Returns the clip on success.
     func sendClip(_ audio: Data, durationMs: Int) async -> VoiceClip? {
-        if isDemo { return nil }
+        if isLocal { return nil }
         var out: VoiceClip?
         _ = await run("clip") { out = try await api.uploadClip(id, audio: audio, durationMs: durationMs) }
         return out

@@ -172,7 +172,7 @@ enum OutingLegsCenters {
     static func of(_ controller: LiveOutingController) -> OutingLegsCenter {
         let session = controller.session
         if let c = centers[session.id] { return c }
-        let c = OutingLegsCenter(outingId: session.id, backend: session.isDemo ? nil : session.api)
+        let c = OutingLegsCenter(outingId: session.id, backend: session.isLocal ? nil : session.api)
         c.listen(session.events)
         centers[session.id] = c
         return c
