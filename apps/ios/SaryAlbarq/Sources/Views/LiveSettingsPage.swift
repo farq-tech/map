@@ -118,7 +118,7 @@ struct LiveSettingsPage: View {
                 }
             }
         case .units:
-            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الأعضاء، الوجهة، الملاحة، المسار.") {
+            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الربع، الوجهة، الملاحة، المسار.") {
                 choice("كيلومتر", on: !DistanceUnits.miles, id: "settings.units.km") { DistanceUnits.miles = false; controller.objectWillChange.send() }
                 choice("ميل", on: DistanceUnits.miles, id: "settings.units.mi", last: true) { DistanceUnits.miles = true; controller.objectWillChange.send() }
             }
@@ -360,7 +360,7 @@ private struct WhoSeesPage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع أعضاء هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للعيال «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
+            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع ربع هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للربع «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
                 SettingsRow(title: controller.session.isSharingNow ? "موقعك مُشارَك الآن" : "موقعك غير مُشارَك الآن") { EmptyView() }
                     .accessibilityIdentifier("settings.sharing.state")
                 SettingsRow(title: "شارك البطارية") {

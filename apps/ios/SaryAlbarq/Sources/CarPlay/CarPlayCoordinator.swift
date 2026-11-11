@@ -443,7 +443,7 @@ final class CarPlayCoordinator: NSObject {
         }
         var tools = [pan]
         if let src = CarPlayFeatures.source, src.carPlayStuckReportSupported {
-            let stuck = CPListItem(text: "غرّزت", detailText: "يوصل للعيال إنك تحتاج سحبة", image: UIImage(systemName: "exclamationmark.triangle.fill"))
+            let stuck = CPListItem(text: "غرّزت", detailText: "يوصل للربع إنك تحتاج سحبة", image: UIImage(systemName: "exclamationmark.triangle.fill"))
             stuck.handler = { [weak self] _, done in
                 MainActor.assumeIsolated { self?.confirmStuck() }
                 done()

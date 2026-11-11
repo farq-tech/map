@@ -53,7 +53,7 @@ final class LiveEndedUITests: XCTestCase {
     func testEndedTripShowsAClearEndedState() {
         let app = launchEnded()
         let banner = app.descendants(matching: .any)["live.ended"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 8), "«الرحلة انتهت» over the map")
+        XCTAssertTrue(banner.waitForExistence(timeout: 8), "«انتهت الطلعة» over the map")
         XCTAssertTrue(app.buttons["live.ended.summary"].exists, "«اعرض الملخص»")
         XCTAssertTrue(app.buttons["live.ended.home"].exists, "«ارجع لطلعاتي»")
         /* Nothing that needs a running trip: no walkie-talkie, no SOS to an ended group. */

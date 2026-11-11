@@ -631,7 +631,7 @@ private struct PhonePanel: View {
 
     var body: some View {
         let a = controller.actions.settingsTab
-        SarySection(title: nil, footer: "يظهر لأعضاء طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
+        SarySection(title: nil, footer: "يظهر لربعك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
             VStack(spacing: theme.space(.s)) {
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "settings-phone", keyboard: .phonePad, maxLength: 14)
                 Button { a.saveMyPhone(phone.isEmpty ? nil : phone); done() } label: { SaryButtonLabel(title: "حفظ", systemImage: SaryIcon.check) }
@@ -817,7 +817,7 @@ struct ShareAlwaysExplainer: View {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
                     Text(afterJoin ? Self.afterJoinTitle : "المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للعيال. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للربع. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")

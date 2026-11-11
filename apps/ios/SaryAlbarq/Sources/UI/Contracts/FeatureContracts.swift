@@ -32,7 +32,7 @@ struct ConvoyAlertUI: Equatable {
         case .tailFar: return "المؤخرة بعيدة عن المقدمة"
         case .separated: return name == "أنت" ? "ابتعدت عن \(leaderTitle)" : "\(name) ابتعد عن \(leaderTitle)"
         case .unexpectedStop: return "\(name) وقف فجأة"
-        case .returnToRally: return "\(otherName ?? "أمير الرحلة"): ارجعوا لنقطة التجمع"
+        case .returnToRally: return "\(otherName ?? "أمير الطلعة"): ارجعوا لنقطة التجمع"
         }
     }
 

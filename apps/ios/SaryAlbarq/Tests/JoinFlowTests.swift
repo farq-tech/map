@@ -117,7 +117,7 @@ final class JoinMachineTests: XCTestCase {
         XCTAssertTrue(JoinCopy.prePromptDetail.contains("السماح أثناء استخدام التطبيق"))
         XCTAssertNotEqual(JoinCopy.needsTitle(.denied), JoinCopy.needsTitle(.reduced))
         XCTAssertTrue(JoinCopy.needsMessage(.reduced).contains("الموقع الدقيق"))
-        XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للعيال")
+        XCTAssertEqual(JoinCopy.hiddenTitle, "موقعك مو ظاهر للربع")
         for t in [JoinCopy.statement, JoinCopy.prePromptDetail, JoinCopy.needsMessage(.denied), JoinCopy.needsMessage(.reduced)] {
             XCTAssertFalse(t.contains("أوقف"), "no stop switch is promised: \(t)")
             XCTAssertFalse(t.contains("شارك موقعي"), t)

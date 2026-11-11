@@ -273,7 +273,7 @@ struct ProfileStep: View {
                           help: "يظهر فوق سيارتك على الخريطة.")
             SaryTextField(title: "رقم الجوال (اختياري)", placeholder: "05XXXXXXXX", text: $phone, id: "onboarding.phone", keyboard: .phonePad, maxLength: 14,
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
-                          help: "يظهر لأعضاء طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
+                          help: "يظهر لربعك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
                 .environment(\.layoutDirection, .rightToLeft)
             if let error { SaryInlineMessage(text: error, tone: .error) }
             Button {

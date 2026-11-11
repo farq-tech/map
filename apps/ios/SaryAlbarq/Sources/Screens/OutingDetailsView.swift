@@ -180,7 +180,7 @@ struct TripSummaryView: View {
                 }
                 TripLegsSection(outingId: outingId)
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                SarySection(title: "ملخصات شاركها الأعضاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                SarySection(title: "ملخصات شاركها الربع", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
                     }
@@ -301,7 +301,7 @@ struct TripSummaryView: View {
                     Button {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
-                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الأعضاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
+                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الربع", systemImage: "square.and.arrow.up.on.square", busy: busy) }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("summary.shareMine")
                 }

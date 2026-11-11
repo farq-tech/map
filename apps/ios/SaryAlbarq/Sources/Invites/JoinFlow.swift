@@ -185,7 +185,7 @@ enum JoinCopy {
     static let cancel = "إلغاء"
 
     /// On the map while my position is not reaching the group (refused, or approximate only).
-    static let hiddenTitle = "موقعك مو ظاهر للعيال"
+    static let hiddenTitle = "موقعك مو ظاهر للربع"
     static func hiddenDetail(_ p: JoinPermission) -> String {
         p == .reduced ? "«الموقع الدقيق» مقفل" : "إذن الموقع مقفل"
     }
