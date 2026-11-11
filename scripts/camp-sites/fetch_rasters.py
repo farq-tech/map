@@ -15,6 +15,7 @@ import json
 import math
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -43,10 +44,20 @@ WC_URL = ("https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/"
 STAC = "https://earth-search.aws.element84.com/v1/search"
 
 
-def etag(url):
+def etag(url, attempts=5):
+    """ETag and size of a remote file. A 404 is the answer (the caller decides); a reset or timeout is retried."""
     req = urllib.request.Request(url, method="HEAD")
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.headers.get("ETag", "").strip('"'), int(r.headers.get("Content-Length", 0))
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.headers.get("ETag", "").strip('"'), int(r.headers.get("Content-Length", 0))
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, OSError) as e:
+            if attempt == attempts:
+                raise
+            print(f"HEAD failed ({attempt}/{attempts}), retrying: {str(e)[:80]} {url}", flush=True)
+            time.sleep(5 * attempt)
 
 
 def land_cells(urls):
@@ -71,14 +82,23 @@ def target(bbox, arcsec):
     return from_bounds(w, s, e, n, cols, rows), rows, cols
 
 
-def read_into(url, bbox, arcsec, resampling, dtype="float32", nodata=None):
+def read_into(url, bbox, arcsec, resampling, dtype="float32", nodata=None, attempts=5):
+    """One windowed read. A server that cuts a response short ("got N bytes, expected M") or resets the
+    connection raises RasterioIOError; that is transient, so retry with a growing pause before failing."""
     tr, rows, cols = target(bbox, arcsec)
-    with rasterio.Env(**GDAL_ENV):
-        with rasterio.open(url) as src:
-            with WarpedVRT(src, crs="EPSG:4326", transform=tr, width=cols, height=rows,
-                           resampling=resampling, src_nodata=nodata if nodata is not None else src.nodata,
-                           nodata=nodata if nodata is not None else src.nodata) as vrt:
-                return vrt.read(1).astype(dtype)
+    for attempt in range(1, attempts + 1):
+        try:
+            with rasterio.Env(**GDAL_ENV):
+                with rasterio.open(url) as src:
+                    with WarpedVRT(src, crs="EPSG:4326", transform=tr, width=cols, height=rows,
+                                   resampling=resampling, src_nodata=nodata if nodata is not None else src.nodata,
+                                   nodata=nodata if nodata is not None else src.nodata) as vrt:
+                        return vrt.read(1).astype(dtype)
+        except rasterio.errors.RasterioIOError as e:
+            if attempt == attempts:
+                raise
+            print(f"read failed ({attempt}/{attempts}), retrying: {str(e)[:80]} {url}", flush=True)
+            time.sleep(5 * attempt)
 
 
 def tiles(bbox, step):
