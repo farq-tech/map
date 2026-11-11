@@ -40,7 +40,7 @@ final class WeatherOverlay {
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
-    private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind)?
+    private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind, destination: Bool)?
     private var windTask: Task<Void, Never>?
     private var windFetchedAt: Date?
     private var frameIndex = 0
@@ -288,10 +288,11 @@ final class WeatherOverlay {
             return
         }
         if let last = outlookFor, last.kind == kind, Date().timeIntervalSince(last.at) < 600,
-           Self.km(last.point, p) < 25 { return }
+           Self.km(last.point, p) < 25, last.destination == request.pointIsDestination { return }
+        /* A new place or layer (not a refresh of the same one): never keep showing the old row. */
+        if outlookFor.map({ $0.kind != kind || Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
-        outlookFor = (p, Date(), kind)
-        legend.outlook = nil
+        outlookFor = (p, Date(), kind, request.pointIsDestination)
         legend.outlookLoading = true
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
         let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me

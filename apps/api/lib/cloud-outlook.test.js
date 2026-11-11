@@ -104,6 +104,8 @@ test('HTTP: /weather/clouds/outlook — bad point 400; fake WMS gives a motion e
     let r = await fetch(`${base}/api/weather/clouds/outlook?lat=0&lng=0`);
     assert.equal(r.status, 400);
     assert.equal((await r.json()).error, 'bad_point');
+    r = await fetch(`${base}/api/weather/clouds/outlook?lat=25.2&lng=55.3`); // Dubai: inside the box, outside the Kingdom
+    assert.equal(r.status, 400);
     r = await fetch(`${base}/api/weather/clouds/outlook?lat=abc&lng=46`);
     assert.equal(r.status, 400);
     r = await fetch(`${base}/api/weather/clouds/outlook?lat=24.7&lng=46.7`);
@@ -142,8 +144,8 @@ test('clouds.warm: fetches the Kingdom tiles of the newest frames once, newest f
   try {
     const r = await clouds.warm(nowMs, { frames: 2 });
     assert.equal(r.frames, 2);
-    assert.ok(r.tiles >= 10 && r.tiles <= 60, `tiles ${r.tiles}`);
-    assert.equal(seen.length, r.frames * r.tiles);
+    assert.ok(r.tiles >= 20 && r.tiles <= 200, `tiles ${r.tiles}`);
+    assert.equal(seen.length, r.tiles);
     assert.match(decodeURIComponent(seen[0]), /T19:00:00Z/); // newest first
   } finally {
     fetcher.setFetch(null);

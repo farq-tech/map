@@ -195,8 +195,9 @@ test('outlookForPoint: under cloud → overhead, with when it clears', () => {
   const motion = { ok: true, dx: 5, dy: 0, speedKmh: 40, bearingDeg: 90, confidence: 0.9, stationary: false };
   const o = m.outlookForPoint(f, 100, 100, motion, 4, 0);
   assert.equal(o.state, 'overhead');
-  // clear edge at x≥110 → ~11 px downwind ≈ 44 km → ~66 min
-  assert.ok(o.clearingInMin > 40 && o.clearingInMin < 90, `clearing ${o.clearingInMin}`);
+  // band x 80..109, point x=100, moving east: the trailing (west) edge is 20 px behind → 21 px × 4 km / 40 km/h ≈ 126 min.
+  // (The leading edge, 10 px ahead, would wrongly say ~66 min.)
+  assert.ok(o.clearingInMin > 110 && o.clearingInMin < 140, `clearing ${o.clearingInMin}`);
 });
 
 test('outlookForPoint: nothing upwind → clear; low confidence → uncertain; no motion → stationary', () => {
@@ -218,4 +219,14 @@ test('outlookForPoint: ETA beyond the horizon is "clear", not a far-off number',
 test('marginMinutes grows with weak confidence and distance', () => {
   assert.ok(m.marginMinutes(120, 0.5) > m.marginMinutes(120, 1));
   assert.ok(m.marginMinutes(240, 0.8) > m.marginMinutes(60, 0.8));
+});
+
+test('estimateMotion: a small shift that barely beats "no motion" is not reported with confidence', () => {
+  const world = makeWorld(420, 7);
+  const [a, b] = pair(world, 190, 1.2, 0); // ~1.2 px
+  // Make the pair almost identical plus noise so the displaced peak ≈ the zero-shift peak.
+  const g = rng(5);
+  const noisy = (f) => ({ w: f.w, h: f.h, data: Float32Array.from(f.data, (v) => Math.max(0, Math.min(1, v + (g() - 0.5) * 0.6))) });
+  const r = m.estimateMotion(noisy(a), noisy(b), DT, PX_KM, { maxShift: 28 });
+  assert.ok(!r.ok || r.stationary || r.confidence < 0.45, `confidence ${r.confidence} speed ${r.speedKmh}`);
 });
