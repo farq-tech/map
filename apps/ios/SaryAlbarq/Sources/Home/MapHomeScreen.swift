@@ -45,6 +45,15 @@ struct MapHomeScreen: View {
     @State private var startFor: StartTarget?
     @State private var creating = false
     @State private var joining = false
+    /// «البر» tools and their sheets, no outing needed (UI-AUDIT م6).
+    @State private var tool: HomeTool?
+    /// «اتجه» / «امشِ عليه»: full screen over the home.
+    @State private var cover: HomeCover?
+    /// «أضفها لطلعتك» is saving to the planned outing.
+    @State private var adding = false
+    /// Why «أضفها لطلعتك» did not go through (shown on the place card).
+    @State private var placeNote: String?
+    @State private var invitePasteMiss = false
     @StateObject private var voice = VoiceSearch()
     /// Where I am before any trip (the live sharer only runs during one).
     @StateObject private var locator = OneShotLocator()
@@ -54,6 +63,8 @@ struct MapHomeScreen: View {
         var destination: OutingDestination
         var subtitle: String?
         var icon: String
+        /// A desert place (a desert chip / «دليل البر» result, a pressed map point): «دروب البر» may apply.
+        var desert = false
     }
 
     struct StartTarget: Identifiable {
@@ -68,7 +79,7 @@ struct MapHomeScreen: View {
             ZStack(alignment: .bottom) {
                 PlanMapView(route: [], destination: selected?.destination, camera: camera, theme: theme, userLocation: myPoint,
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
-                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin")) },
+                                                           subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
                             onDesertTap: { id in if let it = desertItems.first(where: { $0.id == id }) { pickDesert(it) } })
                     .ignoresSafeArea()
@@ -116,6 +127,23 @@ struct MapHomeScreen: View {
         }
         .sheet(isPresented: $creating) { CreateOutingWizard().saryPresented(appearance) }
         .sheet(isPresented: $joining) { JoinByLinkSheet().saryPresented(appearance) }
+        .sheet(item: $tool) { t in
+            HomeToolSheet(tool: t, me: myPoint, host: desertHost, open: openTool, close: { tool = nil })
+                .saryPresented(appearance)
+        }
+        .background {
+            /* Its own host view: a full-screen cover next to the sheets above. */
+            Color.clear.fullScreenCover(item: $cover) { c in
+                switch c {
+                case let .nav(t):
+                    StandaloneNavScreen(target: t) { cover = nil }
+                        .saryPresented(appearance)
+                case let .follow(m):
+                    TrackFollowScreen(model: m) { cover = nil }
+                        .saryPresented(appearance)
+                }
+            }
+        }
     }
 
     // MARK: map chrome
@@ -123,6 +151,7 @@ struct MapHomeScreen: View {
     private var categoryChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: theme.space(.s)) {
+                if destinationPicker == nil { desertToolsChip }
                 ForEach(HomeCategory.all) { c in chip(c) }
             }
             .padding(.horizontal, theme.space(.l))
@@ -151,6 +180,24 @@ struct MapHomeScreen: View {
         .accessibilityIdentifier("home.category.\(c.id)")
     }
 
+    /// «البر»: the weather, the Qibla, «اقترح لي مكان كشتة» and «دروب البر» without an outing (م6).
+    private var desertToolsChip: some View {
+        let p = theme.palette
+        return Button { tool = .menu } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "sun.dust.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.onAccent)
+                Text("البر").font(.sary(14, .bold)).foregroundStyle(p.onAccent)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 36)
+            .background(Capsule().fill(p.warning))
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityLabel(Text("البر: الطقس والقبلة والكشتة والدروب"))
+        .accessibilityIdentifier("home.tools.open")
+    }
+
     private var locateButton: some View {
         Button { recenter(zoom: 14) } label: {
             Image(systemName: "location.fill").font(.system(size: 17, weight: .semibold))
@@ -173,11 +220,12 @@ struct MapHomeScreen: View {
             // 200pt left a large empty area below the buttons; keep enough room for
             // a two-line place name while letting the map remain visible. At accessibility
             // sizes, give the card room to grow; its content remains scrollable as a fallback.
-            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 168
+            /* + the weather line and the second row of actions («اتجه» + the outing action). */
+            base = dynamicTypeSize.isAccessibilitySize ? min(screen - 60, max(420, screen * 0.72)) : 232
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
-            base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
+            base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard))
         }
         return CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(base), drag: Double(drag)))
     }
@@ -191,19 +239,12 @@ struct MapHomeScreen: View {
                 .frame(height: 44)
                 .contentShape(Rectangle())
                 .onTapGesture { setExpanded(!expanded) }
-                /* The sheet itself contains a vertical ScrollView. Keep its pan gesture out of
-                 * that scroll view so dragging the categories/recent places cannot collapse the
-                 * sheet or pan the map; only the dedicated handle resizes it. */
-                .gesture(DragGesture(minimumDistance: 12)
-                    .onChanged { v in drag = v.translation.height }
-                    .onEnded { v in
-                        let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
-                                                         velocity: Double(v.predictedEndTranslation.height - v.translation.height))
-                        drag = 0
-                        setExpanded(next)
-                    })
+                /* The raised sheet contains a vertical ScrollView: there only the handle resizes it,
+                 * so scrolling «طلعاتي» / recent places never collapses the sheet. Collapsed (nothing
+                 * scrolls), the whole sheet drags too (`collapsedDraggable` below). */
+                .gesture(sheetDrag)
                 .accessibilityElement()
-                .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى للتصنيفات"))
+                .accessibilityLabel(Text(expanded ? "صغّر" : "اسحب للأعلى لطلعاتك"))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { setExpanded(!expanded) }
                 .accessibilityIdentifier("home.sheet.handle")
@@ -214,26 +255,30 @@ struct MapHomeScreen: View {
                 .scrollIndicators(.hidden)
                 .accessibilityIdentifier("home.place.scroll")
             } else {
-                searchBar
-                ScrollView {
-                    VStack(alignment: .leading, spacing: theme.space(.l)) {
-                        if showingResults {
-                            resultsList
-                        } else {
-                            if let a = assigning { assignBanner(a) }
-                            shortcutsRow
-                            if let live = activeOuting { activeCard(live) }
-                            if !model.online { SaryOfflineStrip() }
-                            if expanded { expandedContent }
+                VStack(spacing: 0) {
+                    searchBar
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: theme.space(.l)) {
+                            if showingResults {
+                                resultsList
+                            } else {
+                                if let a = assigning { assignBanner(a) }
+                                shortcutsRow
+                                stateCardView
+                                if !model.online { SaryOfflineStrip() }
+                                if expanded { expandedContent }
+                            }
                         }
+                        .padding(.horizontal, theme.space(.l))
+                        .padding(.top, theme.space(.m))
+                        .padding(.bottom, 40)
                     }
-                    .padding(.horizontal, theme.space(.l))
-                    .padding(.top, theme.space(.m))
-                    .padding(.bottom, 40)
+                    .scrollDisabled(!expanded && !showingResults)
+                    .scrollDismissesKeyboard(.interactively)
+                    .accessibilityIdentifier("home.sheet.content")
                 }
-                .scrollDisabled(!expanded && !showingResults)
-                .scrollDismissesKeyboard(.interactively)
-                .accessibilityIdentifier("home.sheet.content")
+                /* Collapsed nothing scrolls: drag the sheet up from anywhere on it, not only the handle. */
+                .gesture(sheetDrag, including: collapsedDraggable ? .all : .subviews)
             }
         }
         .frame(height: height, alignment: .top)
@@ -248,6 +293,146 @@ struct MapHomeScreen: View {
     }
 
     private var showingResults: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// Resizes the sheet: on the handle always, on the whole sheet while it is collapsed.
+    private var sheetDrag: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { v in drag = v.translation.height }
+            .onEnded { v in
+                let next = HomeSheetRules.settle(expanded: expanded, translation: Double(v.translation.height),
+                                                 velocity: Double(v.predictedEndTranslation.height - v.translation.height))
+                drag = 0
+                setExpanded(next)
+            }
+    }
+
+    /// The collapsed sheet has no scrolling content, so its whole area may drag it (never raised:
+    /// there the content scrolls and only the handle resizes).
+    private var collapsedDraggable: Bool { !expanded && !showingResults && selected == nil }
+
+    // MARK: the one state card
+
+    /// What the collapsed sheet says now (`HomeStateCard`): none in the in-trip picker.
+    private var stateCard: HomeStateCard {
+        guard destinationPicker == nil else { return .none }
+        return HomeStateCard.pick(current: model.current, phase: model.listPhase, inviteHint: model.deferredInviteHint)
+    }
+
+    @ViewBuilder
+    private var stateCardView: some View {
+        switch stateCard {
+        case let .active(id):
+            if let o = model.current.first(where: { $0.id == id }) { activeCard(o) }
+        case let .upcoming(id):
+            if let o = model.current.first(where: { $0.id == id }) { upcomingCard(o) }
+        case .invite:
+            inviteCard
+        case .start:
+            if !expanded { startCard }
+        case let .failed(message):
+            if !expanded { failedCard(message) }
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// «طلعتك القادمة»: planned or paused, one tap opens it.
+    private func upcomingCard(_ o: OutingSummary) -> some View {
+        let p = theme.palette
+        let paused = o.status == .paused
+        return Button { model.open(o.id) } label: {
+            HStack(spacing: theme.space(.m)) {
+                Image(systemName: paused ? "pause.circle.fill" : "calendar").font(.system(size: 16, weight: .semibold)).foregroundStyle(p.accentText)
+                    .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.accent.opacity(0.14)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
+                    Text([paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · "))
+                        .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text("افتحها").font(.sary(13, .bold)).foregroundStyle(p.onAccent)
+                    .padding(.horizontal, 12).frame(minHeight: 34).background(Capsule().fill(p.accent))
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(p.elevated))
+        }
+        .buttonStyle(SaryPressStyle())
+        .accessibilityHint(Text("يفتح الطلعة على الخريطة"))
+        .accessibilityIdentifier("home.upcoming")
+    }
+
+    /// First time, or nothing current: the two ways in.
+    private var startCard: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: theme.space(.s)) {
+            Text("أنشئ طلعة وادعُ ربعك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+            Text("ابحث عن وجهتك فوق، أو ابدأ من هنا.").saryText(.footnote).foregroundStyle(p.textSecondary)
+            HStack(spacing: theme.space(.s)) {
+                Button { creating = true } label: { SaryButtonLabel(title: "طلعة جديدة", systemImage: "plus") }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("home.start.create")
+                Button { joining = true } label: { SaryButtonLabel(title: "انضم برابط", systemImage: "link") }
+                    .buttonStyle(.sary(.secondary))
+                    .accessibilityIdentifier("home.start.join")
+            }
+        }
+        .padding(theme.space(.m))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(p.elevated))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.start")
+    }
+
+    /// The list did not load and there is nothing to show: say it, and try again.
+    private func failedCard(_ message: String) -> some View {
+        let p = theme.palette
+        return HStack(spacing: theme.space(.m)) {
+            Image(systemName: model.online ? "exclamationmark.triangle.fill" : SaryIcon.offline).font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(p.warningText)
+                .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.warning.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(HomeListCopy.failedTitle).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
+                Text(HomeListCopy.failedDetail(message, online: model.online)).font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            Button { Task { await model.refresh() } } label: { SaryButtonLabel(title: "حاول مرة ثانية") }
+                .buttonStyle(.sary(.secondary, width: .hug, compact: true))
+                .accessibilityIdentifier("home.failed.retry")
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(p.elevated))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.failed")
+    }
+
+    /// Installed from an invite page and the link never pasted: the invite stays here after
+    /// onboarding. The system «لصق» reads the pasteboard only on that tap.
+    private var inviteCard: some View {
+        let p = theme.palette
+        return VStack(alignment: .leading, spacing: theme.space(.s)) {
+            HStack {
+                Text("جاي من دعوة؟").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                Spacer(minLength: 0)
+                Button("لاحقًا") { model.deferredInviteHint = false }
+                    .buttonStyle(.sary(.plain, width: .hug, compact: true))
+                    .accessibilityIdentifier("home.invite.later")
+            }
+            Text(invitePasteMiss ? "ما لقينا رابط دعوة في النسخ. افتح رابط الدعوة من جديد، أو اطلبه من أمير الطلعة."
+                                 : "اضغط «لصق» ونكمّل دعوتك على طول.")
+                .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            PasteButton(payloadType: String.self) { strings in
+                Task { @MainActor in invitePasteMiss = !model.acceptPastedInvite(strings) }
+            }
+            .buttonBorderShape(.capsule)
+            .tint(p.accent)
+            .accessibilityIdentifier("home.invite.paste")
+        }
+        .padding(theme.space(.m))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(p.elevated))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.invite")
+    }
 
     private var searchBar: some View {
         let p = theme.palette
@@ -363,8 +548,7 @@ struct MapHomeScreen: View {
 
     @ViewBuilder
     private var expandedContent: some View {
-        section("تصنيفات") { categoryGrid(HomeCategory.city) }
-        section("البر") { categoryGrid(HomeCategory.desertOnes) }
+        /* No category grid here: the same chips are on the map, always one tap away (UI-AUDIT §٢). */
         if !recent.isEmpty {
             section("أماكن سابقة") {
                 VStack(spacing: 0) {
@@ -382,25 +566,6 @@ struct MapHomeScreen: View {
         myOutings
     }
 
-    private func categoryGrid(_ list: [HomeCategory]) -> some View {
-        let p = theme.palette
-        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: theme.space(.s)), count: 4), spacing: theme.space(.s)) {
-            ForEach(list) { c in
-                Button { runCategory(c) } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: c.systemImage).font(.system(size: 20)).foregroundStyle(c.desert ? p.warningText : p.accentText)
-                            .frame(width: 48, height: 48)
-                            .background(Circle().fill((c.desert ? p.warning : p.accent).opacity(0.14)))
-                        Text(c.label).font(.sary(12, .medium)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityIdentifier("home.grid.\(c.id)")
-            }
-        }
-    }
-
     /// «طلعاتي»: the planned outings (a new one, by link), the others in progress, the latest ended.
     @ViewBuilder
     private var myOutings: some View {
@@ -412,6 +577,17 @@ struct MapHomeScreen: View {
                 Button { joining = true } label: { SaryButtonLabel(title: "انضم برابط", systemImage: "link") }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("list.join")
+            }
+            /* The list did not load and nothing is kept: an error with «حاول مرة ثانية», never an empty list. */
+            if case let .failed(message) = model.listPhase, model.current.isEmpty, model.history.isEmpty {
+                SaryStateView(kind: model.online ? .error(title: HomeListCopy.failedTitle, message: HomeListCopy.failedDetail(message, online: true))
+                                                 : .offline(message: HomeListCopy.failedDetail(message, online: false)),
+                              actionTitle: "حاول مرة ثانية", actionID: "home.outings.retry") { Task { await model.refresh() } }
+                    .sarySurface(radius: SaryRadius.m)
+                    .accessibilityIdentifier("home.outings.failed")
+            } else if model.listPhase == .loading, model.current.isEmpty, model.history.isEmpty {
+                SaryStateView(kind: .loading("نجيب طلعاتك…"))
+                    .accessibilityIdentifier("home.outings.loading")
             }
             let others = sortedCurrent.filter { $0.id != activeOuting?.id }
             if !others.isEmpty {
@@ -484,7 +660,7 @@ struct MapHomeScreen: View {
                             }
                             let target = r.areaApproach ?? r.point
                             pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
-                                       subtitle: r.subtitle, icon: r.icon))
+                                       subtitle: r.subtitle, icon: r.icon, desert: r.id.hasPrefix("gazetteer:")))
                         }
                     }
                 }
@@ -589,36 +765,75 @@ struct MapHomeScreen: View {
                 } label: { SaryButtonLabel(title: "احفظه كـ\(a.label)", systemImage: a.systemImage) }
                     .buttonStyle(.sary(.primary))
                     .accessibilityIdentifier("home.place.assign")
-            } else if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
-                        .buttonStyle(.sary(.primary))
-                        .accessibilityIdentifier("home.place.start")
-                    Button {
-                        if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
-                    } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
-                        .buttonStyle(.sary(.secondary))
-                        .disabled(isSaved)
-                        .accessibilityIdentifier("home.place.save")
-                }
             } else {
-                HStack(spacing: theme.space(.s)) {
-                    Button { start(d) } label: { SaryButtonLabel(title: placeStartTitle, systemImage: "location.north.fill") }
-                        .buttonStyle(.sary(.primary))
-                        .accessibilityIdentifier("home.place.start")
-                    Button {
-                        if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
-                    } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
-                        .buttonStyle(.sary(.secondary, width: .hug))
-                        .disabled(isSaved)
-                        .accessibilityIdentifier("home.place.save")
-                }
+                placeActions(s, isSaved: isSaved)
             }
         }
         .padding(.horizontal, theme.space(.l))
         .padding(.top, theme.space(.xs))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.place")
+    }
+
+    /// «اتجه», the outing action, the weather there, «دروب البر» and «احفظ».
+    @ViewBuilder
+    private func placeActions(_ s: SelectedPlace, isSaved: Bool) -> some View {
+        let p = theme.palette
+        let d = s.destination
+        let point = LngLat(lng: d.lng, lat: d.lat)
+        let action = placeAction
+        let routes = HomeDesertTools.offersRoutes(desertPlace: s.desert, me: myPoint, target: point)
+        /* «اتجه» first: guidance on this phone, no outing and no server (UI-AUDIT §٢). */
+        let go = Button { directions(d) } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
+            .buttonStyle(.sary(.primary))
+            .accessibilityIdentifier("home.place.go")
+        let outing = Button { start(d) } label: {
+            SaryButtonLabel(title: action.title, systemImage: action.systemImage, busy: adding, busyTitle: "نضيفها…")
+        }
+            .buttonStyle(.sary(.secondary))
+            .disabled(adding)
+            .accessibilityIdentifier("home.place.start")
+        let save = Button {
+            if !isSaved { saved.add(name: d.name, icon: .star, at: point) }
+        } label: { SaryButtonLabel(title: isSaved ? "محفوظ" : "احفظ", systemImage: isSaved ? "star.fill" : "star") }
+            .buttonStyle(.sary(.plain, width: .hug, compact: true))
+            .disabled(isSaved)
+            .accessibilityIdentifier("home.place.save")
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: theme.space(.s)) {
+                go
+                outing
+            }
+        } else {
+            HStack(spacing: theme.space(.s)) {
+                go
+                outing
+            }
+        }
+        if let placeNote { SaryInlineMessage(text: placeNote, tone: .error) }
+        HStack(spacing: theme.space(.s)) {
+            /* The weather at the destination now (Open-Meteo, the point only); tap for 24 h. */
+            Button { openTool(.weather(d)) } label: {
+                HStack(spacing: 4) {
+                    DestinationWeatherBadge(destination: d)
+                    Text("الجو هناك").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                }
+                .padding(.horizontal, 10)
+                .frame(minHeight: 36)
+                .background(Capsule().fill(p.sunken))
+            }
+            .buttonStyle(SaryPressStyle())
+            .accessibilityIdentifier("home.place.weather")
+            if routes {
+                Button { openTool(.routes(target: point, name: d.name, rain: false, weatherAvailable: false)) } label: {
+                    SaryButtonLabel(title: "دروب البر", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                }
+                .buttonStyle(.sary(.plain, width: .hug, compact: true))
+                .accessibilityIdentifier("home.place.routes")
+            }
+            Spacer(minLength: 0)
+            save
+        }
     }
 
     // MARK: actions
@@ -697,7 +912,7 @@ struct MapHomeScreen: View {
         let to = it.approach ?? it.point
         let sub = [it.detail, to != it.point ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
         pick(.init(destination: OutingDestination(name: String(it.title.prefix(TripPlan.destinationNameMax)), lat: to.lat, lng: to.lng),
-                   subtitle: sub.isEmpty ? nil : sub, icon: it.systemImage))
+                   subtitle: sub.isEmpty ? nil : sub, icon: it.systemImage, desert: true))
     }
 
     private func clearSearch() {
@@ -744,29 +959,104 @@ struct MapHomeScreen: View {
         selectedPointNameTask = nil
         selected = nil
         desertPicked = nil
+        placeNote = nil
     }
 
-    /// In an active outing, «ابدأ» goes to this point in that outing; otherwise create a new outing.
-    private func start(_ d: OutingDestination) {
-        selectedPointNameTask?.cancel()
-        selectedPointNameTask = nil
-        let destination = selected.map(\.destination).flatMap { picked in
+    /// The picked place with the name resolved meanwhile (the card's `d` may be a step behind).
+    private func resolved(_ d: OutingDestination) -> OutingDestination {
+        selected.map(\.destination).flatMap { picked in
             let a = LngLat(lng: picked.lng, lat: picked.lat)
             let b = LngLat(lng: d.lng, lat: d.lat)
             return PlanGeo.meters(a, b) < 2 ? picked : nil
         } ?? d
-        RecentPlaces.add(destination)
-        recent = RecentPlaces.load()
-        if let outing = activeOuting {
-            DispatchQueue.main.async { model.open(outing.id, mapDestination: destination) }
-            return
-        }
-        startFor = StartTarget(destination: destination)
     }
 
-    private var placeStartTitle: String {
-        guard let outing = activeOuting else { return "أنشئ طلعة" }
-        return outing.role == "owner" ? "وجّه القافلة إلى هنا" : "ابدأ مشوارًا لنفسي"
+    /// The card's outing action (`HomePlaceAction`): the running outing takes the point; a planned /
+    /// paused one I lead gets it in its plan; otherwise a new outing.
+    private func start(_ d: OutingDestination) {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
+        let destination = resolved(d)
+        RecentPlaces.add(destination)
+        recent = RecentPlaces.load()
+        switch placeAction {
+        case let .guideConvoy(id), let .personalLeg(id):
+            DispatchQueue.main.async { model.open(id, mapDestination: destination) }
+        case let .addToOuting(id):
+            addToOuting(id, destination)
+        case .create:
+            startFor = StartTarget(destination: destination)
+        }
+    }
+
+    private var placeAction: HomePlaceAction { HomePlaceAction.pick(current: model.current) }
+
+    /// «أضفها لطلعتك»: the planned outing's destination, or its next stop; then its details.
+    private func addToOuting(_ id: String, _ d: OutingDestination) {
+        adding = true
+        placeNote = nil
+        Task {
+            let plan = model.plans.model(id)
+            if plan.planPhase == .loading { await plan.loadPlan() }
+            let edit = HomePlanEdit.adding(d, to: plan.plan)
+            let ok: Bool
+            switch edit.outcome {
+            case .destination: ok = await plan.setDestination(d)
+            case .stop: ok = await plan.save(edit.plan)
+            case .already, .full: ok = true
+            }
+            adding = false
+            guard ok else {
+                placeNote = plan.errorText ?? "ما قدرنا نضيفها لطلعتك. جرّب مرة ثانية."
+                plan.errorText = nil
+                return
+            }
+            if edit.outcome == .full {
+                placeNote = HomePlanEdit.confirmation(.full, name: d.name)
+                return
+            }
+            UINotificationFeedback.success()
+            closePlace()
+            push(.details(id))
+        }
+    }
+
+    /// «اتجه»: our own turn-by-turn on this phone, no outing and no server (`StandaloneNavScreen`).
+    private func directions(_ d: OutingDestination) {
+        selectedPointNameTask?.cancel()
+        selectedPointNameTask = nil
+        let destination = resolved(d)
+        RecentPlaces.add(destination)
+        recent = RecentPlaces.load()
+        guard case let .success(t) = NavTargets.point(LngLat(lng: destination.lng, lat: destination.lat), name: destination.name) else { return }
+        cover = .nav(t)
+    }
+
+    /// One desert tool after another: the open sheet goes first (a sheet over a closing one is dropped).
+    private func openTool(_ t: HomeTool) {
+        guard tool != nil else { tool = t; return }
+        tool = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { tool = t }
+    }
+
+    /// The desert tools' host on the home map: «اتجه» opens `StandaloneNavScreen`, «امشِ عليه»
+    /// `TrackFollowScreen` — both on this phone only.
+    private var desertHost: DesertToolsHost {
+        DesertToolsHost(
+            myPoint: { myPoint },
+            close: { tool = nil },
+            directions: { r in
+                guard case let .success(t) = r else { return }
+                tool = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { cover = .nav(t) }
+            },
+            openRoutes: { target, name, rain, weatherAvailable in
+                openTool(.routes(target: target, name: name, rain: rain, weatherAvailable: weatherAvailable))
+            },
+            follow: { s in
+                tool = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { cover = TrackFollowModel(s).map(HomeCover.follow) }
+            })
     }
 
     private func schedule(_ q: String, now: Bool = false) {

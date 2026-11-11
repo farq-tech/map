@@ -214,6 +214,7 @@
 		6031B9EF2FF0D3D7B7F47A71 /* PlaceBriefStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 733802E56603409342A9D921 /* PlaceBriefStore.swift */; };
 		60D51BC35F094628A8C9668A /* VisualsDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F7E9777207753A1040C308 /* VisualsDemo.swift */; };
 		614CE91C1C2E3E95B64D4EFD /* HomeShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B6DDA799F2597AF9E6C669 /* HomeShortcuts.swift */; };
+		5A71C0DE4E0B5F1A2C3D4E01 /* HomeTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A71C0DE4E0B5F1A2C3D4E02 /* HomeTools.swift */; };
 		615D28EBDFD87B0D4DD11638 /* EntryContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E15294979CC3FE90EC6BE3AE /* EntryContracts.swift */; };
 		61BB44C28CF9267AA7A132DD /* GroupAudioStations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2DE2F3115F3550B408EB7BF /* GroupAudioStations.swift */; };
 		61BF79C26E735E13DDA6551C /* MediaShareInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F17910DB4903F123F2A30A /* MediaShareInbox.swift */; };
@@ -356,6 +357,7 @@
 		9DF39B4AE32146FCCF2C0CCA /* GroupAudioBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFD485CF40912113AE9509FA /* GroupAudioBackend.swift */; };
 		9E42F1BDB61E714770B05450 /* YouTubeLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31FFBAC2CB2F8F7492FDCF05 /* YouTubeLink.swift */; };
 		9E79D9373490DDA940293CB7 /* NavSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0FB42D448CC3008D403F34D /* NavSession.swift */; };
+		5A71C0DE4E0B5F1A2C3D4E03 /* StandaloneNavScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A71C0DE4E0B5F1A2C3D4E04 /* StandaloneNavScreen.swift */; };
 		9E9FF48206A0AA4EC6BCEFF0 /* StoryComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C008F75E097C5F716CA27F92 /* StoryComposerView.swift */; };
 		9ED861A95DDEC9123224C7FC /* TripEndSheetsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08EEDF5F5489F0C991FF5B7B /* TripEndSheetsTests.swift */; };
 		9F074D8F527A6A2CB4E741D0 /* PTTFloor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A646C8F38F1576C4D69B2CD /* PTTFloor.swift */; };
@@ -953,6 +955,7 @@
 		AFE11BD246D68B3CF32D2369 /* SpeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTests.swift; sourceTree = "<group>"; };
 		B0B5BF7DAA2399EEA639295E /* CarIcon-f2b630.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-f2b630.png"; sourceTree = "<group>"; };
 		B0FB42D448CC3008D403F34D /* NavSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavSession.swift; sourceTree = "<group>"; };
+		5A71C0DE4E0B5F1A2C3D4E04 /* StandaloneNavScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StandaloneNavScreen.swift; sourceTree = "<group>"; };
 		B192EF8661150F1AD7319221 /* AlwaysLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlwaysLiveTests.swift; sourceTree = "<group>"; };
 		B1F952C74DD68A27167B6C0F /* MapHomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapHomeScreen.swift; sourceTree = "<group>"; };
 		B25DB46CD353D74E938F0729 /* CarIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarIcon.swift; sourceTree = "<group>"; };
@@ -1084,6 +1087,7 @@
 		EFCE098B3D9D73601DF1B926 /* SaryVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaryVoice.swift; sourceTree = "<group>"; };
 		F025C4BB80157D5B8653F73E /* ChatStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStore.swift; sourceTree = "<group>"; };
 		F0B6DDA799F2597AF9E6C669 /* HomeShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeShortcuts.swift; sourceTree = "<group>"; };
+		5A71C0DE4E0B5F1A2C3D4E02 /* HomeTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTools.swift; sourceTree = "<group>"; };
 		F1338061A444CBC2D438FE17 /* OfflineMaps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMaps.swift; sourceTree = "<group>"; };
 		F1D84D7AC1A11FDF1EE20DB3 /* CarIcon-1fb8c4.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "CarIcon-1fb8c4.png"; sourceTree = "<group>"; };
 		F1FD44E9AEFDE68A1AD8C33C /* CampSuggestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampSuggestSheet.swift; sourceTree = "<group>"; };
@@ -1220,6 +1224,7 @@
 				E6A1A341CA1EBEB68894BA94 /* NavPromptTiming.swift */,
 				4E4DA569491A9F892B75F507 /* NavRouting.swift */,
 				B0FB42D448CC3008D403F34D /* NavSession.swift */,
+				5A71C0DE4E0B5F1A2C3D4E04 /* StandaloneNavScreen.swift */,
 				09CC2A7D1B405A7068A2C693 /* NavTargets.swift */,
 				826A2810F7AE639B91EB56BD /* NavText.swift */,
 				BD648519581F42E46FE7A945 /* NavVoice.swift */,
@@ -1461,6 +1466,7 @@
 			children = (
 				20FB2DA77DABE9F602B10595 /* HomeDesert.swift */,
 				F0B6DDA799F2597AF9E6C669 /* HomeShortcuts.swift */,
+				5A71C0DE4E0B5F1A2C3D4E02 /* HomeTools.swift */,
 				B1F952C74DD68A27167B6C0F /* MapHomeScreen.swift */,
 				9FEBCD909B1D263DBF32EB13 /* ProfileSheet.swift */,
 				21D5E93787461C83529EC4FA /* VoiceSearch.swift */,
@@ -2624,6 +2630,7 @@
 				4E82C131A91F499D045F0A83 /* HideReminder.swift in Sources */,
 				AC7E4F8BBE981CD3F2F475C5 /* HomeDesert.swift in Sources */,
 				614CE91C1C2E3E95B64D4EFD /* HomeShortcuts.swift in Sources */,
+				5A71C0DE4E0B5F1A2C3D4E01 /* HomeTools.swift in Sources */,
 				2B115D428C173D9063FDCDD9 /* HomeView.swift in Sources */,
 				65F96AEB99ED4F90606E8F5C /* IntroAudio.swift in Sources */,
 				DA66187CA3FE4D475A1A83C4 /* IntroController.swift in Sources */,
@@ -2695,6 +2702,7 @@
 				C4934B1F49DD44C1EE865DCD /* NavPromptTiming.swift in Sources */,
 				A161B401ABEDFA53A89FCBC9 /* NavRouting.swift in Sources */,
 				9E79D9373490DDA940293CB7 /* NavSession.swift in Sources */,
+				5A71C0DE4E0B5F1A2C3D4E03 /* StandaloneNavScreen.swift in Sources */,
 				73A75CCABECCE3E63B17E334 /* NavTargets.swift in Sources */,
 				86FA00BDABA4FF7C81E24227 /* NavText.swift in Sources */,
 				E3483FA2ABF7702A1A8DA520 /* NavVoice.swift in Sources */,

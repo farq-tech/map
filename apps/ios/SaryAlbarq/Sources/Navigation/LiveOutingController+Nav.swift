@@ -5,12 +5,9 @@ import SwiftUI
 /// itself only carries a few hooks.
 extension LiveOutingController {
     static func navProvider(session: OutingSession) -> NavRoutingProvider {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-SaryNavDemo") { return DemoNavProvider() }
-        #endif
-        /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla. */
-        let streets = SwitchingRouteProvider(mapbox: MapboxNavRoutingProvider())
-        return DesertAwareRouteProvider(base: streets)
+        /* Mapbox by default; «مزوّد المسارات» (hidden setting) can switch to the company's Valhalla.
+         * The same chain guides «اتجه» from the home map without an outing (`StandaloneNavScreen`). */
+        NavProviders.standard()
     }
 
     // MARK: starting points
