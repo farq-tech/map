@@ -225,4 +225,130 @@ final class CampSitesTests: XCTestCase {
     private func night(from: Double, gust: Double) -> CampNight {
         CampNight(windKmh: gust * 0.7, gustKmh: gust, fromDeg: from, rainProbability: 0, rainMm: 0, dust: nil, pm10: nil, sunset: nil)
     }
+
+    // MARK: the site's own name
+
+    private func square(_ c: LngLat, halfDeg: Double) -> [[LngLat]] {
+        [[LngLat(lng: c.lng - halfDeg, lat: c.lat - halfDeg), LngLat(lng: c.lng + halfDeg, lat: c.lat - halfDeg),
+          LngLat(lng: c.lng + halfDeg, lat: c.lat + halfDeg), LngLat(lng: c.lng - halfDeg, lat: c.lat + halfDeg)]]
+    }
+
+    private func site(_ lat: Double, _ lng: Double, near: String? = nil, region: String = "thumamah") -> CampSite {
+        CampSite(id: "n", region: region, lat: lat, lng: lng, nearName: near)
+    }
+
+    func testInsideSandSeaSaysFi() {
+        let c = LngLat(lng: 46.7, lat: 25.3)
+        let sea = DesertPlace(id: "a", kind: .nafud, nameAr: "نفود الثمامة", point: c, polygon: square(c, halfDeg: 0.2))
+        let n = CampNaming.resolve(site(25.31, 46.71), places: [sea])
+        XCTAssertEqual(n.relation, .inside)
+        XCTAssertEqual(n.title, "في نفود الثمامة")
+        XCTAssertEqual(n.routeTitle, "في نفود الثمامة")
+    }
+
+    func testNearRawdaShowsRoundedKm() {
+        /* 0.027° of latitude ≈ 3.0 km north of the rawdah's point. */
+        let r = DesertPlace(id: "r", kind: .rawda, nameAr: "روضة نورة", point: LngLat(lng: 46.7, lat: 25.3))
+        let n = CampNaming.resolve(site(25.327, 46.7), places: [r])
+        guard case .near(let m) = n.relation else { return XCTFail("\(n.relation)") }
+        XCTAssertEqual(m, 3000, accuracy: 100)
+        XCTAssertEqual(n.title, "قرب روضة نورة \u{200F}·\u{200F} ٣ كم")
+        XCTAssertEqual(n.routeTitle, "قرب روضة نورة")
+        XCTAssertNil(n.subtitle, "the name already says روضة")
+    }
+
+    func testOnTheEdgeAndKindLabel() {
+        let c = LngLat(lng: 46.7, lat: 25.3)
+        let sea = DesertPlace(id: "a", kind: .nafud, nameAr: "الثويرات", point: c, polygon: square(c, halfDeg: 0.1))
+        /* 100 m east of the east edge. */
+        let n = CampNaming.resolve(site(25.3, 46.8 + 0.001), places: [sea])
+        XCTAssertEqual(n.relation, .edge)
+        XCTAssertEqual(n.title, "على طرف الثويرات")
+        XCTAssertEqual(n.subtitle, "نفود")
+    }
+
+    func testUnnamedStaysCampSiteWithCoordinatesInSubtitle() {
+        let far = DesertPlace(id: "r", kind: .rawda, nameAr: "روضة بعيدة", point: LngLat(lng: 48.5, lat: 26.5))
+        let n = CampNaming.resolve(site(25.3, 46.7), places: [far])
+        XCTAssertEqual(n.relation, .unnamed)
+        XCTAssertEqual(n.title, "موقع كشتة")
+        XCTAssertFalse(n.title.contains("جلسة"))
+        XCTAssertTrue(n.subtitle?.contains("الثمامة") == true)
+        XCTAssertTrue(n.subtitle?.contains("٢٥٫٣٠٠") == true, n.subtitle ?? "")
+    }
+
+    func testEqualDistancesPickByKindThenId() {
+        let me = LngLat(lng: 46.7, lat: 25.0)
+        let a = DesertPlace(id: "z-fayda", kind: .fayda, nameAr: "فيضة الحلوة", point: LngLat(lng: 46.7, lat: 25.125))
+        let b = DesertPlace(id: "a-rawda", kind: .rawda, nameAr: "روضة ملهم", point: LngLat(lng: 46.7, lat: 24.875))
+        let n1 = CampNaming.resolve(site(me.lat, me.lng), places: [a, b])
+        let n2 = CampNaming.resolve(site(me.lat, me.lng), places: [b, a])
+        XCTAssertEqual(n1, n2)
+        XCTAssertEqual(n1.name, "روضة ملهم")
+    }
+
+    func testFamousNameBeatsAFarGazetteerPlaceButNotACloseOne() {
+        let r = DesertPlace(id: "r", kind: .rawda, nameAr: "روضة بعيدة", point: LngLat(lng: 46.7, lat: 25.3 + 0.09))  // ≈ 10 km
+        XCTAssertEqual(CampNaming.resolve(site(25.3, 46.7, near: "خشوم الثمامة"), places: [r]).title, "قرب خشوم الثمامة")
+        let close = DesertPlace(id: "c", kind: .rawda, nameAr: "روضة قريبة", point: LngLat(lng: 46.7, lat: 25.3 + 0.018))  // ≈ 2 km
+        XCTAssertEqual(CampNaming.resolve(site(25.3, 46.7, near: "خشوم الثمامة"), places: [close]).name, "روضة قريبة")
+        XCTAssertEqual(CampNaming.resolve(site(25.3, 46.7, near: "خشوم الثمامة"), places: []).title, "قرب خشوم الثمامة")
+    }
+
+    func testSmallestContainingOutlineWinsAndBareKindNamesAreNotNames() {
+        let c = LngLat(lng: 46.7, lat: 25.3)
+        let big = DesertPlace(id: "big", kind: .nafud, nameAr: "نفود الثمامة", point: c, polygon: square(c, halfDeg: 0.5))
+        let small = DesertPlace(id: "small", kind: .fayda, nameAr: "فيضة ام جرس", point: c, polygon: square(c, halfDeg: 0.02))
+        let bare = DesertPlace(id: "bare", kind: .fayda, nameAr: "فيضة", point: c, polygon: square(c, halfDeg: 0.01))
+        XCTAssertEqual(CampNaming.resolve(site(25.3, 46.7), places: [big, small, bare]).name, "فيضة ام جرس")
+    }
+
+    func testBundledSitesGetANameAndNeverJalsa() {
+        let places = DesertGazetteer.bundled.places
+        try? XCTSkipIf(places.isEmpty, "gazetteer not bundled in this host")
+        var named = 0
+        for s in CampSiteCatalog.all {
+            let n = CampNaming.resolve(s, places: places)
+            XCTAssertFalse(n.title.contains("جلسة"), s.id)
+            if n.relation != .unnamed { named += 1 }
+        }
+        print("camp-names: \(named)/\(CampSiteCatalog.all.count) named")
+        XCTAssertGreaterThan(named, CampSiteCatalog.all.count / 2)
+    }
+
+    // MARK: protected areas are never suggested
+
+    func testSiteInsideProtectedAreaIsExcludedAndOutsideOneIsKept() {
+        let inside = CampSite(id: "in", lat: 24.9, lng: 46.7, protected: "محمية الملك خالد الملكية")
+        let outside = CampSite(id: "out", lat: 24.9, lng: 46.71)
+        let top = CampRanker.top([inside, outside], near: riyadh, radiusKm: 100, night: nil)
+        XCTAssertEqual(top.map(\.id), ["out"])
+    }
+
+    func testAllSitesProtectedGivesEmptyListAndCount() {
+        let sites = (0..<4).map { CampSite(id: "p\($0)", lat: 24.9, lng: 46.7 + Double($0) * 0.01, protected: "محمية") }
+        XCTAssertTrue(CampRanker.top(sites, near: riyadh, radiusKm: 100, night: nil).isEmpty)
+        XCTAssertEqual(CampRanker.protectedCount(sites, near: riyadh, radiusKm: 100), 4)
+        /* Out of the radius they do not count: the plain empty state, not «كلها داخل محميات». */
+        XCTAssertEqual(CampRanker.protectedCount(sites, near: riyadh, radiusKm: 5), 0)
+    }
+
+    func testTopFillsFiveFromOutsideProtectedAreas() {
+        var sites = (0..<5).map { CampSite(id: "p\($0)", lat: 24.9, lng: 46.7 + Double($0) * 0.01, comfort: 1, beauty: 1, access: 1, protected: "محمية") }
+        sites += (0..<6).map { CampSite(id: "o\($0)", lat: 25.0, lng: 46.7 + Double($0) * 0.01, comfort: 0.3, beauty: 0.3, access: 0.3) }
+        let top = CampRanker.top(sites, near: riyadh, radiusKm: 100, night: nil)
+        XCTAssertEqual(top.count, 5)
+        XCTAssertTrue(top.allSatisfy { $0.site.protected == nil })
+    }
+
+    func testBundledProtectedCoverageIsWhatTheDataSays() {
+        /* Documented in the PR: only sites flagged by the build can be excluded. */
+        let all = CampSiteCatalog.all
+        try? XCTSkipIf(all.isEmpty)
+        let flagged = all.filter(\.protected.isSome)
+        print("camp-protected: \(flagged.count)/\(all.count)", Dictionary(grouping: flagged, by: { $0.protected! }).mapValues(\.count))
+        XCTAssertTrue(CampRanker.top(flagged, near: riyadh, radiusKm: 2000, night: nil).isEmpty)
+    }
 }
+
+private extension Optional { var isSome: Bool { self != nil } }

@@ -14,6 +14,10 @@ final class CampSuggestModel: ObservableObject {
     /// Tonight per region (one Open-Meteo request per region, at its rounded centre).
     @Published private(set) var nights: [String: CampNight] = [:]
     @Published private(set) var weatherFailed = false
+    /// Nothing is listed only because every site in the radius lies in a protected area.
+    @Published private(set) var onlyProtected = false
+    /// Each listed site's own name (gazetteer first), resolved off the main thread after ranking.
+    @Published private(set) var names: [String: CampPlaceName] = [:]
 
     private let sites: [CampSite]
     private let provider: FallbackWeatherProvider
@@ -87,8 +91,23 @@ final class CampSuggestModel: ObservableObject {
         }
         ranked = Array(all.sorted { $0.score > $1.score }.prefix(5))
         phase = .ready
+        onlyProtected = ranked.isEmpty && CampRanker.protectedCount(sites, near: me, radiusKm: radiusKm) > 0
+        resolveNames(for: ranked.map(\.site))
         guard highlights else { return }
         CampSitesHub.shared.highlighted = Dictionary(uniqueKeysWithValues: ranked.enumerated().map { ($0.element.site.id, $0.offset + 1) })
+    }
+
+    /// The name of a site: the resolved one, else the build's `near_name` / «موقع كشتة» until it arrives.
+    func name(_ s: CampSite) -> CampPlaceName { names[s.id] ?? CampNaming.resolve(s, places: []) }
+
+    func resolveNames(for sites: [CampSite]) {
+        Task { [weak self] in
+            let out = await Task.detached(priority: .userInitiated) { () -> [String: CampPlaceName] in
+                let places = DesertGazetteer.bundled.places
+                return Dictionary(uniqueKeysWithValues: sites.map { ($0.id, CampNaming.resolve($0, places: places)) })
+            }.value
+            self?.names.merge(out) { _, new in new }
+        }
     }
 
     #if DEBUG
@@ -131,14 +150,16 @@ struct CampSuggestSheet: View {
                 SaryStateView(kind: .loading("ندوّر لك أحلى جلسة…")).sarySurface(radius: SaryRadius.l)
             default:
                 if model.ranked.isEmpty {
-                    SaryStateView(kind: .empty(title: "ما لقينا أماكن مقترحة قريبة",
-                                               message: "الاقتراحات الحين حول الثمامة والدهناء والنفود. وسّع المسافة أو جرّب منطقة ثانية.",
-                                               systemImage: "tent"))
+                    SaryStateView(kind: .empty(title: model.onlyProtected ? "كل الأماكن القريبة داخل محميات" : "ما لقينا أماكن مقترحة قريبة",
+                                               message: model.onlyProtected
+                                                   ? "ما نقترح عليك تخيّم داخل المحمية. وسّع المسافة ونطلع لك أماكن برّا المحميات."
+                                                   : "الاقتراحات الحين حول الثمامة والدهناء والنفود. وسّع المسافة أو جرّب منطقة ثانية.",
+                                               systemImage: model.onlyProtected ? "leaf.arrow.triangle.circlepath" : "tent"))
                         .sarySurface(radius: SaryRadius.l)
                         .accessibilityIdentifier("camp.empty")
                 } else {
                     ForEach(Array(model.ranked.enumerated()), id: \.element.id) { i, r in
-                        CampSiteCard(rank: i + 1, ranked: r, night: model.nights[r.site.region], go: { go(r.site, rank: i + 1) },
+                        CampSiteCard(rank: i + 1, ranked: r, place: model.name(r.site), night: model.nights[r.site.region], go: { go(r.site, rank: i + 1) },
                                      routes: DesertGrid.bboxes[r.site.region] == nil ? nil : { routes(r.site, rank: i + 1) })
                             .transition(SaryTransition.appear(theme))
                     }
@@ -210,13 +231,13 @@ struct CampSuggestSheet: View {
 
     private func routes(_ s: CampSite, rank: Int) {
         let night = model.nights[s.region]
-        host.openRoutes(s.position, "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? ""), night?.rainy ?? false, night != nil)
+        host.openRoutes(s.position, model.name(s).destinationName, night?.rainy ?? false, night != nil)
     }
 
     private func go(_ s: CampSite, rank: Int) {
         /* Our own guidance (NavSession); the off-road remainder never routes along a channel:
          * the target itself is outside every flood buffer (scripts/camp-sites). */
-        host.directions(NavTargets.point(s.position, name: "جلسة \(SaryFormat.number(rank))" + (s.nearName.map { " قرب \($0)" } ?? "")))
+        host.directions(NavTargets.point(s.position, name: model.name(s).destinationName))
     }
 }
 
@@ -224,6 +245,7 @@ struct CampSuggestSheet: View {
 struct CampSiteCard: View {
     var rank: Int
     var ranked: CampRanker.Ranked
+    var place: CampPlaceName
     var night: CampNight?
     var go: () -> Void
     /// «دروب البر» (nil: the site is outside the bundled route grids).
@@ -238,8 +260,13 @@ struct CampSiteCard: View {
                 Text(SaryFormat.number(rank)).saryText(.headline, weight: .bold).foregroundStyle(p.onAccent)
                     .frame(width: 30, height: 30).background(Circle().fill(p.accent))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(s.nearName.map { "قرب \($0)" } ?? "جلسة \(SaryFormat.number(rank))")
+                    Text(place.title)
                         .saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
+                        .accessibilityIdentifier("camp.title.\(rank)")
+                    if let sub = place.subtitle {
+                        Text(sub).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)
+                            .accessibilityIdentifier("camp.kind.\(rank)")
+                    }
                     Text("\(SaryFormat.distance(meters: ranked.distanceM)) خط مستقيم · درجة \(SaryFormat.number(Int((ranked.score * 100).rounded())))")
                         .saryNumber(.footnote).foregroundStyle(p.textSecondary)
                 }
@@ -304,20 +331,21 @@ struct CampSiteTappedSheet: View {
 
     var body: some View {
         let site = CampSiteCatalog.all.first { $0.id == siteId }
+        let place = site.map { model.name($0) }
         SaryPage(title: "مكان مقترح للكشتة", close: { controller.modal = nil }) {
             if let site {
                 let me = controller.location.lastFix.map { LngLat(lng: $0.lng, lat: $0.lat) }
                 let night = model.nights[site.region]
                 CampSiteCard(rank: 1, ranked: .init(site: site, score: CampRanker.score(site, night: night),
                                                     distanceM: me.map { Vehicle.distanceMeters($0, site.position) } ?? 0),
-                             night: night, go: {
-                    controller.directions(NavTargets.point(site.position, name: site.nearName.map { "جلسة قرب \($0)" } ?? "جلسة كشتة"))
+                             place: place ?? CampNaming.resolve(site, places: []), night: night, go: {
+                    controller.directions(NavTargets.point(site.position, name: place?.destinationName ?? "موقع كشتة"))
                 }, routes: {
                     let rain = night?.rainy ?? false
                     let weatherAvailable = night != nil
                     controller.modal = nil
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        controller.modal = .desertRoute(site.position, site.nearName.map { "جلسة قرب \($0)" } ?? "جلسة كشتة", rain, weatherAvailable)
+                        controller.modal = .desertRoute(site.position, place?.destinationName ?? "موقع كشتة", rain, weatherAvailable)
                     }
                 })
             }
@@ -330,6 +358,7 @@ struct CampSiteTappedSheet: View {
         }
         .task {
             let f = controller.location.lastFix
+            if let site = CampSiteCatalog.all.first(where: { $0.id == siteId }) { model.resolveNames(for: [site]) }
             await model.start(me: f.map { LngLat(lng: $0.lng, lat: $0.lat) })
         }
         .accessibilityIdentifier("camp.site.sheet")
