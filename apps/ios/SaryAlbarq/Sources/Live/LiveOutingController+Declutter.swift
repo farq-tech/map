@@ -108,8 +108,9 @@ extension LiveOutingController {
         /* Cheap checks first: `ui` runs the whole presenter. */
         guard !tripEnded, !nav.isActive, liveContext(drive: drive) != .driving else { return false }
         let ui = self.ui
+        /* «طريق الرجعة» running is focused like my SOS (UI-AUDIT: the panel, SOS and the walkie-talkie only). */
         return LiveScreenRules.showsQuickRow(ended: false, notStarted: ui.status == .notStarted, navigating: false,
-                                             driving: false, sosFocused: LiveScreenRules.sosFocused(ui.sos.mine))
+                                             driving: false, sosFocused: LiveScreenRules.sosFocused(ui.sos.mine) || backTrack != nil)
     }
 
     /// The live sheet's detent shape (`LiveSheetShape`): the peek height from the context the screen
@@ -121,7 +122,7 @@ extension LiveOutingController {
         let trip = LiveScreenRules.peekShowsQuickRow(override: contextOverride, navigating: false, moving: motion.moving,
                                                      driveMode: drive, exploring: exploreActive, ended: false,
                                                      notStarted: ui.status == .notStarted,
-                                                     sosFocused: LiveScreenRules.sosFocused(ui.sos.mine))
+                                                     sosFocused: LiveScreenRules.sosFocused(ui.sos.mine) || backTrack != nil)
         return LiveSheetShape(drive: drive, trip: trip)
     }
 

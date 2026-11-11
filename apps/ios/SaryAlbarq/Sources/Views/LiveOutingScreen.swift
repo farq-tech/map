@@ -307,7 +307,8 @@ struct LiveOutingScreen: View {
                      * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
                     let flow = controller.flowUI
                     /* My SOS on (focused mode): the CTA steps aside; the SOS strip has «أنا بخير». */
-                    let hasCTA = flow.primary != nil && !controller.sosFocused
+                    /* «طريق الرجعة» running: its panel is the one action (UI-AUDIT, device test of PR #149). */
+                    let hasCTA = flow.primary != nil && !controller.sosFocused && controller.backTrack == nil
                     /* Owner (2026-11-11): while driving every primary («وين رايحين؟», «وصلنا»…) is a compact pill;
                      * the sheet raised also shrinks it so it never covers the cars above the sheet. */
                     let ctaCompact = LiveScreenRules.primaryCompact(sheetRaised: controller.sheetDetent != .peek, driving: driving)

@@ -44,6 +44,9 @@ final class BackTrackUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["map.trailStart"].waitForExistence(timeout: 5), "«نقطة البداية» on the map")
         /* While it runs its panel's «إنهاء» is the only stop: no map shortcut, no tile. */
         XCTAssertFalse(app.buttons["outing-backtrack"].exists, "no second stop on the map")
+        /* Focused like SOS (device test of PR #149): no big primary («وصلنا») and no quick row. */
+        XCTAssertFalse(app.descendants(matching: .any)["sheet.quickRow"].exists, "no quick row while going back")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "وصلنا")).firstMatch.exists, "no «وصلنا» while going back")
         sleep(2)
         attach(app, "backtrack")
         app.buttons["backtrack.exit"].tap()
