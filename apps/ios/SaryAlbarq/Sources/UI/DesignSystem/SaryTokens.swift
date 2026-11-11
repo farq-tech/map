@@ -340,7 +340,8 @@ extension View {
 /// Motion tokens. Always go through `SaryTheme.animation(_:)` so the Reduce
 /// Motion setting (system or the app's own motion preference) is respected:
 /// under reduced motion, movement becomes a short cross-fade.
-enum SaryMotion {
+/// The motion language (when to use which token) is in `docs/MOTION.md`.
+enum SaryMotion: CaseIterable {
     /// Taps, toggles, small state changes.
     case snappy
     /// Layout changes: cluster morph, sheet content, expanding capsule.
@@ -349,6 +350,19 @@ enum SaryMotion {
     case enter
     /// Emergency: quick and decisive.
     case urgent
+    /// Something appearing in place: a state view, a card's content, a chip.
+    case appear
+    /// Something leaving: quicker than it came and without bounce, so the
+    /// eye is not pulled back to what is going away.
+    case dismiss
+    /// One-shot attention: a small scale or glow that settles back once
+    /// (a value crossed a threshold, a new alert landed). Never repeated.
+    case emphasis
+    /// Arrival («وصلت»): a warm, slightly springier settle. Once per arrival.
+    case celebrate
+    /// One half-breath of a live indicator (in OR out). A full breath is
+    /// `livePulsePeriod`; loops only run through `View.saryPulse`.
+    case livePulse
 
     var animation: Animation {
         switch self {
@@ -356,10 +370,201 @@ enum SaryMotion {
         case .smooth: return .spring(response: 0.42, dampingFraction: 0.88)
         case .enter: return .spring(response: 0.5, dampingFraction: 0.82)
         case .urgent: return .spring(response: 0.22, dampingFraction: 0.92)
+        case .appear: return .spring(response: 0.36, dampingFraction: 0.9)
+        case .dismiss: return .easeOut(duration: 0.2)
+        case .emphasis: return .spring(response: 0.3, dampingFraction: 0.62)
+        case .celebrate: return .spring(response: 0.55, dampingFraction: 0.7)
+        case .livePulse: return .easeInOut(duration: Self.livePulsePeriod / 2)
         }
     }
 
-    static let reduced: Animation = .easeInOut(duration: 0.18)
+    /// Roughly how long the movement takes to settle (s). For the docs, for
+    /// tests, and for timing a follow-up after the motion ends.
+    var duration: TimeInterval {
+        switch self {
+        case .snappy: return 0.28
+        case .smooth: return 0.42
+        case .enter: return 0.5
+        case .urgent: return 0.22
+        case .appear: return 0.36
+        case .dismiss: return 0.2
+        case .emphasis: return 0.3
+        case .celebrate: return 0.55
+        case .livePulse: return Self.livePulsePeriod / 2
+        }
+    }
+
+    static let reduced: Animation = .easeInOut(duration: reducedDuration)
+    static let reducedDuration: TimeInterval = 0.18
+
+    /// A full breath (in + out) of a live indicator: slow enough to read as
+    /// «alive», never as «look at me».
+    static let livePulsePeriod: TimeInterval = 2.4
+    /// SOS: deliberate, not frantic (50 per minute, a calm heartbeat).
+    static let urgentPulsePeriod: TimeInterval = 1.2
+}
+
+/// Which kind of repeating indicator is asking to run.
+enum SaryLoopKind: Equatable, CaseIterable {
+    /// «مباشر»: the live dot, an on-air halo. Never in drive mode.
+    case live
+    /// SOS (mine or a friend's): the only loop allowed while driving.
+    case urgent
+    /// Loading placeholders.
+    case skeleton
+
+    /// One full cycle (s).
+    var period: TimeInterval {
+        switch self {
+        case .live: return SaryMotion.livePulsePeriod
+        case .urgent: return SaryMotion.urgentPulsePeriod
+        case .skeleton: return 1.8
+        }
+    }
+}
+
+/// How a repeating indicator may run right now.
+enum SaryLoopMode: Equatable {
+    /// Static: nothing repeats.
+    case off
+    /// Opacity only (Reduce Motion: no scale, no travel).
+    case fade
+    /// The designed breathe / ripple.
+    case full
+}
+
+/// Pure rules deciding when motion may play (unit-tested in DesignSystemTests).
+enum SaryMotionPolicy {
+    /// A loop never runs when its subject is not live, when the app is not in
+    /// the foreground, or when the view is gone (the caller stops on
+    /// disappear). Only SOS loops in drive mode; under Reduce Motion only SOS
+    /// keeps a slow fade, everything else is static.
+    static func loop(_ kind: SaryLoopKind, active: Bool, reduceMotion: Bool, drive: Bool, sceneActive: Bool) -> SaryLoopMode {
+        guard active, sceneActive else { return .off }
+        switch kind {
+        case .urgent: return reduceMotion ? .fade : .full
+        case .live, .skeleton: return (reduceMotion || drive) ? .off : .full
+        }
+    }
+
+    /// Whether a transition may travel (move / scale) or must only fade.
+    /// Peripheral motion (chips on the map, toasts, status chrome) only fades
+    /// in drive mode: movement in the corner of the eye pulls it off the road.
+    static func travels(reduceMotion: Bool, drive: Bool, peripheral: Bool) -> Bool {
+        !reduceMotion && !(drive && peripheral)
+    }
+}
+
+// MARK: - Transitions
+
+/// Insert / remove transitions. They take the theme because an
+/// `AnyTransition` cannot read the environment: under Reduce Motion (and for
+/// peripheral pieces in drive mode) every one of them is a plain cross-fade.
+/// Pair with an animation from `theme.animation(_:)` at the change site.
+/// Edges are semantic (`.leading` / `.trailing`), so RTL mirrors for free.
+enum SaryTransition {
+    /// A card rising from the bottom edge (sheet cards, arrival card).
+    /// Leaves by fading and settling a little, without travelling back.
+    static func card(_ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        return .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                           removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+    }
+
+    /// A banner sliding down from the top edge (navigation banner, alert lane
+    /// cards under the status capsule). Leaves in place, fading and settling.
+    static func banner(_ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        return .asymmetric(insertion: .move(edge: .top).combined(with: .opacity),
+                           removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+    }
+
+    /// A short confirmation («نُسخ»): a small rise and fade. Peripheral.
+    static func toast(_ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: true) else { return .opacity }
+        return .offset(y: 10).combined(with: .opacity)
+    }
+
+    /// A chip or badge popping in place (map chips, a badge on a chip).
+    /// Peripheral: only fades in drive mode.
+    static func chipPop(_ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: true) else { return .opacity }
+        return .scale(scale: 0.6).combined(with: .opacity)
+    }
+
+    /// Content appearing in place (state views, a card's body).
+    static func appear(_ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        return .scale(scale: 0.96).combined(with: .opacity)
+    }
+
+    /// A panel entering from a side. `.leading` is the right edge in Arabic.
+    static func side(_ edge: HorizontalEdge, _ theme: SaryTheme) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        return .move(edge: edge == .leading ? .leading : .trailing).combined(with: .opacity)
+    }
+
+    /// Number roll for a live value (speed, distance, count): digits roll in
+    /// the direction the value moved; a cross-fade under Reduce Motion.
+    static func number(_ value: Double, _ theme: SaryTheme) -> ContentTransition {
+        theme.reduceMotion ? .opacity : .numericText(value: value)
+    }
+}
+
+// MARK: - Haptics
+
+/// The haptic vocabulary: five meanings, one feeling each. Components never
+/// pick a raw `SensoryFeedback`; they name the event (`View.saryHaptic`).
+enum SaryHapticEvent: Equatable, CaseIterable {
+    /// A choice changed (segment, toggle, detent, capsule expanded).
+    case selection
+    /// An action the person took went through (copied, saved, sent).
+    case confirm
+    /// Arrived at a destination / rally point.
+    case arrival
+    /// Safety: needs attention now (off track, flood, someone separated).
+    case warning
+    /// Emergency (sending SOS, a friend's SOS).
+    case sos
+
+    /// Critical events still play while driving.
+    var isCritical: Bool { self == .warning || self == .sos }
+
+    var feedback: SensoryFeedback {
+        switch self {
+        case .selection: return .selection
+        case .confirm: return .impact(flexibility: .soft, intensity: 0.7)
+        case .arrival: return .success
+        case .warning: return .warning
+        case .sos: return .error
+        }
+    }
+}
+
+/// Pure haptics policy (unit-tested) plus an imperative player for code that
+/// is not a view (controllers). The system «System Haptics» switch still
+/// applies on top: the OS drops feedback the person turned off.
+enum SaryHaptics {
+    /// While driving only critical events vibrate (a phone in a mount buzzing
+    /// for a tap is noise). SOS is never muted, not even by `enabled`.
+    static func allows(_ event: SaryHapticEvent, driving: Bool, enabled: Bool = true) -> Bool {
+        if event == .sos { return true }
+        guard enabled else { return false }
+        return !driving || event.isCritical
+    }
+
+    /// For controllers outside the view tree. Views use `.saryHaptic(_:trigger:)`.
+    @MainActor
+    static func play(_ event: SaryHapticEvent, driving: Bool, enabled: Bool = true) {
+        guard allows(event, driving: driving, enabled: enabled) else { return }
+        switch event {
+        case .selection: UISelectionFeedbackGenerator().selectionChanged()
+        case .confirm: UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
+        case .arrival: UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case .warning: UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case .sos: UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+    }
 }
 
 // MARK: - Icons (SF Symbols)

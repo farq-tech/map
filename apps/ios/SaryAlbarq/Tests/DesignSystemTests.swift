@@ -370,3 +370,101 @@ final class SaryFitTests: XCTestCase {
         XCTAssertEqual(SaryFit.height(200, container: 600, reference: 0), 200)
     }
 }
+
+// MARK: - Motion language (docs/MOTION.md)
+
+final class SaryMotionTokenTests: XCTestCase {
+    func testLeavingIsQuickerThanArriving() {
+        XCTAssertLessThan(SaryMotion.dismiss.duration, SaryMotion.appear.duration)
+        XCTAssertLessThan(SaryMotion.dismiss.duration, SaryMotion.enter.duration)
+    }
+
+    func testUrgentIsTheQuickestMovement() {
+        for m in SaryMotion.allCases where m != .urgent && m != .livePulse {
+            XCTAssertLessThanOrEqual(SaryMotion.urgent.duration, m.duration, "\(m)")
+        }
+    }
+
+    func testEveryMovementSettlesWithinASecond() {
+        // Glanceable: nothing the driver waits for takes longer than this.
+        for m in SaryMotion.allCases where m != .livePulse {
+            XCTAssertGreaterThan(m.duration, 0, "\(m)")
+            XCTAssertLessThan(m.duration, 1, "\(m)")
+        }
+        XCTAssertLessThan(SaryMotion.reducedDuration, SaryMotion.appear.duration)
+    }
+
+    func testLivePulseIsCalmAndSOSIsDeliberateNotFrantic() {
+        XCTAssertEqual(SaryMotion.livePulse.duration, SaryMotion.livePulsePeriod / 2, accuracy: 0.0001)
+        XCTAssertGreaterThanOrEqual(SaryLoopKind.live.period, 2, "a live dot breathes slowly")
+        // SOS faster than live, but under 1 Hz (no strobing; well below the 3 Hz flash limit).
+        XCTAssertLessThan(SaryLoopKind.urgent.period, SaryLoopKind.live.period)
+        XCTAssertGreaterThanOrEqual(SaryLoopKind.urgent.period, 1)
+    }
+}
+
+final class SaryMotionPolicyTests: XCTestCase {
+    private func loop(_ k: SaryLoopKind, active: Bool = true, reduce: Bool = false, drive: Bool = false, scene: Bool = true) -> SaryLoopMode {
+        SaryMotionPolicy.loop(k, active: active, reduceMotion: reduce, drive: drive, sceneActive: scene)
+    }
+
+    func testLoopsStopWhenNotLiveOrInTheBackground() {
+        for k in SaryLoopKind.allCases {
+            XCTAssertEqual(loop(k, active: false), .off, "\(k) not live")
+            XCTAssertEqual(loop(k, scene: false), .off, "\(k) in background")
+            XCTAssertEqual(loop(k, active: false, reduce: true, drive: true, scene: false), .off)
+        }
+    }
+
+    func testLiveLoopsRunOnlyWhenAllowed() {
+        XCTAssertEqual(loop(.live), .full)
+        XCTAssertEqual(loop(.live, drive: true), .off, "no motion in the periphery while driving")
+        XCTAssertEqual(loop(.live, reduce: true), .off)
+        XCTAssertEqual(loop(.skeleton, reduce: true), .off)
+    }
+
+    func testSOSIsTheOnlyLoopWhileDrivingAndFadesUnderReduceMotion() {
+        XCTAssertEqual(loop(.urgent, drive: true), .full)
+        XCTAssertEqual(loop(.urgent, reduce: true), .fade)
+        XCTAssertEqual(loop(.urgent, reduce: true, drive: true), .fade)
+    }
+
+    func testPeripheralMotionOnlyFadesWhileDriving() {
+        XCTAssertTrue(SaryMotionPolicy.travels(reduceMotion: false, drive: false, peripheral: true))
+        XCTAssertFalse(SaryMotionPolicy.travels(reduceMotion: false, drive: true, peripheral: true))
+        XCTAssertTrue(SaryMotionPolicy.travels(reduceMotion: false, drive: true, peripheral: false))
+        XCTAssertFalse(SaryMotionPolicy.travels(reduceMotion: true, drive: false, peripheral: false))
+    }
+
+    func testThemeAnimationCrossFadesUnderReduceMotion() {
+        var prefs = AppearancePreferences()
+        prefs.motion = .reduced
+        let reduced = SaryTheme.resolve(prefs: prefs, scheme: .dark, night: false, drive: false)
+        for m in SaryMotion.allCases { XCTAssertEqual(reduced.animation(m), SaryMotion.reduced, "\(m)") }
+        prefs.motion = .full
+        let full = SaryTheme.resolve(prefs: prefs, scheme: .dark, night: false, drive: false, systemReduceMotion: true)
+        XCTAssertEqual(full.animation(.celebrate), SaryMotion.celebrate.animation)
+    }
+}
+
+final class SaryHapticsPolicyTests: XCTestCase {
+    func testEverythingPlaysWhenNotDriving() {
+        for e in SaryHapticEvent.allCases { XCTAssertTrue(SaryHaptics.allows(e, driving: false), "\(e)") }
+    }
+
+    func testOnlyCriticalEventsPlayWhileDriving() {
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: true))
+        XCTAssertTrue(SaryHaptics.allows(.warning, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.selection, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.confirm, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.arrival, driving: true))
+        XCTAssertEqual(SaryHapticEvent.allCases.filter(\.isCritical), [.warning, .sos])
+    }
+
+    func testSOSIsNeverMuted() {
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: false, enabled: false))
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: true, enabled: false))
+        XCTAssertFalse(SaryHaptics.allows(.warning, driving: false, enabled: false))
+        XCTAssertFalse(SaryHaptics.allows(.selection, driving: false, enabled: false))
+    }
+}

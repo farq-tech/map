@@ -263,3 +263,177 @@ private struct SaryAnimationModifier<V: Equatable>: ViewModifier {
         content.animation(theme.animation(motion), value: value)
     }
 }
+
+// MARK: - Motion modifiers (see docs/MOTION.md)
+
+/// What a repeating indicator draws at the peak of its cycle.
+enum SaryPulseStyle: Equatable {
+    /// Fades down and back (and grows a touch when motion is full).
+    case breathe
+    /// A ring expanding from the subject and fading out, then starting over:
+    /// SOS, on-air.
+    case ripple
+    /// A soft halo behind a small dot, growing and fading: «مباشر».
+    case halo
+    /// A barely visible scale beat on the subject itself: the SOS disc.
+    case heartbeat
+}
+
+extension View {
+    /// Haptic for a semantic event, fired when `trigger` changes. Applies the
+    /// drive-mode rule (`SaryHaptics.allows`): only critical events while driving.
+    func saryHaptic<T: Equatable>(_ event: SaryHapticEvent, trigger: T) -> some View {
+        modifier(SaryHapticModifier(event: event, trigger: trigger, condition: nil))
+    }
+
+    /// Same, only when `condition(old, new)` holds (e.g. `{ !$0 && $1 }` for
+    /// «became true»).
+    func saryHaptic<T: Equatable>(_ event: SaryHapticEvent, trigger: T, condition: @escaping (T, T) -> Bool) -> some View {
+        modifier(SaryHapticModifier(event: event, trigger: trigger, condition: condition))
+    }
+
+    /// A repeating indicator with every stop condition built in: it runs only
+    /// while `active`, while the view is on screen and the app is in the
+    /// foreground, and as `SaryMotionPolicy.loop` allows (no live loops in
+    /// drive mode or under Reduce Motion; SOS fades instead of moving).
+    /// Never use `repeatForever` directly.
+    func saryPulse(_ kind: SaryLoopKind, style: SaryPulseStyle, active: Bool = true) -> some View {
+        modifier(SaryPulseModifier(kind: kind, style: style, active: active))
+    }
+
+    /// A one-shot emphasis each time `trigger` changes: a small scale that
+    /// settles back (`SaryMotion.emphasis`). Nothing under Reduce Motion or,
+    /// for peripheral pieces, in drive mode.
+    func saryEmphasis<T: Equatable>(trigger: T, scale: CGFloat = 1.06, peripheral: Bool = false) -> some View {
+        modifier(SaryEmphasisModifier(trigger: trigger, scale: scale, peripheral: peripheral))
+    }
+
+    /// Settles into place when it first appears (a small scale + fade).
+    /// For decorative pieces only (glyphs, illustrations): it starts
+    /// transparent, so never put it on something a test or a finger must hit
+    /// at once.
+    func saryAppearOnMount() -> some View {
+        modifier(SaryAppearOnMountModifier())
+    }
+}
+
+private struct SaryHapticModifier<T: Equatable>: ViewModifier {
+    @Environment(\.sary) private var theme
+    var event: SaryHapticEvent
+    var trigger: T
+    var condition: ((T, T) -> Bool)?
+
+    func body(content: Content) -> some View {
+        let allowed = SaryHaptics.allows(event, driving: theme.drive)
+        let feedback = event.feedback
+        let condition = self.condition
+        return content.sensoryFeedback(trigger: trigger) { old, new in
+            guard allowed, condition?(old, new) ?? true else { return nil }
+            return feedback
+        }
+    }
+}
+
+private struct SaryPulseModifier: ViewModifier {
+    var kind: SaryLoopKind
+    var style: SaryPulseStyle
+    var active: Bool
+    @Environment(\.sary) private var theme
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var beat = 0
+    @State private var onScreen = false
+
+    private var mode: SaryLoopMode {
+        guard onScreen else { return .off }
+        return SaryMotionPolicy.loop(kind, active: active, reduceMotion: theme.reduceMotion,
+                                     drive: theme.drive, sceneActive: scenePhase == .active)
+    }
+
+    func body(content: Content) -> some View {
+        let mode = self.mode
+        let style = self.style
+        let period = kind.period
+        return content
+            .phaseAnimator([false, true], trigger: beat) { view, peak in
+                view.modifier(SaryPulseFrame(style: style, mode: mode, peak: peak))
+            } animation: { peak in
+                /* Ripples and halos travel out, then snap back unseen (they are
+                 * transparent at the peak); breaths ease in and out evenly. */
+                let out = (style == .ripple || style == .halo) && mode == .full
+                if peak { return .easeOut(duration: out ? period * 0.9 : period / 2) }
+                return out ? nil : .easeInOut(duration: period / 2)
+            }
+            .onAppear { onScreen = true }
+            .onDisappear { onScreen = false }
+            /* Restarts (or ends) whenever the mode changes; SwiftUI cancels it on disappear. */
+            .task(id: mode) {
+                guard mode != .off else { return }
+                while !Task.isCancelled {
+                    beat &+= 1
+                    try? await Task.sleep(for: .seconds(period))
+                }
+            }
+    }
+}
+
+private struct SaryPulseFrame: ViewModifier {
+    var style: SaryPulseStyle
+    var mode: SaryLoopMode
+    var peak: Bool
+
+    func body(content: Content) -> some View {
+        let on = peak && mode != .off
+        let full = mode == .full
+        switch style {
+        case .breathe:
+            content
+                .opacity(on ? 0.45 : 1)
+                .scaleEffect(on && full ? 1.12 : 1)
+        case .ripple:
+            content
+                .scaleEffect(full ? (on ? 1.12 : 0.92) : 1)
+                .opacity(mode == .off ? 0 : (on ? (full ? 0 : 0.35) : 1))
+        case .halo:
+            content
+                .scaleEffect(full && on ? 1.8 : 1)
+                .opacity(mode == .off ? 0 : (on ? 0 : 0.55))
+        case .heartbeat:
+            content
+                .scaleEffect(on && full ? 1.04 : 1)
+                .opacity(on && !full ? 0.82 : 1)
+        }
+    }
+}
+
+private struct SaryEmphasisModifier<T: Equatable>: ViewModifier {
+    var trigger: T
+    var scale: CGFloat
+    var peripheral: Bool
+    @Environment(\.sary) private var theme
+
+    func body(content: Content) -> some View {
+        let travels = SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: peripheral)
+        let scale = self.scale
+        return content.phaseAnimator([false, true], trigger: trigger) { view, peak in
+            view.scaleEffect(peak && travels ? scale : 1)
+        } animation: { peak in
+            peak ? SaryMotion.emphasis.animation : SaryMotion.smooth.animation
+        }
+    }
+}
+
+private struct SaryAppearOnMountModifier: ViewModifier {
+    @Environment(\.sary) private var theme
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let travels = SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false)
+        return content
+            .opacity(shown ? 1 : 0)
+            .scaleEffect(shown || !travels ? 1 : 0.9)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(theme.animation(.appear)) { shown = true }
+            }
+    }
+}
