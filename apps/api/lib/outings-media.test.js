@@ -104,7 +104,7 @@ test('shared channel end to end: roles, events, position math, cleanup', { skip,
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

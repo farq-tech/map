@@ -64,7 +64,7 @@ test('personal invites — single use, rejoin, other identity, revoke, resend, e
   outings.attach(server);
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -338,7 +338,7 @@ test('personal invites — the same person back with a new account (phone), remo
   outings.attach(server);
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

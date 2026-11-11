@@ -142,6 +142,17 @@ function createChat(ctx) {
   /* «بلّغ عن الرسالة»: a handful an hour is a real complaint; more is a flood. */
   const reportLimit = createRateLimiter({ limit: cfg.reportsPerHour ?? 10, windowMs: 60 * 60_000, now });
   const typingAt = new Map(); // `${outingId}:${userId}:${conv}` → ms
+  const pendingPushes = new Set();
+
+  function schedulePush(work) {
+    const task = Promise.resolve(work);
+    pendingPushes.add(task);
+    task.then(() => pendingPushes.delete(task), () => pendingPushes.delete(task));
+  }
+
+  async function drainPushes() {
+    while (pendingPushes.size) await Promise.allSettled([...pendingPushes]);
+  }
 
   /* ---------- who may do what ---------- */
 
@@ -288,7 +299,7 @@ function createChat(ctx) {
     const message = messageOut(full);
     const blockers = await blockersOf(user.id);
     deliver(outingId, message.recipient_id, user.id, { type: 'chat_message', message }, { exceptUsers: blockers });
-    void pushMessage(message, a, blockers);
+    schedulePush(pushMessage(message, a, blockers));
     return { message, duplicate: false };
   }
 
@@ -635,6 +646,7 @@ function createChat(ctx) {
   return {
     unreadTotal,
     purge,
+    drainPushes,
     api: {
       chatConversations: conversations,
       chatMessages: list,

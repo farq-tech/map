@@ -71,7 +71,7 @@ test('legs end to end: leader group legs, personal legs, old clients see the des
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });

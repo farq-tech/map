@@ -48,7 +48,7 @@ test('shared outings — full lifecycle', { skip, timeout: 60_000 }, async (t) =
   const base = `http://127.0.0.1:${server.address().port}`;
   const wsUrl = `ws://127.0.0.1:${server.address().port}/api/outings/live`;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -296,7 +296,7 @@ test('twenty members in one outing, two outings isolated', { skip, timeout: 60_0
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -371,7 +371,7 @@ test('outing safety — SOS, battery, rally point', { skip, timeout: 60_000 }, a
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -518,7 +518,7 @@ test('web push: notes and SOS reach members whose screen is off', { skip, timeou
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -668,7 +668,7 @@ test('voice clips (memory only) and opt-in trip summaries (totals only)', { skip
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await pool.end();
   });
@@ -811,7 +811,7 @@ test('APNs: tokens per identity, same recipients as web push, gone tokens remove
   outings.attach(server);
   const port = server.address().port;
   t.after(async () => {
-    outings.close();
+    await outings.close();
     await new Promise((r) => server.close(r));
     await new Promise((r) => h2.close(r));
     await pool.end();
