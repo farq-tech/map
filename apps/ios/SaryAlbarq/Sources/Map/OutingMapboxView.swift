@@ -370,6 +370,11 @@ struct OutingMapboxView: UIViewRepresentable {
             /// The vehicle layer is the 2D icon (symbol), not the 3D model.
             var icon = false
             var layersReady = false
+            /// The position and heading last sent to the car's source / layer, and the presence its
+            /// opacity was set for (nil: send again). Every member's fix re-syncs every car, and most
+            /// of them have not moved or changed state.
+            var sent: (position: LngLat, heading: Double?)?
+            var sentPresence: Policy.Freshness?
             /// Name chip and note bubble, drawn in the declutter overlay (see `ChipLayout`).
             var chipBox: HostBox<MapChip>?
             var noteBox: HostBox<MapNote>?
@@ -1046,13 +1051,18 @@ struct OutingMapboxView: UIViewRepresentable {
                 }
                 r.layersReady = true
                 r.greyed = false // fresh layers are drawn in the car's own colour
+                r.sent = nil
+                r.sentPresence = nil
             }
             setPosition(r, on: m)
-            if r.model {
-                try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
-                                        value: Vehicle.opacity(r.item.presence))
+            if r.sentPresence != r.item.presence {
+                r.sentPresence = r.item.presence
+                if r.model {
+                    try? m.setLayerProperty(for: ids.layer, property: r.icon ? "icon-opacity" : "model-opacity",
+                                            value: Vehicle.opacity(r.item.presence))
+                }
+                try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
             }
-            try? m.setLayerProperty(for: ids.spot, property: "circle-opacity", value: Vehicle.opacity(r.item.presence))
             /* Not live: grey, not only faded (the spot, the 2D car or the 3D model's paint). */
             let shown = Vehicle.displayColor(r.item.isMe ? Vehicle.mySpotHex : r.item.color, r.item.presence)
             if r.greyed != (r.item.presence != .live) {
@@ -1069,6 +1079,8 @@ struct OutingMapboxView: UIViewRepresentable {
         }
 
         private func setPosition(_ r: Rec, on m: MapboxMap) {
+            if let s = r.sent, s.position == r.shown, s.heading == r.heading { return }
+            r.sent = (r.shown, r.heading)
             let ids = Vehicle.ids(r.key)
             m.updateGeoJSONSource(withId: ids.source, geoJSON: .geometry(.point(Point(r.shown.coordinate))))
             if r.model {
