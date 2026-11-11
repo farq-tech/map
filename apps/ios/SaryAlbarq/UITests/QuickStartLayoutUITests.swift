@@ -5,9 +5,9 @@ import XCTest
 final class QuickStartLayoutUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    private func open(largeText: Bool) -> XCUIApplication {
+    private func open(largeText: Bool, screen: String = "create-quick") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "create-quick", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", screen, "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0"]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXL"]
         }
@@ -26,6 +26,50 @@ final class QuickStartLayoutUITests: XCTestCase {
             try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent("\(name).png"))
         }
     }
+
+    /// No two of these elements share any area, and the buttons among them can be tapped.
+    private func assertLaidOut(_ app: XCUIApplication, ids: [String], tappable: [String], step: String) {
+        for id in ids { XCTAssertTrue(el(app, id).waitForExistence(timeout: 8), "\(step): \(id)") }
+        let frames = ids.map { ($0, el(app, $0).frame) }
+        for i in 0..<frames.count {
+            for j in (i + 1)..<frames.count {
+                let (a, fa) = frames[i], (b, fb) = frames[j]
+                let x = fa.intersection(fb)
+                XCTAssertFalse(x.width > 1 && x.height > 1, "\(step): \(a) \(fa) overlaps \(b) \(fb)")
+            }
+        }
+        for id in tappable { XCTAssertTrue(el(app, id).isHittable, "\(step): \(id) must be tappable") }
+    }
+
+    /// The full wizard: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ أصدقاءك, with a shot of each step.
+    private func checkWizard(largeText: Bool) {
+        let tag = largeText ? "large" : "normal"
+        let app = open(largeText: largeText, screen: "create")
+        let field = app.textFields["create.dest.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        assertLaidOut(app, ids: ["create.dest.field", "create.dest.map", "create.dest.required"],
+                      tappable: ["create.dest.field", "create.dest.map"], step: "destination")
+        shot("wizard-1-destination-\(tag)")
+        field.tap()
+        field.typeText("24.7590, 46.7491")
+        let coordinate = app.buttons["create.dest.coordinate"]
+        XCTAssertTrue(coordinate.waitForExistence(timeout: 8))
+        coordinate.tap()
+
+        XCTAssertTrue(app.textFields["create.name"].waitForExistence(timeout: 8))
+        shot("wizard-2-weather-\(tag)")
+        let approve = app.buttons["create.approve"]
+        if !approve.isHittable { app.swipeUp() }
+        approve.tap()
+
+        XCTAssertTrue(app.buttons["create.whatsapp"].waitForExistence(timeout: 15))
+        assertLaidOut(app, ids: ["create.created", "create.whatsapp", "create.more", "create.start", "create.later", "create.shareStatement"],
+                      tappable: ["create.whatsapp", "create.more", "create.start", "create.later"], step: "invite")
+        shot("wizard-3-invite-\(tag)")
+    }
+
+    func testWizardStepsDoNotOverlap() { checkWizard(largeText: false) }
+    func testWizardStepsDoNotOverlapAtLargeText() { checkWizard(largeText: true) }
 
     private func check(largeText: Bool) {
         let app = open(largeText: largeText)
