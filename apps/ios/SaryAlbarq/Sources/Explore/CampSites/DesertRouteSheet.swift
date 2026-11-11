@@ -109,14 +109,18 @@ struct DesertRouteSheet: View {
                 SaryStateView(kind: .empty(title: "ما لقينا درب آمن", message: "«اتجه» يوجّهك بالطريق العادي، أو جرّب نقطة ثانية.", systemImage: "xmark.octagon"),
                               actionTitle: "اتجه", actionID: "routes.direct", actionIcon: SaryIcon.directions, action: direct)
                     .sarySurface(radius: SaryRadius.l)
+                    .accessibilityIdentifier("routes.none")
             case .ready:
                 ForEach(hub.options) { o in
                     card(o).transition(SaryTransition.appear(theme))
                 }
             }
-            Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("routes.note")
+            /* «مسار مقترح من صور الأقمار» only with an actual route, never beside «ما لقينا درب آمن». */
+            if phase == .ready {
+                Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("routes.note")
+            }
             /* The grid's tracks come from OSM (ODbL): the credit shows with the lines. */
             Text(Self.attribution).saryText(.caption).foregroundStyle(p.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,7 +152,7 @@ struct DesertRouteSheet: View {
         let corridor = region == nil ? DesertTiles.corridor(spanning: me, target) : nil
         guard region != nil || corridor != nil else { phase = .outside; return }
         let target = self.target, rain = self.rain || !weatherAvailable
-        let opts = await Task.detached(priority: .userInitiated) { () -> [DesertRouter.Option] in
+        var opts = await Task.detached(priority: .userInitiated) { () -> [DesertRouter.Option] in
             let grid: DesertGrid?
             if let region {
                 grid = DesertGrid.bundled(region)
@@ -160,6 +164,10 @@ struct DesertRouteSheet: View {
             guard let g = grid else { return [] }
             return DesertRouter.options(g, from: me, to: target, rain: rain)
         }.value
+        #if DEBUG
+        /* Screenshots / UI tests: the «ما لقينا درب آمن» state without hunting for a blocked target. */
+        if ProcessInfo.processInfo.arguments.contains("-SaryRouteForceNone") { opts = [] }
+        #endif
         hub.options = opts
         hub.selected = opts.first?.mode ?? .easy
         phase = opts.isEmpty ? .none : .ready

@@ -379,7 +379,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "routes", let t = arg("-SaryRouteTo").map({ $0.split(separator: ",").compactMap { Double($0) } }), t.count == 2 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 let hasForecast = !shotArgs.contains("-SaryRouteNoWeather")
-                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), "جلسة", shotArgs.contains("-SaryRouteRain"), hasForecast)
+                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), arg("-SaryRouteName") ?? "موقع كشتة", shotArgs.contains("-SaryRouteRain"), hasForecast)
             }
         }
         if arg("-SaryLiveModal") == "camp" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .campSuggest } }
