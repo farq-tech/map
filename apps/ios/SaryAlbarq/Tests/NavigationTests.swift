@@ -1106,3 +1106,46 @@ final class NavBarLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(NavBarLayout.stopCircle(drive: true), 60, "the drive-mode target")
     }
 }
+
+/// How a new route arrives on the map: fade-in on first show, quick fade + halo on a reroute.
+final class NavRouteRevealTests: XCTestCase {
+    func testKind() {
+        XCTAssertEqual(NavRouteReveal.kind(previous: nil, next: "a", wasGuiding: false, isGuiding: false), .reveal, "the options appear")
+        XCTAssertEqual(NavRouteReveal.kind(previous: nil, next: "a", wasGuiding: false, isGuiding: true), .reveal, "guidance with no preview")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "a", wasGuiding: true, isGuiding: true), .none,
+                       "the same route shrinking behind the car is not new")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: true, isGuiding: true), .reroute)
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: false, isGuiding: false), .none, "picking another option")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: "b", wasGuiding: false, isGuiding: true), .none, "starting on the preview")
+        XCTAssertEqual(NavRouteReveal.kind(previous: "a", next: nil, wasGuiding: true, isGuiding: false), .none, "the route went away")
+    }
+
+    func testDurationsAndReduceMotion() {
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reveal, reduceMotion: false), 600, "about 0.6 s")
+        XCTAssertLessThan(NavRouteReveal.fadeMs(.reroute, reduceMotion: false), NavRouteReveal.fadeMs(.reveal, reduceMotion: false))
+        XCTAssertEqual(NavRouteReveal.fadeMs(.none, reduceMotion: false), 0)
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reveal, reduceMotion: true), 0)
+        XCTAssertEqual(NavRouteReveal.fadeMs(.reroute, reduceMotion: true), 0)
+    }
+
+    func testManeuverArrowFadesOnlyForANewArrow() {
+        let a = [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.61, lat: 24.7)]
+        let b = [LngLat(lng: 46.7, lat: 24.7), LngLat(lng: 46.71, lat: 24.7)]
+        XCTAssertTrue(NavRouteReveal.maneuverFades(previous: nil, next: a, reduceMotion: false))
+        XCTAssertTrue(NavRouteReveal.maneuverFades(previous: a, next: b, reduceMotion: false))
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: a, reduceMotion: false))
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: nil, reduceMotion: false), "going away: no fade")
+        XCTAssertFalse(NavRouteReveal.maneuverFades(previous: a, next: b, reduceMotion: true))
+    }
+
+    func testFadesCoverRealLayersAndRestAtTheirStyleValues() {
+        let ids = Set(NavMapDrawer.layerIds)
+        for f in NavMapDrawer.routeFades + NavMapDrawer.maneuverFades {
+            XCTAssertTrue(ids.contains(f.layer), f.layer)
+            XCTAssertTrue((0...1).contains(f.rest), f.layer)
+        }
+        XCTAssertFalse(NavMapDrawer.routeFades.contains { $0.layer.hasPrefix("sary-nav-alt") }, "alternatives never fade")
+        XCTAssertEqual(NavMapDrawer.routeFades.first { $0.layer == NavMapDrawer.haloLayer }?.rest, NavMapDrawer.haloOpacity)
+        XCTAssertGreaterThan(NavRouteReveal.rerouteHaloOpacity, NavMapDrawer.haloOpacity, "the reroute darkens the halo")
+    }
+}

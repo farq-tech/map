@@ -212,6 +212,8 @@ extension LiveOutingController {
         case .planning:
             let sel = nav.selectedId ?? nav.routes.first?.id
             d.routes = nav.routes.map { .init(id: $0.id, coordinates: $0.coordinates, selected: $0.id == sel) }
+            /* The first options on the map draw on (`NavRouteReveal`); picking another one does not. */
+            d.revealKey = nav.routes.first { $0.id == sel }?.geometryRevision.uuidString
             if let best = nav.routes.first {
                 d.labels = nav.routes.map { r in
                     .init(id: r.id, at: Self.labelPoint(r, others: nav.routes),
@@ -237,6 +239,8 @@ extension LiveOutingController {
                 let surfaces = traffic?.isEmpty == false ? [] : NavSurface.remaining(r.surfaceRuns, from: done, cum: metrics.surfaceCum)
                 d.routes = [.init(id: r.id, coordinates: Self.remaining(r, progress: nav.shownProgress), selected: true,
                                   traffic: traffic, surfaces: surfaces)]
+                /* A new geometry while guiding is a reroute: a quick fade-in and a brief halo on the map. */
+                d.revealKey = r.geometryRevision.uuidString
                 /* The next turn as an arrow on the line (the banner's maneuver, `currentStep`). */
                 if let step = nav.currentStep, NavManeuverArrow.shows(step.maneuver) {
                     d.maneuver = Self.maneuverShaft(r, at: step.location)
