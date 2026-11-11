@@ -15,6 +15,18 @@ enum CityBuildings {
     static let offerMinZoom = 13.0
     /// Metres: from five floors up a building leans visibly in an off-nadir photo.
     static let minHeight = 15.0
+    /// Owner, Build 40: after sunset the walls went black (lit only by the sun's directional light).
+    /// Their own light keeps the sand colour readable at night, under the imagery's glow.
+    static let emissive = 0.75
+    /// Close in, a block fills the screen: from street zoom the buildings fade to a hint.
+    static let fadeFromZoom = 17.0
+    static let fadeToZoom = 18.5
+    static let closeOpacity = 0.25
+
+    /// The layer's opacity: the tilt's (`VisualBudget.buildingsOpacity`) times the close-in fade.
+    static func opacityExpression(_ tilt: Double) -> [Any] {
+        ["interpolate", ["linear"], ["zoom"], fadeFromZoom, tilt, fadeToZoom, tilt * closeOpacity]
+    }
 
     /// Tilted over a city, close enough to see it.
     static func offerRealistic(pitch: Double, zoom: Double, urban: Double) -> Bool {
@@ -44,7 +56,8 @@ enum CityBuildings {
                                          15, "hsl(32, 30%, 74%)", 40, "hsl(35, 26%, 80%)", 150, "hsl(38, 18%, 86%)"],
                 "fill-extrusion-height": ["get", "height"],
                 "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
-                "fill-extrusion-opacity": opacity,
+                "fill-extrusion-opacity": opacityExpression(opacity),
+                "fill-extrusion-emissive-strength": emissive,
                 "fill-extrusion-vertical-gradient": true,
                 "fill-extrusion-ambient-occlusion-intensity": 0.5,
                 "fill-extrusion-ambient-occlusion-radius": 4,

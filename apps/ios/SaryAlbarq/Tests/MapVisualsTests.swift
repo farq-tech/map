@@ -356,7 +356,11 @@ final class MapVisualsTests: XCTestCase {
     }
 
     func testCityBuildingsOnlyOnSatelliteInACityNotWhileDriving() {
-        let s = VisualEffectsSettings()
+        var s = VisualEffectsSettings()
+        /* Off by default (owner, Build 40); everything below is with the switch on. */
+        XCTAssertFalse(VisualBudget.resolve(s, VisualContext(exploring: true, layer: .satellite, pitch: 58, zoom: 15.3, urban: 1)).buildings,
+                       "3D buildings are off unless the person turns them on")
+        s.buildings = true
         let city = VisualContext(exploring: true, layer: .satellite, pitch: 58, zoom: 15.3, urban: 1)
         XCTAssertTrue(VisualBudget.resolve(s, city).buildings)
         var c = city
@@ -383,7 +387,9 @@ final class MapVisualsTests: XCTestCase {
         let layer = CityBuildings.layer(id: "b", source: "s", opacity: 0.5)
         XCTAssertEqual(layer["type"] as? String, "fill-extrusion")
         XCTAssertEqual(layer["source-layer"] as? String, "building")
-        XCTAssertEqual((layer["paint"] as? [String: Any])?["fill-extrusion-opacity"] as? Double, 0.5)
+        /* The tilt's opacity, faded close in (owner, Build 40). */
+        let op = (layer["paint"] as? [String: Any])?["fill-extrusion-opacity"] as? [Any]
+        XCTAssertEqual(op?[4] as? Double, 0.5, "the tilt's opacity up to street zoom")
     }
 
     func testRealisticOfferedOnlyWhenTiltedOverACity() {
@@ -617,5 +623,20 @@ final class ImageryConsistencyTests: XCTestCase {
         let e = DesertGazetteerMapLayer.fillOpacity
         XCTAssertEqual(e.last as? Double, 0, "the outline stays, the orange wash goes")
         XCTAssertEqual(e[e.count - 2] as? Double, DesertGazetteerMapLayer.fillFadeEnd)
+    }
+
+    /// Owner, Build 40: a black box over half the screen after sunset. When the person turns the 3D
+    /// buildings on, they carry their own light and fade close in.
+    func testCityBuildingsLitAtNightAndFadedCloseIn() {
+        let l = CityBuildings.layer(id: "b", source: "s", opacity: 1)
+        let paint = l["paint"] as? [String: Any]
+        XCTAssertEqual(paint?["fill-extrusion-emissive-strength"] as? Double, CityBuildings.emissive)
+        XCTAssertGreaterThanOrEqual(CityBuildings.emissive, 0.5, "never black at night")
+        let e = CityBuildings.opacityExpression(0.8)
+        XCTAssertEqual(e.count, 7)
+        XCTAssertEqual(e[3] as? Double, CityBuildings.fadeFromZoom)
+        XCTAssertEqual(e[4] as? Double, 0.8)
+        XCTAssertEqual(e[6] as? Double ?? 0, 0.8 * CityBuildings.closeOpacity, accuracy: 1e-9)
+        XCTAssertFalse(VisualEffectsSettings().buildings, "off by default")
     }
 }
