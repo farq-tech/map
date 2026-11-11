@@ -831,3 +831,184 @@ final class NavHUDManeuverTests: XCTestCase {
         XCTAssertNil(NavHUD.road(end))
     }
 }
+
+/// Perf pass: the live map's route cuts and the local engine's matcher use cached / windowed
+/// geometry. They must give exactly what the old full-polyline loops gave.
+final class NavRouteMetricsTests: XCTestCase {
+    /// A wiggly `n`-vertex polyline with uneven segment lengths (and a zero-length one).
+    private func wiggly(_ n: Int, seed: Double = 1) -> [LngLat] {
+        var out: [LngLat] = []
+        var lng = 46.7, lat = 24.7
+        for i in 0..<n {
+            out.append(LngLat(lng: lng, lat: lat))
+            if i == n / 3 { continue } /* a repeated vertex: a zero-length segment */
+            lng += 0.0003 + 0.0002 * sin(Double(i) * 0.7 * seed)
+            lat += 0.0002 * cos(Double(i) * 1.3 * seed)
+        }
+        return out
+    }
+
+    /// The pre-cache cut (copied from the old `LiveOutingController.remaining`).
+    private func oldRemaining(_ r: NavRoute, progress: NavProgress?) -> [LngLat] {
+        guard let p = progress, r.distanceM > 0, r.coordinates.count > 2 else { return r.coordinates }
+        let done = max(0, r.distanceM - p.distanceRemainingM)
+        var acc = 0.0
+        for i in 1..<r.coordinates.count {
+            let seg = Vehicle.distanceMeters(r.coordinates[i - 1], r.coordinates[i])
+            if acc + seg >= done {
+                let u = seg > 0 ? (done - acc) / seg : 0
+                let a = r.coordinates[i - 1], b = r.coordinates[i]
+                return [LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)] + r.coordinates[i...]
+            }
+            acc += seg
+        }
+        return Array(r.coordinates.suffix(2))
+    }
+
+    private func progress(_ remaining: Double) -> NavProgress {
+        NavProgress(stepIndex: 1, distanceToManeuverM: 0, distanceRemainingM: remaining, durationRemainingS: 0)
+    }
+
+    @MainActor
+    func testCumulativeMatchesTheEngineTable() {
+        let c = wiggly(200)
+        XCTAssertEqual(NavRouteMetrics.cumulative(c), LocalGuidanceEngine.cumulative(c))
+        XCTAssertEqual(NavRouteMetrics.cumulative([LngLat]()), [0])
+        XCTAssertEqual(NavRouteMetrics.cumulative([c[0]]), [0])
+    }
+
+    @MainActor
+    func testRemainingIsBitIdenticalToTheOldCut() {
+        let c = wiggly(300)
+        let cums = LocalGuidanceEngine.cumulative(c)
+        let total = cums.last!
+        let r = NavRoute(id: "w", coordinates: c, distanceM: total, durationS: 600, steps: [])
+        for k in 0...40 {
+            let rem = total * (1 - Double(k) / 37) /* past the end too */
+            XCTAssertEqual(NavRouteMetrics.remaining(r, progress: progress(rem)), oldRemaining(r, progress: progress(rem)), "remaining \(rem)")
+        }
+        /* Exactly on vertices. */
+        for cum in cums.prefix(30) {
+            XCTAssertEqual(NavRouteMetrics.remaining(r, progress: progress(total - cum)), oldRemaining(r, progress: progress(total - cum)))
+        }
+        XCTAssertEqual(NavRouteMetrics.remaining(r, progress: nil), c)
+        XCTAssertEqual(LiveOutingController.remaining(r, progress: progress(total / 2)), oldRemaining(r, progress: progress(total / 2)))
+        XCTAssertEqual(StandaloneNavRules.remaining(r, progress: progress(total / 3)), oldRemaining(r, progress: progress(total / 3)))
+    }
+
+    func testTrafficRunsWithTheTableAreIdentical() {
+        let c = wiggly(120)
+        let palette: [NavCongestion] = [.low, .moderate, .heavy, .severe, .unknown]
+        let bands: [NavCongestion] = (0..<(c.count - 1)).map { palette[($0 / 7) % 5] }
+        let cum = NavRouteMetrics.cumulative(c)
+        for k in 0...30 {
+            let done = cum.last! * Double(k) / 28
+            XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: done, cum: cum), NavTraffic.runs(c, congestion: bands, from: done), "done \(done)")
+        }
+        for done in cum.prefix(20) {
+            XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: done, cum: cum), NavTraffic.runs(c, congestion: bands, from: done))
+        }
+        /* A table that does not fit is ignored. */
+        XCTAssertEqual(NavTraffic.runs(c, congestion: bands, from: 100, cum: [0, 1]), NavTraffic.runs(c, congestion: bands, from: 100))
+    }
+
+    func testSurfaceRemainingWithTheTableIsIdentical() {
+        let c = wiggly(150)
+        let runs = [
+            NavSurfaceRun(kind: .paved, coordinates: Array(c[0...40])),
+            NavSurfaceRun(kind: .gridSnap, coordinates: [c[40]]), /* too short: skipped by both */
+            NavSurfaceRun(kind: .gridSnap, coordinates: Array(c[40...42])),
+            NavSurfaceRun(kind: .terrain, coordinates: Array(c[42...100])),
+            NavSurfaceRun(kind: .rough, coordinates: Array(c[100...149])),
+        ]
+        let table = NavRouteMetrics.surfaceCumulative(runs)
+        let total = table.last!.last!
+        for k in 0...40 {
+            let done = total * Double(k) / 37
+            XCTAssertEqual(NavSurface.remaining(runs, from: done, cum: table), NavSurface.remaining(runs, from: done), "done \(done)")
+        }
+        for done in table.flatMap({ $0 }) {
+            XCTAssertEqual(NavSurface.remaining(runs, from: done, cum: table), NavSurface.remaining(runs, from: done))
+        }
+        XCTAssertEqual(NavSurface.remaining(runs, from: 50, cum: [[0]]), NavSurface.remaining(runs, from: 50), "a table that does not fit is ignored")
+    }
+
+    func testTablesAreCachedPerGeometryRevision() {
+        let a = NavRoute(id: "a", coordinates: wiggly(50), distanceM: 1, durationS: 1, steps: [])
+        let b = NavRoute(id: "a", coordinates: wiggly(80, seed: 2), distanceM: 1, durationS: 1, steps: [])
+        XCTAssertEqual(NavRouteMetrics.cumulative(a), NavRouteMetrics.cumulative(a.coordinates))
+        XCTAssertEqual(NavRouteMetrics.cumulative(b), NavRouteMetrics.cumulative(b.coordinates), "same id, new geometry: its own table")
+        let copy = a
+        XCTAssertEqual(NavRouteMetrics.cumulative(copy).count, 50)
+    }
+
+    // MARK: the local engine's windowed matcher
+
+    /// The old matcher: every segment from `from - 5` to the end.
+    private func fullLocate(_ p: LngLat, _ c: [LngLat], _ cum: [Double], from: Int) -> (along: Double, offset: Double, index: Int) {
+        var best = (d: Double.infinity, s: 0.0, i: 0)
+        for i in max(0, from - 5)..<(c.count - 1) {
+            let pr = TrailGeo.project(p, c[i], c[i + 1])
+            if pr.distM < best.d { best = (pr.distM, cum[i] + pr.u * (cum[i + 1] - cum[i]), i) }
+        }
+        return (best.s, best.d, best.i)
+    }
+
+    /// A long, nearly straight route east, ~33 m between vertices (~10 km).
+    private func longRoute() -> [LngLat] {
+        (0..<300).map { LngLat(lng: 46.7 + Double($0) * 0.00033, lat: 24.7 + 0.00002 * sin(Double($0))) }
+    }
+
+    @MainActor
+    func testWindowedLocateMatchesTheFullScanOnTheRoute() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        var from = 0
+        for k in stride(from: 0, to: 299, by: 3) {
+            /* Driving along, ~15 m off the line. */
+            let p = LngLat(lng: c[k].lng + 0.0001, lat: c[k].lat + 0.000135)
+            let w = LocalGuidanceEngine.locate(p, in: c, cum: cum, from: from)
+            let f = fullLocate(p, c, cum, from: from)
+            XCTAssertEqual(w.index, f.index, "fix \(k)")
+            XCTAssertEqual(w.along, f.along)
+            XCTAssertEqual(w.offset, f.offset)
+            from = w.index
+        }
+    }
+
+    @MainActor
+    func testWindowedLocateFallsBackForAJumpAndOffRoute() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        /* A GPS gap: 8 km further on, far outside the first window. */
+        let jump = c[250]
+        let w = LocalGuidanceEngine.locate(jump, in: c, cum: cum, from: 10)
+        XCTAssertEqual(w.index, fullLocate(jump, c, cum, from: 10).index)
+        XCTAssertGreaterThan(w.index, 200)
+        /* Well off the route: the same (large) offset as the full scan, so the reroute logic is unchanged. */
+        let off = LngLat(lng: c[20].lng, lat: c[20].lat + 0.003)
+        let o = LocalGuidanceEngine.locate(off, in: c, cum: cum, from: 15)
+        let fo = fullLocate(off, c, cum, from: 15)
+        XCTAssertEqual(o.offset, fo.offset)
+        XCTAssertEqual(o.index, fo.index)
+        /* Near the end (the window reaches the end): the full scan itself. */
+        let end = LocalGuidanceEngine.locate(c[298], in: c, cum: cum, from: 297)
+        XCTAssertEqual(end.index, fullLocate(c[298], c, cum, from: 297).index)
+    }
+
+    @MainActor
+    func testWindowEndIsNeverEmptyNorPastTheEnd() {
+        let c = longRoute()
+        let cum = LocalGuidanceEngine.cumulative(c)
+        let hi = c.count - 1
+        for from in [0, 1, 50, 200, hi - 1, hi] {
+            let lo = min(max(0, from - 5), hi - 1)
+            let e = LocalGuidanceEngine.windowEnd(cum: cum, from: min(from, hi), lo: lo, hi: hi)
+            XCTAssertGreaterThan(e, lo)
+            XCTAssertLessThanOrEqual(e, hi)
+        }
+        /* ~2 km at ~33 m a segment: about 60 segments, not the whole route. */
+        let e0 = LocalGuidanceEngine.windowEnd(cum: cum, from: 0, lo: 0, hi: hi)
+        XCTAssertTrue((55...70).contains(e0), "\(e0)")
+    }
+}

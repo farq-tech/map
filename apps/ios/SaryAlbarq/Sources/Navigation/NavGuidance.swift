@@ -86,17 +86,52 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
         return best.s
     }
 
+    /// How far past the last matched segment `locate` looks first (one fix a second at 140 km/h
+    /// is ~40 m; this leaves room for long GPS gaps before the full scan is needed).
+    static let searchAheadM = 2_000.0
+
     /// Where `p` is on the line: along-distance, lateral offset, segment.
+    ///
+    /// Per fix this used to project onto every segment from `from` to the END of the route (a long
+    /// desert route is thousands of segments, every second, on the main thread). It now searches a
+    /// window of `searchAheadM` ahead first and keeps that match when it is on the route
+    /// (≤ `offRouteM`); otherwise (a GPS gap, a jump, really off the route) it falls back to the
+    /// full forward scan, exactly as before. The only case that differs is a route that passes
+    /// within `offRouteM` of the same place again more than `searchAheadM` later: the old scan
+    /// could jump ahead to that later pass; the window keeps the continuous one.
     static func locate(_ p: LngLat, in c: [LngLat], cum: [Double], from: Int = 0) -> (along: Double, offset: Double, index: Int) {
         guard c.count >= 2 else { return (0, c.first.map { Vehicle.distanceMeters($0, p) } ?? 0, 0) }
-        var best = (d: Double.infinity, s: 0.0, i: 0)
         /* Search ahead of where we were (and a little behind): a route can pass the same place twice. */
-        let lo = max(0, from - 5), hi = c.count - 1
-        for i in lo..<hi {
-            let pr = TrailGeo.project(p, c[i], c[i + 1])
-            if pr.distM < best.d { best = (pr.distM, cum[i] + pr.u * (cum[i + 1] - cum[i]), i) }
+        let lo = min(max(0, from - 5), c.count - 2), hi = c.count - 1
+        func scan(_ range: Range<Int>) -> (d: Double, s: Double, i: Int) {
+            var best = (d: Double.infinity, s: 0.0, i: 0)
+            for i in range {
+                let pr = TrailGeo.project(p, c[i], c[i + 1])
+                if pr.distM < best.d { best = (pr.distM, cum[i] + pr.u * (cum[i + 1] - cum[i]), i) }
+            }
+            return best
         }
+        let end = Self.windowEnd(cum: cum, from: min(max(0, from), hi), lo: lo, hi: hi)
+        if end < hi {
+            let near = scan(lo..<end)
+            if near.d <= offRouteM { return (near.s, near.d, near.i) }
+        }
+        let best = scan(lo..<hi)
         return (best.s, best.d, best.i)
+    }
+
+    /// The (exclusive) last segment of the first search window: segments starting no more than
+    /// `searchAheadM` along the line past vertex `from` (at least one past `lo`, at most `hi`).
+    static func windowEnd(cum: [Double], from: Int, lo: Int, hi: Int) -> Int {
+        guard cum.count > hi, from < cum.count else { return hi }
+        let limit = cum[from] + searchAheadM
+        /* First vertex index past the limit (`cum` never decreases). */
+        var a = from, b = hi
+        while a < b {
+            let mid = (a + b) / 2
+            if cum[mid] > limit { b = mid } else { a = mid + 1 }
+        }
+        return min(hi, max(lo + 1, a + 1))
     }
 
     /// Progress at along-distance `s` (pure, for tests).

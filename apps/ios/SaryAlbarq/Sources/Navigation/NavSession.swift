@@ -284,11 +284,19 @@ final class NavSession: ObservableObject {
     lazy var sayGuidance: (NavLine) -> Void = { [weak self] in self?.voice.say($0) }
 
     /// A fork / lane that stays on the road it is on, or barely bends (`NavPromptBudget.isSoft`).
+    /// Cached per route geometry and step: `bendDeg` scans the whole polyline, and one prompt asks
+    /// several times (the line, its playback, every length `NavPromptTiming.plan` tries).
     func isSoft(_ index: Int) -> Bool {
         guard let r = active, r.steps.indices.contains(index) else { return false }
+        if softCache.revision != r.geometryRevision { softCache = (r.geometryRevision, [:]) }
+        if let known = softCache.byStep[index] { return known }
         let s = r.steps[index]
-        return NavPromptBudget.isSoft(s, previous: index > 0 ? r.steps[index - 1] : nil, bendDeg: NavPromptBudget.bendDeg(r.coordinates, at: s.location))
+        let soft = NavPromptBudget.isSoft(s, previous: index > 0 ? r.steps[index - 1] : nil, bendDeg: NavPromptBudget.bendDeg(r.coordinates, at: s.location))
+        softCache.byStep[index] = soft
+        return soft
     }
+
+    private var softCache: (revision: UUID?, byStep: [Int: Bool]) = (nil, [:])
 
     /// The words for step `index`: `distanceM` is what is said (0: the action alone), `dNow` where I am.
     /// nil: nothing to say (a soft maneuver's early cue).

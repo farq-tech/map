@@ -46,19 +46,7 @@ enum StandaloneNavRules {
 
     /// The part of the route still ahead (the same cut as the live map's line).
     static func remaining(_ r: NavRoute, progress: NavProgress?) -> [LngLat] {
-        guard let p = progress, r.distanceM > 0, r.coordinates.count > 2 else { return r.coordinates }
-        let done = max(0, r.distanceM - p.distanceRemainingM)
-        var acc = 0.0
-        for i in 1..<r.coordinates.count {
-            let seg = Vehicle.distanceMeters(r.coordinates[i - 1], r.coordinates[i])
-            if acc + seg >= done {
-                let u = seg > 0 ? (done - acc) / seg : 0
-                let a = r.coordinates[i - 1], b = r.coordinates[i]
-                return [LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)] + r.coordinates[i...]
-            }
-            acc += seg
-        }
-        return Array(r.coordinates.suffix(2))
+        NavRouteMetrics.remaining(r, progress: progress)
     }
 
     /// The follow camera moves at most this often (each move eases; every fix would shake).

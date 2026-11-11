@@ -197,6 +197,105 @@ struct NavRoute: Equatable, Identifiable {
     }
 }
 
+/// Derived route geometry, computed once per `NavRoute.geometryRevision` instead of on every
+/// progress tick / SwiftUI body evaluation. The live map cut its line, its traffic runs and its
+/// surface runs with a fresh haversine pass over the whole polyline on every redraw; with a
+/// cached cumulative table each cut is a binary search plus the copy of what is left.
+///
+/// Values are bit-identical to the old loops: the table holds exactly the running sums those
+/// loops built (`acc += Vehicle.distanceMeters(a, b)`, in order).
+enum NavRouteMetrics {
+    struct Tables {
+        /// Running metres at every route vertex.
+        var cum: [Double]
+        /// Per surface run, the running metres (across runs, as `NavSurface.remaining` counts them)
+        /// at each of its vertices; empty for a run with fewer than two points.
+        var surfaceCum: [[Double]]
+    }
+
+    private static let lock = NSLock()
+    /// A few recent routes (the active one, its alternatives while planning).
+    private static var cache: [(id: UUID, tables: Tables)] = []
+    private static let capacity = 6
+
+    /// Running metres at every vertex: `cum[0] = 0`, `cum[i] = cum[i-1] + d(c[i-1], c[i])`.
+    static func cumulative(_ c: [LngLat]) -> [Double] {
+        var out = [Double]()
+        out.reserveCapacity(max(1, c.count))
+        out.append(0)
+        var acc = 0.0
+        if c.count > 1 {
+            for i in 1..<c.count {
+                acc += Vehicle.distanceMeters(c[i - 1], c[i])
+                out.append(acc)
+            }
+        }
+        return out
+    }
+
+    /// The running sums `NavSurface.remaining` builds while it walks the runs in order.
+    static func surfaceCumulative(_ runs: [NavSurfaceRun]) -> [[Double]] {
+        var acc = 0.0
+        return runs.map { run in
+            guard run.coordinates.count >= 2 else { return [] }
+            var out = [Double]()
+            out.reserveCapacity(run.coordinates.count)
+            out.append(acc)
+            for (a, b) in zip(run.coordinates, run.coordinates.dropFirst()) {
+                acc += Vehicle.distanceMeters(a, b)
+                out.append(acc)
+            }
+            return out
+        }
+    }
+
+    /// The tables of `r`, cached by its geometry revision.
+    static func tables(_ r: NavRoute) -> Tables {
+        lock.lock()
+        if let hit = cache.first(where: { $0.id == r.geometryRevision })?.tables,
+           hit.cum.count == max(1, r.coordinates.count), hit.surfaceCum.count == r.surfaceRuns.count {
+            lock.unlock()
+            return hit
+        }
+        lock.unlock()
+        let t = Tables(cum: cumulative(r.coordinates), surfaceCum: surfaceCumulative(r.surfaceRuns))
+        lock.lock()
+        cache.removeAll { $0.id == r.geometryRevision }
+        cache.append((r.geometryRevision, t))
+        if cache.count > capacity { cache.removeFirst(cache.count - capacity) }
+        lock.unlock()
+        return t
+    }
+
+    /// The cumulative table of `r`, cached by its geometry revision.
+    static func cumulative(_ r: NavRoute) -> [Double] { tables(r).cum }
+
+    /// The first vertex index `i` in `1..<cum.count` with `cum[i] >= done` (nil: none), the same
+    /// index a forward scan `if acc + seg >= done` finds, because `cum` never decreases.
+    static func firstIndex(atLeast done: Double, in cum: [Double]) -> Int? {
+        guard cum.count > 1 else { return nil }
+        var lo = 1, hi = cum.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if cum[mid] >= done { hi = mid } else { lo = mid + 1 }
+        }
+        return lo < cum.count ? lo : nil
+    }
+
+    /// The part of the route still ahead (the line shrinks behind the car): the live map's and the
+    /// standalone screen's cut, without re-measuring the travelled part on every redraw.
+    static func remaining(_ r: NavRoute, progress: NavProgress?) -> [LngLat] {
+        guard let p = progress, r.distanceM > 0, r.coordinates.count > 2 else { return r.coordinates }
+        let done = max(0, r.distanceM - p.distanceRemainingM)
+        let cum = cumulative(r)
+        guard let i = firstIndex(atLeast: done, in: cum) else { return Array(r.coordinates.suffix(2)) }
+        let a = r.coordinates[i - 1], b = r.coordinates[i]
+        let seg = Vehicle.distanceMeters(a, b)
+        let u = seg > 0 ? (done - cum[i - 1]) / seg : 0
+        return [LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)] + r.coordinates[i...]
+    }
+}
+
 /// What a provider returns: routes (best first) plus an opaque handle the
 /// matching guidance engine understands (Mapbox: `NavigationRoutes`).
 struct NavRoutePlan {
@@ -261,11 +360,24 @@ struct NavTrafficRun: Equatable {
 enum NavTraffic {
     /// The route from `done` metres on, cut into runs of equal band. Nil when the annotation does
     /// not fit the line (then the map draws one plain colour, never a wrong one).
-    static func runs(_ coords: [LngLat], congestion: [NavCongestion]?, from done: Double) -> [NavTrafficRun]? {
+    /// `cum`: the route's cumulative metres (`NavRouteMetrics`), when the caller has them: the
+    /// travelled part is skipped by binary search instead of re-measured. Same result either way.
+    static func runs(_ coords: [LngLat], congestion: [NavCongestion]?, from done: Double, cum: [Double]? = nil) -> [NavTrafficRun]? {
         guard let c = congestion, coords.count >= 2, c.count == coords.count - 1 else { return nil }
         guard c.contains(where: { $0.band > 0 }) else { return nil }
         var out: [NavTrafficRun] = []
         var acc = 0.0
+        var start = 0
+        if let cum, cum.count == coords.count {
+            /* The first segment the old loop did not skip: the first i with cum[i + 1] > done. */
+            var lo = 0, hi = coords.count - 1
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if cum[mid + 1] > done { hi = mid } else { lo = mid + 1 }
+            }
+            start = lo
+            acc = cum[lo]
+        }
         func add(_ band: Int, _ a: LngLat, _ b: LngLat) {
             if var last = out.last, last.band == band, last.coordinates.last == a {
                 last.coordinates.append(b)
@@ -274,7 +386,7 @@ enum NavTraffic {
                 out.append(NavTrafficRun(band: band, coordinates: [a, b]))
             }
         }
-        for i in 0..<(coords.count - 1) {
+        for i in start..<(coords.count - 1) {
             let a = coords[i], b = coords[i + 1]
             let seg = Vehicle.distanceMeters(a, b)
             defer { acc += seg }
@@ -294,8 +406,14 @@ enum NavSurface {
     /// The surface runs from `done` metres along the route on (runs follow the route in order):
     /// the travelled part is dropped and the run under the car is cut where it is, as
     /// `NavTraffic.runs` does for traffic.
-    static func remaining(_ runs: [NavSurfaceRun], from done: Double) -> [NavSurfaceRun] {
+    /// `cum`: `NavRouteMetrics.surfaceCumulative(runs)` (cached per route), when the caller has it:
+    /// the travelled runs and segments are skipped by lookup instead of re-measured. Same result.
+    static func remaining(_ runs: [NavSurfaceRun], from done: Double, cum: [[Double]]? = nil) -> [NavSurfaceRun] {
         guard done > 0 else { return runs }
+        if let cum, cum.count == runs.count,
+           zip(runs, cum).allSatisfy({ $0.coordinates.count < 2 ? $1.isEmpty : $1.count == $0.coordinates.count }) {
+            return remaining(runs, from: done, table: cum)
+        }
         var out: [NavSurfaceRun] = []
         var acc = 0.0
         for run in runs where run.coordinates.count >= 2 {
@@ -314,6 +432,32 @@ enum NavSurface {
                 cut = [from, b]
             }
             if cut.count >= 2 { out.append(NavSurfaceRun(kind: run.kind, coordinates: cut)) }
+        }
+        return out
+    }
+
+    /// `remaining` with the running sums looked up: `table[k][j]` is the `acc` the loop above holds
+    /// before segment `j` of run `k` (bit-identical: the same additions in the same order).
+    private static func remaining(_ runs: [NavSurfaceRun], from done: Double, table: [[Double]]) -> [NavSurfaceRun] {
+        var out: [NavSurfaceRun] = []
+        for (k, run) in runs.enumerated() where run.coordinates.count >= 2 {
+            let c = table[k], pts = run.coordinates
+            if c[0] >= done { out.append(run); continue }
+            /* The first segment not wholly travelled: the first j with c[j + 1] > done. */
+            var lo = 0, hi = pts.count - 1
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if c[mid + 1] > done { hi = mid } else { lo = mid + 1 }
+            }
+            guard lo < pts.count - 1 else { continue }
+            let a = pts[lo], b = pts[lo + 1]
+            let seg = Vehicle.distanceMeters(a, b)
+            var from = a
+            if c[lo] < done, seg > 0 {
+                let u = (done - c[lo]) / seg
+                from = LngLat(lng: a.lng + (b.lng - a.lng) * u, lat: a.lat + (b.lat - a.lat) * u)
+            }
+            out.append(NavSurfaceRun(kind: run.kind, coordinates: [from] + pts[(lo + 1)...]))
         }
         return out
     }
