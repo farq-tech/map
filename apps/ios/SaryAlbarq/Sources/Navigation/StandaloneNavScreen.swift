@@ -122,6 +122,11 @@ struct StandaloneNavScreen: View {
             .padding(theme.space(.m))
         }
         .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SaryParkedPhone") {
+                location.debugParkPhone(at: LngLat(lng: 46.6744, lat: 24.7113), ageS: 300)
+            }
+            #endif
             let sharer = location
             nav.myFix = { [weak sharer] in sharer?.lastFix }
             nav.toast = { t in show(t) }
