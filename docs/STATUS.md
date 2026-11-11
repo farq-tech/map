@@ -29,6 +29,7 @@
 - **المراحل:** م1 السلامة ← م5 نظام التصميم ← م3 شاشة الطلعة وم4 الرئيسية والرحلات ← م6 البر في الواجهة ← م2 الكلمات (آخرها لأنها تمس كل الملفات).
 - **قاعدة للوكلاء الآخرين:** لا تعدّل هذه الملفات قبل التنسيق مع هذه الجلسة (تعليق على PR #147): `Views/LiveOutingScreen.swift`، `Views/LiveSheet.swift`، `Views/LiveActionSheet.swift`، `Views/TripHeader.swift`، `Views/TripViews.swift`، `Views/OutingFlowViews.swift`، `Core/OutingFlow.swift`، `Live/LiveOutingController*.swift`، `Home/*`، `Navigation/NavGuidanceViews.swift`، `UI/DesignSystem/*`، `UI/Components/*`، `Screens/OnboardingFlow.swift`، `Create/CreateOutingWizard.swift`، `Plan/LivePlan.swift`، `Explore/ExploreViews.swift`. إصلاح عاجل فيها: commit صغير ومنفصل، واذكره في PR #147.
 - **التحقق:** الكود يُكتب بدون Swift في السحابة؛ كل مرحلة تحتاج بناءً واختبارًا على الماك قبل دمجها وقبل أي بناء TestFlight.
+- **الحالة 2026-11-11:** المراحل كلها مكتوبة على الفرع (م1، م5، م3، م4+م6، م2) ومعها تمييز أنواع الطريق (زفلت/ترابي/بر سهل/وعر). **لم تُبنَ بعد** — الخطوة التالية بناء واختبار على الماك (handoff في PR #149). الحجز قائم حتى الدمج.
 
 
 ### تحديث تنفيذ 2026-11-08 — استرداد حالة بدء الطلعة
