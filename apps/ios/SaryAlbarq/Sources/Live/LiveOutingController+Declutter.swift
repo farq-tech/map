@@ -30,7 +30,9 @@ enum LiveScreenRules {
     /// SwiftUI re-snapped the sheet by itself each time (owner report, Build 36).
     static func peekShowsQuickRow(override o: LiveContextOverride, navigating: Bool, moving: Bool, driveMode: Bool,
                                   exploring: Bool, ended: Bool, notStarted: Bool, sosFocused: Bool) -> Bool {
-        guard !ended, !navigating else { return false }
+        /* Exploring hides the quick row (LiveSheet: `showsQuickRow && !exploreActive`): a peek sized for
+         * it was a tall empty sheet under the explore map (owner, Build 40). */
+        guard !ended, !navigating, !exploring else { return false }
         let context = LiveContextRule.resolve(override: o, navigating: navigating, moving: moving, driveMode: driveMode,
                                               sheetRaised: false, exploring: exploring)
         return showsQuickRow(ended: ended, notStarted: notStarted, navigating: navigating, driving: context == .driving,
