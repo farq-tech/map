@@ -232,6 +232,8 @@ struct OutingFlowInput: Equatable {
     var endSuggested = false
     /// The guidance on this phone (`TripGuidanceState`): paused, the leg's primary is «استأنف التوجيه».
     var guidance: TripGuidanceState = .off
+    /// Before the start, for a member: the leader's and the members' presence (`WaitingLeader`).
+    var waiting: WaitingLeaderInfo? = nil
     var now = Date()
 }
 
@@ -242,6 +244,56 @@ struct OutingFlowUI: Equatable {
     /// The header's second line: the state, in Najdi.
     var line: String
     var primary: OutingCTA?
+    /// Members only, before the start: what «ننتظر أمير الطلعة» is waiting on (shown under it).
+    var waiting: WaitingLeaderInfo? = nil
+}
+
+/// «ننتظر أمير الطلعة» with the facts behind it (Build 36 report, item 9: the bare message said
+/// nothing): is the leader here, how many of «الربع» joined and are connected, and is MY link up
+/// (when it is not, everything above is the last thing we heard, and is said to be).
+struct WaitingLeaderInfo: Equatable {
+    /// «أمير الطلعة فهد متصل الآن» / «… آخر ظهور قبل ١٢ د» / «… غير متصل الآن».
+    var leader: String
+    var leaderOnline: Bool
+    /// «الربع ٤ · المتصلين ٢».
+    var members: String
+    /// Nil while my connection is up; «اتصالك: بلا إنترنت · آخر حالة وصلتنا» otherwise.
+    var connection: String?
+
+    /// The one line under the button.
+    var line: String { [connection == nil ? leader : connection, members].compactMap { $0 }.joined(separator: " · ") }
+    /// Everything, for VoiceOver.
+    var accessibility: String {
+        (["ما بدأت الطلعة", leader, members] + (connection.map { [$0] } ?? [])).joined(separator: "، ")
+    }
+}
+
+enum WaitingLeader {
+    /// `members`: the outing's members as the server last sent them (`online` / `away` from the live
+    /// channel's presence, `last_seen_at` from the heartbeat). `clockOffsetMs`: server − device.
+    /// `myLinkUp`: my live channel is connected (else the presence above may be old).
+    static func info(members: [Member], myId: String, clockOffsetMs: Double, myLinkUp: Bool, myLinkText: String, now: Date) -> WaitingLeaderInfo {
+        let leader = members.first { $0.role == "owner" }
+        let leaderText: String
+        var online = false
+        if let l = leader {
+            let name = "\(SaryCopy.leader) \(l.display_name)"
+            if l.online == true {
+                online = true
+                leaderText = l.away == true ? "\(name) متصل (سرى بالخلفية عنده)" : "\(name) متصل الآن"
+            } else if let seen = ISODate.parse(l.last_seen_at)?.addingTimeInterval(-clockOffsetMs / 1000) {
+                leaderText = "\(name) آخر ظهور \(SaryFormat.elapsed(since: seen, now: now))"
+            } else {
+                leaderText = "\(name) غير متصل الآن"
+            }
+        } else {
+            leaderText = "ما نعرف حالة \(SaryCopy.leader)"
+        }
+        let connected = members.filter { $0.user_id == myId ? myLinkUp : $0.online == true }.count
+        let membersText = "\(SaryCopy.members) \(SaryFormat.number(members.count)) · المتصلين \(SaryFormat.number(connected))"
+        return WaitingLeaderInfo(leader: leaderText, leaderOnline: online, members: membersText,
+                                 connection: myLinkUp ? nil : "اتصالك: \(myLinkText) · آخر حالة وصلتنا")
+    }
 }
 
 enum OutingFlow {
@@ -270,7 +322,8 @@ enum OutingFlow {
         switch s {
         case .notStarted:
             /* The member hears «ننتظر أمير الطلعة» once — on the button; the header only says the state. */
-            return OutingFlowUI(state: s, line: "ما بدأت الطلعة", primary: i.iLead ? .startOuting : .waitLeader)
+            return OutingFlowUI(state: s, line: "ما بدأت الطلعة", primary: i.iLead ? .startOuting : .waitLeader,
+                                waiting: i.iLead ? nil : i.waiting)
         case .paused:
             return OutingFlowUI(state: s, line: "الطلعة متوقفة مؤقتًا", primary: nil)
         case .idle:

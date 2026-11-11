@@ -41,6 +41,56 @@ final class OutingFlowTests: XCTestCase {
         XCTAssertFalse(member.line.contains("ننتظر"), "the header does not repeat the button")
     }
 
+    // MARK: «ننتظر أمير الطلعة» with its facts (Build 36 item 9)
+
+    private func member(_ id: String, _ name: String, owner: Bool = false, online: Bool? = nil, away: Bool? = nil, seen: Date? = nil) -> Member {
+        Member(user_id: id, display_name: name, avatar: nil, phone: nil, role: owner ? "owner" : "member", sharing: false,
+               joined_at: ISODate.string(t0.addingTimeInterval(-3600)), online: online, away: away,
+               last_seen_at: seen.map { ISODate.string($0) })
+    }
+
+    func testWaitingShowsTheLeaderTheMembersAndMyLink() {
+        let all = [member("L", "فهد", owner: true, online: true), member("me", "أنا"), member("b", "سعد", online: true), member("c", "ناصر", online: false)]
+        let w = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(w.leader, "أمير الطلعة فهد متصل الآن")
+        XCTAssertTrue(w.leaderOnline)
+        XCTAssertEqual(w.members, "الربع ٤ · المتصلين ٣", "me (link up), the leader and سعد")
+        XCTAssertNil(w.connection)
+        XCTAssertEqual(w.line, "أمير الطلعة فهد متصل الآن · الربع ٤ · المتصلين ٣")
+        XCTAssertTrue(w.accessibility.hasPrefix("ما بدأت الطلعة، "))
+
+        let away = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: true, away: true)], myId: "me", clockOffsetMs: 0,
+                                      myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(away.leader, "أمير الطلعة فهد متصل (سرى بالخلفية عنده)")
+
+        /* Offline leader: when we last heard from him, measured on the server's clock. */
+        let seen = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: false, seen: t0.addingTimeInterval(-12 * 60 + 30))],
+                                      myId: "me", clockOffsetMs: 30_000, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(seen.leader, "أمير الطلعة فهد آخر ظهور قبل ١٢ د")
+        XCTAssertFalse(seen.leaderOnline)
+        let never = WaitingLeader.info(members: [member("L", "فهد", owner: true)], myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        XCTAssertEqual(never.leader, "أمير الطلعة فهد غير متصل الآن")
+
+        /* My link is down: the line says so first (what we show is the last state that reached us). */
+        let down = WaitingLeader.info(members: all, myId: "me", clockOffsetMs: 0, myLinkUp: false, myLinkText: "بلا إنترنت", now: t0)
+        XCTAssertEqual(down.connection, "اتصالك: بلا إنترنت · آخر حالة وصلتنا")
+        XCTAssertEqual(down.members, "الربع ٤ · المتصلين ٢")
+        XCTAssertTrue(down.line.hasPrefix("اتصالك: بلا إنترنت"))
+    }
+
+    func testWaitingInfoReachesOnlyTheMembersButton() {
+        let w = WaitingLeader.info(members: [member("L", "فهد", owner: true, online: true)], myId: "me", clockOffsetMs: 0, myLinkUp: true, myLinkText: "متصل", now: t0)
+        var m = input(.created, lead: false)
+        m.waiting = w
+        XCTAssertEqual(OutingFlow.ui(m).waiting, w)
+        var l = input(.created)
+        l.waiting = w
+        XCTAssertNil(OutingFlow.ui(l).waiting, "the leader starts it: nothing to wait for")
+        var running = input(.active, lead: false)
+        running.waiting = w
+        XCTAssertNil(OutingFlow.ui(running).waiting)
+    }
+
     func testRunningWithoutALegAsksWhereTo() {
         var i = input(.active)
         i.liveCount = 4
