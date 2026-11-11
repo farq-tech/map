@@ -44,12 +44,14 @@ struct LiveOutingScreen: View {
     @ObservedObject private var visuals = MapVisualsHub.shared
 
     var body: some View {
-        let ui = controller.ui
+        /* One presenter pass per render: the map's members and the edge arrows reuse it. */
+        let input = controller.input
+        let ui = LiveOutingPresenter.state(input)
         GeometryReader { geo in
             let full = CGSize(width: geo.size.width, height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
             ZStack {
                 Color.clear.onAppear { screenHeight = full.height }.onChange(of: full.height) { _, h in screenHeight = h }
-                let members = controller.mapMembers(theme: theme)
+                let members = controller.mapMembers(theme: theme, input: input, participants: ui.participantsTab.participants)
                 let exploring = controller.liveContext(drive: theme.drive) == .exploring
                 PlanObserving(plan: app.plans.model(controller.session.id), picked: controller.planPicked) { plan in
                 OutingMapboxView(
@@ -99,7 +101,8 @@ struct LiveOutingScreen: View {
                 }
 
                 EdgeArrowLayer(overlay: controller.overlay, controller: controller, area: clearArea(full: full), avoid: avoidRects(full: full),
-                               driving: controller.liveContext(drive: theme.drive) == .driving, alerting: controller.alertingMemberIds)
+                               driving: controller.liveContext(drive: theme.drive) == .driving, alerting: controller.alertingMemberIds(ui: ui),
+                               parts: Dictionary(ui.participantsTab.participants.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }))
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
 
@@ -907,6 +910,11 @@ private struct EdgeArrowLayer: View {
     /// Driving: only members in an alert state get an arrow.
     var driving = false
     var alerting: Set<String> = []
+    /// Participants by id, from the screen's render (`ui`). Passed in rather than rebuilt here:
+    /// this layer redraws with every camera projection (10 Hz while panning), and rebuilding the
+    /// presenter input each time was the costliest part of it. Only name, colour, distance,
+    /// presence and note are read (not the bearing, which follows the map).
+    var parts: [String: ParticipantUI] = [:]
     @Environment(\.sary) private var theme
 
     static let chip = CGSize(width: 104, height: 38)
@@ -927,7 +935,6 @@ private struct EdgeArrowLayer: View {
     }
 
     var body: some View {
-        let parts = Dictionary(LiveOutingPresenter.participants(controller.input).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let me = controller.session.view?.myId
         let all = overlay.projection.points.filter { $0.key != me }.map { (id: $0.key, point: $0.value) }.sorted { $0.id < $1.id }
         /* At most three, alert members first then the nearest (docs/IA-REDESIGN.md §2.6). */

@@ -147,10 +147,14 @@ extension LiveOutingController {
     var tripEnded: Bool { session.displayView?.status == .ended || session.closedReason == .outingEnded }
 
     /// Members in an alert state (SOS, «غرّز», silent): their edge arrows always show.
-    var alertingMemberIds: Set<String> {
+    var alertingMemberIds: Set<String> { alertingMemberIds(ui: ui) }
+
+    /// The same from a `ui` already built for this render (its participants are
+    /// `LiveOutingPresenter.participants(input)`), so the presenter does not run again.
+    func alertingMemberIds(ui: LiveOutingUIState) -> Set<String> {
         var s = Set(ui.sos.incoming.map(\.participantId))
         for r in safety.friendsStuck { s.insert(r.userId) }
-        for p in LiveOutingPresenter.participants(input) where p.silentSince != nil { s.insert(p.id) }
+        for p in ui.participantsTab.participants where p.silentSince != nil { s.insert(p.id) }
         return s
     }
 

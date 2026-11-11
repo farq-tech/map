@@ -328,6 +328,11 @@ final class LiveOutingController: ObservableObject {
     private var alertTimers: [String: Timer] = [:]
     /// Last note shown per member, so a note heard nearby and then from the server alerts once.
     private var alertedNotes: [String: (text: String, at: Date)] = [:]
+    /// This outing's stored trip log, decoded once per change of the stored bytes (`tripInput`).
+    var tripLogMemo = StoredBytesMemo<TripLog?>()
+    /// A `sessionChanged` / `locationChanged` pass is already queued on the main queue.
+    private var sessionPassQueued = false
+    private var locationPassQueued = false
 
     init(session: OutingSession, location: LocationSharer, appearance: AppearanceSettings, featuresBackend: OutingFeaturesBackend? = nil) {
         self.session = session
@@ -377,11 +382,26 @@ final class LiveOutingController: ObservableObject {
         }
         if arg("-SaryLiveModal") == "qibla" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .qibla } }
         #endif
+        /* One GPS fix publishes several properties (`lastFix`, `displayFix`, `quality`, the session's
+         * trail…), each firing `objectWillChange`. Every queued pass reads the state as it is when it
+         * runs (after all of them), so passes queued before the first one runs are coalesced into it. */
         session.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.sessionChanged(); self?.followUpJoin(); self?.arrivalTick() }
+            guard let self, !self.sessionPassQueued else { return }
+            self.sessionPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.sessionPassQueued = false
+                self.sessionChanged(); self.followUpJoin(); self.arrivalTick()
+            }
         }.store(in: &bag)
         location.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { self?.locationChanged() }
+            guard let self, !self.locationPassQueued else { return }
+            self.locationPassQueued = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.locationPassQueued = false
+                self.locationChanged()
+            }
         }.store(in: &bag)
         player.onProgress = { [weak self] id, p in self?.setPlayback(id, .playing(progress: p)) }
         player.onFinish = { [weak self] id in self?.setPlayback(id, .idle) }
@@ -538,7 +558,13 @@ final class LiveOutingController: ObservableObject {
 
     func mapMembers(theme: SaryTheme) -> [MapMember] {
         let i = input
-        let parts = Dictionary(LiveOutingPresenter.participants(i).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return mapMembers(theme: theme, input: i, participants: LiveOutingPresenter.participants(i))
+    }
+
+    /// The same, from an `input` and its participants already built for this render (the live
+    /// screen has both from its `ui`): the presenter does not run twice for one frame.
+    func mapMembers(theme: SaryTheme, input i: LivePresenterInput, participants: [ParticipantUI]) -> [MapMember] {
+        let parts = Dictionary(participants.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let showNames = theme.nameDisplay == .always
         /* Notes above cars are reading material: off while driving (docs/IA-REDESIGN.md §2.6). */
         return LiveOutingPresenter.mapMembers(i, hideNotes: theme.drive || liveContext(drive: theme.drive) == .driving).map { m in

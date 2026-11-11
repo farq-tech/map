@@ -16,7 +16,7 @@ extension LiveOutingController {
         /* The stored trip log changes only with shared fixes: re-read it every few seconds, not every render. */
         if nowMs - speedState.tripLoadedAtMs > 5_000 {
             speedState.tripLoadedAtMs = nowMs
-            let stored = session.isDemo ? nil : TripLogStore.load(session.id)?.speedSummary
+            let stored = session.isDemo ? nil : storedTripLog()?.speedSummary
             let local = speed.local.speedSummary
             let t = (stored?.isEmpty == false) ? stored : local
             speedState.trip = t?.isEmpty == false ? t : nil

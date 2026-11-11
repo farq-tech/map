@@ -38,6 +38,13 @@ extension LiveOutingController {
         trip.update(view: session.displayView, myFix: location.lastFix, destination: tripDestination)
     }
 
+    /// `TripLogStore.load(session.id)`, decoded again only when the stored bytes changed (one more
+    /// fix shared): `tripInput` is read several times per render (`input`, `tripPanel`).
+    func storedTripLog() -> TripLog? {
+        let id = session.id
+        return tripLogMemo.value(for: UserDefaults.standard.data(forKey: TripLogStore.key)) { _ in TripLogStore.load(id) }
+    }
+
     var tripInput: TripPresenterInput {
         var i = TripPresenterInput()
         let v = session.displayView
@@ -53,7 +60,7 @@ extension LiveOutingController {
         i.myId = v?.myId ?? session.myUserId
         i.myFix = session.smoothedFix(location.lastFix)
         i.trail = session.displayTrail
-        i.log = session.isDemo ? speed.local : TripLogStore.load(session.id)
+        i.log = session.isDemo ? speed.local : storedTripLog()
         if nav.phase == .guiding || nav.phase == .offRoad {
             i.navGuiding = true
             i.navRemainingM = nav.remainingMeters
@@ -255,4 +262,24 @@ extension LiveOutingController {
 enum UINotificationFeedback {
     @MainActor static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
     @MainActor static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+}
+
+/// Keeps a value decoded from stored bytes until those bytes change. Comparing the bytes is a
+/// memcmp; decoding them (every outing's trip log, as JSON) is far dearer.
+struct StoredBytesMemo<Value> {
+    private var bytes: Data?
+    private var cached: Value?
+    private var filled = false
+    /// How many times `decode` actually ran (tests).
+    private(set) var decodeCount = 0
+
+    mutating func value(for bytes: Data?, decode: (Data?) -> Value) -> Value {
+        if filled, self.bytes == bytes, let cached { return cached }
+        let v = decode(bytes)
+        decodeCount += 1
+        self.bytes = bytes
+        cached = v
+        filled = true
+        return v
+    }
 }
