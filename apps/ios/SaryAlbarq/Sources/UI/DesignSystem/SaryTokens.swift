@@ -100,6 +100,14 @@ extension Font {
         return .custom(weight.postScript, size: size, relativeTo: style)
     }
 
+    /// ITF Huwiya Arabic that does NOT follow Dynamic Type: for glyph-like
+    /// text inside a fixed-size shape (avatar initials), which would otherwise
+    /// outgrow its circle at large text sizes.
+    static func saryFixed(_ size: CGFloat, _ weight: SaryWeight = .regular) -> Font {
+        SaryFonts.registerIfNeeded()
+        return .custom(weight.postScript, fixedSize: size)
+    }
+
     /// Numbers that update live (distances, timers, battery): the system font
     /// (SF Arabic covers Arabic-Indic digits) with tabular figures, because
     /// Huwiya's digits are proportional and would jitter while ticking.
@@ -124,6 +132,142 @@ extension Font.TextStyle {
         case .caption2: return .caption2
         default: return .body
         }
+    }
+}
+
+// MARK: - Widths (screen-size adaptation)
+
+/// How much horizontal room the current window or presentation gives.
+/// Nothing in the design system multiplies sizes by the screen: points stay
+/// points. Components only change ARRANGEMENT by width (stack instead of
+/// row, wrap instead of overflow), so a 393 pt iPhone looks as designed.
+enum SaryWidthClass: Equatable, Sendable {
+    /// Under 360 pt: Display Zoom («تكبير الشاشة») on a 375/393 pt iPhone
+    /// (320 pt wide), or a narrow iPad split view / Slide Over.
+    case narrow
+    /// An upright phone at standard zoom (360–599 pt).
+    case regular
+    /// iPad, a wide split view (600 pt and up).
+    case wide
+
+    static let narrowBelow: CGFloat = 360
+    static let wideFrom: CGFloat = 600
+
+    /// A width of 0 or less means «not measured yet»: treated as a phone.
+    static func of(width: CGFloat) -> SaryWidthClass {
+        guard width > 0 else { return .regular }
+        if width < narrowBelow { return .narrow }
+        if width < wideFrom { return .regular }
+        return .wide
+    }
+}
+
+/// Maximum widths for content that must not stretch across an iPad.
+enum SaryLayout {
+    /// Scrolling page content (same as `SaryPage`).
+    static let readableWidth: CGFloat = 640
+    /// Single-column forms, onboarding, full-screen alerts.
+    static let formWidth: CGFloat = 480
+    /// In-app dialogs and empty / error states.
+    static let dialogWidth: CGFloat = 400
+
+    /// The width a centred column takes in `container`: all of it minus
+    /// `margin` on each side, but never more than `max` and never negative.
+    static func columnWidth(container: CGFloat, max: CGFloat, margin: CGFloat = 0) -> CGFloat {
+        Swift.max(0, Swift.min(container - 2 * margin, max))
+    }
+}
+
+private struct SaryWidthClassKey: EnvironmentKey {
+    static let defaultValue: SaryWidthClass = .regular
+}
+
+extension EnvironmentValues {
+    /// Width class of the enclosing window / sheet, measured by `saryAppearance`.
+    /// Read it with `@Environment(\.saryWidthClass) private var widthClass`.
+    var saryWidthClass: SaryWidthClass {
+        get { self[SaryWidthClassKey.self] }
+        set { self[SaryWidthClassKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Caps the content at `max` points and centres it; full width when the
+    /// window is narrower (every iPhone for the default 640). Backgrounds that
+    /// must stay full-bleed go OUTSIDE this modifier.
+    func saryReadableWidth(_ max: CGFloat = SaryLayout.readableWidth) -> some View {
+        frame(maxWidth: max).frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Flow layout
+
+/// Pure line-breaking math for `SaryFlowLayout` (unit-tested).
+enum SaryFlow {
+    /// Frames for items of `sizes`, laid out leading-to-trailing in lines no
+    /// wider than `maxWidth` and wrapped when the next item does not fit. Each
+    /// item is centred vertically in its line; an item wider than a whole line
+    /// gets a line to itself, clamped to `maxWidth`. Origins start at (0, 0).
+    static func frames(sizes: [CGSize], spacing: CGFloat, lineSpacing: CGFloat, maxWidth: CGFloat) -> [CGRect] {
+        let limit = Swift.max(0, maxWidth)
+        var lines: [[Int]] = []
+        var current: [Int] = []
+        var x: CGFloat = 0
+        for (i, s) in sizes.enumerated() {
+            let w = Swift.min(s.width, limit)
+            if !current.isEmpty && x + spacing + w > limit {
+                lines.append(current)
+                current = []
+                x = 0
+            }
+            x += (current.isEmpty ? 0 : spacing) + w
+            current.append(i)
+        }
+        if !current.isEmpty { lines.append(current) }
+
+        var frames = Array(repeating: CGRect.zero, count: sizes.count)
+        var y: CGFloat = 0
+        for (n, line) in lines.enumerated() {
+            let height = line.map { sizes[$0].height }.max() ?? 0
+            var lx: CGFloat = 0
+            for i in line {
+                let w = Swift.min(sizes[i].width, limit)
+                let h = sizes[i].height
+                frames[i] = CGRect(x: lx, y: y + (height - h) / 2, width: w, height: h)
+                lx += w + spacing
+            }
+            y += height + (n < lines.count - 1 ? lineSpacing : 0)
+        }
+        return frames
+    }
+
+    /// The size the frames above occupy.
+    static func size(of frames: [CGRect]) -> CGSize {
+        CGSize(width: frames.map(\.maxX).max() ?? 0, height: frames.map(\.maxY).max() ?? 0)
+    }
+}
+
+/// A row that wraps to the next line instead of overflowing: badges, chips,
+/// swatches. When everything fits it looks exactly like an `HStack` with the
+/// same spacing (centred vertically). Placement is mirrored in RTL by SwiftUI.
+struct SaryFlowLayout: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        SaryFlow.size(of: frames(proposal.width, subviews))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (f, v) in zip(frames(bounds.width, subviews), subviews) {
+            v.place(at: CGPoint(x: bounds.minX + f.minX, y: bounds.minY + f.minY),
+                    proposal: ProposedViewSize(width: f.width, height: f.height))
+        }
+    }
+
+    private func frames(_ width: CGFloat?, _ subviews: Subviews) -> [CGRect] {
+        SaryFlow.frames(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, spacing: spacing,
+                        lineSpacing: lineSpacing, maxWidth: width ?? .infinity)
     }
 }
 

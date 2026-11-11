@@ -140,7 +140,9 @@ extension View {
     /// Attach ONCE at the app root (and on any sheet / full-screen cover whose
     /// content is built outside this hierarchy). Injects `AppearanceSettings`
     /// into the environment, resolves the theme, forces Arabic RTL, registers
-    /// Huwiya and applies the text-size step on top of Dynamic Type.
+    /// Huwiya, applies the text-size step on top of Dynamic Type and measures
+    /// the width class (`\.saryWidthClass`). It never scales or fixes the
+    /// frame of the content: Display Zoom and Dynamic Type pass through.
     func saryAppearance(_ settings: AppearanceSettings) -> some View {
         SaryFonts.registerIfNeeded()
         return modifier(SaryAppearanceRoot(settings: settings))
@@ -183,6 +185,9 @@ private struct SaryThemeResolver: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// Width class of this window / presentation (see `SaryWidthClass`). Only
+    /// the class is stored, so the tree is not re-rendered while a width animates.
+    @State private var widthClass: SaryWidthClass = .regular
 
     func body(content: Content) -> some View {
         let theme = SaryTheme.resolve(
@@ -200,6 +205,8 @@ private struct SaryThemeResolver: ViewModifier {
             .environment(\.locale, Locale(identifier: "ar"))
             .dynamicTypeSize(settings.prefs.textSize.apply(to: typeSize))
             .tint(theme.palette.accent)
+            .environment(\.saryWidthClass, widthClass)
+            .onGeometryChange(for: SaryWidthClass.self) { SaryWidthClass.of(width: $0.size.width) } action: { widthClass = $0 }
     }
 }
 

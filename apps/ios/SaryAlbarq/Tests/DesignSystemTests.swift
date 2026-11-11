@@ -247,3 +247,66 @@ final class SaryThemeTests: XCTestCase {
         XCTAssertLessThan(spread, 0.01, "widths: \(widths)")
     }
 }
+
+/// Screen-size adaptation: width classes, readable columns and the wrapping row.
+final class SaryScreenFitTests: XCTestCase {
+    func testWidthClasses() {
+        XCTAssertEqual(SaryWidthClass.of(width: 0), .regular, "not measured yet = a phone")
+        XCTAssertEqual(SaryWidthClass.of(width: 320), .narrow, "Display Zoom on a 375/393 pt iPhone")
+        XCTAssertEqual(SaryWidthClass.of(width: 359.5), .narrow)
+        XCTAssertEqual(SaryWidthClass.of(width: 375), .regular, "iPhone SE / mini")
+        XCTAssertEqual(SaryWidthClass.of(width: 393), .regular, "the reference iPhone keeps its layout")
+        XCTAssertEqual(SaryWidthClass.of(width: 440), .regular, "Pro Max")
+        XCTAssertEqual(SaryWidthClass.of(width: 744), .wide, "iPad mini")
+        XCTAssertEqual(SaryWidthClass.of(width: 1366), .wide)
+    }
+
+    func testColumnWidth() {
+        // Every iPhone: the whole width (minus margins).
+        XCTAssertEqual(SaryLayout.columnWidth(container: 393, max: SaryLayout.readableWidth), 393)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 320, max: SaryLayout.formWidth, margin: 16), 288)
+        // iPad: capped, never stretched across 1000+ pt.
+        XCTAssertEqual(SaryLayout.columnWidth(container: 1366, max: SaryLayout.readableWidth), 640)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 1024, max: SaryLayout.formWidth, margin: 24), 480)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 10, max: 400, margin: 16), 0, "never negative")
+    }
+
+    func testFlowKeepsOneLineWhenItFits() {
+        let sizes = [CGSize(width: 60, height: 20), CGSize(width: 100, height: 16), CGSize(width: 40, height: 18)]
+        let f = SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: 300)
+        XCTAssertEqual(f.map(\.minX), [0, 66, 172], "exactly like an HStack with the same spacing")
+        XCTAssertEqual(f.map(\.midY), [10, 10, 10], "centred in the line")
+        XCTAssertEqual(SaryFlow.size(of: f), CGSize(width: 212, height: 20))
+        // No width proposed (ideal size): one line.
+        XCTAssertEqual(SaryFlow.size(of: SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: .infinity)).height, 20)
+    }
+
+    func testFlowWrapsInsteadOfOverflowing() {
+        // The participant row's status line on a 320 pt screen: badge, «عبر الأجهزة القريبة», speed, battery.
+        let sizes = [CGSize(width: 70, height: 20), CGSize(width: 110, height: 18), CGSize(width: 50, height: 16), CGSize(width: 40, height: 16)]
+        let f = SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: 130)
+        XCTAssertEqual(f[0].minY, 0)
+        XCTAssertEqual(f[1].minX, 0, "the nearby mark starts a new line")
+        XCTAssertEqual(f[1].minY, 24)
+        XCTAssertEqual(f[2].minX, 0)
+        XCTAssertEqual(f[3].minX, 56, "speed and battery share the third line")
+        XCTAssertEqual(f[2].midY, f[3].midY)
+        for r in f { XCTAssertLessThanOrEqual(r.maxX, 130) }
+        XCTAssertEqual(SaryFlow.size(of: f).height, 20 + 4 + 18 + 4 + 16)
+    }
+
+    func testFlowClampsAnItemWiderThanTheLine() {
+        let f = SaryFlow.frames(sizes: [CGSize(width: 30, height: 10), CGSize(width: 500, height: 10)], spacing: 6, lineSpacing: 4, maxWidth: 200)
+        XCTAssertEqual(f[1], CGRect(x: 0, y: 14, width: 200, height: 10))
+        XCTAssertTrue(SaryFlow.frames(sizes: [], spacing: 6, lineSpacing: 4, maxWidth: 200).isEmpty)
+        XCTAssertEqual(SaryFlow.frames(sizes: [CGSize(width: 30, height: 10)], spacing: 6, lineSpacing: 4, maxWidth: 0)[0].width, 0)
+    }
+
+    func testDesignTokensAreNotScaledByTheDevice() {
+        // Points stay points: only the density setting changes spacing.
+        let t = SaryTheme.default
+        XCTAssertEqual(t.space(.l), 16)
+        XCTAssertEqual(t.buttonHeight, 50)
+        XCTAssertEqual(t.minTarget, 44)
+    }
+}
