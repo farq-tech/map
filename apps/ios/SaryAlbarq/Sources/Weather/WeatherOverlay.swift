@@ -260,6 +260,8 @@ final class WeatherOverlay {
         }
         if let last = outlookFor, Date().timeIntervalSince(last.at) < 600,
            Self.km(last.point, p) < 25 { return }
+        /* A new place (not a refresh of the same one): never keep showing the old place's arrival. */
+        if outlookFor.map({ Self.km($0.point, p) >= 25 }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
         outlookFor = (p, Date())
         legend.outlookLoading = true

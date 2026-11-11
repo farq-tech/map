@@ -195,8 +195,9 @@ test('outlookForPoint: under cloud → overhead, with when it clears', () => {
   const motion = { ok: true, dx: 5, dy: 0, speedKmh: 40, bearingDeg: 90, confidence: 0.9, stationary: false };
   const o = m.outlookForPoint(f, 100, 100, motion, 4, 0);
   assert.equal(o.state, 'overhead');
-  // clear edge at x≥110 → ~11 px downwind ≈ 44 km → ~66 min
-  assert.ok(o.clearingInMin > 40 && o.clearingInMin < 90, `clearing ${o.clearingInMin}`);
+  // band x 80..109, point x=100, moving east: the trailing (west) edge is 20 px behind → 21 px × 4 km / 40 km/h ≈ 126 min.
+  // (The leading edge, 10 px ahead, would wrongly say ~66 min.)
+  assert.ok(o.clearingInMin > 110 && o.clearingInMin < 140, `clearing ${o.clearingInMin}`);
 });
 
 test('outlookForPoint: nothing upwind → clear; low confidence → uncertain; no motion → stationary', () => {
