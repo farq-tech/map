@@ -15,6 +15,7 @@ import json
 import math
 import os
 import sys
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -46,6 +47,22 @@ def etag(url):
     req = urllib.request.Request(url, method="HEAD")
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.headers.get("ETag", "").strip('"'), int(r.headers.get("Content-Length", 0))
+
+
+def land_cells(urls):
+    """(url, etag, bytes) of the cells that exist. Copernicus DEM and ESA WorldCover publish land cells only: a
+    coastal tile whose halo reaches an open-sea cell gets a 404 there, which is not an error (sea, no ground)."""
+    found = []
+    for u in urls:
+        try:
+            tag, size = etag(u)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(f"no data (open sea): {u}", flush=True)
+                continue
+            raise
+        found.append((u, tag, size))
+    return found
 
 
 def target(bbox, arcsec):
@@ -136,16 +153,21 @@ def main(region, cache):
     os.makedirs(odir, exist_ok=True)
     sources = []
 
-    dem_urls = [fmt(la, lo, DEM_URL) for la, lo in tiles(bbox, 1)]
-    for u in dem_urls:
-        tag, size = etag(u)
+    all_dem = [fmt(la, lo, DEM_URL) for la, lo in tiles(bbox, 1)]
+    dem_cells = land_cells(all_dem)
+    if not dem_cells:
+        raise SystemExit(f"{region}: no Copernicus DEM cell at all")
+    for u, tag, size in dem_cells:
         sources.append({"dataset": "Copernicus DEM GLO-30", "url": u, "etag": tag, "bytes": size})
+    dem_urls = [c[0] for c in dem_cells]
     dem = mosaic(dem_urls, bbox, arc, Resampling.average, nodata=-32767.0)
+    if len(dem_urls) < len(all_dem):  # missing cells are open sea: sea level, not "no data"
+        dem = np.where((dem == -32767.0) | np.isnan(dem), 0.0, dem).astype(dem.dtype)
 
-    wc_urls = [fmt(la, lo, WC_URL) for la, lo in tiles(bbox, 3)]
-    for u in wc_urls:
-        tag, size = etag(u)
+    wc_cells = land_cells([fmt(la, lo, WC_URL) for la, lo in tiles(bbox, 3)])
+    for u, tag, size in wc_cells:
         sources.append({"dataset": "ESA WorldCover 10m 2021 v200", "url": u, "etag": tag, "bytes": size})
+    wc_urls = [c[0] for c in wc_cells]
     # The 10 m class map read once at ~10 m (6x the grid), then block statistics per cell:
     # the dominant class and the fraction of each class of interest.
     rows, cols = grid_shape(bbox, arc)
