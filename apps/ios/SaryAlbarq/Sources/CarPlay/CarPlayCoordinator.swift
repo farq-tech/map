@@ -52,6 +52,11 @@ final class CarPlayCoordinator: NSObject {
     // Lists.
     private var membersTemplate: CPListTemplate?
     private var outingsTemplate: CPListTemplate?
+    /// What each list last showed: `updateSections` only when it changed. `refresh()` runs every
+    /// second and on every change; rebuilding an unchanged CarPlay list each time is wasted work
+    /// on the head unit (and CarPlay throttles template updates).
+    private var membersShown: (rows: [CarPlayMemberRow], header: String)?
+    private var outingsShownKey: String?
     private var buttonKey = ""
     private var forcedNight: Bool?
     /// The driver backed out of the «سَرى البارق» list: do not push it again until asked.
@@ -100,6 +105,8 @@ final class CarPlayCoordinator: NSObject {
         endTrip(cancelled: true)
         bag = []
         sessionBag = []
+        /* The model sink too: otherwise it keeps scheduling refreshes after CarPlay disconnects. */
+        modelSink = nil
         CarPlayHub.setActive(false)
     }
 
@@ -107,9 +114,11 @@ final class CarPlayCoordinator: NSObject {
 
     private func bindModel() {
         guard let m = model else { return }
-        modelSink = m.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { self?.refresh() }
-        }
+        /* Throttled like the session's own publishers: AppModel publishes often (every outing
+         * list / location change) and each refresh rebuilds the CarPlay map content. Still read
+         * on the next main-loop turn: `objectWillChange` fires before the value changes. */
+        modelSink = m.objectWillChange.throttle(for: .milliseconds(400), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.refresh() } }
         refresh()
     }
 
@@ -275,7 +284,11 @@ final class CarPlayCoordinator: NSObject {
             mapVC.show(c)
         }
         if let t = outingsTemplate {
-            t.updateSections(outingSections())
+            let key = outingsKey()
+            if key != outingsShownKey {
+                outingsShownKey = key
+                t.updateSections(outingSections())
+            }
         } else if !outingsClosedByDriver {
             pushOutings()
         }
@@ -293,9 +306,16 @@ final class CarPlayCoordinator: NSObject {
     private func pushOutings() {
         outingsClosedByDriver = false
         let t = CPListTemplate(title: "سَرى البارق", sections: outingSections())
+        outingsShownKey = outingsKey()
         t.emptyViewTitleVariants = ["ابدأ من الجوال"]
         outingsTemplate = t
         interface.pushTemplate(t, animated: false, completion: nil)
+    }
+
+    /// Everything `outingSections()` shows (the same filter and order), as one comparable key.
+    private func outingsKey() -> String {
+        (model?.current ?? []).filter { $0.status != .ended }.prefix(6)
+            .map { "\($0.id)|\($0.name)|\($0.status)|\($0.member_count)" }.joined(separator: "\n")
     }
 
     private func outingSections() -> [CPListSection] {
@@ -330,7 +350,9 @@ final class CarPlayCoordinator: NSObject {
 
     private func showMembers() {
         guard let s = session else { return }
-        let t = CPListTemplate(title: "الربع", sections: memberSections(input(s)))
+        let i = input(s)
+        let t = CPListTemplate(title: "الربع", sections: memberSections(i))
+        membersShown = (CarPlayPresenter.memberRows(i), CarPlayPresenter.mySharingLine(i))
         t.emptyViewTitleVariants = ["ما فيه أحد غيرك في الطلعة"]
         membersTemplate = t
         interface.pushTemplate(t, animated: true, completion: nil)
@@ -339,6 +361,11 @@ final class CarPlayCoordinator: NSObject {
     private func updateMembersList(_ i: CarPlayInput) {
         guard let t = membersTemplate else { return }
         guard interface.templates.contains(where: { $0 === t }) else { membersTemplate = nil; return }
+        /* The rows carry positions and ages: a moving group still updates every refresh, a parked
+         * one (nothing on the list changed) no longer rebuilds the whole list each second. */
+        let shown = (rows: CarPlayPresenter.memberRows(i), header: CarPlayPresenter.mySharingLine(i))
+        if let last = membersShown, last.rows == shown.rows, last.header == shown.header { return }
+        membersShown = shown
         t.updateSections(memberSections(i))
     }
 
