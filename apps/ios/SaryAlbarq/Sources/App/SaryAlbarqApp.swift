@@ -95,6 +95,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 let m = AppBoot.model
                 Self.model = m
             }
+        } else {
+            /* The Arabic satellite style every first map loads: read and graded off the main thread
+             * now, before SwiftUI builds the first screen (no map, no UI work here). */
+            ArabicBasemap.prewarm()
         }
         return true
     }

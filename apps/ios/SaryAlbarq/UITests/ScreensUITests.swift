@@ -22,7 +22,7 @@ final class ScreensUITests: XCTestCase {
         }
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "جارية")).firstMatch.exists)
         XCTAssertTrue(app.staticTexts["متوقفة مؤقتًا"].exists)
-        XCTAssertTrue(app.staticTexts["لم تبدأ"].exists)
+        XCTAssertTrue(app.staticTexts["ما بدأت"].exists)
         app.buttons["list.create"].tap()
         XCTAssertTrue(app.textFields["create.dest.field"].waitForExistence(timeout: 5), "«طلعة جديدة» starts with «وين رايحين؟»")
         app.buttons["page-close"].tap()

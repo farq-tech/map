@@ -263,7 +263,8 @@ struct SaryPalette: Equatable {
             stroke: Color(rgb: 0x2A2218, opacity: 0.10),
             textPrimary: Color(rgb: 0x1F1A14),
             textSecondary: Color(rgb: 0x5C5244),
-            textTertiary: Color(rgb: 0x7D7263),
+            // 0x6E6457: ≥ 4.5:1 on every light surface (0x7D7263 was 4.1:1 on `background`, 3.8:1 on `sunken`).
+            textTertiary: Color(rgb: 0x6E6457),
             accent: Color(rgb: accent.fill),
             accentText: Color(rgb: accent.lightText),
             onAccent: Color(rgb: 0x1A1612),

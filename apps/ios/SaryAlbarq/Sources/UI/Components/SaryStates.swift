@@ -25,21 +25,27 @@ struct SaryStateView: View {
     var body: some View {
         let p = theme.palette
         VStack(spacing: theme.space(.m)) {
-            switch kind {
-            case .loading(let title):
-                ProgressView().controlSize(.large).tint(p.accent)
-                    .frame(height: 52)
-                Text(title).saryText(.callout).foregroundStyle(p.textSecondary)
-            case .empty(let title, let message, let symbol):
-                glyph(symbol, color: p.textTertiary)
-                texts(title, message)
-            case .error(let title, let message):
-                glyph(SaryIcon.error, color: p.emergencyText)
-                texts(title, message)
-            case .offline(let message):
-                glyph(SaryIcon.offline, color: p.warningText)
-                texts("بلا إنترنت", message ?? "نعرض آخر ما وصلنا، ونحدّث أول ما يرجع الاتصال")
+            /* A stack, not a Group: `.id` / `.transition` must land on ONE view. */
+            VStack(spacing: theme.space(.m)) {
+                switch kind {
+                case .loading(let title):
+                    ProgressView().controlSize(.large).tint(p.accent)
+                        .frame(height: 52)
+                    Text(title).saryText(.callout).foregroundStyle(p.textSecondary)
+                case .empty(let title, let message, let symbol):
+                    glyph(symbol, color: p.textTertiary)
+                    texts(title, message)
+                case .error(let title, let message):
+                    glyph(SaryIcon.error, color: p.emergencyText)
+                    texts(title, message)
+                case .offline(let message):
+                    glyph(SaryIcon.offline, color: p.warningText)
+                    texts("بلا إنترنت", message ?? "نعرض آخر ما وصلنا، ونحدّث أول ما يرجع الاتصال")
+                }
             }
+            /* loading → empty / error / offline: the new state settles in where the old one was. */
+            .id(Self.phase(kind))
+            .transition(SaryTransition.appear(theme))
             if let actionTitle, !kind.isLoading {
                 Button(action: action) { SaryButtonLabel(title: actionTitle, systemImage: actionIcon) }
                     .buttonStyle(.sary(.secondary, width: .hug, compact: true))
@@ -48,8 +54,20 @@ struct SaryStateView: View {
             }
         }
         .padding(theme.space(.xxl))
-        .frame(maxWidth: .infinity)
+        .saryAnimation(.appear, value: Self.phase(kind))
+        /* Centred column on iPad: the message never runs across a 1000 pt line. */
+        .saryReadableWidth(SaryLayout.formWidth)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Which state is shown, without its texts: what the state transition keys on.
+    static func phase(_ kind: SaryStateKind) -> Int {
+        switch kind {
+        case .loading: return 0
+        case .empty: return 1
+        case .error: return 2
+        case .offline: return 3
+        }
     }
 
     private func glyph(_ symbol: String, color: Color) -> some View {
@@ -58,6 +76,8 @@ struct SaryStateView: View {
             .foregroundStyle(color)
             .frame(width: 64, height: 64)
             .background(Circle().fill(theme.palette.sunken))
+            /* Decorative and hidden from VoiceOver, so it may start transparent. */
+            .saryAppearOnMount()
             .accessibilityHidden(true)
     }
 
@@ -75,7 +95,6 @@ struct SaryStateView: View {
 /// Placeholder rows while loading. Shimmer only when motion is allowed.
 struct SarySkeletonRow: View {
     @Environment(\.sary) private var theme
-    @State private var phase = false
 
     var body: some View {
         let fill = theme.palette.textPrimary.opacity(theme.isLight ? 0.08 : 0.09)
@@ -90,11 +109,8 @@ struct SarySkeletonRow: View {
         }
         .padding(.vertical, theme.space(.s))
         .padding(.horizontal, theme.space(.m))
-        .opacity(phase ? 0.55 : 1)
-        .onAppear {
-            guard !theme.reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { phase = true }
-        }
+        /* Stops off-screen, in the background, in drive mode and under Reduce Motion. */
+        .saryPulse(.skeleton, style: .dim)
         .accessibilityHidden(true)
     }
 }
@@ -154,6 +170,7 @@ struct SaryDialog: View {
     var confirm: () -> Void = {}
     var cancel: () -> Void = {}
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
 
     var body: some View {
         let p = theme.palette
@@ -177,11 +194,12 @@ struct SaryDialog: View {
                 Button(cancelTitle, action: cancel).buttonStyle(.sary(.secondary))
             }
         }
-        .padding(theme.space(.xxl))
+        /* 24 pt inside + 16 pt outside leave 240 pt of text on a 320 pt screen: tighter there. */
+        .padding(theme.space(widthClass == .narrow ? .l : .xxl))
         .background(RoundedRectangle(cornerRadius: SaryRadius.xl, style: .continuous).fill(p.elevated))
         .overlay(RoundedRectangle(cornerRadius: SaryRadius.xl, style: .continuous).stroke(p.stroke, lineWidth: 0.5))
         .saryShadow(.overlay, theme)
-        .frame(maxWidth: 400)
+        .frame(maxWidth: SaryLayout.dialogWidth)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
     }

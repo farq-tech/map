@@ -137,7 +137,11 @@ struct HomeToolSheet: View {
         case .camp:
             CampSuggestSheet(host: host)
         case let .routes(target, name, rain, weatherAvailable):
+            /* Half height first, the map live behind it: the routes are drawn on the home map. */
             DesertRouteSheet(host: host, target: target, name: name, rain: rain, weatherAvailable: weatherAvailable)
+                .presentationDetents([.medium, .large])
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                .presentationDragIndicator(.visible)
         }
     }
 }

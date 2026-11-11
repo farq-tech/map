@@ -30,18 +30,73 @@ enum LiveCalmRules {
     }
 }
 
-/// Lovable's caption under a round button: 10 pt on a dark pill.
+/// Motion on the live screen (pure, unit-tested in `LiveDeclutterTests`): it says what changed and
+/// stays almost still while driving (no stagger, no travel, quicker springs).
+enum LiveMotion {
+    /// The gap between items of a row appearing one after another.
+    static let staggerStep: Double = 0.04
+    /// Items past this one appear together (a long row never trails off).
+    static let staggerMaxIndex = 4
+    /// How far an item rises as it appears (pt).
+    static let rise: CGFloat = 6
+
+    /// The delay before item `index` of a row appears: none while driving or with Reduce Motion.
+    static func staggerDelay(index: Int, drive: Bool, reduceMotion: Bool) -> Double {
+        guard !drive, !reduceMotion, index > 0 else { return 0 }
+        return Double(min(index, staggerMaxIndex)) * staggerStep
+    }
+
+    /// The rise of an appearing item: a fade only while driving or with Reduce Motion.
+    static func riseOffset(drive: Bool, reduceMotion: Bool) -> CGFloat {
+        drive || reduceMotion ? 0 : rise
+    }
+
+    /// The primary button's morph between states: smooth when stopped, quicker while driving.
+    static func primaryMorph(drive: Bool) -> SaryMotion { drive ? .snappy : .smooth }
+
+    /// The people list re-ordering (who is nearest, who went quiet).
+    static func reorder(drive: Bool) -> SaryMotion { drive ? .snappy : .smooth }
+}
+
+/// One item of a row appearing in turn (`LiveMotion.staggerDelay`) when the row is inserted:
+/// a small rise and fade, once. It never re-runs on updates (only on insertion).
+struct LiveStaggerIn: ViewModifier {
+    var index: Int
+    @Environment(\.sary) private var theme
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let still = theme.reduceMotion
+        content
+            .opacity(shown || still ? 1 : 0)
+            .offset(y: shown ? 0 : LiveMotion.riseOffset(drive: theme.drive, reduceMotion: theme.reduceMotion))
+            .onAppear {
+                guard !shown else { return }
+                let delay = LiveMotion.staggerDelay(index: index, drive: theme.drive, reduceMotion: theme.reduceMotion)
+                withAnimation(theme.animation(theme.drive ? .snappy : .appear).delay(delay)) { shown = true }
+            }
+    }
+}
+
+extension View {
+    /// See `LiveStaggerIn`.
+    func liveStaggerIn(_ index: Int) -> some View { modifier(LiveStaggerIn(index: index)) }
+}
+
+/// Lovable's caption under a round button: 11 pt bold on a dark pill (was 10 pt regular,
+/// unreadable in sun).
 struct LovableCaption: View {
     var text: String
     @Environment(\.sary) private var theme
     var body: some View {
         Text(text)
-            .font(.sary(10, .regular))
+            .saryText(.micro, weight: .bold)
             .foregroundStyle(theme.palette.textSecondary)
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, 6)
-            .frame(height: 15)
+            /* The pill keeps its 15 pt at rest (layout unchanged); drive mode's bigger text gets 18. */
+            .frame(height: theme.drive ? 18 : 15)
             .background(Capsule().fill(Color.black.opacity(0.6)))
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
             .accessibilityHidden(true)
@@ -62,7 +117,7 @@ struct LiveSideButtons: View {
     var body: some View {
         let p = theme.palette
         VStack(spacing: 10) {
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 let filled = item.id == "actions" || item.isActive
                 VStack(spacing: 4) {
                     Button { action(item.id) } label: {
@@ -77,8 +132,9 @@ struct LiveSideButtons: View {
                             .saryGlass(Circle(), role: .chrome, interactive: true)
                             .overlay(alignment: .topTrailing) {
                                 if let b = item.badge, b > 0 {
-                                    Text(SaryFormat.number(b)).font(.sary(10, .heavy)).foregroundStyle(p.onEmergency)
+                                    Text(SaryFormat.number(b)).saryNumber(.micro, weight: .heavy).foregroundStyle(p.onEmergency)
                                         .frame(minWidth: 17, minHeight: 17)
+                                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                                         .background(Circle().fill(p.emergency))
                                         .saryBadgeOutset(trailing: 3, top: 3)
                                 }
@@ -92,6 +148,8 @@ struct LiveSideButtons: View {
                     .accessibilityIdentifier(item.accessibilityID)
                     if captions { LovableCaption(text: item.label) }
                 }
+                /* The column comes back when the sheet settles at its peek: the buttons in turn. */
+                .liveStaggerIn(index)
             }
         }
         .animation(theme.animation(.snappy), value: items)
@@ -126,16 +184,25 @@ struct LovableSpeedBubble: View {
         let p = theme.palette
         let kmh = ui.current.kmh.map { Int($0.rounded()) }
         VStack(spacing: 0) {
+            /* Tabular digits (no jitter while it ticks) that grow with the drive scale like
+             * every other number: 26 pt at rest, 30 pt in drive mode. */
             Text(kmh.map { SaryFormat.number($0) } ?? "—")
-                .font(.sary(26, .heavy))
+                .saryNumber(.title, weight: .heavy)
                 .foregroundStyle(ui.overLimit ? p.emergencyText : p.textPrimary)
-                .contentTransition(.numericText())
+                .contentTransition(SaryTransition.number(Double(kmh ?? 0), theme))
+                /* Rolls on the speed readings that already arrive (no extra updates). */
+                .animation(theme.animation(.snappy), value: kmh)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text("كم/س").font(.sary(11, .regular)).foregroundStyle(p.textSecondary)
+            Text("كم/س").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
+        .padding(.horizontal, 8)
+        /* A fixed 76 pt disc: its text follows Dynamic Type only as far as `SarySpeedometer` does. */
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .frame(width: 76, height: 76)
-        .background(Circle().fill(p.chromeOpaque.opacity(0.88)))
+        .background(Circle().fill(p.chromeOpaque.opacity(theme.drive ? 1 : 0.88)))
         .saryGlass(Circle(), role: .chrome)
         .overlay { if ui.overLimit { Circle().stroke(p.emergency, lineWidth: 3) } }
         .accessibilityElement(children: .ignore)
@@ -153,9 +220,10 @@ struct ConvoyLinePill: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 6) {
-                Circle().fill(theme.palette.live).frame(width: 8, height: 8)
+                Circle().fill(theme.palette.live).frame(width: theme.drive ? 10 : 8, height: theme.drive ? 10 : 8)
+                /* Primary while driving: the ramp's footnote (15 pt in drive mode), bold. */
                 Text(text)
-                    .font(.sary(13, .medium))
+                    .saryText(.footnote, weight: .bold)
                     .foregroundStyle(theme.palette.textPrimary)
                     .lineLimit(1)
             }
@@ -166,7 +234,7 @@ struct ConvoyLinePill: View {
         .buttonStyle(SaryPressStyle())
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityLabel(Text("القافلة: \(text)"))
-        .accessibilityHint(Text("يفتح الربع"))
+        .accessibilityHint(Text("يفتح الأصدقاء"))
         .accessibilityIdentifier("convoy.line")
     }
 }
@@ -179,9 +247,10 @@ struct AlertHistoryButton: View {
 
     var body: some View {
         Button(action: action) {
+            /* Secondary chrome: it steps back in drive mode so the alert beside it leads. */
             Image(systemName: open ? "xmark" : "clock.arrow.circlepath")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(theme.palette.textPrimary)
+                .foregroundStyle(theme.drive && !open ? theme.palette.textSecondary : theme.palette.textPrimary)
                 .frame(width: 44, height: 44)
                 .saryGlass(Circle(), role: .chrome, interactive: true)
                 .frame(width: 44, height: 44)

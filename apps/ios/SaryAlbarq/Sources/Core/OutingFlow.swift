@@ -249,13 +249,13 @@ struct OutingFlowUI: Equatable {
 }
 
 /// «ننتظر أمير الطلعة» with the facts behind it (Build 36 report, item 9: the bare message said
-/// nothing): is the leader here, how many of «الربع» joined and are connected, and is MY link up
+/// nothing): is the leader here, how many of «الأصدقاء» joined and are connected, and is MY link up
 /// (when it is not, everything above is the last thing we heard, and is said to be).
 struct WaitingLeaderInfo: Equatable {
     /// «أمير الطلعة فهد متصل الآن» / «… آخر ظهور قبل ١٢ د» / «… غير متصل الآن».
     var leader: String
     var leaderOnline: Bool
-    /// «الربع ٤ · المتصلين ٢».
+    /// «الأصدقاء ٤ · المتصلين ٢».
     var members: String
     /// Nil while my connection is up; «اتصالك: بلا إنترنت · آخر حالة وصلتنا» otherwise.
     var connection: String?
@@ -373,7 +373,7 @@ enum SaryCopy {
     /// Its leader.
     static let leader = "أمير الطلعة"
     /// The outing's members.
-    static let members = "الربع"
+    static let members = "الأصدقاء"
     /// Retrace your own recorded trail back (offline, on this phone).
     static let backTrack = "طريق الرجعة"
     /// End the retrace (its panel's button).
@@ -421,7 +421,7 @@ enum EndOutingCopy {
     static let systemImage = "house.fill"
 
     static func message(everyoneArrived: Bool = false) -> String {
-        everyoneArrived ? "وصل الربع كلهم. يوقف إرسال المواقع عند الكل ويطلع ملخص الطلعة."
+        everyoneArrived ? "وصل الأصدقاء كلهم. يوقف إرسال المواقع عند الكل ويطلع ملخص الطلعة."
                         : "يوقف إرسال المواقع عند الكل ويطلع ملخص الطلعة بكل مشاويرها. ما تقدر ترجعها."
     }
 }

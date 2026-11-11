@@ -114,7 +114,7 @@ enum LiveOutingPresenter {
     static func nearbyLabel(_ n: Int) -> String? {
         guard n > 0 else { return nil }
         if n == 1 { return "متصل مباشرة بسيارة واحدة" }
-        return "متصل مباشرة بـ \(ArabicFormat.number(Double(n))) سيارات"
+        return "متصل مباشرة بـ \(SaryFormat.number(n)) سيارات"
     }
 
     static func connection(_ l: LiveChannel.State, closed: LiveCloseReason?) -> ConnectionStateUI {
@@ -299,11 +299,18 @@ enum LiveOutingPresenter {
     /// settings); the same one staying up, or none, leaves the screen alone.
     static func sosClearsScreen(current: String?, previous: String?) -> Bool { current != nil && current != previous }
 
+    /// My own SOS button's state: the whole of `sos(_:).mine`, without the friends' part, so a
+    /// header that shows only my button needs no presenter pass.
+    static func mySOS(view v: OutingView?, sending: Bool, now: Date) -> MySOSUI {
+        guard let v else { return .none }
+        if sending { return .sending }
+        if let s = v.me?.sos { return .active(since: deviceDate(s.at, view: v) ?? now) }
+        return .none
+    }
+
     static func sos(_ i: LivePresenterInput) -> SOSUIState {
         guard let v = i.view else { return SOSUIState() }
-        var mine: MySOSUI = .none
-        if i.sosSending { mine = .sending }
-        else if let s = v.me?.sos { mine = .active(since: deviceDate(s.at, view: v) ?? i.now) }
+        let mine = mySOS(view: v, sending: i.sosSending, now: i.now)
         let colors = v.colors
         var incoming: [IncomingSOSUI] = []
         for m in v.orderedMembers where m.user_id != v.myId {

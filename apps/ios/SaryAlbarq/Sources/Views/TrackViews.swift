@@ -93,13 +93,31 @@ struct TrackDetailView: View {
     var close: () -> Void
     var follow: (FollowSubject) -> Void
     @Environment(\.sary) private var theme
-    @State private var cardHeight: CGFloat = 220
     @State private var realistic: RealisticScene?
+    /// Measured in window points (the map runs under the status bar / Dynamic Island and the home
+    /// indicator): where the header ends, where the stats card starts, the map's own frame.
+    /// Was a fixed 90 pt top (under a Dynamic Island header the track started behind it) and the
+    /// card's height alone at the bottom (34 pt short on phones with a home indicator).
+    @State private var headerBottom: CGFloat = 0
+    @State private var cardTop: CGFloat = 0
+    @State private var mapFrame: CGRect = .zero
+
+    private var mapPadding: UIEdgeInsets {
+        let measured = mapFrame.height > 0
+        let top = measured && headerBottom > mapFrame.minY ? headerBottom - mapFrame.minY + 8 : 90
+        let bottom = measured && cardTop > 0 && mapFrame.maxY > cardTop ? mapFrame.maxY - cardTop + 12 : 220
+        return UIEdgeInsets(top: top, left: 0, bottom: bottom, right: 0)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            TrackMapView(line: subject.line, padding: UIEdgeInsets(top: 90, left: 0, bottom: cardHeight, right: 0), hiRes: HiResRequest(surface: .trackDetail))
+            TrackMapView(line: subject.line, padding: mapPadding, hiRes: HiResRequest(surface: .trackDetail))
                 .ignoresSafeArea()
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { mapFrame = g.frame(in: .global) }
+                        .onChange(of: g.frame(in: .global)) { _, f in mapFrame = f }
+                })
             VStack(spacing: 0) {
                 HStack(spacing: theme.space(.s)) {
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "track.close", visual: 44, surface: .glass, action: close)
@@ -114,12 +132,21 @@ struct TrackDetailView: View {
                     RealisticEntryButton(id: "track.realistic") { realistic = .track(subject) }
                 }
                 .padding(.horizontal, theme.space(.m))
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { headerBottom = g.frame(in: .global).maxY }
+                        .onChange(of: g.frame(in: .global).maxY) { _, y in headerBottom = y }
+                })
                 Spacer()
             }
             TrackStatsCard(stats: subject.stats, speedLegend: subject.line.hasSpeeds) { follow(subject) }
                 .padding(.horizontal, theme.space(.m))
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { cardTop = g.frame(in: .global).minY }
+                        .onChange(of: g.frame(in: .global).minY) { _, y in cardTop = y }
+                })
                 .padding(.bottom, theme.space(.s))
-                .background(GeometryReader { g in Color.clear.onAppear { cardHeight = g.size.height + 24 } })
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("track.detail")
@@ -235,8 +262,8 @@ struct FollowTrackPanel: View {
         .overlay {
             if off { RoundedRectangle(cornerRadius: SaryRadius.l, style: .continuous).stroke(p.emergency, lineWidth: 3) }
         }
-        .sensoryFeedback(.warning, trigger: off) { was, now in now && !was }
-        .sensoryFeedback(.success, trigger: arrived) { was, now in now && !was }
+        .saryHaptic(.warning, trigger: off) { was, now in now && !was }
+        .saryHaptic(.arrival, trigger: arrived) { was, now in now && !was }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("follow.panel")
     }

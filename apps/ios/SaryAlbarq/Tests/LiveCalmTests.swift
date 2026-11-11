@@ -54,7 +54,7 @@ final class LiveCalmTests: XCTestCase {
 
     func testToolsGridSectionsAndNothingLost() {
         let groups = LiveActionCatalog.groups(.init(guideAllTarget: "الوجهة", channels: true))
-        XCTAssertEqual(groups.map(\.title), ["الطريق", "الربع", "السلامة", "المكان", "الخريطة"])
+        XCTAssertEqual(groups.map(\.title), ["الطريق", "الأصدقاء", "السلامة", "المكان", "الخريطة"])
         let grid = Set(groups.flatMap(\.items).map(\.id))
         /* UI-AUDIT م3: «ملاحة», «طريق الرجعة» and «أخفِ موقعي» moved in from the quick row (16 with channels). */
         XCTAssertLessThanOrEqual(grid.count, 16, "even with PTT channels, «المزيد» stays short")

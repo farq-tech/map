@@ -321,7 +321,7 @@ test('«نبّهه»: leader only, to that member only, rate-limited; the server
   assert.equal(ok.status, 200);
   const p = push.sent.filter((x) => x.payload.type === 'nudge').at(-1).payload;
   assert.equal(p.to_user, B.id, 'only to the member');
-  assert.equal(p.body, 'افتح سرى عشان يرجع موقعك يوصل للربع');
+  assert.equal(p.body, 'افتح سرى عشان يرجع موقعك يوصل للأصدقاء');
   assert.equal((await api('POST', `/${O}/members/${B.id}/nudge`, A.token)).status, 429, 'not twice in 3 min');
   assert.equal((await api('POST', `/${O}/members/${A.id}/nudge`, A.token)).status, 400, 'not myself');
 
@@ -335,6 +335,6 @@ test('«نبّهه»: leader only, to that member only, rate-limited; the server
   await new Promise((r) => setTimeout(r, 50));
   const self = push.sent.filter((x) => x.payload.type === 'nudge' && x.payload.to_user === B.id);
   assert.equal(self.length, 1);
-  assert.match(self[0].payload.title, /موقعك ما يوصل للربع/);
+  assert.match(self[0].payload.title, /موقعك ما يوصل للأصدقاء/);
   assert.equal(push.sent.filter((x) => x.payload.type === 'member_silent').length, 1);
 });

@@ -8,6 +8,9 @@ import SwiftUI
 /// (`FriendSOSAlertHost`), so nothing presented here can hold it back.
 struct LiveSheet: View {
     @ObservedObject var controller: LiveOutingController
+    /// The live screen's presenter state for this render (`LiveOutingScreen` builds it once and
+    /// hands it down), so the sheet and everything under it never run the presenter again.
+    var ui: LiveOutingUIState
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @EnvironmentObject private var model: AppModel
@@ -15,7 +18,6 @@ struct LiveSheet: View {
     @State private var invite: InviteToken?
 
     var body: some View {
-        let ui = controller.ui
         let actions = controller.actions
         VStack(spacing: theme.space(.s)) {
             if controller.nav.isActive {
@@ -23,13 +25,16 @@ struct LiveSheet: View {
                  * «غيّر الوجهة», «أوقف التوجيه»). */
                 NavBottomBar(nav: controller.nav, end: controller.stopGuidanceTapped,
                              more: { controller.modal = .actions },
-                             changeDestination: controller.navChangeDestination)
+                             changeDestination: controller.navChangeDestination,
+                             peek: ui.sheetDetent == .peek)
                 if ui.sheetDetent != .peek, controller.nav.phase != .arrived {
-                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة». */
+                    /* Pulled up: «المسارات»، «مشاركة الوصول»، «الصوت»، «الخطوات»، «نظرة عامة» (and «غيّر الوجهة»
+                     * when the compact bar has no room for it). */
                     NavTripOptions(nav: controller.nav, routes: controller.navCanShowRoutes ? { controller.navShowRoutes() } : nil,
                                    steps: { controller.modal = .navSteps },
                                    overview: { controller.navControlTapped("nav.overview") }, overviewOn: controller.nav.camera == .overview,
-                                   cameraMode: controller.mapFollowMode.rawValue)
+                                   cameraMode: controller.mapFollowMode.rawValue,
+                                   changeDestination: controller.navChangeDestination)
                         .padding(.top, theme.space(.s))
                 }
             } else {
@@ -37,7 +42,7 @@ struct LiveSheet: View {
                 SarySheetSummary(participants: ui.participantsTab.participants, detent: ui.sheetDetent, ended: controller.tripEnded,
                                  expand: { actions.setSheetDetent(ui.sheetDetent == .peek ? .half : .peek) })
                 if controller.showsQuickRow(drive: theme.drive) && !controller.exploreActive {
-                    LiveQuickRow(controller: controller)
+                    LiveQuickRow(controller: controller, hasRally: ui.participantsTab.rally != nil)
                 }
             }
             if ui.sheetDetent != .peek {
@@ -97,7 +102,7 @@ struct LiveSheet: View {
             Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("ربع الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
+            Text("أصدقاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
         }
         .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
             Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
@@ -154,7 +159,7 @@ struct LiveSheet: View {
                     .accessibilityIdentifier("participant-card")
             }
         case .note:
-            NoteComposer(state: NoteComposerUIState(currentNote: controller.ui.participantsTab.participants.first(where: \.isMe)?.note,
+            NoteComposer(state: NoteComposerUIState(currentNote: ui.participantsTab.participants.first(where: \.isMe)?.note,
                                                    isSending: controller.session.busy.contains("note")),
                          actions: NoteComposerActions(
                             send: { t in Task { if await controller.session.sendNote(t) { controller.modal = nil; controller.toast("رسالتك فوق سيارتك ١٥ دقيقة") } } },
@@ -170,7 +175,7 @@ struct LiveSheet: View {
         case .notify:
             NotifyExplainerSheet(done: { controller.modal = nil })
         case .offlineMaps:
-            OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: controller.ui.outingName)
+            OfflineMapsView(back: { controller.modal = nil }, suggested: controller.offlineSuggestion, outingName: ui.outingName)
                 .presentationDetents([.large])
         case .weather:
             WeatherSheet(weather: controller.weather, close: { controller.modal = nil },
@@ -261,7 +266,7 @@ struct LiveSheet: View {
 
     /// «المزيد» → «الطلعة»: pause / end for the leader, leave for everyone, the settings.
     private var tripRows: LiveTripRows {
-        let s = controller.ui.settingsTab
+        let s = ui.settingsTab
         let a = controller.actions.settingsTab
         let running = s.outingStatus != .ended
         return LiveTripRows(canPause: s.isLeader && running && s.outingStatus != .notStarted,
@@ -286,12 +291,15 @@ extension IncomingSOSUI: @retroactive Hashable {
 /// «المزيد» (everything else). No accent here: the state's one primary is the CTA over the map.
 struct LiveQuickRow: View {
     @ObservedObject var controller: LiveOutingController
+    /// A rally point is set (the sheet's presenter state says it; no presenter pass here).
+    var hasRally: Bool
     @Environment(\.sary) private var theme
 
     var body: some View {
         let s = controller.actionState
         HStack(alignment: .top, spacing: 4) {
-            ForEach(LiveScreenRules.quickRow(chat: s.chat), id: \.self) { id in
+            ForEach(Array(LiveScreenRules.quickRow(chat: s.chat).enumerated()), id: \.element) { index, id in
+                Group {
                 switch id {
                 case "desert": desertMenu
                 case "chat":
@@ -299,7 +307,7 @@ struct LiveQuickRow: View {
                         controller.performAction("chat")
                     }
                 case "rally":
-                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: controller.ui.participantsTab.rally != nil) {
+                    item("التجمع", icon: SaryIcon.rally, id: "sheet.rally", active: hasRally) {
                         controller.performAction("rally")
                     }
                 default:
@@ -307,9 +315,15 @@ struct LiveQuickRow: View {
                         controller.modal = .actions
                     }
                 }
+                }
+                /* The row arrives (trip started, guidance ended): the actions in turn, once. */
+                .liveStaggerIn(index)
             }
         }
         .padding(.horizontal, theme.space(.m))
+        /* Captions of round buttons in the fixed-height peek (`SheetDetentUI.peekHeight`), not body
+         * text: uncapped they grew taller than the peek and were cut off at accessibility sizes. */
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sheet.quickRow")
     }
@@ -346,7 +360,7 @@ struct LiveQuickRow: View {
                 .foregroundStyle(p.accentText)
                 .frame(width: size, height: size)
                 .background(Circle().fill(p.sunken))
-            Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+            Text(title).font(.sary(11, .bold)).foregroundStyle(p.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity)
@@ -366,13 +380,13 @@ struct LiveQuickRow: View {
                     .background(Circle().fill(accent ? p.accent : active ? p.accent.opacity(0.85) : p.sunken))
                     .overlay(alignment: .topTrailing) {
                         if badge > 0 {
-                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(p.onEmergency)
+                            Text(SaryFormat.number(badge)).saryNumber(.micro, weight: .heavy).foregroundStyle(p.onEmergency)
                                 .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                                 .background(Capsule().fill(p.emergency))
                                 .saryBadgeOutset(trailing: 4, top: 2)
                         }
                     }
-                Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
+                Text(title).font(.sary(11, .bold)).foregroundStyle(p.textPrimary)
                     .lineLimit(1).minimumScaleFactor(0.75)
             }
             .frame(maxWidth: .infinity)
@@ -436,7 +450,7 @@ private struct LiveSheetBody: View {
                     Button { controller.modal = .panel(.invite) } label: {
                         HStack(spacing: theme.space(.m)) {
                             SaryRowIcon(systemImage: "person.badge.plus", color: theme.palette.accent)
-                            Text("ادعُ ربعك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
+                            Text("ادعُ أصدقاءك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, theme.space(.m))
@@ -448,8 +462,10 @@ private struct LiveSheetBody: View {
                 }
             }
             .padding(.vertical, theme.space(.xs))
+            /* The people re-order (nearest first, who went quiet) in place: the rows keep their ids. */
+            .animation(theme.animation(LiveMotion.reorder(drive: theme.drive)), value: ui.participantsTab.participants.map(\.id))
             .sarySurface(radius: SaryRadius.l)
-            ConvoySection(controller: controller, features: features)
+            ConvoySection(controller: controller, features: features, participants: ui.participantsTab.participants)
             // Keep the section available for the first waypoint and show the honest
             // unavailable state when the server has not deployed its routes.
             if !features.waypoints.isEmpty || features.phase != .loading {
@@ -475,7 +491,7 @@ private struct TripStatusCallout: View {
             case .notStarted:
                 /* UI-AUDIT م3: nothing here — «ابدأ الطلعة» (or the member's «ننتظر أمير الطلعة») is the
                  * one CTA over the map; the header says «ما بدأت الطلعة». The sheet is the people and
-                 * «ادعُ ربعك». */
+                 * «ادعُ أصدقاءك». */
                 EmptyView()
             case .paused:
                 SaryBanner(text: "الطلعة متوقفة مؤقتًا. لا أحد يشارك موقعه الآن.", tone: .warning, systemImage: SaryIcon.pause)
@@ -631,7 +647,7 @@ private struct PhonePanel: View {
 
     var body: some View {
         let a = controller.actions.settingsTab
-        SarySection(title: nil, footer: "يظهر لربعك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
+        SarySection(title: nil, footer: "يظهر لأصدقائك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
             VStack(spacing: theme.space(.s)) {
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "settings-phone", keyboard: .phonePad, maxLength: 14)
                 Button { a.saveMyPhone(phone.isEmpty ? nil : phone); done() } label: { SaryButtonLabel(title: "حفظ", systemImage: SaryIcon.check) }
@@ -654,7 +670,7 @@ struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للأصدقاء ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -677,7 +693,7 @@ struct TrailSettingsSection: View {
                           isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
                 .disabled(!card.recordingOn)
             SaryDivider()
-            SaryToggleRow(title: "أظهر مسارات الربع", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
+            SaryToggleRow(title: "أظهر مسارات الأصدقاء", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
                           isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends")
             /* Moved from the trip tab: the recording's accuracy and the GPS warnings, where the recording is set. */
             if let h = card.health {
@@ -744,7 +760,7 @@ struct TrailAlwaysExplainer: View {
                     Text("عشان «طريق الرجعة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     bullet("iphone", "المسار يبقى على جوالك فقط. ما نرسله لأحد، ولا حتى للخادم.")
-                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع ربع الطلعة تستمر والشاشة مقفلة.")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أصدقاء الطلعة تستمر والشاشة مقفلة.")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -808,8 +824,8 @@ struct ShareAlwaysExplainer: View {
     var afterJoin = false
     @Environment(\.sary) private var theme
 
-    static let afterJoinTitle = "خلّ الربع يشوفونك طول الطلعة"
-    static let afterJoinBody = "عشان يوصل موقعك للربع من الحين لين تخلص الطلعة — حتى لو قفلت الجوال أو فتحت تطبيق ثاني أو كنت على CarPlay — اسمح بالموقع «دائمًا». ما نرسل موقعك إلا وأنت في طلعة، ويوقف أول ما تخلص أو تطلع منها."
+    static let afterJoinTitle = "خلّ الأصدقاء يشوفونك طول الطلعة"
+    static let afterJoinBody = "عشان يوصل موقعك للأصدقاء من الحين لين تخلص الطلعة — حتى لو قفلت الجوال أو فتحت تطبيق ثاني أو كنت على CarPlay — اسمح بالموقع «دائمًا». ما نرسل موقعك إلا وأنت في طلعة، ويوقف أول ما تخلص أو تطلع منها."
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.space(.l)) {
@@ -817,7 +833,7 @@ struct ShareAlwaysExplainer: View {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
                     Text(afterJoin ? Self.afterJoinTitle : "المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للربع. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للأصدقاء. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -885,19 +901,19 @@ private struct InviteTab: View {
                         actions.copyLink()
                         copied = true
                         Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
-                    } label: { SaryButtonLabel(title: copied ? "تم النسخ" : "نسخ", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
+                    } label: { SaryButtonLabel(title: copied ? "نسخناه" : "نسخ", systemImage: copied ? SaryIcon.check : SaryIcon.copy) }
                         .buttonStyle(.sarySecondary)
                         .accessibilityIdentifier("invite-copy")
                     Button(action: actions.shareLink) { SaryButtonLabel(title: "مشاركة", systemImage: SaryIcon.share) }
                         .buttonStyle(.saryPrimary)
                         .accessibilityIdentifier("invite-share")
                 }
-                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع ربعك فقط.")
+                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع أصدقاءك فقط.")
                     .saryText(.footnote)
                     .foregroundStyle(theme.palette.textSecondary)
                     .multilineTextAlignment(.center)
             } else if s.canRevoke {
-                SaryStateView(kind: .empty(title: "لا يوجد رابط على هذا الجهاز",
+                SaryStateView(kind: .empty(title: "ما فيه رابط على هذا الجوال",
                                            message: "الخادم لا يحفظ الروابط. أنشئ رابطًا جديدًا، وأي رابط قديم يتوقف.", systemImage: "link"))
             } else {
                 SaryStateView(kind: .empty(title: "اطلب الرابط من أمير الطلعة", message: "الرابط عند من أنشأه فقط.", systemImage: "link"))
@@ -933,7 +949,7 @@ struct NoteComposer: View {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             Text("رسالة فوق سيارتك").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-            Text("يشوفها الربع فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+            Text("يشوفها الأصدقاء فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             SaryTextField(title: "الرسالة", placeholder: "مثل: بوقف عند المحطة", text: $text, id: "note-input", maxLength: state.maxLength)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: theme.space(.s)) {
@@ -991,7 +1007,8 @@ struct NearestStationsView: View {
                     .sarySurface(radius: SaryRadius.l)
                 }
             }
-            Text("© OpenStreetMap contributors · ODbL").saryText(.micro).foregroundStyle(theme.palette.textTertiary)
+            /* ODbL: the attribution must stay readable (secondary, also at night). */
+            Text("© OpenStreetMap contributors · ODbL").saryText(.micro).foregroundStyle(theme.palette.textSecondary)
                 .environment(\.layoutDirection, .leftToRight)
         }
         .padding(theme.space(.l))

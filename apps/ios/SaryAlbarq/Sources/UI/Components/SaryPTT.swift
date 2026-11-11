@@ -19,10 +19,14 @@ struct SaryPTTButton: View {
     /// target ABOVE the capsule (a sibling, not a child), so the talk gesture never sees that touch.
     var channelLabel: String? = nil
     var openChannels: (() -> Void)? = nil
+    /// The pill's minimum width when the dock is short of room (`LiveFit.dock`); nil: 200 / 178.
+    /// Below the regular width the side padding tightens and the title scales down (never wraps).
+    var pillMinWidth: CGFloat? = nil
 
     @Environment(\.sary) private var theme
     @State private var pressing = false
     @State private var pulse = false
+    @Environment(\.scenePhase) private var scenePhase
     /// «طريقة اللاسلكي»: the wording follows what the button really does (tap to record vs hold).
     @AppStorage(PTTTalkMode.key) private var talkModeRaw = PTTTalkMode.default.rawValue
 
@@ -73,20 +77,26 @@ struct SaryPTTButton: View {
         .accessibilityAction(named: Text(notesMode ? "ابدأ التسجيل" : "ابدأ التكلم")) { actions.pressBegan() }
         .accessibilityAction(named: Text(notesMode ? "أرسل الرسالة" : "أوقف التكلم")) { notesMode ? actions.pressBegan() : actions.pressEnded() }
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .onChange(of: isOnAir) { _, on in
-            guard on, !theme.reduceMotion else { pulse = false; return }
-            pulse = false
-            withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
-        }
+        /* The on-air loop runs only while on air, on screen and in the foreground. */
+        .onChange(of: isOnAir) { _, _ in updatePulse() }
+        .onChange(of: scenePhase) { _, _ in updatePulse() }
+        .onDisappear { pulse = false }
+        /* Raw on purpose (docs/MOTION.md): it confirms an eyes-free action the driver is doing. */
         .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
-        .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
+        .saryHaptic(.selection, trigger: isListening, condition: { _, new in new })
         .animation(theme.animation(.snappy), value: state)
             if channelLabel != nil, openChannels != nil {
                 pillFace(h: h, d: d, fill: nil, ink: ink, placeholder: true)
             }
         }
-        .fixedSize()
+        /* Vertical only (was both): fixed horizontally the pill kept its full title width and pushed
+         * the dock's row off a 375 pt screen; now it narrows down to its minimum width and the
+         * title scales (`minimumScaleFactor`). With room it is exactly as wide as before. */
+        .fixedSize(horizontal: false, vertical: true)
     }
+
+    private var regularPillWidth: CGFloat { big ? 200 : 178 }
+    private var pillNarrow: Bool { (pillMinWidth ?? regularPillWidth) < regularPillWidth }
 
     /// The capsule's content. `placeholder`: the same layout, invisible, with only the channel
     /// label live (the sibling layer that takes the label's taps).
@@ -101,9 +111,9 @@ struct SaryPTTButton: View {
                 }
             }
         }
-        .padding(.leading, big ? 26 : 20)
-        .padding(.trailing, big ? 28 : 20)
-        .frame(minWidth: big ? 200 : 178, minHeight: h, maxHeight: h)
+        .padding(.leading, pillNarrow ? 16 : (big ? 26 : 20))
+        .padding(.trailing, pillNarrow ? 16 : (big ? 28 : 20))
+        .frame(minWidth: pillMinWidth ?? regularPillWidth, minHeight: h, maxHeight: h)
         if placeholder {
             content.allowsHitTesting(true)
         } else {
@@ -247,7 +257,7 @@ struct SaryPTTButton: View {
             if let c = channelLabel, openChannels != nil {
                 Button { openChannels?() } label: {
                     Text(c)
-                        .font(.sary(10, .medium))
+                        .font(.sary(12, .medium, relativeTo: .caption))
                         .foregroundStyle(captionColor)
                         .lineLimit(1)
                         .fixedSize()
@@ -275,19 +285,27 @@ struct SaryPTTButton: View {
                     .accessibilityIdentifier("outing-ptt-caption")
             }
         }
-        .onChange(of: isOnAir) { _, on in
-            guard on, !theme.reduceMotion else { pulse = false; return }
-            pulse = false
-            withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
-        }
+        /* The on-air loop runs only while on air, on screen and in the foreground. */
+        .onChange(of: isOnAir) { _, _ in updatePulse() }
+        .onChange(of: scenePhase) { _, _ in updatePulse() }
+        .onDisappear { pulse = false }
+        /* Raw on purpose (docs/MOTION.md): it confirms an eyes-free action the driver is doing. */
         .sensoryFeedback(.impact(weight: .medium), trigger: isTalking) { _, new in new }
-        .sensoryFeedback(.selection, trigger: isListening) { _, new in new }
+        .saryHaptic(.selection, trigger: isListening, condition: { _, new in new })
         .animation(theme.animation(.snappy), value: state)
     }
 
     private var isTalking: Bool { if case .talking = state { return true }; return false }
     private var isListening: Bool { if case .listening = state { return true }; return false }
     private var isOnAir: Bool { isTalking || isListening }
+
+    /// Starts or stops the on-air halo. Kept while driving on purpose: it says
+    /// «you are transmitting» on the control the driver's thumb is on.
+    private func updatePulse() {
+        pulse = false
+        guard isOnAir, !theme.reduceMotion, scenePhase == .active else { return }
+        withAnimation(.easeOut(duration: 1.1).repeatForever(autoreverses: false)) { pulse = true }
+    }
 
     @ViewBuilder
     private func halo(size: CGFloat) -> some View {
@@ -380,7 +398,7 @@ struct SaryPTTButton: View {
             if case .talking = state { return "اضغط مرة ثانية ترسل الرسالة لكل اللي على ترددك" }
             return "اضغط مرة وحدة تبدأ التسجيل، واضغط مرة ثانية أو «أرسل» ترسلها لكل اللي على ترددك"
         }
-        return "امسك الزر وتكلم، يسمعك الربع مباشرة. ارفع إصبعك لتوقف"
+        return "امسك الزر وتكلم، يسمعك الأصدقاء مباشرة. ارفع إصبعك لتوقف"
     }
 
     private var captionColor: Color {

@@ -54,9 +54,17 @@ struct NavOptionsSheet: View {
         }
         .padding(theme.space(.l))
         .background(p.elevated.ignoresSafeArea())
-        .presentationDetents([.fraction(0.52), .large])
-        .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.52)))
+        .presentationDetents([.custom(NavOptionsDetent.self), .large])
+        .presentationBackgroundInteraction(.enabled(upThrough: .custom(NavOptionsDetent.self)))
         .accessibilityIdentifier("nav.options")
+    }
+
+    /// About half the screen as before (52 %), but at least 400 pt: on an SE the half sheet left
+    /// the route list squeezed to a sliver between the header and «ابدأ الملاحة».
+    struct NavOptionsDetent: CustomPresentationDetent {
+        static func height(in context: Context) -> CGFloat? {
+            SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: context.maxDetentValue)
+        }
     }
 
     private var icon: String {

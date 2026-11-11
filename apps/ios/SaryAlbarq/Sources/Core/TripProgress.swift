@@ -406,16 +406,41 @@ enum ReturnRoute {
 /// One return trip's guidance on this screen: undecided until the trip's guidance would
 /// start, then the desert leg (`BackTrack` on the outbound trail, the trip's own road guidance
 /// waits) until it arrives at the junction, then the road (the trip's normal guidance).
+///
+/// An on-phone return (`ReturnRoute.PhonePlan`: no server trip, e.g. no network after the end)
+/// has no trip guidance of its own to hand over to: at the junction it asks `cityLeg(roadRouting:)`
+/// — the fastest road when a road route can be had, else the outbound city part retraced
+/// (`cityTrail`, which also holds any road guidance back).
 struct ReturnGuide: Equatable {
-    enum Phase: Equatable { case undecided, desert, road }
+    enum Phase: Equatable { case undecided, desert, cityTrail, road }
     private(set) var phase: Phase = .undecided
+    /// Set only for an on-phone return: what its city part is made of.
+    private(set) var phone: ReturnRoute.PhonePlan?
 
     /// The trip's road guidance must not start (no new desert route while retracing the trail).
-    var holdsRoadGuidance: Bool { phase == .desert }
+    var holdsRoadGuidance: Bool { phase == .desert || phase == .cityTrail }
 
     mutating func begin(_ s: ReturnRoute.Start) {
         guard phase == .undecided else { return }
         if case .desertTrail = s { phase = .desert } else { phase = .road }
+    }
+
+    /// «طريق الرجعة» on this phone (the person's explicit ask: replaces whatever was decided).
+    /// True when the desert leg comes first; false: start the city leg now (`cityLeg`).
+    @discardableResult
+    mutating func beginOnPhone(_ p: ReturnRoute.PhonePlan) -> Bool {
+        phone = p
+        phase = p.desertLeg.count >= 2 ? .desert : .road
+        return phase == .desert
+    }
+
+    /// The city part of an on-phone return (at the junction, or at once without a desert leg).
+    /// `.none` for a server return trip: its own trip guidance takes the city part.
+    mutating func cityLeg(roadRouting: Bool) -> ReturnRoute.CityLeg {
+        guard let p = phone else { return .none }
+        let leg = ReturnRoute.cityLeg(p, roadRouting: roadRouting)
+        if case .outboundTrail = leg { phase = .cityTrail } else { phase = .road }
+        return leg
     }
 
     /// A back-track update of the desert leg: true once, when it reached the junction — hand
@@ -426,9 +451,103 @@ struct ReturnGuide: Equatable {
         return true
     }
 
-    /// The desert leg was stopped (by the person, or replaced by «على مساري»): the road from here.
+    /// The desert leg (or the city trail) was stopped (by the person, or replaced by «على مساري»):
+    /// the road from here.
     mutating func cancel() {
-        if phase == .desert { phase = .road }
+        if phase == .desert || phase == .cityTrail { phase = .road }
+    }
+}
+
+// MARK: «طريق الرجعة» with no server trip (no network after the end)
+
+extension ReturnRoute {
+    /// How «طلعة الرجعة» is made.
+    enum Mode: Equatable {
+        /// Online after the end: a new return trip on the server, whose own guidance applies the
+        /// desert-then-fastest-road rule (`LiveOutingController.startReturnDesertLegIfNeeded`).
+        case newTrip
+        /// No network, or the outing still running (no new outing while one runs): on this
+        /// phone, from this outing's own trail and its saved junction.
+        case onPhone(PhonePlan)
+    }
+
+    struct PhonePlan: Equatable {
+        /// The desert part of the outbound trail, junction first (exactly `desertLeg`); empty
+        /// when I am not on it (city side, at the junction, far from the trail).
+        var desertLeg: [TrailPoint]
+        /// Retraced for the city part when no road route can be had, start first: the outbound
+        /// trail up to the junction after a desert leg; the whole trail without one (`BackTrack`
+        /// re-acquires its nearest point, so from the city part it leads back along the city
+        /// part). Empty when the desert leg already ends at the start (junction unknown).
+        var cityTrail: [TrailPoint]
+        /// Where the return ends: the outbound trail's first point.
+        var home: LngLat
+        /// False: nothing told the city from the desert, so the whole trail is retraced.
+        var junctionKnown: Bool
+    }
+
+    enum CityLeg: Equatable {
+        /// Nothing left (the desert leg ended at the start, or no trail).
+        case none
+        /// A road route to the start point (network, or a road graph on the phone).
+        case fastestRoad(to: LngLat)
+        /// The outbound city part retraced on the phone: the road we came by, not the fastest.
+        case outboundTrail([TrailPoint])
+    }
+
+    /// Online × outing active/ended × junction known/unknown: the server makes the return trip
+    /// only when online after the end; everything else is guided on this phone.
+    static func mode(online: Bool, outingEnded: Bool, trail pts: [TrailPoint], split: Split, me: LngLat) -> Mode {
+        if online && outingEnded { return .newTrip }
+        return .onPhone(phonePlan(trail: pts, split: split, me: me))
+    }
+
+    /// The on-phone return from `me`: the desert part back to the junction (never anything else
+    /// in the desert — the same leg a server return trip retraces), then the city part (`cityLeg`).
+    static func phonePlan(trail pts: [TrailPoint], split: Split, me: LngLat) -> PhonePlan {
+        var desert: [TrailPoint] = []
+        if case let .desertTrail(leg) = start(trail: pts, split: split, me: me) { desert = leg }
+        let city: [TrailPoint]
+        if desert.isEmpty {
+            city = pts
+        } else if split.junction >= 1, pts.indices.contains(split.junction) {
+            city = Array(pts[...split.junction])
+        } else {
+            city = []
+        }
+        return PhonePlan(desertLeg: desert, cityTrail: city.count >= 2 ? city : [],
+                         home: pts.first?.position ?? me, junctionKnown: split.source != .none)
+    }
+
+    /// The city part: the fastest road when a road route can be had, else the outbound city part
+    /// retraced (said with `cityTrailNote`).
+    static func cityLeg(_ p: PhonePlan, roadRouting: Bool) -> CityLeg {
+        guard p.cityTrail.count >= 2 else { return .none }
+        return roadRouting ? .fastestRoad(to: p.home) : .outboundTrail(p.cityTrail)
+    }
+
+    /// A road route for the city part can be had: online, or a road graph on the phone. The app
+    /// has none today (offline areas hold map tiles, not routing tiles; `RoadSnap` only puts the
+    /// car on a drawn street), so offline this is false and the outbound city part is retraced.
+    static func roadRouting(online: Bool, offlineRoadGraph: Bool = false) -> Bool { online || offlineRoadGraph }
+
+    static let cityTrailNote = "ما فيه نت · نكمل على طريق رحتك في المدينة، مو أسرع طريق"
+    static let fastestRoadNote = "نكمل بأسرع طريق إلى نقطة البداية"
+
+    /// Said when an on-phone return starts on its desert leg.
+    static func desertNote(_ p: PhonePlan, roadRouting: Bool) -> String {
+        guard p.junctionKnown else { return "نرجّعك على كامل مسارك من جوالك: هذا طريق رحتك، مو أسرع طريق" }
+        return roadRouting ? "نرجع على نفس دربك في البر، وبعده أسرع طريق في المدينة"
+                           : "ما فيه نت · نرجع على نفس دربك في البر، وبعده طريق رحتك في المدينة"
+    }
+
+    /// Said when the city leg starts.
+    static func cityNote(_ leg: CityLeg) -> String? {
+        switch leg {
+        case .none: return nil
+        case .fastestRoad: return fastestRoadNote
+        case .outboundTrail: return cityTrailNote
+        }
     }
 }
 
@@ -578,5 +697,46 @@ enum ArrivalOrder {
 
     static func everyoneArrived(arrivals: [String: Double], memberIds: [String]) -> Bool {
         !memberIds.isEmpty && memberIds.allSatisfy { arrivals[$0] != nil }
+    }
+}
+
+// MARK: - «جاهز للبر»
+
+/// Before leaving coverage: does this phone hold what the desert needs with no signal? The
+/// offline map of the destination (a complete saved area holds it), the desert grid there
+/// («دروب البر», saved with the area by `DesertTileStore.prefetch`) and the trail recording that
+/// «طريق الرجعة» retraces. Pure: the plan's row feeds it from the stores.
+struct DesertReadiness: Equatable {
+    var map: Bool
+    /// nil: no desert routing there (outside the Kingdom), so not asked.
+    var trails: Bool?
+    var returnTrail: Bool
+
+    var ready: Bool { map && trails != false && returnTrail }
+
+    static func make(destination: LngLat, savedAreas: [OfflinePlan.Box], trailsOnPhone: Bool?, trailRecording: Bool) -> DesertReadiness {
+        DesertReadiness(map: savedAreas.contains { holds($0, destination) }, trails: trailsOnPhone, returnTrail: trailRecording)
+    }
+
+    /// The saved area's box holds `p` (edges included).
+    static func holds(_ b: OfflinePlan.Box, _ p: LngLat) -> Bool {
+        p.lat >= b.south && p.lat <= b.north && p.lng >= b.west && p.lng <= b.east
+    }
+
+    /// «جاهز للبر: الخريطة ✓ الدروب ✓ طريق الرجعة ✓».
+    var line: String {
+        func mark(_ ok: Bool) -> String { ok ? "✓" : "✗" }
+        var parts = ["الخريطة \(mark(map))"]
+        if let trails { parts.append("الدروب \(mark(trails))") }
+        parts.append("طريق الرجعة \(mark(returnTrail))")
+        return (ready ? "جاهز للبر: " : "جاهزية البر: ") + parts.joined(separator: " ")
+    }
+
+    /// What to do first, while there is still a network.
+    var hint: String? {
+        if !map { return "احفظ خريطة المنطقة بدون نت قبل تطلع من التغطية، وتنحفظ معها الدروب" }
+        if trails == false { return "الدروب ما انحفظت: احفظ خريطة المنطقة مرة ثانية وأنت على نت" }
+        if !returnTrail { return "شغّل «سجّل مساري» عشان «طريق الرجعة» يرجّعك على دربك بدون نت" }
+        return nil
     }
 }

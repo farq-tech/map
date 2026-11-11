@@ -31,6 +31,11 @@ struct SaryAlertLane: View {
         "+\(SaryFormat.number(hidden)) \(hidden == 1 ? "تنبيه" : "تنبيهات")"
     }
 
+    static func isToast(_ alert: LiveAlertUI) -> Bool {
+        if case .toast = alert.kind { return true }
+        return false
+    }
+
     /// What the lane shows: the first `limit`, or all of them once expanded.
     static func visible(_ alerts: [LiveAlertUI], limit: Int, expanded: Bool) -> (shown: [LiveAlertUI], hidden: Int) {
         let l = max(1, limit)
@@ -56,7 +61,7 @@ struct SaryAlertLane: View {
                 Button { expanded.toggle() } label: {
                     HStack(spacing: 4) {
                         Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
+                            .saryGlyph(11, weight: .bold)
                         Text(expanded ? "إخفاء" : Self.overflowLabel(v.hidden))
                             .saryText(.caption, weight: .bold)
                     }
@@ -68,6 +73,7 @@ struct SaryAlertLane: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
+                .transition(SaryTransition.chipPop(theme))
                 .accessibilityIdentifier("alerts.more")
                 .accessibilityLabel(Text(expanded ? "إخفاء التنبيهات" : "\(Self.overflowLabel(v.hidden))، اعرضها"))
             }
@@ -82,10 +88,10 @@ struct SaryAlertLane: View {
         VStack(spacing: theme.space(.s)) {
             ForEach(list) { alert in
                 SaryAlertCard(alert: alert, tapped: { tapped(alert.id) }, dismiss: { dismiss(alert.id) }, voice: voice, silent: silent)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))
-                    ))
+                    /* Spatial continuity: cards come down out of the status capsule they sit
+                     * under, and leave in place (fade + settle) rather than flying off. A toast
+                     * only rises a little. Both cross-fade under Reduce Motion. */
+                    .transition(Self.isToast(alert) ? SaryTransition.toast(theme) : SaryTransition.banner(theme))
             }
         }
     }
@@ -116,7 +122,7 @@ struct SaryAlertCard: View {
                     Text("خرجت عن المسار").saryText(theme.drive ? .headline : .callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(1)
                     Text("على بعد \(SaryFormat.distance(meters: o.meters)) من «\(o.trackName)» · ارجع باتجاه السهم")
-                        .saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
+                        .saryNumber(.footnote, weight: detailWeight).foregroundStyle(theme.palette.textSecondary).lineLimit(2)
                 }
             }
             .accessibilityLabel(Text("خرجت عن المسار، على بعد \(SaryFormat.distance(meters: o.meters)) من \(o.trackName)"))
@@ -143,29 +149,29 @@ struct SaryAlertCard: View {
             card {
                 ZStack(alignment: .bottomTrailing) {
                     Image(systemName: SaryIcon.warning)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: theme.drive ? 20 : 15, weight: .bold))
                         .foregroundStyle(theme.palette.warningText)
-                        .frame(width: 36, height: 36)
+                        .frame(width: theme.drive ? 48 : 36, height: theme.drive ? 48 : 36)
                         .background(Circle().fill(theme.palette.warning.opacity(0.18)))
                     Circle().fill(Color(rgb: color)).frame(width: 12, height: 12)
                         .overlay(Circle().stroke(theme.palette.background, lineWidth: 2))
                 }
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("\(name) ابتعد عن الربع").saryText(.callout, weight: .bold)
+                    Text("\(name) ابتعد عن الأصدقاء").saryText(theme.drive ? .headline : .callout, weight: .bold)
                         .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                    Text("على بعد \(SaryFormat.distance(meters: meters))").saryNumber(.footnote, weight: .medium)
+                    Text("على بعد \(SaryFormat.distance(meters: meters))").saryNumber(.footnote, weight: detailWeight)
                         .foregroundStyle(theme.palette.textSecondary)
                 }
             }
-            .accessibilityLabel(Text("\(name) ابتعد عن الربع، على بعد \(SaryFormat.distance(meters: meters))"))
+            .accessibilityLabel(Text("\(name) ابتعد عن الأصدقاء، على بعد \(SaryFormat.distance(meters: meters))"))
         case .weather(let w):
             card {
                 WeatherAlertLeading(alert: w)
             } content: {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(w.title).saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                    Text(w.detail).saryNumber(.footnote, weight: .medium).foregroundStyle(theme.palette.textSecondary).lineLimit(w.kind == .flood ? 4 : (theme.drive ? 2 : 3))
+                    Text(w.title).saryText(theme.drive ? .headline : .callout, weight: .bold).foregroundStyle(theme.palette.textPrimary).lineLimit(2)
+                    Text(w.detail).saryNumber(.footnote, weight: detailWeight).foregroundStyle(theme.palette.textSecondary).lineLimit(w.kind == .flood ? 4 : (theme.drive ? 2 : 3))
                 }
             }
             .accessibilityLabel(Text("\(w.title). \(w.detail)"))
@@ -190,7 +196,7 @@ struct SaryAlertCard: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(c.title).saryText(theme.drive ? .headline : .callout, weight: .bold)
                             .foregroundStyle(theme.palette.textPrimary).lineLimit(2)
-                        Text(c.detail).saryNumber(.footnote, weight: .medium)
+                        Text(c.detail).saryNumber(.footnote, weight: detailWeight)
                             .foregroundStyle(theme.palette.textSecondary)
                     }
                 }
@@ -200,6 +206,9 @@ struct SaryAlertCard: View {
             }
         }
     }
+
+    /// A card's second line: medium at rest, bold in drive mode so it still reads in sun glare.
+    private var detailWeight: SaryWeight { theme.drive ? .bold : .medium }
 
     /// «اتجه» on the return-to-rally prompt; «ارجعوا لنقطة التجمع» on separation / stop for leaders.
     @ViewBuilder
@@ -291,7 +300,7 @@ struct SaryVoiceBanner: View {
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text(playing ? "إيقاف الرسالة الصوتية" : "تشغيل رسالة \(clip.senderName) الصوتية"))
-            .sensoryFeedback(.impact(weight: .light), trigger: playing)
+            .saryHaptic(.selection, trigger: playing)
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {

@@ -13,6 +13,18 @@ struct SaryPresenceStyle {
     var dashed: Bool { if case .stale = presence { return true }; return false }
     var paused: Bool { presence == .paused }
 
+    /// The presence without its timestamp: what motion keys on, so a member
+    /// going live → stale → paused animates once per change (a smooth colour
+    /// and opacity shift), not every time the «since» moves.
+    enum Phase: Equatable { case live, stale, paused }
+    var phase: Phase {
+        switch presence {
+        case .live: return .live
+        case .stale: return .stale
+        case .paused: return .paused
+        }
+    }
+
     func label(now: Date) -> String {
         switch presence {
         case .live: return "مباشر"
@@ -53,8 +65,9 @@ struct SaryAvatar: View {
             if let photo {
                 Image(uiImage: photo).resizable().scaledToFill().clipShape(Circle())
             } else {
+                /* Fixed size: the circle does not grow with Dynamic Type, so neither does its letter. */
                 Text(initial)
-                    .font(.sary(size * 0.44, .bold))
+                    .font(.saryFixed(size * 0.44, .bold))
                     .foregroundStyle(SaryCarColors.ink(on: color))
                     .offset(y: size * 0.03)
             }
@@ -91,8 +104,11 @@ struct SaryAvatar: View {
                     .overlay(Circle().stroke(theme.palette.stale, lineWidth: 1.5))
                     /* Outward on the trailing side in RTL and LTR alike (not `.offset(x:)`). */
                     .padding(.trailing, -2).padding(.bottom, -2)
+                    .transition(SaryTransition.chipPop(theme))
             }
         }
+        /* Live → late → silent: colour drains and the ring turns dashed smoothly, never a jump. */
+        .saryAnimation(.smooth, value: style.phase)
         .accessibilityHidden(true)
     }
 
@@ -116,9 +132,9 @@ struct SaryPresenceBadge: View {
             case .live:
                 Circle().fill(p.live).frame(width: 7, height: 7)
             case .stale:
-                Image(systemName: "clock").font(.system(size: 10, weight: .bold))
+                Image(systemName: "clock").saryGlyph(10, weight: .bold)
             case .paused:
-                Image(systemName: SaryIcon.pause).font(.system(size: 9, weight: .heavy))
+                Image(systemName: SaryIcon.pause).saryGlyph(9, weight: .heavy)
             }
             Text(style.label(now: now))
                 .saryText(.caption)
@@ -133,6 +149,7 @@ struct SaryPresenceBadge: View {
                 Capsule().strokeBorder(p.stale, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
             }
         }
+        .saryAnimation(.smooth, value: style.phase)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(style.accessibilityLabel(now: now)))
     }
@@ -235,8 +252,10 @@ struct SaryRoleChip: View {
         if role != .member {
             HStack(spacing: 3) {
                 Image(systemName: role == .leader ? SaryIcon.crown : SaryIcon.shield)
-                    .font(.system(size: 9, weight: .bold))
-                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro)
+                    .saryGlyph(9, weight: .bold)
+                /* Stays 11 pt (it sits beside the one-line name, which would truncate sooner);
+                 * the heaviest weight keeps it legible. Drive mode floors it at 12 pt. */
+                Text(role == .leader ? "أمير الطلعة" : "نائب الأمير").saryText(.micro, weight: .heavy)
             }
             .foregroundStyle(theme.palette.accentText)
             .padding(.horizontal, 6)
@@ -278,7 +297,10 @@ struct SaryParticipantRow: View {
                             Text(nick).saryText(.caption).foregroundStyle(theme.palette.textTertiary).lineLimit(1)
                                 .accessibilityIdentifier("participant.nickname")
                         }
-                        line {
+                        /* Badges wrap to a second line instead of overflowing into the distance
+                         * (Display Zoom, large text); one line, as before, when they fit. */
+                        let badges = ax ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(SaryFlowLayout(spacing: 6, lineSpacing: 4))
+                        badges {
                             if let s = participant.silentSince { SarySilentBadge(since: s, now: now, reason: participant.presenceReason) }
                             else if let r = participant.presenceReason, let s = participant.presence.staleSince ?? (participant.neverShared ? now : nil) {
                                 /* Not live yet not «silent» (under 10 min, or never sent): say why, calmly. */
@@ -301,7 +323,7 @@ struct SaryParticipantRow: View {
                                 .accessibilityIdentifier("participant.convoy")
                         }
                         if participant.tripArrived {
-                            SaryTripArrivedBadge()
+                            SaryTripArrivedBadge().transition(SaryTransition.chipPop(theme))
                         } else if let r = participant.tripRemainingMeters {
                             Text("باقي \(SaryFormat.distance(meters: r))" + (participant.tripRemainingApprox ? " تقريبًا" : "") + " للوجهة")
                                 .saryNumber(.caption, weight: .bold)
@@ -323,6 +345,10 @@ struct SaryParticipantRow: View {
             .frame(minHeight: theme.minTarget + 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            /* Presence changes (live → late → silent) recolour the row in one smooth shift. */
+            .saryAnimation(.smooth, value: SaryPresenceStyle(presence: participant.presence).phase)
+            .saryAnimation(.smooth, value: participant.silentSince != nil)
+            .saryAnimation(.celebrate, value: participant.tripArrived)
         }
         .buttonStyle(SaryRowPressStyle())
         .accessibilityElement(children: .combine)
@@ -393,10 +419,16 @@ struct SaryParticipantCard: View {
     var state: ParticipantCardUIState
     var actions: ParticipantCardActions = .init()
     @Environment(\.sary) private var theme
+    @Environment(\.saryWidthClass) private var widthClass
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var confirmRemove = false
 
     var body: some View {
         let p = state.participant
+        /* Two buttons side by side leave ~100 pt each on a 320 pt screen: stack them there. */
+        let pair = widthClass == .narrow || typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: theme.space(.s)))
+            : AnyLayout(HStackLayout(spacing: theme.space(.s)))
         VStack(spacing: theme.space(.l)) {
             HStack(alignment: .center, spacing: theme.space(.m)) {
                 SaryAvatar(name: p.name, color: p.color, photo: p.photo, presence: p.presence, size: theme.drive ? 68 : 58)
@@ -415,18 +447,11 @@ struct SaryParticipantCard: View {
 
             let speed = p.presence.isLive ? p.speedKmh : nil
             if p.distanceMeters != nil || p.batteryPercent != nil || speed != nil {
-                HStack(spacing: theme.space(.m)) {
-                    if p.distanceMeters != nil {
-                        stat(title: "المسافة") {
-                            SaryDistanceLabel(meters: p.distanceMeters, bearing: p.bearingDegrees, style: .headline)
-                        }
-                    }
-                    if let k = speed {
-                        stat(title: "السرعة") { SarySpeedLabel(kmh: k, style: .headline) }
-                    }
-                    if let b = p.batteryPercent {
-                        stat(title: "البطارية") { SaryBatteryLabel(percent: b).saryText(.headline) }
-                    }
+                /* Side by side when the numbers fit (every standard iPhone), stacked when they would
+                 * overflow their boxes (Display Zoom, large text). */
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: theme.space(.m)) { stats(p, speed: speed) }
+                    VStack(spacing: theme.space(.s)) { stats(p, speed: speed) }
                 }
             }
 
@@ -443,7 +468,7 @@ struct SaryParticipantCard: View {
                     .accessibilityIdentifier("participant.nudge")
             }
 
-            HStack(spacing: theme.space(.s)) {
+            pair {
                 Button(action: actions.call) { SaryButtonLabel(title: "اتصال", systemImage: SaryIcon.phone) }
                     .buttonStyle(.sary(.secondary))
                     .disabled(!p.hasPhone)
@@ -451,12 +476,12 @@ struct SaryParticipantCard: View {
                     .buttonStyle(.sary(.secondary))
                     .disabled(!p.hasPhone)
             }
-            HStack(spacing: theme.space(.s)) {
+            pair {
                 Button(action: actions.showOnMap) { SaryButtonLabel(title: "أظهره على الخريطة", systemImage: SaryIcon.showOnMap) }
                     .buttonStyle(.saryPrimary)
                 if !p.isMe {
-                    /* «روح له»: only to a live position; an old one explains why instead of guiding. */
-                    Button(action: actions.navigate) { SaryButtonLabel(title: "روح له", systemImage: SaryIcon.directions) }
+                    /* «اتجه» (was «روح له»): only to a live position; an old one explains why instead of guiding. */
+                    Button(action: actions.navigate) { SaryButtonLabel(title: SaryCopy.go, systemImage: SaryIcon.directions) }
                         .buttonStyle(.sary(.secondary))
                         .opacity(p.presence.isLive ? 1 : 0.55)
                         .accessibilityIdentifier("participant.navigate")
@@ -480,6 +505,21 @@ struct SaryParticipantCard: View {
         .confirmationDialog("إزالة \(p.name) من الطلعة؟", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("أزله", role: .destructive, action: actions.removeMember)
             Button("إلغاء", role: .cancel) {}
+        }
+    }
+
+    @ViewBuilder
+    private func stats(_ p: ParticipantUI, speed: Double?) -> some View {
+        if p.distanceMeters != nil {
+            stat(title: "المسافة") {
+                SaryDistanceLabel(meters: p.distanceMeters, bearing: p.bearingDegrees, style: .headline)
+            }
+        }
+        if let k = speed {
+            stat(title: "السرعة") { SarySpeedLabel(kmh: k, style: .headline) }
+        }
+        if let b = p.batteryPercent {
+            stat(title: "البطارية") { SaryBatteryLabel(percent: b).saryText(.headline) }
         }
     }
 
@@ -508,8 +548,9 @@ struct SaryNearbyMark: View {
     var body: some View {
         let p = theme.palette
         HStack(spacing: 3) {
-            Image(systemName: Self.icon).font(.system(size: compact ? 8 : 10, weight: .bold))
-            Text(Self.text).saryText(.micro, weight: .medium).lineLimit(1)
+            Image(systemName: Self.icon).saryGlyph(compact ? 8 : 10, weight: .bold)
+            /* 11 pt inside a name chip: bold (was medium) so it survives sun glare. */
+            Text(Self.text).saryText(.micro, weight: .bold).lineLimit(1)
         }
         .foregroundStyle(p.textSecondary)
         .padding(.horizontal, compact ? 5 : 6)

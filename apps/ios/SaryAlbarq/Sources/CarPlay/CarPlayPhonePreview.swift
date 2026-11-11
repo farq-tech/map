@@ -64,7 +64,7 @@ struct CarPlayPhonePreview: View {
             switch mode {
             case "members":
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("الربع — " + CarPlayPresenter.mySharingLine(i)).font(.headline)
+                    Text("الأصدقاء — " + CarPlayPresenter.mySharingLine(i)).font(.headline)
                     ForEach(CarPlayPresenter.memberRows(i)) { r in
                         HStack {
                             Image(uiImage: CarPlayCoordinator.dot(r.color, live: r.isLive, alert: r.sos || r.stuck))

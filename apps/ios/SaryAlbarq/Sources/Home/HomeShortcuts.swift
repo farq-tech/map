@@ -95,6 +95,15 @@ enum HomeSheetRules {
         }
     }
 
+    /// The collapsed height for the current text size: `textScale` is the body text's scale
+    /// (1 at the default size). Text in the collapsed sheet grows with Dynamic Type while the
+    /// sheet stayed fixed, so its card was cut off (collapsed, nothing scrolls); the sheet now
+    /// grows with it, up to 1.4×, and `frameHeight` still keeps the map visible above it.
+    static func collapsedHeight(card: HomeStateCard, textScale: Double) -> Double {
+        let k = textScale.isFinite ? min(1.4, max(1, textScale)) : 1
+        return (collapsedHeight(card: card) * k).rounded()
+    }
+
     /// Clamp a GeometryReader's first (sometimes zero) measurement before it reaches `.frame`.
     /// SwiftUI may lay out the home screen once before safe-area insets are available.
     static func frameHeight(screen: Double, preferred: Double, drag: Double) -> Double {
@@ -127,7 +136,7 @@ enum HomeSheetRules {
 
 /// The ONE state card on the collapsed home sheet (UI-AUDIT §٢ «الرئيسية»), decided here and
 /// unit-tested in HomeFlowTests: a running outing, else the planned / paused one, else (first
-/// time, or nothing current) «أنشئ طلعة وادعُ ربعك» with «انضم برابط».
+/// time, or nothing current) «أنشئ طلعة وادعُ أصدقاءك» with «انضم برابط».
 enum HomeStateCard: Equatable {
     /// «طلعتك جارية».
     case active(String)
@@ -136,7 +145,7 @@ enum HomeStateCard: Equatable {
     case invite
     /// «طلعتك القادمة»: planned (not started) or paused.
     case upcoming(String)
-    /// «أنشئ طلعة وادعُ ربعك» + «انضم برابط».
+    /// «أنشئ طلعة وادعُ أصدقاءك» + «انضم برابط».
     case start
     /// The list could not load and nothing is on screen: say so (never an empty home).
     case failed(String)

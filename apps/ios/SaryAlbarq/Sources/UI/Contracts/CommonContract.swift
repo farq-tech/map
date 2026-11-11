@@ -38,7 +38,7 @@ enum OutingStatusUI: Equatable {
         switch self {
         case .active: return "جارية"
         case .paused: return "متوقفة مؤقتًا"
-        case .notStarted: return "لم تبدأ"
+        case .notStarted: return "ما بدأت"
         case .ended: return "انتهت"
         }
     }

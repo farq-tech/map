@@ -108,4 +108,68 @@ final class IntroPolicyTests: XCTestCase {
         let size = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int)
         XCTAssertLessThan(size, 300_000)
     }
+
+    // MARK: screen fit (IntroScene.visibleRect / titleMaxWidth)
+
+    func testIntroIsCroppedEvenlyNeverScaled() {
+        let pm = IntroScene.visibleRect(screen: CGSize(width: 440, height: 956))
+        XCTAssertEqual(pm, CGRect(origin: .zero, size: IntroScene.size))
+        let se = IntroScene.visibleRect(screen: CGSize(width: 375, height: 667))
+        XCTAssertEqual(se.width, 375, accuracy: 0.001)
+        XCTAssertEqual(se.height, 667, accuracy: 0.001)
+        XCTAssertEqual(se.minX, 32.5, accuracy: 0.001)
+        XCTAssertEqual(se.minY, 144.5, accuracy: 0.001)
+    }
+
+    func testLogoAndNameStayInsideTheSafeAreaOnEveryPhone() {
+        // (screen, top inset, bottom inset): SE, mini, 15, Pro Max.
+        let phones: [(CGSize, CGFloat, CGFloat)] = [
+            (CGSize(width: 375, height: 667), 20, 0), (CGSize(width: 375, height: 812), 50, 34),
+            (CGSize(width: 393, height: 852), 59, 34), (CGSize(width: 440, height: 956), 62, 34),
+            (CGSize(width: 320, height: 693), 48, 28), (CGSize(width: 320, height: 568), 20, 0),  // Display Zoom
+        ]
+        for (screen, top, bottom) in phones {
+            let v = IntroScene.visibleRect(screen: screen)
+            let safeTop = v.minY + top, safeBottom = v.maxY - bottom
+            // The logo's glow top (r 30 + margin) and the name block (≈ 62 + 110 pt tall).
+            XCTAssertGreaterThan(IntroScene.logoRest.y - 60, safeTop, "\(screen)")
+            XCTAssertLessThan(IntroScene.logoRest.y + 62 + 110, safeBottom, "\(screen)")
+            XCTAssertGreaterThanOrEqual(IntroScene.logoRest.x - 40, v.minX)
+        }
+    }
+
+    func testTitleWidthFitsTheVisibleScreen() {
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 320), 272, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 375), 327, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 393), 345, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 600), 392, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 0), 120, accuracy: 0.001)
+    }
+}
+
+/// The handoff into the app and the onboarding step slide.
+final class IntroHandoffTests: XCTestCase {
+    func testTheIntroOpensUpAsItFadesExceptUnderReduceMotion() {
+        XCTAssertGreaterThan(IntroHandoff.removalScale(reduceMotion: false), 1)
+        XCTAssertLessThanOrEqual(IntroHandoff.removalScale(reduceMotion: false), 1.08, "a touch, not a zoom")
+        XCTAssertEqual(IntroHandoff.removalScale(reduceMotion: true), 1)
+    }
+
+    func testFadesKeepTheirLengths() {
+        XCTAssertEqual(IntroHandoff.fade(.finished), 0.6)
+        XCTAssertEqual(IntroHandoff.fade(.skipped), 0.35)
+        XCTAssertEqual(IntroHandoff.fade(.interrupted), 0.2)
+        XCTAssertEqual(IntroHandoff.fade(.launchOnly), 0.4)
+        XCTAssertLessThan(IntroHandoff.fade(.interrupted), IntroHandoff.fade(.skipped), "a launch for something leaves fastest")
+    }
+
+    func testOnboardingStepsSlideOnAndBack() {
+        XCTAssertLessThan(OnboardingMotion.rank(.intro), OnboardingMotion.rank(.profile))
+        XCTAssertLessThan(OnboardingMotion.rank(.profile), OnboardingMotion.rank(.locationExplainer))
+        XCTAssertEqual(OnboardingMotion.Gesture.allCases.first, .rest, "the explainer gesture starts and ends at rest")
+        XCTAssertEqual(OnboardingMotion.Gesture.rest.scale, 1)
+        XCTAssertEqual(OnboardingMotion.Gesture.rest.lift, 0)
+        XCTAssertFalse(OnboardingMotion.plays(reduceMotion: true))
+        XCTAssertTrue(OnboardingMotion.plays(reduceMotion: false))
+    }
 }

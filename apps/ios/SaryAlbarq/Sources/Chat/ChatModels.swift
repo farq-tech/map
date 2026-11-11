@@ -300,3 +300,22 @@ enum BlockedUsers {
         save(load(defaults).filter { $0.user_id != userId }, defaults: defaults)
     }
 }
+
+/// How a chat bubble arrives: from its own side (mine sit at the trailing end, the left in
+/// Arabic; theirs at the leading end), a short slide, and only once the thread has settled
+/// (the first page and older pages land without motion). Pure (`ChatTests`).
+enum ChatMotion {
+    /// The slide length, points.
+    static let entry: Double = 28
+    /// After the first page has landed, before arrivals animate.
+    static let settleDelay: TimeInterval = 0.4
+
+    /// Screen x offset the bubble starts at (positive = right): it comes in from its own side.
+    static func entryOffsetX(mine: Bool, rightToLeft: Bool) -> Double {
+        let trailingIsLeft = rightToLeft
+        let fromLeft = mine ? trailingIsLeft : !trailingIsLeft
+        return fromLeft ? -entry : entry
+    }
+
+    static func animatesArrivals(loaded: Bool, settled: Bool) -> Bool { loaded && settled }
+}

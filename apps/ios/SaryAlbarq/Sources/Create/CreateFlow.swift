@@ -1,7 +1,30 @@
 import Foundation
 
-// «طلعة جديدة»: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ ربعك.
+// «طلعة جديدة»: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ أصدقاءك.
 // Pure state and text, no UI (tested in CreateFlowTests).
+
+/// Which way a step change slides. Going on, the next step enters from the reading end and
+/// the old one leaves toward the start: in Arabic (RTL) the new step comes in from the LEFT,
+/// in LTR from the right. Edges are semantic (`trailing` = left in RTL), so SwiftUI mirrors.
+enum CreateStepMotion {
+    enum Side: Equatable { case left, right }
+    /// Semantic, like SwiftUI's `HorizontalEdge` (this file stays free of UI imports).
+    enum Edge: Equatable { case leading, trailing }
+
+    static func isForward(from old: CreateStep, to new: CreateStep) -> Bool { new.rawValue >= old.rawValue }
+
+    /// The semantic edge the incoming step enters from (the outgoing one leaves by the other).
+    static func insertionEdge(forward: Bool) -> Edge { forward ? .trailing : .leading }
+
+    /// «ابدأ الطلعة» is ready (its emphasis plays): the outing exists and nothing is pending.
+    static func startReady(outingId: String?, creating: Bool) -> Bool { outingId != nil && !creating }
+
+    /// Where that is on screen.
+    static func enterSide(forward: Bool, rightToLeft: Bool) -> Side {
+        let trailing = insertionEdge(forward: forward) == .trailing
+        return trailing == rightToLeft ? .left : .right
+    }
+}
 
 enum CreateCopy {
     /// The server creates the outing and nothing is queued on the phone, so offline we say it
@@ -18,12 +41,12 @@ enum CreateStep: Int, CaseIterable, Equatable {
         switch self {
         case .destination: return "وين رايحين؟"
         case .weather: return "الجو هناك"
-        case .invite: return "ادعُ ربعك"
+        case .invite: return "ادعُ أصدقاءك"
         }
     }
 }
 
-/// What «يناسبنا الجو، كمّل» / «ادعُ ربعك» is waiting on, said on screen while it runs
+/// What «يناسبنا الجو، كمّل» / «ادعُ أصدقاءك» is waiting on, said on screen while it runs
 /// (Build 36 report, item 8: «نجهّز الطلعة…» with no progress looked stuck).
 enum CreateStage: Equatable {
     /// `POST /api/outings` (12 s timeout in `OutingsAPI.call`).
@@ -66,7 +89,12 @@ struct CreateFlowState: Equatable {
         }
     }
 
-    private(set) var step: CreateStep = .destination
+    private(set) var step: CreateStep = .destination {
+        didSet { if step != oldValue { movedForward = CreateStepMotion.isForward(from: oldValue, to: step) } }
+    }
+    /// The last step change went on (true) or back: set in the same mutation as `step`, so the
+    /// step transition that animates that change already reads the right direction.
+    private(set) var movedForward = true
     /// Required: there is no «بدون وجهة» — an outing is a trip with a start and an end.
     private(set) var destination: OutingDestination?
     var name = ""

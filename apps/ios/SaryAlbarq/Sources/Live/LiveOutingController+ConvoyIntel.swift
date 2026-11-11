@@ -11,13 +11,14 @@ extension LiveOutingController {
     }
 
     /// Feed the watch (called with the convoy check on every session / GPS change).
-    func checkConvoyIntel(now: Date = Date()) {
+    /// `members`: the pass's cars when the caller already built them (same input, notes hidden).
+    func checkConvoyIntel(now: Date = Date(), members prebuilt: [MapMember]? = nil) {
         guard let v = session.view, v.status == .active else {
             for k in convoyWatch.lastFired.keys { dismissAlert(k) }
             convoyWatch.reset()
             return
         }
-        let members = LiveOutingPresenter.mapMembers(input, hideNotes: true)
+        let members = prebuilt ?? LiveOutingPresenter.mapMembers(input, hideNotes: true)
         let cars = members.map { m -> ConvoyWatch.Car in
             let live = m.presence == .live
             let speed = live ? m.speedMps.flatMap { $0.isFinite && $0 >= 0 && $0 <= Policy.maxPlausibleMps ? Speed.kmh($0) : nil } : nil

@@ -16,6 +16,8 @@ struct TrackFollowScreen: View {
     @State private var fitKey = 0
     @State private var followMe = true
     @State private var topHeight: CGFloat = 200
+    /// The map's top in window points (it runs under the status bar / Dynamic Island).
+    @State private var mapTop: CGFloat = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
@@ -27,6 +29,11 @@ struct TrackFollowScreen: View {
                              padding: UIEdgeInsets(top: topHeight, left: 0, bottom: 40, right: 0), fitKey: fitKey, followMe: followMe,
                              onUserGesture: { followMe = false })
                     .ignoresSafeArea()
+                    .background(GeometryReader { g in
+                        Color.clear
+                            .onAppear { mapTop = g.frame(in: .global).minY }
+                            .onChange(of: g.frame(in: .global).minY) { _, y in mapTop = y }
+                    })
                 VStack(spacing: theme.space(.s)) {
                     FollowTrackPanel(ui: ui, reverse: {
                         model.reverse()
@@ -42,7 +49,16 @@ struct TrackFollowScreen: View {
                     if approaching { ProgressView().padding(theme.space(.s)).saryGlass(Capsule(), role: .control) }
                 }
                 .padding(.horizontal, theme.space(.m))
-                .background(GeometryReader { g in Color.clear.onAppear { topHeight = g.size.height + 70 } })
+                /* Map chrome: the live screen's cap (the panel and the alerts grew over the whole map). */
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                /* The map runs under the status bar / Dynamic Island: its top padding is where the panel
+                 * really ends on screen (was the panel's height + 70 pt, one device's status bar, measured
+                 * once — an alert arriving later covered the track). */
+                .background(GeometryReader { g in
+                    Color.clear
+                        .onAppear { topHeight = g.frame(in: .global).maxY - mapTop + 12 }
+                        .onChange(of: g.frame(in: .global).maxY) { _, y in topHeight = y - mapTop + 12 }
+                })
                 VStack {
                     Spacer()
                     HStack {

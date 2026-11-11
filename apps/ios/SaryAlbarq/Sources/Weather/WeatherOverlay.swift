@@ -426,9 +426,10 @@ struct WeatherLegendCard: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
+            /* Data attribution over the map: 10 pt semibold, secondary (was 9 pt tertiary). */
             Text(model.attribution)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(p.textTertiary)
+                .saryGlyph(10, weight: .semibold, maxGrowth: SaryGlyph.tightGrowth)
+                .foregroundStyle(p.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .environment(\.layoutDirection, .leftToRight)
                 .frame(maxWidth: .infinity, alignment: .trailing)

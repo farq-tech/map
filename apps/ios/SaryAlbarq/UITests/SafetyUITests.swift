@@ -20,7 +20,7 @@ final class SafetyUITests: XCTestCase {
         XCTAssertTrue(more.waitForExistence(timeout: 20), "«+» is in the floating group")
         more.tap()
         let stuck = any(app, "outing-stuck")
-        XCTAssertTrue(stuck.waitForExistence(timeout: 5), "«غرّزت» is in the actions sheet (الربع)")
+        XCTAssertTrue(stuck.waitForExistence(timeout: 5), "«غرّزت» is in the actions sheet (الأصدقاء)")
         stuck.tap()
         let yes = app.buttons["إيه، غرّزت"]
         XCTAssertTrue(yes.waitForExistence(timeout: 5), "a confirm, not a hold")

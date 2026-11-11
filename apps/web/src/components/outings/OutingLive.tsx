@@ -1008,7 +1008,7 @@ export default function OutingLive({ outingId, initialPanel }: { outingId: strin
 
 	const sharingLine = (() => {
 		if (!outing || !me) return "";
-		if (outing.status === "created") return isRTL ? "لم تبدأ الطلعة — لا تُرسَل المواقع بعد" : "Not started — no positions are shared yet";
+		if (outing.status === "created") return isRTL ? "ما بدأت الطلعة — ما تنرسل المواقع للحين" : "Not started — no positions are shared yet";
 		if (outing.status === "paused") return isRTL ? "الطلعة متوقفة مؤقتًا — المشاركة متوقفة للجميع" : "Paused — sharing is off for everyone";
 		if (!me.sharing) return isRTL ? "نُفعّل مشاركة موقعك…" : "Turning your sharing on…";
 		if (!visible) return isRTL ? "التطبيق في الخلفية — لا يُرسَل موقعك" : "In background — not sending";

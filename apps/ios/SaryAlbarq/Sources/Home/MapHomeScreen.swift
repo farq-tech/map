@@ -15,6 +15,8 @@ struct MapHomeScreen: View {
     @Environment(\.sary) private var theme
     @Environment(AppearanceSettings.self) private var appearance
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// 100 at the default text size: the collapsed sheet grows with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var textScale100: CGFloat = 100
 
     @State private var expanded = false
     @State private var drag: CGFloat = 0
@@ -66,6 +68,8 @@ struct MapHomeScreen: View {
     @StateObject private var locator = OneShotLocator()
     @ObservedObject private var saved = SavedPlacesStore.shared
     @AppStorage("sary.map.qibla.visible.v1") private var showQiblaOnMap = true
+    /// «دروب البر» opened from here: drawn on this map while its sheet is open.
+    @ObservedObject private var desertRoutes = DesertRoutesHub.shared
 
     struct SelectedPlace: Equatable {
         var destination: OutingDestination
@@ -143,6 +147,10 @@ struct MapHomeScreen: View {
             HomeToolSheet(tool: t, me: myPoint, host: desertHost, open: openTool, close: { tool = nil })
                 .saryPresented(appearance)
         }
+        .onChange(of: tool?.id) { old, new in
+            /* «دروب البر» closed (swiped down too): its lines leave the home map with it. */
+            if old?.hasPrefix("routes:") == true, new?.hasPrefix("routes:") != true { DesertRoutesHub.shared.clear() }
+        }
         .background {
             /* Its own host view: a full-screen cover next to the sheets above. */
             Color.clear.fullScreenCover(item: $cover) { c in
@@ -197,13 +205,16 @@ struct MapHomeScreen: View {
         let p = theme.palette
         return Button { tool = .menu } label: {
             HStack(spacing: 6) {
-                Image(systemName: "sun.dust.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.onAccent)
-                Text("البر").font(.sary(14, .bold)).foregroundStyle(p.onAccent)
+                Image(systemName: "sun.dust.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.onWarning)
+                Text("البر").font(.sary(14, .bold)).foregroundStyle(p.onWarning)
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 36)
             .background(Capsule().fill(p.warning))
             .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            /* Same as the category chips: 36 tall to the eye, 44 to the finger. */
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text("البر: الطقس والقبلة والكشتة والدروب"))
@@ -261,7 +272,7 @@ struct MapHomeScreen: View {
         } else if expanded {
             base = CGFloat(HomeSheetRules.expandedHeight(screen: Double(screen)))
         } else {
-            base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard))
+            base = CGFloat(HomeSheetRules.collapsedHeight(card: stateCard, textScale: Double(textScale100 / 100)))
         }
         return base
     }
@@ -289,6 +300,8 @@ struct MapHomeScreen: View {
                     placeCard(s)
                 }
                 .scrollIndicators(.hidden)
+                /* The picked place rises into the sheet as the sheet takes its height. */
+                .transition(SaryTransition.appear(theme))
                 .accessibilityIdentifier("home.place.scroll")
             } else {
                 VStack(spacing: 0) {
@@ -315,6 +328,7 @@ struct MapHomeScreen: View {
                 }
                 /* Collapsed nothing scrolls: drag the sheet up from anywhere on it, not only the handle. */
                 .gesture(sheetDrag(screen: screen), including: collapsedDraggable ? .all : .subviews)
+                .transition(.opacity)
             }
         }
         .frame(height: height, alignment: .top)
@@ -324,6 +338,9 @@ struct MapHomeScreen: View {
         .frame(maxWidth: .infinity, alignment: .bottom)
         .animation(theme.animation(.smooth), value: expanded)
         .animation(theme.animation(.smooth), value: selected)
+        /* The collapsed height follows the state card; results replace the home content. */
+        .animation(theme.animation(.smooth), value: stateCard)
+        .animation(theme.animation(.smooth), value: showingResults)
         .onChange(of: sheetDragging) { _, dragging in
             guard !dragging else { return }
             /* A cancelled drag (no `onEnded`): settle back instead of staying where the finger left it.
@@ -388,8 +405,27 @@ struct MapHomeScreen: View {
         return HomeStateCard.pick(current: model.current, phase: model.listPhase, inviteHint: model.deferredInviteHint)
     }
 
-    @ViewBuilder
+    /// The one state card cross-fades when what it says changes (start → upcoming → active…).
     private var stateCardView: some View {
+        stateCardContent
+            .transition(SaryTransition.appear(theme))
+            .id(stateCardKind)
+    }
+
+    /// Which card (not its live details): a new kind swaps the card, new details update in place.
+    private var stateCardKind: String {
+        switch stateCard {
+        case .active: return "active"
+        case .upcoming: return "upcoming"
+        case .invite: return "invite"
+        case .start: return "start"
+        case .failed: return "failed"
+        case .none: return "none"
+        }
+    }
+
+    @ViewBuilder
+    private var stateCardContent: some View {
         switch stateCard {
         case let .active(id):
             if let o = model.current.first(where: { $0.id == id }) { activeCard(o) }
@@ -416,8 +452,11 @@ struct MapHomeScreen: View {
                     .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
-                    Text([paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · "))
+                    let line = [paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · ")
+                    Text(line)
                         .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
+                        .contentTransition(theme.reduceMotion ? .opacity : .numericText())
+                        .saryAnimation(.smooth, value: line)
                 }
                 Spacer(minLength: 0)
                 Text("افتحها").font(.sary(13, .bold)).foregroundStyle(p.onAccent)
@@ -435,7 +474,7 @@ struct MapHomeScreen: View {
     private var startCard: some View {
         let p = theme.palette
         return VStack(alignment: .leading, spacing: theme.space(.s)) {
-            Text("أنشئ طلعة وادعُ ربعك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+            Text("أنشئ طلعة وادعُ أصدقاءك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
             Text("ابحث عن وجهتك فوق، أو ابدأ من هنا.").saryText(.footnote).foregroundStyle(p.textSecondary)
             HStack(spacing: theme.space(.s)) {
                 Button { creating = true } label: { SaryButtonLabel(title: "طلعة جديدة", systemImage: "plus") }
@@ -520,6 +559,9 @@ struct MapHomeScreen: View {
                 if !query.isEmpty {
                     Button { clearSearch() } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(p.textTertiary)
+                            /* Same glyph, 44 pt touch area (the capsule is 50 tall). */
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel(Text("امسح"))
                     .accessibilityIdentifier("home.search.clear")
@@ -582,7 +624,7 @@ struct MapHomeScreen: View {
                     .frame(width: 28, height: 28).background(Circle().fill(p.accent.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).font(.sary(14, .bold)).foregroundStyle(p.textPrimary).lineLimit(1).minimumScaleFactor(0.75)
-                    if let detail { Text(detail).font(.sary(11, .regular)).foregroundStyle(p.textSecondary).lineLimit(1) }
+                    if let detail { Text(detail).font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1) }
                 }
                 Spacer(minLength: 0)
             }
@@ -603,6 +645,9 @@ struct MapHomeScreen: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
                     Text("طلعتك جارية · \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
+                        /* Someone joins: the count rolls, the card stays. */
+                        .contentTransition(theme.reduceMotion ? .opacity : .numericText())
+                        .saryAnimation(.smooth, value: o.participantsLabel)
                 }
                 Spacer(minLength: 0)
                 Text("افتح الخريطة").font(.sary(13, .bold)).foregroundStyle(p.onAccent)
@@ -718,16 +763,21 @@ struct MapHomeScreen: View {
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
                 if results.count >= 3 { PlaceOrderPicker(order: $resultOrder, hasPosition: myPoint != nil) }
+                let ordered = PlaceSearch.ordered(results, by: resultOrder, near: myPoint)
                 VStack(spacing: 0) {
-                    ForEach(Array(PlaceSearch.ordered(results, by: resultOrder, near: myPoint).enumerated()), id: \.element.id) { i, r in
+                    ForEach(Array(ordered.enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
                         /* Build 36 item 11: Arabic name first, the other language on its own small line, the distance bold. */
                         PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
                                        meters: r.meters(from: myPoint), id: "home.result") { pickResult(r) }
+                        .transition(SaryTransition.appear(theme))
                     }
                 }
                 .padding(.horizontal, theme.space(.m))
                 .sarySurface(radius: SaryRadius.m)
+                /* Results refine as you type: rows keep their place (stable ids), new ones fade in,
+                   a new order slides them. */
+                .saryAnimation(.snappy, value: ordered.map(\.id))
             } else if !searching && searchError == nil && query.count >= 2 {
                 Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني، أو اضغط مطوّلًا على الخريطة.").saryText(.subhead).foregroundStyle(p.textSecondary)
             }
@@ -749,16 +799,22 @@ struct MapHomeScreen: View {
                     if i > 0 { SaryDivider() }
                     placeRow(icon: it.systemImage, title: "\(SaryFormat.number(i + 1)). \(it.title)", detail: it.detail, point: it.point,
                              id: "home.desert.result", meters: it.meters) { pickDesert(it) }
+                        .transition(SaryTransition.appear(theme))
                 }
             }
             .padding(.horizontal, theme.space(.m))
             .sarySurface(radius: SaryRadius.m)
+            .saryAnimation(.snappy, value: desertItems.map(\.id))
             Text(HomeDesertRules.footnote(category)).saryText(.caption).foregroundStyle(p.textTertiary)
                 .accessibilityIdentifier("home.desert.attribution")
         }
     }
 
     private var desertOverlay: DesertOverlay? {
+        HomeDesertRules.overlay(desertPlaces, routes: desertRoutes.options, selected: desertRoutes.selected)
+    }
+
+    private var desertPlaces: DesertOverlay? {
         if let s = desertPicked, selected != nil { return DesertOverlay(items: [s], selected: s.id) }
         guard selected == nil else { return nil }
         if category?.desertSource != nil, !desertItems.isEmpty {
@@ -899,6 +955,9 @@ struct MapHomeScreen: View {
                 .padding(.horizontal, 10)
                 .frame(minHeight: 36)
                 .background(Capsule().fill(p.sunken))
+                /* 36 tall to the eye, 44 to the finger. */
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("home.place.weather")
@@ -1163,6 +1222,13 @@ struct MapHomeScreen: View {
             follow: { s in
                 tool = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { cover = TrackFollowModel(s).map(HomeCover.follow) }
+            },
+            fitTrack: { pts in
+                /* The routes are drawn on this map (`desertOverlay`): frame them above the half sheet. */
+                let fit = HomeDesertRules.routesFit(pts)
+                guard fit.count >= 2 else { return }
+                cameraSeq += 1
+                camera = PlanCamera(kind: .fit(fit), id: cameraSeq)
             })
     }
 

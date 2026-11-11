@@ -54,7 +54,7 @@ final class PersonalInvitesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["جوس"].exists)
         XCTAssertTrue(any(app, "participant.neverShared").exists, "«ما شارك موقعه» for a member without a location")
         shot(app, "1-group-list")
-        /* «ادعُ ربعك» under the people opens the invites. */
+        /* «ادعُ أصدقاءك» under the people opens the invites. */
         let invite = any(app, "sheet.invite")
         scrollTo(app, invite)
         invite.tap()

@@ -150,7 +150,7 @@ final class DeclutterTests: XCTestCase {
         let line = TripHeaderPresenter.line(status: .active, trip: t, follow: nil, connection: .connected, nearbyCars: 0) ?? ""
         XCTAssertTrue(line.hasPrefix("إلى روضة الثمامة · باقي ١٢ كم"), line)
         XCTAssertTrue(line.contains(" · نوصل "), line)
-        XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "لم تبدأ")
+        XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: trip(.notStarted), follow: nil, connection: .connected, nearbyCars: 0), "ما بدأت")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: t, follow: "على المسار", connection: .connected, nearbyCars: 0), "على المسار")
         XCTAssertEqual(TripHeaderPresenter.line(status: .paused, trip: t, follow: nil, connection: .connected, nearbyCars: 0), "الطلعة متوقفة مؤقتًا")
         XCTAssertEqual(TripHeaderPresenter.line(status: .active, trip: nil, follow: nil, connection: .offline, nearbyCars: 0), "بلا إنترنت")
@@ -169,7 +169,7 @@ final class DeclutterTests: XCTestCase {
     func testActionCatalogHoldsEveryFeature() {
         /* UX simplification: «المزيد» holds only what the quick row and other screens do not. */
         let g = LiveActionCatalog.groups(.init())
-        XCTAssertEqual(g.map(\.title), ["الطريق", "الربع", "السلامة", "المكان", "الخريطة"])
+        XCTAssertEqual(g.map(\.title), ["الطريق", "الأصدقاء", "السلامة", "المكان", "الخريطة"])
         let ids = g.flatMap(\.items).map(\.accessibilityID)
         /* UI-AUDIT م3: «ملاحة» and «طريق الرجعة» are tiles (the quick row has no accent button and no
          * back-track button any more). */
@@ -205,7 +205,7 @@ final class DeclutterTests: XCTestCase {
     /// «أخفِ موقعي» moved from the quick row into «المزيد» → «الجماعة»; «طريق الرجعة» leaves «المزيد»
     /// while it runs (its panel's «إنهاء» is the one stop).
     func testHideAndBackTrackTiles() {
-        let group = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الربع" }?.items ?? [] }
+        let group = { (s: LiveActionCatalog.State) in LiveActionCatalog.groups(s).first { $0.title == "الأصدقاء" }?.items ?? [] }
         XCTAssertFalse(group(.init()).contains { $0.id == "hide" }, "only when I can hide")
         let hide = group(.init(canHide: true)).first { $0.id == "hide" }
         XCTAssertEqual(hide?.accessibilityID, "live.hideLocation")
@@ -320,8 +320,8 @@ final class DeclutterTests: XCTestCase {
     }
 
     func testThreeTabs() {
-        /* Lovable: «الخريطة · الربع · الطلعة» in the sheet (the word dictionary); the settings behind the header's gear. */
-        XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "الربع", "الطلعة"])
+        /* Lovable: «الخريطة · الأصدقاء · الطلعة» in the sheet (the word dictionary); the settings behind the header's gear. */
+        XCTAssertEqual(LiveTabUI.sheetTabs.map(\.label), ["الخريطة", "الأصدقاء", "الطلعة"])
         XCTAssertEqual(LiveTabUI.more.label, "الإعدادات")
     }
 }

@@ -164,7 +164,7 @@ final class OutingFeaturesModel: ObservableObject {
             upsert(w)
             composeError = nil
             modal = nil
-            toast("أُضيفت النقطة عند كل الربع")
+            toast("أُضيفت النقطة عند كل الأصدقاء")
             return true
         } catch {
             if FeatureAvailability.notDeployed(error) { phase = .notDeployed }
@@ -212,7 +212,7 @@ final class OutingFeaturesModel: ObservableObject {
             session?.applyLocal(.convoy(saved ?? (c.isOn ? c : nil)))
             convoyError = nil
             modal = nil
-            toast(c.isOn ? "تم ضبط القافلة" : "أُوقف وضع القافلة")
+            toast(c.isOn ? "ضبطنا القافلة" : "وقّفنا وضع القافلة")
             return true
         } catch {
             convoyError = FeatureAvailability.arabic(error)

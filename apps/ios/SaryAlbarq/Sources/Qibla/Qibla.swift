@@ -84,6 +84,19 @@ enum Qibla {
 
     /// Facing the Qibla within this many degrees.
     static let alignedWithin = 5.0
+
+    /// The compass's design size (pointer + rose) on a standard phone.
+    static let compassDesign = CGSize(width: 300, height: 320)
+
+    /// Scale (0.72…1) for the compass in a `page`-sized sheet: full size whenever it fits
+    /// (every 390 pt+ phone), smaller when the width or the height left after the header,
+    /// degrees and hint (`reservedHeight`) is short, e.g. an SE's 375×667.
+    static func compassScale(page: CGSize, sideMargins: CGFloat = 40, reservedHeight: CGFloat = 340) -> CGFloat {
+        guard page.width > 0, page.height > 0 else { return 1 }
+        let byWidth = (page.width - sideMargins) / compassDesign.width
+        let byHeight = (page.height - reservedHeight) / compassDesign.height
+        return min(1, max(0.72, min(byWidth, byHeight)))
+    }
     /// A heading accuracy worse than this (degrees) asks for calibration.
     static let poorAccuracy = 20.0
 
@@ -106,6 +119,19 @@ enum Qibla {
         "\(SaryFormat.number(Int(d.rounded()) % 360))°"
     }
 
+    /// Continuous dial angle: the previous unwrapped value plus the shortest step to `next`.
+    static func unwrap(previous: Double?, next: Double) -> Double {
+        guard let p = previous else { return normalize(next) }
+        return p + turn(qibla: next, heading: p)
+    }
+
+    /// Facing the Qibla, with hysteresis: in at `alignedWithin`, out only past `alignedLeave`,
+    /// so a hand's tremble at the edge never buzzes again and again.
+    static let alignedLeave = 8.0
+    static func aligned(turn: Double, was: Bool) -> Bool {
+        abs(turn) <= (was ? alignedLeave : alignedWithin)
+    }
+
     static func turnHint(_ turn: Double) -> String {
         let a = abs(turn)
         if a <= alignedWithin { return "أنت مقابل القبلة" }
@@ -114,11 +140,22 @@ enum Qibla {
     }
 }
 
+/// The dial's motion: an interpolating spring keeps its velocity when the next reading
+/// retargets it mid-way, so a stream of compass readings reads as one smooth turn.
+enum QiblaDial {
+    static let spring: Animation = .interpolatingSpring(stiffness: 140, damping: 22)
+}
+
 /// Live heading (true north) and position for «القبلة». Uses its own `CLLocationManager`
 /// (When-In-Use is enough; the app already has it for the outing).
 @MainActor
 final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published private(set) var heading: Double?
+    @Published private(set) var heading: Double? {
+        didSet { dialHeading = heading.map { Qibla.unwrap(previous: dialHeading, next: $0) } }
+    }
+    /// `heading` made continuous (359° → 1° is +2°, never −358°), for the dial's rotation: a
+    /// spring then turns the rose and needle the short way instead of spinning round.
+    @Published private(set) var dialHeading: Double?
     @Published private(set) var accuracy: Double?
     /// True north when CoreLocation has a location fix; magnetic otherwise.
     @Published private(set) var isTrueNorth = false
@@ -276,6 +313,8 @@ struct QiblaView: View {
     @AppStorage("sary.map.qibla.visible.v1") private var showDirectionOnMap = true
     var close: () -> Void
     @Environment(\.sary) private var theme
+    /// Facing the Qibla (`Qibla.aligned`, with hysteresis).
+    @State private var facing = false
 
     init(fallback: CLLocationCoordinate2D?, close: @escaping () -> Void) {
         _compass = StateObject(wrappedValue: QiblaCompass(fallback: fallback))
@@ -283,11 +322,17 @@ struct QiblaView: View {
     }
 
     var body: some View {
+        GeometryReader { geo in page(scale: Qibla.compassScale(page: geo.size)) }
+            .onAppear { compass.start() }
+            .onDisappear { compass.stop() }
+    }
+
+    private func page(scale: CGFloat) -> some View {
         let p = theme.palette
-        SaryPage(title: "القبلة", close: close) {
+        return SaryPage(title: "القبلة", close: close) {
             VStack(spacing: theme.space(.l)) {
                 if let c = compass.coordinate {
-                    content(c)
+                    content(c, scale: scale)
                 } else {
                     VStack(spacing: theme.space(.m)) {
                         if compass.locationState == .locating {
@@ -314,22 +359,22 @@ struct QiblaView: View {
                                 .accessibilityIdentifier("qibla.retry")
                         }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 320)
+                    .frame(maxWidth: .infinity, minHeight: Qibla.compassDesign.height * scale)
                 }
             }
         }
-        .onAppear { compass.start() }
-        .onDisappear { compass.stop() }
     }
 
     @ViewBuilder
-    private func content(_ c: CLLocationCoordinate2D) -> some View {
+    private func content(_ c: CLLocationCoordinate2D, scale: CGFloat) -> some View {
         let p = theme.palette
         let q = Qibla.bearing(from: c)
         let cal = Qibla.calibration(accuracy: compass.heading == nil ? nil : compass.accuracy)
         let heading = compass.heading ?? 0
+        /* Continuous: the spring turns the short way across north. */
+        let dial = compass.dialHeading ?? heading
         let turn = Qibla.turn(qibla: q, heading: heading)
-        let aligned = compass.heading != nil && abs(turn) <= Qibla.alignedWithin
+        let aligned = compass.heading != nil && facing
 
         VStack(spacing: theme.space(.xs)) {
             Text(Qibla.degreesLabel(q))
@@ -343,21 +388,29 @@ struct QiblaView: View {
 
         ZStack {
             /* The rose turns with the phone: north stays north. */
-            QiblaRose(qibla: q)
-                .rotationEffect(.degrees(-heading))
+            QiblaRose(qibla: q, diameter: QiblaRose.designDiameter * scale)
+                .rotationEffect(.degrees(-dial))
             /* The fixed pointer at the top: line it up with the Kaaba. */
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(aligned ? p.liveText : p.textPrimary)
-                .offset(y: -150)
+                .offset(y: -150 * scale)
             Image(systemName: "location.north.fill")
-                .font(.system(size: 64, weight: .bold))
+                .font(.system(size: 64 * scale, weight: .bold))
                 .foregroundStyle(aligned ? p.liveText : p.accent)
-                .rotationEffect(.degrees(compass.heading == nil ? q : turn))
+                /* q − dial equals `turn` modulo 360 but never jumps at ±180°. */
+                .rotationEffect(.degrees(compass.heading == nil ? q : q - dial))
                 .accessibilityHidden(true)
         }
-        .frame(width: 300, height: 320)
-        .animation(.easeOut(duration: 0.25), value: heading)
+        .frame(width: Qibla.compassDesign.width * scale, height: Qibla.compassDesign.height * scale)
+        /* A damped spring per heading reading (not per frame): the needle settles instead of
+           twitching with each degree; a short fade-like ease under Reduce Motion. */
+        .animation(theme.reduceMotion ? SaryMotion.reduced : QiblaDial.spring, value: dial)
+        .saryAnimation(.snappy, value: aligned)
+        .onChange(of: turn) { _, t in facing = Qibla.aligned(turn: t, was: facing) }
+        .onAppear { facing = Qibla.aligned(turn: turn, was: false) }
+        /* Lined up: one soft tap (again only after leaving the Qibla past the hysteresis). */
+        .saryHaptic(.confirm, trigger: aligned) { was, now in !was && now }
         .accessibilityElement()
         .accessibilityLabel(Text(compass.heading == nil ? "اتجاه القبلة \(Qibla.degreesLabel(q)) من الشمال" : Qibla.turnHint(turn)))
         .accessibilityIdentifier("qibla.compass")
@@ -400,12 +453,16 @@ struct QiblaView: View {
 /// A compass rose (N/E/S/W in Arabic, ticks every 10°) with the Kaaba marked at `qibla`.
 struct QiblaRose: View {
     var qibla: Double
+    /// Rose diameter; every radius below is a fraction of the 280 pt design.
+    var diameter: CGFloat = designDiameter
+    static let designDiameter: CGFloat = 280
     struct Cardinal { var angle: Double; var label: String }
     static let cardinals = [Cardinal(angle: 0, label: "ش"), Cardinal(angle: 90, label: "ق"), Cardinal(angle: 180, label: "ج"), Cardinal(angle: 270, label: "غ")]
     @Environment(\.sary) private var theme
 
     var body: some View {
         let p = theme.palette
+        let k = diameter / Self.designDiameter
         ZStack {
             Circle().fill(p.sunken.opacity(0.6))
             Circle().stroke(p.separator, lineWidth: 1.5)
@@ -413,7 +470,7 @@ struct QiblaRose: View {
                 Rectangle()
                     .fill(i % 9 == 0 ? p.textPrimary : p.textTertiary)
                     .frame(width: i % 9 == 0 ? 3 : 1.5, height: i % 9 == 0 ? 14 : 8)
-                    .offset(y: -128)
+                    .offset(y: -128 * k)
                     .rotationEffect(.degrees(Double(i) * 10))
             }
             ForEach(Self.cardinals, id: \.angle) { c in
@@ -422,7 +479,7 @@ struct QiblaRose: View {
                     .font(.sary(16, .bold))
                     .foregroundStyle(a == 0 ? p.emergencyText : p.textSecondary)
                     .rotationEffect(.degrees(-a))
-                    .offset(y: -104)
+                    .offset(y: -104 * k)
                     .rotationEffect(.degrees(a))
             }
             /* The Kaaba on the rim. */
@@ -432,10 +489,10 @@ struct QiblaRose: View {
                 .padding(6)
                 .background(Circle().fill(p.accent.opacity(0.25)))
                 .rotationEffect(.degrees(-qibla))
-                .offset(y: -150)
+                .offset(y: -150 * k)
                 .rotationEffect(.degrees(qibla))
         }
-        .frame(width: 280, height: 280)
+        .frame(width: diameter, height: diameter)
         .environment(\.layoutDirection, .leftToRight)
     }
 }

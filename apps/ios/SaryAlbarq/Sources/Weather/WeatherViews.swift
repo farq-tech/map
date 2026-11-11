@@ -132,7 +132,7 @@ struct WeatherCardView: View {
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: theme.space(.xs)) {
                 if ui.offline || ui.stale {
-                    Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold))
+                    Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").saryGlyph(11, weight: .bold)
                 }
                 Text(footerText).saryNumber(.caption, weight: ui.stale || ui.offline ? .bold : .regular).lineLimit(2)
             }
@@ -171,7 +171,7 @@ struct HoursStrip: View {
                         Text(h.temp).saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                         HStack(spacing: 2) {
                             WindArrow(degrees: h.arrowDeg, size: 11, tint: p.textSecondary)
-                            Text(h.wind).saryNumber(.micro).foregroundStyle(p.textSecondary)
+                            Text(h.wind).saryNumber(.micro, weight: .medium).foregroundStyle(p.textSecondary)
                         }
                         Text(h.rainChance ?? " ").saryNumber(.micro, weight: .bold).foregroundStyle(p.accentText)
                     }
@@ -257,7 +257,7 @@ struct WeatherSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("تم", action: close).accessibilityIdentifier("weather.close")
+                    Button("خلاص", action: close).accessibilityIdentifier("weather.close")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { Task { await weather.refresh(force: true); now = Date() } } label: {
@@ -331,7 +331,7 @@ struct WeatherSheet: View {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 Label(weather.wadiStatus, systemImage: "water.waves").saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن الربع ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
+                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن الأصدقاء ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.vertical, theme.space(.s))
@@ -372,7 +372,7 @@ struct WeatherPointSheet: View {
             .background(p.elevated.ignoresSafeArea())
             .navigationTitle("الطقس هنا")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("تم", action: close) } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("خلاص", action: close) } }
         }
         .task { await store.update(WeatherArea(point: point.lat, lng: point.lng)) }
     }

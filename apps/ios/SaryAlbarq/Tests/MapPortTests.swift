@@ -583,3 +583,71 @@ final class NavSourceChangesTests: XCTestCase {
         XCTAssertTrue(NavSourceChanges.between(drawn: d, next: gone).offRoad)
     }
 }
+
+/// The road / waterway query results are converted off the main thread; these are the pure
+/// decisions that conversion and its hand-back to the main thread rely on.
+final class MapFeatureConversionTests: XCTestCase {
+    func testNameKeyUsesTheFirstNonEmptyName() {
+        XCTAssertEqual(RoadSnap.nameKey(cls: "primary", name: "طريق الملك فهد", nameAr: "x", ref: "40"), "primary:طريق الملك فهد")
+        XCTAssertEqual(RoadSnap.nameKey(cls: "street", name: "", nameAr: "شارع التحلية", ref: ""), "street:شارع التحلية")
+        XCTAssertEqual(RoadSnap.nameKey(cls: "trunk", name: "", nameAr: "", ref: "65"), "trunk:65")
+        XCTAssertEqual(RoadSnap.nameKey(cls: "service", name: "", nameAr: "", ref: ""), "service:")
+    }
+
+    func testRoadSetUpdateMatchesTheInlineChecks() {
+        let a = RoadSnap.RoadLine(key: "id:1", coords: [[46.6, 24.7], [46.61, 24.71]])
+        let b = RoadSnap.RoadLine(key: "id:2", coords: [[46.7, 24.8], [46.71, 24.81]])
+        XCTAssertEqual(RoadSnap.RoadSetUpdate.between(old: [a, b], new: [a, b]), .init(replace: false, changed: false))
+        XCTAssertEqual(RoadSnap.RoadSetUpdate.between(old: [], new: [a]), .init(replace: true, changed: true))
+        XCTAssertEqual(RoadSnap.RoadSetUpdate.between(old: [a, b], new: [b, a]), .init(replace: true, changed: true))
+        /* Same count and same first line, a later line moved: stored, but no re-sync (as before). */
+        var b2 = b
+        b2.coords[1] = [46.72, 24.82]
+        XCTAssertEqual(RoadSnap.RoadSetUpdate.between(old: [a, b], new: [a, b2]), .init(replace: true, changed: false))
+        /* Only a key differs: stored, no re-sync. */
+        var a2 = a
+        a2.key = "primary:x"
+        XCTAssertEqual(RoadSnap.RoadSetUpdate.between(old: [a], new: [a2]), .init(replace: true, changed: false))
+    }
+
+    func testOnlyTheLatestGenerationIsCurrent() {
+        var g = QueryGeneration()
+        let first = g.next()
+        XCTAssertTrue(g.isCurrent(first))
+        let second = g.next()
+        XCTAssertFalse(g.isCurrent(first))
+        XCTAssertTrue(g.isCurrent(second))
+        XCTAssertNotEqual(first, second)
+    }
+
+    func testWatercourseClassKeepsTheOldFilter() {
+        XCTAssertEqual(WadiProximity.watercourseClass(cls: "stream_intermittent", type: nil), "stream_intermittent")
+        /* No class: the type stands in. */
+        XCTAssertEqual(WadiProximity.watercourseClass(cls: nil, type: "river"), "river")
+        /* A wadi by type counts whatever its class, and keeps its class. */
+        XCTAssertEqual(WadiProximity.watercourseClass(cls: "lake", type: "wadi"), "lake")
+        XCTAssertNil(WadiProximity.watercourseClass(cls: "lake", type: "pond"))
+        XCTAssertNil(WadiProximity.watercourseClass(cls: nil, type: nil))
+    }
+}
+
+/// The plan map's centre reports (`PlanMapView` → «اختر من الخريطة») are throttled per frame.
+final class ReportThrottleTests: XCTestCase {
+    func testFirstReportPassesThenOnePerInterval() {
+        /* Binary-exact times (eighths of a second), so the window edges are exact. */
+        var t = ReportThrottle(interval: 0.125)
+        XCTAssertTrue(t.take(5))
+        XCTAssertFalse(t.take(5.0625))
+        XCTAssertEqual(t.wait(5.0625), 0.0625, accuracy: 1e-9)
+        XCTAssertTrue(t.take(5.125))
+        XCTAssertEqual(t.wait(5.5), 0)
+    }
+
+    func testRefusedReportDoesNotMoveTheWindow() {
+        var t = ReportThrottle(interval: 0.125)
+        XCTAssertTrue(t.take(1))
+        XCTAssertFalse(t.take(1.0625))
+        /* The trailing report scheduled after `wait` is allowed. */
+        XCTAssertTrue(t.take(1.125))
+    }
+}

@@ -347,12 +347,8 @@ enum WeatherFormat {
         return "\(SaryFormat.number(h12)) \(h < 12 ? "ص" : "م")"
     }
 
-    /// «٤:٣٠ م».
+    /// «٤:٣٠ م» (`SaryFormat.timeOfDay`).
     static func clock(_ d: Date, timeZone: TimeZone = .current) -> String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = timeZone
-        let h = cal.component(.hour, from: d), m = cal.component(.minute, from: d)
-        let h12 = h % 12 == 0 ? 12 : h % 12
-        return "\(SaryFormat.digits(String(format: "%d:%02d", h12, m))) \(h < 12 ? "ص" : "م")"
+        SaryFormat.timeOfDay(d, timeZone: timeZone)
     }
 }

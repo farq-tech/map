@@ -69,9 +69,13 @@ struct PlanEditorView: View {
         }
         .sheet(isPresented: Binding(get: { card != nil }, set: { if !$0 { card = nil } })) {
             if let c = card {
-                PointCard(subject: .point(c, name: nil), actions: pointActions, close: { card = nil })
-                    .presentationDetents([.height(420), .large])
-                    .rtl()
+                /* Scrolls when the card is taller than the detent (an SE, large text, every action). */
+                ScrollView {
+                    PointCard(subject: .point(c, name: nil), actions: pointActions, close: { card = nil })
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .presentationDetents([.height(420), .large])
+                .rtl()
             }
         }
         .sheet(isPresented: $searchOpen) {

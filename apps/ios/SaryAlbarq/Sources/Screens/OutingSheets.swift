@@ -212,7 +212,7 @@ struct InviteJoinSheet: View {
                 } else {
                     if needsTypedName(inv) {
                         /* An open link and no identity yet: the only thing we cannot know is your name. */
-                        SaryTextField(title: "اسمك", placeholder: "كما يشوفه الربع", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
+                        SaryTextField(title: "اسمك", placeholder: "كما يشوفه الأصدقاء", text: $name, id: "invite.myName", maxLength: ServerRules.nameMax)
                     }
                     if case let .failed(m) = step { SaryInlineMessage(text: m, tone: .error) }
                     if showsPrePrompt { JoinPrePrompt() }
@@ -430,33 +430,42 @@ struct JoinNeedsLocationView: View {
 
     var body: some View {
         let p = theme.palette
-        VStack(spacing: theme.space(.l)) {
-            Spacer(minLength: theme.space(.xl))
-            Image(systemName: permission == .reduced ? "location.circle" : "location.slash.circle.fill")
-                .font(.system(size: 64, weight: .semibold))
-                .foregroundStyle(p.accentText)
-                .accessibilityHidden(true)
-            Text(JoinCopy.needsTitle(permission))
-                .saryText(.title, weight: .bold)
-                .foregroundStyle(p.textPrimary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("join.needsLocation")
-            Text(JoinCopy.needsMessage(permission))
-                .saryText(.callout)
-                .foregroundStyle(p.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: theme.space(.xl))
-            Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
-                .buttonStyle(.sary(.primary))
-                .accessibilityIdentifier("join.openSettings")
-            Button(JoinCopy.cancel, action: cancel)
-                .buttonStyle(.sary(.plain))
-                .accessibilityIdentifier("join.cancel")
+        /* Scrolls on an SE / large text instead of pushing the buttons off; the buttons stay pinned. */
+        SaryFitColumn {
+            VStack(spacing: theme.space(.l)) {
+                Spacer(minLength: theme.space(.xl))
+                Image(systemName: permission == .reduced ? "location.circle" : "location.slash.circle.fill")
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(p.accentText)
+                    .accessibilityHidden(true)
+                Text(JoinCopy.needsTitle(permission))
+                    .saryText(.title, weight: .bold)
+                    .foregroundStyle(p.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("join.needsLocation")
+                Text(JoinCopy.needsMessage(permission))
+                    .saryText(.callout)
+                    .foregroundStyle(p.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: theme.space(.l))
+            }
+            .padding(.horizontal, theme.space(.l))
+        } bottom: {
+            VStack(spacing: theme.space(.l)) {
+                Button(action: openSettings) { SaryButtonLabel(title: JoinCopy.openSettings, systemImage: "gearshape.fill") }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("join.openSettings")
+                Button(JoinCopy.cancel, action: cancel)
+                    .buttonStyle(.sary(.plain))
+                    .accessibilityIdentifier("join.cancel")
+            }
+            .padding(.top, theme.space(.s))
+            .padding(.horizontal, theme.space(.l))
+            .padding(.bottom, theme.space(.l))
+            .background(p.background)
         }
-        .padding(.horizontal, theme.space(.l))
-        .padding(.bottom, theme.space(.l))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.palette.background.ignoresSafeArea())
     }
@@ -516,40 +525,57 @@ struct NotifyExplainerSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @State private var busy = false
+    @State private var ring = 0
 
     var body: some View {
         let p = theme.palette
-        VStack(spacing: theme.space(.l)) {
-            Image(systemName: "bell.badge.fill").font(.system(size: 52, weight: .semibold)).foregroundStyle(p.accentText)
-                .padding(.top, theme.space(.xl))
-            Text("نبّهك إذا احتاجك أحد؟").saryText(.title, weight: .bold).foregroundStyle(p.textPrimary)
-            VStack(alignment: .leading, spacing: theme.space(.m)) {
-                line(SaryIcon.sos, p.emergency, "طوارئ من أحد في طلعتك — تنبيه عاجل بصوت.")
-                line(SaryIcon.note, nil, "رسالة قصيرة أو مقطع صوتي من الربع، بهدوء.")
-                line("lock.fill", nil, "لا إعلانات، ولا شيء خارج طلعاتك. توقفها من الإعدادات متى شئت.")
+        /* Scrolls on an SE / large text; «فعّل التنبيهات» and «لاحقًا» stay pinned at the bottom. */
+        SaryFitColumn {
+            VStack(spacing: theme.space(.l)) {
+                Image(systemName: "bell.badge.fill").font(.system(size: 52, weight: .semibold)).foregroundStyle(p.accentText)
+                    /* The bell rings once as the sheet settles (bounded; nothing under Reduce Motion). */
+                    .symbolEffect(.bounce, value: ring)
+                    .onAppear {
+                        guard OnboardingMotion.plays(reduceMotion: theme.reduceMotion) else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + SaryMotion.enter.duration) { ring &+= 1 }
+                    }
+                    .padding(.top, theme.space(.xl))
+                Text("نبّهك إذا احتاجك أحد؟").saryText(.title, weight: .bold).foregroundStyle(p.textPrimary)
+                    .multilineTextAlignment(.center)
+                VStack(alignment: .leading, spacing: theme.space(.m)) {
+                    line(SaryIcon.sos, p.emergency, "طوارئ من أحد في طلعتك — تنبيه عاجل بصوت.")
+                    line(SaryIcon.note, nil, "رسالة قصيرة أو مقطع صوتي من الأصدقاء، بهدوء.")
+                    line("lock.fill", nil, "لا إعلانات، ولا شيء خارج طلعاتك. توقفها من الإعدادات متى شئت.")
+                }
+                .padding(theme.space(.l))
+                .sarySurface(radius: SaryRadius.l)
+                Spacer(minLength: 0)
             }
-            .padding(theme.space(.l))
-            .sarySurface(radius: SaryRadius.l)
-            Spacer(minLength: 0)
-            Button {
-                busy = true
-                Task {
-                    await model.push.ask(signedIn: model.signedIn)
-                    busy = false
+            .padding(.horizontal, theme.space(.l))
+        } bottom: {
+            VStack(spacing: theme.space(.l)) {
+                Button {
+                    busy = true
+                    Task {
+                        await model.push.ask(signedIn: model.signedIn)
+                        busy = false
+                        done()
+                    }
+                } label: { SaryButtonLabel(title: "فعّل التنبيهات", systemImage: "bell.fill", busy: busy) }
+                    .buttonStyle(.sary(.primary))
+                    .accessibilityIdentifier("notify.allow")
+                Button("لاحقًا") {
+                    model.push.explained = true
                     done()
                 }
-            } label: { SaryButtonLabel(title: "فعّل التنبيهات", systemImage: "bell.fill", busy: busy) }
-                .buttonStyle(.sary(.primary))
-                .accessibilityIdentifier("notify.allow")
-            Button("لاحقًا") {
-                model.push.explained = true
-                done()
+                .buttonStyle(.sary(.plain))
+                .accessibilityIdentifier("notify.later")
             }
-            .buttonStyle(.sary(.plain))
-            .accessibilityIdentifier("notify.later")
+            .padding(.top, theme.space(.s))
+            .padding(.horizontal, theme.space(.l))
+            .padding(.bottom, theme.space(.l))
+            .background(p.elevated)
         }
-        .padding(.horizontal, theme.space(.l))
-        .padding(.bottom, theme.space(.l))
         .background(p.elevated.ignoresSafeArea())
         .presentationDetents([.large])
     }

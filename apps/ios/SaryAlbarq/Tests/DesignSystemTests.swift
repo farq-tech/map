@@ -247,3 +247,306 @@ final class SaryThemeTests: XCTestCase {
         XCTAssertLessThan(spread, 0.01, "widths: \(widths)")
     }
 }
+
+/// Screen-size adaptation: width classes, readable columns and the wrapping row.
+final class SaryScreenFitTests: XCTestCase {
+    func testWidthClasses() {
+        XCTAssertEqual(SaryWidthClass.of(width: 0), .regular, "not measured yet = a phone")
+        XCTAssertEqual(SaryWidthClass.of(width: 320), .narrow, "Display Zoom on a 375/393 pt iPhone")
+        XCTAssertEqual(SaryWidthClass.of(width: 359.5), .narrow)
+        XCTAssertEqual(SaryWidthClass.of(width: 375), .regular, "iPhone SE / mini")
+        XCTAssertEqual(SaryWidthClass.of(width: 393), .regular, "the reference iPhone keeps its layout")
+        XCTAssertEqual(SaryWidthClass.of(width: 440), .regular, "Pro Max")
+        XCTAssertEqual(SaryWidthClass.of(width: 744), .wide, "iPad mini")
+        XCTAssertEqual(SaryWidthClass.of(width: 1366), .wide)
+    }
+
+    func testColumnWidth() {
+        // Every iPhone: the whole width (minus margins).
+        XCTAssertEqual(SaryLayout.columnWidth(container: 393, max: SaryLayout.readableWidth), 393)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 320, max: SaryLayout.formWidth, margin: 16), 288)
+        // iPad: capped, never stretched across 1000+ pt.
+        XCTAssertEqual(SaryLayout.columnWidth(container: 1366, max: SaryLayout.readableWidth), 640)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 1024, max: SaryLayout.formWidth, margin: 24), 480)
+        XCTAssertEqual(SaryLayout.columnWidth(container: 10, max: 400, margin: 16), 0, "never negative")
+    }
+
+    func testFlowKeepsOneLineWhenItFits() {
+        let sizes = [CGSize(width: 60, height: 20), CGSize(width: 100, height: 16), CGSize(width: 40, height: 18)]
+        let f = SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: 300)
+        XCTAssertEqual(f.map(\.minX), [0, 66, 172], "exactly like an HStack with the same spacing")
+        XCTAssertEqual(f.map(\.midY), [10, 10, 10], "centred in the line")
+        XCTAssertEqual(SaryFlow.size(of: f), CGSize(width: 212, height: 20))
+        // No width proposed (ideal size): one line.
+        XCTAssertEqual(SaryFlow.size(of: SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: .infinity)).height, 20)
+    }
+
+    func testFlowWrapsInsteadOfOverflowing() {
+        // The participant row's status line on a 320 pt screen: badge, «عبر الأجهزة القريبة», speed, battery.
+        let sizes = [CGSize(width: 70, height: 20), CGSize(width: 110, height: 18), CGSize(width: 50, height: 16), CGSize(width: 40, height: 16)]
+        let f = SaryFlow.frames(sizes: sizes, spacing: 6, lineSpacing: 4, maxWidth: 130)
+        XCTAssertEqual(f[0].minY, 0)
+        XCTAssertEqual(f[1].minX, 0, "the nearby mark starts a new line")
+        XCTAssertEqual(f[1].minY, 24)
+        XCTAssertEqual(f[2].minX, 0)
+        XCTAssertEqual(f[3].minX, 56, "speed and battery share the third line")
+        XCTAssertEqual(f[2].midY, f[3].midY)
+        for r in f { XCTAssertLessThanOrEqual(r.maxX, 130) }
+        XCTAssertEqual(SaryFlow.size(of: f).height, 20 + 4 + 18 + 4 + 16)
+    }
+
+    func testFlowClampsAnItemWiderThanTheLine() {
+        let f = SaryFlow.frames(sizes: [CGSize(width: 30, height: 10), CGSize(width: 500, height: 10)], spacing: 6, lineSpacing: 4, maxWidth: 200)
+        XCTAssertEqual(f[1], CGRect(x: 0, y: 14, width: 200, height: 10))
+        XCTAssertTrue(SaryFlow.frames(sizes: [], spacing: 6, lineSpacing: 4, maxWidth: 200).isEmpty)
+        XCTAssertEqual(SaryFlow.frames(sizes: [CGSize(width: 30, height: 10)], spacing: 6, lineSpacing: 4, maxWidth: 0)[0].width, 0)
+    }
+
+    func testDesignTokensAreNotScaledByTheDevice() {
+        // Points stay points: only the density setting changes spacing.
+        let t = SaryTheme.default
+        XCTAssertEqual(t.space(.l), 16)
+        XCTAssertEqual(t.buttonHeight, 50)
+        XCTAssertEqual(t.minTarget, 44)
+    }
+}
+
+/// The friend-SOS hero shrinks on short windows but keeps its proportions.
+final class SarySOSHeroFitTests: XCTestCase {
+    func testRegularIsTheDesign() {
+        XCTAssertEqual(SarySOSHeroMetrics.regular, SarySOSHeroMetrics(ring: 190, disc: 150, avatar: 104))
+        XCTAssertEqual(SarySOSHeroMetrics.regular.scaled(1), .regular)
+    }
+
+    func testCompactKeepsProportionsAndAFaceSizedAvatar() {
+        let c = SarySOSHeroMetrics.compact
+        XCTAssertLessThan(c.ring, SarySOSHeroMetrics.regular.ring)
+        XCTAssertLessThan(c.avatar, c.disc)
+        XCTAssertLessThan(c.disc, c.ring)
+        XCTAssertGreaterThanOrEqual(c.avatar, 64, "still a recognisable face")
+        XCTAssertEqual(c.disc / c.ring, 150.0 / 190.0, accuracy: 0.02)
+        // Saves at least 60 pt of height on an iPhone SE.
+        XCTAssertGreaterThanOrEqual(SarySOSHeroMetrics.regular.ring - c.ring, 60)
+    }
+}
+
+/// Fitting fixed design heights on every iPhone (`SaryFit`, ScreenKit).
+final class SaryFitTests: XCTestCase {
+    func testDesignHeightsAreKeptOnStandardMiniAndProMax() {
+        // Visible scroll heights of a page / large sheet: 393×852 ≈ 683, mini ≈ 652, Pro Max ≈ 780.
+        for container in [683.0, 652.0, 780.0, 640.0] as [CGFloat] {
+            XCTAssertEqual(SaryFit.height(300, container: container), 300, "\(container)")
+            XCTAssertEqual(SaryFit.height(200, container: container), 200, "\(container)")
+        }
+    }
+
+    func testDesignHeightsShrinkProportionallyOnAnSE() {
+        // SE page: 667 − 20 status bar − ~76 header ≈ 571.
+        XCTAssertEqual(SaryFit.height(300, container: 571), (300 * 571 / 640 as CGFloat).rounded())
+        XCTAssertEqual(SaryFit.height(200, container: 571), (200 * 571 / 640 as CGFloat).rounded())
+        XCTAssertLessThan(SaryFit.height(200, container: 571), 200)
+    }
+
+    func testDesignHeightsAreBounded() {
+        XCTAssertEqual(SaryFit.height(200, container: 100), 140, "never below 0.7×")
+        XCTAssertEqual(SaryFit.height(200, container: 100, minScale: 0.5), 100)
+        XCTAssertEqual(SaryFit.height(200, container: 0), 200, "an unmeasured container keeps the design size")
+        XCTAssertEqual(SaryFit.height(200, container: .infinity), 200)
+    }
+
+    func testDetentKeepsItsFractionOnStandardPhonesAndAMinimumOnAnSE() {
+        // Full sheet heights: 393×852 ≈ 793, Pro Max ≈ 897, SE ≈ 647.
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 793), 793 * 0.52, accuracy: 0.001)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 897), 897 * 0.52, accuracy: 0.001)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 647), 400)
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 300), 300, "never taller than the sheet")
+        XCTAssertEqual(SaryFit.detentHeight(fraction: 0.52, minimum: 400, maxHeight: 0), 400)
+    }
+
+    func testStoryPreviewKeepsItsSizeOnAStandardPhoneAndShrinksOnAnSE() {
+        let design: CGFloat = 300 / (1080.0 / 1920.0)   // 533⅓ pt, the 9:16 preview
+        XCTAssertEqual(SaryFit.height(design, container: 669, reference: 660), design.rounded(), "393×852 cover")
+        XCTAssertEqual(SaryFit.height(design, container: 557, reference: 660), (design * 557 / 660).rounded(), "SE cover")
+        XCTAssertEqual(SaryFit.height(200, container: 600, reference: 0), 200)
+    }
+}
+
+// MARK: - Motion language (docs/MOTION.md)
+
+final class SaryMotionTokenTests: XCTestCase {
+    func testLeavingIsQuickerThanArriving() {
+        XCTAssertLessThan(SaryMotion.dismiss.duration, SaryMotion.appear.duration)
+        XCTAssertLessThan(SaryMotion.dismiss.duration, SaryMotion.enter.duration)
+    }
+
+    func testUrgentIsTheQuickestMovement() {
+        for m in SaryMotion.allCases where m != .urgent && m != .livePulse {
+            XCTAssertLessThanOrEqual(SaryMotion.urgent.duration, m.duration, "\(m)")
+        }
+    }
+
+    func testEveryMovementSettlesWithinASecond() {
+        // Glanceable: nothing the driver waits for takes longer than this.
+        for m in SaryMotion.allCases where m != .livePulse {
+            XCTAssertGreaterThan(m.duration, 0, "\(m)")
+            XCTAssertLessThan(m.duration, 1, "\(m)")
+        }
+        XCTAssertLessThan(SaryMotion.reducedDuration, SaryMotion.appear.duration)
+    }
+
+    func testLivePulseIsCalmAndSOSIsDeliberateNotFrantic() {
+        XCTAssertEqual(SaryMotion.livePulse.duration, SaryMotion.livePulsePeriod / 2, accuracy: 0.0001)
+        XCTAssertGreaterThanOrEqual(SaryLoopKind.live.period, 2, "a live dot breathes slowly")
+        // SOS faster than live, but under 1 Hz (no strobing; well below the 3 Hz flash limit).
+        XCTAssertLessThan(SaryLoopKind.urgent.period, SaryLoopKind.live.period)
+        XCTAssertGreaterThanOrEqual(SaryLoopKind.urgent.period, 1)
+    }
+}
+
+final class SaryMotionPolicyTests: XCTestCase {
+    private func loop(_ k: SaryLoopKind, active: Bool = true, reduce: Bool = false, drive: Bool = false, scene: Bool = true) -> SaryLoopMode {
+        SaryMotionPolicy.loop(k, active: active, reduceMotion: reduce, drive: drive, sceneActive: scene)
+    }
+
+    func testLoopsStopWhenNotLiveOrInTheBackground() {
+        for k in SaryLoopKind.allCases {
+            XCTAssertEqual(loop(k, active: false), .off, "\(k) not live")
+            XCTAssertEqual(loop(k, scene: false), .off, "\(k) in background")
+            XCTAssertEqual(loop(k, active: false, reduce: true, drive: true, scene: false), .off)
+        }
+    }
+
+    func testLiveLoopsRunOnlyWhenAllowed() {
+        XCTAssertEqual(loop(.live), .full)
+        XCTAssertEqual(loop(.live, drive: true), .off, "no motion in the periphery while driving")
+        XCTAssertEqual(loop(.live, reduce: true), .off)
+        XCTAssertEqual(loop(.skeleton, reduce: true), .off)
+    }
+
+    func testSOSIsTheOnlyLoopWhileDrivingAndFadesUnderReduceMotion() {
+        XCTAssertEqual(loop(.urgent, drive: true), .full)
+        XCTAssertEqual(loop(.urgent, reduce: true), .fade)
+        XCTAssertEqual(loop(.urgent, reduce: true, drive: true), .fade)
+    }
+
+    func testPeripheralMotionOnlyFadesWhileDriving() {
+        XCTAssertTrue(SaryMotionPolicy.travels(reduceMotion: false, drive: false, peripheral: true))
+        XCTAssertFalse(SaryMotionPolicy.travels(reduceMotion: false, drive: true, peripheral: true))
+        XCTAssertTrue(SaryMotionPolicy.travels(reduceMotion: false, drive: true, peripheral: false))
+        XCTAssertFalse(SaryMotionPolicy.travels(reduceMotion: true, drive: false, peripheral: false))
+    }
+
+    func testThemeAnimationCrossFadesUnderReduceMotion() {
+        var prefs = AppearancePreferences()
+        prefs.motion = .reduced
+        let reduced = SaryTheme.resolve(prefs: prefs, scheme: .dark, night: false, drive: false)
+        for m in SaryMotion.allCases { XCTAssertEqual(reduced.animation(m), SaryMotion.reduced, "\(m)") }
+        prefs.motion = .full
+        let full = SaryTheme.resolve(prefs: prefs, scheme: .dark, night: false, drive: false, systemReduceMotion: true)
+        XCTAssertEqual(full.animation(.celebrate), SaryMotion.celebrate.animation)
+    }
+}
+
+final class SaryLiveIndicatorTests: XCTestCase {
+    func testStatusDotBreathesOnlyWhenReallyLive() {
+        XCTAssertTrue(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .paused, connection: .connected, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .offline, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connecting, sharing: .sharing))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .paused))
+        XCTAssertFalse(SaryStatusSignals.isLive(status: .active, connection: .connected, sharing: .starting))
+    }
+
+    func testPresencePhaseIgnoresTheTimestamp() {
+        let a = SaryPresenceStyle(presence: .stale(since: Date(timeIntervalSince1970: 0))).phase
+        let b = SaryPresenceStyle(presence: .stale(since: Date(timeIntervalSince1970: 600))).phase
+        XCTAssertEqual(a, b, "a ticking «since» must not re-trigger the presence animation")
+        XCTAssertEqual(SaryPresenceStyle(presence: .live).phase, .live)
+        XCTAssertEqual(SaryPresenceStyle(presence: .paused).phase, .paused)
+    }
+
+    func testStateTransitionKeysOnTheKindNotItsText() {
+        XCTAssertEqual(SaryStateView.phase(.loading("أ")), SaryStateView.phase(.loading("ب")))
+        XCTAssertNotEqual(SaryStateView.phase(.loading("أ")), SaryStateView.phase(.offline(message: nil)))
+        XCTAssertNotEqual(SaryStateView.phase(.error(title: "x", message: nil)), SaryStateView.phase(.empty(title: "x", message: nil, systemImage: "tray")))
+    }
+}
+
+final class SaryHapticsPolicyTests: XCTestCase {
+    func testEverythingPlaysWhenNotDriving() {
+        for e in SaryHapticEvent.allCases { XCTAssertTrue(SaryHaptics.allows(e, driving: false), "\(e)") }
+    }
+
+    func testOnlyCriticalEventsPlayWhileDriving() {
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: true))
+        XCTAssertTrue(SaryHaptics.allows(.warning, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.selection, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.confirm, driving: true))
+        XCTAssertFalse(SaryHaptics.allows(.arrival, driving: true))
+        XCTAssertEqual(SaryHapticEvent.allCases.filter(\.isCritical), [.warning, .sos])
+    }
+
+    func testSOSIsNeverMuted() {
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: false, enabled: false))
+        XCTAssertTrue(SaryHaptics.allows(.sos, driving: true, enabled: false))
+        XCTAssertFalse(SaryHaptics.allows(.warning, driving: false, enabled: false))
+        XCTAssertFalse(SaryHaptics.allows(.selection, driving: false, enabled: false))
+    }
+}
+
+/// Legibility while driving and for tiny glyphs (UI polish pass 3).
+final class SaryLegibilityTests: XCTestCase {
+    func testDriveFloorsTinyStylesThenScales() {
+        // At rest every style keeps its ramp size: layout unchanged.
+        for s in SaryTextStyle.allCases { XCTAssertEqual(s.size(drive: false), s.size, s.label) }
+        // Drive: `.micro` (11) reads like `.caption` (12), both × 1.15.
+        XCTAssertEqual(SaryTextStyle.micro.size(drive: true), 12 * 1.15, accuracy: 0.001)
+        XCTAssertEqual(SaryTextStyle.caption.size(drive: true), 12 * 1.15, accuracy: 0.001)
+        XCTAssertEqual(SaryTextStyle.headline.size(drive: true), 17 * 1.15, accuracy: 0.001)
+        // Nothing is smaller than ~13.8 pt in drive mode, and nothing shrinks.
+        for s in SaryTextStyle.allCases {
+            XCTAssertGreaterThanOrEqual(s.size(drive: true), SaryTextStyle.driveFloor * SaryTextStyle.driveScale - 0.001, s.label)
+            XCTAssertGreaterThanOrEqual(s.size(drive: true), s.size(drive: false), s.label)
+            XCTAssertEqual(s.scale(drive: true) * s.size, s.size(drive: true), accuracy: 0.001, s.label)
+            XCTAssertEqual(s.scale(drive: false), 1, accuracy: 0.0001, s.label)
+        }
+        // The theme's scale is the same token.
+        XCTAssertEqual(SaryTheme.resolve(prefs: .init(), scheme: .dark, night: false, drive: true).typeScale, SaryTextStyle.driveScale)
+        XCTAssertEqual(SaryTheme.default.typeScale, 1)
+    }
+
+    func testGlyphGrowsALittleAndNeverShrinks() {
+        // Default text size: exactly the designed size.
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 10), 10)
+        // Larger text: follows, up to the cap.
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 12), 12)
+        XCTAssertEqual(SaryGlyph.size(base: 10, scaled: 30), 10 * SaryGlyph.maxGrowth, accuracy: 0.001)
+        XCTAssertEqual(SaryGlyph.size(base: 6, scaled: 20, maxGrowth: SaryGlyph.tightGrowth), 6 * SaryGlyph.tightGrowth, accuracy: 0.001)
+        // Smaller text sizes never make a tiny glyph tinier.
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: 7), 9)
+        // A cap under 1 means «never grows»; bad input falls back to the base.
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: 14, maxGrowth: 0.5), 9)
+        XCTAssertEqual(SaryGlyph.size(base: 9, scaled: .infinity), 9)
+        XCTAssertEqual(SaryGlyph.size(base: 0, scaled: 12), 0)
+        XCTAssertLessThan(SaryGlyph.tightGrowth, SaryGlyph.maxGrowth)
+    }
+
+    func testTimeOfDayAndDay() {
+        let riyadh = TimeZone(identifier: "Asia/Riyadh")!
+        // 2026-11-04T16:30:00Z is 19:30 in Riyadh.
+        let evening = ISODate.parse("2026-11-04T16:30:00Z")!
+        XCTAssertEqual(SaryFormat.timeOfDay(evening, timeZone: riyadh), "٧:٣٠ م")
+        XCTAssertEqual(SaryFormat.timeOfDay(ISODate.parse("2026-11-04T21:05:00Z")!, timeZone: riyadh), "١٢:٠٥ ص")
+        XCTAssertEqual(SaryFormat.timeOfDay(ISODate.parse("2026-11-04T09:00:00Z")!, timeZone: riyadh), "١٢:٠٠ م")
+        // The weather and safety clocks are the same formatter.
+        XCTAssertEqual(WeatherFormat.clock(evening, timeZone: riyadh), SaryFormat.timeOfDay(evening, timeZone: riyadh))
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = riyadh
+        XCTAssertEqual(SafetyFormat.clock(evening, calendar: cal), SaryFormat.timeOfDay(evening, timeZone: riyadh))
+
+        let day = SaryFormat.day(evening, timeZone: riyadh)
+        XCTAssertTrue(day.contains("٤"), day)
+        XCTAssertTrue(day.contains("٢٠٢٦"), day)
+        XCTAssertNil(day.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789")), day)
+    }
+}

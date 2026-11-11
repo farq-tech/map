@@ -137,7 +137,7 @@ struct PlaceBriefSection: View {
         } label: {
             HStack(spacing: theme.space(.s)) {
                 Image(systemName: detailsExpanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
+                    .saryGlyph(11, weight: .bold)
                 Text(detailsExpanded ? "إخفاء التفاصيل" : "التفاصيل والتوقعات")
                     .saryText(.footnote, weight: .bold)
                 Spacer(minLength: 0)
@@ -183,7 +183,7 @@ struct PlaceBriefSection: View {
         let warn = ui.stale || ui.offline
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: theme.space(.xs)) {
-                if warn { Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold)) }
+                if warn { Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").saryGlyph(11, weight: .bold) }
                 if let prov = ui.provider, !ui.source.isEmpty {
                     Link(destination: prov.attributionURL) { Text(ui.source).saryNumber(.caption, weight: warn ? .bold : .regular).lineLimit(2) }
                 } else {

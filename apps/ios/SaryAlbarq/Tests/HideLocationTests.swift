@@ -70,6 +70,6 @@ final class HideLocationTests: XCTestCase {
         /* Two map buttons at most (the owner's «زحمة» review): «أخفِ موقعي» is in the sheet's strip. */
         XCTAssertEqual(HideText.hideButton, "أخفِ موقعي")
         XCTAssertEqual(HideText.shownButton, "أظهر موقعي")
-        XCTAssertEqual(HideText.hiddenStrip, "موقعك مخفي عن الربع")
+        XCTAssertEqual(HideText.hiddenStrip, "موقعك مخفي عن الأصدقاء")
     }
 }

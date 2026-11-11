@@ -262,7 +262,7 @@ struct CoordinateSearchSheet: View {
         SaryPage(title: "ابحث أو أدخل إحداثية", close: close) {
             if let picked {
                 PlanMapView(route: [], picked: picked.point, interactive: false, camera: PlanCamera(kind: .point(picked.point, zoom: 13), id: Int(picked.point.lat * 1e5) ^ Int(picked.point.lng * 1e5)), theme: theme)
-                    .frame(height: 200)
+                    .saryFitHeight(200)
                     .clipShape(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous))
                     .accessibilityIdentifier("search.preview")
                 PointCard(subject: .point(picked.point, name: picked.name), actions: actions)
