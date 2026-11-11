@@ -79,5 +79,60 @@ class DesertEndpointsTest(unittest.TestCase):
         self.assertEqual((status, h['Location']), (302, 'https://bucket.example/desert/manifest.json'))
 
 
+class FakeBucket:
+    """download_file like boto3: writes the object to the target path, or raises when it is absent."""
+    def __init__(self, objects):
+        self.objects, self.calls = objects, []
+
+    def download_file(self, bucket, key, target):
+        self.calls.append((bucket, key))
+        if key not in self.objects:
+            raise FileNotFoundError(key)
+        with open(target, 'wb') as f:
+            f.write(self.objects[key])
+
+
+class DesertBucketFillTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.d = self.dir.name
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_missing_tile_is_fetched_once_then_kept(self):
+        b = FakeBucket({'desert/routes-t25_46.bin': b'tile'})
+        f = os.path.join(self.d, 'routes-t25_46.bin')
+        self.assertTrue(serve.desert_fill(f, client=b, bucket='grids'))
+        self.assertTrue(serve.desert_fill(f, client=b, bucket='grids'))
+        self.assertEqual(b.calls, [('grids', 'desert/routes-t25_46.bin')])
+        with open(f, 'rb') as h:
+            self.assertEqual(h.read(), b'tile')
+        self.assertFalse(os.path.exists(f + '.part'))
+
+    def test_absent_object_is_not_found(self):
+        b = FakeBucket({})
+        self.assertFalse(serve.desert_fill(os.path.join(self.d, 'routes-t20_40.bin'), client=b, bucket='grids'))
+
+    def test_stale_manifest_is_refetched_and_a_failure_keeps_the_old_one(self):
+        f = os.path.join(self.d, 'manifest.json')
+        with open(f, 'w') as h:
+            h.write('old')
+        t = os.path.getmtime(f)
+        b = FakeBucket({'desert/manifest.json': b'new'})
+        self.assertTrue(serve.desert_fill(f, client=b, bucket='grids', now=t + 10))
+        self.assertEqual(b.calls, [])  # still fresh
+        self.assertTrue(serve.desert_fill(f, client=b, bucket='grids', now=t + 301))
+        with open(f) as h:
+            self.assertEqual(h.read(), 'new')
+        down = FakeBucket({})
+        self.assertTrue(serve.desert_fill(f, client=down, bucket='grids', now=os.path.getmtime(f) + 400))
+        with open(f) as h:
+            self.assertEqual(h.read(), 'new')
+
+    def test_no_bucket_means_disk_only(self):
+        self.assertFalse(serve.desert_fill(os.path.join(self.d, 'manifest.json'), bucket=''))
+
+
 if __name__ == '__main__':
     unittest.main()

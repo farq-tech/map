@@ -40,6 +40,19 @@ python3 -m unittest test_build_tiles     # needs requirements-test.txt
   `/data/desert`), or redirected to `DESERT_PUBLIC_BASE` when set. Manifest cached 5 min, tiles 1 day
   (the app checks each tile's sha256 against the manifest). Independent of the vector archive.
 
+  With `DESERT_BUCKET` set, files missing from `DESERT_DATA_DIR` are read through from the private Railway
+  bucket **`sary-desert-grids`** (project `farq-targeting`, production, region ams) under `desert/`, and kept
+  on disk; the manifest is re-fetched after 5 minutes. Service variables (references, not copies):
+  - `DESERT_BUCKET=${{sary-desert-grids.BUCKET}}`
+  - `DESERT_ENDPOINT=${{sary-desert-grids.ENDPOINT}}`, `DESERT_REGION=${{sary-desert-grids.REGION}}`
+  - `DESERT_ACCESS_KEY_ID=${{sary-desert-grids.ACCESS_KEY_ID}}`, `DESERT_SECRET_ACCESS_KEY=${{sary-desert-grids.SECRET_ACCESS_KEY}}`
+
+  Upload after `national.sh` (tiles first, `manifest.json` last, so the app never sees a manifest for tiles
+  that are not there yet), with the bucket's credentials:
+
+      aws s3 sync out/desert/ s3://$BUCKET/desert/ --endpoint-url $ENDPOINT --exclude manifest.json
+      aws s3 cp out/desert/manifest.json s3://$BUCKET/desert/manifest.json --endpoint-url $ENDPOINT
+
 `python3 -m unittest test_serve_desert` tests these endpoints.
 
 It rebuilds every `REBUILD_HOURS` (default 168) with `build.sh`, which downloads a fresh extract. A rebuild writes a new file and swaps it in only when complete; a failed rebuild keeps the previous archive live.

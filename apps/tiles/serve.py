@@ -9,6 +9,11 @@
 Environment:
     DESERT_DATA_DIR     where manifest.json and routes-t*.bin live (read-only)    default $TILES_DATA_DIR/desert
     DESERT_PUBLIC_BASE  if set (https://bucket-host/desert), the desert endpoints redirect there instead
+    DESERT_BUCKET       a private S3-compatible bucket (Railway bucket «sary-desert-grids») holding manifest.json and
+                        routes-t*.bin under DESERT_PREFIX (default "desert/"). Files missing from DESERT_DATA_DIR are
+                        fetched from it on first request and kept there (read-through cache); the manifest is
+                        re-fetched when older than 5 minutes. Credentials: DESERT_ENDPOINT, DESERT_REGION,
+                        DESERT_ACCESS_KEY_ID, DESERT_SECRET_ACCESS_KEY (reference the bucket's variables in Railway).
     TILES_DATA_DIR      where farq.pmtiles lives (a persistent volume)          default /data
     PUBLIC_URL          the URL the apps reach this service at (for TileJSON)    default http://localhost:$PORT
     PORT                                                                          default 8080
@@ -41,6 +46,45 @@ TILE = re.compile(r'^/tiles/(\d{1,2})/(\d+)/(\d+)\.(?:mvt|pbf)$')
 DESERT_DIR = os.environ.get('DESERT_DATA_DIR', os.path.join(DATA, 'desert'))
 DESERT_PUBLIC_BASE = os.environ.get('DESERT_PUBLIC_BASE', '').rstrip('/')
 DESERT_TILE = re.compile(r'^/desert/tiles/(t\d{1,2}_\d{1,3})\.bin$')
+DESERT_BUCKET = os.environ.get('DESERT_BUCKET', '').strip()
+DESERT_PREFIX = os.environ.get('DESERT_PREFIX', 'desert/')
+DESERT_MANIFEST_TTL = 300
+_desert_s3 = None
+_desert_lock = threading.Lock()
+
+
+def desert_s3():
+    """The bucket client (boto3, as fetch_atlas.py), created on first use."""
+    global _desert_s3
+    if _desert_s3 is None:
+        import boto3
+        _desert_s3 = boto3.client('s3', endpoint_url=os.environ.get('DESERT_ENDPOINT') or None,
+                                  region_name=os.environ.get('DESERT_REGION') or None,
+                                  aws_access_key_id=os.environ.get('DESERT_ACCESS_KEY_ID') or None,
+                                  aws_secret_access_key=os.environ.get('DESERT_SECRET_ACCESS_KEY') or None)
+    return _desert_s3
+
+
+def desert_fill(file: str, client=None, bucket: str | None = None, now: float | None = None) -> bool:
+    """Make sure `file` (a manifest or tile path from desert_file) is on disk, fetching it from the bucket when it is
+    missing (or, for the manifest, stale). True when a usable file is there. A failed fetch keeps any older copy."""
+    bucket = DESERT_BUCKET if bucket is None else bucket
+    if not bucket:
+        return os.path.exists(file)
+    now = time.time() if now is None else now
+    name = os.path.basename(file)
+    fresh = os.path.exists(file) and (name != 'manifest.json' or now - os.path.getmtime(file) < DESERT_MANIFEST_TTL)
+    if fresh:
+        return True
+    with _desert_lock:
+        try:
+            os.makedirs(os.path.dirname(file), exist_ok=True)
+            part = f'{file}.part'
+            (client or desert_s3()).download_file(bucket, DESERT_PREFIX + name, part)
+            os.replace(part, file)
+        except Exception as e:  # missing object (sea / abroad) or network: serve what we have
+            print(f'desert: {name} not fetched from bucket ({type(e).__name__})', flush=True)
+    return os.path.exists(file)
 
 
 def desert_file(path: str, directory: str | None = None):
@@ -136,6 +180,7 @@ class Handler(BaseHTTPRequestHandler):
         if DESERT_PUBLIC_BASE:
             return self.send(302, headers={'Location': DESERT_PUBLIC_BASE + '/' + os.path.basename(file),
                                            'Cache-Control': f'public, max-age={max_age}'})
+        desert_fill(file)
         try:
             etag = desert_etag(file)
             with open(file, 'rb') as f:
