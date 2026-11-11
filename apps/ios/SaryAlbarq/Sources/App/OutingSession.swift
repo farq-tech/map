@@ -1147,6 +1147,36 @@ final class OutingSession: ObservableObject, Identifiable {
     /// for the old request can change the view without the person doing anything).
     private var sosChoice = 0
     private var hideChoice = 0
+    /// What the latest of those taps asked for (SOS on / hidden).
+    private var sosWanted = false
+    private var hideWanted = false
+
+    /// Raise the SOS again after a «أنا بخير» that was on the wire — unless the person tapped since
+    /// `choice`. A «أنا بخير» tapped while this request is out is sent again after it, so the
+    /// newest tap is what the server keeps (an extra DELETE is harmless).
+    private func reRaiseSOS(me: String, wire: WireFix?, choice: Int) async {
+        guard sosChoice == choice, closedReason == nil else { return }
+        outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
+        _ = await run("sos") {
+            let r = try await api.raiseSos(id, fix: wire)
+            if sosChoice == choice { view?.apply(.sos(userId: me, sos: r, refresh: false)) }
+        }
+        if sosChoice != choice, !sosWanted { sendLater(.cancelSOS, trace: ActionTrace.begin("sos-cancel")) }
+    }
+
+    /// Show me again after a hide that was on the wire — unless the person tapped since `choice`.
+    /// A hide tapped while this request is out is sent again after it. True unless the show failed.
+    @discardableResult
+    private func reShow(me: String, choice: Int) async -> Bool {
+        guard hideChoice == choice, closedReason == nil else { return true }
+        outbox.discard(user: myUserId, outing: id, kind: .hide)
+        let ok = await run("hidden") {
+            let r = try await api.setHidden(id, hidden: false)
+            if hideChoice == choice { view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self")) }
+        }
+        if hideChoice != choice, hideWanted { sendLater(.hide, trace: ActionTrace.begin("hide")) }
+        return ok
+    }
 
     /// A request still on the wire when the 15 s wait ran out: once it is done (whatever its
     /// answer), its retry is taken back and `redo` sends the later choice again, so that one is
@@ -1158,7 +1188,6 @@ final class OutingSession: ObservableObject, Identifiable {
             guard let self else { return }
             guard await self.outbox.waitUntilNotInFlight(user: self.myUserId, outing: self.id, kind: kind, timeoutMs: 120_000),
                   self.closedReason == nil, stillWanted(self) else { return }
-            self.outbox.discard(user: self.myUserId, outing: self.id, kind: kind)
             await redo(self)
         }
     }
@@ -1167,10 +1196,7 @@ final class OutingSession: ObservableObject, Identifiable {
     /// `choice`: `hideChoice` as it was when the person asked to be shown (read before any await).
     private func redoShowAfterInFlightHide(me: String, choice: Int) {
         redoAfterInFlight(.hide, stillWanted: { s in s.hideChoice == choice }) { s in
-            _ = await s.run("hidden") {
-                let r = try await s.api.setHidden(s.id, hidden: false)
-                s.view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
-            }
+            await s.reShow(me: me, choice: choice)
         }
     }
 
@@ -1338,6 +1364,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard let me = view?.myId, view?.status != .ended else { return false }
         let t = ActionTrace.begin(on ? "hide" : "show")
         hideChoice &+= 1
+        hideWanted = on
         let choice = hideChoice
         let ok: Bool
         if isLocal || on {
@@ -1353,12 +1380,9 @@ final class OutingSession: ObservableObject, Identifiable {
         } else {
             /* A hide already on the wire must land first, or it would hide me again after this. */
             let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
-            /* A hide that failed on the wire is back in the queue: its retry would hide me again. */
-            outbox.discard(user: myUserId, outing: id, kind: .hide)
-            ok = await run("hidden") {
-                let r = try await api.setHidden(id, hidden: on)
-                view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
-            }
+            /* A hide that failed on the wire is back in the queue: its retry would hide me again
+             * (reShow takes it back, unless I tapped again meanwhile). */
+            ok = await reShow(me: me, choice: choice)
             if ok, !cleared { redoShowAfterInFlightHide(me: me, choice: choice) }
             ActionTrace.uiShown(t)
             ActionTrace.acked(t, ok: ok)
@@ -1406,6 +1430,7 @@ final class OutingSession: ObservableObject, Identifiable {
         let t = ActionTrace.begin("sos")
         defer { ActionTrace.uiShown(t) }
         sosChoice &+= 1
+        sosWanted = true
         let choice = sosChoice
         let hideChoiceAtSOS = hideChoice
         let wasHidden = view?.me?.hidden == true
@@ -1443,31 +1468,22 @@ final class OutingSession: ObservableObject, Identifiable {
         if ok, racingCancel {
             let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .cancelSOS, timeoutMs: 15_000)
             /* That «أنا بخير» may have failed and gone back in the queue to retry: its retry would
-             * cancel this SOS later, so it is taken back before the SOS is raised again. */
-            outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
-            _ = await run("sos") {
-                let s = try await api.raiseSos(id, fix: wire)
-                view?.apply(.sos(userId: me, sos: s, refresh: false))
-            }
-            /* Still on the wire after 15 s: once it is done, the same again (unless I said «أنا بخير» since). */
+             * cancel this SOS later, so it is taken back before the SOS is raised again — unless I
+             * said «أنا بخير» to this SOS meanwhile (reRaiseSOS checks). */
+            await reRaiseSOS(me: me, wire: wire, choice: choice)
+            /* Still on the wire after 15 s: once it is done, the same again (unless I tapped since). */
             if !cleared {
                 let sosWire = wire
                 redoAfterInFlight(.cancelSOS, stillWanted: { s in s.sosChoice == choice }) { s in
-                    _ = await s.run("sos") {
-                        let r = try await s.api.raiseSos(s.id, fix: sosWire)
-                        s.view?.apply(.sos(userId: me, sos: r, refresh: false))
-                    }
+                    await s.reRaiseSOS(me: me, wire: sosWire, choice: choice)
                 }
             }
         }
         if ok, racingHide {
             let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
-            /* Same for a hide that failed and is waiting to retry: it would hide me again after the SOS. */
-            outbox.discard(user: myUserId, outing: id, kind: .hide)
-            _ = await run("hidden") {
-                let r = try await api.setHidden(id, hidden: false)
-                view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
-            }
+            /* Same for a hide that failed and is waiting to retry: it would hide me again after the SOS
+             * (unless I hid again meanwhile: reShow checks). */
+            await reShow(me: me, choice: hideChoiceAtSOS)
             if !cleared { redoShowAfterInFlightHide(me: me, choice: hideChoiceAtSOS) }
         }
         ActionTrace.acked(t, ok: ok)
@@ -1486,6 +1502,7 @@ final class OutingSession: ObservableObject, Identifiable {
         guard let me = view?.myId else { return }
         let t = ActionTrace.begin("sos-cancel")
         sosChoice &+= 1
+        sosWanted = false
         mesh.announce(.sosClear)
         view?.apply(.sos(userId: me, sos: nil, refresh: false))
         ActionTrace.uiShown(t)
