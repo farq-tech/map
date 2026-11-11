@@ -82,13 +82,17 @@ final class FarqValhallaRouteProvider: NavRoutingProvider {
     /// The body the proxy expects (`language: ar-SA`, metric is implied by Valhalla's km units).
     static func body(_ r: NavRouteRequest) -> [String: Any] {
         let o = r.options
-        return [
+        var body: [String: Any] = [
             "locations": [["lat": r.origin.lat, "lng": r.origin.lng], ["lat": r.target.position.lat, "lng": r.target.position.lng]],
             "costing": "auto",
             "options": ["avoid_unpaved": o.avoidUnpaved, "avoid_tolls": o.avoidTolls, "avoid_highways": false, "use_tracks": !o.avoidUnpaved],
             "alternates": 2,
             "language": "ar-SA",
         ]
+        if !r.avoidPolygons.isEmpty {
+            body["exclude_polygons"] = r.avoidPolygons.map { ring in ring.map { [$0.lng, $0.lat] } }
+        }
+        return body
     }
 
     private func request(_ path: String, method: String, body: Data? = nil) -> URLRequest {

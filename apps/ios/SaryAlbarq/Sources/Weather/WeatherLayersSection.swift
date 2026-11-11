@@ -49,7 +49,8 @@ struct WeatherLayersSection: View {
         switch layers.kind {
         case .none: return "طبقات الطقس من الأقمار الصناعية، تظهر فوق الخريطة في الاستكشاف."
         case .clouds: return "صور الأشعة تحت الحمراء من القمر الأوروبي Meteosat (EUMETSAT)، كل ١٠ دقائق لآخر ساعتين. آخر صورة عمرها ٢٠–٦٠ دقيقة. \(layers.kind.attribution())"
-        case .rain: return "تقدير المطر من أقمار ناسا (GPM IMERG) بدقة ~١٠ كم، يتأخر ٤–٧ ساعات. الزخات الصغيرة قد لا تظهر. \(layers.kind.attribution())"
+        case .rain: return "تقدير المطر من أقمار ناسا (GPM IMERG) بدقة ~١٠ كم، يتأخر ٤–٧ ساعات. الزخات الصغيرة قد لا تظهر. اتجاه الحركة من صورتين متتاليتين، وهو ماضٍ مو توقع. \(layers.kind.attribution())"
+        case .wind: return "توقّع نموذج جوي عالمي (ECMWF عبر MET Norway) للساعة الحالية على شبكة ~١٥٠ كم، مو قياس ولا بث حي. الرياح المحلية (الأودية، العواصف) ما تظهر. \(layers.kind.attribution())"
         case .green: return "مؤشر الخضرة (NDVI) من قمر VIIRS لآخر ٨ أيام مقارنة بالصيف، بدقة ~١ كم. أغلب المزارع المروية مستبعدة. \(layers.kind.attribution())"
         }
     }

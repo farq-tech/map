@@ -214,11 +214,17 @@ async function warm(nowMs = Date.now(), { frames = 4 } = {}) {
   const latest = await latestImageTime(nowMs);
   const plan = planFrames(latest, nowMs).slice(-frames).reverse(); // newest first
   const KSA_BOX = { west: 34, south: 16, east: 56, north: 33 };
-  const tiles = [3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
-  for (const f of plan) {
+  const base = [3, 4, 5].flatMap((z) => tilesFor(KSA_BOX, z));
+  /* The newest picture also gets z6 (what a person zoomed in a little asks for). Deeper zooms (up to z9)
+   * would be thousands of ~20 s upstream tiles a frame, so they stay on demand. */
+  const closer = tilesFor(KSA_BOX, 6);
+  let total = 0;
+  for (const [i, f] of plan.entries()) {
+    const tiles = i === 0 ? base.concat(closer) : base;
+    total += tiles.length;
     await Promise.all(tiles.map((t) => tile(f.id, t.z, t.x, t.y, nowMs).catch(() => null)));
   }
-  return { frames: plan.length, tiles: tiles.length };
+  return { frames: plan.length, tiles: total };
 }
 
 module.exports = {
