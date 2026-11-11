@@ -137,6 +137,12 @@ enum NavMotion {
 
     /// Reduce Motion: a crossfade, no travel.
     static func swapTravels(reduceMotion: Bool) -> Bool { !reduceMotion }
+
+    /// A rolling text that mostly counts down (time and distance left) and has no single numeric
+    /// value to give `SaryTransition.number`: digits roll down; a crossfade under Reduce Motion.
+    static func countdownRoll(_ theme: SaryTheme) -> ContentTransition {
+        theme.reduceMotion ? .opacity : .numericText(countsDown: true)
+    }
 }
 
 /// The guidance bar's fit in the sheet's 70 pt peek and at 320 pt (pure, unit-tested in
@@ -207,7 +213,7 @@ struct NavManeuverBanner: View {
                             Text(parts.value).font(.sary(theme.drive ? 38 : 32, .heavy)).foregroundStyle(p.textPrimary)
                                 .monospacedDigit()
                                 /* Rolls on the progress updates that already change it (about 1 Hz). */
-                                .contentTransition(.numericText(countsDown: true))
+                                .contentTransition(SaryTransition.number(d, theme))
                                 .animation(theme.animation(.snappy), value: parts.value)
                             Text(parts.unit).font(.sary(theme.drive ? 18 : 15, .bold)).foregroundStyle(p.textSecondary)
                         }
@@ -267,8 +273,8 @@ struct NavManeuverBanner: View {
         /* «نعيد حساب الطريق…» and back: a crossfade, so the reroute reads as one change. */
         .animation(theme.animation(.smooth), value: nav.rerouting)
         .navPanel(theme)
-        /* A reroute gets one haptic tap outside drive mode; in drive mode the voice says it. */
-        .sensoryFeedback(.impact(weight: .medium), trigger: nav.rerouting) { was, now in now && !was && !theme.drive }
+        /* A reroute gets one soft tap (silent in drive mode by `SaryHaptics.allows`; the voice says it). */
+        .saryHaptic(.confirm, trigger: nav.rerouting) { was, now in now && !was }
         .overlay(alignment: .topLeading) {
             Button { pip.start() } label: {
                 Image(systemName: pip.active ? "pip.exit" : "pip.enter")
@@ -350,14 +356,14 @@ struct NavETARow: View {
                     if let eta = nav.etaDate {
                         let clock = NavText.clock(eta)
                         Text("توصل \(clock)").font(.sary(size, .bold)).foregroundStyle(p.liveText)
-                            .contentTransition(.numericText())
+                            .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                             .animation(theme.animation(.snappy), value: clock)
                             .accessibilityIdentifier("nav.eta")
                     }
                     if let s = nav.remainingSeconds {
                         let left = NavText.remaining(seconds: s)
                         Text("· باقي \(left)").font(.sary(size, .regular)).foregroundStyle(p.textSecondary)
-                            .contentTransition(.numericText(countsDown: true))
+                            .contentTransition(SaryTransition.number(s, theme))
                             .animation(theme.animation(.snappy), value: left)
                             .accessibilityIdentifier("nav.remainingTime")
                     }
@@ -365,7 +371,7 @@ struct NavETARow: View {
                     if let m = nav.remainingMeters {
                         let far = SaryFormat.distance(meters: m)
                         Text(far).font(.sary(size, .bold)).foregroundStyle(p.textPrimary)
-                            .contentTransition(.numericText(countsDown: true))
+                            .contentTransition(SaryTransition.number(m, theme))
                             .animation(theme.animation(.snappy), value: far)
                             .accessibilityIdentifier("nav.remainingDistance")
                     }
@@ -536,14 +542,14 @@ struct NavArrivalCard: View {
         .shadow(color: p.live.opacity(celebrate ? 0.45 : 0), radius: celebrate ? 18 : 0)
         .scaleEffect(celebrate ? 1.02 : 1)
         .onAppear {
-            /* «وصلت»: a success haptic outside drive mode (in drive mode the voice says it). */
-            if !theme.drive { arrivedTap += 1 }
+            /* «وصلت»: the arrival haptic (silent in drive mode by `SaryHaptics.allows`). */
+            arrivedTap += 1
             guard !theme.reduceMotion else { return }
-            withAnimation(theme.animation(.snappy)) { celebrate = true } completion: {
+            withAnimation(theme.animation(.celebrate)) { celebrate = true } completion: {
                 withAnimation(theme.animation(.smooth)) { celebrate = false }
             }
         }
-        .sensoryFeedback(.success, trigger: arrivedTap)
+        .saryHaptic(.arrival, trigger: arrivedTap)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.arrived")
     }
@@ -619,7 +625,7 @@ struct NavBottomBar: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
-                    .contentTransition(.numericText(countsDown: true))
+                    .contentTransition(SaryTransition.number(nav.remainingSeconds ?? 0, theme))
                     .animation(theme.animation(.snappy), value: left)
                     .accessibilityIdentifier("nav.remainingTime")
             }
@@ -629,7 +635,7 @@ struct NavBottomBar: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .dynamicTypeSize(...NavBarLayout.numbersTypeCap)
-                .contentTransition(.numericText(countsDown: true))
+                .contentTransition(NavMotion.countdownRoll(theme))
                 .animation(theme.animation(.snappy), value: trip)
                 .accessibilityIdentifier("nav.eta")
             if NavBarLayout.showsStaleNote(peek: peek), let note = nav.target?.staleNote() {
@@ -787,7 +793,7 @@ struct NavSpeedCluster: View {
                 Text(kmh.map { SaryFormat.number($0) } ?? "—")
                     .font(.sary(d * 0.36, .heavy))
                     .foregroundStyle(over ? p.onEmergency : p.textPrimary)
-                    .contentTransition(.numericText())
+                    .contentTransition(SaryTransition.number(Double(kmh ?? 0), theme))
                     /* Rolls on the speed readings that already arrive (no extra updates). */
                     .animation(theme.animation(.snappy), value: kmh)
                     .lineLimit(1)
