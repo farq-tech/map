@@ -104,7 +104,28 @@ struct PlanPickedPin: View {
 /// The home map's location marker uses LocationSharer's permission and fix, not Mapbox's
 /// implicit location provider. This keeps the app in control of when iOS asks for permission.
 struct PlanUserLocationPin: View {
+    /// «اتجه» (temporary until #157): my car in my colour, turned by heading, instead of the dot.
+    /// Every other map passes nil and keeps the blue dot.
+    var car: UInt32? = nil
+    var heading: Double? = nil
+
     var body: some View {
+        if let car, let img = CarIcon.image(car) {
+            Image(uiImage: img)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 26, height: 47)
+                .rotationEffect(.degrees(CarIcon.rotate(heading)))
+                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                .frame(width: 52, height: 52)
+                .accessibilityLabel(Text("أنت"))
+                .accessibilityIdentifier("map.user-car")
+        } else {
+            dot
+        }
+    }
+
+    private var dot: some View {
         Circle()
             .fill(Color(red: 0.12, green: 0.52, blue: 0.98))
             .frame(width: 16, height: 16)

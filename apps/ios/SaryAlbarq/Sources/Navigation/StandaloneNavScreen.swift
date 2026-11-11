@@ -13,6 +13,22 @@ enum NavProviders {
     }
 }
 
+/// My car's colour for «اتجه» without an outing (temporary until #157): the colour the live map
+/// last gave me («أنت», `OutingView.colors`), else the white car.
+enum MyCarColor {
+    static let key = "sary.myCarColor.v1"
+    static let fallback: UInt32 = 0xE8EEF0
+
+    static func current(_ d: UserDefaults = .standard) -> UInt32 {
+        (d.object(forKey: key) as? NSNumber).map { UInt32(truncating: $0) } ?? fallback
+    }
+
+    static func remember(_ c: UInt32, _ d: UserDefaults = .standard) {
+        guard current(d) != c || d.object(forKey: key) == nil else { return }
+        d.set(NSNumber(value: c), forKey: key)
+    }
+}
+
 /// Pure decisions of «اتجه» without an outing (unit-tested in HomeFlowTests).
 enum StandaloneNavRules {
     enum Gate: Equatable {
@@ -101,6 +117,8 @@ struct StandaloneNavScreen: View {
     @State private var waitingSince: Date?
     /// The clock the gate is read with: ticks every second while waiting.
     @State private var now = Date()
+    /// «سرعة المركبة» on this screen (the same smoothing as the live trip's speedometer).
+    @StateObject private var speed = SpeedModel()
 
     var body: some View {
         let p = theme.palette
@@ -110,7 +128,9 @@ struct StandaloneNavScreen: View {
             PlanMapView(route: StandaloneNavRules.line(phase: nav.phase, active: nav.active, progress: nav.shownProgress, offRoad: nav.offRoad,
                                                        me: me, target: target.position),
                         destination: OutingDestination(name: target.name, lat: target.position.lat, lng: target.position.lng),
-                        camera: camera, theme: theme, userLocation: me)
+                        camera: camera, theme: theme, userLocation: me,
+                        userCar: MyCarColor.current(),
+                        userHeading: location.lastFix.flatMap { Policy.trustedHeading($0.heading, speed: $0.speed) })
                 .ignoresSafeArea()
                 .accessibilityIdentifier("standaloneNav.map")
             VStack(spacing: theme.space(.s)) {
@@ -123,7 +143,8 @@ struct StandaloneNavScreen: View {
                         .accessibilityIdentifier("standaloneNav.toast")
                 }
                 Spacer()
-                HStack {
+                HStack(alignment: .bottom) {
+                    speedReadout
                     Spacer()
                     Button { toggleCamera(me) } label: {
                         Image(systemName: followMe ? "map.fill" : "location.fill").font(.system(size: 17, weight: .bold))
@@ -171,6 +192,7 @@ struct StandaloneNavScreen: View {
             guard let f else { return }
             if !started { begin() }
             nav.ingest(f)
+            speed.ingest(f)
             follow(LngLat(lng: f.lng, lat: f.lat))
         }
         .onChange(of: location.canLocate) { _, _ in begin() }
@@ -185,6 +207,21 @@ struct StandaloneNavScreen: View {
     }
 
     // MARK: chrome
+
+    /// My speed with the posted limit (as the live trip's guidance), or the limit alone until a
+    /// speed is read. Respects «نبّهني إذا تجاوزت» (SpeedPrefs).
+    @ViewBuilder
+    private var speedReadout: some View {
+        let guiding = nav.phase == .guiding
+        if guiding && speed.everRead {
+            let over = SpeedPrefs.alertOn() && (speed.current.kmh ?? 0) > Double(SpeedPrefs.limitKmh())
+            NavSpeedCluster(ui: SpeedometerUI(current: speed.current, trip: nil, overLimit: over), limit: nav.progress?.speedLimitKmh)
+                .accessibilityIdentifier("standaloneNav.speed")
+        } else if guiding, let k = nav.progress?.speedLimitKmh {
+            NavSpeedLimitSign(kmh: k)
+                .accessibilityIdentifier("standaloneNav.speedLimit")
+        }
+    }
 
     @ViewBuilder
     private func top(_ gate: StandaloneNavRules.Gate) -> some View {

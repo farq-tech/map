@@ -221,4 +221,16 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertFalse(IntroPolicy.enabledByDefault)
         XCTAssertEqual(IntroPolicy.mode(IntroFacts(enabled: IntroPolicy.enabled(defaults))), .still)
     }
+
+    /// «اتجه» draws my car in the colour the live map last gave me, else the white car (temporary, #157).
+    func testMyCarColorRemembersTheLiveColourElseWhite() {
+        let d = UserDefaults(suiteName: "MyCarColorTests")!
+        d.removePersistentDomain(forName: "MyCarColorTests")
+        XCTAssertEqual(MyCarColor.current(d), MyCarColor.fallback, "no trip yet: the white car")
+        MyCarColor.remember(0xD6452F, d)
+        XCTAssertEqual(MyCarColor.current(d), 0xD6452F)
+        MyCarColor.remember(0x2F6FD6, d)
+        XCTAssertEqual(MyCarColor.current(d), 0x2F6FD6, "the latest trip's colour")
+        XCTAssertNotNil(CarIcon.image(MyCarColor.fallback), "the white car is drawable")
+    }
 }
