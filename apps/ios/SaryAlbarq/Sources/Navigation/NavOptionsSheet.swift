@@ -134,7 +134,7 @@ struct NavOptionsSheet: View {
                     HStack(spacing: 6) {
                         if index == 0 { tag(nav.options.fastest ? "الأسرع" : "الأقصر", p.liveText) }
                         if let v = r.via { Text("عبر \(NavText.arabicDigitsOnly(v))").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
-                        if r.hasUnpaved { tag("ترابي", p.warningText) }
+                        if let t = NavSurfaceLegend.badge(for: r) { tag(t, p.warningText) }
                         if r.hasTolls { tag("رسوم", p.warningText) }
                     }
                 }
@@ -255,6 +255,9 @@ struct NavTargetPicker: View {
 struct NavSurfaceLegend: View {
     @Environment(\.sary) private var theme
     var runs: [NavSurfaceRun]
+    /// «أخفِ» / «أظهر»: the window can be put away; the choice is kept on this phone (owner's request).
+    @AppStorage(NavSurfaceLegend.hiddenKey) private var hidden = false
+    static let hiddenKey = "sary.nav.surfaceLegend.hidden.v1"
 
     struct Row: Identifiable, Equatable {
         var kind: NavSurfaceKind
@@ -282,6 +285,20 @@ struct NavSurfaceLegend: View {
         return out.filter { $0.meters >= 50 }
     }
 
+    /// The route card's tag. It used to say «ترابي» on any route the desert router built (it always sets
+    /// `hasUnpaved`), even one that is 98% asphalt (owner's phone, Riyadh → Thumamah: 71.4 of 72.9 km paved).
+    /// Now it names the largest non-asphalt surface with its length, from the same runs as the legend:
+    /// «ترابي ١٫٥ كم». Nothing when the route is all asphalt. Without surface data: the old word.
+    static func badge(for r: NavRoute) -> String? {
+        guard r.hasUnpaved else { return nil }
+        guard !r.surfaceRuns.isEmpty else { return label(.unpaved) }
+        guard let top = rows(r.surfaceRuns).filter({ $0.kind != .paved }).max(by: { $0.meters < $1.meters }) else { return nil }
+        return "\(label(top.kind)) \(SaryFormat.distance(meters: top.meters))"
+    }
+
+    /// The whole route in metres: every surface listed (the tiny approximate join is not counted).
+    static func total(_ rows: [Row]) -> Double { rows.reduce(0) { $0 + $1.meters } }
+
     /// Worth a legend: something other than asphalt is on the way.
     static func shows(_ runs: [NavSurfaceRun]) -> Bool { rows(runs).contains { $0.kind != .paved } }
 
@@ -289,19 +306,47 @@ struct NavSurfaceLegend: View {
         let p = theme.palette
         let rows = Self.rows(runs)
         return VStack(alignment: .leading, spacing: theme.space(.xs)) {
-            Text("نوع الطريق").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
-            ForEach(rows) { r in
-                HStack(spacing: theme.space(.s)) {
-                    swatch(r.kind)
-                    Text(Self.label(r.kind)).saryText(.footnote, weight: .medium).foregroundStyle(p.textPrimary)
+            HStack {
+                Text("نوع الطريق").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
+                Spacer(minLength: 0)
+                if hidden {
+                    Text(SaryFormat.distance(meters: Self.total(rows))).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                }
+                Button { withAnimation(theme.animation(.smooth)) { hidden.toggle() } } label: {
+                    Image(systemName: hidden ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(p.textSecondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, -10)
+                .accessibilityLabel(Text(hidden ? "أظهر نوع الطريق" : "أخفِ نوع الطريق"))
+                .accessibilityIdentifier("nav.surfaceLegend.toggle")
+            }
+            if !hidden {
+                ForEach(rows) { r in
+                    HStack(spacing: theme.space(.s)) {
+                        swatch(r.kind)
+                        Text(Self.label(r.kind)).saryText(.footnote, weight: .medium).foregroundStyle(p.textPrimary)
+                        Spacer(minLength: 0)
+                        Text(SaryFormat.distance(meters: r.meters)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                SaryDivider()
+                HStack {
+                    Text("المجموع").saryText(.footnote, weight: .bold).foregroundStyle(p.textPrimary)
                     Spacer(minLength: 0)
-                    Text(SaryFormat.distance(meters: r.meters)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
+                    Text(SaryFormat.distance(meters: Self.total(rows))).saryNumber(.footnote, weight: .bold).foregroundStyle(p.textPrimary)
                 }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("nav.surfaceLegend.total")
             }
         }
         .padding(theme.space(.m))
         .sarySurface(radius: SaryRadius.m)
+        /* Children stay separate elements (the hide button, each surface, the total): VoiceOver reads them one by one. */
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("nav.surfaceLegend")
     }
 

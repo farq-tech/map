@@ -72,6 +72,15 @@ struct DebugScreen: View {
         #if DEBUG
         case "imagery": SatelliteImageryProbe().ignoresSafeArea()
         #endif
+        #if DEBUG
+        case "route-surfaces":
+            /* The road-type window with known lengths (Riyadh → Thumamah: mostly asphalt), no network. */
+            let km = { (k: Double) -> [LngLat] in [LngLat(lng: 46.6, lat: 24.7), LngLat(lng: 46.6, lat: 24.7 + k / 111.19)] }
+            SaryPage(title: "نوع الطريق") {
+                NavSurfaceLegend(runs: [NavSurfaceRun(kind: .paved, coordinates: km(71.4)), NavSurfaceRun(kind: .unpaved, coordinates: km(1.1)),
+                                        NavSurfaceRun(kind: .terrain, coordinates: km(0.4))])
+            }
+        #endif
         case "plan-details": HomeView(initial: [.details("demo-new")])
         case "plan-editor", "plan-editor-draw":
             PlanEditorView(plan: model.plans.model(DemoData.outingId), outingName: "طلعة الثمامة (عرض تجريبي)", canEdit: true, myFix: nil, close: {})

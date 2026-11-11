@@ -236,3 +236,24 @@ final class StandaloneNavRestartUITests: XCTestCase {
         XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
     }
 }
+
+/// The road-type window (owner): it can be put away and brought back; the total stays visible.
+final class SurfaceLegendToggleUITests: XCTestCase {
+    func testHideAndShowTheRoadTypeWindow() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "route-surfaces", "-SaryScheme", "light"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("nav.surfaceLegend").waitForExistence(timeout: 20))
+        let toggle = app.buttons["nav.surfaceLegend.toggle"]
+        XCTAssertTrue(toggle.isHittable, "the hide button can be pressed")
+        /* The choice is kept on the phone: start from the shown state whatever an earlier run left. */
+        if !any("nav.surfaceLegend.total").exists { toggle.tap() }
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForExistence(timeout: 3), "the total under the surfaces")
+        toggle.tap()
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForNonExistence(timeout: 3), "hidden: the rows and the total row are gone")
+        XCTAssertTrue(any("nav.surfaceLegend").exists, "the window itself stays, folded")
+        toggle.tap()
+        XCTAssertTrue(any("nav.surfaceLegend.total").waitForExistence(timeout: 3), "shown again")
+    }
+}
