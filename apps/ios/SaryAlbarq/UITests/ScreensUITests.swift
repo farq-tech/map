@@ -165,3 +165,74 @@ final class StandaloneNavStaleFixUITests: XCTestCase {
         XCTAssertTrue(started, "guidance never started: «\(status.exists ? status.label : "-")»")
     }
 }
+
+/// Issue #161: a category chip (or a search) lists places; they must show on the map too.
+final class CategoryPinsUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    private func shot(_ name: String) {
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = name; a.lifetime = .keepAlways; add(a)
+    }
+
+    func testCityCategoryResultsShowOnTheMap() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        any("home.category.restaurants").tap()
+        XCTAssertTrue(any("home.result").waitForExistence(timeout: 20), "the list has places")
+        sleep(2)
+        /* Lower the sheet: the map with its markers. */
+        let handle = any("home.sheet.handle")
+        if handle.exists { handle.swipeDown() }
+        sleep(4)
+        shot("category-restaurants")
+    }
+}
+
+/// «اتجه» while driving (temporary until #157): my car (not a dot), my speed and the posted limit.
+final class StandaloneNavDriveShotsUITests: XCTestCase {
+    func testCarAndSpeedWhileGuiding() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home", "-SaryNavDemo"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).press(forDuration: 1.3)
+        XCTAssertTrue(any("home.place.go").waitForExistence(timeout: 10))
+        any("home.place.go").tap()
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 20), "guiding")
+        sleep(12)
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "standalone-drive"; a.lifetime = .keepAlways; add(a)
+        XCTAssertTrue(any("map.user-car").exists, "my car, not the dot")
+        XCTAssertTrue(any("standaloneNav.speed").exists || any("standaloneNav.speedLimit").exists, "speed or the posted limit")
+    }
+}
+
+/// Owner, Build 39: «اتجه» stuck on «ننتظر موقعك… · الدقة ±٨ م» with a good fix — guidance had started
+/// and was brought back to idle. It must start again by itself.
+final class StandaloneNavRestartUITests: XCTestCase {
+    func testGuidanceBackToIdleStartsAgain() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
+                               "-SaryNavDemo", "-SaryNavResetOnce", "3"]
+        app.launch()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 1.3)
+        XCTAssertTrue(any("home.place.go").waitForExistence(timeout: 10))
+        any("home.place.go").tap()
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 20), "guiding first")
+        sleep(6)   /* reset at +3 s, then the 1 s re-check */
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "standalone-after-reset"; a.lifetime = .keepAlways; add(a)
+        let status = any("standaloneNav.status")
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
+    }
+}
