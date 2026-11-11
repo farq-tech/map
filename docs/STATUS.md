@@ -371,3 +371,9 @@
 - أعيد تشغيل `xcodebuild test` على الرأس `cc1de32c993033cb743661a6c0ec7dca35936af0` في Xcode 27.2، جهاز Atlas Isolated iPhone 18 Pro Simulator / iOS 27.2؛ شملت `DesertRouterTests` و`PlaceNamerTests` و`QiblaTests`.
 - النتيجة حسب `xcresulttool get test-results summary`: **39/39 ناجح، 0 فشل، 0 تخطٍ، 0 runtime warnings**. هذا يعيد التحقق من هذه المجموعات فقط على الرأس الحالي؛ لا يشمل المجموعة الكاملة، ولا اختبار واجهة كاملة، ولا جهاز iPhone حقيقي، ولا طلب مسار Mapbox حي. لا يُغلق به أي من هذه البنود الأوسع.
 - لا يزال #144 Draft ومفتوحًا؛ لا archive أو رفع جديد لهذا الرأس مثبت. المالك: Codex. التالي: إعادة المجموعة الكاملة وفرز الإخفاقات السابقة، ثم اختبار الرحلة على iPhone فعلي قبل اعتماد المرشح.
+
+## اختبارات واجهة تدفق الطلعة على رأس #144 — 2026-11-11 07:10 (Asia/Riyadh)
+
+- على الرأس نفسه `cc1de32c993033cb743661a6c0ec7dca35936af0`، شغّلت على Atlas Isolated iPhone 18 Pro Simulator / iOS 27.2: `SaryAlbarqUITests.testMapPointStartsLegInActiveOuting`، و`OutingLegsUITests.testInTripSearchOpensTheHomeDestinationSearch`، و`OutingLegsUITests.testAfterArrivalCanChooseAndStartAnotherDestination`.
+- النتيجة من xcresult: **3/3 ناجحة، 0 فشل، 0 تخطٍ، 0 runtime warnings**. التدفقات تستخدم `-demo` وبيانات محاكي؛ تثبت وصول التفاعل للواجهة وتحديث الوجهة/البحث داخل الطلعة، ولا تثبت حساب مسار حيًا أو مزامنة متعددة الأجهزة أو سلوك iPhone فعلي. سجل المحاكي طبع تحذيرًا عن رمز وصول مكرر من إطار إمكانية الوصول في WebKit وWebCore، لكن xcresult لم يسجل runtime warnings؛ لا ننسبه إلى التطبيق دون إعادة تحقق.
+- المالك: Codex. التالي: إعادة اختبار التدفقات على جهاز فعلي مع وجهة حقيقية، ثم اختبر حساب المدينة-إلى-البر مستقلًا؛ لا تخلط نجاح demo UI باكتمال الملاحة.
