@@ -1317,6 +1317,8 @@ final class OutingSession: ObservableObject, Identifiable {
             ActionTrace.acked(t, ok: true)
             ok = true
         } else {
+            /* A hide already on the wire must land first, or it would hide me again after this. */
+            await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
             ok = await run("hidden") {
                 let r = try await api.setHidden(id, hidden: on)
                 view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
@@ -1386,13 +1388,31 @@ final class OutingSession: ObservableObject, Identifiable {
             ActionTrace.acked(t, ok: true)
             return wasHidden
         }
-        /* A «أنا بخير» still queued from before must not land after this SOS and cancel it. */
+        /* A «أنا بخير» still queued from before must not land after this SOS and cancel it. One
+         * already on the wire can't be taken back: the SOS goes now, and is raised again once
+         * that request is done (below), so it can never end up cancelled. */
         outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
+        let racingCancel = outbox.isInFlight(user: myUserId, outing: id, kind: .cancelSOS)
+        let racingHide = wasHidden && outbox.isInFlight(user: myUserId, outing: id, kind: .hide)
         /* The SOS shows me again (the server does the same): a queued hide must not undo that. */
         if wasHidden { outbox.discard(user: myUserId, outing: id, kind: .hide) }
         let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
             view?.apply(.sos(userId: me, sos: s, refresh: false))
+        }
+        if ok, racingCancel {
+            await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .cancelSOS, timeoutMs: 15_000)
+            _ = await run("sos") {
+                let s = try await api.raiseSos(id, fix: wire)
+                view?.apply(.sos(userId: me, sos: s, refresh: false))
+            }
+        }
+        if ok, racingHide {
+            await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
+            _ = await run("hidden") {
+                let r = try await api.setHidden(id, hidden: false)
+                view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
+            }
         }
         ActionTrace.acked(t, ok: ok)
         if !ok {
