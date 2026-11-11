@@ -1434,8 +1434,11 @@ final class OutingSession: ObservableObject, Identifiable {
         let choice = sosChoice
         let hideChoiceAtSOS = hideChoice
         let wasHidden = view?.me?.hidden == true
+        /* The SOS shows me (here and on the server): that is now the standing choice. */
+        if wasHidden { hideWanted = false }
         defer {
-            if wasHidden {
+            /* …unless I hid again while it was being sent. */
+            if wasHidden, hideChoice == hideChoiceAtSOS {
                 view?.apply(.memberHidden(userId: me, hidden: false, since: nil, reason: "sos"))
                 HideReminder.sync(outingId: id, since: nil)
             }
@@ -1463,8 +1466,13 @@ final class OutingSession: ObservableObject, Identifiable {
         if wasHidden { outbox.discard(user: myUserId, outing: id, kind: .hide) }
         let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
-            view?.apply(.sos(userId: me, sos: s, refresh: false))
+            /* «أنا بخير» tapped while this was out (CarPlay can offer it early): don't put the SOS back. */
+            if sosChoice == choice { view?.apply(.sos(userId: me, sos: s, refresh: false)) }
         }
+        /* Taps made while the SOS was on its way may have reached the server first, and the SOS
+         * undid them there (it clears «أنا بخير» and shows me): send the newest of each again. */
+        if ok, sosChoice != choice, !sosWanted { sendLater(.cancelSOS, trace: ActionTrace.begin("sos-cancel")) }
+        if ok, hideChoice != hideChoiceAtSOS, hideWanted { sendLater(.hide, trace: ActionTrace.begin("hide")) }
         if ok, racingCancel {
             let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .cancelSOS, timeoutMs: 15_000)
             /* That «أنا بخير» may have failed and gone back in the queue to retry: its retry would
