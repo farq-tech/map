@@ -184,7 +184,7 @@ final class OutingLegsUITests: XCTestCase {
 
     func testMemberWaitsForTheLeader() {
         let app = launch(["-SaryDemoMe", "00000000-0000-4000-8000-000000000002"])
-        XCTAssertTrue(waitLine(app, contains: "بانتظار أمير الرحلة يبدأ"), line(app))
+        XCTAssertTrue(waitLine(app, contains: "ننتظر أمير الرحلة يبدأها"), line(app))
         XCTAssertTrue(el(app, "flow.cta.waitLeader").exists)
         XCTAssertFalse(el(app, "flow.cta.startOuting").exists, "only the leader starts")
         shot(app, "02-not-started-member")

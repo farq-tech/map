@@ -2001,8 +2001,10 @@ extension OutingMapboxView.Coordinator {
         if planDrawing.plan.route.count >= 2 { routes.append(planDrawing.plan.route) }
         /* UX ٢١: after the end the slope warning is history — no routes, no legend. */
         if tripEnded { routes = [] }
-        /* Same idea as LiveContextRule: guidance, drive mode, or clearly moving (> ~15 km/h). */
-        let driving = theme.drive || navDrawer.ownsCamera || (me?.speedMps ?? 0) > 4.2
+        /* Camera fitting a route preview is not driving. Block the drone for active guidance,
+         * explicit drive mode, or a clearly moving vehicle. */
+        let driving = MapVisualDriving.isDriving(driveMode: theme.drive, guidanceActive: navLast.guidanceActive,
+                                                  speedMps: me?.speedMps)
         return MapVisualInputs(me: me.map { recs[$0.id]?.shown ?? $0.position }, driving: driving, exploring: exploreDrawer.last.active,
                                terrain3D: terrain3D, night: theme.night, layer: layer, chrome: chrome, routes: routes)
     }

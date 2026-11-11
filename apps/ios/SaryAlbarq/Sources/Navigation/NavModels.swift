@@ -149,6 +149,9 @@ enum NavSurfaceKind: String, Equatable {
     case unpaved
     /// A cost-grid path through terrain, not a mapped road or track.
     case terrain
+    /// Short, approximate join from an exact provider coordinate to a cost-grid cell center.
+    /// Drawn dashed so it is never mistaken for a mapped road or verified trail.
+    case gridSnap
 }
 
 struct NavSurfaceRun: Equatable {

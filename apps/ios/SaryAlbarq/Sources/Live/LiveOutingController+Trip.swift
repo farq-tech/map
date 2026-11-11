@@ -13,8 +13,8 @@ extension LiveOutingController {
     var returnOrigin: String? { ReturnTripStore.origin(of: session.id) }
 
     func registerTrip() {
-        /* The navigation picker's «الوجهة» and «نهاية المسار» read the plan too. */
-        navDestination = { [weak self] in self?.planModel?.plan.destination }
+        /* The navigation picker must follow the active leg when it differs from the old plan. */
+        navDestination = { [weak self] in self?.tripDestination }
         navPlanRoute = { [weak self] in self?.planModel?.plan.points ?? [] }
         trip.onEvent = { [weak self] e in self?.tripEvent(e) }
         session.tripSnapshot = { [weak self] in

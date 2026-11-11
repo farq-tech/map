@@ -288,6 +288,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         var coordinates = prefix
         let routePoints = option.points
         if coordinates.isEmpty { coordinates.append(start) }
+        let gridJoin = coordinates.last
         if let first = routePoints.first {
             if let last = coordinates.last, Vehicle.distanceMeters(last, first) <= 5 {
                 // Keep the raster path after its shared join point. Skipping the whole raster
@@ -345,11 +346,21 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         } else {
             streetSurfaces = []
         }
+        // A* starts/ends at raster-cell centers, while city routing and user pins use exact
+        // coordinates. Preserve the short join geometrically, but tag it explicitly as an
+        // approximate grid snap so the renderer cannot color it as paved or as a verified trail.
+        let gridSnap: [NavSurfaceRun]
+        if let gridJoin, let first = routePoints.first,
+           Vehicle.distanceMeters(gridJoin, first) > 5 {
+            gridSnap = [NavSurfaceRun(kind: .gridSnap, coordinates: [gridJoin, first])]
+        } else {
+            gridSnap = []
+        }
         let desertSurfaces = Self.surfaceRuns(routePoints, grid: grid)
         return NavRoute(id: "\(idPrefix)-desert-\(option.mode.rawValue)", coordinates: coordinates,
                         distanceM: total, durationS: duration, steps: steps,
                         hasUnpaved: true, via: "درب بري محسوب (تضاريس وطرق OSM)", timingProfile: timingProfile,
-                        surfaceRuns: streetSurfaces + desertSurfaces,
+                        surfaceRuns: streetSurfaces + gridSnap + desertSurfaces,
                         roadEnd: prefix.count >= 2 ? ReturnRoute.pavedEnd(streetSurfaces, fallback: prefix.last) : nil)
     }
 

@@ -177,7 +177,7 @@ struct MapHomeScreen: View {
         } else {
             base = CGFloat(HomeSheetRules.collapsedHeight) + (activeOuting == nil ? 0 : 78)
         }
-        return min(min(screen - 60, 760), max(160, base - drag))
+        return CGFloat(HomeSheetRules.frameHeight(screen: Double(screen), preferred: Double(base), drag: Double(drag)))
     }
 
     private func sheet(height: CGFloat) -> some View {

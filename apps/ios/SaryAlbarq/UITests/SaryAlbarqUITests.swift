@@ -62,7 +62,7 @@ final class SaryAlbarqUITests: XCTestCase {
     /// Selecting a point from Home during an existing outing starts a leg in that outing.
     func testMapPointStartsLegInActiveOuting() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "home", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryScreen", "home", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryDrive", "0", "-SaryDemoPlanName", "وجهة الخطة القديمة"]
         allowLocation()
         XCUIDevice.shared.location = XCUILocation(location: CLLocation(coordinate: CLLocationCoordinate2D(latitude: 24.7113, longitude: 46.6744), altitude: 600,
                                                                      horizontalAccuracy: 5, verticalAccuracy: 5, course: 0, speed: 0, timestamp: Date()))
@@ -76,15 +76,28 @@ final class SaryAlbarqUITests: XCTestCase {
         let start = app.descendants(matching: .any)["home.place.start"].firstMatch
         XCTAssertTrue(start.waitForExistence(timeout: 10))
         XCTAssertEqual(start.label, "وجّه القافلة إلى هنا")
+        let selectedName = app.staticTexts["home.place.name"].label
+        XCTAssertFalse(selectedName.isEmpty)
+        XCTAssertNotEqual(selectedName, "وجهة الخطة القديمة", "the selected map point must differ from the outing's existing plan destination")
         start.tap()
 
         let liveMap = app.descendants(matching: .any)["outing-sheet-summary"].firstMatch
         XCTAssertTrue(liveMap.waitForExistence(timeout: 30), "the existing outing should open")
         let line = app.descendants(matching: .any)["trip.header.line"].firstMatch
         XCTAssertTrue(line.waitForExistence(timeout: 10))
-        let destination = NSPredicate(format: "label CONTAINS %@", "في الطريق إلى نقطة على الخريطة")
+        let destination = NSPredicate(format: "label CONTAINS %@", selectedName)
         expectation(for: destination, evaluatedWith: line)
         waitForExpectations(timeout: 15)
+
+        /* The route picker must use the active map-picked leg, not the previous plan target. */
+        app.buttons["outing-actions"].tap()
+        let navigate = app.buttons["outing-navigate"]
+        XCTAssertTrue(navigate.waitForExistence(timeout: 5))
+        navigate.tap()
+        let pickerDestination = app.buttons["nav.pick.destination"]
+        XCTAssertTrue(pickerDestination.waitForExistence(timeout: 5))
+        XCTAssertTrue(pickerDestination.label.contains(selectedName), "picker should follow the active leg: \(pickerDestination.label)")
+        XCTAssertFalse(pickerDestination.label.contains("وجهة الخطة القديمة"), "picker must not fall back to the previous plan target")
     }
 
     private func attach(_ app: XCUIApplication, _ name: String) {
@@ -130,8 +143,8 @@ final class SaryAlbarqUITests: XCTestCase {
          * alert may arrive after the initiating tap returns. Poll SpringBoard directly;
          * tapping blank app space can dismiss the alert, reach the map, or leave the app. */
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        /* Interruption monitors run in response to an app interaction. Tap the invite title,
-         * a no-op element, so the prompt is handled without replaying Join underneath. */
+        /* Do not tap the obscured invitation/map while waiting: a system alert can report the
+         * underlying title as hittable even though XCTest cannot compute a valid hit point. */
         usleep(600_000)
         let deadline = Date().addingTimeInterval(15)
         let expectsRefusal = labels.contains("Don’t Allow") || labels.contains("Don't Allow") || labels.contains("عدم السماح")
@@ -147,9 +160,6 @@ final class SaryAlbarqUITests: XCTestCase {
                 handled = true
                 break
             }
-            let inviteTitle = app.staticTexts["invite.name"]
-            if inviteTitle.exists && inviteTitle.isHittable { inviteTitle.tap() }
-            if handled { break }
             for label in labels {
                 /* Core Location's prompt is surfaced as a SpringBoard interruption on some
                  * simulator runtimes and as an app button on others; query both owners. */
@@ -253,6 +263,7 @@ final class SaryAlbarqUITests: XCTestCase {
         sleep(1)
         shot("1-invite-one-screen", app)
 
+        setTestLocation()
         XCTAssertTrue(tapAndHandleLocationPermission(app, join, using: ["Allow While Using App", "السماح أثناء استخدام التطبيق"]))
 
         let summary = any(app, "outing-sheet-summary")
