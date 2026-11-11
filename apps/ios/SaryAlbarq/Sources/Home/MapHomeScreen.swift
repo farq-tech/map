@@ -90,7 +90,7 @@ struct MapHomeScreen: View {
                             onLongPress: { p in pick(.init(destination: OutingDestination(name: "نقطة على الخريطة", lat: p.lat, lng: p.lng),
                                                            subtitle: CoordinateShare.displayDecimal(p), icon: "mappin", desert: true)) },
                             desert: desertOverlay,
-                            onDesertTap: { id in if let it = desertItems.first(where: { $0.id == id }) { pickDesert(it) } })
+                            onDesertTap: { id in pinTapped(id) })
                     .ignoresSafeArea()
                     .accessibilityIdentifier("home.map")
                 VStack(spacing: theme.space(.s)) {
@@ -744,18 +744,7 @@ struct MapHomeScreen: View {
                         if i > 0 { SaryDivider() }
                         /* Build 36 item 11: Arabic name first, the other language on its own small line, the distance bold. */
                         PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
-                                       meters: r.meters(from: myPoint), id: "home.result") {
-                            if let polygon = r.areaPolygon {
-                                desertPicked = DesertCategoryItem(id: r.id, title: r.name, detail: r.subtitle, point: r.point,
-                                                                 meters: r.areaDistanceM, systemImage: r.icon, polygon: polygon,
-                                                                 approach: r.areaApproach)
-                            } else {
-                                desertPicked = nil
-                            }
-                            let target = r.areaApproach ?? r.point
-                            pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
-                                       subtitle: r.subtitle, icon: r.icon, desert: r.id.hasPrefix("gazetteer:")))
-                        }
+                                       meters: r.meters(from: myPoint), id: "home.result") { pickResult(r) }
                         .transition(SaryTransition.appear(theme))
                     }
                 }
@@ -798,8 +787,24 @@ struct MapHomeScreen: View {
 
     private var desertOverlay: DesertOverlay? {
         if let s = desertPicked, selected != nil { return DesertOverlay(items: [s], selected: s.id) }
-        guard selected == nil, category?.desertSource != nil, !desertItems.isEmpty else { return nil }
-        return DesertOverlay(items: Array(desertItems.prefix(HomeDesertRules.onMap)))
+        guard selected == nil else { return nil }
+        if category?.desertSource != nil, !desertItems.isEmpty {
+            return DesertOverlay(items: Array(desertItems.prefix(HomeDesertRules.onMap)))
+        }
+        /* Issue #161: a city chip or a search draws its places too (numbered like the list). */
+        let pins = resultPins
+        return pins.isEmpty ? nil : DesertOverlay(items: pins)
+    }
+
+    /// The listed places as map markers, in the order the list shows them.
+    private var resultPins: [DesertCategoryItem] {
+        HomeDesertRules.resultPins(PlaceSearch.ordered(results, by: resultOrder, near: myPoint))
+    }
+
+    /// A tapped marker: a desert chip's item, or one of the listed places.
+    private func pinTapped(_ id: String) {
+        if let it = desertItems.first(where: { $0.id == id }) { pickDesert(it); return }
+        if let r = results.first(where: { $0.id == id }) { pickResult(r) }
     }
 
     private func placeRow(icon: String, title: String, detail: String?, point: LngLat, id: String, meters: Double? = nil, run: @escaping () -> Void) -> some View {
@@ -1010,6 +1015,20 @@ struct MapHomeScreen: View {
         }
     }
 
+    /// A listed place (its row, or its marker on the map).
+    private func pickResult(_ r: PlaceSearch.Place) {
+        if let polygon = r.areaPolygon {
+            desertPicked = DesertCategoryItem(id: r.id, title: r.name, detail: r.subtitle, point: r.point,
+                                             meters: r.areaDistanceM, systemImage: r.icon, polygon: polygon,
+                                             approach: r.areaApproach)
+        } else {
+            desertPicked = nil
+        }
+        let target = r.areaApproach ?? r.point
+        pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
+                   subtitle: r.subtitle, icon: r.icon, desert: r.id.hasPrefix("gazetteer:")))
+    }
+
     private func pickDesert(_ it: DesertCategoryItem) {
         desertPicked = it
         let to = it.approach ?? it.point
@@ -1195,6 +1214,11 @@ struct MapHomeScreen: View {
                 let r = try await PlaceSearch.search(t, near: near)
                 guard !Task.isCancelled else { return }
                 results = HomeDesertRules.merge(desert: desert, places: r)
+                /* A chip (city category): fit the map on you and the first places, as the desert chips do. */
+                if category != nil {
+                    let pts = HomeDesertRules.fitPoints(resultPins, me: near)
+                    if pts.count >= 2 { cameraSeq += 1; camera = PlanCamera(kind: .fit(pts), id: cameraSeq) }
+                }
             } catch let e as PlaceSearch.SearchError {
                 results = desert
                 if desert.isEmpty { searchError = e.arabic }
