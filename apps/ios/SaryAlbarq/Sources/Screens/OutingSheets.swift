@@ -22,11 +22,13 @@ struct JoinByLinkSheet: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             HStack(spacing: theme.space(.s)) {
-                Button {
-                    text = UIPasteboard.general.string ?? UIPasteboard.general.url?.absoluteString ?? ""
-                    invalid = false
-                } label: { SaryButtonLabel(title: "الصق", systemImage: "doc.on.clipboard") }
-                    .buttonStyle(.sary(.secondary))
+                /* The system «لصق»: the pasteboard is read only on this tap (no iOS paste banner). */
+                PasteButton(payloadType: String.self) { strings in
+                    Task { @MainActor in pasted(strings) }
+                }
+                .buttonBorderShape(.capsule)
+                .tint(theme.palette.accent)
+                .accessibilityIdentifier("paste.paste")
                 Button { scanning = true } label: { SaryButtonLabel(title: "امسح QR", systemImage: "qrcode.viewfinder") }
                     .buttonStyle(.sary(.secondary))
                     .accessibilityIdentifier("paste.scan")
@@ -46,6 +48,14 @@ struct JoinByLinkSheet: View {
             } cancel: { scanning = false }
             .rtl()
         }
+    }
+
+    /// «لصق»: the link goes in the field; a valid one opens the invite at once.
+    private func pasted(_ strings: [String]) {
+        guard let s = strings.first(where: { InviteLink.token(fromPasted: $0) != nil }) ?? strings.first else { return }
+        text = s
+        invalid = false
+        if InviteLink.token(fromPasted: s) != nil { go(s) } else { invalid = true }
     }
 
     private func go(_ s: String) {
@@ -225,7 +235,7 @@ struct InviteJoinSheet: View {
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.expired")
             case .taken:
-                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «حسابي» وافتح الرابط مرة ثانية، أو اطلب من أمير الرحلة دعوة جديدة باسمك."),
+                SaryStateView(kind: .error(title: "هذه الدعوة لشخص آخر", message: "انضم بها صاحبها. إذا كانت لك ودخلت بحساب جديد، أضف رقم جوالك في «ملفي» وافتح الرابط مرة ثانية، أو اطلب من أمير الرحلة دعوة جديدة باسمك."),
                               actionTitle: "حسنًا", actionID: "invite.close", actionIcon: nil, action: close)
                     .accessibilityIdentifier("invite.taken")
             case .invalid:
@@ -285,7 +295,7 @@ struct InviteJoinSheet: View {
             case .join, .other: phase = .error(e.arabic)
             }
         } catch {
-            phase = .error("حدث خطأ. أعد المحاولة.")
+            phase = .error("ما قدرنا نقرأ الدعوة الحين. تأكد إن النت شغّال وجرّب مرة ثانية.")
         }
     }
 

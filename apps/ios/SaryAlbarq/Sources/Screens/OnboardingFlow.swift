@@ -184,8 +184,10 @@ private struct IntroStep: View {
             .padding(.horizontal, theme.space(.l))
             Spacer(minLength: theme.space(.xl))
             VStack(spacing: theme.space(.s)) {
+                /* Came from an invite: «لصق» in the card above is the one primary action; «ابدأ»
+                 * steps back (the card stays on the home afterwards, the invite is not lost). */
                 Button(action: start) { SaryButtonLabel(title: "ابدأ") }
-                    .buttonStyle(.sary(.primary))
+                    .buttonStyle(.sary(model.deferredInviteHint ? .secondary : .primary))
                     .accessibilityIdentifier("onboarding.begin")
                 Button("عندي حساب سابق", action: restore)
                     .buttonStyle(.sary(.plain))
@@ -203,8 +205,8 @@ private struct IntroStep: View {
         return VStack(alignment: .leading, spacing: theme.space(.s)) {
             Text("جاي من دعوة؟").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
                 .accessibilityIdentifier("deferred.title")
-            Text(pasteMiss ? "ما لقينا رابط دعوة في النسخ. افتح رابط الدعوة من جديد، أو اطلبه من أمير الرحلة."
-                           : "اضغط «لصق» ونكمّل دعوتك على طول.")
+            Text(pasteMiss ? "ما لقينا رابط دعوة في النسخ. افتح رابط الدعوة من جديد، أو اطلبه من أمير الطلعة."
+                           : "اضغط «لصق» ونكمّل دعوتك على طول. لو بديت بدونها، تلقاها بعدين في الرئيسية.")
                 .saryText(.callout).foregroundStyle(p.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             PasteButton(payloadType: String.self) { strings in
@@ -304,7 +306,8 @@ struct ProfileStep: View {
     }
 }
 
-/// Before the system location prompt: what we use it for, in plain words.
+/// Before the system location prompt: two short lines (UI-AUDIT ١-هـ). «دائمًا» is not explained
+/// here: it is asked in the trip, when it matters (the «دائمًا» explainer, `share.always.*`).
 private struct LocationStep: View {
     var allow: () -> Void
     var skip: () -> Void
@@ -318,15 +321,14 @@ private struct LocationStep: View {
                 .font(.system(size: 64, weight: .semibold))
                 .foregroundStyle(p.accentText)
                 .accessibilityHidden(true)
-            Text("نستخدم موقعك أثناء الطلعة فقط")
+            Text("موقعك للطلعة بس")
                 .saryText(.title, weight: .bold)
                 .foregroundStyle(p.textPrimary)
                 .multilineTextAlignment(.center)
+                .accessibilityIdentifier("onboarding.location.title")
             VStack(alignment: .leading, spacing: theme.space(.m)) {
-                line("map.fill", "لنعرض مكانك ومسافة العيال عنك على الخريطة.")
-                line("hand.raised.fill", "لا يُرسل موقعك لأحد إلا لأعضاء طلعة انضممت لها، تلقائيًا ما دامت شغّالة؛ لإيقافه غادر الطلعة.")
-                line("lock.iphone", "بإذن «دائمًا» تستمر المشاركة والشاشة مقفلة حتى تغادر أو تنتهي الطلعة، ويظهر مؤشر الموقع الأزرق. خارج الطلعات لا نتتبعك أبدًا.")
-                line("trash", "الخادم يحتفظ بآخر موقع لك فقط، ويحذفه إذا غادرت الطلعة أو انتهت.")
+                line("map.fill", "يشوفك ربعك على الخريطة وتشوفهم، وقت الطلعة بس.")
+                line("hand.raised.fill", "تطلع من الطلعة أو تخلص، يوقف. وبرّا الطلعات ما نتتبعك.")
             }
             .padding(theme.space(.l))
             .sarySurface(radius: SaryRadius.l)
@@ -338,7 +340,7 @@ private struct LocationStep: View {
             Button(action: allow) { SaryButtonLabel(title: "اسمح بالموقع", systemImage: SaryIcon.locate) }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("onboarding.allowLocation")
-            Button("ليس الآن", action: skip)
+            Button("لاحقًا", action: skip)
                 .buttonStyle(.sary(.plain))
                 .accessibilityIdentifier("onboarding.skipLocation")
         }
