@@ -188,6 +188,7 @@
 		50676ABA167F396BA6E7C174 /* SaryAppearancePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4117F5D9F0E57B269FB9E05C /* SaryAppearancePanel.swift */; };
 		5086FEB9195B2DE0F76B0BF1 /* WeatherLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C384D2700540B51F8F9CB7 /* WeatherLayers.swift */; };
 		DC981AD177A8D7D9BACA5F37 /* CloudOutlook.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0A1829B8D7F5303C46DB28 /* CloudOutlook.swift */; };
+		7C3E1A5B9D2F4608A1B3C5D7 /* WindRainMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3E1A5B9D2F4608A1B3C5D8 /* WindRainMotion.swift */; };
 		5174026A641210957D3151BA /* BodyDynamics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96189BD6BDBE4350CD808ECD /* BodyDynamics.swift */; };
 		522FFF9D2561513CE3D84C56 /* PTTWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8B4883CF6EE1515B05DE75 /* PTTWire.swift */; };
 		5232C6A922DC5A881BE253DE /* PlaceSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E27E0720DD931C16730988 /* PlaceSearch.swift */; };
@@ -283,6 +284,7 @@
 		7B9E5C3F50F7C40B4AE8F04E /* DesertTerrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C611B1059DE705E698793E36 /* DesertTerrain.swift */; };
 		7CFCF40C8A75281649BD4B3C /* WeatherLayersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCAAA1A3A5005482E11D0A51 /* WeatherLayersTests.swift */; };
 		EA9E5DA7E199DAEA298D691C /* CloudOutlookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF4B78797B11EC749105504 /* CloudOutlookTests.swift */; };
+		7C3E1A5B9D2F4608A1B3C5D9 /* WindRainMotionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3E1A5B9D2F4608A1B3C5DA /* WindRainMotionTests.swift */; };
 		7E461E9A917B3B570300C744 /* ConvoyAlertSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD0881226C19DA929E05463 /* ConvoyAlertSettingsView.swift */; };
 		7E994F406C43AB15337A7483 /* MediaCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97179EEC15AB7F4549E7E345 /* MediaCenter.swift */; };
 		7EFE68FBACBFFDBBDC9C067C /* OutingFeaturesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9EBA4DBD0EE2156C0A0383 /* OutingFeaturesAPI.swift */; };
@@ -824,6 +826,7 @@
 		67707621CC9E957DE75D3CFA /* PrivacyManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyManifestTests.swift; sourceTree = "<group>"; };
 		67C384D2700540B51F8F9CB7 /* WeatherLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherLayers.swift; sourceTree = "<group>"; };
 		DB0A1829B8D7F5303C46DB28 /* CloudOutlook.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOutlook.swift; sourceTree = "<group>"; };
+		7C3E1A5B9D2F4608A1B3C5D8 /* WindRainMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindRainMotion.swift; sourceTree = "<group>"; };
 		684DDD78E399AA41FE2B80A8 /* BackgroundShareE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundShareE2ETests.swift; sourceTree = "<group>"; };
 		6941E4E68E615810EF62599E /* SaryShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SaryShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6A39DD17129EE34E8BC31565 /* TyreTracks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TyreTracks.swift; sourceTree = "<group>"; };
@@ -1063,6 +1066,7 @@
 		DC378DBA5C797B0A053E99D1 /* TrailMatching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrailMatching.swift; sourceTree = "<group>"; };
 		DCAAA1A3A5005482E11D0A51 /* WeatherLayersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherLayersTests.swift; sourceTree = "<group>"; };
 		8FF4B78797B11EC749105504 /* CloudOutlookTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudOutlookTests.swift; sourceTree = "<group>"; };
+		7C3E1A5B9D2F4608A1B3C5DA /* WindRainMotionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindRainMotionTests.swift; sourceTree = "<group>"; };
 		DE9D31346DAF59A4452999F1 /* MeshVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshVoice.swift; sourceTree = "<group>"; };
 		DEB8C1B01FC775191E479C1B /* ServerRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRulesTests.swift; sourceTree = "<group>"; };
 		E0489B2C1D18D5B00426F64E /* WadiProximity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WadiProximity.swift; sourceTree = "<group>"; };
@@ -1609,6 +1613,7 @@
 				ADD3481E4956173E7476C431 /* WaypointTests.swift */,
 				DCAAA1A3A5005482E11D0A51 /* WeatherLayersTests.swift */,
 				8FF4B78797B11EC749105504 /* CloudOutlookTests.swift */,
+				7C3E1A5B9D2F4608A1B3C5DA /* WindRainMotionTests.swift */,
 				42C1C3FA58A8C93A2102ACB0 /* WeatherTests.swift */,
 				01FB7D7462CB968C1B2B7987 /* Fixtures */,
 			);
@@ -2123,6 +2128,7 @@
 				A7D103A86D3A736B06E9438E /* WeatherChip.swift */,
 				67C384D2700540B51F8F9CB7 /* WeatherLayers.swift */,
 				DB0A1829B8D7F5303C46DB28 /* CloudOutlook.swift */,
+				7C3E1A5B9D2F4608A1B3C5D8 /* WindRainMotion.swift */,
 				75DA0B9A4AF344663731ED5F /* WeatherLayersSection.swift */,
 				9CAF059F25F880DEEA683E7A /* WeatherModels.swift */,
 				DB0DD9D61893377188CDE35B /* WeatherOverlay.swift */,
@@ -2585,6 +2591,7 @@
 				98F4EB3B6FBDCC01779015FA /* WaypointTests.swift in Sources */,
 				7CFCF40C8A75281649BD4B3C /* WeatherLayersTests.swift in Sources */,
 				EA9E5DA7E199DAEA298D691C /* CloudOutlookTests.swift in Sources */,
+				7C3E1A5B9D2F4608A1B3C5D9 /* WindRainMotionTests.swift in Sources */,
 				4A03A5EB17408785D87EC545 /* WeatherTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -2933,6 +2940,7 @@
 				FEC0656AF815344CE70E7F3A /* WeatherChip.swift in Sources */,
 				5086FEB9195B2DE0F76B0BF1 /* WeatherLayers.swift in Sources */,
 				DC981AD177A8D7D9BACA5F37 /* CloudOutlook.swift in Sources */,
+				7C3E1A5B9D2F4608A1B3C5D7 /* WindRainMotion.swift in Sources */,
 				3DE75AB0D311F8CCF4E0449C /* WeatherLayersSection.swift in Sources */,
 				221DBCA2BC5B78E51263FF28 /* WeatherModels.swift in Sources */,
 				4A7A82B0B905F4E791B2D6BB /* WeatherOverlay.swift in Sources */,

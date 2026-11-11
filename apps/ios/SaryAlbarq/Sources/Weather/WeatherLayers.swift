@@ -9,6 +9,7 @@ enum WeatherOverlayKind: String, CaseIterable, Identifiable, Codable {
     case none
     case clouds
     case rain
+    case wind
     case green
 
     var id: String { rawValue }
@@ -18,6 +19,7 @@ enum WeatherOverlayKind: String, CaseIterable, Identifiable, Codable {
         case .none: return "بدون"
         case .clouds: return "السحاب الآن"
         case .rain: return "وين نزل مطر"
+        case .wind: return "اتجاه الرياح"
         case .green: return "وين ربّع"
         }
     }
@@ -26,7 +28,8 @@ enum WeatherOverlayKind: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .none: return "الخريطة بلا طبقة طقس"
         case .clouds: return "صور القمر الصناعي لآخر ساعتين تتحرك، وين السحاب يمشي"
-        case .rain: return "المطر اللي نزل فعلًا (تقدير الأقمار الصناعية)"
+        case .rain: return "المطر اللي نزل فعلًا (تقدير الأقمار الصناعية) واتجاه حركته"
+        case .wind: return "خطوط تبيّن وين تهب الريح الحين (توقّع نموذج جوي، مو قياس)"
         case .green: return "الأماكن اللي خضّرت بعد المطر (ربيع، روضات، فياض)"
         }
     }
@@ -36,6 +39,7 @@ enum WeatherOverlayKind: String, CaseIterable, Identifiable, Codable {
         case .none: return "circle.slash"
         case .clouds: return "cloud.fill"
         case .rain: return "cloud.rain.fill"
+        case .wind: return "wind"
         case .green: return "leaf.fill"
         }
     }
@@ -46,6 +50,7 @@ enum WeatherOverlayKind: String, CaseIterable, Identifiable, Codable {
         case .none: return ""
         case .clouds: return "Contains modified EUMETSAT Meteosat data \(year)"
         case .rain: return "NASA GPM IMERG (Early) via NASA GIBS"
+        case .wind: return "Data from MET Norway (ECMWF HRES), CC BY 4.0"
         case .green: return "NASA VIIRS NOAA-20 NDVI via NASA GIBS"
         }
     }
@@ -72,6 +77,9 @@ enum WeatherLegend {
         .init(hex: 0x5AC846, label: "ربيع واضح"),
         .init(hex: 0x148C28, label: "ربيع كثيف"),
     ]
+    static let wind: [WeatherLegendItem] = [
+        .init(hex: 0xFFFFFF, label: "خط التدفق: طوله مسافة ٦ ساعات بسرعة الريح، والسهم وجهتها"),
+    ]
     static let clouds: [WeatherLegendItem] = [
         .init(hex: 0xFFFFFF, label: "أبيض كثيف: سحب عالية (احتمال مطر)"),
         .init(hex: 0xD8DEE6, label: "خفيف: سحب رقيقة"),
@@ -82,6 +90,7 @@ enum WeatherLegend {
         case .none: return []
         case .clouds: return clouds
         case .rain: return rain
+        case .wind: return wind
         case .green: return green
         }
     }
@@ -115,7 +124,7 @@ final class WeatherLayers: ObservableObject {
         let d = defaults.integer(forKey: Self.daysKey)
         rainDays = Self.allowedDays.contains(d) ? d : 3
         #if DEBUG
-        /* `-SaryWeather clouds|rain|green [-SaryRainDays 7]` (screenshots). */
+        /* `-SaryWeather clouds|rain|wind|green [-SaryRainDays 7]` (screenshots). */
         let a = ProcessInfo.processInfo.arguments
         if let i = a.firstIndex(of: "-SaryWeather"), i + 1 < a.count, let k = WeatherOverlayKind(rawValue: a[i + 1]) { kind = k }
         if let i = a.firstIndex(of: "-SaryRainDays"), i + 1 < a.count, let d = Int(a[i + 1]), Self.allowedDays.contains(d) { rainDays = d }

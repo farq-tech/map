@@ -41,7 +41,9 @@ final class WeatherOverlay {
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
     private var outlookRetried = false
-    private var outlookFor: (point: LngLat, at: Date, destination: Bool)?
+    private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind, destination: Bool)?
+    private var windTask: Task<Void, Never>?
+    private var windFetchedAt: Date?
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
@@ -126,13 +128,33 @@ final class WeatherOverlay {
 
     // MARK: install
 
+    #if DEBUG
+    private var debugCameraDone = false
+    /// Screenshots: `-SaryWeatherCamera 24.5,45,5` frames the map (lat,lng,zoom) a few seconds after the layer opens.
+    private func debugCamera() {
+        guard !debugCameraDone, effectiveKind != .none, styleReady else { return }
+        let a = ProcessInfo.processInfo.arguments
+        guard let i = a.firstIndex(of: "-SaryWeatherCamera"), i + 1 < a.count else { return }
+        let n = a[i + 1].split(separator: ",").compactMap { Double($0) }
+        guard n.count == 3 else { return }
+        debugCameraDone = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.map?.mapboxMap.setCamera(to: CameraOptions(center: CLLocationCoordinate2D(latitude: n[0], longitude: n[1]), zoom: n[2]))
+        }
+    }
+    #endif
+
     private func apply() {
+        #if DEBUG
+        defer { debugCamera() }
+        #endif
         let kind = effectiveKind
         legend.kind = kind
         legend.days = layers.rainDays
         legend.attribution = kind.attribution()
         legend.items = WeatherLegend.items(kind)
         if kind != .clouds { stopAnimation(); framesTask?.cancel(); framesTask = nil }
+        if kind != .wind { windTask?.cancel(); windTask = nil }
         refreshOutlook()
         guard let map, styleReady else { layoutLegend(); return }
         let m: MapboxMap = map.mapboxMap
@@ -144,6 +166,10 @@ final class WeatherOverlay {
             install(m, kind: .rain, key: "rain-\(layers.rainDays)",
                     sources: [("rain", WeatherLayerAPI.rainTiles(days: layers.rainDays))], min: 3, max: 11, bounds: [34, 16, 56, 33])
             legend.time = WeatherLayers.daysLabel(layers.rainDays)
+        case .wind:
+            if drawn?.kind != .wind { removeAll(m); drawn = Drawn(kind: .wind, key: "wind-pending"); windFetchedAt = nil }
+            installWind(m)
+            legend.time = "الريح الحين · نموذج"
         case .green:
             install(m, kind: .green, key: "green", sources: [("green", WeatherLayerAPI.greenTiles())], min: 4, max: 12, bounds: [34, 16, 56, 33])
             legend.time = "آخر ٨ أيام مقارنة بالصيف"
@@ -242,8 +268,10 @@ final class WeatherOverlay {
         }
     }
 
-    /// Phase 2: direction + arrival for the destination / the person, refreshed when the point moves
-    /// ≥ 25 km or the estimate is older than 10 min. Any failure or low confidence hides the row.
+    /// The row under the legend, per layer: «السحاب الآن» → cloud direction + arrival (phase 2),
+    /// «وين نزل مطر» → which way the observed rain was moving, «اتجاه الرياح» → wind at the point.
+    /// Refreshed when the point moves ≥ 25 km or the estimate is older than 10 min. Any failure or low
+    /// confidence hides the row.
     private func refreshOutlook(isRetry: Bool = false) {
         var point = request.point
         #if DEBUG
@@ -254,27 +282,44 @@ final class WeatherOverlay {
             if n.count == 2 { point = LngLat(lng: n[1], lat: n[0]) }
         }
         #endif
-        guard effectiveKind == .clouds, let p = point else {
+        let kind = effectiveKind
+        guard kind == .clouds || kind == .rain || kind == .wind, let p = point else {
             outlookTask?.cancel(); outlookTask = nil; outlookFor = nil
             legend.outlook = nil; legend.outlookLoading = false
             return
         }
-        if let last = outlookFor, Date().timeIntervalSince(last.at) < 600,
+        if let last = outlookFor, last.kind == kind, Date().timeIntervalSince(last.at) < 600,
            Self.km(last.point, p) < 25, last.destination == request.pointIsDestination { return }
-        /* A new place (not a refresh of the same one): never keep showing the old place's arrival. */
-        if outlookFor.map({ Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
+        /* A new place or layer (not a refresh of the same one): never keep showing the old row. */
+        if outlookFor.map({ $0.kind != kind || Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
         /* The one-retry allowance belongs to a request: a new place or layer starts with a fresh one. */
         if !isRetry { outlookRetried = false }
-        outlookFor = (p, Date(), request.pointIsDestination)
+        outlookFor = (p, Date(), kind, request.pointIsDestination)
         legend.outlookLoading = true
+        legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
         let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         outlookTask = Task { [weak self] in
-            let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+            var failed = false
+            let display: CloudOutlookPresenter.Display?
+            switch kind {
+            case .wind:
+                let w = try? await WeatherLayerAPI.windAt(lat: p.lat, lng: p.lng)
+                failed = w == nil
+                display = w.flatMap { WindRainPresenter.wind($0, subject: subject) }
+            case .rain:
+                let r = try? await WeatherLayerAPI.rainMotion(lat: p.lat, lng: p.lng)
+                failed = r == nil
+                display = r.flatMap { WindRainPresenter.rain($0, subject: subject) }
+            default:
+                let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+                failed = o == nil
+                display = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
+            }
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
-            self.legend.outlook = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
-            if o == nil {
+            self.legend.outlook = display
+            if failed {
                 self.outlookFor = nil
                 /* One quiet retry a minute later (the server may have finished reading by then). */
                 if !self.outlookRetried {
@@ -284,6 +329,73 @@ final class WeatherOverlay {
                 }
             } else {
                 self.outlookRetried = false
+            }
+        }
+    }
+
+    // MARK: wind
+
+    /// «اتجاه الرياح»: flow lines (GeoJSON from our API) drawn thin and half-transparent, so the map shows through.
+    private func installWind(_ m: MapboxMap) {
+        let id = Self.prefix + "wind"
+        let have = m.sourceExists(withId: id) && m.layerExists(withId: id)
+        if have, let at = windFetchedAt, Date().timeIntervalSince(at) < 1800 { return }
+        guard windTask == nil else { return }
+        windTask = Task { [weak self] in
+            let r = try? await WeatherLayerAPI.windLines()
+            guard let self else { return }
+            self.windTask = nil
+            guard !Task.isCancelled, self.effectiveKind == .wind, let map = self.map, let r, r.ok else {
+                if self.effectiveKind == .wind { self.legend.time = "الرياح ما وصلت، نحاول بعد شوي" }
+                return
+            }
+            let m: MapboxMap = map.mapboxMap
+            let fc = FeatureCollection(features: r.features)
+            self.windFetchedAt = Date()
+            if m.sourceExists(withId: id) {
+                m.updateGeoJSONSource(withId: id, geoJSON: .featureCollection(fc))
+                return
+            }
+            self.removeAll(m)
+            var src = GeoJSONSource(id: id)
+            src.data = .featureCollection(fc)
+            /* Thin, half-transparent white with a faint dark edge so it reads on bright desert and dark sea. */
+            var casing = LineLayer(id: id + "-casing", source: id)
+            casing.lineColor = .constant(StyleColor(.black))
+            casing.lineOpacity = .constant(0.3)
+            casing.lineWidth = .constant(3.4)
+            casing.lineBlur = .constant(1.5)
+            casing.lineEmissiveStrength = .constant(1)
+            casing.lineCap = .constant(.round)
+            casing.lineJoin = .constant(.round)
+            var line = LineLayer(id: id, source: id)
+            line.lineColor = .constant(StyleColor(.white))
+            line.lineOpacity = .constant(0.9)
+            line.lineWidth = .expression(Exp(.interpolate) {
+                Exp(.linear)
+                Exp(.get) { "speed_ms" }
+                0; 1.0
+                12; 2.2
+            })
+            /* The Standard style lights its slots; full emissive keeps the lines white at night too. */
+            line.lineEmissiveStrength = .constant(1)
+            line.lineCap = .constant(.round)
+            line.lineJoin = .constant(.round)
+            do {
+                try m.addSource(src)
+                if let middle = Slot.middle, m.allSlotIdentifiers.contains(middle) {
+                    casing.slot = middle; line.slot = middle
+                    try m.addLayer(casing); try m.addLayer(line)
+                } else if let below = self.firstLabelLayer(m) {
+                    try m.addLayer(casing, layerPosition: .below(below)); try m.addLayer(line, layerPosition: .below(below))
+                } else {
+                    try m.addLayer(casing); try m.addLayer(line)
+                }
+                self.drawn = Drawn(kind: .wind, key: "wind")
+            } catch {
+                #if DEBUG
+                print("[weather] add wind failed: \(error)")
+                #endif
             }
         }
     }
@@ -416,6 +528,7 @@ final class WeatherLegendModel: ObservableObject {
     /// Phase 2: the cloud's direction + arrival line (nil = hidden: low confidence, no point, no data).
     @Published var outlook: CloudOutlookPresenter.Display?
     @Published var outlookLoading = false
+    @Published var outlookLoadingText = ""
     /// «إغلاق»: turns the weather layer off (back on from «الطبقات» → «الطقس»).
     var onClose: () -> Void = {}
     var onTogglePlay: () -> Void = {}
@@ -504,10 +617,10 @@ struct WeatherLegendCard: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
-            if model.kind == .clouds, let o = model.outlook {
-                CloudOutlookRow(display: o)
-            } else if model.kind == .clouds, model.outlookLoading {
-                Text("نقدّر اتجاه السحاب…").saryText(.caption).foregroundStyle(p.textSecondary)
+            if let o = model.outlook {
+                CloudOutlookRow(display: o, arrowLabel: model.kind == .wind ? "اتجاه هبوب الريح" : model.kind == .rain ? "اتجاه حركة المطر" : "اتجاه حركة السحاب")
+            } else if model.outlookLoading {
+                Text(model.outlookLoadingText).saryText(.caption).foregroundStyle(p.textSecondary)
                     .accessibilityIdentifier("weather.outlook.loading")
             }
             /* Data attribution over the map: 10 pt semibold, secondary (was 9 pt tertiary). */
@@ -530,6 +643,7 @@ struct WeatherLegendCard: View {
 /// The arrow (where the cloud moves toward, north up) + the arrival line, with the picture's age.
 struct CloudOutlookRow: View {
     let display: CloudOutlookPresenter.Display
+    var arrowLabel = "اتجاه حركة السحاب"
     @Environment(\.sary) private var theme
 
     var body: some View {
@@ -549,7 +663,7 @@ struct CloudOutlookRow: View {
                 /* Compass rotation must not mirror with the card's right-to-left layout. */
                 .environment(\.layoutDirection, .leftToRight)
                 .accessibilityIdentifier("weather.outlook.arrow")
-                .accessibilityLabel(Text("اتجاه حركة السحاب"))
+                .accessibilityLabel(Text(arrowLabel))
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(display.headline).saryText(.caption, weight: .bold).foregroundStyle(p.textPrimary)
