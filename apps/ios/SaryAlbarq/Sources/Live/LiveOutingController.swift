@@ -545,6 +545,12 @@ final class LiveOutingController: ObservableObject {
 
     var ui: LiveOutingUIState { LiveOutingPresenter.state(input) }
 
+    /// `ui.sos.mine` from the same sources as `input` (the merged view, the sending flag, now),
+    /// without building the input or running the presenter.
+    var mySOS: MySOSUI {
+        LiveOutingPresenter.mySOS(view: session.meshOverlay.view, sending: session.sosSending, now: Date())
+    }
+
     /// The outing's area for offline maps: every car (and the rally point), padded to a few km.
     var offlineSuggestion: OfflinePlan.Box? {
         var pts = mapMembers(theme: .default).map(\.position)

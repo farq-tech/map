@@ -87,7 +87,8 @@ struct LiveSettingsPage: View {
             Text(title).font(.sary(20, .bold)).foregroundStyle(theme.palette.textPrimary).accessibilityAddTraits(.isHeader)
             Spacer()
             if !controller.tripEnded {
-                SarySOSButton(state: controller.ui.sos.mine, trigger: controller.actions.sos.trigger, size: 44, compactLabel: true)
+                /* Every page's header (the root and the pushed one) shows it: no presenter pass per header. */
+                SarySOSButton(state: controller.mySOS, trigger: controller.actions.sos.trigger, size: 44, compactLabel: true)
                     .padding(6)
             }
         }
