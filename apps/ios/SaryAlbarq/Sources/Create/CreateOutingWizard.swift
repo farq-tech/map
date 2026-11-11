@@ -630,7 +630,8 @@ private struct WeatherStep: View {
     private func weatherCards(_ d: OutingDestination) -> some View {
         let p = theme.palette
         let s = weather.store
-        let card = WeatherPresenter.card(title: "الجو في \(d.name) الآن", report: s.report, refreshing: s.refreshing, failed: s.lastFailed, now: now, hours: 24)
+        let card = WeatherPresenter.card(title: "الجو في \(d.name) الآن", report: s.report, refreshing: s.refreshing, failed: s.lastFailed, now: now, hours: 24,
+                                         reference: WeatherReference(point: Geo.LatLng(lat: d.lat, lng: d.lng), label: "من الوجهة"))
         WeatherCardView(ui: card)
             .accessibilityIdentifier("create.weather.now")
         arrivalCard(d)

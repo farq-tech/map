@@ -93,6 +93,17 @@ struct WeatherReport: Equatable, Codable {
     var hours: [WeatherHour]
     /// False when the air-quality call failed (dust unknown, never "no dust").
     var airAvailable: Bool
+    /// Where the forecast is really for: Open-Meteo answers with the model grid cell it used
+    /// (top-level `latitude` / `longitude`), which can be a few km from what we asked. Nil when the
+    /// provider does not say (Apple Weather, older cached reports).
+    var modelLat: Double? = nil
+    var modelLng: Double? = nil
+
+    /// The forecast's own point: the model's grid cell when known, else the point we asked for.
+    var forecastPoint: Geo.LatLng {
+        if let modelLat, let modelLng, PlanGeo.valid(lat: modelLat, lng: modelLng) { return Geo.LatLng(lat: modelLat, lng: modelLng) }
+        return area.coordinate
+    }
 }
 
 // MARK: - Open-Meteo wire format
@@ -158,6 +169,9 @@ enum OpenMeteo {
         }
         var current: Current?
         var hourly: Hourly?
+        /// The model grid cell Open-Meteo used for this answer.
+        var latitude: Double?
+        var longitude: Double?
     }
 
     struct Air: Decodable {
@@ -203,6 +217,7 @@ enum OpenMeteo {
                 dust: a?.current?.dust ?? hourDust?.0 ?? nil, pm10: a?.current?.pm10 ?? hourDust?.1 ?? nil,
                 apparentC: c.apparent_temperature, humidity: c.relative_humidity_2m, uvIndex: uvNow)
         }
-        return WeatherReport(area: area, fetchedAt: fetchedAt, current: current, hours: hours, airAvailable: a?.hourly != nil)
+        return WeatherReport(area: area, fetchedAt: fetchedAt, current: current, hours: hours, airAvailable: a?.hourly != nil,
+                             modelLat: f.latitude, modelLng: f.longitude)
     }
 }

@@ -67,6 +67,30 @@ final class WeatherParsingTests: XCTestCase {
         XCTAssertEqual(ui.dustText, "الغبار غير متاح")
     }
 
+    /// Build 36 item 12: when the numbers came, and where the forecast is really for.
+    func testCardSaysWhenAndWhereTheForecastIsFor() throws {
+        let r = try Fixture.report()
+        XCTAssertEqual(r.modelLat, 24.710016, "Open-Meteo answers with the grid cell it used")
+        XCTAssertEqual(r.modelLng, 46.688103)
+        XCTAssertEqual(r.forecastPoint.lat, 24.710016)
+        let riyadh = TimeZone(identifier: "Asia/Riyadh")!
+        XCTAssertEqual(WeatherProvenance.updated(Fixture.currentAt, now: Fixture.currentAt.addingTimeInterval(180), timeZone: riyadh),
+                       "آخر تحديث ٣:١٥ م (قبل ٣ د)")
+        let me = WeatherReference(point: Geo.LatLng(lat: 24.73, lng: 46.70), label: "منك")
+        XCTAssertEqual(WeatherProvenance.point(r, reference: me), "نقطة التوقع على بعد ٢٫٥ كم منك · منطقة تقريبية",
+                       "the outing area is rounded for privacy, and says so")
+        let here = WeatherReference(point: Geo.LatLng(lat: 24.7101, lng: 46.6882), label: "من الوجهة")
+        XCTAssertEqual(WeatherProvenance.point(r, reference: here), "نقطة التوقع على بعد أقل من ١ كم من الوجهة · منطقة تقريبية")
+        XCTAssertNil(WeatherProvenance.point(r, reference: nil))
+        let ui = WeatherPresenter.card(title: "", report: r, refreshing: false, failed: false, now: Fixture.currentAt, reference: me)
+        XCTAssertTrue(ui.updated.hasPrefix("آخر تحديث "), ui.updated)
+        XCTAssertEqual(ui.forecastPoint, "نقطة التوقع على بعد ٢٫٥ كم منك · منطقة تقريبية")
+        /* No grid cell from the provider (Apple Weather, an old cache): the point we asked for. */
+        var asked = r
+        asked.modelLat = nil
+        XCTAssertEqual(asked.forecastPoint, r.area.coordinate)
+    }
+
     func testBrokenJSONThrows() {
         XCTAssertThrowsError(try OpenMeteo.parse(forecast: Data("{\"hourly\":{\"time\":[]}}".utf8), air: nil, area: Fixture.area, fetchedAt: Date()))
         XCTAssertThrowsError(try OpenMeteo.parse(forecast: Data("<html>".utf8), air: nil, area: Fixture.area, fetchedAt: Date()))

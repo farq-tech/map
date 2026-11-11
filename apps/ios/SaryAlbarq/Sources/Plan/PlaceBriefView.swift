@@ -181,16 +181,23 @@ struct PlaceBriefSection: View {
     private var sourceRow: some View {
         let p = theme.palette
         let warn = ui.stale || ui.offline
-        return HStack(spacing: theme.space(.xs)) {
-            if warn { Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold)) }
-            if let prov = ui.provider, !ui.source.isEmpty {
-                Link(destination: prov.attributionURL) { Text(ui.source).saryNumber(.caption, weight: warn ? .bold : .regular).lineLimit(2) }
-            } else {
-                Text(ui.offline ? "بلا إنترنت" : OpenMeteo.attribution).saryNumber(.caption)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: theme.space(.xs)) {
+                if warn { Image(systemName: ui.offline ? SaryIcon.offline : "clock.badge.exclamationmark").font(.system(size: 11, weight: .bold)) }
+                if let prov = ui.provider, !ui.source.isEmpty {
+                    Link(destination: prov.attributionURL) { Text(ui.source).saryNumber(.caption, weight: warn ? .bold : .regular).lineLimit(2) }
+                } else {
+                    Text(ui.offline ? "بلا إنترنت" : OpenMeteo.attribution).saryNumber(.caption)
+                }
+            }
+            .foregroundStyle(warn ? p.warningText : p.textTertiary)
+            .accessibilityIdentifier("brief.source")
+            /* Where the forecast is for (Build 36 item 12); not in the driving one-liner. */
+            if !compact, let point = ui.forecastPoint {
+                Label(point, systemImage: "scope").saryNumber(.caption).foregroundStyle(p.textTertiary).lineLimit(2)
+                    .accessibilityIdentifier("brief.forecastPoint")
             }
         }
-        .foregroundStyle(warn ? p.warningText : p.textTertiary)
-        .accessibilityIdentifier("brief.source")
     }
 }
 
