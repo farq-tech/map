@@ -128,7 +128,7 @@ struct SafetyAlertCard: View {
                 if !theme.drive { Text(detail).saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2) }
             case let .myTimerOverdue(contact, due):
                 Text("تأخرت عن وقت الرجوع").saryText(theme.drive ? .headline : .callout, weight: .heavy)
-                Text("كان \(SafetyFormat.clock(due)) · وصل تنبيه لـ\(contact)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
+                Text(contact.isEmpty ? "كان \(SafetyFormat.clock(due)) · ما وصل تنبيه لأحد" : "كان \(SafetyFormat.clock(due)) · وصل تنبيه لـ\(contact)").saryText(.footnote).foregroundStyle(p.textSecondary).lineLimit(2)
             case let .friendTimerOverdue(name, _):
                 Text("\(name) تأخر عن وقت رجوعه").saryText(.callout, weight: .heavy).lineLimit(2)
                 Text("تطمّن عليه").saryText(.footnote).foregroundStyle(p.textSecondary)
@@ -293,7 +293,7 @@ struct SafetySection: View {
                 SaryRowIcon(systemImage: SafetyIcon.stuck, color: p.warning)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("غرّزت؟").saryText(.body, weight: .bold).foregroundStyle(p.textPrimary)
-                    Text("ضغطة وحدة تنبّه الأصدقاء، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
+                    Text(safety.localOnly ? "يعلّم المكان على مسارك. ما فيه أحد معك يوصله التنبيه؛ اتصل بإنجاد أو ٩١١." : "ضغطة وحدة تنبّه الأصدقاء، ويشوفون مكانك إذا كنت تشارك موقعك.").saryText(.footnote).foregroundStyle(p.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button { safety.askStuck() } label: { SaryButtonLabel(title: "غرّزت", busy: safety.stuckBusy) }
@@ -333,23 +333,23 @@ struct ReturnTimerCard: View {
                     .accessibilityIdentifier("timer-unavailable")
             case .none:
                 HStack(spacing: theme.space(.m)) {
-                    header("مؤقت الرجوع", "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
+                    header("مؤقت الرجوع", safety.localOnly ? "منبّه على جوالك يذكّرك بوقت رجوعك. ما يوصل لأحد." : "قل لأحد من أهلك متى ترجع. إذا تأخرت يوصله تنبيه.")
                     Button { safety.editorOpen = true } label: { SaryButtonLabel(title: "اضبط", systemImage: "plus") }
                         .buttonStyle(.sary(.primary, width: .hug, compact: true))
                         .accessibilityIdentifier("timer-set")
                 }
             case let .armed(due, contact):
-                header("ترجع \(SafetyFormat.dueLabel(due, now: now))", "\(SafetyFormat.remaining(until: due, now: now)) · يتابعك \(contact)", numbers: true)
+                header("ترجع \(SafetyFormat.dueLabel(due, now: now))", contact.isEmpty ? "\(SafetyFormat.remaining(until: due, now: now)) · على جوالك فقط" : "\(SafetyFormat.remaining(until: due, now: now)) · يتابعك \(contact)", numbers: true)
                 if !safety.remindersAllowed {
                     SaryInlineMessage(text: "فعّل الإشعارات ليذكّرك التطبيق قبل الموعد بـ٣٠ و١٠ دقائق.", tone: .info)
                 }
                 buttons(arrivedKind: .secondary)
             case let .overdue(due, contact):
-                header("تأخرت عن وقت الرجوع", "\(SafetyFormat.late(since: due, now: now)) · وصل تنبيه لـ\(contact)", tone: p.warningText, numbers: true)
+                header("تأخرت عن وقت الرجوع", contact.isEmpty ? "\(SafetyFormat.late(since: due, now: now)) · ما وصل تنبيه لأحد" : "\(SafetyFormat.late(since: due, now: now)) · وصل تنبيه لـ\(contact)", tone: p.warningText, numbers: true)
                 buttons(arrivedKind: .primary)
             case let .arrived(contact):
                 HStack(spacing: theme.space(.m)) {
-                    header("وصلت بالسلامة", "وصل الخبر لـ\(contact)", icon: SafetyIcon.arrived, tone: p.liveText)
+                    header("وصلت بالسلامة", contact.isEmpty ? "الحمد لله على السلامة" : "وصل الخبر لـ\(contact)", icon: SafetyIcon.arrived, tone: p.liveText)
                     Button { safety.editorOpen = true } label: { Text("مؤقت جديد") }
                         .buttonStyle(.sary(.secondary, width: .hug, compact: true))
                 }
@@ -360,7 +360,7 @@ struct ReturnTimerCard: View {
         .confirmationDialog("نلغي مؤقت الرجوع؟", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("ألغِ المؤقت", role: .destructive) { Task { await safety.cancelTimer() } }
             Button("لا", role: .cancel) {}
-        } message: { Text("الرابط اللي أرسلته يصير «أُلغي»، وما يوصل أي تنبيه.") }
+        } message: { Text(safety.localOnly ? "يوقف المنبّه اللي على جوالك." : "الرابط اللي أرسلته يصير «أُلغي»، وما يوصل أي تنبيه.") }
     }
 
     private func header(_ title: String, _ sub: String, icon: String = SafetyIcon.timer, tone: Color? = nil, numbers: Bool = false) -> some View {
@@ -384,14 +384,16 @@ struct ReturnTimerCard: View {
                 .buttonStyle(.sary(arrivedKind, compact: true))
                 .disabled(safety.timerBusy)
                 .accessibilityIdentifier("timer-arrived")
-            Button { safety.offerShare() } label: { SaryButtonLabel(title: "شارك", systemImage: SaryIcon.share) }
-                .buttonStyle(.sary(.secondary, compact: true))
-                .accessibilityIdentifier("timer-share")
+            if !safety.localOnly {
+                Button { safety.offerShare() } label: { SaryButtonLabel(title: "شارك", systemImage: SaryIcon.share) }
+                    .buttonStyle(.sary(.secondary, compact: true))
+                    .accessibilityIdentifier("timer-share")
+            }
             Menu {
                 ForEach(ReturnTimerLogic.extendChoices, id: \.self) { m in
                     Button("مدّد \(SafetyFormat.span(minutes: m))") { Task { await safety.extend(minutes: m) } }
                 }
-                Button("غيّر الوقت أو الاسم") { safety.editorOpen = true }
+                Button(safety.localOnly ? "غيّر الوقت" : "غيّر الوقت أو الاسم") { safety.editorOpen = true }
                 Button("ألغِ المؤقت", role: .destructive) { confirmCancel = true }
             } label: {
                 Image(systemName: "ellipsis")
@@ -425,7 +427,9 @@ struct ReturnTimerEditor: View {
                     Spacer()
                     SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق") { safety.editorOpen = false }
                 }
-                Text("حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
+                Text(safety.localOnly
+                     ? "حدد متى ترجع، ويذكّرك جوالك قبلها. هذا منبّه على جوالك بس: ما يوصل لأحد، فإذا تحتاج مساعدة اتصل بـ٩١١."
+                     : "حدد متى ترجع، وأرسل رابطًا لأحد من أهلك. إذا ما ضغطت «وصلت» قبل الوقت، يوصله تنبيه.")
                     .saryText(.callout).foregroundStyle(p.textSecondary)
 
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
@@ -449,23 +453,26 @@ struct ReturnTimerEditor: View {
                 .padding(theme.space(.m))
                 .sarySurface(radius: SaryRadius.m)
 
-                SaryTextField(title: "اسم اللي يتابعك", placeholder: "مثل: أم فهد", text: $contact, id: "timer-contact", maxLength: ReturnTimerLogic.contactMax)
+                if !safety.localOnly {
+                    SaryTextField(title: "اسم اللي يتابعك", placeholder: "مثل: أم فهد", text: $contact, id: "timer-contact", maxLength: ReturnTimerLogic.contactMax)
 
-                VStack(alignment: .leading, spacing: theme.space(.s)) {
-                    Text("وش يشوف من الرابط؟").saryText(.headline).foregroundStyle(p.textPrimary)
-                    bullet("person.2.fill", "اسم الطلعة وأسماء اللي معك ووقت رجوعك.")
-                    bullet("eye.slash.fill", "ما يشوف مواقعكم ما دام الوقت ما خلص.")
-                    bullet(SafetyIcon.overdue, "إذا تأخرتوا يوصله تنبيه، ويظهر له آخر موقع معروف وقت التأخير لمن يشارك موقعه.")
-                    bullet(SafetyIcon.arrived, "إذا ضغطت «وصلت» يوصله «وصلوا بالسلامة».")
+                    VStack(alignment: .leading, spacing: theme.space(.s)) {
+                        Text("وش يشوف من الرابط؟").saryText(.headline).foregroundStyle(p.textPrimary)
+                        bullet("person.2.fill", "اسم الطلعة وأسماء اللي معك ووقت رجوعك.")
+                        bullet("eye.slash.fill", "ما يشوف مواقعكم ما دام الوقت ما خلص.")
+                        bullet(SafetyIcon.overdue, "إذا تأخرتوا يوصله تنبيه، ويظهر له آخر موقع معروف وقت التأخير لمن يشارك موقعه.")
+                        bullet(SafetyIcon.arrived, "إذا ضغطت «وصلت» يوصله «وصلوا بالسلامة».")
+                    }
+                    .padding(theme.space(.m))
+                    .sarySurface(radius: SaryRadius.m)
                 }
-                .padding(theme.space(.m))
-                .sarySurface(radius: SaryRadius.m)
 
                 Button { Task { await safety.arm(due: due, contact: contact) } } label: {
-                    SaryButtonLabel(title: "اضبط وأرسل الرابط", systemImage: SaryIcon.share, busy: safety.timerBusy, busyTitle: "جارٍ الضبط…")
+                    SaryButtonLabel(title: safety.localOnly ? "اضبط المنبّه" : "اضبط وأرسل الرابط",
+                                    systemImage: safety.localOnly ? SafetyIcon.timer : SaryIcon.share, busy: safety.timerBusy, busyTitle: "جارٍ الضبط…")
                 }
                 .buttonStyle(.saryPrimary)
-                .disabled(ReturnTimerLogic.cleanContact(contact) == nil || safety.timerBusy)
+                .disabled((!safety.localOnly && ReturnTimerLogic.cleanContact(contact) == nil) || safety.timerBusy)
                 .accessibilityIdentifier("timer-save")
                 Text("نذكّرك قبل الموعد بـ٣٠ دقيقة و١٠ دقائق.").saryText(.footnote).foregroundStyle(p.textTertiary)
             }
@@ -508,7 +515,9 @@ struct SafetyPrompts: View {
                     Button("اطلب إنجاد (واتساب)") { safety.openEnjad(.stuck) }
                     Button("إلغاء", role: .cancel) {}
                 } message: {
-                    Text(safety.isSharingNow()
+                    Text(safety.localOnly
+                         ? "ما فيه أحد معك يوصله التنبيه؛ اتصل بإنجاد أو ٩١١. نعلّم المكان على مسارك بس."
+                         : safety.isSharingNow()
                          ? "يوصل للأصدقاء في الطلعة إنك غرّزت، ويشوفون مكانك على الخريطة."
                          : "يوصل للأصدقاء في الطلعة إنك غرّزت. موقعك غير مُشارَك، فما يشوفون مكانك إلا إذا شاركته.")
                 }
@@ -545,7 +554,7 @@ struct SafetyPrompts: View {
     }
 
     private var overdueMessage: String {
-        if case let .overdue(_, contact) = safety.timerPhase {
+        if case let .overdue(_, contact) = safety.timerPhase, !contact.isEmpty {
             return "وصل تنبيه لـ\(contact). إذا وصلت اضغط «وصلت»، أو مدّد الوقت."
         }
         return "إذا وصلت اضغط «وصلت»، أو مدّد الوقت."

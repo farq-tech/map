@@ -210,11 +210,21 @@ enum CampRanker {
         var id: String { site.id }
     }
 
+    /// Inside a protected area (royal reserve, national park): never suggested, not merely warned.
+    /// The build marks each site with the OSM protected polygon its cell falls in (`protected`); the
+    /// polygons themselves are not bundled, so a margin around their edge cannot be applied on the phone.
+    static func inProtectedArea(_ s: CampSite) -> Bool { s.protected != nil }
+
+    /// Sites inside the radius that are skipped only because they lie in a protected area.
+    static func protectedCount(_ sites: [CampSite], near me: LngLat, radiusKm: Double) -> Int {
+        sites.filter { inProtectedArea($0) && Vehicle.distanceMeters(me, $0.position) <= radiusKm * 1000 }.count
+    }
+
     /// «أحلى ٥» within the radius, best first.
     static func top(_ sites: [CampSite], near me: LngLat, radiusKm: Double, night: CampNight?, count: Int = 5) -> [Ranked] {
         sites.compactMap { s -> Ranked? in
             let d = Vehicle.distanceMeters(me, s.position)
-            guard d <= radiusKm * 1000, allowed(s, night: night) else { return nil }
+            guard d <= radiusKm * 1000, !inProtectedArea(s), allowed(s, night: night) else { return nil }
             return Ranked(site: s, score: score(s, night: night), distanceM: d)
         }
         .sorted { $0.score != $1.score ? $0.score > $1.score : $0.distanceM < $1.distanceM }
@@ -299,4 +309,149 @@ enum CampReason {
     static let weatherUnavailableNote = "ما وصلنا طقس بعض المناطق الليلة؛ ترتيبها بلا حساب الريح، واستبعدنا الأرض المنخفضة والقريبة من مجاري الأودية احتياطًا. تجنّب الأودية وتحقق من الطقس قبل الطلعة."
     static let legalNote = "الاحتطاب ممنوع، ولا تخيّم فوق النبات"
     static func protectedNote(_ name: String) -> String { "\(name): محمية، تأكد من التصريح قبل التخييم" }
+}
+
+// MARK: - The site's own name («روضة نورة»، «نفود الثمامة»)
+
+/// What a camp card is called. Built by `CampNaming.resolve` (pure: a position + the gazetteer's
+/// places ⇒ the words); never an invented name — a place with none stays «موقع كشتة».
+struct CampPlaceName: Equatable {
+    enum Relation: Equatable {
+        /// Inside the place's outline («في نفود الثمامة»).
+        case inside
+        /// On the edge of the outline, within `CampNaming.edgeMeters` («على طرف نفود الثمامة»).
+        case edge
+        /// Near a gazetteer place, `meters` away («قرب روضة نورة · ٣ كم»).
+        case near(meters: Double)
+        /// The build's own `near_name` (a famous camping place within 4 km of the cell).
+        case famous
+        /// No name within reach: «موقع كشتة» + region + coordinates.
+        case unnamed
+    }
+
+    var relation: Relation
+    /// The place's own name; nil when `relation == .unnamed`.
+    var name: String?
+    /// The kind in words («روضة»، «نفود»، «فيضة»), when the name does not already say it.
+    var kind: String?
+    /// The region's Arabic name («الثمامة»), for the unnamed case.
+    var region: String?
+    var lat: Double
+    var lng: Double
+
+    /// The card's title: «في نفود الثمامة»، «قرب روضة نورة · ٣ كم»، «موقع كشتة».
+    var title: String {
+        switch relation {
+        case .unnamed: return "موقع كشتة"
+        default: return "\(routeTitle)\(distanceSuffix)"
+        }
+    }
+
+    /// The same without the distance — what «اتجه» / «دروب البر» / the outing carry as the destination.
+    var routeTitle: String {
+        guard let name else { return "موقع كشتة" }
+        switch relation {
+        case .inside: return "في \(name)"
+        case .edge: return "على طرف \(name)"
+        case .near, .famous: return "قرب \(name)"
+        case .unnamed: return "موقع كشتة"
+        }
+    }
+
+    /// The bare destination for «اتجه» / «دروب البر» («إلى روضة نورة»): the name, else «موقع كشتة».
+    var destinationName: String { name ?? "موقع كشتة" }
+
+    private var distanceSuffix: String {
+        guard case .near(let m) = relation else { return "" }
+        let km = Int((m / 1000).rounded())
+        /* RLM around the dot keeps it between the name and the digits in an RTL line. */
+        let sep = " \u{200F}·\u{200F} "
+        return km < 1 ? "\(sep)أقل من ١ كم" : "\(sep)\(SaryFormat.number(km)) كم"
+    }
+
+    /// The small line under the title when there is something to add (the kind; or, for an
+    /// unnamed site, why it has no name: the region and the short coordinates).
+    var subtitle: String? {
+        if relation == .unnamed {
+            let c = "\(SaryFormat.digits(String(format: "%.3f", lat)))، \(SaryFormat.digits(String(format: "%.3f", lng)))"
+            return "ما له اسم معروف" + (region.map { " · \($0)" } ?? "") + " · \(c)"
+        }
+        return kind
+    }
+}
+
+enum CampNaming {
+    /// How far a place still names a site, per kind (m). Rawdahs are wide and few; a faydah is a
+    /// small basin; sand ridges / sand seas name the ground you are on, so they must be close.
+    static func reach(_ kind: DesertKind) -> Double {
+        switch kind {
+        case .rawda: return 15_000
+        case .fayda: return 8_000
+        case .nafud: return 5_000
+        case .camp: return 0
+        }
+    }
+
+    /// Within this of an outline's edge the site is «على طرف» it, not «قرب».
+    static let edgeMeters = 300.0
+    /// The build's `near_name` is within 4 km of the cell: it beats a gazetteer place farther than this.
+    static let famousMeters = 4_000.0
+
+    /// The words that already say what a name is («روضة نورة» says روضة).
+    private static let kindWords = ["روضة", "رياض", "فيضة", "فياض", "نفود", "عرق", "عروق", "طعس", "طعوس", "نازية", "نوازي", "زبارة",
+                                    "خيط", "خيوط", "نقا", "رملة", "شعيب", "خشم", "خشوم", "حرة", "قرية", "هجرة"]
+
+    /// Names that only say the kind («فيضة») are not names.
+    private static func isNamed(_ p: DesertPlace) -> Bool {
+        guard let n = p.nameAr?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return false }
+        return !(kindWords + [DesertKind.nafud.arabic, DesertKind.rawda.arabic, DesertKind.fayda.arabic]).contains(n)
+    }
+
+    private static func kindLabel(_ p: DesertPlace) -> String? {
+        let n = p.nameAr ?? ""
+        if kindWords.contains(where: { n.hasPrefix($0) }) { return nil }
+        return p.kind.arabic
+    }
+
+    private static func area(_ p: DesertPlace) -> Double {
+        guard let b = p.bbox, b.count == 4 else { return 0 }
+        return (b[2] - b[0]) * (b[3] - b[1])
+    }
+
+    /// The best gazetteer place for a point: inside an outline first (the smallest one: the most
+    /// specific), then the nearest within its kind's reach; ties by kind (rawda, nafud, fayda), then id.
+    static func bestPlace(_ p: LngLat, in places: [DesertPlace]) -> DesertHit? {
+        var hits: [DesertHit] = []
+        for q in places where q.kind != .camp && isNamed(q) {
+            let reach = reach(q.kind)
+            if let b = q.bbox, b.count == 4, q.polygon != nil, p.lng < b[0] - 0.2 || p.lng > b[2] + 0.2 || p.lat < b[1] - 0.2 || p.lat > b[3] + 0.2 { continue }
+            let m = DesertGazetteer.lowerBound(q, from: p) <= reach ? q.distance(from: p) : .infinity
+            if m <= reach { hits.append(DesertHit(place: q, meters: m)) }
+        }
+        let rank: [DesertKind: Int] = [.rawda: 0, .nafud: 1, .fayda: 2, .camp: 3]
+        let inside = hits.filter(\.inside).sorted { (area($0.place), rank[$0.place.kind]!, $0.place.id) < (area($1.place), rank[$1.place.kind]!, $1.place.id) }
+        if let h = inside.first { return h }
+        return hits.sorted { ($0.meters, rank[$0.place.kind]!, $0.place.id) < ($1.meters, rank[$1.place.kind]!, $1.place.id) }.first
+    }
+
+    /// (أ) the gazetteer's nearest name, (ب) the build's `near_name`, (د) the region + coordinates.
+    /// There is no local list of towns/villages (OSM places are not bundled), so «قرب بلدة» is not offered.
+    static func resolve(_ s: CampSite, places: [DesertPlace]) -> CampPlaceName {
+        let region = DesertPlace.campRegions[s.region]
+        func make(_ r: CampPlaceName.Relation, _ name: String?, _ kind: String?) -> CampPlaceName {
+            CampPlaceName(relation: r, name: name, kind: kind, region: region, lat: s.lat, lng: s.lng)
+        }
+        let hit = bestPlace(s.position, in: places)
+        let famous = s.nearName?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        if let h = hit, h.inside || h.meters <= famousMeters || famous == nil {
+            let r: CampPlaceName.Relation = h.inside ? .inside : (h.place.polygon != nil && h.meters <= edgeMeters ? .edge : .near(meters: h.meters))
+            return make(r, h.place.nameAr, kindLabel(h.place))
+        }
+        if let f = famous { return make(.famous, f, nil) }
+        return make(.unnamed, nil, nil)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

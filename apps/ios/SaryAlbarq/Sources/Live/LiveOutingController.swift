@@ -379,7 +379,7 @@ final class LiveOutingController: ObservableObject {
         if arg("-SaryLiveModal") == "routes", let t = arg("-SaryRouteTo").map({ $0.split(separator: ",").compactMap { Double($0) } }), t.count == 2 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 let hasForecast = !shotArgs.contains("-SaryRouteNoWeather")
-                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), "جلسة", shotArgs.contains("-SaryRouteRain"), hasForecast)
+                self?.modal = .desertRoute(LngLat(lng: t[1], lat: t[0]), arg("-SaryRouteName") ?? "موقع كشتة", shotArgs.contains("-SaryRouteRain"), hasForecast)
             }
         }
         if arg("-SaryLiveModal") == "camp" { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.modal = .campSuggest } }
@@ -1009,6 +1009,8 @@ final class LiveOutingController: ObservableObject {
         a.openNearestStations = { [weak self] in self?.openStations() }
         a.sos = SOSActions(
             trigger: { [weak self] in
+                /* A solo outing: nobody to alert and nothing sent — the call is the help (911 first, Enjad second). */
+                if self?.groupUI.serverSOS == false { self?.openEnjad(.emergency); return }
                 Task {
                     guard let self else { return }
                     /* An SOS overrides «أخفِ موقعي»: the real position went out; say it is shown again. */
@@ -1495,6 +1497,8 @@ final class LiveOutingController: ObservableObject {
 
     private func pttBegan() {
         guard session.view?.status != .ended else { return }
+        /* A solo outing never records or talks (nobody to hear it; a note would be refused, then deleted). */
+        guard groupUI.walkieTalkie, groupUI.voiceNotes else { return }
         /* «رسالة صوتية»: a tap records, the next tap (or «أرسل») sends. «مباشر (تجريبي)» below. */
         if PTTTalkMode.current() == .notes { return session.voiceNotes.talkTapped() }
         if MicPermission.granted || PTTAudioEngine.testToneRequested {

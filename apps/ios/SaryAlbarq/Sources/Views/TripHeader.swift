@@ -6,6 +6,8 @@ struct TripHeaderUI: Equatable {
     var line: String?
     var level: SarySignalLevel
     var bell: Int
+    /// A solo outing: «على جوالك فقط» under the title (nothing is shared, docs/SOLO-OUTING.md (ج)).
+    var localOnly = false
 }
 
 enum TripHeaderPresenter {
@@ -125,6 +127,15 @@ struct TripHeader: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .accessibilityIdentifier("outing-title")
+                    if ui.localOnly {
+                        /* In place of a sharing state: this outing never leaves the phone. */
+                        Label(SoloCopy.localOnly, systemImage: "lock.fill")
+                            .font(.sary(theme.drive ? 13 : 11, .bold))
+                            .foregroundStyle(p.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .accessibilityIdentifier("solo.header.local")
+                    }
                     if let line = ui.line {
                         /* Drive mode: medium weight, so the state line holds up in sun. */
                         Text(line)

@@ -27,13 +27,27 @@ struct EnjadSheet: View {
     var online: Bool
     var addPhone: () -> Void
     var close: () -> Void
+    /// A solo outing's SOS (docs/SOLO-OUTING.md (ج)): nobody gets an alert, so «اتصل ٩١١» comes
+    /// first, then Enjad as the second option.
+    var official911First = false
     @Environment(\.sary) private var theme
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         let p = theme.palette
         let text = Enjad.message(input)
-        SaryPage(title: "اطلب إنجاد", subtitle: "جمعية إنجاد للبحث والإنقاذ", close: close) {
+        SaryPage(title: official911First ? SoloCopy.sosTitle : "اطلب إنجاد", subtitle: official911First ? nil : "جمعية إنجاد للبحث والإنقاذ", close: close) {
+            if official911First {
+                VStack(alignment: .leading, spacing: theme.space(.s)) {
+                    Text(SoloCopy.sosNote).saryText(.subhead, weight: .medium).foregroundStyle(p.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("solo.sos.note")
+                    Button { openURL(Enjad.officialCallURL) } label: { SaryButtonLabel(title: SoloCopy.call911, systemImage: SaryIcon.phone) }
+                        .buttonStyle(.sary(.destructive))
+                        .accessibilityLabel(Text(SoloCopy.call911))
+                        .accessibilityIdentifier("solo.sos.call911")
+                }
+            }
             if !Enjad.hasPhone(input) {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     SaryBanner(text: "رقم جوالك غير مضاف: أضفه قبل الإرسال ليتواصلون معك، أو اكتبه في الرسالة بنفسك.", tone: .warning, systemImage: "phone.badge.plus")

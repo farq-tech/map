@@ -11,6 +11,11 @@ final class QiblaMapOverlay {
     static let casingID = "sary-qibla-casing"
     static let lineID = "sary-qibla-line"
 
+    /// The dashed direction-to-Kaaba line is drawn when the user keeps it on, except while turn-by-turn
+    /// guidance runs: toward Makkah it coincides with the road and reads as a second, wrong route
+    /// (owner's Riyadh→Makkah report, Build 41). The saved choice is untouched; it returns after the trip.
+    nonisolated static func shows(userChoice: Bool, navigating: Bool) -> Bool { userChoice && !navigating }
+
     private weak var map: MapView?
     private var origin: LngLat?
     private var styleReady = false

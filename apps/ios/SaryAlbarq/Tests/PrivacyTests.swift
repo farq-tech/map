@@ -456,6 +456,50 @@ final class SoloOutingTests: XCTestCase {
         s.close()
     }
 
+    /// Step 3: «مساري» records in a solo outing, to trails-v1/solo-<UUID>.json, with my totals —
+    /// all on this device, through no socket and no request.
+    func testSoloRecordsItsTrailOnThePhoneOnly() throws {
+        let e = env()
+        let location = LocationSharer()
+        location.testAuthorization = .authorizedWhenInUse
+        let s = OutingSession.solo(me: me, name: "مشوار إلى النفود", location: location, env: e)
+        s.open()
+        XCTAssertTrue(s.trailRecordingAllowed, "the solo outing is active and I am in it")
+        let now = Date().timeIntervalSince1970 * 1000
+        for i in 0..<6 {
+            s.trailFix(DeviceFix(lat: 25.123456 + Double(i) * 0.0003, lng: 47.654321, accuracy: 5, heading: nil, speed: 10, atMs: now - 60_000 + Double(i) * 1000))
+        }
+        XCTAssertEqual(s.trail.points.count, 6)
+        s.saveTrail()
+        XCTAssertTrue(TrailStore.fileName(s.id).hasPrefix("solo-"))
+        XCTAssertEqual(TrailStore.load(s.id, in: e.trailDirectory)?.points.count, 6, "kept in trails-v1/solo-<UUID>.json")
+        XCTAssertNotNil(TripLogStore.load(s.id, defaults: e.defaults), "my totals for the summary, from the trail's fixes")
+        XCTAssertFalse(s.gate.allowsPosition, "recording never opens the sharing gate")
+        XCTAssertTrue(sockets.isEmpty)
+        XCTAssertTrue(StubAPIProtocol.requests.isEmpty)
+        s.close()
+    }
+
+    /// Step 3: the plan of a solo outing lives on this phone (`LocalPlanBackend`); a server
+    /// outing keeps its own backend.
+    @MainActor
+    func testSoloPlanIsLocal() async throws {
+        let defaults = UserDefaults(suiteName: "solo-plan-\(UUID().uuidString)")!
+        let demo = DemoPlanBackend(arguments: [])
+        let center = PlanCenter(backend: demo, local: LocalPlanBackend(defaults: defaults))
+        let id = SoloOuting.newId()
+        XCTAssertTrue(center.backend(for: id) is LocalPlanBackend)
+        XCTAssertTrue(center.backend(for: "o1") === demo)
+        let d = OutingDestination(name: "روضة الثمامة", lat: 24.7590, lng: 46.7491)
+        let ok = await center.model(id).setDestination(d)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(center.model(id).plan.destination, d)
+        /* Kept on the phone: a new store (a relaunch) still has it. */
+        let again = try await LocalPlanBackend(defaults: defaults).plan(id)
+        XCTAssertEqual(again.destination, d)
+        XCTAssertTrue(StubAPIProtocol.requests.isEmpty)
+    }
+
     func testAPIRefusesSoloIdsWithoutTheNetwork() async {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.protocolClasses = [StubAPIProtocol.self]

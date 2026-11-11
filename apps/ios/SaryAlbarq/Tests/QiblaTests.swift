@@ -123,4 +123,26 @@ final class QiblaTests: XCTestCase {
         XCTAssertTrue(Qibla.aligned(turn: -7.9, was: true))
         XCTAssertFalse(Qibla.aligned(turn: 9, was: true), "really turned away")
     }
+
+    /// Issue #163: a late authorization answer after the screen closed must not restart the GPS.
+    @MainActor
+    func testStoppedCompassDoesNotStartLocationAgain() {
+        let c = QiblaCompass()
+        c.start()
+        XCTAssertTrue(c.isRunning)
+        c.stop()
+        XCTAssertFalse(c.isRunning)
+        c.start()
+        XCTAssertTrue(c.isRunning, "a new start runs again")
+        c.stop()
+        XCTAssertFalse(c.isRunning, "begin-location is guarded by this flag")
+    }
+
+    /// Riyadh→Makkah: the qibla line lies on the road and looked like a second route, so guidance hides it.
+    func testQiblaLineIsHiddenWhileNavigatingOnly() {
+        XCTAssertTrue(QiblaMapOverlay.shows(userChoice: true, navigating: false))
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: true, navigating: true), "turn-by-turn: no second dashed line")
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: false), "the user's own off switch still wins")
+        XCTAssertFalse(QiblaMapOverlay.shows(userChoice: false, navigating: true))
+    }
 }

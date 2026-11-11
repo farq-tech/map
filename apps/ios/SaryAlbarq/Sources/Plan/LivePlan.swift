@@ -135,9 +135,12 @@ struct LivePlanModalView: View {
                     if await plan.setDestination(OutingDestination(name: name ?? "الوجهة", lat: p.lat, lng: p.lng)) { controller.toast("صارت الوجهة") }
                 }
             }
-            a.rally = { p in
-                controller.modal = nil
-                controller.saveRally(p, label: "")
+            /* A solo outing has nobody to gather (`LiveScreenRules.solo`). */
+            if controller.groupUI.rally {
+                a.rally = { p in
+                    controller.modal = nil
+                    controller.saveRally(p, label: "")
+                }
             }
         }
         a.droneFlight = { p in
@@ -145,7 +148,8 @@ struct LivePlanModalView: View {
             controller.sheetDetent = .peek
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { MapVisualsHub.shared.fly(to: p) }
         }
-        if let hook = PointActions.addWaypointHook {
+        /* Shared points live on the server: a solo outing adds to its own route instead. */
+        if let hook = PointActions.addWaypointHook, controller.groupUI.friends {
             let id = controller.session.id
             a.addPoint = { p in controller.modal = nil; hook(id, p) }
         } else if lead {

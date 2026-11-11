@@ -232,3 +232,112 @@ final class TripAutoNavUITests: XCTestCase {
         shot(app, "autonav-9-offroad")
     }
 }
+
+/// «اتجه» on my own (docs/SOLO-OUTING.md, step 4): `-SarySolo` opens a solo outing (one member, on
+/// this phone only) to a test destination, over `-demo`'s local identity with the offline demo router
+/// (`-SaryNavDemo`). The group's UI is gone, the header says «على جوالك فقط», SOS is a 911 call, and
+/// guidance starts by itself. `-SaryContext stopped` keeps the header (guiding would make it «driving»).
+///
+/// The simulator's location is set from outside, as for `TripAutoNavUITests`
+/// (`xcrun simctl location <udid> set 24.7113,46.6744`).
+final class SoloOutingUITests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false
+    }
+
+    private func el(_ app: XCUIApplication, _ id: String) -> XCUIElement { app.descendants(matching: .any)[id].firstMatch }
+
+    private func launch(_ extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SarySolo", "24.7590,46.7491,روضة الثمامة", "-SaryNavDemo",
+                               "-SaryScheme", "light", "-SaryDrive", "0", "-SaryNight", "0", "-SaryWeatherDemo", "calm",
+                               "-SaryContext", "stopped"] + extra
+        addUIInterruptionMonitor(withDescription: "permissions") { alert in
+            for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق", "Allow", "السماح"] where alert.buttons[label].exists {
+                alert.buttons[label].tap()
+                return true
+            }
+            return false
+        }
+        app.launch()
+        app.allowLocationIfAsked()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let deadline = Date().addingTimeInterval(45)
+        while !el(app, "outing-sheet-summary").exists && !el(app, "nav.bottomBar").exists && Date() < deadline {
+            for label in ["Allow While Using App", "السماح أثناء استخدام التطبيق"] where springboard.buttons[label].exists {
+                springboard.buttons[label].tap()
+            }
+            usleep(250_000)
+        }
+        XCTAssertTrue(el(app, "outing-sheet-summary").exists || el(app, "nav.bottomBar").exists, "the live screen, on a solo outing")
+        return app
+    }
+
+    private func shot(_ app: XCUIApplication, _ name: String) {
+        let a = XCTAttachment(screenshot: app.screenshot())
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+    }
+
+    private func openMore(_ app: XCUIApplication) {
+        let more = el(app, "nav.more").exists ? el(app, "nav.more") : el(app, "outing-actions")
+        if !more.waitForExistence(timeout: 4) { el(app, "outing-sheet-summary").tap() }
+        XCTAssertTrue(more.waitForExistence(timeout: 6), "«المزيد»")
+        more.tap()
+        XCTAssertTrue(el(app, "outing-actions-sheet").waitForExistence(timeout: 6))
+    }
+
+    func testGuidanceStartsByItself() {
+        let app = launch()
+        XCTAssertTrue(el(app, "nav.banner").waitForExistence(timeout: 25), "turn-by-turn to the destination, without a tap")
+        shot(app, "solo-1-guiding")
+    }
+
+    func testNoWalkieTalkieNoVoiceNotes() {
+        let app = launch()
+        sleep(2)
+        XCTAssertFalse(el(app, "outing-ptt").exists, "no «اضغط وتكلم» in a solo outing")
+        XCTAssertFalse(el(app, "ptt-channel-chip").exists)
+        XCTAssertFalse(el(app, "outing-ptt-caption").exists)
+        XCTAssertFalse(el(app, "voice-note-timer").exists, "no recording")
+    }
+
+    func testNoChatNoFriends() {
+        let app = launch()
+        sleep(2)
+        XCTAssertFalse(el(app, "sheet.chat").exists, "no chat in the quick row")
+        XCTAssertFalse(el(app, "sheet.rally").exists, "no rally point")
+        openMore(app)
+        for id in ["outing-chat", "outing-invite", "outing-convoy", "outing-note-open", "outing-fit", "outing-ptt-channels", "live.hideLocation"] {
+            XCTAssertFalse(el(app, id).exists, "\(id) is not offered in a solo outing")
+        }
+        XCTAssertFalse(app.staticTexts["الأصدقاء"].exists, "no «الأصدقاء» group")
+        XCTAssertTrue(el(app, "outing-stuck").exists, "the safety pack stays")
+        let end = el(app, "settings-end")
+        for _ in 0..<8 where !(end.exists && end.isHittable) { app.swipeUp(); usleep(500_000) }
+        XCTAssertTrue(end.waitForExistence(timeout: 6))
+        XCTAssertTrue(end.label.contains("أنهِ المشوار"), end.label)
+        XCTAssertFalse(el(app, "settings-leave").exists, "nothing to leave")
+        shot(app, "solo-2-more")
+    }
+
+    func testHeaderSaysOnThisPhoneOnly() {
+        let app = launch()
+        let header = el(app, "trip.header")
+        XCTAssertTrue(header.waitForExistence(timeout: 15), "the trip header")
+        XCTAssertTrue(header.label.contains("على جوالك فقط"), header.label)
+        shot(app, "solo-3-header")
+    }
+
+    func testSOSIsA911Call() {
+        let app = launch()
+        let sos = el(app, "outing-sos")
+        XCTAssertTrue(sos.waitForExistence(timeout: 20))
+        sos.press(forDuration: 1.6)
+        XCTAssertTrue(el(app, "solo.sos.call911").waitForExistence(timeout: 6), "«اتصل ٩١١» first")
+        XCTAssertFalse(el(app, "sos-countdown").exists, "no «نرسل طوارئ…»: nothing is sent")
+        XCTAssertTrue(el(app, "enjad.call").exists, "Enjad as the second option")
+        shot(app, "solo-4-sos")
+    }
+}
