@@ -10,6 +10,10 @@ struct WeatherOverlayRequest: Equatable {
     var active = false
     /// The screen's chrome (top bar, sheet): the legend card stays clear of it.
     var chrome: UIEdgeInsets = .zero
+    /// Where «السحاب الآن» tells the cloud's direction and arrival: the chosen destination, else the
+    /// person's own position (nil = no estimate).
+    var point: LngLat?
+    var pointIsDestination = false
 }
 
 /// The weather overlays on one `MapView`: raster sources served by our API, re-added after
@@ -35,6 +39,8 @@ final class WeatherOverlay {
     private var framesFetchedAt: Date?
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
+    private var outlookTask: Task<Void, Never>?
+    private var outlookFor: (point: LngLat, at: Date)?
     private var frameIndex = 0
     private var pauseTicks = 0
     let legend = WeatherLegendModel()
@@ -58,6 +64,7 @@ final class WeatherOverlay {
         self.layers = layers
         legend.onTogglePlay = { [weak self] in self?.togglePlay() }
         legend.onScrub = { [weak self] i in self?.seek(to: i) }
+        legend.onClose = { [weak self] in self?.layers.kind = .none }
         styleReady = map.mapboxMap.isStyleLoaded
         map.mapboxMap.onStyleLoaded.observe { [weak self] _ in
             guard let self else { return }
@@ -65,6 +72,8 @@ final class WeatherOverlay {
             self.drawn = nil
             self.apply()
         }.store(in: &cancelables)
+        legend.$outlook.dropFirst().receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutLegend() }.store(in: &bag)
         layers.$kind.combineLatest(layers.$rainDays).dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.apply() }.store(in: &bag)
@@ -90,7 +99,7 @@ final class WeatherOverlay {
 
     func update(_ r: WeatherOverlayRequest) {
         guard r != request else { return }
-        let chromeOnly = r.active == request.active
+        let chromeOnly = r.active == request.active && r.point == request.point && r.pointIsDestination == request.pointIsDestination
         request = r
         if chromeOnly {
             layoutLegend()
@@ -123,6 +132,7 @@ final class WeatherOverlay {
         legend.attribution = kind.attribution()
         legend.items = WeatherLegend.items(kind)
         if kind != .clouds { stopAnimation(); framesTask?.cancel(); framesTask = nil }
+        refreshOutlook()
         guard let map, styleReady else { layoutLegend(); return }
         let m: MapboxMap = map.mapboxMap
         switch kind {
@@ -180,6 +190,8 @@ final class WeatherOverlay {
              * frames fetch no tiles until the loop — or the scrubber — reaches them. */
             if visibleIndex != nil { layer.visibility = .constant(shown ? .visible : .none) }
             layer.rasterFadeDuration = .constant(0)
+            /* Clouds: frames dissolve into each other (0.5 s) instead of snapping. */
+            if visibleIndex != nil { layer.rasterOpacityTransition = StyleTransition(duration: 0.5, delay: 0) }
             layer.rasterResampling = .constant(.linear)
             do {
                 try m.addSource(src)
@@ -227,6 +239,44 @@ final class WeatherOverlay {
                 self.legend.time = "صور السحاب ما وصلت، نحاول بعد شوي"
             }
         }
+    }
+
+    /// Phase 2: direction + arrival for the destination / the person, refreshed when the point moves
+    /// ≥ 25 km or the estimate is older than 10 min. Any failure or low confidence hides the row.
+    private func refreshOutlook() {
+        var point = request.point
+        #if DEBUG
+        /* Screenshots: `-SaryCloudPoint 17.5,44.0` pins the estimate to a point (the simulator has no real position). */
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-SaryCloudPoint"), i + 1 < args.count {
+            let n = args[i + 1].split(separator: ",").compactMap { Double($0) }
+            if n.count == 2 { point = LngLat(lng: n[1], lat: n[0]) }
+        }
+        #endif
+        guard effectiveKind == .clouds, let p = point else {
+            outlookTask?.cancel(); outlookTask = nil; outlookFor = nil
+            legend.outlook = nil; legend.outlookLoading = false
+            return
+        }
+        if let last = outlookFor, Date().timeIntervalSince(last.at) < 600,
+           Self.km(last.point, p) < 25 { return }
+        outlookTask?.cancel()
+        outlookFor = (p, Date())
+        legend.outlookLoading = true
+        let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
+        outlookTask = Task { [weak self] in
+            let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+            guard let self, !Task.isCancelled else { return }
+            self.legend.outlookLoading = false
+            self.legend.outlook = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
+            if o == nil { self.outlookFor = nil }
+        }
+    }
+
+    private static func km(_ a: LngLat, _ b: LngLat) -> Double {
+        let dLat = (a.lat - b.lat) * 111.2
+        let dLng = (a.lng - b.lng) * 111.2 * cos(a.lat * .pi / 180)
+        return (dLat * dLat + dLng * dLng).squareRoot()
     }
 
     private func startAnimation() {
@@ -348,6 +398,11 @@ final class WeatherLegendModel: ObservableObject {
     @Published var frameIndex = 0
     @Published var frameCount = 0
     @Published var age = ""
+    /// Phase 2: the cloud's direction + arrival line (nil = hidden: low confidence, no point, no data).
+    @Published var outlook: CloudOutlookPresenter.Display?
+    @Published var outlookLoading = false
+    /// «إغلاق»: turns the weather layer off (back on from «الطبقات» → «الطقس»).
+    var onClose: () -> Void = {}
     var onTogglePlay: () -> Void = {}
     var onScrub: (Int) -> Void = { _ in }
 }
@@ -369,6 +424,14 @@ struct WeatherLegendCard: View {
                 Text(model.time).saryText(.footnote, weight: .bold).foregroundStyle(p.textSecondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .accessibilityIdentifier("weather.legend.time")
+                Button { model.onClose() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold)).foregroundStyle(p.textSecondary)
+                        .frame(width: 26, height: 26).background(Circle().fill(p.sunken))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("weather.legend.close")
+                .accessibilityLabel(Text("إغلاق طبقة الطقس"))
             }
             if model.kind == .clouds {
                 HStack(spacing: 8) {
@@ -426,6 +489,12 @@ struct WeatherLegendCard: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             }
+            if model.kind == .clouds, let o = model.outlook {
+                CloudOutlookRow(display: o)
+            } else if model.kind == .clouds, model.outlookLoading {
+                Text("نقدّر اتجاه السحاب…").saryText(.caption).foregroundStyle(p.textSecondary)
+                    .accessibilityIdentifier("weather.outlook.loading")
+            }
             /* Data attribution over the map: 10 pt semibold, secondary (was 9 pt tertiary). */
             Text(model.attribution)
                 .saryGlyph(10, weight: .semibold, maxGrowth: SaryGlyph.tightGrowth)
@@ -440,5 +509,47 @@ struct WeatherLegendCard: View {
         .saryGlass(RoundedRectangle(cornerRadius: 16, style: .continuous), role: .chrome)
         .environment(\.layoutDirection, .rightToLeft)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// The arrow (where the cloud moves toward, north up) + the arrival line, with the picture's age.
+struct CloudOutlookRow: View {
+    let display: CloudOutlookPresenter.Display
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        HStack(alignment: .top, spacing: 10) {
+            if let deg = display.arrowDegrees {
+                ZStack {
+                    Circle().stroke(p.textTertiary.opacity(0.6), lineWidth: 1)
+                    Text("ش").saryGlyph(8, weight: .bold, maxGrowth: SaryGlyph.tightGrowth)
+                        .foregroundStyle(p.textTertiary).offset(y: -15)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(p.accentText)
+                        .rotationEffect(.degrees(deg))
+                }
+                .frame(width: 38, height: 38)
+                /* Compass rotation must not mirror with the card's right-to-left layout. */
+                .environment(\.layoutDirection, .leftToRight)
+                .accessibilityIdentifier("weather.outlook.arrow")
+                .accessibilityLabel(Text("اتجاه حركة السحاب"))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(display.headline).saryText(.caption, weight: .bold).foregroundStyle(p.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("weather.outlook.headline")
+                Text(display.detail).saryText(.footnote, weight: .bold).foregroundStyle(p.accentText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("weather.outlook.detail")
+                Text(display.footnote).saryText(.caption).foregroundStyle(p.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("weather.outlook.footnote")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("weather.outlook")
     }
 }

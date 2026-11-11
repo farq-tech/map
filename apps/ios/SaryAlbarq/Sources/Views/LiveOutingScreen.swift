@@ -93,7 +93,8 @@ struct LiveOutingScreen: View {
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
                     hiRes: controller.hiResRequest(ui, exploring: exploring),
-                    qiblaOrigin: qiblaMapOrigin
+                    qiblaOrigin: qiblaMapOrigin,
+                    userPoint: weatherUserPoint
                 )
                 }
                 .ignoresSafeArea()
@@ -190,6 +191,14 @@ struct LiveOutingScreen: View {
         guard showQiblaOnMap, let fix = controller.location.lastFix else { return nil }
         let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
         guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
+        return LngLat(lng: fix.lng, lat: fix.lat)
+    }
+
+    /// The cloud outlook's own-position point: a fix younger than 10 min and accurate to 2 km.
+    private var weatherUserPoint: LngLat? {
+        guard let fix = controller.location.lastFix else { return nil }
+        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
+        guard ageMs >= 0, ageMs <= 600_000, let accuracy = fix.accuracy, accuracy <= 2000 else { return nil }
         return LngLat(lng: fix.lng, lat: fix.lat)
     }
 
