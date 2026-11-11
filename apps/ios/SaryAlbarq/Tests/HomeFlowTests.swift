@@ -167,6 +167,26 @@ final class HomeFlowTests: XCTestCase {
         XCTAssertEqual(StandaloneNavRules.gate(canLocate: true, fix: fresh, now: now), .ready)
     }
 
+    /// Owner report, Build 38: «اتجه» on a still phone waited forever. While waiting it asks the GPS
+    /// once, re-checks on a clock, and says «اطلع لمكان مكشوف» after 45 s — never from an old fix.
+    func testStandaloneWaitAsksForAFixAndSaysWhenSlow() {
+        let now = Date()
+        XCTAssertTrue(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: false, alreadyAsked: false), "a stale fix: ask")
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: false, alreadyAsked: true), "asked once")
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .needsPermission, started: false, alreadyAsked: false))
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .ready, started: false, alreadyAsked: false))
+        XCTAssertFalse(StandaloneNavRules.needsFreshFixRequest(gate: .waitingForFix, started: true, alreadyAsked: false))
+        XCTAssertLessThanOrEqual(StandaloneNavRules.recheckS, 2, "re-checked on a clock, not only on new fixes")
+        XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: nil, now: now))
+        XCTAssertFalse(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-44), now: now))
+        XCTAssertTrue(StandaloneNavRules.waitSlow(waitingSince: now.addingTimeInterval(-45), now: now))
+        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: 35, waitingSince: now.addingTimeInterval(-3), now: now), "ننتظر موقعك… · الدقة ±٣٥ م")
+        XCTAssertEqual(StandaloneNavRules.waitText(accuracyM: nil, waitingSince: now.addingTimeInterval(-60), now: now), "ما قدرنا نحدد موقعك، اطلع لمكان مكشوف")
+        /* The gate itself is unchanged: a 5-minute-old fix is still not where I am. */
+        let old = DeviceFix(lat: 24.7, lng: 46.6, accuracy: 10, heading: nil, speed: 0, atMs: now.timeIntervalSince1970 * 1000 - 300_000)
+        XCTAssertEqual(StandaloneNavRules.gate(canLocate: true, fix: old, now: now), .waitingForFix)
+    }
+
     func testStandaloneNavLine() {
         let a = LngLat(lng: 46.70, lat: 24.70), b = LngLat(lng: 46.70, lat: 24.72), c = LngLat(lng: 46.72, lat: 24.72)
         let target = LngLat(lng: 46.73, lat: 24.73)
@@ -200,5 +220,54 @@ final class HomeFlowTests: XCTestCase {
     func testIntroIsStaticByDefault() {
         XCTAssertFalse(IntroPolicy.enabledByDefault)
         XCTAssertEqual(IntroPolicy.mode(IntroFacts(enabled: IntroPolicy.enabled(defaults))), .still)
+    }
+
+    /// «اتجه» draws my car in the colour the live map last gave me, else the white car (temporary, #157).
+    func testMyCarColorRemembersTheLiveColourElseWhite() {
+        let d = UserDefaults(suiteName: "MyCarColorTests")!
+        d.removePersistentDomain(forName: "MyCarColorTests")
+        XCTAssertEqual(MyCarColor.current(d), MyCarColor.fallback, "no trip yet: the white car")
+        MyCarColor.remember(0xD6452F, d)
+        XCTAssertEqual(MyCarColor.current(d), 0xD6452F)
+        MyCarColor.remember(0x2F6FD6, d)
+        XCTAssertEqual(MyCarColor.current(d), 0x2F6FD6, "the latest trip's colour")
+        XCTAssertNotNil(CarIcon.image(MyCarColor.fallback), "the white car is drawable")
+    }
+
+    /// Owner, Build 39: guidance back to idle with the gate ready must start again, and the idle card
+    /// must not say «ننتظر موقعك» when the fix is there.
+    func testStandaloneRestartsFromIdleAndSaysTheTruth() {
+        let now = Date()
+        XCTAssertTrue(StandaloneNavRules.shouldStart(gate: .ready, phase: .idle, loading: false))
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .ready, phase: .idle, loading: true), "a start in flight")
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .ready, phase: .guiding, loading: false))
+        XCTAssertFalse(StandaloneNavRules.shouldStart(gate: .waitingForFix, phase: .idle, loading: false))
+        XCTAssertEqual(StandaloneNavRules.idleText(gate: .ready, accuracyM: 8, waitingSince: nil, now: now, targetName: "الثمامة"), "نبدأ التوجيه إلى الثمامة…")
+        XCTAssertEqual(StandaloneNavRules.idleText(gate: .waitingForFix, accuracyM: 8, waitingSince: now, now: now, targetName: "الثمامة"), "ننتظر موقعك… · الدقة ±٨ م")
+        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 30, rejected: [.stale: 12, .teleport: 1], lastFixAgeS: 4.2),
+                       "مقبولة ٣٠ · مرفوضة: قديمة ١٢، قفزة ١ · آخر قراءة قبل ٤ ث")
+        XCTAssertEqual(StandaloneNavRules.diagnostics(accepted: 0, rejected: [:], lastFixAgeS: nil), "مقبولة ٠ · مرفوضة ٠")
+    }
+
+    /// The gate on a phone lying still (owner's hypothesis, Build 39): iOS's fresh 1 Hz fixes after a
+    /// fresh-fix request are taken even after an old reference from an earlier session; only fixes
+    /// that are not newer than the reference, or older than 10 s once a reference exists, are refused.
+    func testGateOnAParkedPhone() {
+        var g = FixQualityGate()
+        g.keepsFirstStale = false
+        let t0 = Date().timeIntervalSince1970 * 1000
+        let fix = { (atMs: Double, acc: Double) in DeviceFix(lat: 24.7113, lng: 46.6744, accuracy: acc, heading: nil, speed: 0, atMs: atMs) }
+        /* An old reference from an earlier session (10 min ago). */
+        if case .accept = g.judge(fix(t0 - 600_000, 8), nowMs: t0 - 600_000) {} else { XCTFail("seed") }
+        /* iOS answers the request: fresh fixes once a second, 0.5 s old on arrival → all taken. */
+        for k in 0..<10 {
+            let at = t0 + Double(k) * 1000
+            guard case .accept = g.judge(fix(at, 8), nowMs: at + 500) else { return XCTFail("fresh fix \(k) refused") }
+        }
+        /* What would freeze lastFix: fixes no newer than the reference, or 15–60 s old on arrival. */
+        let last = t0 + 9000
+        XCTAssertEqual(g.judge(fix(last, 8), nowMs: last + 1000), .reject(.stale), "not newer than the reference")
+        XCTAssertEqual(g.judge(fix(last + 500, 8), nowMs: last + 15_500), .reject(.stale), "15 s old on arrival")
+        XCTAssertEqual(g.accepted, 11)
     }
 }
