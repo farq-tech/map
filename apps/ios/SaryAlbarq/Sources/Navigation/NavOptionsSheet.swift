@@ -251,7 +251,7 @@ struct NavTargetPicker: View {
 
 
 /// The route's surfaces in words and in the same "materials" the map draws (`NavMapDrawer.SurfaceStyle`):
-/// «زفلت ٣٢ كم · ترابي ٦ كم · بر سهل ٤ كم · وعر ١٫٢ كم». Shown only when the route is not all asphalt.
+/// «زفلت ٣٢ كم · ترابي ٦ كم · بر مفتوح ٤ كم · وعر ١٫٢ كم». Shown only when the route is not all asphalt.
 struct NavSurfaceLegend: View {
     @Environment(\.sary) private var theme
     var runs: [NavSurfaceRun]
@@ -266,7 +266,7 @@ struct NavSurfaceLegend: View {
         switch k {
         case .paved: return "زفلت"
         case .unpaved: return "ترابي"
-        case .terrain: return "بر سهل"
+        case .terrain: return "بر مفتوح"
         case .rough: return "وعر"
         case .gridSnap: return "وصلة تقريبية"
         }

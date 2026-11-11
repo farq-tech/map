@@ -147,7 +147,7 @@ final class NavMapDrawer {
             ["id": "sary-nav-dirt-ruts", "type": "line", "source": Self.source, "filter": kind(.unpaved), "layout": ["line-cap": "butt", "line-join": "round"],
              "paint": ["line-color": SurfaceStyle.dirtRuts, "line-width": width(1.4), "line-gap-width": width(2.6),
                        "line-dasharray": [3, 2], "line-opacity": 0.85, "line-emissive-strength": 1] as [String: Any]],
-            /* Open terrain («بر سهل»): a chain of amber dots over a soft dark halo — a predicted way, not a road. */
+            /* Open terrain («بر مفتوح»): a chain of amber dots over a soft dark halo — a predicted way, not a road. */
             ["id": "sary-nav-terrain-casing", "type": "line", "source": Self.source, "filter": kind(.terrain), "layout": round,
              "paint": ["line-color": SurfaceStyle.terrainEdge, "line-width": width(9), "line-opacity": 0.45,
                        "line-blur": 1.5, "line-emissive-strength": 1] as [String: Any]],
