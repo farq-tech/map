@@ -254,12 +254,12 @@ final class SaryAlbarqUITests: XCTestCase {
         XCTAssertTrue(dest.exists && dest.label.contains("روضة الثمامة"), "the destination under the trip name: \(dest.exists ? dest.label : "-")")
         XCTAssertTrue(any(app, "invite.personal").label.contains("فهد أخوي"), "the name the inviter gave")
         XCTAssertFalse(app.textFields["invite.myName"].exists, "no name to type: the identity is made silently")
-        XCTAssertEqual(app.staticTexts["join.shareStatement"].label, "بانضمامك يشوف ربع الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
+        XCTAssertEqual(app.staticTexts["join.shareStatement"].label, "بانضمامك يشوف أصدقاء الطلعة موقعك المباشر لين تنتهي الطلعة أو تغادرها")
         XCTAssertTrue(join.label.contains("انضم للطلعة"))
         /* Build 21: iOS never asked → the Najdi pre-prompt is right above the button (no extra screen). */
         let pre = any(app, "join.prePrompt").firstMatch
         XCTAssertTrue(pre.exists, "the pre-prompt before the system alert")
-        XCTAssertTrue(pre.label.contains("عشان الربع يشوفونك وتوصلهم الطوارئ"), pre.label)
+        XCTAssertTrue(pre.label.contains("عشان الأصدقاء يشوفونك وتوصلهم الطوارئ"), pre.label)
         sleep(1)
         shot("1-invite-one-screen", app)
 
@@ -289,7 +289,7 @@ final class SaryAlbarqUITests: XCTestCase {
          * so the share keeps going with the phone locked until the trip ends. */
         let later = app.buttons["share.always.later"]
         XCTAssertTrue(later.waitForExistence(timeout: 20), "«دائمًا» explained right after joining")
-        XCTAssertTrue(app.staticTexts["خلّ الربع يشوفونك طول الطلعة"].exists, "the after-join explainer")
+        XCTAssertTrue(app.staticTexts["خلّ الأصدقاء يشوفونك طول الطلعة"].exists, "the after-join explainer")
         shot("2d-always-after-join", app)
         later.tap()
         XCTAssertTrue(later.waitForNonExistence(timeout: 5))
@@ -343,7 +343,7 @@ final class SaryAlbarqUITests: XCTestCase {
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen after a previous refusal")
-        XCTAssertEqual(needs.label, "موقعك مقفل، والربع ما راح يشوفونك")
+        XCTAssertEqual(needs.label, "موقعك مقفل، والأصدقاء ما راح يشوفونك")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
         XCTAssertFalse(any(app, "outing-sheet-summary").exists)
     }
@@ -360,7 +360,7 @@ final class SaryAlbarqUITests: XCTestCase {
 
         let needs = app.staticTexts["join.needsLocation"]
         XCTAssertTrue(needs.waitForExistence(timeout: 10), "the recovery screen")
-        XCTAssertEqual(needs.label, "موقعك مقفل، والربع ما راح يشوفونك")
+        XCTAssertEqual(needs.label, "موقعك مقفل، والأصدقاء ما راح يشوفونك")
         XCTAssertTrue(app.buttons["join.openSettings"].exists)
         XCTAssertTrue(app.buttons["join.cancel"].exists)
         XCTAssertFalse(app.buttons["join.enterWithout"].exists, "owner: never in a trip without the location")

@@ -161,7 +161,7 @@ struct GroupAudioSheet: View {
             ScrollView {
                 VStack(spacing: theme.space(.m)) {
                     if center.availability == .localOnly {
-                        SaryInlineMessage(text: "التشغيل الحين لك أنت بس. المزامنة مع الربع تشتغل مع تحديث الخادم القادم.", tone: .info)
+                        SaryInlineMessage(text: "التشغيل الحين لك أنت بس. المزامنة مع الأصدقاء تشتغل مع تحديث الخادم القادم.", tone: .info)
                             .accessibilityIdentifier("radio.localOnly")
                     }
                     NowPlayingCard(center: center)

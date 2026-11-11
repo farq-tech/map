@@ -1,7 +1,7 @@
 import XCTest
 
 /// «طلعة جديدة» end to end with demo data (no server) and a synthetic calm forecast:
-/// a typed coordinate → an automatic trip name → «الجو هناك» → «ادعُ ربعك» → the live map.
+/// a typed coordinate → an automatic trip name → «الجو هناك» → «ادعُ أصدقاءك» → the live map.
 /// With `SARY_FLOW_SHOTS=1` it saves docs/app-shots/flow-*-<scheme>.jpg (`SARY_FLOW_SCHEME` light|dark).
 final class CreateFlowUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -67,10 +67,10 @@ final class CreateFlowUITests: XCTestCase {
         let approve = app.buttons["create.approve"]
         approve.tap()
 
-        /* ٣ ادعُ ربعك */
+        /* ٣ ادعُ أصدقاءك */
         let whatsapp = app.buttons["create.whatsapp"]
         XCTAssertTrue(whatsapp.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["ادعُ ربعك"].exists)
+        XCTAssertTrue(app.staticTexts["ادعُ أصدقاءك"].exists)
         XCTAssertTrue(app.buttons["create.start"].isHittable, "«ابدأ الطلعة» is pinned at the bottom, never under the fold")
         /* WhatsApp first; QR, share, copy and the message under «خيارات أخرى». */
         XCTAssertFalse(app.descendants(matching: .any)["create.qr"].exists)

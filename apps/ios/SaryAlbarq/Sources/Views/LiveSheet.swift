@@ -102,7 +102,7 @@ struct LiveSheet: View {
             Button("غادر الطلعة", role: .destructive) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { controller.confirm = .leave } }
             Button("ابقَ في الطلعة", role: .cancel) {}
         } message: {
-            Text("ربع الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
+            Text("أصدقاء الطلعة يشوفون موقعك ما دمت فيها. الرجوع للقائمة لا يوقف المشاركة؛ تتوقف فقط إذا غادرت الطلعة أو انتهت.")
         }
         .confirmationDialog("تغادر الطلعة؟", isPresented: Binding(get: { controller.confirm == .leave }, set: { if !$0 && controller.confirm == .leave { controller.confirm = nil } }), titleVisibility: .visible) {
             Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
@@ -450,7 +450,7 @@ private struct LiveSheetBody: View {
                     Button { controller.modal = .panel(.invite) } label: {
                         HStack(spacing: theme.space(.m)) {
                             SaryRowIcon(systemImage: "person.badge.plus", color: theme.palette.accent)
-                            Text("ادعُ ربعك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
+                            Text("ادعُ أصدقاءك").saryText(.body, weight: .bold).foregroundStyle(theme.palette.accentText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, theme.space(.m))
@@ -491,7 +491,7 @@ private struct TripStatusCallout: View {
             case .notStarted:
                 /* UI-AUDIT م3: nothing here — «ابدأ الطلعة» (or the member's «ننتظر أمير الطلعة») is the
                  * one CTA over the map; the header says «ما بدأت الطلعة». The sheet is the people and
-                 * «ادعُ ربعك». */
+                 * «ادعُ أصدقاءك». */
                 EmptyView()
             case .paused:
                 SaryBanner(text: "الطلعة متوقفة مؤقتًا. لا أحد يشارك موقعه الآن.", tone: .warning, systemImage: SaryIcon.pause)
@@ -647,7 +647,7 @@ private struct PhonePanel: View {
 
     var body: some View {
         let a = controller.actions.settingsTab
-        SarySection(title: nil, footer: "يظهر لربعك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
+        SarySection(title: nil, footer: "يظهر لأصدقائك في طلعاتك فقط، ليتصلوا بك أو يراسلوك واتساب. تقدر تغيّره من «ملفي» أيضًا.") {
             VStack(spacing: theme.space(.s)) {
                 SaryTextField(title: "رقم الجوال", placeholder: "05XXXXXXXX", text: $phone, id: "settings-phone", keyboard: .phonePad, maxLength: 14)
                 Button { a.saveMyPhone(phone.isEmpty ? nil : phone); done() } label: { SaryButtonLabel(title: "حفظ", systemImage: SaryIcon.check) }
@@ -670,7 +670,7 @@ struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للأصدقاء ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -693,7 +693,7 @@ struct TrailSettingsSection: View {
                           isOn: Binding(get: { card.matchOn }, set: { controller.setTrailMatching($0) }), id: "trail.match")
                 .disabled(!card.recordingOn)
             SaryDivider()
-            SaryToggleRow(title: "أظهر مسارات الربع", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
+            SaryToggleRow(title: "أظهر مسارات الأصدقاء", subtitle: "آخر ٣٠ دقيقة، من مواقعهم اللي وصلتك الآن", systemImage: SaryIcon.fitGroup,
                           isOn: Binding(get: { controller.showFriendTrails }, set: { controller.showFriendTrails = $0 }), id: "trail.friends")
             /* Moved from the trip tab: the recording's accuracy and the GPS warnings, where the recording is set. */
             if let h = card.health {
@@ -760,7 +760,7 @@ struct TrailAlwaysExplainer: View {
                     Text("عشان «طريق الرجعة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     bullet("iphone", "المسار يبقى على جوالك فقط. ما نرسله لأحد، ولا حتى للخادم.")
-                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع ربع الطلعة تستمر والشاشة مقفلة.")
+                    bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع أصدقاء الطلعة تستمر والشاشة مقفلة.")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -824,8 +824,8 @@ struct ShareAlwaysExplainer: View {
     var afterJoin = false
     @Environment(\.sary) private var theme
 
-    static let afterJoinTitle = "خلّ الربع يشوفونك طول الطلعة"
-    static let afterJoinBody = "عشان يوصل موقعك للربع من الحين لين تخلص الطلعة — حتى لو قفلت الجوال أو فتحت تطبيق ثاني أو كنت على CarPlay — اسمح بالموقع «دائمًا». ما نرسل موقعك إلا وأنت في طلعة، ويوقف أول ما تخلص أو تطلع منها."
+    static let afterJoinTitle = "خلّ الأصدقاء يشوفونك طول الطلعة"
+    static let afterJoinBody = "عشان يوصل موقعك للأصدقاء من الحين لين تخلص الطلعة — حتى لو قفلت الجوال أو فتحت تطبيق ثاني أو كنت على CarPlay — اسمح بالموقع «دائمًا». ما نرسل موقعك إلا وأنت في طلعة، ويوقف أول ما تخلص أو تطلع منها."
 
     var body: some View {
         VStack(alignment: .leading, spacing: theme.space(.l)) {
@@ -833,7 +833,7 @@ struct ShareAlwaysExplainer: View {
                 VStack(alignment: .leading, spacing: theme.space(.l)) {
                     Image(systemName: "lock.iphone").font(.system(size: 48)).foregroundStyle(theme.palette.accent)
                     Text(afterJoin ? Self.afterJoinTitle : "المشاركة تستمر والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للربع. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
+                    Text(afterJoin ? Self.afterJoinBody : "لما طلعت من التطبيق توقف إرسال موقعك للأصدقاء. اسمح «دائمًا» عشان يشوفونك وأنت تسوق، حتى لو قفلت الشاشة أو فتحت تطبيقًا ثانيًا أو كنت على CarPlay.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
                     ShareAlwaysBullets()
                     Text("بيسألك iOS: اختر «تغيير إلى السماح دائمًا».")
@@ -908,7 +908,7 @@ private struct InviteTab: View {
                         .buttonStyle(.saryPrimary)
                         .accessibilityIdentifier("invite-share")
                 }
-                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع ربعك فقط.")
+                Text("الرابط يدخل أي شخص يفتحه إلى الطلعة. شاركه مع أصدقاءك فقط.")
                     .saryText(.footnote)
                     .foregroundStyle(theme.palette.textSecondary)
                     .multilineTextAlignment(.center)
@@ -949,7 +949,7 @@ struct NoteComposer: View {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             Text("رسالة فوق سيارتك").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
-            Text("يشوفها الربع فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
+            Text("يشوفها الأصدقاء فوق سيارتك ١٥ دقيقة.").saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
             SaryTextField(title: "الرسالة", placeholder: "مثل: بوقف عند المحطة", text: $text, id: "note-input", maxLength: state.maxLength)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: theme.space(.s)) {

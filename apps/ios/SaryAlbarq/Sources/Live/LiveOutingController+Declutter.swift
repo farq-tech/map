@@ -18,7 +18,7 @@ enum LiveScreenRules {
     }
 
     /// The quick row: stopped and looking only — never before the start (the sheet is the people
-    /// and «ادعُ ربعك» then), while driving or guiding, after the end, or while my SOS is on.
+    /// and «ادعُ أصدقاءك» then), while driving or guiding, after the end, or while my SOS is on.
     static func showsQuickRow(ended: Bool, notStarted: Bool, navigating: Bool, driving: Bool, sosFocused: Bool) -> Bool {
         !ended && !notStarted && !navigating && !driving && !sosFocused
     }

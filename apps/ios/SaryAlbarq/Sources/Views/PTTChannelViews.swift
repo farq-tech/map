@@ -314,7 +314,7 @@ struct PTTPrivateChannelEditor: View {
                 }
                 Section {
                     if members.isEmpty {
-                        Text("ما فيه أحد ثاني من الربع في الطلعة بعد").foregroundStyle(.secondary)
+                        Text("ما فيه أحد ثاني من الأصدقاء في الطلعة بعد").foregroundStyle(.secondary)
                     }
                     ForEach(members) { p in
                         Button {

@@ -119,7 +119,7 @@ struct LiveSettingsPage: View {
                 }
             }
         case .units:
-            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الربع، الوجهة، الملاحة، المسار.") {
+            sub("وحدات المسافة", footer: "تنطبق على كل المسافات في التطبيق: الأصدقاء، الوجهة، الملاحة، المسار.") {
                 choice("كيلومتر", on: !DistanceUnits.miles, id: "settings.units.km") { DistanceUnits.miles = false; controller.objectWillChange.send() }
                 choice("ميل", on: DistanceUnits.miles, id: "settings.units.mi", last: true) { DistanceUnits.miles = true; controller.objectWillChange.send() }
             }
@@ -336,7 +336,7 @@ private struct VolumePage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت الربع من السماعة الخارجية.") {
+            SettingsGroup(title: "صوت اللاسلكي", footer: "قوة صوت الأصدقاء من السماعة الخارجية.") {
                 SarySegmented(options: PTTVoiceLevel.allCases, selection: $voiceLevel, label: { $0.label }, id: "settings.voiceLevel")
                     .padding(10)
             }
@@ -361,14 +361,14 @@ private struct WhoSeesPage<H: View>: View {
         let s = controller.ui.settingsTab
         let a = controller.actions.settingsTab
         SettingsList(header: header) {
-            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع ربع هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للربع «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
+            SettingsGroup(title: nil, footer: "موقعك يُشارك تلقائيًا مع أصدقاء هذي الطلعة فقط، لا أحد غيرهم، ما دمت فيها وهي شغّالة. بإذن «دائمًا» يستمر الإرسال والشاشة مقفلة؛ بإذن «أثناء الاستخدام» فقط يتوقف إذا قفلت الشاشة ويظهر للأصدقاء «آخر موقع». الخادم يحفظ آخر موقع فقط ويحذفه إذا غادرت أو انتهت الطلعة. تطلع منها من «المزيد» ← «غادر الطلعة».") {
                 SettingsRow(title: controller.session.isSharingNow ? "موقعك مُشارَك الآن" : "موقعك غير مُشارَك الآن") { EmptyView() }
                     .accessibilityIdentifier("settings.sharing.state")
                 SettingsRow(title: "شارك البطارية") {
                     Toggle("", isOn: Binding(get: { s.batterySharingOn }, set: { a.setBatterySharing($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-battery")
-                SettingsRow(title: "الإشعارات: رسائل وطوارئ الربع", last: true) {
+                SettingsRow(title: "الإشعارات: رسائل وطوارئ الأصدقاء", last: true) {
                     Toggle("", isOn: Binding(get: { s.notificationsOn }, set: { a.setNotifications($0) })).labelsHidden()
                 }
                 .accessibilityElement(children: .combine).accessibilityIdentifier("settings-notify")

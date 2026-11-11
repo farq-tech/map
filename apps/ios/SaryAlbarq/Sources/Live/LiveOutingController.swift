@@ -1212,7 +1212,7 @@ final class LiveOutingController: ObservableObject {
         session.hasConsent && (location.authorization == .denied || location.authorization == .restricted)
     }
 
-    /// The «دائمًا» explainer is the after-join one («خلّ الربع يشوفونك طول الطلعة»).
+    /// The «دائمًا» explainer is the after-join one («خلّ الأصدقاء يشوفونك طول الطلعة»).
     @Published var shareAlwaysAfterJoin = false
 
     /// Right after «انضم» (field 2026-11-06: members on «أثناء الاستخدام» went dark the moment

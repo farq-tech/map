@@ -51,7 +51,7 @@ extension PTTChannels {
         case "leader_only": return "التردد الخاص لأمير الطلعة فقط"
         case "too_many_channels": return "وصلت للحد: ٥ ترددات خاصة في الطلعة"
         case "invalid_name": return "اكتب اسمًا للتردد"
-        case "invalid_members": return "بعض الربع ما عادوا في الطلعة"
+        case "invalid_members": return "بعض الأصدقاء ما عادوا في الطلعة"
         case "cannot_remove_self": return "ما تقدر تخرج نفسك — أغلق التردد بدلًا من ذلك"
         case "channel_not_found": return "هذا التردد ما عاد موجود"
         case "outing_ended": return "انتهت الطلعة"

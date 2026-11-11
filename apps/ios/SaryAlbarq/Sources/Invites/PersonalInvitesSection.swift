@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// «ادعُ ربعك» — personal invites: pick a contact (or type name + number), send
+/// «ادعُ أصدقاءك» — personal invites: pick a contact (or type name + number), send
 /// that person their own link (WhatsApp / SMS / share), and see per person
 /// «أُرسلت / فتحها / انضم / لم يفتحها». Used in the live trip's «المجموعة» tab and
 /// at the end of «طلعة جديدة». `legacy` is the old open-link card, shown only

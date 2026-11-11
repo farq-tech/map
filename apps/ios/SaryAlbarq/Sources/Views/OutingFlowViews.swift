@@ -23,7 +23,7 @@ struct OutingPrimaryCTA: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(c.title).font(.sary(compact ? 14 : 16, .bold)).foregroundStyle(p.textPrimary)
                                     .lineLimit(1).minimumScaleFactor(0.8)
-                                /* Build 36 item 9: the leader's presence and «الربع» under the message
+                                /* Build 36 item 9: the leader's presence and «الأصدقاء» under the message
                                  * (stopped only; the compact pill keeps one line). */
                                 if !compact, let w = ui.waiting {
                                     HStack(spacing: 4) {

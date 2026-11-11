@@ -229,7 +229,7 @@ struct TripCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         if let g = ui.groupStartMeters, g > 200, !theme.drive {
-            Text("نقطة انطلاق الربع على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textSecondary)
+            Text("نقطة انطلاق الأصدقاء على بعد \(SaryFormat.distance(meters: g))").saryNumber(.caption).foregroundStyle(theme.palette.textSecondary)
         }
         HStack(spacing: theme.space(.s)) {
             if ui.isReturnTrip {
@@ -271,10 +271,10 @@ struct TripCard: View {
         }
         if ui.canEnd {
             if ui.everyoneArrived {
-                Text("وصل الربع كلهم. إذا خلصت الطلعة، أنهِها من «المزيد» ← «الطلعة».").saryText(.footnote).foregroundStyle(p.textSecondary)
+                Text("وصل الأصدقاء كلهم. إذا خلصت الطلعة، أنهِها من «المزيد» ← «الطلعة».").saryText(.footnote).foregroundStyle(p.textSecondary)
             }
         } else {
-            Text("أمير الطلعة ينهيها لما يوصل الربع.").saryText(.footnote).foregroundStyle(p.textSecondary)
+            Text("أمير الطلعة ينهيها لما يوصل الأصدقاء.").saryText(.footnote).foregroundStyle(p.textSecondary)
         }
     }
 

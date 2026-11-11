@@ -331,7 +331,7 @@ struct WeatherSheet: View {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 Label(weather.wadiStatus, systemImage: "water.waves").saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن الربع ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
+                Text("تقدير، تابع تحذيرات \(NCM.name). نبحث في مجاري الأودية والسيول المرسومة على الخريطة (من OpenStreetMap) داخل ما حمّلته الخريطة حولكم، ونقيس بُعدها عن الأصدقاء ونقطة التجمع والوجهة والمسار. كثير من الأودية غير مرسوم، والسيل قد يأتي من مطر بعيد في أعلى الوادي لا تظهره توقعات منطقتكم. لا تعتبر غياب التنبيه أمانًا.")
                     .saryText(.footnote).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.vertical, theme.space(.s))

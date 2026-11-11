@@ -1,6 +1,6 @@
 import Foundation
 
-// «طلعة جديدة»: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ ربعك.
+// «طلعة جديدة»: ١ وين رايحين؟ → ٢ الجو هناك → ٣ ادعُ أصدقاءك.
 // Pure state and text, no UI (tested in CreateFlowTests).
 
 /// Which way a step change slides. Going on, the next step enters from the reading end and
@@ -41,12 +41,12 @@ enum CreateStep: Int, CaseIterable, Equatable {
         switch self {
         case .destination: return "وين رايحين؟"
         case .weather: return "الجو هناك"
-        case .invite: return "ادعُ ربعك"
+        case .invite: return "ادعُ أصدقاءك"
         }
     }
 }
 
-/// What «يناسبنا الجو، كمّل» / «ادعُ ربعك» is waiting on, said on screen while it runs
+/// What «يناسبنا الجو، كمّل» / «ادعُ أصدقاءك» is waiting on, said on screen while it runs
 /// (Build 36 report, item 8: «نجهّز الطلعة…» with no progress looked stuck).
 enum CreateStage: Equatable {
     /// `POST /api/outings` (12 s timeout in `OutingsAPI.call`).

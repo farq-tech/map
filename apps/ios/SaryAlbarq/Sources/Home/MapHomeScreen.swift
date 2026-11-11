@@ -455,7 +455,7 @@ struct MapHomeScreen: View {
     private var startCard: some View {
         let p = theme.palette
         return VStack(alignment: .leading, spacing: theme.space(.s)) {
-            Text("أنشئ طلعة وادعُ ربعك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+            Text("أنشئ طلعة وادعُ أصدقاءك").saryText(.headline, weight: .bold).foregroundStyle(p.textPrimary)
             Text("ابحث عن وجهتك فوق، أو ابدأ من هنا.").saryText(.footnote).foregroundStyle(p.textSecondary)
             HStack(spacing: theme.space(.s)) {
                 Button { creating = true } label: { SaryButtonLabel(title: "طلعة جديدة", systemImage: "plus") }

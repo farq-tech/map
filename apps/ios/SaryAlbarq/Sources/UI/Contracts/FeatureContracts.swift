@@ -43,7 +43,7 @@ struct ConvoyAlertUI: Equatable {
         case .aheadOfLead: return "قدّام المقدمة بـ \(d)"
         case .tailFar: return "بين المقدمة والمؤخرة \(d)"
         case .separated: return "على بعد \(d) من \(otherName ?? leaderTitle)"
-        case .unexpectedStop: return "واقف منذ \(SaryFormat.number(minutes ?? 0)) د والربع يتحركون"
+        case .unexpectedStop: return "واقف منذ \(SaryFormat.number(minutes ?? 0)) د والأصدقاء يتحركون"
         case .returnToRally: return meters >= 0 ? "نقطة التجمع على بعد \(d) (خط مستقيم)" : "اضغط «اتجه» للطريق والوقت المتوقع"
         }
     }

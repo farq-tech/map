@@ -96,7 +96,7 @@ struct SarySOSButton: View {
         .saryHaptic(.warning, trigger: fired)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(active ? "أرسلت طوارئ" : (sending ? "جارٍ إرسال الطوارئ" : "طوارئ")))
-        .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الربع"))
+        .accessibilityHint(Text("امسك الزر ثانية وحدة، وبعدها عندك ٣ ثوانٍ تتراجع قبل ما توصل الطوارئ لكل الأصدقاء"))
         .accessibilityAddTraits(.isButton)
         /* VoiceOver: the system already confirms a custom action, so this one sends at once. */
         .accessibilityAction(named: Text("أرسل طوارئ الآن")) { fired += 1; trigger() }
@@ -257,7 +257,7 @@ struct SOSCountdownView: View {
         let p = theme.palette
         return VStack(spacing: theme.space(.l)) {
             Text("نوقف الطوارئ؟").saryText(.title2, weight: .bold).foregroundStyle(p.textPrimary)
-            Text("يوصل للربع إنك بخير ويختفي تنبيهك عندهم.").saryText(.callout).foregroundStyle(p.textSecondary).multilineTextAlignment(.center)
+            Text("يوصل للأصدقاء إنك بخير ويختفي تنبيهك عندهم.").saryText(.callout).foregroundStyle(p.textSecondary).multilineTextAlignment(.center)
             Button { center.answerStop(true) } label: {
                 Text("إيه، أنا بخير").font(.sary(18, .heavy)).foregroundStyle(p.onEmergency)
                     .frame(maxWidth: .infinity, minHeight: 56).background(Capsule().fill(p.emergency))
@@ -292,7 +292,7 @@ struct SOSCountdownView: View {
                     /* One deliberate beat per second: the count is the thing to watch. */
                     .saryEmphasis(trigger: center.remaining, scale: 1.08)
                     .accessibilityIdentifier("sos-countdown-seconds")
-                Text("توصل لكل الربع مع موقعك")
+                Text("توصل لكل الأصدقاء مع موقعك")
                     .saryText(.callout, weight: .medium)
                     .foregroundStyle(p.onEmergency.opacity(0.9))
                 Button(action: center.cancel) {
@@ -324,7 +324,7 @@ struct SOSCountdownView: View {
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("اتصل ٩١١"))
-                .accessibilityHint(Text("الطوارئ الرسمية. تنبيهك للربع يكمل"))
+                .accessibilityHint(Text("الطوارئ الرسمية. تنبيهك للأصدقاء يكمل"))
                 .accessibilityIdentifier("sos.call911")
             }
             .padding(theme.space(.xl))

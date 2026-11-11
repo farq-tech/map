@@ -65,7 +65,7 @@ struct WaypointsSection: View {
     }
 
     private var footer: String {
-        "تظهر لكل الربع، وتبقى بعد نهاية الطلعة. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
+        "تظهر لكل الأصدقاء، وتبقى بعد نهاية الطلعة. اضغط مطولًا على الخريطة لتضيف نقطة في أي مكان."
     }
 
     private var myPoint: Geo.LatLng? {
@@ -305,7 +305,7 @@ struct WaypointComposer: View {
                     .buttonStyle(.saryPrimary)
                     .disabled(ServerRules.cleanText(title, max: WaypointRules.titleMax) == nil || features.saving || photoBusy)
                     .accessibilityIdentifier("waypoint.save")
-                Text("تظهر النقطة واسمك لربع الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
+                Text("تظهر النقطة واسمك لأصدقاء الطلعة فقط.").saryText(.footnote).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.l))
         }
@@ -466,7 +466,7 @@ struct WaypointCard: View {
         .confirmationDialog("تحذف «\(w.title)»؟", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("احذفها للجميع", role: .destructive) { Task { await features.delete(w.id) } }
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("تختفي النقطة من خريطة كل الربع.") }
+        } message: { Text("تختفي النقطة من خريطة كل الأصدقاء.") }
     }
 
     private func subtitle(_ w: Waypoint) -> String {

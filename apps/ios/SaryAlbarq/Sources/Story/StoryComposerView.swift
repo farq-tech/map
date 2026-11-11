@@ -28,11 +28,11 @@ struct StoryComposerView: View {
             previewCard
             SarySegmented(options: StoryFormat.allCases, selection: $options.format, label: \.label,
                           systemImage: { $0 == .vertical ? "rectangle.portrait" : "square" }, id: "story.format")
-            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد الربع بدل أسمائهم.") {
+            SarySection(title: "الخصوصية", footer: "القصة تُصنع على جوالك ولا تُرفع لأي خادم. افتراضيًا نقصّ أول وآخر ٥٠٠ م من مسارك حتى لا يبان بيتك أو مكان انطلاقك، ونكتب عدد الأصدقاء بدل أسمائهم.") {
                 SaryToggleRow(title: "أظهر نقطة البداية", subtitle: "يظهر المسار كاملًا من أول نقطة لآخر نقطة",
                               systemImage: "mappin.and.ellipse", isOn: $options.showStartEnd, id: "story.showStart")
                 SaryDivider()
-                SaryToggleRow(title: "أظهر أسماء الربع", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
+                SaryToggleRow(title: "أظهر أسماء الأصدقاء", subtitle: "تأكد أنهم موافقون: القصة تنتشر خارج الطلعة",
                               systemImage: "person.2.fill", isOn: $options.showNames, id: "story.showNames")
             }
             SarySection(title: "صور من الطلعة", footer: "حتى ٣ صور التُقطت وقت الطلعة. تُرسم داخل القصة فقط وتبقى على جوالك، ولا يدخل القصة موقع الصورة ولا بياناتها.") {

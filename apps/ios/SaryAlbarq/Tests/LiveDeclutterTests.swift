@@ -76,7 +76,7 @@ final class LiveScreenRulesTests: XCTestCase {
         XCTAssertFalse(LiveScreenRules.quickRow(chat: true).contains("backtrack"), "«طريق الرجعة» is the side shortcut / «المزيد»")
         XCTAssertTrue(LiveScreenRules.showsQuickRow(ended: false, notStarted: false, navigating: false, driving: false, sosFocused: false))
         XCTAssertFalse(LiveScreenRules.showsQuickRow(ended: false, notStarted: true, navigating: false, driving: false, sosFocused: false),
-                       "not started: the map, SOS, the CTA and the sheet (people + «ادعُ ربعك») only")
+                       "not started: the map, SOS, the CTA and the sheet (people + «ادعُ أصدقاءك») only")
         XCTAssertFalse(LiveScreenRules.showsQuickRow(ended: false, notStarted: false, navigating: true, driving: false, sosFocused: false))
         XCTAssertFalse(LiveScreenRules.showsQuickRow(ended: false, notStarted: false, navigating: false, driving: true, sosFocused: false))
         XCTAssertFalse(LiveScreenRules.showsQuickRow(ended: true, notStarted: false, navigating: false, driving: false, sosFocused: false))

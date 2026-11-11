@@ -21,7 +21,7 @@ struct SplashView: View {
                         Text("سَرى البارق")
                             .font(.sary(34, .heavy))
                             .foregroundStyle(Color(rgb: 0xF4EFE6))
-                        Text("طلعات البر مع الربع")
+                        Text("طلعات البر مع الأصدقاء")
                             .saryText(.callout)
                             .foregroundStyle(Color(rgb: 0xB9AE9C))
                     }
@@ -208,7 +208,7 @@ private struct IntroStep: View {
                     .font(.sary(36, .heavy))
                     .foregroundStyle(p.textPrimary)
                     .padding(.top, theme.space(.xl))
-                Text("شوف الربع على الخريطة في الطلعة، وكل سيارة بلونها.")
+                Text("شوف الأصدقاء على الخريطة في الطلعة، وكل سيارة بلونها.")
                     .saryText(.title2, weight: .medium)
                     .foregroundStyle(p.textSecondary)
                     .multilineTextAlignment(.center)
@@ -217,7 +217,7 @@ private struct IntroStep: View {
                     .accessibilityIdentifier("onboarding.idea")
                 Spacer(minLength: theme.space(.xl))
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
-                    point("location.fill", "موقعك يُشارك فقط مع ربع الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
+                    point("location.fill", "موقعك يُشارك فقط مع أصدقاء الطلعة اللي تنضم لها، وما دامت شغّالة. تغادرها فتتوقف.")
                     point("person.crop.circle.badge.checkmark", "بدون كلمة مرور: اسمك على هذا الجهاز، ورمز استرجاع إذا غيّرت جوالك.")
                     point("sos", "طوارئ ونقطة تجمع ورسائل قصيرة للمجموعة.")
                 }
@@ -292,7 +292,7 @@ struct ProfileStep: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let phoneOK = phone.trimmingCharacters(in: .whitespaces).isEmpty || SaryFormat.normalizeSaudiMobile(phone) != nil
-        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه الربع في الطلعة فقط", back: back) {
+        SaryPage(title: "عرّفنا عليك", subtitle: "يشوفه الأصدقاء في الطلعة فقط", back: back) {
             VStack(spacing: theme.space(.s)) {
                 PhotosPicker(selection: $item, matching: .images) {
                     ZStack(alignment: .bottomTrailing) {
@@ -318,7 +318,7 @@ struct ProfileStep: View {
                           help: "يظهر فوق سيارتك على الخريطة.")
             SaryTextField(title: "رقم الجوال (اختياري)", placeholder: "05XXXXXXXX", text: $phone, id: "onboarding.phone", keyboard: .phonePad, maxLength: 14,
                           state: phoneOK ? .normal : .error("اكتب رقمًا سعوديًا يبدأ بـ ٠٥"),
-                          help: "يظهر لربعك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
+                          help: "يظهر لأصدقائك في طلعاتك فقط ليتصلوا بك أو يراسلوك واتساب. تقدر تحذفه متى شئت.")
                 .environment(\.layoutDirection, .rightToLeft)
             if let error { SaryInlineMessage(text: error, tone: .error) }
             Button {
@@ -384,7 +384,7 @@ private struct LocationStep: View {
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("onboarding.location.title")
                 VStack(alignment: .leading, spacing: theme.space(.m)) {
-                    line("map.fill", "يشوفك ربعك على الخريطة وتشوفهم، وقت الطلعة بس.")
+                    line("map.fill", "يشوفك أصدقاءك على الخريطة وتشوفهم، وقت الطلعة بس.")
                     line("hand.raised.fill", "تطلع من الطلعة أو تخلص، يوقف. وبرّا الطلعات ما نتتبعك.")
                 }
                 .padding(theme.space(.l))

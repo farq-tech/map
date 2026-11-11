@@ -180,7 +180,7 @@ struct TripSummaryView: View {
                 }
                 TripLegsSection(outingId: outingId)
                 TripWaypointsSection(outingId: outingId, outingName: s.outing.name)
-                SarySection(title: "ملخصات شاركها الربع", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
+                SarySection(title: "ملخصات شاركها الأصدقاء", footer: "كل واحد يشارك مجاميعه فقط (المسافة والوقت)، لا المسار ولا النقاط.") {
                     if shares.isEmpty {
                         Text("ما شارك أحد ملخصه بعد.").saryText(.subhead).foregroundStyle(p.textSecondary).padding(.vertical, theme.space(.s))
                     }
@@ -284,10 +284,10 @@ struct TripSummaryView: View {
     @ViewBuilder
     private func mySummary(mine: TripShare?, local: TripTotals?, endedAt: Date?) -> some View {
         let open = endedAt.map { Date().timeIntervalSince($0) < 7 * 86400 } ?? false
-        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع ربع الطلعة (خلال أسبوع من نهايتها).") {
+        SarySection(title: "ملخصي", footer: "محسوب على جوالك من مشاركتك فقط. يبقى عندك إلا إذا اخترت مشاركته مع أصدقاء الطلعة (خلال أسبوع من نهايتها).") {
             VStack(alignment: .leading, spacing: theme.space(.s)) {
                 if mine != nil {
-                    Label("شاركت ملخصك مع الربع", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
+                    Label("شاركت ملخصك مع الأصدقاء", systemImage: SaryIcon.checkCircle).saryText(.subhead, weight: .bold).foregroundStyle(theme.palette.liveText)
                     Button {
                         busy = true
                         Task { if await model.withdrawSummary(outingId) { await load() }; busy = false }
@@ -301,7 +301,7 @@ struct TripSummaryView: View {
                     Button {
                         busy = true
                         Task { if await model.shareSummary(outingId) != nil { await load() }; busy = false }
-                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الربع", systemImage: "square.and.arrow.up.on.square", busy: busy) }
+                    } label: { SaryButtonLabel(title: "شارك ملخصي مع الأصدقاء", systemImage: "square.and.arrow.up.on.square", busy: busy) }
                         .buttonStyle(.sary(.primary))
                         .accessibilityIdentifier("summary.shareMine")
                 }

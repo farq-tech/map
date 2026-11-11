@@ -98,7 +98,7 @@ final class HomeFlowTests: XCTestCase {
     }
 
     func testStateCardFirstTimeLoadingAndFailure() {
-        XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loaded), .start, "nothing current: «أنشئ طلعة وادعُ ربعك»")
+        XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loaded), .start, "nothing current: «أنشئ طلعة وادعُ أصدقاءك»")
         XCTAssertEqual(HomeStateCard.pick(current: [outing("e", .ended)], phase: .loaded), .start)
         XCTAssertEqual(HomeStateCard.pick(current: [], phase: .loading), .none, "no flash of «أنشئ طلعة» while loading")
         XCTAssertEqual(HomeStateCard.pick(current: [], phase: .failed("x")), .failed("x"), "a failed list is said, never empty")

@@ -2,7 +2,7 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// «طلعة جديدة» in three steps: ١ وين رايحين؟ → ٢ الجو هناك (يناسبنا الجو؟) → ٣ ادعُ ربعك.
+/// «طلعة جديدة» in three steps: ١ وين رايحين؟ → ٢ الجو هناك (يناسبنا الجو؟) → ٣ ادعُ أصدقاءك.
 /// The outing is created on the server only when the weather is approved; the
 /// destination is saved with it (on this phone first if the server cannot take it yet).
 struct CreateOutingWizard: View {
@@ -548,7 +548,7 @@ private struct CompanionsStep: View {
         if !online { SaryOfflineStrip(text: CreateCopy.offline) }
         CreateProgressLine(flow: flow)
         Button(action: withFriends) {
-            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ ربعك",
+            SaryButtonLabel(title: flow.failure != nil && !solo ? CreateFlowState.retryTitle : "ادعُ أصدقاءك",
                             systemImage: flow.failure != nil && !solo ? SaryIcon.retry : "person.2.fill",
                             busy: flow.creating && !solo, busyTitle: "ننشئ الطلعة…")
         }
@@ -738,7 +738,7 @@ private struct WeatherStep: View {
     }
 }
 
-// MARK: - Step 3: ادعُ ربعك
+// MARK: - Step 3: ادعُ أصدقاءك
 
 private struct InviteStep: View {
     var flow: CreateFlowState
@@ -760,7 +760,7 @@ private struct InviteStep: View {
         }
         HStack(spacing: theme.space(.s)) {
             Image(systemName: SaryIcon.checkCircle).foregroundStyle(p.liveText)
-            Text(link == nil ? "أنشأنا «\(flow.trimmedName)». ادعُ ربعك واحدًا واحدًا." : "أنشأنا «\(flow.trimmedName)». أرسل الدعوة لربعك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
+            Text(link == nil ? "أنشأنا «\(flow.trimmedName)». ادعُ أصدقاءك واحدًا واحدًا." : "أنشأنا «\(flow.trimmedName)». أرسل الدعوة لأصدقائك.").saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("create.created")

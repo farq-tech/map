@@ -122,7 +122,7 @@ export function keepOpenNote(wakeSupported: boolean): string {
 /** What the leader sends a member who is following in the browser (same text in the iPhone app). */
 export function installGuideMessage(betaUrl: string | null = IOS_TESTFLIGHT_PUBLIC_URL): string {
 	return [
-		`عشان يوصل موقعك للربع والجوال مقفل، نزّل ${APP_NAME}:`,
+		`عشان يوصل موقعك للأصدقاء والجوال مقفل، نزّل ${APP_NAME}:`,
 		`١ نزّل TestFlight: ${TESTFLIGHT_APP_URL}`,
 		`٢ نزّل ${APP_NAME}: ${betaUrl ?? TESTFLIGHT_APP_URL}`,
 		`٣ افتح ${APP_NAME}، وافتح رابط الدعوة مرة ثانية`,

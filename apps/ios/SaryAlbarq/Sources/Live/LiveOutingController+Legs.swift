@@ -104,7 +104,7 @@ extension LiveOutingController {
                 startedAt: LiveOutingPresenter.deviceDate(v.snapshot.outing.started_at, view: v),
                 groupStart: trip.record.groupStart?.position, livePositions: livePts, hasActiveLeg: legs.current != nil || implicitLeg != nil, now: i.now)
             if v.status == .created, !i.iLead {
-                /* «ننتظر أمير الطلعة» with what it waits on: the leader, «الربع», and my own link. */
+                /* «ننتظر أمير الطلعة» with what it waits on: the leader, «الأصدقاء», and my own link. */
                 /* `.limited` = polling: each poll's snapshot carries the server's `online` too. */
                 let link = presented().connection
                 i.waiting = WaitingLeader.info(members: Array(v.members.values), myId: v.myId, clockOffsetMs: v.clockOffsetMs,

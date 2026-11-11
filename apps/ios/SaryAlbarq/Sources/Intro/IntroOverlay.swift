@@ -74,7 +74,7 @@ struct IntroFrameView: View {
                     .shadow(color: IntroScene.c(IntroScene.gold, 0.55), radius: 14)
                     .opacity(nameA)
                     .offset(y: CGFloat(1 - nameA) * 10)
-                Text("طلعات البر مع الربع")
+                Text("طلعات البر مع الأصدقاء")
                     .font(.sary(17, .medium, relativeTo: .callout))
                     .foregroundStyle(IntroScene.c(0xC9BBA4))
                     .lineLimit(1)

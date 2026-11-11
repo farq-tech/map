@@ -145,7 +145,7 @@ struct ChatHomeView: View {
                 SaryInlineMessage(text: retentionText, tone: .info).accessibilityIdentifier("chat.retention")
             }
             VStack(spacing: 0) {
-                row(.group, title: "محادثة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل الربع")
+                row(.group, title: "محادثة الطلعة", color: nil, subtitle: chat.threads[.group]?.latest.map(ChatPreview.line) ?? "لكل الأصدقاء")
             }
             .sarySurface(radius: SaryRadius.l)
             if !others.isEmpty || !former.isEmpty {

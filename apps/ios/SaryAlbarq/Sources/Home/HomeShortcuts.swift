@@ -136,7 +136,7 @@ enum HomeSheetRules {
 
 /// The ONE state card on the collapsed home sheet (UI-AUDIT §٢ «الرئيسية»), decided here and
 /// unit-tested in HomeFlowTests: a running outing, else the planned / paused one, else (first
-/// time, or nothing current) «أنشئ طلعة وادعُ ربعك» with «انضم برابط».
+/// time, or nothing current) «أنشئ طلعة وادعُ أصدقاءك» with «انضم برابط».
 enum HomeStateCard: Equatable {
     /// «طلعتك جارية».
     case active(String)
@@ -145,7 +145,7 @@ enum HomeStateCard: Equatable {
     case invite
     /// «طلعتك القادمة»: planned (not started) or paused.
     case upcoming(String)
-    /// «أنشئ طلعة وادعُ ربعك» + «انضم برابط».
+    /// «أنشئ طلعة وادعُ أصدقاءك» + «انضم برابط».
     case start
     /// The list could not load and nothing is on screen: say so (never an empty home).
     case failed(String)

@@ -284,7 +284,7 @@ extension LiveOutingController {
             if nav.isActive, nav.phase != .arrived { nav.voice.say("وصل \(name)", clips: ["grp_14"]) }
         }
         if let v, v.iOwn, ArrivalOrder.everyoneArrived(arrivals: trip.record.arrivals, memberIds: v.orderedMembers.map(\.user_id)) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الربع كلهم · تقدر تنهي الطلعة") }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.toast("وصل الأصدقاء كلهم · تقدر تنهي الطلعة") }
         }
         objectWillChange.send()
     }
