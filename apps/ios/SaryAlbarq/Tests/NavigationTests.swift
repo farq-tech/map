@@ -263,11 +263,17 @@ final class NavTextTests: XCTestCase {
 final class StubURLProtocol: URLProtocol {
     nonisolated(unsafe) static var routes: [String: (Int, Data)] = [:]
     nonisolated(unsafe) static var seen: [URLRequest] = []
+    /// Fail every request with this URL error instead of answering (e.g. `.notConnectedToInternet`).
+    nonisolated(unsafe) static var failWith: URLError.Code?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.seen.append(request)
+        if let e = Self.failWith {
+            client?.urlProtocol(self, didFailWithError: URLError(e))
+            return
+        }
         let (code, body) = Self.routes[request.url?.path ?? ""] ?? (404, Data("{\"error\":\"not_found\"}".utf8))
         let resp = HTTPURLResponse(url: request.url!, statusCode: code, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
@@ -300,6 +306,7 @@ final class NavRoutingProviderTests: XCTestCase {
         fixture = try Data(contentsOf: url)
         StubURLProtocol.routes = [:]
         StubURLProtocol.seen = []
+        StubURLProtocol.failWith = nil
     }
 
     private func farq() -> FarqValhallaRouteProvider {
@@ -357,6 +364,32 @@ final class NavRoutingProviderTests: XCTestCase {
             let p = try await sw.routes(req())
             XCTAssertEqual(p.routes.first?.id, "mapbox-0", code)
             XCTAssertEqual(sw.lastFallbackReason, code == "no_route" ? .noRoute : .unavailable)
+        }
+    }
+
+    /// «فرق» with no network: Valhalla is a server, but the Mapbox SDK routes on the phone from
+    /// downloaded routing tiles (hybrid), so the offline error must fall through to it (#180).
+    func testFarqOfflineFallsThroughToMapboxOnDeviceRouter() async throws {
+        StubURLProtocol.failWith = .notConnectedToInternet
+        let mb = FakeMapbox()
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+        let p = try await sw.routes(req())
+        XCTAssertEqual(p.routes.first?.id, "mapbox-0")
+        XCTAssertEqual(mb.calls, 1, "Mapbox asked even though Valhalla is offline")
+        XCTAssertEqual(sw.name, "Mapbox")
+    }
+
+    /// And when Mapbox has no downloaded routing tiles either, the offline error still surfaces.
+    func testFarqOfflineWithMapboxOfflineStillReportsOffline() async {
+        StubURLProtocol.failWith = .notConnectedToInternet
+        let mb = FakeMapbox()
+        mb.fail = .offline
+        let sw = SwitchingRouteProvider(farq: farq(), mapbox: mb, choice: { .farq })
+        do {
+            _ = try await sw.routes(req())
+            XCTFail("expected .offline")
+        } catch {
+            XCTAssertEqual(error as? NavRoutingError, .offline)
         }
     }
 
