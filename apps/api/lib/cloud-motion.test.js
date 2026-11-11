@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const m = require('./cloud-motion');
+const m = require('./weather/cloud-motion');
 
 function rng(seed) {
   let s = seed >>> 0;

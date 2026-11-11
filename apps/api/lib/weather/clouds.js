@@ -160,6 +160,13 @@ function irToOverlay(rgba, { lo = 105, hi = 205, maxAlpha = 235 } = {}) {
   return out;
 }
 
+/** WMS GetMap URL for a EPSG:3857 box [minx, miny, maxx, maxy] at sensing time `tMs`. */
+function wmsMapUrl([a, b, c, d], width, height, tMs) {
+  return `${WMS}?service=WMS&version=1.3.0&request=GetMap&layers=${encodeURIComponent(LAYER)}&styles=&crs=EPSG:3857`
+    + `&bbox=${a},${b},${c},${d}&width=${width}&height=${height}&format=image/png&transparent=true`
+    + `&time=${encodeURIComponent(new Date(tMs).toISOString().replace('.000', ''))}`;
+}
+
 const tileCache = new Lru(Number(process.env.WEATHER_CLOUD_TILE_CACHE) || 1500);
 const inflight = new Map();
 let EMPTY;
@@ -186,9 +193,7 @@ async function tile(id, z, x, y, nowMs = Date.now()) {
     /* WMS reprojects and resamples to the tile for us. */
     const size = 256;
     const [a, b, c, d] = tileBbox3857(z, x, y);
-    const url = `${WMS}?service=WMS&version=1.3.0&request=GetMap&layers=${encodeURIComponent(LAYER)}&styles=&crs=EPSG:3857`
-      + `&bbox=${a},${b},${c},${d}&width=${size}&height=${size}&format=image/png&transparent=true`
-      + `&time=${encodeURIComponent(new Date(t).toISOString().replace('.000', ''))}`;
+    const url = wmsMapUrl([a, b, c, d], size, size, t);
     const r = await fetchBuffer(url, { timeoutMs: 45_000 });
     if (r.status !== 200 || !/png/.test(r.type)) return null;
     const src = PNG.sync.read(r.body);
@@ -202,7 +207,7 @@ async function tile(id, z, x, y, nowMs = Date.now()) {
 
 module.exports = {
   LAYER, REGION, MIN_ZOOM, MAX_ZOOM,
-  frameId, parseFrameId, frameAllowed, planFrames, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
+  frameId, parseFrameId, frameAllowed, planFrames, wmsMapUrl, latestImageTime, latestFromCapabilities, framesPayload, irToOverlay, tile, riyadhLabel, attribution,
   _reset() {
     capsCache = { at: 0, latest: null };
   },

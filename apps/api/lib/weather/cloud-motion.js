@@ -125,12 +125,23 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
   const dx = bx - maxShift + fit(at(bx - 1, by), best, at(bx + 1, by));
   const dy = by - maxShift + fit(at(bx, by - 1), best, at(bx, by + 1));
 
-  /* Runner-up: best value outside a 6-px disc around the peak. */
+  /* Runner-up: the best *other local maximum* (a shoulder of the same peak is not a rival). */
   let second = -2;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
+  for (let y = 1; y < size - 1; y++) {
+    for (let x = 1; x < size - 1; x++) {
       if ((x - bx) ** 2 + (y - by) ** 2 <= 36) continue;
-      if (surface[y * size + x] > second) second = surface[y * size + x];
+      const v = surface[y * size + x];
+      if (v <= second) continue;
+      let isMax = true;
+      for (let j = -1; j <= 1 && isMax; j++) {
+        for (let i = -1; i <= 1; i++) {
+          if ((i || j) && surface[(y + j) * size + x + i] > v) {
+            isMax = false;
+            break;
+          }
+        }
+      }
+      if (isMax) second = v;
     }
   }
   /* And how well "no motion" explains the pair: a stationary scene correlates at shift 0. */
@@ -159,6 +170,20 @@ function estimateMotion(older, newer, dtMin, pxKm, opts = {}) {
   };
 }
 
+/**
+ * Do two independent motion estimates (consecutive frame pairs) agree? Returns 0..1: 1 when the
+ * bearings are within 20° and the speeds within 25 %, falling to 0 at 60° / 60 %. Used to cut the
+ * confidence when the picture is changing faster than it is moving.
+ */
+function consistency(a, b) {
+  if (!a || !b || !a.ok || !b.ok) return 0;
+  if (a.stationary && b.stationary) return 1;
+  if (a.stationary !== b.stationary) return 0;
+  const ang = angleDiff(a.bearingDeg, b.bearingDeg);
+  const rel = Math.abs(a.speedKmh - b.speedKmh) / Math.max(a.speedKmh, b.speedKmh);
+  return Math.min(clamp01(1 - (ang - 20) / 40), clamp01(1 - (rel - 0.25) / 0.35));
+}
+
 /** Mean opacity of a (2r+1)² patch around (cx, cy), edge-clamped. */
 function patchMean(f, cx, cy, r = 2) {
   let s = 0;
@@ -179,16 +204,18 @@ function patchMean(f, cx, cy, r = 2) {
  */
 function scanAlongMotion(newer, cx, cy, motion, pxKm, { dense = 0.45, clear = 0.2, horizonKm = 300 } = {}) {
   const len = Math.hypot(motion.dx, motion.dy);
-  if (!len) return { here: patchMean(newer, cx, cy), upwindKm: null, downwindKm: null };
+  if (!len) return { here: patchMean(newer, cx, cy), upwindKm: null, downwindKm: null, scannedKm: 0 };
   const ux = motion.dx / len;
   const uy = motion.dy / len;
   const here = patchMean(newer, cx, cy);
   const maxSteps = Math.floor(horizonKm / pxKm);
   let upwindKm = null;
+  let scannedKm = 0;
   for (let i = 1; i <= maxSteps; i++) {
     const x = cx - ux * i;
     const y = cy - uy * i;
     if (x < 0 || y < 0 || x > newer.w - 1 || y > newer.h - 1) break;
+    scannedKm = i * pxKm;
     if (patchMean(newer, x, y) >= dense) {
       upwindKm = i * pxKm;
       break;
@@ -204,7 +231,7 @@ function scanAlongMotion(newer, cx, cy, motion, pxKm, { dense = 0.45, clear = 0.
       break;
     }
   }
-  return { here, upwindKm, downwindKm };
+  return { here, upwindKm, downwindKm, scannedKm };
 }
 
 /** ± margin (minutes) around an arrival estimate: grows with weak confidence and with distance. */
@@ -242,12 +269,12 @@ function outlookForPoint(newer, cx, cy, motion, pxKm, ageMin, opts = {}) {
       marginMin: clearImg != null ? marginMinutes(clearImg, motion.confidence) : null,
     };
   }
-  if (scan.upwindKm == null) return { ...common, state: 'clear', horizonKm: opts.horizonKm || 300 };
+  if (scan.upwindKm == null) return { ...common, state: 'clear', scannedKm: Math.round(scan.scannedKm) };
   const etaImg = (scan.upwindKm / motion.speedKmh) * 60;
   const etaNow = etaImg - ageMin;
   const margin = marginMinutes(etaImg, motion.confidence);
   if (etaNow <= 0) return { ...common, state: 'arrived', distanceKm: scan.upwindKm, marginMin: margin };
-  if (etaNow > horizonMin) return { ...common, state: 'clear', horizonKm: opts.horizonKm || 300 };
+  if (etaNow > horizonMin) return { ...common, state: 'clear', scannedKm: Math.round(scan.scannedKm) };
   return { ...common, state: 'approaching', etaMin: Math.round(etaNow), marginMin: margin, distanceKm: scan.upwindKm };
 }
 
@@ -258,5 +285,5 @@ function directionAr(bearing) {
 }
 
 module.exports = {
-  bearingOf, angleDiff, estimateMotion, scanAlongMotion, outlookForPoint, marginMinutes, directionAr, patchMean,
+  bearingOf, angleDiff, consistency, estimateMotion, scanAlongMotion, outlookForPoint, marginMinutes, directionAr, patchMean,
 };
