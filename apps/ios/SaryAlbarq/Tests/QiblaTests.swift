@@ -123,4 +123,18 @@ final class QiblaTests: XCTestCase {
         XCTAssertTrue(Qibla.aligned(turn: -7.9, was: true))
         XCTAssertFalse(Qibla.aligned(turn: 9, was: true), "really turned away")
     }
+
+    /// Issue #163: a late authorization answer after the screen closed must not restart the GPS.
+    @MainActor
+    func testStoppedCompassDoesNotStartLocationAgain() {
+        let c = QiblaCompass()
+        c.start()
+        XCTAssertTrue(c.isRunning)
+        c.stop()
+        XCTAssertFalse(c.isRunning)
+        c.start()
+        XCTAssertTrue(c.isRunning, "a new start runs again")
+        c.stop()
+        XCTAssertFalse(c.isRunning, "begin-location is guarded by this flag")
+    }
 }
