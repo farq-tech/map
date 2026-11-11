@@ -251,9 +251,15 @@ struct AreaPickerMap: UIViewRepresentable {
     var initial: OfflinePlan.Box?
     var changed: (OfflinePlan.Box) -> Void
 
-    /// The box on screen: centred, between the top bar and the bottom panel.
+    /// Height of the chrome around the box (top bar + the bottom panel with its name field,
+    /// topo toggle and download button) that the box must not run under.
+    static let chromeHeight: CGFloat = 447
+
+    /// The box on screen: centred, between the top bar and the bottom panel. On a 375×667 SE the
+    /// 42 % box ran under the panel (the area being saved was hidden behind it), so the side is
+    /// also capped by what the chrome leaves; on 812 pt+ phones the cap does not bite.
     static func boxRect(in size: CGSize) -> CGRect {
-        let side = min(size.width - 48, size.height * 0.42)
+        let side = max(120, min(size.width - 48, size.height * 0.42, size.height - chromeHeight))
         return CGRect(x: (size.width - side) / 2, y: size.height * 0.36 - side / 2, width: side, height: side)
     }
 

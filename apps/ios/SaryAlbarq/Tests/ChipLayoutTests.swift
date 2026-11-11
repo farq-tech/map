@@ -226,4 +226,22 @@ final class OfflinePlanTests: XCTestCase {
         XCTAssertTrue(OfflinePlan.extraTilesets.contains("mapbox://mapbox.mapbox-terrain-dem-v1"))
         XCTAssertTrue(OfflinePlan.regionId().hasPrefix("sary-"))
     }
+
+    // MARK: offline area picker box (AreaPickerMap.boxRect)
+
+    func testOfflineBoxIsUnchangedOnStandardAndLargePhones() {
+        for size in [CGSize(width: 393, height: 852), CGSize(width: 440, height: 956), CGSize(width: 375, height: 812)] {
+            let r = AreaPickerMap.boxRect(in: size)
+            XCTAssertEqual(r.width, min(size.width - 48, size.height * 0.42), accuracy: 0.001, "\(size)")
+        }
+    }
+
+    func testOfflineBoxStaysAboveThePanelOnAnSE() {
+        let size = CGSize(width: 375, height: 667)
+        let r = AreaPickerMap.boxRect(in: size)
+        XCTAssertEqual(r.width, 667 - AreaPickerMap.chromeHeight, accuracy: 0.001)
+        // The panel (≈ 300 pt + margins) starts around y 350 on an SE.
+        XCTAssertLessThanOrEqual(r.maxY, 352)
+        XCTAssertGreaterThanOrEqual(AreaPickerMap.boxRect(in: CGSize(width: 320, height: 568)).width, 120)
+    }
 }
