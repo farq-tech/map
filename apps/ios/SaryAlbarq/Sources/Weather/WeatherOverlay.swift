@@ -272,7 +272,7 @@ final class WeatherOverlay {
     /// «وين نزل مطر» → which way the observed rain was moving, «اتجاه الرياح» → wind at the point.
     /// Refreshed when the point moves ≥ 25 km or the estimate is older than 10 min. Any failure or low
     /// confidence hides the row.
-    private func refreshOutlook() {
+    private func refreshOutlook(isRetry: Bool = false) {
         var point = request.point
         #if DEBUG
         /* Screenshots: `-SaryCloudPoint 17.5,44.0` pins the estimate to a point (the simulator has no real position). */
@@ -293,6 +293,8 @@ final class WeatherOverlay {
         /* A new place or layer (not a refresh of the same one): never keep showing the old row. */
         if outlookFor.map({ $0.kind != kind || Self.km($0.point, p) >= 25 || $0.destination != request.pointIsDestination }) ?? true { legend.outlook = nil }
         outlookTask?.cancel()
+        /* The one-retry allowance belongs to a request: a new place or layer starts with a fresh one. */
+        if !isRetry { outlookRetried = false }
         outlookFor = (p, Date(), kind, request.pointIsDestination)
         legend.outlookLoading = true
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
@@ -323,7 +325,7 @@ final class WeatherOverlay {
                 if !self.outlookRetried {
                     self.outlookRetried = true
                     try? await Task.sleep(nanoseconds: 60_000_000_000)
-                    if !Task.isCancelled { self.refreshOutlook() }
+                    if !Task.isCancelled { self.refreshOutlook(isRetry: true) }
                 }
             } else {
                 self.outlookRetried = false
