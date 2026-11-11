@@ -173,9 +173,9 @@ final class OutingActivityTests: XCTestCase {
     }
 
     func testConnectionBanners() {
-        XCTAssertEqual(OutingActivityDisplay.banner(state { $0.gpsOK = false }), .init(text: "انقطع GPS", tone: .warning))
+        XCTAssertEqual(OutingActivityDisplay.banner(state { $0.gpsOK = false }), .init(text: "انقطعت إشارة الموقع", tone: .warning))
         XCTAssertEqual(OutingActivityDisplay.banner(state { $0.online = false }), .init(text: "بلا اتصال بالشبكة", tone: .warning))
-        XCTAssertEqual(OutingActivityDisplay.banner(state { $0.online = false; $0.gpsOK = false })?.text, "بلا اتصال ولا GPS")
+        XCTAssertEqual(OutingActivityDisplay.banner(state { $0.online = false; $0.gpsOK = false })?.text, "بلا اتصال ولا إشارة موقع")
     }
 
     func testStalenessFromAgeOrSystem() {

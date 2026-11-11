@@ -315,7 +315,7 @@ final class PlanModel: ObservableObject {
             if e.code == "invalid_title" { return "اكتب اسمًا أقصر للغرض." }
             return e.arabic
         }
-        return "حدث خطأ. أعد المحاولة."
+        return SaryCopy.genericError
     }
 }
 

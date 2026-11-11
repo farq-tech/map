@@ -229,7 +229,7 @@ enum HomeListCopy {
     /// The server's own reason when it has one; the catch-all becomes plain words.
     static func failedDetail(_ message: String, online: Bool) -> String {
         guard online else { return "ما فيه إنترنت. نجيبها أول ما يرجع الاتصال." }
-        let generic = ["حدث خطأ. أعد المحاولة.", "لا يوجد اتصال بالإنترنت.", ""]
+        let generic = [SaryCopy.genericError, "لا يوجد اتصال بالإنترنت.", ""]
         return generic.contains(message.trimmingCharacters(in: .whitespaces)) ? "صار خلل من طرفنا. جرّب مرة ثانية بعد شوي." : message
     }
 }

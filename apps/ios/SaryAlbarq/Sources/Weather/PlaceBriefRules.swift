@@ -321,7 +321,7 @@ enum PlaceBriefPresenter {
         ui.offline = failed == .offline
         guard let w else {
             if let failed {
-                ui.phase = .unavailable(failed == .offline ? "الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة" : "تعذّر جلب الطقس لهذه النقطة. حاول بعد قليل")
+                ui.phase = .unavailable(failed == .offline ? "الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة" : "تعذّر جلب الطقس لهذه النقطة. حاول بعد قليل")
             } else {
                 ui.phase = loading ? .loading : .unavailable("الطقس غير متاح")
             }

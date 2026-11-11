@@ -35,7 +35,7 @@ enum PresenceReason: String, Equatable, CaseIterable {
         case .appClosed: return "سرى مسكّر عنده"
         case .whenInUse: return "الموقع «أثناء الاستخدام» بس"
         case .web: return "يتابع من المتصفح"
-        case .noGps: return "ما فيه إشارة GPS"
+        case .noGps: return "ما فيه إشارة موقع"
         case .lowPower: return "وضع توفير الطاقة"
         case .noNetwork: return "ما فيه شبكة"
         }
@@ -104,7 +104,7 @@ enum HideText {
     static let hiddenCaption = "موقعك مخفي"
     static let hiddenStrip = "موقعك مخفي عن الربع"
     static let confirmTitle = "تخفي موقعك عن الربع؟"
-    static let confirmBody = "تبقى في الطلعة وتوصلك الرسائل الصوتية والمحادثة والإذاعة، بس موقعك ما يوصل لأحد لين تظهره. الطوارئ (SOS) ترسل موقعك الحقيقي دايم."
+    static let confirmBody = "تبقى في الطلعة وتوصلك الرسائل الصوتية والمحادثة والإذاعة، بس موقعك ما يوصل لأحد لين تظهره. الطوارئ ترسل موقعك الحقيقي دايم."
     static let hiddenToast = "موقعك مخفي — الربع يشوفون «مخفي موقعه»"
     static let shownToast = "رجع موقعك يوصل للربع"
     static let sosShown = "الطوارئ أرسلت موقعك الحقيقي، ورجع موقعك ظاهر للربع"

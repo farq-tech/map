@@ -92,7 +92,7 @@ struct OutingAPIError: Error, Equatable {
             "too_many_invites": "وصلت الحد الأعلى للدعوات في هذه الطلعة.",
             "invalid_open_links": "تعذّر تغيير الرابط المفتوح.",
         ]
-        return t[code] ?? "حدث خطأ. أعد المحاولة."
+        return t[code] ?? SaryCopy.genericError
     }
 }
 

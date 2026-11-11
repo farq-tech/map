@@ -151,9 +151,9 @@ struct OutingActivityDisplay: Equatable {
             return Banner(text: text + more, tone: .emergency)
         }
         switch (s.online, s.gpsOK) {
-        case (false, false): return Banner(text: "بلا اتصال ولا GPS", tone: .warning)
+        case (false, false): return Banner(text: "بلا اتصال ولا إشارة موقع", tone: .warning)
         case (false, true): return Banner(text: "بلا اتصال بالشبكة", tone: .warning)
-        case (true, false): return Banner(text: "انقطع GPS", tone: .warning)
+        case (true, false): return Banner(text: "انقطعت إشارة الموقع", tone: .warning)
         case (true, true): return nil
         }
     }

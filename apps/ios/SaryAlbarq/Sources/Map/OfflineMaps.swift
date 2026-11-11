@@ -248,7 +248,7 @@ final class OfflineMaps: ObservableObject {
         if let t = e as? TileRegionError {
             switch t {
             case .tileCountExceeded: return "المنطقة كبيرة مرة. صغّرها."
-            case .diskFull: return "لا توجد مساحة كافية في الجوال."
+            case .diskFull: return "ما فيه مساحة كافية في الجوال."
             default: break
             }
         }

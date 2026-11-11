@@ -22,7 +22,7 @@ enum GroupAudioBackendError: Error, Equatable {
                 "rate_limited": "على هونك… اصبر ثواني.",
                 "not_a_member": "لست عضوًا في هذه الطلعة.",
             ]
-            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : "حدث خطأ. أعد المحاولة.")
+            return t[code] ?? (status == 0 ? "لا يوجد اتصال بالإنترنت." : SaryCopy.genericError)
         }
     }
 }

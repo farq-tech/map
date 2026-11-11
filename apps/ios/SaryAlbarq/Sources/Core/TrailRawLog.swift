@@ -104,7 +104,7 @@ struct TrailHealth: Equatable {
     /// «الدقة ±٨ م · ١٢ نقطة/دقيقة».
     var line: String {
         var parts: [String] = []
-        if let a = accuracyM { parts.append("الدقة ±\(SaryFormat.number(Int(a.rounded()))) م") } else { parts.append("بانتظار GPS") }
+        if let a = accuracyM { parts.append("الدقة ±\(SaryFormat.number(Int(a.rounded()))) م") } else { parts.append("بانتظار الموقع") }
         parts.append("\(SaryFormat.number(fixesPerMinute)) نقطة/دقيقة")
         return parts.joined(separator: " · ")
     }

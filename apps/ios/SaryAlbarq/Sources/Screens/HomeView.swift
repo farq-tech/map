@@ -153,7 +153,7 @@ struct HistoryView: View {
     var body: some View {
         SaryPage(title: "الطلعات السابقة", back: back) {
             if model.history.isEmpty {
-                SaryStateView(kind: .empty(title: "لا توجد طلعات منتهية", message: "تظهر هنا بعد ما تنتهي الطلعة.", systemImage: "flag.checkered"))
+                SaryStateView(kind: .empty(title: "ما فيه طلعات منتهية", message: "تظهر هنا بعد ما تنتهي الطلعة.", systemImage: "flag.checkered"))
             }
             VStack(spacing: theme.space(.s)) {
                 ForEach(model.history) { o in OutingCard(o: o, open: { open(o.id) }, details: nil) }

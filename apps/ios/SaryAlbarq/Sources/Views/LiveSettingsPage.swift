@@ -50,9 +50,9 @@ struct LiveSettingsPage: View {
                     row("مسح سجل الطلعات", id: "settings.clearHistory", last: true) { confirmClear = true }
                 }
                 group("متقدم") {
-                    toggle("دقة GPS العالية", isOn: Binding(get: { shareMode == ShareMode.precise.rawValue },
+                    toggle("دقة الموقع العالية", isOn: Binding(get: { shareMode == ShareMode.precise.rawValue },
                                                            set: { shareMode = ($0 ? ShareMode.precise : ShareMode.balanced).rawValue }), id: "settings.gpsPrecise")
-                    toggle("توفير بطارية GPS", isOn: Binding(get: { shareMode == ShareMode.saver.rawValue },
+                    toggle("توفير بطارية الموقع", isOn: Binding(get: { shareMode == ShareMode.saver.rawValue },
                                                             set: { shareMode = ($0 ? ShareMode.saver : ShareMode.balanced).rawValue }), id: "settings.gpsSaver")
                     row("الوضع بدون إنترنت", id: "settings-offline") { closeThen { controller.modal = .offlineMaps } }
                     row("تشخيص", id: "settings.diagnostics", last: true) { path.append(.diagnostics) }

@@ -667,7 +667,7 @@ struct MapHomeScreen: View {
                 .padding(.horizontal, theme.space(.m))
                 .sarySurface(radius: SaryRadius.m)
             } else if !searching && searchError == nil && query.count >= 2 {
-                Text("ما وجدنا مكانًا بهذا الاسم. جرّب اسمًا آخر، أو اضغط مطوّلًا على الخريطة.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني، أو اضغط مطوّلًا على الخريطة.").saryText(.subhead).foregroundStyle(p.textSecondary)
             }
         }
     }

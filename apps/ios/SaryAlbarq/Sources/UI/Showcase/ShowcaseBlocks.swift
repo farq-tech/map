@@ -180,7 +180,7 @@ private struct ButtonsBlocks: View {
                 Button {} label: { SaryButtonLabel(title: "ابدأ الطلعة", systemImage: "play.fill") }.buttonStyle(.saryPrimary)
                 Button {} label: { SaryButtonLabel(title: "شارك رابط الدعوة", systemImage: SaryIcon.share) }.buttonStyle(.sarySecondary)
                 Button {} label: { SaryButtonLabel(title: "أنهِ الطلعة للجميع", systemImage: "stop.fill") }.buttonStyle(.saryDestructive)
-                Button("ليس الآن") {}.buttonStyle(.saryPlain)
+                Button("لاحقًا") {}.buttonStyle(.saryPlain)
                 Button("غادر الطلعة") {}.buttonStyle(.sary(.plainDestructive))
             }
         }

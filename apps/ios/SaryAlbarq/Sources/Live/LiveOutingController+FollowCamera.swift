@@ -31,7 +31,7 @@ extension LiveOutingController {
 
     /// The button: free → «تتبعني» → «باتجاهي» → free.
     func cycleCameraMode() {
-        if location.lastFix == nil { toast("ننتظر أول قراءة من GPS") }
+        if location.lastFix == nil { toast("ننتظر أول قراءة للموقع") }
         if nav.isActive, nav.camera == .overview {
             /* From «نظرة عامة» the button means "back on my car". */
             nav.camera = .follow

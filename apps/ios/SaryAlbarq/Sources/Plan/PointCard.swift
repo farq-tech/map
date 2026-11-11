@@ -326,7 +326,7 @@ struct CoordinateSearchSheet: View {
                             }
                         }
                     } else if !searching && searchError == nil && text.count >= 2 {
-                        Text("ما وجدنا مكانًا بهذا الاسم. جرّب كلمة ثانية مثل «مطعم» أو «شاليهات» أو اسم الحي.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                        Text("ما لقينا مكان بهذا الاسم. جرّب كلمة ثانية مثل «مطعم» أو «شاليهات» أو اسم الحي.").saryText(.subhead).foregroundStyle(p.textSecondary)
                     }
                 }
                 if myFix != nil {

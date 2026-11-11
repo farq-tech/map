@@ -37,18 +37,13 @@ struct SarySOSButton: View {
                 ProgressView().tint(p.onEmergency).controlSize(.regular)
             } else {
                 if compactLabel && !active {
-                    /* UX ٢١: «SOS» alone is English; «طوارئ» goes with it. */
-                    VStack(spacing: 0) {
-                        Text("SOS")
-                            .font(.system(size: max(13, size * 0.24), weight: .heavy, design: .rounded))
-                            .environment(\.layoutDirection, .leftToRight)
-                        Text("طوارئ")
-                            .font(.sary(max(9, size * 0.15), .heavy))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .dynamicTypeSize(...DynamicTypeSize.large)
-                    }
-                    .foregroundStyle(p.onEmergency)
+                    /* UI-AUDIT م2: no Latin «SOS» on screen; the one word is «طوارئ». */
+                    Text(SaryCopy.emergency)
+                        .font(.sary(max(11, size * 0.22), .heavy))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .dynamicTypeSize(...DynamicTypeSize.large)
+                        .foregroundStyle(p.onEmergency)
                 } else {
                 VStack(spacing: 0) {
                     Image(systemName: active ? SaryIcon.checkCircle : SaryIcon.sos)

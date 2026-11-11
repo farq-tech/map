@@ -1335,7 +1335,7 @@ final class LiveOutingController: ObservableObject {
 
     func loadStations() {
         guard let f = location.lastFix else {
-            stations = .error("ننتظر موقعك من GPS لنبحث حولك")
+            stations = .error("ننتظر موقعك لنبحث حولك")
             return
         }
         stations = .loading

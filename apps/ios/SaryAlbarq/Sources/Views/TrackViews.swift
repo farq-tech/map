@@ -253,7 +253,7 @@ struct FollowTrackPanel: View {
     private var detail: String {
         let dir = ui.reversed ? "بالاتجاه المعاكس" : "إلى نهايته"
         switch ui.phase {
-        case .waitingFix: return "ننتظر موقعك من GPS…"
+        case .waitingFix: return "ننتظر موقعك…"
         case .arrived: return ui.name
         case .far:
             return "أقرب نقطة منه على بعد \(ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? "") · \(ui.directionLabel)"

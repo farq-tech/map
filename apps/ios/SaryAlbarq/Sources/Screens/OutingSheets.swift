@@ -541,7 +541,7 @@ struct NotifyExplainerSheet: View {
             } label: { SaryButtonLabel(title: "فعّل التنبيهات", systemImage: "bell.fill", busy: busy) }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("notify.allow")
-            Button("ليس الآن") {
+            Button("لاحقًا") {
                 model.push.explained = true
                 done()
             }

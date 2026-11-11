@@ -103,7 +103,7 @@ struct LiveSheet: View {
             Button("غادر الطلعة", role: .destructive, action: controller.leaveOuting)
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("تتوقف مشاركة موقعك فورًا ويُحذف آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
+            Text("تتوقف مشاركة موقعك فورًا وينمسح آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
         }
         .confirmationDialog("نغيّر الوجهة إلى \(controller.confirm?.retargetTarget?.name ?? "النقطة")؟",
                             isPresented: Binding(get: { controller.confirm?.retargetTarget != nil },
@@ -654,7 +654,7 @@ struct TrailSettingsSection: View {
 
     var body: some View {
         let p = theme.palette
-        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك ولا يُرسل للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
+        SarySection(title: "مساري", footer: "مسارك محفوظ على جوالك وما نرسله للربع ولا لخوادمنا. مع «طابق مساري مع الطرق» تُرسل أجزاء منه لمزوّد الخرائط فقط لرسمه على الشوارع. يُمسح مع تسجيل الخروج أو حذف الحساب.") {
             SaryToggleRow(title: "سجّل مساري", subtitle: "لتشوف من وين جيت وترجع منه", systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill",
                           isOn: Binding(get: { card.recordingOn }, set: { controller.setTrailRecording($0) }), id: "trail.record")
             SaryDivider()
@@ -695,7 +695,7 @@ struct TrailSettingsSection: View {
                             .accessibilityIdentifier("trail.precise")
                     }
                     if card.gapCount > 0 {
-                        Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة GPS لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
+                        Text("الخط المتقطع جزء ما وصلتنا فيه أي نقطة موقع لأكثر من دقيقة؛ نرسمه على الشارع إذا عرفناه، وإلا مستقيمًا.")
                             .saryText(.caption).foregroundStyle(p.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -719,7 +719,7 @@ struct TrailSettingsSection: View {
         .confirmationDialog("امسح مسارك؟", isPresented: $confirmClear, titleVisibility: .visible) {
             Button("امسح مساري", role: .destructive, action: controller.clearTrail)
             Button("إلغاء", role: .cancel) {}
-        } message: { Text("يُحذف مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق الرجعة» يبدأ من جديد.") }
+        } message: { Text("ينمسح مسارك لهذه الطلعة من جوالك، وما تقدر ترجعه. «طريق الرجعة» يبدأ من جديد.") }
     }
 
     private var backgroundSubtitle: String {
@@ -743,7 +743,7 @@ struct TrailAlwaysExplainer: View {
                     Text("سجّل مسارك حتى والشاشة مقفلة").saryText(.title2).foregroundStyle(theme.palette.textPrimary)
                     Text("عشان «طريق الرجعة» يرجّعك من نفس الطريق اللي دخلت منه، حتى لو قفلت الشاشة وأنت تسوق.")
                         .saryText(.body).foregroundStyle(theme.palette.textSecondary)
-                    bullet("iphone", "المسار يبقى على جوالك فقط. لا يُرسل لأحد، ولا حتى للخادم.")
+                    bullet("iphone", "المسار يبقى على جوالك فقط. ما نرسله لأحد، ولا حتى للخادم.")
                     bullet("person.2.fill", "نفس الإذن يخلّي مشاركة موقعك مع ربع الطلعة تستمر والشاشة مقفلة.")
                     bullet("location.fill", "يظهر مؤشر الموقع الأزرق أعلى الشاشة وقت التسجيل.")
                     bullet("battery.50percent", "يستهلك بطارية أكثر. يتوقف لحاله إذا انتهت الطلعة أو غادرتها، وتقدر توقفه من الإعدادات.")
@@ -976,7 +976,7 @@ struct NearestStationsView: View {
             case .loading:
                 SaryStateView(kind: .loading("جارٍ البحث عن أقرب محطة…"))
             case .empty:
-                SaryStateView(kind: .empty(title: "لا توجد محطة مسجّلة قريبة", message: "لا نخمّن مكانها.", systemImage: SaryIcon.nearest))
+                SaryStateView(kind: .empty(title: "ما فيه محطة مسجّلة قريبة", message: "لا نخمّن مكانها.", systemImage: SaryIcon.nearest))
             case let .error(msg):
                 SaryStateView(kind: .error(title: "تعذّر التحميل", message: msg), actionTitle: "حاول مرة ثانية", action: actions.retry)
             case let .loaded(rows):

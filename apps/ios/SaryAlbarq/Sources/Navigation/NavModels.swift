@@ -57,7 +57,7 @@ enum NavRefusal: Error, Equatable {
         case let .memberStale(name, _): return "موقع \(name) قديم، ما نوجّهك لمكان ممكن تغيّر. اطلب منه يشارك موقعه."
         case let .memberHidden(name): return "\(name) ما يشارك موقعه الآن."
         case .isMe: return "هذا موقعك أنت."
-        case .noFix: return "ننتظر موقعك من GPS لنحسب الطريق."
+        case .noFix: return "ننتظر موقعك لنحسب الطريق."
         case .missing: return "ما فيه نقطة محددة."
         }
     }

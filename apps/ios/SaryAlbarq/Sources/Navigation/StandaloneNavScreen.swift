@@ -172,7 +172,7 @@ struct StandaloneNavScreen: View {
         case .idle:
             switch gate {
             case .needsPermission: permissionCard
-            case .waitingForFix, .ready: status("ننتظر موقعك من GPS، ونبدأ على طول", busy: true)
+            case .waitingForFix, .ready: status("ننتظر موقعك، ونبدأ على طول", busy: true)
             }
         }
     }

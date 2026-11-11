@@ -777,7 +777,7 @@ struct BackTrackPanel: View {
 
     private var detail: String {
         switch ui.phase {
-        case .waitingFix: return "ننتظر موقعك من GPS…"
+        case .waitingFix: return "ننتظر موقعك…"
         case .arrived: return "هنا دخلت أول مرة."
         case .offTrack:
             let m = ui.offsetMeters.map { SaryFormat.distance(meters: $0) } ?? ""

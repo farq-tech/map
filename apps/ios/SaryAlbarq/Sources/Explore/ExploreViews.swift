@@ -331,7 +331,7 @@ struct SavedPlacesSheet: View {
         .sheet(item: $share) { s in ShareSheet(items: [s.text]).presentationDetents([.medium, .large]) }
         .realisticCover($realistic)
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
-                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "ينمسح من أماكنك على هذا الجوال.", confirmTitle: "احذف") {
             if let d = deleting { store.delete(d.id) }
             deleting = nil
         }
@@ -442,7 +442,7 @@ struct SavedPlaceEditSheet: View {
             } label: { SaryButtonLabel(title: "احفظ", systemImage: "star.fill") }
                 .buttonStyle(.sary(.primary))
                 .accessibilityIdentifier("placeEdit.save")
-            Text("يُحفظ على هذا الجوال فقط، ولا يُرسل لأحد.").saryText(.footnote).foregroundStyle(p.textTertiary)
+            Text("يُحفظ على هذا الجوال فقط، وما نرسله لأحد.").saryText(.footnote).foregroundStyle(p.textTertiary)
         }
         .onAppear {
             name = draft.name
@@ -503,7 +503,7 @@ struct TracksSheet: View {
             }
         }
         .saryDialog(Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), systemImage: "trash.fill",
-                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "يُحذف من قائمة المسارات على هذا الجوال. الخطة لا تتأثر.", confirmTitle: "احذف") {
+                    title: "تحذف «\(deleting?.name ?? "")»؟", message: "ينمسح من قائمة المسارات على هذا الجوال. الخطة ما تتأثر.", confirmTitle: "احذف") {
             if let d = deleting { library.delete(d.id) }
             deleting = nil
         }

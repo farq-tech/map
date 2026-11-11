@@ -199,13 +199,13 @@ struct TripSummaryView: View {
                     }
                 }
                 if let track {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط، بلون السرعة. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrackSummaryCard(subject: track, trail: model.myTrailPoints(outingId), online: model.online || model.isDemo,
                                          open: { trackCover = .detail(track) }, follow: { trackCover = TrackFollowModel(track).map(TrackCover.follow) })
                             .padding(.vertical, theme.space(.s))
                     }
                 } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
-                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. لا يُرسل لأحد، ولا يدخل في «شارك ملخصي».") {
+                    SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrailSketch(trail: trail, color: theme.palette.accent)
                             .frame(height: 180)
                             .padding(.vertical, theme.space(.s))

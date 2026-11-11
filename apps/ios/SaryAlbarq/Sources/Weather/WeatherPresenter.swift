@@ -58,7 +58,7 @@ struct WeatherCardUI: Equatable {
 enum WeatherPresenter {
     static func card(title: String, report r: WeatherReport?, refreshing: Bool, failed: Bool, now: Date, hours count: Int = 8) -> WeatherCardUI {
         guard let r else {
-            if failed { return WeatherCardUI(title: title, phase: .unavailable("تعذّر جلب الطقس، ولا توجد بيانات محفوظة لهذه المنطقة"), offline: true) }
+            if failed { return WeatherCardUI(title: title, phase: .unavailable("تعذّر جلب الطقس، وما فيه بيانات محفوظة لهذه المنطقة"), offline: true) }
             return WeatherCardUI(title: title, phase: .loading)
         }
         let fresh = WeatherFreshness.of(r, now: now)

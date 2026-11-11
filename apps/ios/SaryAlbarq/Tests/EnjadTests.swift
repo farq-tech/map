@@ -21,7 +21,7 @@ final class EnjadTests: XCTestCase {
         XCTAssertFalse(m.contains("آخر موقع معروف"))
         XCTAssertTrue(m.contains("https://maps.google.com/?q=24.713612,46.675346"))
         XCTAssertTrue(m.contains("24°42'49.0\"N"))
-        XCTAssertTrue(m.contains("دقة GPS: ±٨ م"))
+        XCTAssertTrue(m.contains("دقة الموقع: ±٨ م"))
         XCTAssertTrue(m.contains("آخر تحديث: "))
         XCTAssertTrue(m.contains("البطارية: ٤٢٪"))
         XCTAssertTrue(m.contains("عدد الأفراد في الطلعة: ٥"))

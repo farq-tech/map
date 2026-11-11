@@ -124,7 +124,7 @@ final class HomeFlowTests: XCTestCase {
     }
 
     func testListFailureIsSaidInPlainWords() {
-        XCTAssertEqual(HomeListCopy.failedDetail("حدث خطأ. أعد المحاولة.", online: true), "صار خلل من طرفنا. جرّب مرة ثانية بعد شوي.")
+        XCTAssertEqual(HomeListCopy.failedDetail(SaryCopy.genericError, online: true), "صار خلل من طرفنا. جرّب مرة ثانية بعد شوي.")
         XCTAssertEqual(HomeListCopy.failedDetail("الخادم مشغول. أعد المحاولة بعد قليل.", online: true), "الخادم مشغول. أعد المحاولة بعد قليل.")
         XCTAssertTrue(HomeListCopy.failedDetail("x", online: false).contains("إنترنت"))
     }

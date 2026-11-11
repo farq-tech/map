@@ -261,7 +261,7 @@ private struct DestinationStep: View {
                     }
                 }
             } else if !searching && searchError == nil && text.count >= 2 {
-                Text("ما وجدنا مكانًا بهذا الاسم. جرّب اسمًا آخر أو أدخل إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
+                Text("ما لقينا مكان بهذا الاسم. جرّب اسم ثاني أو أدخل إحداثية.").saryText(.subhead).foregroundStyle(p.textSecondary)
             }
         }
         Button { mapOpen = true } label: { SaryButtonLabel(title: "اختر من الخريطة", systemImage: "map") }

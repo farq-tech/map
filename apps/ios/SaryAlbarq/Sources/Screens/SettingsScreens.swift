@@ -176,7 +176,7 @@ struct SettingsView: View {
             SarySection(title: "الخصوصية والموقع") {
                 SaryNavRow(title: "الخصوصية", detail: "ما يُشارك ومتى، البطارية، بياناتك", systemImage: "hand.raised.fill", id: "settings.privacy") { open(.privacy) }
                 SaryDivider()
-                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من الدردشة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
+                SaryNavRow(title: "المحظورين", detail: "اللي حظرتهم من المحادثة والرسائل الصوتية", systemImage: "person.crop.circle.badge.xmark", id: "settings.blocked") { open(.blocked) }
             }
             SarySection(title: "المظهر والقيادة") {
                 SaryNavRow(title: "المظهر", detail: "الألوان، وضع القيادة والليل، حجم النص", systemImage: "paintbrush.fill", id: "settings.appearance") { open(.appearance) }
@@ -436,7 +436,7 @@ struct NotificationSettingsView: View {
             stateCard
             if chatPrefsLoaded {
             SarySection(footer: "تقدر توقف تنبيهات المحادثات وحدها وتبقى تنبيهات الطوارئ.") {
-                SaryToggleRow(title: "رسائل المحادثات", subtitle: "دردشة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
+                SaryToggleRow(title: "رسائل المحادثات", subtitle: "محادثة الطلعة والرسائل الخاصة", systemImage: "bubble.left.and.bubble.right.fill",
                               isOn: Binding(get: { chatPush }, set: { on in setChatPush(on) }), id: "notify.chat")
                     .disabled(!model.signedIn || model.isDemo)
             }
@@ -445,7 +445,7 @@ struct NotificationSettingsView: View {
                 VStack(alignment: .leading, spacing: theme.space(.s)) {
                     kind(SaryIcon.sos, p.emergency, "طوارئ", "تنبيه عاجل بصوت، حتى في وضع التركيز إذا سمحت بالتنبيهات العاجلة. يُستبدل بـ«أنا بخير» إذا انتهت.")
                     kind(SaryIcon.note, nil, "رسالة فوق السيارة", "بهدوء، بدون صوت.")
-                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل دردشة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
+                    kind("bubble.left.and.bubble.right.fill", nil, "المحادثات", "تنبيه عادي بصوت لرسائل محادثة الطلعة والرسائل الخاصة، فقط إذا كنت خارج الطلعة أو الشاشة مقفلة. باسم المرسل كما يظهر في الطلعة.")
                     kind(SaryIcon.mic, nil, "قناة الطلعة", "صوت الربع مباشرة مثل اللاسلكي، حتى والشاشة مقفلة. تكتمها من إعدادات الطلعة.")
                 }
                 .padding(.vertical, theme.space(.s))
@@ -555,7 +555,7 @@ struct AdvancedSettingsView: View {
     var body: some View {
         let p = theme.palette
         SaryPage(title: "متقدم", back: back) {
-            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط GPS الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
+            SarySection(title: "سجل المسار", footer: "سجل المسار من جوالك (نقاط الموقع الخام بدقتها، والمسار المنعّم، والمطابق مع الطرق) في ملف، لترسله لفريق سَرى البارق إذا طلبوه.") {
                 if gpx.isEmpty {
                     Text("ما فيه مسار محفوظ على هذا الجوال.").saryText(.subhead).foregroundStyle(p.textSecondary)
                         .padding(.vertical, theme.space(.s))

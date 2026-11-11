@@ -58,11 +58,11 @@ enum Enjad {
             l.append("(\(CoordinateParser.dmsString(p)))")
             l.append("خرائط: https://maps.google.com/?q=\(String(format: "%.6f,%.6f", f.lat, f.lng))")
             var gps: [String] = []
-            if let a = f.accuracy, a >= 0 { gps.append("دقة GPS: ±\(SaryFormat.number(Int(a.rounded()))) م") }
+            if let a = f.accuracy, a >= 0 { gps.append("دقة الموقع: ±\(SaryFormat.number(Int(a.rounded()))) م") }
             gps.append("آخر تحديث: \(NavText.clock(Date(timeIntervalSince1970: f.atMs / 1000)))")
             l.append(gps.joined(separator: " · "))
         } else {
-            l.append("الموقع: غير متوفر (ما وصل موقع من GPS)")
+            l.append("الموقع: غير متوفر (ما وصلنا موقع من الجوال)")
         }
         var extra: [String] = []
         if let b = i.batteryPercent { extra.append("البطارية: \(SaryFormat.percent(b))") }

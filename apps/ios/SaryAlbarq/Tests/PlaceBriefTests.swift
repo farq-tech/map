@@ -220,7 +220,7 @@ final class PlaceBriefRulesTests: XCTestCase {
 
     func testPresenterPhases() throws {
         let offline = PlaceBriefPresenter.build(nil, loading: false, failed: .offline, point: Desert.point, now: at)
-        XCTAssertEqual(offline.phase, .unavailable("الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة"))
+        XCTAssertEqual(offline.phase, .unavailable("الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة"))
         XCTAssertNotNil(offline.sunset, "sun times need no network")
         XCTAssertEqual(PlaceBriefPresenter.build(nil, loading: true, failed: nil, point: Desert.point, now: at).phase, .loading)
 
@@ -395,7 +395,7 @@ final class PlaceBriefStoreTests: XCTestCase {
         await m.settle()
         XCTAssertNil(m.weather)
         let ui = PlaceBriefPresenter.build(m.weather, loading: m.loading, failed: m.failure, point: Desert.point, now: at)
-        XCTAssertEqual(ui.phase, .unavailable("الطقس غير متاح بدون إنترنت، ولا توجد قراءة محفوظة قريبة من هذه النقطة"))
+        XCTAssertEqual(ui.phase, .unavailable("الطقس غير متاح بدون إنترنت، وما فيه قراءة محفوظة قريبة من هذه النقطة"))
     }
 
     func testFallbackProviderRecordsWhoAnswered() async throws {
