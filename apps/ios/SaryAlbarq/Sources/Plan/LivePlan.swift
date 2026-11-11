@@ -341,10 +341,13 @@ struct LiveSearchSheet: View {
                 let point = LngLat(lng: r.destination.lng, lat: r.destination.lat)
                 PlaceResultRow(icon: r.icon, name: r.title, secondaryName: r.secondaryName, detail: r.detail,
                                meters: r.meters ?? near.map { PlanGeo.meters($0, point) }, id: id) { pick(r.destination) }
+                    .transition(SaryTransition.appear(theme))
             }
         }
         .padding(.horizontal, theme.space(.m))
         .sarySurface(radius: SaryRadius.m)
+        /* Results refine as you type: rows keep their place (stable ids), new ones fade in. */
+        .saryAnimation(.snappy, value: rows.map(\.id))
     }
 
     private func clear() {

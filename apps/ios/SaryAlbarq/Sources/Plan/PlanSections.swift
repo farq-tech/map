@@ -203,6 +203,7 @@ struct ChecklistSection: View {
                     if s.total > 0 {
                         HStack {
                             Text(s.progressLabel).saryNumber(.headline, weight: .bold).foregroundStyle(p.textPrimary)
+                                .contentTransition(SaryTransition.number(Double(s.doneCount), theme))
                                 .accessibilityIdentifier("checklist.progress")
                             Text("جاهز").saryText(.subhead).foregroundStyle(p.textSecondary)
                             Spacer()
@@ -217,6 +218,7 @@ struct ChecklistSection: View {
                                      toggle: { Task { await plan.toggle(item.id) } },
                                      assign: { u in Task { await plan.assign(item.id, to: u) } },
                                      delete: { Task { await plan.delete(item.id) } })
+                            .transition(SaryTransition.appear(theme))
                     }
                     SaryDivider()
                     HStack(spacing: theme.space(.s)) {
@@ -248,6 +250,10 @@ struct ChecklistSection: View {
                     }
                 }
                 .padding(.vertical, theme.space(.s))
+                /* A ticked item slides to its new place (stable ids), added / removed ones fade,
+                   the bar and the count follow. */
+                .saryAnimation(.smooth, value: s.ordered.map(\.id))
+                .saryAnimation(.smooth, value: s.doneCount)
             }
         }
         .alert("تنبيه", isPresented: Binding(get: { plan.errorText != nil }, set: { if !$0 { plan.errorText = nil } })) {
