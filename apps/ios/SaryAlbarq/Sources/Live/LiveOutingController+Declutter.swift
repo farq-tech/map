@@ -13,9 +13,43 @@ enum LiveScreenRules {
     /// The stopped quick row (four): «البر», «المحادثة» (when the server has it), «التجمع», «المزيد».
     /// «ملاحة» / «وجّه الكل» left it (the CTA is the one accent; «وجّه الكل» is offered in
     /// `NavStartChoiceSheet`), «أخفِ موقعي» moved into «المزيد», «طريق الرجعة» is the map's side button.
-    static func quickRow(chat: Bool) -> [String] {
-        ["desert"] + (chat ? ["chat"] : []) + ["rally", "more"]
+    static func quickRow(chat: Bool, rally: Bool = true) -> [String] {
+        ["desert"] + (chat ? ["chat"] : []) + (rally ? ["rally"] : []) + ["more"]
     }
+
+    /// What the live screen offers that only makes sense with others. A solo outing («اتجه» on my
+    /// own, docs/SOLO-OUTING.md (ج)) hides all of it; a real or demo outing shows all of it.
+    struct GroupUI: Equatable {
+        /// «اضغط وتكلم», its channel chip and «الترددات».
+        var walkieTalkie = true
+        /// «رسالة صوتية»: recording and the dock over the map (a solo recording would be uploaded,
+        /// refused and deleted: never offered).
+        var voiceNotes = true
+        /// «المحادثة» (quick row, «المزيد»).
+        var chat = true
+        /// «نقطة التجمع» (quick row, panel, map point card).
+        var rally = true
+        /// «ادعُ أصدقاءك» (sheet, «المزيد»).
+        var invite = true
+        /// Friends' alerts: «القافلة», «نبّهه», «رسالة فوق سيارتي», «أخفِ موقعي», «شوف الكل», «وجّه الكل».
+        var friendAlerts = true
+        /// «الأصدقاء»: the people list in the sheet and the «المزيد» group.
+        var friends = true
+        /// SOS goes to the server and the group (with the 3 s «تراجع»). False: SOS is a 911 call.
+        var serverSOS = true
+        /// The outing can be left («غادر الطلعة») or paused for everyone.
+        var leaveAndPause = true
+    }
+
+    /// A real or demo outing: everything.
+    static let group = GroupUI()
+
+    /// A solo outing: nobody else, nothing sent — no walkie-talkie, voice notes, chat, rally,
+    /// invite, friends' alerts or «الأصدقاء»; SOS is a 911 call; «أنهِ المشوار» ends it here.
+    static let solo = GroupUI(walkieTalkie: false, voiceNotes: false, chat: false, rally: false, invite: false,
+                              friendAlerts: false, friends: false, serverSOS: false, leaveAndPause: false)
+
+    static func groupUI(solo isSolo: Bool) -> GroupUI { isSolo ? solo : group }
 
     /// The quick row: stopped and looking only — never before the start (the sheet is the people
     /// and «ادعُ أصدقاءك» then), while driving or guiding, after the end, or while my SOS is on.
@@ -153,6 +187,12 @@ extension LiveOutingController {
         tripEnded && (backTrack != nil || session.trail.points.count >= 2)
     }
 
+    /// A solo outing («اتجه» on my own): one member, on this phone only.
+    var isSolo: Bool { session.isSolo }
+
+    /// What of the group's UI this outing shows (`LiveScreenRules.solo` in a solo outing).
+    var groupUI: LiveScreenRules.GroupUI { LiveScreenRules.groupUI(solo: isSolo) }
+
     /// The outing has ended («انتهت الطلعة»): the screen shows the end, not live controls.
     var tripEnded: Bool { session.displayView?.status == .ended || session.closedReason == .outingEnded }
 
@@ -190,10 +230,11 @@ extension LiveOutingController {
               stuck: safety.myStuck != nil,
               ended: tripEnded,
               guideAllTarget: canGuideAll && guideAllHasOthers && session.view?.status == .active ? autoNavNextTarget?.name : nil,
-              chat: chat.isAvailable,
-              channels: session.walkie.showsChannels,
-              canHide: canHideLocation,
-              hidden: isLocationHidden)
+              chat: chat.isAvailable && groupUI.chat,
+              channels: session.walkie.showsChannels && groupUI.walkieTalkie,
+              canHide: canHideLocation && groupUI.friendAlerts,
+              hidden: isLocationHidden,
+              solo: isSolo)
     }
 
     /// «المزيد» → an entry that only opens another sheet: swapped in directly (`sheet(item:)`
@@ -206,6 +247,8 @@ extension LiveOutingController {
     func performAction(_ id: String) {
         /* An entry that needs a running trip is not offered after the end (the catalog drops it). */
         if tripEnded, LiveActionCatalog.needsRunningTrip.contains(id) { modal = nil; return }
+        /* A solo outing never runs a group action, whatever asked for it (the catalog drops them). */
+        if isSolo, LiveActionCatalog.soloHidden.contains(id) { modal = nil; return }
         if Self.swapsModalDirectly.contains(id) { return runAction(id) }
         modal = nil
         let run: () -> Void = { [weak self] in self?.runAction(id) }

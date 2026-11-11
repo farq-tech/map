@@ -88,7 +88,8 @@ struct LiveSettingsPage: View {
             Spacer()
             if !controller.tripEnded {
                 /* Every page's header (the root and the pushed one) shows it: no presenter pass per header. */
-                SarySOSButton(state: controller.mySOS, trigger: controller.actions.sos.trigger, size: 44, compactLabel: true)
+                SarySOSButton(state: controller.mySOS, trigger: controller.actions.sos.trigger, size: 44, compactLabel: true,
+                              countdown: controller.groupUI.serverSOS)
                     .padding(6)
             }
         }

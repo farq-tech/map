@@ -261,7 +261,13 @@ struct InviteJoinSheet: View {
         }
     }
 
+    /// The GPS warmed for a join that did not happen (failed or cancelled) has no session to stop it.
+    private func releaseJoinGPS() {
+        if model.session == nil { location.stopWatchingForeground() }
+    }
+
     private func close() {
+        releaseJoinGPS()
         model.clearPendingInviteJoinAttempt(token)
         model.pendingInvite = nil
         dismiss()
@@ -407,6 +413,7 @@ struct InviteJoinSheet: View {
                 }
                 let m = model.errorText ?? "تعذّر الانضمام."
                 model.errorText = nil
+                releaseJoinGPS()
                 send(.joinFailed(m))
             }
         case .entered:

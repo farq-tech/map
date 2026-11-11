@@ -152,13 +152,14 @@ final class ScreensUITests: XCTestCase {
 
 /// «اتجه» without an outing on a phone lying still: iOS sends nothing new, my only fix is 5 minutes
 /// old. Guidance must ask for a fresh fix and start, never hang on «ننتظر موقعك» (owner, Build 38).
+/// `StandaloneNavScreen` is behind `-SaryStandaloneNav` since «اتجه» opens a solo outing (one build, then removed).
 final class StandaloneNavStaleFixUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
     func testGoOnAParkedPhoneAsksForAFixAndStarts() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
-                               "-SaryParkedPhone", "-SaryNavDemo"]
+                               "-SaryParkedPhone", "-SaryNavDemo", "-SaryStandaloneNav"]
         app.launch()
         let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
         XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
@@ -205,10 +206,12 @@ final class CategoryPinsUITests: XCTestCase {
 }
 
 /// «اتجه» while driving (temporary until #157): my car (not a dot), my speed and the posted limit.
+/// `StandaloneNavScreen` behind `-SaryStandaloneNav` (one build).
 final class StandaloneNavDriveShotsUITests: XCTestCase {
     func testCarAndSpeedWhileGuiding() {
         let app = XCUIApplication()
-        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home", "-SaryNavDemo"]
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home", "-SaryNavDemo",
+                               "-SaryStandaloneNav"]
         app.launch()
         let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
         XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
@@ -231,7 +234,7 @@ final class StandaloneNavRestartUITests: XCTestCase {
     func testGuidanceBackToIdleStartsAgain() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
-                               "-SaryNavDemo", "-SaryNavResetOnce", "3"]
+                               "-SaryNavDemo", "-SaryNavResetOnce", "3", "-SaryStandaloneNav"]
         app.launch()
         let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
         XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
@@ -245,6 +248,36 @@ final class StandaloneNavRestartUITests: XCTestCase {
         a.name = "standalone-after-reset"; a.lifetime = .keepAlways; add(a)
         let status = any("standaloneNav.status")
         XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 8), "guiding again, not «\(status.exists ? status.label : "-")»")
+    }
+}
+
+/// #157 (docs/SOLO-OUTING.md, step 6): «اتجه» on the home map opens the live screen on a solo outing
+/// (one member, on this phone only), not `StandaloneNavScreen`; guidance starts by itself.
+final class SoloFromHomeUITests: XCTestCase {
+    override func setUp() { continueAfterFailure = false }
+
+    func testGoOpensTheLiveScreenOnASoloOuting() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-resetState", "-demo", "-SaryWeatherDemo", "calm", "-SaryScheme", "light", "-SaryScreen", "home",
+                               "-SaryNavDemo", "-SaryContext", "stopped"]
+        app.launch()
+        app.allowLocationIfAsked()
+        let any = { (id: String) in app.descendants(matching: .any)[id].firstMatch }
+        XCTAssertTrue(any("home.search").waitForExistence(timeout: 30))
+        sleep(2)
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).press(forDuration: 1.3)
+        let go = any("home.place.go")
+        XCTAssertTrue(go.waitForExistence(timeout: 10), "«اتجه» on the place card")
+        go.tap()
+        XCTAssertTrue(any("outing.map").waitForExistence(timeout: 15) || any("outing-sheet-summary").exists || any("nav.bottomBar").exists,
+                      "the live screen")
+        XCTAssertFalse(any("standaloneNav.screen").exists, "not the old «اتجه» screen")
+        XCTAssertFalse(any("outing-ptt").exists, "a solo outing: no walkie-talkie")
+        let header = any("trip.header")
+        if header.waitForExistence(timeout: 10) { XCTAssertTrue(header.label.contains("على جوالك فقط"), header.label) }
+        XCTAssertTrue(any("nav.banner").waitForExistence(timeout: 25) || any("nav.offroad").exists, "guidance starts by itself")
+        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        a.name = "solo-from-home"; a.lifetime = .keepAlways; add(a)
     }
 }
 

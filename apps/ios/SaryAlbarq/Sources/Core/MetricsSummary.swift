@@ -289,12 +289,48 @@ enum MetricsExtract {
 
         init?(_ any: Any?) {
             if let n = any as? NSNumber { value = n.doubleValue; unit = ""; return }
-            guard let s = (any as? String)?.replacingOccurrences(of: ",", with: "").trimmingCharacters(in: .whitespaces),
-                  !s.isEmpty else { return nil }
+            guard let raw = any as? String else { return nil }
+            let s = Self.normalized(raw)
+            guard !s.isEmpty else { return nil }
             let num = s.prefix { "0123456789.-eE+".contains($0) }
             guard let v = Double(num) else { return nil }
             value = v
             unit = s.dropFirst(num.count).trimmingCharacters(in: .whitespaces)
+        }
+
+        /// The value as plain ASCII "1234.5 ms" whatever the phone's number format: Arabic-Indic and
+        /// Persian digits, the Arabic decimal and group signs, spaces/NBSP as group separators, and a
+        /// lone comma read as a decimal comma unless it groups exactly three digits ("1,234" vs "1,5").
+        static func normalized(_ raw: String) -> String {
+            var out = ""
+            for ch in raw.trimmingCharacters(in: .whitespacesAndNewlines) {
+                switch ch {
+                case "\u{0660}"..."\u{0669}":
+                    out.append(Character(String(ch.unicodeScalars.first!.value - 0x0660)))
+                case "\u{06F0}"..."\u{06F9}":
+                    out.append(Character(String(ch.unicodeScalars.first!.value - 0x06F0)))
+                case "\u{066B}": out.append(".")          // Arabic decimal separator
+                case "\u{066C}", "\u{00A0}", "\u{202F}", "'": break   // group separators
+                default: out.append(ch)
+                }
+            }
+            /* Split the numeric head from the unit, then settle the comma/period roles in the head. */
+            let headEnd = out.firstIndex { !"0123456789.,-eE+ ".contains($0) } ?? out.endIndex
+            var head = String(out[..<headEnd]).replacingOccurrences(of: " ", with: "")
+            let tail = String(out[headEnd...])
+            if head.contains(",") && head.contains(".") {
+                /* Both: the later one is the decimal mark. */
+                if let c = head.lastIndex(of: ","), let d = head.lastIndex(of: "."), c > d {
+                    head = head.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+                } else {
+                    head = head.replacingOccurrences(of: ",", with: "")
+                }
+            } else if head.contains(",") {
+                let groups = head.split(separator: ",", omittingEmptySubsequences: false)
+                let grouping = groups.count > 1 && groups.dropFirst().allSatisfy { $0.count == 3 }
+                head = grouping ? head.replacingOccurrences(of: ",", with: "") : head.replacingOccurrences(of: ",", with: ".")
+            }
+            return (head + " " + tail.trimmingCharacters(in: .whitespaces)).trimmingCharacters(in: .whitespaces)
         }
 
         var seconds: Double? {

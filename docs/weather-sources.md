@@ -87,6 +87,24 @@
 ```
 `GET /api/weather/clouds/tile/{id}/{z}/{x}/{y}.png`: صورة PNG بيضاء شفافة (السحب الباردة أكثر عتامة). ترجع 404 إذا كانت الصورة غير مسموحة بعد حسب الترخيص.
 
+### `GET /api/weather/clouds/outlook?lat=&lng=` (المرحلة ٢)
+اتجاه حركة السحاب وسرعته عند نقطة، وتقدير متى يصلها سحاب كثيف. تُحسب الحركة من ٣ صور MTG بينها ٣٠ دقيقة (الأحدث المسموح بها، وقبلها بنحو ٣٠ و٦٠ دقيقة) على نافذة ٦٤٠ كم حول مركز خلية ١°، بمطابقة كتل (NCC) مع تحسين دون-بكسلي، وتُقارن الزوجان المتتاليان: إن اختلفا انخفضت الثقة.
+```json
+{
+  "ok": true, "layer": "clouds_outlook", "point": { "lat": 17.5, "lng": 44 },
+  "state": "approaching", "confidence": 0.87, "min_confidence": 0.45,
+  "motion": { "bearing_deg": 61, "speed_kmh": 69, "direction_ar": "شمال شرقي" },
+  "eta_minutes": 125, "clearing_minutes": null, "margin_minutes": 38, "distance_km": 240, "scanned_km": 300,
+  "image_time": "2026-11-11T19:00:00.000Z", "image_age_min": 59,
+  "compared_with": ["2026-11-11T18:30:00Z", "2026-11-11T18:00:00Z"], "dt_minutes": 30, "cross_check": 1,
+  "caveats_ar": "…", "attribution": "Contains modified EUMETSAT Meteosat data 2026"
+}
+```
+- `state`: `approaching` (سحاب كثيف قادم؛ `eta_minutes` من الآن ± `margin_minutes`)، `overhead` (فوق النقطة وقت الصورة؛ `clearing_minutes` إن وُجد)، `arrived` (الصورة أقدم من الوصول: لا رقم)، `clear` (لا سحاب كثيف ضمن `scanned_km` في اتجاه الريح)، `stationary`، `uncertain` (ثقة أقل من `min_confidence` أو لا بيانات: بلا `motion` ولا أرقام).
+- `eta_minutes` يُحسب من لحظة الصورة ثم يُطرح عمرها (`image_age_min`). لا تُعرض الأرقام بلا عمر الصورة وهامشها.
+- أخطاء: 400 `bad_point` (خارج المملكة)، 503 `upstream_unavailable` أو `not_enough_frames`. الطلب الأول لخلية جديدة بطيء (٣ صور من EUMETView، نحو دقيقة)، والتالي فوري من الذاكرة.
+- حدود التقدير: حمل أفقي ثابت فقط (لا تكوّن ولا تبدد)، لا يعدّ توقع مطر، ويفترض حركة واحدة للسحب كلها في النافذة.
+
 ### `GET /api/weather/rain/recent?days=1|3|7&bbox=w,s,e,n`
 ```json
 {

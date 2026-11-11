@@ -23,8 +23,20 @@ enum HomeTool: Identifiable {
 }
 
 /// Full-screen pages the home map opens without an outing.
+/// «اتجه» opened `StandaloneNavScreen` until the solo outing (docs/SOLO-OUTING.md, step 6): it stays
+/// reachable for one build behind DEBUG `-SaryStandaloneNav`, then goes (step 8).
+enum StandaloneNavSwitch {
+    static var on: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-SaryStandaloneNav")
+        #else
+        return false
+        #endif
+    }
+}
+
 enum HomeCover: Identifiable {
-    /// «اتجه»: turn-by-turn on this phone (`StandaloneNavScreen`).
+    /// «اتجه» behind `-SaryStandaloneNav`: turn-by-turn on this phone (`StandaloneNavScreen`).
     case nav(NavTarget)
     /// «امشِ عليه» on a desert route: «اسلك هذا المسار» (`TrackFollowScreen`).
     case follow(TrackFollowModel)

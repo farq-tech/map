@@ -120,6 +120,8 @@ struct SarySheetSummary: View {
     /// The trip ended: «انتهت الطلعة» in place of «… مباشر» (nobody is live any more,
     /// though my own car still moves with this phone's GPS).
     var ended = false
+    /// A solo outing (docs/SOLO-OUTING.md): no count of people, «على جوالك فقط» instead.
+    var localOnly = false
     var expand: () -> Void = {}
     @Environment(\.sary) private var theme
 
@@ -136,8 +138,18 @@ struct SarySheetSummary: View {
                     }
                 }
                 .environment(\.layoutDirection, .rightToLeft)
-                summaryText(count: participants.count, live: live, nearest: nearest)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    if localOnly {
+                        Label(ended ? SaryCopy.outingEnded : SoloCopy.localOnlyLong, systemImage: "lock.fill")
+                            .saryText(.callout, weight: .bold)
+                            .foregroundStyle(p.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    } else {
+                        summaryText(count: participants.count, live: live, nearest: nearest)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if detent == .peek {
                     Image(systemName: "chevron.up")
                         .font(.system(size: 13, weight: .bold))
@@ -150,8 +162,9 @@ struct SarySheetSummary: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(ended ? "\(SaryFormat.number(participants.count)) في الطلعة، انتهت الطلعة" : SaryFormat.peekSummary(participants)))
-        .accessibilityHint(Text(detent == .peek ? "اضغط لعرض المشاركين" : ""))
+        .accessibilityLabel(Text(localOnly ? (ended ? SaryCopy.outingEnded : SoloCopy.localOnlyLong)
+                                 : ended ? "\(SaryFormat.number(participants.count)) في الطلعة، انتهت الطلعة" : SaryFormat.peekSummary(participants)))
+        .accessibilityHint(Text(detent == .peek && !localOnly ? "اضغط لعرض المشاركين" : ""))
         .accessibilityIdentifier("outing-sheet-summary")
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }

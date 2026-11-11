@@ -177,7 +177,12 @@ final class AppModel: ObservableObject {
             if arguments.contains("-SaryNoIdentity") { identity = nil }
             seedDemoLists()
             pendingInvite = "demo-invite"
-        } else if isDemo && debugScreen == nil { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        } else if isDemo && debugScreen == nil && !arguments.contains("-SarySolo") { openDemo() } else if isDemo { seedDemoLists() } else { resumeActiveShare() }
+        /* `-SarySolo ["lat,lng,name"]`: a solo outing («اتجه» on my own) to a test destination (UI tests). */
+        if let i = arguments.firstIndex(of: "-SarySolo") {
+            let d = Self.debugSoloDestination(i + 1 < arguments.count ? arguments[i + 1] : nil)
+            DispatchQueue.main.async { [weak self] in self?.openSolo(to: d) }
+        }
         /* `-SaryDemoInviteDuringTrip <s>`: an invite link opened s seconds into the demo trip (UI tests). */
         if isDemo, let i = arguments.firstIndex(of: "-SaryDemoInviteDuringTrip"), i + 1 < arguments.count, let s = Double(arguments[i + 1]) {
             demoInviteKind = "group"
@@ -293,8 +298,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Waypoints / convoy: the real API, or the demo's in-memory one.
-    var featuresBackend: OutingFeaturesBackend { isDemo ? DemoFeatures.backend : api }
+    /// Waypoints / convoy: the real API, or the demo's in-memory one. A solo outing (docs/SOLO-OUTING.md)
+    /// never reaches the server: an in-memory one that answers «غير متاح بعد» (its waypoints are hidden).
+    func featuresBackend(for outingId: String) -> OutingFeaturesBackend {
+        if SoloOuting.isSoloId(outingId) { return DemoFeaturesBackend(myId: identity?.user.id ?? "", notDeployed: true) }
+        return isDemo ? DemoFeatures.backend : api
+    }
 
     // MARK: identity
 
@@ -648,6 +657,12 @@ final class AppModel: ObservableObject {
 
     /// The outing as the server has it now (details, history summary).
     func snapshot(_ id: String) async throws -> OutingSnapshot {
+        /* A solo outing has no server: its own picture, from the open session or kept at its end. */
+        if SoloOuting.isSoloId(id) {
+            if let s = session ?? parkedSession, s.id == id, let snap = s.view?.snapshot { return snap }
+            if let snap = soloSnapshots[id] { return snap }
+            throw OutingAPIError.localOuting
+        }
         if isDemo { return DemoData.endedSnapshot(id: id) }
         return try await api.get(id)
     }
@@ -656,6 +671,11 @@ final class AppModel: ObservableObject {
     /// outing leaves the list, and `POST /leave` goes through the persisted outbox. Always true.
     @discardableResult
     func leave(_ id: String) async -> Bool {
+        /* A solo outing: nothing to tell anyone, it just closes here. */
+        if SoloOuting.isSoloId(id) {
+            if session?.id == id { closeSession() } else if parkedSession?.id == id { closeParked() }
+            return true
+        }
         if isDemo { return true }
         guard let me = identity?.user.id else { return false }
         if let s = session, s.id == id {
@@ -685,13 +705,14 @@ final class AppModel: ObservableObject {
 
     /// My own totals for this outing, from this device (nil when I never shared here).
     func myTrip(_ id: String) -> TripTotals? {
-        if isDemo { return TripTotals(distanceM: 48_300, durationS: 3 * 3600 + 12 * 60, movingS: 2 * 3600 + 5 * 60) }
+        /* A solo outing's totals are real even under `-demo` (its own trail, TripLogStore). */
+        if isDemo && !SoloOuting.isSoloId(id) { return TripTotals(distanceM: 48_300, durationS: 3 * 3600 + 12 * 60, movingS: 2 * 3600 + 5 * 60) }
         return TripLogStore.load(id)?.totals
     }
 
     /// My trail for this outing, from this device only (never sent).
     func myTrailPoints(_ id: String) -> Trail? {
-        if isDemo { return id == "demo-old" || id == DemoData.outingId ? DemoTrail.mine(now: Date()) : nil }
+        if isDemo && !SoloOuting.isSoloId(id) { return id == "demo-old" || id == DemoData.outingId ? DemoTrail.mine(now: Date()) : nil }
         if let s = session, s.id == id { return s.trail }
         return TrailStore.load(id)
     }
@@ -718,14 +739,14 @@ final class AppModel: ObservableObject {
     }
 
     func shareSummary(_ id: String) async -> TripShare? {
-        guard let t = myTrip(id) else { return nil }
+        guard !SoloOuting.isSoloId(id), let t = myTrip(id) else { return nil }
         if isDemo { return TripShare(user_id: DemoData.currentMe, display_name: "أنا", distance_m: Double(t.distanceM), duration_s: Double(t.durationS), moving_s: Double(t.movingS), shared_at: ISODate.string(Date())) }
         do { return try await api.shareSummary(id, t) } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return nil
     }
 
     func withdrawSummary(_ id: String) async -> Bool {
-        if isDemo { return true }
+        if isDemo || SoloOuting.isSoloId(id) { return true }
         do { try await api.withdrawSummary(id); return true } catch let e as OutingAPIError { errorText = e.arabic } catch {}
         return false
     }
@@ -737,6 +758,12 @@ final class AppModel: ObservableObject {
         if let p = parkedSession {
             if p.id == outingId, session == nil { return unpark() }
             if p.id != outingId { closeParked() }
+        }
+        /* A solo outing (a Live Activity tap, a notification) lives only in its own session: never
+         * opened as a server outing (no socket, no request). Gone: nothing to open. */
+        if SoloOuting.isSoloId(outingId) {
+            if session?.id != outingId { pendingMapDestination = nil }
+            return
         }
         if isDemo {
             if outingId == DemoData.outingId { openDemoSession() }
@@ -782,6 +809,7 @@ final class AppModel: ObservableObject {
     }
 
     private func closeParked() {
+        keepSoloSnapshot(parkedSession)
         parkedSink = nil
         parkedSession?.close()
         parkedSession = nil
@@ -790,6 +818,7 @@ final class AppModel: ObservableObject {
     /// `keepShare`: back to «طلعاتي» while still a member — the share stays armed, so opening the
     /// trip again (or a relaunch) picks it up. Leaving / sign-out forget it.
     func closeSession(keepShare: Bool = false) {
+        keepSoloSnapshot(session)
         session?.keepShareOnClose = keepShare
         session?.close()
         session = nil
@@ -807,6 +836,11 @@ final class AppModel: ObservableObject {
     /// follow my old trail back. Opens and starts it like «ابدأ الطلعة» in «طلعة جديدة».
     @discardableResult
     func startReturnTrip(from outingId: String) async -> String? {
+        /* A solo outing never creates a server outing (step 7 of docs/SOLO-OUTING.md adds a solo return). */
+        guard !SoloOuting.isSoloId(outingId) else {
+            errorText = SoloCopy.returnLater
+            return nil
+        }
         guard !isDemo else {
             errorText = "«طلعة الرجعة» تحتاج الخادم؛ في العرض التجريبي استخدم «طريق الرجعة» في «مساري»."
             return nil
@@ -902,6 +936,59 @@ final class AppModel: ObservableObject {
         open(id)
         session?.resumeIfPreviouslySharing()
     }
+
+    // MARK: solo («اتجه» on my own, docs/SOLO-OUTING.md)
+
+    /// The pictures of solo outings closed in this run, for their summary (no server keeps them).
+    private var soloSnapshots: [String: OutingSnapshot] = [:]
+
+    private func keepSoloSnapshot(_ s: OutingSession?) {
+        guard let s, s.isSolo, var snap = s.view?.snapshot else { return }
+        if snap.outing.status == .ended, snap.outing.ended_at == nil { snap.outing.ended_at = ISODate.string(Date()) }
+        soloSnapshots[s.id] = snap
+    }
+
+    /// «اتجه» from the home map: the live screen on a solo outing to `d` (one member, me; nothing
+    /// sent, docs/SOLO-OUTING.md (ب)3). Inside a real outing (open or parked) the point becomes a
+    /// leg of that outing instead (`startLegFromMap`): never two sessions at once.
+    func openSolo(to d: OutingDestination) {
+        if let s = session ?? parkedSession, !s.isSolo {
+            open(s.id, mapDestination: d)
+            return
+        }
+        guard let me = identity?.user else { return }
+        /* An earlier solo outing still open or parked ends here (its trail stays on the phone). */
+        if session?.isSolo == true {
+            keepSoloSnapshot(session)
+            session?.close()
+            session = nil
+        }
+        if parkedSession?.isSolo == true { closeParked() }
+        let id = SoloOuting.newId()
+        let name = String(SoloCopy.outingName(to: d.name).prefix(ServerRules.outingNameMax))
+        /* The trip's destination, on this phone (`LocalPlanBackend`): auto-navigation reads it. */
+        let plan = plans.model(id)
+        Task { @MainActor in _ = await plan.setDestination(d) }
+        var env = SessionEnv()
+        env.outbox = outbox
+        let s = OutingSession.solo(id: id, me: me, name: name, location: location, env: env)
+        /* Guidance starts by itself once the plan has the destination (`LiveOutingHost.startIfAsked`). */
+        pendingStart = id
+        pendingSummary = nil
+        session = s
+        s.open()
+    }
+
+    #if DEBUG
+    /// `-SarySolo "lat,lng,name"`; without a value, a point north of Riyadh.
+    static func debugSoloDestination(_ arg: String?) -> OutingDestination {
+        let parts = (arg ?? "").split(separator: ",", maxSplits: 2).map { $0.trimmingCharacters(in: .whitespaces) }
+        if parts.count >= 2, let lat = Double(parts[0]), let lng = Double(parts[1]), !parts[0].hasPrefix("-") {
+            return OutingDestination(name: parts.count > 2 ? parts[2] : "الوجهة", lat: lat, lng: lng)
+        }
+        return OutingDestination(name: "روضة الثمامة", lat: 24.7590, lng: 46.7491)
+    }
+    #endif
 
     private func seedDemoLists() {
         if ProcessInfo.processInfo.arguments.contains("-demoEmpty") {

@@ -639,6 +639,33 @@ final class BackgroundSessionTests: XCTestCase {
         outbox.stop()
     }
 
+    /// Safety: a «أنا بخير» that was on the wire when a new SOS went out, and failed, goes back
+    /// in the queue to retry; `raiseSOS` takes it back after waiting, so it can't cancel the new SOS.
+    func testAFailedInFlightCancelCanBeTakenBackOnceItIsOffTheWire() async {
+        let server = SlowServer()
+        server.delay = 50_000_000
+        server.failuresLeft = 1
+        /* A real backoff (not the clock-moving one): the retry must still be waiting when we look. */
+        let outbox = OutingActionOutbox(deps: .init(
+            perform: { a in try await server.perform(a) },
+            defaults: defaults,
+            now: { [unowned self] in self.clock },
+            sleep: { _ in try? await Task.sleep(nanoseconds: 10_000_000_000) }
+        ))
+        outbox.currentUser = { "u1" }
+        outbox.enqueue(PendingOutingAction(user: "u1", outing: "o1", kind: .cancelSOS, createdMs: clock))
+        await waitUntil { outbox.isInFlight(user: "u1", outing: "o1", kind: .cancelSOS) }
+        XCTAssertFalse(outbox.discard(user: "u1", outing: "o1", kind: .cancelSOS), "on the wire: can't be taken back")
+        let cleared = await outbox.waitUntilNotInFlight(user: "u1", outing: "o1", kind: .cancelSOS, timeoutMs: 5_000)
+        XCTAssertTrue(cleared)
+        XCTAssertTrue(outbox.has(user: "u1", outing: "o1", kind: .cancelSOS), "failed, so queued again to retry")
+        XCTAssertTrue(outbox.discard(user: "u1", outing: "o1", kind: .cancelSOS), "off the wire: taken back")
+        XCTAssertTrue(outbox.queue.isEmpty)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(server.done.isEmpty, "the retry never cancels the new SOS")
+        outbox.stop()
+    }
+
     /// Demo and solo have no server: every action applies on this phone and nothing is queued.
     func testLocalSessionsNeverQueueServerWork() async {
         let server = SlowServer()
@@ -774,5 +801,40 @@ final class BackgroundSessionTests: XCTestCase {
         s.resumeIfPreviouslySharing()
         XCTAssertFalse(location.isSharing)
         XCTAssertFalse(s.wantsToShare)
+    }
+
+    /// Issue #163: after the outing closed, returning to the app must not re-arm the GPS
+    /// (nothing is left to stop it: the status-bar location arrow stayed on).
+    func testClosedSessionDoesNotRearmTheGPSOnReturn() async {
+        let s = session()
+        ready(sockets[0])
+        s.foreground(true)
+        XCTAssertTrue(location.watching, "on screen: the foreground watch is armed")
+        s.close()
+        XCTAssertFalse(location.watching, "closing releases the watch")
+        foreground = false
+        s.foreground(false)
+        s.foreground(true)
+        XCTAssertFalse(location.watching, "a closed session never re-arms the GPS")
+        XCTAssertFalse(location.isSharing)
+        XCTAssertNil(location.plan, "no consumer left: the manager is stopped")
+    }
+}
+
+/// Review findings on #179: an undelivered hide must outlive the 2 h cap, like a leave.
+final class PendingActionAgeTests: XCTestCase {
+    func testHideAndLeaveKeepForDaysOthersForTwoHours() {
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .hide), PendingActionQueue.leaveMaxAgeMs)
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .leave), PendingActionQueue.leaveMaxAgeMs)
+        XCTAssertEqual(PendingActionQueue.maxAgeMs(for: .setRally), PendingActionQueue.maxAgeMs)
+    }
+
+    func testPruneKeepsAnUndeliveredHideAfterThreeHours() {
+        var q = PendingActionQueue()
+        q.enqueue(PendingOutingAction(user: "u", outing: "o", kind: .hide, createdMs: 0))
+        q.enqueue(PendingOutingAction(user: "u", outing: "o2", kind: .note, text: "x", createdMs: 0))
+        q.prune(nowMs: 3 * 3_600_000)
+        XCTAssertTrue(q.has(user: "u", outing: "o", kind: .hide), "hide still waits: dropping it could share again")
+        XCTAssertFalse(q.has(user: "u", outing: "o2", kind: .note), "a note is moot after 2 h")
     }
 }

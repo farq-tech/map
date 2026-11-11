@@ -721,7 +721,7 @@ struct TripWaypointsSection: View {
 
     private func load() async {
         do {
-            let got = OutingFeaturesModel.sorted(try await model.featuresBackend.waypoints(outingId))
+            let got = OutingFeaturesModel.sorted(try await model.featuresBackend(for: outingId).waypoints(outingId))
             list = got
             note = nil
             WaypointCache.save(outingId, name: outingName, got)

@@ -5,6 +5,7 @@
  * and holds no key):
  *   GET /api/weather/clouds/tiles              latest cloud frames (+ tile templates)
  *   GET /api/weather/clouds/tile/:id/:z/:x/:y.png
+ *   GET /api/weather/clouds/outlook?lat=&lng=  cloud motion + arrival estimate for one point
  *   GET /api/weather/rain/recent?days=1|3|7&bbox=w,s,e,n
  *   GET /api/weather/rain/tile/:days/:z/:x/:y.png
  *   GET /api/weather/green?bbox=w,s,e,n
@@ -16,6 +17,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const clouds = require('../lib/weather/clouds');
+const cloudOutlook = require('../lib/weather/cloud-outlook');
 const rain = require('../lib/weather/rain');
 const green = require('../lib/weather/green');
 const desert = require('../lib/weather/desert-search');
@@ -52,6 +54,14 @@ function createWeatherRouter() {
     const r = await clouds.tile(req.params.id, int(req.params.z), int(req.params.x), int(req.params.y));
     /* A frame never changes once sensed. */
     return sendTile(res, r, 86400);
+  }));
+
+  router.get('/weather/clouds/outlook', wrap(async (req, res) => {
+    const pt = parseNear(`${req.query.lat},${req.query.lng}`);
+    if (!pt) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
+    const body = await cloudOutlook.outlook(pt.lat, pt.lng);
+    if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
+    return sendJson(req, res, body, 300);
   }));
 
   router.get('/weather/rain/recent', wrap(async (req, res) => {
@@ -101,7 +111,7 @@ function createWeatherRouter() {
 
 module.exports = createWeatherRouter;
 /**
- * Background warm-up: greenness first (≈ 220 GIBS tiles), then the 7-day rain window (≈ 1,300
+ * Background warm-up: cloud frames (every 5 min), greenness first (≈ 220 GIBS tiles), then the 7-day rain window (≈ 1,300
  * tiles); rain again every 20 min, greenness every 6 h. Off with WEATHER_WARM=0.
  */
 module.exports.startWarm = () => {
@@ -113,4 +123,8 @@ module.exports.startWarm = () => {
   };
   setTimeout(run, 3_000).unref();
   setInterval(run, 20 * 60_000).unref();
+  /* Clouds: a new picture every 10 min; warm the newest few so the loop plays whole, not square by square. */
+  const runClouds = () => clouds.warm().catch(() => {});
+  setTimeout(runClouds, 5_000).unref();
+  setInterval(runClouds, 5 * 60_000).unref();
 };

@@ -70,17 +70,26 @@ final class SafetyController: ObservableObject {
 
     static let warnedStoreKey = "sary.safety.sunsetWarned.v1"
 
-    init(outingId: String, myId: String, backend: SafetyBackend?, scheduler: ReminderScheduling = LocalReminderScheduler(), defaults: UserDefaults = .standard) {
+    /// `seedsDemo`: the `-demo` outing's screenshot states (`-SarySafety`) may be seeded. nil = as before
+    /// (any local pack, `backend == nil`); a solo outing passes false: local, but never demo data.
+    init(outingId: String, myId: String, backend: SafetyBackend?, seedsDemo: Bool? = nil, scheduler: ReminderScheduling = LocalReminderScheduler(), defaults: UserDefaults = .standard) {
         self.outingId = outingId
         self.myId = myId
         self.backend = backend
+        self.seedsDemo = seedsDemo ?? (backend == nil)
         self.scheduler = scheduler
         self.defaults = defaults
         watchURL = WatchLinkStore.load(outingId, defaults: defaults)
         if backend == nil { timerAvailability = .available; stuckAvailability = .available }
     }
 
-    var isDemo: Bool { backend == nil }
+    /// No server behind the safety pack (the demo, a solo outing): timers and «غرّزت» stay on this phone.
+    var isLocal: Bool { backend == nil }
+    /// The demo outing's seeded states are allowed (never in a solo outing, docs/SOLO-OUTING.md).
+    let seedsDemo: Bool
+    /// A solo outing: nobody else hears the safety pack. «غرّزت» only marks the trail and the return
+    /// timer is an alarm on this phone (no contact, no link); the copy never promises an alert.
+    var localOnly: Bool { isLocal && !seedsDemo }
 
     /// Wire to the open session: its view changes, its safety events, my GPS, and a 15 s tick.
     func bind(events: AnyPublisher<SafetyEvent, Never>, viewChanged: AnyPublisher<Void, Never>, locationChanged: AnyPublisher<Void, Never>, timers: Bool = true) {
@@ -123,7 +132,7 @@ final class SafetyController: ObservableObject {
     // MARK: return timer
 
     func load() async {
-        if isDemo { return }
+        if isLocal { return }
         guard let backend else { return }
         do {
             let box = try await backend.returnTimer(outingId)
@@ -179,6 +188,17 @@ final class SafetyController: ObservableObject {
     /// «اضبط المؤقت» from the editor. Opens the share sheet with the message when it worked.
     func arm(due: Date, contact raw: String) async {
         let n = now()
+        if localOnly {
+            /* An alarm on this phone: no contact (empty marks a local timer everywhere), nothing to share. */
+            if ReturnTimerLogic.validate(due: due, contact: "-", now: n) != nil {
+                errorText = "اختر وقتًا بعد ١٠ دقائق على الأقل، وخلال ٢٤ ساعة."
+                return
+            }
+            guard await save(due: due, contact: "") else { return }
+            editorOpen = false
+            toast("ضبطنا منبّه الرجوع على جوالك · ما يوصل لأحد")
+            return
+        }
         guard let contact = ReturnTimerLogic.cleanContact(raw) else { errorText = "اكتب اسم اللي يتابعك."; return }
         if ReturnTimerLogic.validate(due: due, contact: contact, now: n) != nil {
             errorText = "اختر وقتًا بعد ١٠ دقائق على الأقل، وخلال ٢٤ ساعة."
@@ -194,7 +214,9 @@ final class SafetyController: ObservableObject {
         guard let t = timer, let due = ReturnTimerLogic.due(t) else { return }
         let next = ReturnTimerLogic.extended(due: due, byMinutes: minutes, now: now())
         if await save(due: next, contact: t.contact_name) {
-            toast("مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) · الرابط اللي عند \(t.contact_name) يبقى شغال")
+            toast(t.contact_name.isEmpty
+                  ? "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now()))"
+                  : "مدّدنا وقت رجوعك إلى \(SafetyFormat.dueLabel(next, now: now())) · الرابط اللي عند \(t.contact_name) يبقى شغال")
         }
     }
 
@@ -223,7 +245,7 @@ final class SafetyController: ObservableObject {
     }
 
     func offerShare() {
-        guard let t = timer, let due = ReturnTimerLogic.due(t) else { return }
+        guard let t = timer, !t.contact_name.isEmpty, let due = ReturnTimerLogic.due(t) else { return }
         shareText = ReturnTimerLogic.shareMessage(contact: t.contact_name, outingName: view()?.snapshot.outing.name ?? "طلعة", due: due, url: watchURL, now: now())
     }
 
@@ -241,7 +263,7 @@ final class SafetyController: ObservableObject {
             }
             forgetLink()
             setTimer(next, link: nil)
-            toast("الحمد لله على السلامة. وصل الخبر لـ\(t.contact_name)")
+            toast(t.contact_name.isEmpty ? "الحمد لله على السلامة" : "الحمد لله على السلامة. وصل الخبر لـ\(t.contact_name)")
         } catch let e as OutingAPIError where e.code == "no_timer" {
             forgetLink()
             setTimer(nil, link: nil)
@@ -297,7 +319,11 @@ final class SafetyController: ObservableObject {
             try await backend?.reportStuck(outingId, note: clean)
             stuckAvailability = .available
             stuck[myId] = StuckReport(userId: myId, at: now(), note: clean)
-            toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
+            if localOnly {
+                toast("علّمنا مكان التغريز على مسارك · ما فيه أحد معك يوصله التنبيه")
+            } else {
+                toast(isSharingNow() ? "وصل للأصدقاء إنك غرّزت، ويشوفون مكانك" : "وصل للأصدقاء إنك غرّزت · موقعك غير مُشارَك")
+            }
         } catch let e as OutingAPIError where e.isNotDeployed {
             stuckAvailability = .notDeployed
             toast("«غرّزت» غير متاح بعد")
@@ -520,7 +546,7 @@ final class SafetyController: ObservableObject {
     #if DEBUG
     /// Screenshot / UI-test states on the demo outing (`-SarySafety <state>`).
     func seedDemo(_ state: String) {
-        guard isDemo else { return }
+        guard seedsDemo else { return }
         let n = now()
         let friend = "00000000-0000-4000-8000-000000000003"
         let other = "00000000-0000-4000-8000-000000000002"

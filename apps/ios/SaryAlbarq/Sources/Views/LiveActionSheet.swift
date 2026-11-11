@@ -71,7 +71,14 @@ enum LiveActionCatalog {
         /// «أخفِ موقعي» / «أظهر موقعي» (a running trip I share in).
         var canHide = false
         var hidden = false
+        /// A solo outing (docs/SOLO-OUTING.md (ج)): no «الأصدقاء» group, no group-only tile.
+        var solo = false
     }
+
+    /// Entries a solo outing never offers: nobody else is there, nothing is sent
+    /// (`LiveScreenRules.solo`). «أضف نقطة» too: shared points live on the server.
+    static let soloHidden: Set<String> = ["chat", "rally", "invite", "convoy", "note", "hide", "channels", "fit", "guideAll",
+                                          "waypoint", "youtube", "radio"]
 
     /// Entries that only make sense while the outing runs (they reach the group, or the group's channel).
     static let needsRunningTrip: Set<String> = ["note", "stuck", "waypoint", "youtube", "follow", "guideAll", "channels", "enjad",
@@ -134,13 +141,31 @@ enum LiveActionCatalog {
                 .init(id: "fit", title: "شوف الكل", systemImage: SaryIcon.fitGroup, accessibilityID: "outing-fit"),
             ]),
         ]
-        guard s.ended else { return all }
-        return all.compactMap { g in
+        let shown = s.solo ? soloGroups(all) : all
+        guard s.ended else { return shown }
+        return shown.compactMap { g in
             var g = g
             g.items = g.items.compactMap { original in
                 var item = original
                 guard !item.children.isEmpty else { return needsRunningTrip.contains(item.id) ? nil : item }
                 item.children.removeAll { needsRunningTrip.contains($0.id) }
+                return item.children.isEmpty ? nil : item
+            }
+            return g.items.isEmpty ? nil : g
+        }
+    }
+
+    /// A solo outing: «الأصدقاء» goes whole, and every group-only tile (`soloHidden`) with it.
+    private static func soloGroups(_ all: [LiveActionGroup]) -> [LiveActionGroup] {
+        all.compactMap { g in
+            guard g.title != "الأصدقاء" else { return nil }
+            var g = g
+            g.items = g.items.compactMap { original in
+                var item = original
+                guard !soloHidden.contains(item.id) else { return nil }
+                if item.id == "navigate" { item.subtitle = "للوجهة أو لأي مكان تختاره" }
+                guard !item.children.isEmpty else { return item }
+                item.children.removeAll { soloHidden.contains($0.id) }
                 return item.children.isEmpty ? nil : item
             }
             return g.items.isEmpty ? nil : g
@@ -163,6 +188,8 @@ enum LiveActionCatalog {
 
 /// «المزيد» → «الطلعة»: the trip's own buttons, once (they were in the trip tab twice).
 struct LiveTripRows {
+    /// A solo outing: «أنهِ المشوار» (ends it on this phone, then its summary).
+    var solo = false
     var canPause = false
     var paused = false
     var canEnd = false
@@ -249,7 +276,7 @@ struct LiveActionSheet: View {
         } message: { k in
             switch k {
             case .pause: Text(trip.paused ? "يرجع الأعضاء يشاركون مواقعهم." : "تتوقف مشاركة المواقع عند الجميع وتُحذف المواقع حتى تستأنف.")
-            case .end: Text(EndOutingCopy.message())
+            case .end: Text(trip.solo ? SoloCopy.endMessage : EndOutingCopy.message())
             case .leave: Text("تتوقف مشاركة موقعك فورًا وينمسح آخر موقع لك من الخادم. ترجع لها فقط بدعوة جديدة.")
             }
         }
@@ -258,7 +285,7 @@ struct LiveActionSheet: View {
     private var confirmTitle: String {
         switch confirm {
         case .pause?: return trip.paused ? "استئناف الطلعة؟" : "إيقاف الطلعة مؤقتًا؟"
-        case .end?: return EndOutingCopy.title
+        case .end?: return trip.solo ? SoloCopy.endTitle : EndOutingCopy.title
         case .leave?: return "تغادر الطلعة؟"
         case nil: return ""
         }
@@ -279,7 +306,7 @@ struct LiveActionSheet: View {
                 }
                 if trip.canEnd {
                     SaryDivider()
-                    tripRow("أنهِ الطلعة", icon: EndOutingCopy.systemImage, destructive: true, id: "settings-end") { confirm = .end }
+                    tripRow(trip.solo ? SoloCopy.end : "أنهِ الطلعة", icon: EndOutingCopy.systemImage, destructive: true, id: "settings-end") { confirm = .end }
                 }
                 if trip.canLeave {
                     SaryDivider()

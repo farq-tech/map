@@ -93,7 +93,8 @@ struct LiveOutingScreen: View {
                     labels: (exploring && controller.mapLayer == .satellite) || controller.trackFollow != nil || controller.backTrack != nil ? .clean : (controller.nav.isActive ? .driving : .standard),
                     onCenter: { controller.mapCenterChanged($0) },
                     hiRes: controller.hiResRequest(ui, exploring: exploring),
-                    qiblaOrigin: qiblaMapOrigin
+                    qiblaOrigin: qiblaMapOrigin,
+                    userPoint: weatherUserPoint
                 )
                 }
                 .ignoresSafeArea()
@@ -125,7 +126,8 @@ struct LiveOutingScreen: View {
          * its own window (the dock's copy is hidden or covered then). */
         .background(SOSOverlayHost(visible: (controller.sheetDetent == .full || controller.modal != nil) && !controller.tripEnded && !controller.settingsOpen,
                                    state: ui.sos.mine, theme: theme, trigger: controller.actions.sos.trigger,
-                                   frame: frames["sos"], size: controller.liveContext(drive: theme.drive) == .driving ? 60 : 52))
+                                   frame: frames["sos"], size: controller.liveContext(drive: theme.drive) == .driving ? 60 : 52,
+                                   countdown: controller.groupUI.serverSOS))
         /* A friend's SOS: full screen in its own window, over every sheet, page and dialog (UI-AUDIT 0.1). */
         .background(FriendSOSAlertHost(alert: LiveOutingPresenter.fullScreenSOS(ui.sos), theme: theme,
                                        show: { controller.showSOS($0) }, call: { controller.actions.sos.call($0) }))
@@ -187,9 +189,19 @@ struct LiveOutingScreen: View {
 
     /// The qibla ray follows only a recent accepted fix; stale/low-quality GPS must not move it.
     private var qiblaMapOrigin: LngLat? {
-        guard showQiblaOnMap, let fix = controller.location.lastFix else { return nil }
+        let navigating = controller.nav.phase == .guiding || controller.nav.phase == .offRoad
+        guard QiblaMapOverlay.shows(userChoice: showQiblaOnMap, navigating: navigating),
+              let fix = controller.location.lastFix else { return nil }
         let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
         guard ageMs >= 0, ageMs <= 120_000, let accuracy = fix.accuracy, accuracy <= 500 else { return nil }
+        return LngLat(lng: fix.lng, lat: fix.lat)
+    }
+
+    /// The cloud outlook's own-position point: a fix younger than 10 min and accurate to 2 km.
+    private var weatherUserPoint: LngLat? {
+        guard let fix = controller.location.lastFix else { return nil }
+        let ageMs = Date().timeIntervalSince1970 * 1000 - fix.atMs
+        guard ageMs >= 0, ageMs <= 600_000, let accuracy = fix.accuracy, accuracy <= 2000 else { return nil }
         return LngLat(lng: fix.lng, lat: fix.lat)
     }
 
@@ -257,7 +269,8 @@ struct LiveOutingScreen: View {
                              maxListHeight: LiveFit.alertListMaxHeight(screenHeight: full.height), width: full.width, weather: controller.weather,
                              plan: app.plans.model(controller.session.id), media: MediaCenters.of(controller),
                              radio: GroupAudioCenters.of(controller),
-                             sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger)),
+                             sos: ended ? nil : AnyView(LovableSOS(state: ui.sos.mine, size: driving ? 60 : 52, trigger: controller.actions.sos.trigger,
+                                                                   countdown: controller.groupUI.serverSOS)),
                              /* My SOS on (focused mode): no side buttons — the strip, the walkie-talkie and the map. */
                              side: showSide && !controller.sosFocused ? AnyView(sideView(side, exploring: exploring, captions: sideCaptions).chromeFrame("cluster")) : nil)
                     .chromeFrame("top")
@@ -303,7 +316,8 @@ struct LiveOutingScreen: View {
                                 .accessibilityIdentifier("explore.hint")
                                 .chromeFrame("dock")
                             Spacer(minLength: 0)
-                            if !ended {
+                            /* A solo outing has no walkie-talkie (`LiveScreenRules.solo`). */
+                            if !ended && controller.groupUI.walkieTalkie {
                                 SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: false, level: controller.pttLevel,
                                               openChannels: { controller.modal = .pttChannels })
                                     .chromeFrame("ptt")
@@ -320,12 +334,16 @@ struct LiveOutingScreen: View {
                             .chromeFrame("convoy")
                             .transition(.opacity)
                     }
-                    /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock. */
-                    VoiceNoteDock(center: controller.session.voiceNotes, openList: { controller.modal = .pttChannels })
-                        .chromeFrame("voice-note")
-                        .padding(.horizontal, theme.space(.m))
-                        .opacity(controller.sheetDetent == .full ? 0 : 1)
-                        .allowsHitTesting(controller.sheetDetent != .full)
+                    /* «رسالة صوتية»: the recording bar, «فلان يتكلم…», unheard notes — just over the dock.
+                     * Never in a solo outing: a recording would be uploaded, refused and deleted. */
+                    let talk = controller.groupUI.walkieTalkie && controller.groupUI.voiceNotes
+                    if talk {
+                        VoiceNoteDock(center: controller.session.voiceNotes, openList: { controller.modal = .pttChannels })
+                            .chromeFrame("voice-note")
+                            .padding(.horizontal, theme.space(.m))
+                            .opacity(controller.sheetDetent == .full ? 0 : 1)
+                            .allowsHitTesting(controller.sheetDetent != .full)
+                    }
                     /* ONE big button at a time (ux/الطلعة-والمشوار.md): stopped — the outing's primary action
                      * («ابدأ الطلعة» / «وين رايحين؟» / «ابدأ المشوار») is big and the walkie-talkie is a round
                      * button beside it; driving — the walkie-talkie is big and «وصلنا» is compact. */
@@ -336,8 +354,8 @@ struct LiveOutingScreen: View {
                     /* Owner (2026-11-11): while driving every primary («وين رايحين؟», «وصلنا»…) is a compact pill;
                      * the sheet raised also shrinks it so it never covers the cars above the sheet. */
                     let ctaCompact = LiveScreenRules.primaryCompact(sheetRaised: controller.sheetDetent != .peek, driving: driving)
-                    let pttBig = driving && (ctaCompact || !hasCTA)
-                    let pttPill = pttBig || !hasCTA
+                    let pttBig = talk && driving && (ctaCompact || !hasCTA)
+                    let pttPill = talk && (pttBig || !hasCTA)
                     let showsSpeedBubble = driving && controller.speed.everRead && controller.speedometerUI.current.kmh != nil && !guidingHUD
                     /* The row's room on this phone (`LiveFit.dock`): at 375 pt the speed, the 200 pt pill and
                      * a compact primary (or the guiding speed cluster) were wider than the screen — the
@@ -377,12 +395,15 @@ struct LiveOutingScreen: View {
                         } else if !driving {
                             Spacer()
                         }
-                        /* Round beside the big primary: no caption under it (its label is spoken by VoiceOver). */
-                        SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttPill, level: controller.pttLevel, pill: pttPill, big: pttBig,
-                                      channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
-                                      openChannels: { controller.modal = .pttChannels },
-                                      pillMinWidth: pttPill ? dockFit.pttMinWidth : nil)
-                            .chromeFrame("ptt")
+                        /* Round beside the big primary: no caption under it (its label is spoken by VoiceOver).
+                         * A solo outing: no walkie-talkie at all. */
+                        if talk {
+                            SaryPTTButton(state: ui.ptt, actions: controller.actions.ptt, showsCaption: pttPill, level: controller.pttLevel, pill: pttPill, big: pttBig,
+                                          channelLabel: controller.session.walkie.showsChannels ? PTTChannels.chipLabel(controller.session.walkie.currentChannel) : nil,
+                                          openChannels: { controller.modal = .pttChannels },
+                                          pillMinWidth: pttPill ? dockFit.pttMinWidth : nil)
+                                .chromeFrame("ptt")
+                        }
                         if ctaCompact && hasCTA && !ctaOwnRow {
                             Spacer(minLength: 0)
                             /* Its whole label always: the talk pill is the one that gives way. */
@@ -716,7 +737,8 @@ private struct LiveTopStack: View {
                                  line: follow ?? (controller.showsTripStrip || ui.status == .notStarted ? controller.flowUI(ui: ui).line
                                      : TripHeaderPresenter.line(status: ui.status, trip: trip, follow: follow, connection: ui.connection, nearbyCars: ui.nearbyCars)),
                                  level: TripHeaderPresenter.level(connection: ui.connection, sharing: ui.sharing, warnings: ui.warnings),
-                                 bell: bell)
+                                 bell: bell,
+                                 localOnly: controller.isSolo)
             /* «تخفيف الزحمة» ٤–٥: the weather while stopped only (dangerous weather comes as an alert);
              * no binoculars here («أدوات» → «استكشاف وطبقات»); nothing live after the end. */
             let ended = controller.tripEnded
@@ -724,7 +746,7 @@ private struct LiveTopStack: View {
              * weather pill (the weather stays in the sheet and its own alerts). `LiveFit`. */
             let roomForWeather = LiveFit.showsHeaderWeather(width: width, largeText: typeSize >= .xxLarge)
             TripHeader(ui: h, weather: driving || ended || !roomForWeather ? nil : weather.chip(now: ctx.date),
-                       accessibility: [ui.outingName, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line,
+                       accessibility: [ui.outingName, h.localOnly ? SoloCopy.localOnlyLong : nil, h.title == ui.outingName ? nil : "إلى \(h.title)", h.line,
                                        trip?.phase == .underway ? trip?.remainingLine : nil, ui.connection.label].compactMap { $0 }.joined(separator: "، "),
                        back: controller.actions.back,
                        open: controller.openTripDetails,

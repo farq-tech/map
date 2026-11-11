@@ -114,6 +114,8 @@ final class OutingSession: ObservableObject, Identifiable {
     nonisolated var isDemo: Bool { kind.isDemo }
     /// No server behind this session (demo or solo): never send, apply locally.
     nonisolated var isLocal: Bool { kind.isLocal }
+    /// «اتجه» on my own (docs/SOLO-OUTING.md): one member, on this phone only. Group-only UI hides.
+    nonisolated var isSolo: Bool { kind == .solo }
     let location: LocationSharer
     /// Return-timer and «غرّزت» events for `SafetyController`.
     let safetyEvents = PassthroughSubject<SafetyEvent, Never>()
@@ -492,6 +494,9 @@ final class OutingSession: ObservableObject, Identifiable {
     /// GPS and drops any fix waiting for the network, and the share intent stays,
     /// so it resumes on return.
     func foreground(_ active: Bool) {
+        /* A closed session owns no GPS: coming back to the screen must not re-arm the foreground watch
+         * (nothing would ever stop it again — the status-bar location arrow stayed on, issue #163). */
+        guard !didClose else { return }
         visible = active
         location.setOffScreen(!active)
         sendPresenceHint(foreground: active)
@@ -615,6 +620,8 @@ final class OutingSession: ObservableObject, Identifiable {
     /// Call after the consent sheet was accepted. Consent is recorded only once
     /// iOS permission is really granted, and only for this identity.
     func beginSharing() async {
+        /* A solo outing has nobody to share with: no consent, no active share, the gate stays shut. */
+        guard kind != .solo else { return }
         guard let v = view, v.status == .active else {
             errorText = "المشاركة تبدأ عندما يبدأ أمير الطلعة الطلعة."
             return
@@ -945,6 +952,11 @@ final class OutingSession: ObservableObject, Identifiable {
         if recentRaw.count > 400 { recentRaw.removeFirst(recentRaw.count - 300) }
         let added = trail.add(raw)
         if added { trailUnsaved += 1 }
+        /* Solo: «ملخص رحلتي» (distance, time) from the trail's own fixes — `handleFix` never runs
+         * there, its gate stays closed (nothing is shared). On this device only, like the trail. */
+        if kind == .solo {
+            TripLogStore.update(id, defaults: env.defaults) { $0.add(lat: f.lat, lng: f.lng, accuracy: f.accuracy, speed: f.speed, atMs: f.atMs, speedAccuracy: f.speedAccuracy) }
+        }
         if rawPending.count >= 30 || (added && (trailUnsaved >= 5 || Date().timeIntervalSince(trailSavedAt) > 5)) { saveTrail() }
         if added, env.timers, TrailMatchPrefs.enabled(env.defaults) { matcher?.tick(trail) }
     }
@@ -1142,6 +1154,64 @@ final class OutingSession: ObservableObject, Identifiable {
 
     // MARK: actions
 
+    /// Bumped on every SOS / «أنا بخير» and every hide / show I make: a late redo checks the person
+    /// did not change their mind since, from their taps, not from the view (a stale server event
+    /// for the old request can change the view without the person doing anything).
+    private var sosChoice = 0
+    private var hideChoice = 0
+    /// What the latest of those taps asked for (SOS on / hidden).
+    private var sosWanted = false
+    private var hideWanted = false
+
+    /// Raise the SOS again after a «أنا بخير» that was on the wire — unless the person tapped since
+    /// `choice`. A «أنا بخير» tapped while this request is out is sent again after it, so the
+    /// newest tap is what the server keeps (an extra DELETE is harmless).
+    private func reRaiseSOS(me: String, wire: WireFix?, choice: Int) async {
+        guard sosChoice == choice, closedReason == nil else { return }
+        outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
+        _ = await run("sos") {
+            let r = try await api.raiseSos(id, fix: wire)
+            if sosChoice == choice { view?.apply(.sos(userId: me, sos: r, refresh: false)) }
+        }
+        if sosChoice != choice, !sosWanted { sendLater(.cancelSOS, trace: ActionTrace.begin("sos-cancel")) }
+    }
+
+    /// Show me again after a hide that was on the wire — unless the person tapped since `choice`.
+    /// A hide tapped while this request is out is sent again after it. True unless the show failed.
+    @discardableResult
+    private func reShow(me: String, choice: Int) async -> Bool {
+        guard hideChoice == choice, closedReason == nil else { return true }
+        outbox.discard(user: myUserId, outing: id, kind: .hide)
+        let ok = await run("hidden") {
+            let r = try await api.setHidden(id, hidden: false)
+            if hideChoice == choice { view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self")) }
+        }
+        if hideChoice != choice, hideWanted { sendLater(.hide, trace: ActionTrace.begin("hide")) }
+        return ok
+    }
+
+    /// A request still on the wire when the 15 s wait ran out: once it is done (whatever its
+    /// answer), its retry is taken back and `redo` sends the later choice again, so that one is
+    /// what stays. Skipped when the person changed their mind meanwhile (`stillWanted`).
+    private func redoAfterInFlight(_ kind: PendingOutingAction.Kind,
+                                   stillWanted: @escaping @MainActor (OutingSession) -> Bool,
+                                   _ redo: @escaping @MainActor (OutingSession) async -> Void) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard await self.outbox.waitUntilNotInFlight(user: self.myUserId, outing: self.id, kind: kind, timeoutMs: 120_000),
+                  self.closedReason == nil, stillWanted(self) else { return }
+            await redo(self)
+        }
+    }
+
+    /// «أظهر موقعي» again once a hide that outlasted the wait is off the wire (unless I hid since).
+    /// `choice`: `hideChoice` as it was when the person asked to be shown (read before any await).
+    private func redoShowAfterInFlightHide(me: String, choice: Int) {
+        redoAfterInFlight(.hide, stillWanted: { s in s.hideChoice == choice }) { s in
+            await s.reShow(me: me, choice: choice)
+        }
+    }
+
     private func run(_ key: String, _ work: () async throws -> Void) async -> Bool {
         busy.insert(key)
         defer { busy.remove(key) }
@@ -1305,6 +1375,9 @@ final class OutingSession: ObservableObject, Identifiable {
     func setHidden(_ on: Bool) async -> Bool {
         guard let me = view?.myId, view?.status != .ended else { return false }
         let t = ActionTrace.begin(on ? "hide" : "show")
+        hideChoice &+= 1
+        hideWanted = on
+        let choice = hideChoice
         let ok: Bool
         if isLocal || on {
             view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
@@ -1317,10 +1390,12 @@ final class OutingSession: ObservableObject, Identifiable {
             ActionTrace.acked(t, ok: true)
             ok = true
         } else {
-            ok = await run("hidden") {
-                let r = try await api.setHidden(id, hidden: on)
-                view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
-            }
+            /* A hide already on the wire must land first, or it would hide me again after this. */
+            let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
+            /* A hide that failed on the wire is back in the queue: its retry would hide me again
+             * (reShow takes it back, unless I tapped again meanwhile). */
+            ok = await reShow(me: me, choice: choice)
+            if ok, !cleared { redoShowAfterInFlightHide(me: me, choice: choice) }
             ActionTrace.uiShown(t)
             ActionTrace.acked(t, ok: ok)
         }
@@ -1366,6 +1441,10 @@ final class OutingSession: ObservableObject, Identifiable {
         guard let me = view?.myId else { return false }
         let t = ActionTrace.begin("sos")
         defer { ActionTrace.uiShown(t) }
+        sosChoice &+= 1
+        sosWanted = true
+        let choice = sosChoice
+        let hideChoiceAtSOS = hideChoice
         let wasHidden = view?.me?.hidden == true
         defer {
             if wasHidden {
@@ -1386,13 +1465,38 @@ final class OutingSession: ObservableObject, Identifiable {
             ActionTrace.acked(t, ok: true)
             return wasHidden
         }
-        /* A «أنا بخير» still queued from before must not land after this SOS and cancel it. */
+        /* A «أنا بخير» still queued from before must not land after this SOS and cancel it. One
+         * already on the wire can't be taken back: the SOS goes now, and is raised again once
+         * that request is done (below), so it can never end up cancelled. */
         outbox.discard(user: myUserId, outing: id, kind: .cancelSOS)
+        let racingCancel = outbox.isInFlight(user: myUserId, outing: id, kind: .cancelSOS)
+        let racingHide = wasHidden && outbox.isInFlight(user: myUserId, outing: id, kind: .hide)
         /* The SOS shows me again (the server does the same): a queued hide must not undo that. */
         if wasHidden { outbox.discard(user: myUserId, outing: id, kind: .hide) }
         let ok = await run("sos") {
             let s = try await api.raiseSos(id, fix: wire)
             view?.apply(.sos(userId: me, sos: s, refresh: false))
+        }
+        if ok, racingCancel {
+            let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .cancelSOS, timeoutMs: 15_000)
+            /* That «أنا بخير» may have failed and gone back in the queue to retry: its retry would
+             * cancel this SOS later, so it is taken back before the SOS is raised again — unless I
+             * said «أنا بخير» to this SOS meanwhile (reRaiseSOS checks). */
+            await reRaiseSOS(me: me, wire: wire, choice: choice)
+            /* Still on the wire after 15 s: once it is done, the same again (unless I tapped since). */
+            if !cleared {
+                let sosWire = wire
+                redoAfterInFlight(.cancelSOS, stillWanted: { s in s.sosChoice == choice }) { s in
+                    await s.reRaiseSOS(me: me, wire: sosWire, choice: choice)
+                }
+            }
+        }
+        if ok, racingHide {
+            let cleared = await outbox.waitUntilNotInFlight(user: myUserId, outing: id, kind: .hide, timeoutMs: 15_000)
+            /* Same for a hide that failed and is waiting to retry: it would hide me again after the SOS
+             * (unless I hid again meanwhile: reShow checks). */
+            await reShow(me: me, choice: hideChoiceAtSOS)
+            if !cleared { redoShowAfterInFlightHide(me: me, choice: hideChoiceAtSOS) }
         }
         ActionTrace.acked(t, ok: ok)
         if !ok {
@@ -1409,6 +1513,8 @@ final class OutingSession: ObservableObject, Identifiable {
     func cancelSOS() async {
         guard let me = view?.myId else { return }
         let t = ActionTrace.begin("sos-cancel")
+        sosChoice &+= 1
+        sosWanted = false
         mesh.announce(.sosClear)
         view?.apply(.sos(userId: me, sos: nil, refresh: false))
         ActionTrace.uiShown(t)
@@ -1550,6 +1656,28 @@ enum SoloOuting {
         )
         return OutingView(snap, deviceNow: now)
     }
+}
+
+/// What a solo outing says (Najdi; the convoy word is «الأصدقاء», never «الربع»).
+enum SoloCopy {
+    /// The outing's name: «مشوار إلى روضة الثمامة».
+    static func outingName(to place: String) -> String {
+        let p = place.trimmingCharacters(in: .whitespacesAndNewlines)
+        return p.isEmpty ? "مشوار" : "مشوار إلى \(p)"
+    }
+    /// The header, in place of the sharing state: nothing leaves the phone.
+    static let localOnly = "على جوالك فقط"
+    static let localOnlyLong = "على جوالك فقط · ما يوصل لأحد"
+    /// «أنهِ الطلعة» in a solo outing.
+    static let end = "أنهِ المشوار"
+    static let endTitle = "تنهي المشوار؟"
+    static let endMessage = "يوقف التوجيه والتسجيل ويطلع ملخص مشوارك. كل شي على جوالك فقط."
+    /// The SOS in a solo outing: nobody to send it to, so the call is the help.
+    static let sosTitle = "طوارئ"
+    static let sosNote = "ما فيه أحد معك يوصله التنبيه. اتصل على ٩١١، أو اطلب إنجاد."
+    static let call911 = "اتصل ٩١١"
+    /// «طلعة الرجعة» from a solo outing comes in a later build.
+    static let returnLater = "«مشوار الرجعة» جاي قريب. للحين استعمل «طريق الرجعة» من «المزيد» يرجّعك على مسارك."
 }
 
 extension OutingSession {

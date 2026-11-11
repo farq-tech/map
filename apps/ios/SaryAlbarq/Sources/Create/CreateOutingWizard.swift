@@ -42,7 +42,10 @@ struct CreateOutingWizard: View {
             /* One step at a time, sliding the way the person moves: on → in from the reading end
                (the left in Arabic), back → from the start. A ZStack so the two never stack during it. */
             ZStack(alignment: .top) {
-                stepContent
+                /* One column per step (the spacing `SaryPage` gives its content): the step views return
+                   several sibling views, which a bare ZStack would lay on top of each other (Build 41). */
+                VStack(alignment: .leading, spacing: theme.space(.xl)) { stepContent }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .id(flow.step)
                     .transition(stepTransition)
             }
@@ -569,6 +572,7 @@ private struct CompanionsStep: View {
             .accessibilityIdentifier("start.changePlace")
         Label(ShareMemory.joinStatement, systemImage: "location.fill")
             .saryText(.footnote, weight: .medium).foregroundStyle(p.textSecondary).fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("start.statement")
     }
 }
 
