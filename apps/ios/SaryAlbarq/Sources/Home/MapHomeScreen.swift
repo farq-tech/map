@@ -917,7 +917,7 @@ struct MapHomeScreen: View {
         let point = LngLat(lng: d.lng, lat: d.lat)
         let action = placeAction
         let routes = HomeDesertTools.offersRoutes(desertPlace: s.desert, me: myPoint, target: point)
-        /* «اتجه» first: guidance on this phone, no outing and no server (UI-AUDIT §٢). */
+        /* «اتجه» first: guidance on this phone, nothing sent (UI-AUDIT §٢): a solo outing (docs/SOLO-OUTING.md). */
         let go = Button { directions(d) } label: { SaryButtonLabel(title: "اتجه", systemImage: SaryIcon.directions) }
             .buttonStyle(.sary(.primary))
             .accessibilityIdentifier("home.place.go")
@@ -1187,7 +1187,9 @@ struct MapHomeScreen: View {
         }
     }
 
-    /// «اتجه»: our own turn-by-turn on this phone, no outing and no server (`StandaloneNavScreen`).
+    /// «اتجه»: the live screen on a solo outing (one member, me; nothing sent, docs/SOLO-OUTING.md),
+    /// or a leg of the outing already running (`AppModel.openSolo`). `StandaloneNavScreen` only
+    /// behind `-SaryStandaloneNav`, for one build.
     private func directions(_ d: OutingDestination) {
         selectedPointNameTask?.cancel()
         selectedPointNameTask = nil
@@ -1195,7 +1197,8 @@ struct MapHomeScreen: View {
         RecentPlaces.add(destination)
         recent = RecentPlaces.load()
         guard case let .success(t) = NavTargets.point(LngLat(lng: destination.lng, lat: destination.lat), name: destination.name) else { return }
-        cover = .nav(t)
+        if StandaloneNavSwitch.on { cover = .nav(t); return }
+        DispatchQueue.main.async { model.openSolo(to: destination) }
     }
 
     /// One desert tool after another: the open sheet goes first (a sheet over a closing one is dropped).
@@ -1205,8 +1208,8 @@ struct MapHomeScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { tool = t }
     }
 
-    /// The desert tools' host on the home map: «اتجه» opens `StandaloneNavScreen`, «امشِ عليه»
-    /// `TrackFollowScreen` — both on this phone only.
+    /// The desert tools' host on the home map: «اتجه» opens a solo outing (`StandaloneNavScreen` behind
+    /// `-SaryStandaloneNav`), «امشِ عليه» `TrackFollowScreen` — both on this phone only.
     private var desertHost: DesertToolsHost {
         DesertToolsHost(
             myPoint: { myPoint },
@@ -1214,7 +1217,10 @@ struct MapHomeScreen: View {
             directions: { r in
                 guard case let .success(t) = r else { return }
                 tool = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { cover = .nav(t) }
+                let d = OutingDestination(name: t.name, lat: t.position.lat, lng: t.position.lng)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if StandaloneNavSwitch.on { cover = .nav(t) } else { model.openSolo(to: d) }
+                }
             },
             openRoutes: { target, name, rain, weatherAvailable in
                 openTool(.routes(target: target, name: name, rain: rain, weatherAvailable: weatherAvailable))
