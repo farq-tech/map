@@ -114,7 +114,7 @@ struct WeatherChipView: View {
                 }
                 /* A new reading rolls its digits instead of snapping. */
                 Text(ui.temp).saryNumber(theme.drive ? .headline : .subhead, weight: .heavy).foregroundStyle(tint)
-                    .contentTransition(.numericText())
+                    .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                 Text(ui.place).saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary).lineLimit(1)
                     .frame(maxWidth: 110, alignment: .leading)
                 if let s = ui.staleText {
@@ -173,7 +173,7 @@ struct DestinationWeatherBadge: View {
                 .contentTransition(.symbolEffect(.replace))
             Text(ui.temp).saryNumber(.caption, weight: .bold)
                 .foregroundStyle(ui.alertLevel > 0 ? theme.palette.warningText : theme.palette.textSecondary)
-                .contentTransition(.numericText())
+                .contentTransition(theme.reduceMotion ? .opacity : .numericText())
             if ui.staleText != nil { Image(systemName: "clock").font(.system(size: 9, weight: .bold)).foregroundStyle(theme.palette.warningText) }
         }
         /* The reading arrives after the card: its digits roll in rather than pop. */

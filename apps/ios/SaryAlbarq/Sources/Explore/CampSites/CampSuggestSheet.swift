@@ -140,7 +140,7 @@ struct CampSuggestSheet: View {
                     ForEach(Array(model.ranked.enumerated()), id: \.element.id) { i, r in
                         CampSiteCard(rank: i + 1, ranked: r, night: model.nights[r.site.region], go: { go(r.site, rank: i + 1) },
                                      routes: DesertGrid.bboxes[r.site.region] == nil ? nil : { routes(r.site, rank: i + 1) })
-                            .transition(.opacity.combined(with: .offset(y: 12)))
+                            .transition(SaryTransition.appear(theme))
                     }
                 }
             }

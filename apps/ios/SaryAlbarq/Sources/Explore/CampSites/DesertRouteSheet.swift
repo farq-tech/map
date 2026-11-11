@@ -110,7 +110,7 @@ struct DesertRouteSheet: View {
                     .sarySurface(radius: SaryRadius.l)
             case .ready:
                 ForEach(hub.options) { o in
-                    card(o).transition(.opacity.combined(with: .offset(y: 12)))
+                    card(o).transition(SaryTransition.appear(theme))
                 }
             }
             Text(Self.note).saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
@@ -121,7 +121,7 @@ struct DesertRouteSheet: View {
         /* The computed routes arrive with a soft entrance; picking one pops it (and a tick). */
         .saryAnimation(.smooth, value: phase)
         .saryAnimation(.snappy, value: hub.selected)
-        .sensoryFeedback(.selection, trigger: pickTick)
+        .saryHaptic(.selection, trigger: pickTick)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("routes.sheet")
     }

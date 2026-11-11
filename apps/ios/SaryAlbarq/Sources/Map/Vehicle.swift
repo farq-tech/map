@@ -244,13 +244,14 @@ enum GroupFraming {
 /// while the outing runs). One slow beat timer drives it, never a per-frame loop: each beat
 /// sets a style value and Mapbox's own paint transition (or one SwiftUI phase cycle for the
 /// flag) eases it. The breath is inhale → exhale → hold, so the map idles a third of the time.
-/// Stopped in the background, under Reduce Motion and in Low Power Mode. Pure (`FollowCameraTests`).
+/// Stopped in the background, under Reduce Motion, in drive mode and in Low Power Mode. Pure (`FollowCameraTests`).
 enum LivePulse {
     enum Phase: Equatable { case inhale, exhale, hold }
 
-    /// One beat, seconds (also the paint transition length).
-    static let beat: TimeInterval = 1.4
-    static var transitionMs: Int { Int(beat * 1000) }
+    /// One beat, seconds (also the paint transition length): half of the design system's
+    /// live breath (`SaryMotion.livePulsePeriod`), so the map breathes like every «مباشر» dot.
+    static let beat: TimeInterval = SaryMotion.livePulsePeriod / 2
+    static var transitionMs: Int { Int((beat * 1000).rounded()) }
 
     static func phase(_ beat: Int) -> Phase {
         switch ((beat % 3) + 3) % 3 {
@@ -260,8 +261,10 @@ enum LivePulse {
         }
     }
 
-    static func shouldRun(live: Bool, foreground: Bool, reduceMotion: Bool, lowPower: Bool) -> Bool {
-        live && foreground && !reduceMotion && !lowPower
+    /// The design system's loop rule (`SaryMotionPolicy.loop(.live, …)`: not live, background,
+    /// Reduce Motion or drive mode → off), plus Low Power Mode (the map would render for it).
+    static func shouldRun(live: Bool, foreground: Bool, reduceMotion: Bool, drive: Bool, lowPower: Bool) -> Bool {
+        SaryMotionPolicy.loop(.live, active: live && !lowPower, reduceMotion: reduceMotion, drive: drive, sceneActive: foreground) != .off
     }
 
     /// My halo's white ring: at rest as `Vehicle.myHaloLayer` draws it; on the inhale it widens and softens.

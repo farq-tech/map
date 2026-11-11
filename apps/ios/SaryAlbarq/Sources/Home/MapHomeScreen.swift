@@ -276,7 +276,7 @@ struct MapHomeScreen: View {
                 }
                 .scrollIndicators(.hidden)
                 /* The picked place rises into the sheet as the sheet takes its height. */
-                .transition(.opacity.combined(with: .offset(y: 18)))
+                .transition(SaryTransition.appear(theme))
                 .accessibilityIdentifier("home.place.scroll")
             } else {
                 VStack(spacing: 0) {
@@ -383,7 +383,7 @@ struct MapHomeScreen: View {
     /// The one state card cross-fades when what it says changes (start → upcoming → active…).
     private var stateCardView: some View {
         stateCardContent
-            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+            .transition(SaryTransition.appear(theme))
             .id(stateCardKind)
     }
 
@@ -430,7 +430,7 @@ struct MapHomeScreen: View {
                     let line = [paused ? "طلعتك القادمة · متوقفة" : "طلعتك القادمة", o.timeLabel(), o.participantsLabel].compactMap { $0 }.joined(separator: " · ")
                     Text(line)
                         .font(.sary(12, .regular)).foregroundStyle(p.textSecondary).lineLimit(1)
-                        .contentTransition(.numericText())
+                        .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                         .saryAnimation(.smooth, value: line)
                 }
                 Spacer(minLength: 0)
@@ -621,7 +621,7 @@ struct MapHomeScreen: View {
                     Text(o.name).font(.sary(15, .bold)).foregroundStyle(p.textPrimary).lineLimit(1)
                     Text("طلعتك جارية · \(o.participantsLabel)").font(.sary(12, .regular)).foregroundStyle(p.textSecondary)
                         /* Someone joins: the count rolls, the card stays. */
-                        .contentTransition(.numericText())
+                        .contentTransition(theme.reduceMotion ? .opacity : .numericText())
                         .saryAnimation(.smooth, value: o.participantsLabel)
                 }
                 Spacer(minLength: 0)
@@ -756,7 +756,7 @@ struct MapHomeScreen: View {
                             pick(.init(destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
                                        subtitle: r.subtitle, icon: r.icon, desert: r.id.hasPrefix("gazetteer:")))
                         }
-                        .transition(.opacity.combined(with: .offset(y: 6)))
+                        .transition(SaryTransition.appear(theme))
                     }
                 }
                 .padding(.horizontal, theme.space(.m))
@@ -785,7 +785,7 @@ struct MapHomeScreen: View {
                     if i > 0 { SaryDivider() }
                     placeRow(icon: it.systemImage, title: "\(SaryFormat.number(i + 1)). \(it.title)", detail: it.detail, point: it.point,
                              id: "home.desert.result", meters: it.meters) { pickDesert(it) }
-                        .transition(.opacity.combined(with: .offset(y: 6)))
+                        .transition(SaryTransition.appear(theme))
                 }
             }
             .padding(.horizontal, theme.space(.m))

@@ -990,7 +990,7 @@ struct OutingMapboxView: UIViewRepresentable {
         /// Start or stop the beat timer (`LivePulse.shouldRun`); stopping puts the halo back at rest.
         func updatePulse() {
             let run = LivePulse.shouldRun(live: myLive || rallyLive, foreground: foreground, reduceMotion: theme.reduceMotion,
-                                          lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
+                                          drive: theme.drive, lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled)
             if run {
                 guard pulseTimer == nil else { return }
                 let t = Timer(timeInterval: LivePulse.beat, repeats: true) { [weak self] _ in self?.pulseTick() }
@@ -1303,6 +1303,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     let box = HostBox(view)
                     overlay.addSubview(box)
                     r.chipBox = box
+                    box.pop(theme)
                 }
             } else {
                 r.chipBox?.removeFromSuperview()
@@ -1319,6 +1320,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     let box = HostBox(view)
                     overlay.addSubview(box)
                     r.noteBox = box
+                    box.pop(theme)
                 }
             } else {
                 r.noteBox?.removeFromSuperview()
@@ -1412,6 +1414,7 @@ struct OutingMapboxView: UIViewRepresentable {
                     box = HostBox(view)
                     overlay.addSubview(box)
                     groupBoxes[g.key] = box
+                    box.pop(theme)
                 }
                 box.frame = CGRect(x: g.frame.midX - box.ideal.width / 2, y: g.frame.maxY - box.ideal.height, width: box.ideal.width, height: box.ideal.height)
                 for id in g.ids {
@@ -1978,6 +1981,29 @@ final class HostBox<Content: View & Equatable>: UIView {
         super.layoutSubviews()
         host.view.frame = bounds
     }
+
+    /// Pop in once, on insertion (the SwiftUI `SaryTransition.chipPop` cannot show for a UIKit
+    /// box). Core Animation on the hosted layer: the model values (frame, alpha) the per-frame
+    /// declutter layout sets stay untouched, and the render server runs it, not our frames.
+    /// A plain fade when travel is not allowed (Reduce Motion, or drive mode: peripheral).
+    func pop(_ theme: SaryTheme) {
+        let layer = host.view.layer
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = theme.reduceMotion ? SaryMotion.reducedDuration : SaryMotion.appear.duration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "sary.pop.fade")
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: true) else { return }
+        let scale = CASpringAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.6
+        scale.toValue = 1
+        scale.damping = 18
+        scale.stiffness = 260
+        scale.mass = 1
+        scale.duration = min(scale.settlingDuration, 0.5)
+        layer.add(scale, forKey: "sary.pop.scale")
+    }
 }
 
 extension HostBox where Content == MapChip {
@@ -2076,8 +2102,9 @@ struct RallyPin: View {
                         .frame(width: 18, height: 6)
                         .phaseAnimator([false, true], trigger: beat) { ring, out in
                             ring.scaleEffect(out ? 2.6 : 1).opacity(out ? 0.55 : 0)
-                        } animation: { out in
-                            out ? .easeOut(duration: 1.1) : .easeIn(duration: 0.9)
+                        } animation: { _ in
+                            /* One half-breath each way; beats only come when the loop policy allows. */
+                            theme.animation(.livePulse)
                         }
                         .padding(.bottom, 1)
                         .allowsHitTesting(false)

@@ -381,11 +381,12 @@ final class MapMotionTests: XCTestCase {
     }
 
     func testPulseRunsOnlyWhileLiveInTheForeground() {
-        XCTAssertTrue(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, lowPower: false))
-        XCTAssertFalse(LivePulse.shouldRun(live: false, foreground: true, reduceMotion: false, lowPower: false), "nothing live")
-        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: false, reduceMotion: false, lowPower: false), "background")
-        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: true, lowPower: false), "reduce motion")
-        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, lowPower: true), "low power")
+        XCTAssertTrue(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: false, lowPower: false))
+        XCTAssertFalse(LivePulse.shouldRun(live: false, foreground: true, reduceMotion: false, drive: false, lowPower: false), "nothing live")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: false, reduceMotion: false, drive: false, lowPower: false), "background")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: true, drive: false, lowPower: false), "reduce motion")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: true, lowPower: false), "drive mode")
+        XCTAssertFalse(LivePulse.shouldRun(live: true, foreground: true, reduceMotion: false, drive: false, lowPower: true), "low power")
     }
 
     func testBreathIsInhaleExhaleHold() {
@@ -394,7 +395,8 @@ final class MapMotionTests: XCTestCase {
         XCTAssertEqual(LivePulse.haloRing(.hold).width, LivePulse.restRingWidth)
         XCTAssertEqual(LivePulse.haloRing(.exhale).opacity, LivePulse.restRingOpacity, "the exhale returns to rest")
         XCTAssertGreaterThan(LivePulse.haloRing(.inhale).width, LivePulse.restRingWidth)
-        XCTAssertEqual(LivePulse.transitionMs, 1400)
+        XCTAssertEqual(LivePulse.beat * 2, SaryMotion.livePulsePeriod, accuracy: 0.001, "the map breathes like every live dot")
+        XCTAssertEqual(LivePulse.transitionMs, Int((SaryMotion.livePulsePeriod * 500).rounded()))
     }
 
     func testMemberFadeIsShortEnoughForUITests() {
