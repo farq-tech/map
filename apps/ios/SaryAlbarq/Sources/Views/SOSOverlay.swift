@@ -86,7 +86,16 @@ final class SOSOverlayWindow: UIWindow {
 
     deinit { observers.forEach(NotificationCenter.default.removeObserver) }
 
-    private func applyVisibility() { isHidden = !wanted || keyboardUp }
+    private func applyVisibility() {
+        let hide = !wanted || keyboardUp
+        let appearing = isHidden && !hide
+        isHidden = hide
+        /* The floating copy takes over from the map's SOS as a sheet covers it: a quick fade-in
+         * (`SaryMotion.urgent`'s duration) so it does not pop; at once under Reduce Motion. */
+        guard appearing, !UIAccessibility.isReduceMotionEnabled else { alpha = 1; return }
+        alpha = 0
+        UIView.animate(withDuration: SaryMotion.urgent.duration, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) { self.alpha = 1 }
+    }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -116,6 +125,25 @@ final class SOSOverlayWindow: UIWindow {
         )
         wanted = m.visible
         applyVisibility()
+    }
+}
+
+/// A friend's SOS arriving: urgent but controlled (`SaryMotion.urgent`): it settles from a touch
+/// larger and half faded, once per alert (the window's root carries the alert's id). It never
+/// starts fully transparent, so VoiceOver finds it at once; under Reduce Motion it is just there.
+private struct SOSUrgentEntrance: ViewModifier {
+    @Environment(\.sary) private var theme
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let settled = shown || theme.reduceMotion
+        content
+            .opacity(settled ? 1 : 0.4)
+            .scaleEffect(settled ? 1 : 1.04)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(theme.animation(.urgent)) { shown = true }
+            }
     }
 }
 
@@ -199,6 +227,7 @@ final class FriendSOSAlertWindow: UIWindow {
         let id = a.id
         host.rootView = AnyView(
             SaryFriendSOSAlert(alert: a, now: Date(), show: { m.show(id) }, call: { m.call(id) })
+                .modifier(SOSUrgentEntrance())
                 .id(id)
                 .accessibilityIdentifier("friend-sos-alert")
                 .saryTheme(m.theme)
