@@ -242,14 +242,21 @@
 - **التحقق من WeatherKit على توزيع فعلي:** اختار المالك WeatherKit دون غبار/PM10. App Store Connect API يؤكد أن capability مفعلة على `sa.sary.albarq`، لكن تغييرات الفرع غير مدموجة ولم يُفحص provisioning profile/توقيع TestFlight أو استجابة WeatherKit الحية؛ قائمة App Store Connect الحالية لا تعرض ملفًا لـ`sa.sary.albarq`. بعد الدمج، تحقق من entitlement في التوزيع واختبر استجابة فعلية قبل إعلان الميزة متاحة.
 - **اختبار iPhone فعلي:** محاكي iPhone 18 Pro وiPad Pro متاحان، لكن لا يُدّعى اختبار جهاز فعلي إلا بعد اتصال جهاز مفتوح والتحقق منه عبر `devicectl`.
 
-## إعادة فحص حالة PRs والإصدار — 2026-11-11 05:16 (Asia/Riyadh)
+## إعادة فحص حالة PRs والإصدار — 2026-11-11 05:21 (Asia/Riyadh)
 
-- PR #144: مفتوح وDraft، الرأس `c9b7493af3e5d1e88f2dda0a7d220bdf422b8000`، الأساس `codex/build27-integration`. آخر `verify` هو run `42943068703` وانتهى Failure مع `steps: []`؛ لم ينفذ CI أي تحقق للكود. Vercel Preview ناجح. لا يوجد دليل في هذا الفحص على رفع هذا الرأس إلى TestFlight.
-- PR #141: مفتوح وDraft، الرأس `76b575f62bb5ab3d83e32433b431c53bd597fa23` على `main`. آخر `verify` هو run `42944364042` وانتهى Failure مع `steps: []`؛ لا توجد نتيجة اختبار من CI. Vercel Preview ناجح.
+- PR #144: مفتوح وDraft، الرأس `ed099b95454173e0b9c843427e7e682ee5cc4cbb`، الأساس `codex/build27-integration`. آخر `verify` هو run `42945342766` وانتهى Failure مع `steps: []`؛ لم ينفذ CI أي تحقق للكود. Vercel Preview ناجح. لا يوجد دليل في هذا الفحص على رفع هذا الرأس إلى TestFlight.
+- PR #141: مفتوح وDraft، الرأس `76b575f62bb5ab3d83e32433b431c53bd597fa23` على `main`. آخر `verify` هو run `42944985537` وانتهى Failure مع `steps: []`؛ لا توجد نتيجة اختبار من CI. Vercel Preview ناجح.
 - PR #145: مفتوح وDraft، الرأس `eb89ee52d7e634712b05d0cb215fb6aadb7c5d7f` مبني فوق #144. run `42893843500` أخفق قبل أي خطوة، وVercel Preview ناجح. وصف التغييرات والاختبارات المحلية السابقة موجود في هذا السجل، لكن لا دليل على دمجها في #144 أو TestFlight؛ لا تعاملها كجزء من Build 36.
 - PR #133: مفتوح وغير Draft وقابل للدمج (`MERGEABLE`)، لكن `verify` لم ينجح وVercel Preview فقط ناجح. اختبارات Python 36/36 الموثقة لا تستبدل اختبارات iOS المفقودة؛ لا تدمج من حالة المعاينة وحدها.
 - إثبات قفل الفوترة موجود في تعليقات/annotations سابقة على حساب Actions، بينما runs أعلاه لا تعرض خطوات. سجّل النتيجة كما هي ولا تستنتج نجاحًا أو فشلًا للكود. أعد فحص GitHub بعد معالجة الفوترة.
 - المالك: Codex. الخطوة التالية: فرز #145 ومجموعة الاختبارات الحالية، ثم إغلاق أو دمج البنود القابلة للحسم بعد تحقق CI. قبل أي إعلان إصدار، تحقق من App Store Connect وبناء TestFlight المحدد؛ لا يوجد في هذه اللقطة إثبات أن المستخدم استلم Build 36.
+
+## تصحيح نطاق اختبار اتصال شبكة البر — 2026-11-11 05:20 (Asia/Riyadh)
+
+- كان اسم الاختبار `testLiveMapboxSnapEndpointsConnectToBothReportedThumamahPins` يوحي بأنه يطلب Mapbox مباشرة، لكنه يستخدم نقطتي نهاية مسجلتين من طلب سابق ويفحص شبكة البر المحلية فقط. غُيّر الاسم إلى `testRecordedMapboxSnapEndpointsConnectToBothReportedThumamahPins` وصُحح التعليق ورسالة الفشل لمنع اعتبار الاختبار دليل ملاحة حيّة.
+- على PR #144 commit `ed099b95454173e0b9c843427e7e682ee5cc4cbb` شغّلت الاختبار المعاد تسميته باستخدام `xcodebuild test` على Atlas iPhone 18 Pro Simulator / iOS 27.2: **1/1 ناجح، 0 فشل، 0 runtime warnings** وفق xcresult. الاختبار لا يتصل بـMapbox ولا يثبت مسارًا حيًا من المدينة إلى البر.
+- بعد الدفع انتهى CI run `42945342766` بفشل قبل أي خطوة (`steps: []`)، واكتمل Vercel Preview بنجاح. لا توجد نتيجة CI للشيفرة، ولا اختبار جهاز فعلي أو دليل TestFlight لهذا commit.
+- المالك: Codex. الخطوة التالية: أضف/شغّل اختبار تكامل منفصلًا يطلب مزود الشوارع الحي ثم يتابع من نقطة snapping إلى شبكة البر، مع توثيق شبكة الاتصال والنتيجة؛ لا تخلط ذلك باختبار grid المحلي.
 
 ## قواعد التشغيل
 
