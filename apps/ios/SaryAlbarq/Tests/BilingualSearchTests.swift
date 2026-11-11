@@ -129,6 +129,40 @@ final class BilingualSearchTests: XCTestCase {
         XCTAssertEqual(r[0].altName, "Starbucks")
         XCTAssertEqual(r[0].subtitle, "Starbucks · مقهى")
         XCTAssertEqual(r[1].name, "ستاربكس", "an English-only branch gets its Arabic name from the lexicon")
+        /* Build 36 item 11: the row keeps the languages apart — the English name on its own small line. */
+        XCTAssertEqual(r[0].secondaryName, "Starbucks")
+        XCTAssertEqual(r[0].rowDetail, "مقهى", "no English in the detail line")
+    }
+
+    // MARK: result rows and their order (Build 36 item 11)
+
+    func testRowFieldsKeepTheLanguagesApart() {
+        var p = PlaceSearch.Place(id: "1", name: "روضة خريم", detail: "أقرب طرف منك", point: Self.me, category: "روضة", altName: "Rawdat Khuraim")
+        XCTAssertEqual(p.secondaryName, "Rawdat Khuraim")
+        XCTAssertEqual(p.rowDetail, "روضة · أقرب طرف منك")
+        XCTAssertEqual(p.subtitle, "Rawdat Khuraim · روضة · أقرب طرف منك", "the older one-line subtitle is unchanged")
+        p.altName = "روضه خريم"
+        XCTAssertNil(p.secondaryName, "the same name twice is not shown")
+        p.altName = "  "
+        XCTAssertNil(p.secondaryName)
+        p.areaDistanceM = 1200
+        XCTAssertEqual(p.meters(from: Self.me), 1200, "an area's distance is to its edge")
+        p.areaDistanceM = nil
+        XCTAssertNil(p.meters(from: nil))
+    }
+
+    func testOrderNearestAndByKindAreStable() {
+        let far = Self.poi("مقهى بعيد", 24.80, 46.70)                       // ~10 km
+        let near = Self.poi("مقهى قريب", 24.715, 46.676)                    // ~200 m
+        let park = Self.poi("حديقة", 24.72, 46.68, category: "حديقة")      // ~900 m
+        let none = Self.poi("مكان", 24.714, 46.6755, category: nil)          // ~40 m, no kind
+        let list = [far, park, none, near]
+        XCTAssertEqual(PlaceSearch.ordered(list, by: .relevance, near: Self.me).map(\.name), list.map(\.name))
+        XCTAssertEqual(PlaceSearch.ordered(list, by: .nearest, near: Self.me).map(\.name), ["مكان", "مقهى قريب", "حديقة", "مقهى بعيد"])
+        XCTAssertEqual(PlaceSearch.ordered(list, by: .kind, near: Self.me).map(\.name), ["مقهى قريب", "مقهى بعيد", "حديقة", "مكان"],
+                       "the kind with the nearest place first, nearest first inside, no kind last")
+        XCTAssertEqual(PlaceSearch.ordered(list, by: .nearest, near: nil).map(\.name), list.map(\.name), "no position: unchanged")
+        XCTAssertEqual(PlaceSearch.ListOrder.allCases.map(\.title), ["الأنسب", "الأقرب", "حسب النوع"])
     }
 
     func testCrossLanguageMergeRules() {

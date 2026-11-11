@@ -48,9 +48,11 @@ enum HomeDesertRules {
         return hits.map { h in
             let p = h.place
             let me = near ?? GazetteerCategoryService.fallbackCenter
-            let detail = [p.secondary, h.inside ? "أنت داخلها" : p.polygon != nil ? "أقرب طرف منك" : nil].compactMap { $0 }.joined(separator: " · ")
-            return PlaceSearch.Place(id: "gazetteer:\(p.id)", name: p.title, detail: detail.isEmpty ? nil : detail, point: p.point,
-                                     category: p.kind.arabic, icon: p.kind.systemImage, country: "SA",
+            /* The other-language name (name_en) is `altName`, shown small on its own line — not mixed into
+             * the detail line with the Arabic (Build 36 item 11). `subtitle` still lists it first. */
+            let detail: String? = h.inside ? "أنت داخلها" : (p.polygon != nil ? "أقرب طرف منك" : nil)
+            return PlaceSearch.Place(id: "gazetteer:\(p.id)", name: p.title, detail: detail, point: p.point,
+                                     category: p.kind.arabic, icon: p.kind.systemImage, country: "SA", altName: p.secondary,
                                      areaPolygon: p.polygon, areaDistanceM: p.polygon == nil ? nil : h.meters,
                                      areaApproach: p.polygon.map { _ in p.approach(from: me) })
         }

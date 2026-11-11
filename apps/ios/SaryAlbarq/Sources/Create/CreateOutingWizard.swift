@@ -256,6 +256,7 @@ private struct DestinationStep: View {
     @State private var results: [PlaceSearch.Place] = []
     @State private var searching = false
     @State private var searchError: String?
+    @State private var order: PlaceSearch.ListOrder = .relevance
     @State private var job: Task<Void, Never>?
     @State private var mapOpen = false
     @State private var recent = RecentPlaces.load()
@@ -286,11 +287,12 @@ private struct DestinationStep: View {
             if searching { SaryStateView(kind: .loading("نبحث…")) }
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
+                if results.count >= 3 { PlaceOrderPicker(order: $order, hasPosition: near != nil) }
                 SarySection(title: "أماكن") {
-                    ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
+                    ForEach(Array(PlaceSearch.ordered(results, by: order, near: near).enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        row(icon: r.icon, title: r.name, detail: r.subtitle, trailing: near.map { SaryFormat.distance(meters: PlanGeo.meters($0, r.point)) },
-                            id: "create.dest.result") {
+                        PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
+                                       meters: r.meters(from: near), id: "create.dest.result") {
                             choose(OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: r.point.lat, lng: r.point.lng))
                         }
                     }

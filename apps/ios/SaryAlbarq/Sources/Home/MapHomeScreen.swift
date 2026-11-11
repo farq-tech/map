@@ -27,6 +27,8 @@ struct MapHomeScreen: View {
     @FocusState private var searchFocused: Bool
     @State private var category: HomeCategory?
     @State private var results: [PlaceSearch.Place] = []
+    /// «الأنسب · الأقرب · حسب النوع» above the results.
+    @State private var resultOrder: PlaceSearch.ListOrder = .relevance
     @State private var searching = false
     @State private var searchError: String?
     @State private var job: Task<Void, Never>?
@@ -696,10 +698,13 @@ struct MapHomeScreen: View {
             if searching { SaryStateView(kind: .loading("نبحث…")) }
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
+                if results.count >= 3 { PlaceOrderPicker(order: $resultOrder, hasPosition: myPoint != nil) }
                 VStack(spacing: 0) {
-                    ForEach(Array(results.enumerated()), id: \.element.id) { i, r in
+                    ForEach(Array(PlaceSearch.ordered(results, by: resultOrder, near: myPoint).enumerated()), id: \.element.id) { i, r in
                         if i > 0 { SaryDivider() }
-                        placeRow(icon: r.icon, title: r.name, detail: r.subtitle, point: r.point, id: "home.result", meters: r.areaDistanceM) {
+                        /* Build 36 item 11: Arabic name first, the other language on its own small line, the distance bold. */
+                        PlaceResultRow(icon: r.icon, name: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
+                                       meters: r.meters(from: myPoint), id: "home.result") {
                             if let polygon = r.areaPolygon {
                                 desertPicked = DesertCategoryItem(id: r.id, title: r.name, detail: r.subtitle, point: r.point,
                                                                  meters: r.areaDistanceM, systemImage: r.icon, polygon: polygon,

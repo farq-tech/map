@@ -158,6 +158,68 @@ struct LivePlanModalView: View {
     }
 }
 
+/// One place-search result, the same in the home search, the in-trip search and «طلعة جديدة» step ١
+/// (Build 36 item 11: rows were tight, Arabic and English mixed on one line, the distance faint):
+/// the Arabic name big; the other-language name alone on a small line; the kind and the area under it;
+/// the distance bold at the end, easy to compare down the list.
+struct PlaceResultRow: View {
+    var icon: String
+    var name: String
+    var secondaryName: String?
+    var detail: String?
+    var meters: Double?
+    var id: String
+    var run: () -> Void
+    @Environment(\.sary) private var theme
+
+    var body: some View {
+        let p = theme.palette
+        Button(action: run) {
+            HStack(alignment: .center, spacing: theme.space(.m)) {
+                SaryRowIcon(systemImage: icon)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(name).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(2)
+                    if let secondaryName {
+                        /* Latin reads left to right inside the RTL row, small and quiet. */
+                        Text(secondaryName).saryText(.caption).foregroundStyle(p.textTertiary).lineLimit(1)
+                    }
+                    if let detail { Text(detail).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
+                }
+                Spacer(minLength: theme.space(.s))
+                if let m = meters {
+                    Text(m == 0 ? "هنا" : SaryFormat.distance(meters: m))
+                        .saryNumber(.subhead, weight: .bold).foregroundStyle(p.textPrimary)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .padding(.vertical, theme.space(.s))
+            .frame(minHeight: theme.minTarget + 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(id)
+    }
+}
+
+/// «الأنسب · الأقرب · حسب النوع» above a result list (shown when there is something to reorder).
+struct PlaceOrderPicker: View {
+    @Binding var order: PlaceSearch.ListOrder
+    /// Without a position «الأقرب» means nothing: only relevance and kind are offered.
+    var hasPosition: Bool
+
+    var body: some View {
+        Picker("ترتيب النتائج", selection: $order) {
+            ForEach(PlaceSearch.ListOrder.allCases.filter { hasPosition || $0 != .nearest }, id: \.self) { o in
+                Text(o.title).tag(o)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("places.order")
+    }
+}
+
 /// In-trip search («ابحث أو إحداثية», «ابحث عن مكان» in «وين رايحين؟», «حدّد الوجهة»): the home
 /// search's sources — «دليل البر» first (offline), then Apple and Mapbox, or a typed coordinate —
 /// in a lean sheet with a close button. Picking a place sets the next leg's destination.
@@ -170,6 +232,7 @@ struct LiveSearchSheet: View {
     @State private var results: [PlaceSearch.Place] = []
     @State private var searching = false
     @State private var searchError: String?
+    @State private var order: PlaceSearch.ListOrder = .relevance
     @State private var job: Task<Void, Never>?
     /* Loaded on appear (a @State initialiser runs on every re-init of this struct). */
     @State private var recent: [OutingDestination] = []
@@ -239,9 +302,10 @@ struct LiveSearchSheet: View {
             if searching { SaryStateView(kind: .loading("نبحث…")) }
             if let searchError { SaryBanner(text: searchError, tone: .warning) }
             if !results.isEmpty {
-                list(results.map { r in
+                if results.count >= 3 { PlaceOrderPicker(order: $order, hasPosition: near != nil) }
+                list(PlaceSearch.ordered(results, by: order, near: near).map { r in
                     let target = r.areaApproach ?? r.point
-                    return Row(id: r.id, icon: r.icon, title: r.name, detail: r.subtitle,
+                    return Row(id: r.id, icon: r.icon, title: r.name, secondaryName: r.secondaryName, detail: r.rowDetail,
                                destination: OutingDestination(name: String(r.name.prefix(TripPlan.destinationNameMax)), lat: target.lat, lng: target.lng),
                                meters: r.areaDistanceM)
                 }, id: "live.search.result")
@@ -255,34 +319,19 @@ struct LiveSearchSheet: View {
         var id: String
         var icon: String
         var title: String
+        var secondaryName: String? = nil
         var detail: String?
         var destination: OutingDestination
         var meters: Double?
     }
 
     private func list(_ rows: [Row], id: String) -> some View {
-        let p = theme.palette
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
                 if i > 0 { SaryDivider() }
-                Button { pick(r.destination) } label: {
-                    HStack(spacing: theme.space(.m)) {
-                        SaryRowIcon(systemImage: r.icon)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(r.title).saryText(.body, weight: .bold).foregroundStyle(p.textPrimary).lineLimit(1)
-                            if let d = r.detail { Text(d).saryNumber(.footnote).foregroundStyle(p.textSecondary).lineLimit(1) }
-                        }
-                        Spacer(minLength: 0)
-                        let point = LngLat(lng: r.destination.lng, lat: r.destination.lat)
-                        if let m = r.meters ?? near.map({ PlanGeo.meters($0, point) }) {
-                            Text(m == 0 ? "هنا" : SaryFormat.distance(meters: m)).saryNumber(.footnote).foregroundStyle(p.textTertiary)
-                        }
-                    }
-                    .frame(minHeight: theme.minTarget + 8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(id)
+                let point = LngLat(lng: r.destination.lng, lat: r.destination.lat)
+                PlaceResultRow(icon: r.icon, name: r.title, secondaryName: r.secondaryName, detail: r.detail,
+                               meters: r.meters ?? near.map { PlanGeo.meters($0, point) }, id: id) { pick(r.destination) }
             }
         }
         .padding(.horizontal, theme.space(.m))
