@@ -46,9 +46,22 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
     private var spokenKeys = Set<String>()
     private var arrived = false
     private var lastSpeed: Double?
+    /// Failed reroutes in a row, and no new attempt before this time (`rerouteBackoffS`).
+    private var failedReroutes = 0
+    private var rerouteNotBefore = Date.distantPast
+    /// The clock (tests move it).
+    var now: () -> Date = Date.init
 
     /// Off the line by more than this, three fixes in a row (accuracy permitting): reroute.
     static let offRouteM = 50.0
+
+    /// The wait after `failures` failed reroutes in a row before the next try: 5, 10, 20, 40, then
+    /// 60 s. Offline in the desert a reroute never succeeds, and every attempt ran the whole routing
+    /// chain (network request, three desert A* searches) again three fixes later, about every 3 s.
+    static func rerouteBackoffS(failures: Int) -> TimeInterval {
+        guard failures > 0 else { return 0 }
+        return min(60, 5 * pow(2, Double(min(failures, 8) - 1)))
+    }
 
     func start(route: NavRoute, plan: NavRoutePlan, target: NavTarget) async throws {
         load(route)
@@ -67,6 +80,8 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
         offCount = 0
         spokenKeys = []
         arrived = false
+        failedReroutes = 0
+        rerouteNotBefore = .distantPast
     }
 
     static func cumulative(_ c: [LngLat]) -> [Double] {
@@ -173,10 +188,13 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
         let tolerance = Self.offRouteM + min(40, fix.accuracy ?? 10)
         if loc.offset > tolerance {
             offCount += 1
-            if offCount >= 3, !rerouting { startReroute(me, heading: fix.heading) }
+            if offCount >= 3, !rerouting, now() >= rerouteNotBefore { startReroute(me, heading: fix.heading) }
             return
         }
         offCount = 0
+        /* Back on the route: a later detour is a new one, not a retry of the failed one. */
+        failedReroutes = 0
+        rerouteNotBefore = .distantPast
         lastIndex = loc.index
         let p = Self.progress(route: r, stepAlong: stepAlong, total: total, at: loc.along)
         onEvent(.progress(p))
@@ -219,6 +237,8 @@ final class LocalGuidanceEngine: NavGuidanceEngine {
                 self.onEvent(.rerouted(new))
             } else {
                 self.offCount = 0
+                self.failedReroutes += 1
+                self.rerouteNotBefore = self.now().addingTimeInterval(Self.rerouteBackoffS(failures: self.failedReroutes))
                 self.onEvent(.rerouteFailed("تعذّر حساب طريق جديد"))
             }
         }

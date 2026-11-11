@@ -484,6 +484,44 @@ final class LocalGuidanceTests: XCTestCase {
         XCTAssertTrue(events.contains(.offRoute))
         await fulfillment(of: [exp], timeout: 2)
     }
+
+    func testRerouteBackoffDoublesToAMinute() {
+        XCTAssertEqual(LocalGuidanceEngine.rerouteBackoffS(failures: 0), 0)
+        XCTAssertEqual((1...7).map { LocalGuidanceEngine.rerouteBackoffS(failures: $0) }, [5, 10, 20, 40, 60, 60, 60])
+        XCTAssertEqual(LocalGuidanceEngine.rerouteBackoffS(failures: 1_000), 60)
+    }
+
+    /// Offline in the desert every reroute fails: the next try waits (5 s, 10 s …) instead of
+    /// re-running the routing chain three fixes later; back on the route, a new detour reroutes at once.
+    func testFailedRerouteWaitsBeforeTheNextTry() async throws {
+        let e = LocalGuidanceEngine()
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        e.now = { clock }
+        var events: [NavGuidanceEvent] = []
+        e.onEvent = { events.append($0) }
+        var asked = 0
+        e.reroute = { _, _ in asked += 1; return nil }
+        let r = route()
+        try await e.start(route: r, plan: .init(routes: [r]), target: NavTarget(source: .point, name: "هنا", position: r.end!))
+        func offThree() { for k in 0..<3 { e.ingest(fix(24.705, 46.685 + 0.0001 * Double(k))) } }
+        func settle() async { for _ in 0..<20 { await Task.yield() } }
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 1)
+        XCTAssertTrue(events.contains(.rerouteFailed("تعذّر حساب طريق جديد")))
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 1, "within the 5 s backoff: no new attempt")
+        clock = clock.addingTimeInterval(5)
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 2, "after the backoff it tries again")
+        /* Back on the route clears the backoff. */
+        e.ingest(fix(24.705, 46.68))
+        offThree()
+        await settle()
+        XCTAssertEqual(asked, 3)
+    }
 }
 
 /// Every «اتجه» (silent member, fuel station, waypoint) is OUR guidance: a nav target for
