@@ -304,6 +304,12 @@ enum LiveFit {
         !guiding && !compactHeight(screenHeight)
     }
 
+    /// The side buttons under the open alerts' list: on a short screen they step aside while the
+    /// list is open (320 × 568 Display Zoom: header + list + side column ran ~50 pt into the dock).
+    static func sideWithAlertList(bellOpen: Bool, screenHeight: CGFloat) -> Bool {
+        !(bellOpen && compactHeight(screenHeight))
+    }
+
     // MARK: The dock (bottom row over the sheet)
 
     /// «اضغط وتكلم» pill: 200 pt big (driving), 178 pt stopped, never under 150 pt.

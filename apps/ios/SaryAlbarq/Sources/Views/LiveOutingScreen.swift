@@ -225,6 +225,7 @@ struct LiveOutingScreen: View {
         let side = exploring ? exploreSide : (guidingHUD ? controller.navSideItems : sideItems(driving: driving, ended: ended))
         /* After the end only «طريق الرجعة» stays on the map (on this phone, no network: UI-AUDIT 0.3). */
         let showSide = controller.sheetDetent == .peek && !side.isEmpty && (!ended || !exploring)
+            && LiveFit.sideWithAlertList(bellOpen: controller.bellOpen, screenHeight: full.height)
         /* iPhone SE (667 pt): the side captions drop out so the column stays above the dock (`LiveFit`). */
         let sideCaptions = LiveFit.sideCaptions(guiding: guidingHUD, screenHeight: full.height)
         ZStack {

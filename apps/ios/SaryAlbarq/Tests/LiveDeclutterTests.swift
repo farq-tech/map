@@ -183,6 +183,9 @@ final class LiveFitTests: XCTestCase {
     let mini = CGSize(width: 375, height: 812)
     let standard = CGSize(width: 393, height: 852)
     let proMax = CGSize(width: 440, height: 956)
+    /// Display Zoom: an SE at 320 × 568, a mini at 320 × 693.
+    let zoomedSE = CGSize(width: 320, height: 568)
+    let zoomedMini = CGSize(width: 320, height: 693)
 
     func testOnlyTheSEIsShort() {
         XCTAssertTrue(LiveFit.compactHeight(se.height))
@@ -190,10 +193,22 @@ final class LiveFitTests: XCTestCase {
         XCTAssertFalse(LiveFit.compactHeight(standard.height))
         XCTAssertFalse(LiveFit.compactHeight(proMax.height))
         XCTAssertFalse(LiveFit.compactHeight(0), "not measured yet: the regular layout")
+        XCTAssertTrue(LiveFit.compactHeight(zoomedSE.height), "Display Zoom")
+        XCTAssertTrue(LiveFit.compactHeight(zoomedMini.height))
+    }
+
+    func testSideStepsAsideForTheAlertListOnlyWhenShort() {
+        XCTAssertTrue(LiveFit.sideWithAlertList(bellOpen: false, screenHeight: zoomedSE.height))
+        XCTAssertFalse(LiveFit.sideWithAlertList(bellOpen: true, screenHeight: zoomedSE.height))
+        XCTAssertFalse(LiveFit.sideWithAlertList(bellOpen: true, screenHeight: se.height))
+        XCTAssertTrue(LiveFit.sideWithAlertList(bellOpen: true, screenHeight: standard.height), "unchanged on a standard phone")
+        /* 320 × 568, list open, no side: 20 + 4 + 70 header + 8 + list ends above the dock (568 − 142 − 8 − 84). */
+        XCTAssertLessThanOrEqual(20 + 4 + 70 + 8 + LiveFit.alertListMaxHeight(screenHeight: zoomedSE.height), 568 - 142 - 8 - 84)
     }
 
     func testHeaderWeatherFollowsTheRealWidth() {
         XCTAssertFalse(LiveFit.showsHeaderWeather(width: se.width, largeText: false), "375 pt: the state line needs the width")
+        XCTAssertFalse(LiveFit.showsHeaderWeather(width: zoomedSE.width, largeText: false), "Display Zoom")
         XCTAssertFalse(LiveFit.showsHeaderWeather(width: mini.width, largeText: false))
         XCTAssertTrue(LiveFit.showsHeaderWeather(width: standard.width, largeText: false), "unchanged on a standard phone")
         XCTAssertTrue(LiveFit.showsHeaderWeather(width: proMax.width, largeText: false))
@@ -232,7 +247,7 @@ final class LiveFitTests: XCTestCase {
     }
 
     func testDockNeverOverflowsANarrowPhone() {
-        for size in [se, mini, standard, proMax] {
+        for size in [zoomedSE, zoomedMini, se, mini, standard, proMax] {
             let width = size.width - 32
             for title in ["وصلنا", "وين رايحين؟", "استأنف التوجيه", "ننتظر أمير الطلعة"] {
                 for (speed, cluster) in [(LiveFit.speedBubbleWidth, CGFloat(0)), (0, LiveFit.navSpeedClusterWidth(drive: true, limit: true))] {
