@@ -40,6 +40,7 @@ final class WeatherOverlay {
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
+    private var outlookRetried = false
     private var outlookFor: (point: LngLat, at: Date, kind: WeatherOverlayKind, destination: Bool)?
     private var windTask: Task<Void, Never>?
     private var windFetchedAt: Date?
@@ -297,18 +298,36 @@ final class WeatherOverlay {
         legend.outlookLoadingText = kind == .wind ? "نجيب الرياح…" : kind == .rain ? "نقدّر اتجاه المطر…" : "نقدّر اتجاه السحاب…"
         let subject: CloudOutlookSubject = request.pointIsDestination ? .destination : .me
         outlookTask = Task { [weak self] in
+            var failed = false
             let display: CloudOutlookPresenter.Display?
             switch kind {
             case .wind:
-                display = (try? await WeatherLayerAPI.windAt(lat: p.lat, lng: p.lng)).flatMap { WindRainPresenter.wind($0, subject: subject) }
+                let w = try? await WeatherLayerAPI.windAt(lat: p.lat, lng: p.lng)
+                failed = w == nil
+                display = w.flatMap { WindRainPresenter.wind($0, subject: subject) }
             case .rain:
-                display = (try? await WeatherLayerAPI.rainMotion(lat: p.lat, lng: p.lng)).flatMap { WindRainPresenter.rain($0, subject: subject) }
+                let r = try? await WeatherLayerAPI.rainMotion(lat: p.lat, lng: p.lng)
+                failed = r == nil
+                display = r.flatMap { WindRainPresenter.rain($0, subject: subject) }
             default:
-                display = (try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)).flatMap { CloudOutlookPresenter.display($0, subject: subject) }
+                let o = try? await WeatherLayerAPI.cloudOutlook(lat: p.lat, lng: p.lng)
+                failed = o == nil
+                display = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
             }
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
             self.legend.outlook = display
+            if failed {
+                self.outlookFor = nil
+                /* One quiet retry a minute later (the server may have finished reading by then). */
+                if !self.outlookRetried {
+                    self.outlookRetried = true
+                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    if !Task.isCancelled { self.refreshOutlook() }
+                }
+            } else {
+                self.outlookRetried = false
+            }
         }
     }
 

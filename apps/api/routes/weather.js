@@ -66,7 +66,9 @@ function createWeatherRouter() {
     if (!pt || !inKsa(pt.lng, pt.lat)) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
     const body = await cloudOutlook.outlook(pt.lat, pt.lng);
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
-    return sendJson(req, res, body, 300);
+    /* Time-sensitive (age, ETA count from now): never served from a shared cache. */
+    res.set('Cache-Control', 'no-store');
+    return res.json(body);
   }));
 
   router.get('/weather/wind', wrap(async (req, res) => {
