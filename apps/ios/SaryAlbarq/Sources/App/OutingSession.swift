@@ -1162,6 +1162,9 @@ final class OutingSession: ObservableObject, Identifiable {
             if sosChoice == choice { view?.apply(.sos(userId: me, sos: r, refresh: false)) }
         }
         if sosChoice != choice, !sosWanted { sendLater(.cancelSOS, trace: ActionTrace.begin("sos-cancel")) }
+        /* Every SOS shows me on the server: a hide that is my standing choice (tapped since the
+         * SOS) goes again after it. */
+        if hideWanted { sendLater(.hide, trace: ActionTrace.begin("hide")) }
     }
 
     /// Show me again after a hide that was on the wire — unless the person tapped since `choice`.
