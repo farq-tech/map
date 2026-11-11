@@ -1142,6 +1142,12 @@ final class OutingSession: ObservableObject, Identifiable {
 
     // MARK: actions
 
+    /// Bumped on every SOS / «أنا بخير» and every hide / show I make: a late redo checks the person
+    /// did not change their mind since, from their taps, not from the view (a stale server event
+    /// for the old request can change the view without the person doing anything).
+    private var sosChoice = 0
+    private var hideChoice = 0
+
     /// A request still on the wire when the 15 s wait ran out: once it is done (whatever its
     /// answer), its retry is taken back and `redo` sends the later choice again, so that one is
     /// what stays. Skipped when the person changed their mind meanwhile (`stillWanted`).
@@ -1159,7 +1165,8 @@ final class OutingSession: ObservableObject, Identifiable {
 
     /// «أظهر موقعي» again once a hide that outlasted the wait is off the wire (unless I hid since).
     private func redoShowAfterInFlightHide(me: String) {
-        redoAfterInFlight(.hide, stillWanted: { s in s.view?.me?.hidden != true && !s.outbox.has(user: s.myUserId, outing: s.id, kind: .hide) }) { s in
+        let choice = hideChoice
+        redoAfterInFlight(.hide, stillWanted: { s in s.hideChoice == choice }) { s in
             _ = await s.run("hidden") {
                 let r = try await s.api.setHidden(s.id, hidden: false)
                 s.view?.apply(.memberHidden(userId: me, hidden: r.hidden, since: r.since, reason: "self"))
@@ -1330,6 +1337,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func setHidden(_ on: Bool) async -> Bool {
         guard let me = view?.myId, view?.status != .ended else { return false }
         let t = ActionTrace.begin(on ? "hide" : "show")
+        hideChoice &+= 1
         let ok: Bool
         if isLocal || on {
             view?.apply(.memberHidden(userId: me, hidden: on, since: on ? ISODate.string(Date()) : nil, reason: "self"))
@@ -1396,6 +1404,8 @@ final class OutingSession: ObservableObject, Identifiable {
         guard let me = view?.myId else { return false }
         let t = ActionTrace.begin("sos")
         defer { ActionTrace.uiShown(t) }
+        sosChoice &+= 1
+        let choice = sosChoice
         let wasHidden = view?.me?.hidden == true
         defer {
             if wasHidden {
@@ -1440,7 +1450,7 @@ final class OutingSession: ObservableObject, Identifiable {
             /* Still on the wire after 15 s: once it is done, the same again (unless I said «أنا بخير» since). */
             if !cleared {
                 let sosWire = wire
-                redoAfterInFlight(.cancelSOS, stillWanted: { s in s.view?.me?.sos != nil }) { s in
+                redoAfterInFlight(.cancelSOS, stillWanted: { s in s.sosChoice == choice }) { s in
                     _ = await s.run("sos") {
                         let r = try await s.api.raiseSos(s.id, fix: sosWire)
                         s.view?.apply(.sos(userId: me, sos: r, refresh: false))
@@ -1473,6 +1483,7 @@ final class OutingSession: ObservableObject, Identifiable {
     func cancelSOS() async {
         guard let me = view?.myId else { return }
         let t = ActionTrace.begin("sos-cancel")
+        sosChoice &+= 1
         mesh.announce(.sosClear)
         view?.apply(.sos(userId: me, sos: nil, refresh: false))
         ActionTrace.uiShown(t)
