@@ -40,6 +40,7 @@ final class WeatherOverlay {
     private var framesTask: Task<Void, Never>?
     private var timer: Timer?
     private var outlookTask: Task<Void, Never>?
+    private var outlookRetried = false
     private var outlookFor: (point: LngLat, at: Date, destination: Bool)?
     private var frameIndex = 0
     private var pauseTicks = 0
@@ -271,7 +272,17 @@ final class WeatherOverlay {
             guard let self, !Task.isCancelled else { return }
             self.legend.outlookLoading = false
             self.legend.outlook = o.flatMap { CloudOutlookPresenter.display($0, subject: subject) }
-            if o == nil { self.outlookFor = nil }
+            if o == nil {
+                self.outlookFor = nil
+                /* One quiet retry a minute later (the server may have finished reading by then). */
+                if !self.outlookRetried {
+                    self.outlookRetried = true
+                    try? await Task.sleep(nanoseconds: 60_000_000_000)
+                    if !Task.isCancelled { self.refreshOutlook() }
+                }
+            } else {
+                self.outlookRetried = false
+            }
         }
     }
 
