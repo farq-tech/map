@@ -492,6 +492,9 @@ final class OutingSession: ObservableObject, Identifiable {
     /// GPS and drops any fix waiting for the network, and the share intent stays,
     /// so it resumes on return.
     func foreground(_ active: Bool) {
+        /* A closed session owns no GPS: coming back to the screen must not re-arm the foreground watch
+         * (nothing would ever stop it again — the status-bar location arrow stayed on, issue #163). */
+        guard !didClose else { return }
         visible = active
         location.setOffScreen(!active)
         sendPresenceHint(foreground: active)
