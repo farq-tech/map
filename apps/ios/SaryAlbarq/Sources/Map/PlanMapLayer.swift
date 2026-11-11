@@ -119,11 +119,16 @@ final class PinSlot<V: View> {
     private(set) var annotation: ViewAnnotation?
     private var host: UIHostingController<V>?
     private var key: String?
+    /// Where the annotation is (re-placing it at the same point every SwiftUI pass is wasted work).
+    private var point: LngLat?
 
     func set(_ point: LngLat?, key: String, on map: MapView, anchor: ViewAnnotationAnchor = .bottom, priority: Int = 110, view: () -> V) {
         guard let point else { clear(); return }
         if key == self.key, let a = annotation {
-            a.annotatedFeature = .geometry(Point(point.coordinate))
+            if point != self.point {
+                a.annotatedFeature = .geometry(Point(point.coordinate))
+                self.point = point
+            }
             return
         }
         clear()
@@ -138,6 +143,7 @@ final class PinSlot<V: View> {
         annotation = a
         host = h
         self.key = key
+        self.point = point
     }
 
     func clear() {
@@ -145,6 +151,7 @@ final class PinSlot<V: View> {
         annotation = nil
         host = nil
         key = nil
+        point = nil
     }
 }
 
@@ -153,6 +160,8 @@ final class PinSlot<V: View> {
 final class LivePlanDrawing {
     var plan = MapPlan()
     var layerKey: String?
+    /// The route last sent to the plan source (nil: send again).
+    var drawnRoute: [LngLat]?
     let destination = PinSlot<PlanDestinationPin>()
     let picked = PinSlot<PlanPickedPin>()
     var longPress: Cancelable?
@@ -173,8 +182,13 @@ extension OutingMapboxView.Coordinator {
         if force || key != planDrawing.layerKey || !m.layerExists(withId: PlanMapStyle.line) {
             PlanMapStyle.ensureLayers(m, emphasised: p.emphasised, night: theme.night)
             planDrawing.layerKey = key
+            planDrawing.drawnRoute = nil
         }
-        PlanMapStyle.update(m, route: p.route)
+        /* A picked point or the destination changing does not touch the route line. */
+        if force || planDrawing.drawnRoute != p.route {
+            PlanMapStyle.update(m, route: p.route)
+            planDrawing.drawnRoute = p.route
+        }
         let theme = self.theme
         planDrawing.destination.set(p.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }, key: "\(p.destination?.name ?? "")|\(theme.night)", on: map) {
             PlanDestinationPin(name: p.destination?.name ?? "الوجهة", theme: theme)
