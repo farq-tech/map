@@ -404,9 +404,11 @@ struct OutingMapboxView: UIViewRepresentable {
                 self.refreshWaterways()
             }.store(in: &cancelables)
             map.mapboxMap.onCameraChanged.observe { [weak self] _ in
-                self?.layoutChips()
-                self?.project()
-                self?.reportCenter()
+                guard let self else { return }
+                /* A display-link frame that moves the camera lays the chips out itself once it is done. */
+                if !self.inFrame { self.layoutChips() }
+                self.project()
+                self.reportCenter()
             }.store(in: &cancelables)
             /* Chips live in our own overlay (over the map, under Mapbox's ornaments) so the
              * declutter layout can move, stack and fold them in the same frame as the camera. */
@@ -1539,8 +1541,13 @@ struct OutingMapboxView: UIViewRepresentable {
             link = l
         }
 
+        /// True inside `step()`: it ends with `layoutChips()`, so camera changes it causes need no layout of their own.
+        private var inFrame = false
+
         @objc private func step() {
             guard let m = map?.mapboxMap else { return }
+            inFrame = true
+            defer { inFrame = false }
             let now = CACurrentMediaTime()
             var moving = false
             var cars: [MotionFX.Car] = []
