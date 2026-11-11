@@ -160,6 +160,8 @@ struct OutingMapboxView: UIViewRepresentable {
     var hiRes = HiResRequest.off
     /// Fresh device location for the always-on map direction to the Kaaba (nil hides it).
     var qiblaOrigin: LngLat?
+    /// The person's own recent fix (the cloud outlook's point when no destination is chosen).
+    var userPoint: LngLat?
 
     static let styleURI = StyleURI(rawValue: "mapbox://styles/mapbox/standard-satellite")!
 
@@ -230,7 +232,9 @@ struct OutingMapboxView: UIViewRepresentable {
         c.setExplore(explore)
         HiResImagery.of(map).update(hiRes)
         /* «السحاب الآن» / «وين نزل مطر» / «وين ربّع» (exploration's «الطبقات»). */
-        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome))
+        let cloudDest = plan.picked ?? plan.destination.map { LngLat(lng: $0.lng, lat: $0.lat) }
+        WeatherOverlay.of(map).update(WeatherOverlayRequest(active: explore.active, chrome: chrome,
+                                                            point: cloudDest ?? userPoint, pointIsDestination: cloudDest != nil))
         QiblaMapOverlay.of(map).update(origin: qiblaOrigin)
         if let req = camera, req.id != c.lastCamera {
             c.lastCamera = req.id
