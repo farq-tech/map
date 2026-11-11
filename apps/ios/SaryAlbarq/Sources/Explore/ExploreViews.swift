@@ -485,7 +485,8 @@ struct TracksSheet: View {
                     }
                 }
             }
-            Text("الخطة نفسها تُستورد وتُصدّر من «الرحلة» ← «الخطة وقائمة التجهيز».").saryText(.footnote).foregroundStyle(p.textTertiary)
+            /* Named by the screen that has it (the live tabs are being renamed): the plan editor imports, «ملف المسار» exports. */
+            Text("مسار الخطة نفسه يُستورد من محرّر «خطة الطلعة»، ويُصدّر من «ملف المسار» في تفاصيل الطلعة.").saryText(.footnote).foregroundStyle(p.textTertiary)
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: RouteFile.contentTypes, allowsMultipleSelection: false) { r in
             if case let .success(urls) = r, let u = urls.first { importFile(u) }
