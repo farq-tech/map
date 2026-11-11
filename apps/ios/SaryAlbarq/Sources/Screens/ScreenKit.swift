@@ -68,6 +68,30 @@ extension SaryPage where Trailing == EmptyView {
     }
 }
 
+/// Layout math for fitting fixed design sizes on every iPhone (unit-tested in DesignSystemTests).
+enum SaryFit {
+    /// The visible height of a page's scroll area on a standard 393×852 phone and on a mini; at
+    /// or above it, design sizes are kept as they are.
+    static let referenceHeight: CGFloat = 640
+
+    /// A fixed design height (map previews, track maps) in a container `container` points tall:
+    /// unchanged on standard, mini and Pro Max phones, scaled down proportionally (never below
+    /// `minScale`) on a short screen such as a 375×667 SE, so the buttons under it stay in reach.
+    static func height(_ design: CGFloat, container: CGFloat, minScale: CGFloat = 0.7) -> CGFloat {
+        guard container.isFinite, container > 0 else { return design }
+        let k = min(1, max(minScale, container / referenceHeight))
+        return (design * k).rounded()
+    }
+}
+
+extension View {
+    /// `.frame(height: design)` that shrinks on short screens (see `SaryFit.height`), measured
+    /// against the nearest scroll view / sheet / window.
+    func saryFitHeight(_ design: CGFloat, minScale: CGFloat = 0.7) -> some View {
+        containerRelativeFrame(.vertical) { length, _ in SaryFit.height(design, container: length, minScale: minScale) }
+    }
+}
+
 /// A full-height column that lays out exactly like a plain `VStack` filling the screen (its
 /// `Spacer`s spread out) whenever it fits, and scrolls instead of clipping or overlapping when
 /// it does not: a 375×667 SE, or large Dynamic Type. `bottom` stays pinned above the home

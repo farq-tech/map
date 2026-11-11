@@ -49,7 +49,7 @@ struct PlanDetailsSections: View {
                         PlanMapView(route: tp.points, destination: tp.destination, interactive: false,
                                     camera: PlanCamera(kind: .fit(tp.points + (tp.destination.map { [LngLat(lng: $0.lng, lat: $0.lat)] } ?? [])), id: tp.points.count &+ (tp.updated_at?.hashValue ?? 0)),
                                     theme: theme)
-                            .frame(height: 170)
+                            .saryFitHeight(170)
                             .clipShape(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous))
                             .allowsHitTesting(false)
                             .accessibilityIdentifier("details.planMap")

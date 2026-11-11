@@ -75,8 +75,12 @@ struct LivePlanModalView: View {
                 briefCard(p, name: name, plan: plan, close: close)
             case .me:
                 if let f = CoordinateShare.Fix(location.lastFix) {
-                    PointCard(subject: .me(f), actions: actions(plan), close: close)
-                        .presentationDetents([.height(460), .large])
+                    /* Scrolls when the card is taller than the detent (an SE, large text, every action). */
+                    ScrollView {
+                        PointCard(subject: .me(f), actions: actions(plan), close: close)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .presentationDetents([.height(460), .large])
                 } else {
                     SaryStateView(kind: .empty(title: "ما عندنا موقعك بعد", message: "فعّل الموقع وانتظر قليلًا.", systemImage: SaryIcon.gpsOff))
                         .presentationDetents([.medium])

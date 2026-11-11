@@ -207,7 +207,7 @@ struct TripSummaryView: View {
                 } else if let trail = model.myTrailPoints(outingId), trail.points.count >= 2 {
                     SarySection(title: "مساري", footer: "مرسوم من جوالك فقط. ما نرسله لأحد، وما يدخل في «شارك ملخصي».") {
                         TrailSketch(trail: trail, color: theme.palette.accent)
-                            .frame(height: 180)
+                            .saryFitHeight(180)
                             .padding(.vertical, theme.space(.s))
                             .accessibilityIdentifier("summary.trail")
                     }
@@ -377,7 +377,7 @@ struct TrackSummaryCard: View {
                 .padding(theme.space(.s))
                 .accessibilityIdentifier("summary.trackOpen")
             }
-            .frame(height: 300)
+            .saryFitHeight(300)
             .contentShape(Rectangle())
             .onTapGesture(perform: open)
             TrackStatsCard(stats: subject.stats, speedLegend: subject.line.hasSpeeds, follow: follow)
@@ -512,7 +512,7 @@ struct TripSummarySection: View {
                         TrailSketch(trail: trail, color: p.accent)
                     }
                 }
-                .frame(height: 200)
+                .saryFitHeight(200)
                 .clipShape(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous))
                 .padding(.vertical, theme.space(.s))
                 .accessibilityIdentifier("summary.route")

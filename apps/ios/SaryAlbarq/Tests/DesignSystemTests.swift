@@ -329,3 +329,28 @@ final class SarySOSHeroFitTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(SarySOSHeroMetrics.regular.ring - c.ring, 60)
     }
 }
+
+/// Fitting fixed design heights on every iPhone (`SaryFit`, ScreenKit).
+final class SaryFitTests: XCTestCase {
+    func testDesignHeightsAreKeptOnStandardMiniAndProMax() {
+        // Visible scroll heights of a page / large sheet: 393×852 ≈ 683, mini ≈ 652, Pro Max ≈ 780.
+        for container in [683.0, 652.0, 780.0, 640.0] as [CGFloat] {
+            XCTAssertEqual(SaryFit.height(300, container: container), 300, "\(container)")
+            XCTAssertEqual(SaryFit.height(200, container: container), 200, "\(container)")
+        }
+    }
+
+    func testDesignHeightsShrinkProportionallyOnAnSE() {
+        // SE page: 667 − 20 status bar − ~76 header ≈ 571.
+        XCTAssertEqual(SaryFit.height(300, container: 571), (300 * 571 / 640 as CGFloat).rounded())
+        XCTAssertEqual(SaryFit.height(200, container: 571), (200 * 571 / 640 as CGFloat).rounded())
+        XCTAssertLessThan(SaryFit.height(200, container: 571), 200)
+    }
+
+    func testDesignHeightsAreBounded() {
+        XCTAssertEqual(SaryFit.height(200, container: 100), 140, "never below 0.7×")
+        XCTAssertEqual(SaryFit.height(200, container: 100, minScale: 0.5), 100)
+        XCTAssertEqual(SaryFit.height(200, container: 0), 200, "an unmeasured container keeps the design size")
+        XCTAssertEqual(SaryFit.height(200, container: .infinity), 200)
+    }
+}
