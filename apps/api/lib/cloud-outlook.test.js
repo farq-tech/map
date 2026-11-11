@@ -104,6 +104,8 @@ test('HTTP: /weather/clouds/outlook — bad point 400; fake WMS gives a motion e
     let r = await fetch(`${base}/api/weather/clouds/outlook?lat=0&lng=0`);
     assert.equal(r.status, 400);
     assert.equal((await r.json()).error, 'bad_point');
+    r = await fetch(`${base}/api/weather/clouds/outlook?lat=25.2&lng=55.3`); // Dubai: inside the box, outside the Kingdom
+    assert.equal(r.status, 400);
     r = await fetch(`${base}/api/weather/clouds/outlook?lat=abc&lng=46`);
     assert.equal(r.status, 400);
     r = await fetch(`${base}/api/weather/clouds/outlook?lat=24.7&lng=46.7`);

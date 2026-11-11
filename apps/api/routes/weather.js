@@ -21,7 +21,7 @@ const cloudOutlook = require('../lib/weather/cloud-outlook');
 const rain = require('../lib/weather/rain');
 const green = require('../lib/weather/green');
 const desert = require('../lib/weather/desert-search');
-const { KSA, parseBbox, parseNear } = require('../lib/weather/mercator');
+const { KSA, parseBbox, parseNear, inKsa } = require('../lib/weather/mercator');
 
 function sendJson(req, res, body, maxAge) {
   const payload = JSON.stringify(body);
@@ -58,7 +58,7 @@ function createWeatherRouter() {
 
   router.get('/weather/clouds/outlook', wrap(async (req, res) => {
     const pt = parseNear(`${req.query.lat},${req.query.lng}`);
-    if (!pt) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
+    if (!pt || !inKsa(pt.lng, pt.lat)) return res.status(400).json({ ok: false, error: 'bad_point', message_ar: 'الموقع خارج المملكة أو غير مقروء.' });
     const body = await cloudOutlook.outlook(pt.lat, pt.lng);
     if (!body.ok) return res.status(503).json({ ...body, message_ar: 'ما قدرنا نقدّر حركة السحاب الحين.' });
     return sendJson(req, res, body, 300);
