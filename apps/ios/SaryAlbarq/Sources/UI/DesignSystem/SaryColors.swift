@@ -176,6 +176,13 @@ struct SaryPalette: Equatable {
     var liveText: Color
     var warning: Color
     var warningText: Color
+    /// Ink on a `warning` fill (hazard badges).
+    var onWarning: Color
+    /// Navigation blue: the route line, maneuver arrows and nav selection.
+    /// Dimmed at night like the accent.
+    var navBlue: Color
+    /// Ink on a `navBlue` fill.
+    var onNavBlue: Color
     /// Grey for anything that is NOT live (stale, paused, unknown).
     var stale: Color
 
@@ -197,7 +204,15 @@ struct SaryPalette: Equatable {
         var accentText: UInt32
         var surface: UInt32
         var chromeOpaque: UInt32
+        var warningText: UInt32
+        var navBlue: UInt32
+        var onNavBlue: UInt32
     }
+
+    /// Navigation blue for day / dark (also the route-line colour on the map).
+    static let navBlueDay: UInt32 = 0x2B7BF0
+    /// Dimmed navigation blue for desert night.
+    static let navBlueNight: UInt32 = 0x2463BF
 
     // MARK: Dark Sand (default)
 
@@ -222,13 +237,17 @@ struct SaryPalette: Equatable {
             liveText: Color(rgb: 0x45C083),
             warning: Color(rgb: 0xF2B630),
             warningText: Color(rgb: 0xF2B630),
+            onWarning: Color(rgb: 0x1A1612),
+            navBlue: Color(rgb: SaryPalette.navBlueDay),
+            onNavBlue: Color(rgb: 0xFFFFFF),
             stale: Color(rgb: 0x8C8478),
             chromeOpaque: Color(rgb: 0x241F1A),
             chromeTint: Color(rgb: 0x1C1814, opacity: 0.55),
             scrim: Color.black.opacity(0.55),
             shadow: Color.black.opacity(0.35),
             raw: .init(background: 0x1A1612, textPrimary: 0xF4EFE6, textSecondary: 0xB9AE9C,
-                       accentText: accent.fill, surface: 0x2B251F, chromeOpaque: 0x241F1A)
+                       accentText: accent.fill, surface: 0x2B251F, chromeOpaque: 0x241F1A,
+                       warningText: 0xF2B630, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF)
         )
     }
 
@@ -255,13 +274,17 @@ struct SaryPalette: Equatable {
             liveText: Color(rgb: 0x1A7347),
             warning: Color(rgb: 0xE2A11C),
             warningText: Color(rgb: 0x8A5C00),
+            onWarning: Color(rgb: 0x1F1A14),
+            navBlue: Color(rgb: SaryPalette.navBlueDay),
+            onNavBlue: Color(rgb: 0xFFFFFF),
             stale: Color(rgb: 0x8A8072),
             chromeOpaque: Color(rgb: 0xFFFCF6),
             chromeTint: Color(rgb: 0xFFFBF3, opacity: 0.55),
             scrim: Color.black.opacity(0.40),
             shadow: Color(rgb: 0x3A2A14, opacity: 0.18),
             raw: .init(background: 0xF5EFE4, textPrimary: 0x1F1A14, textSecondary: 0x5C5244,
-                       accentText: accent.lightText, surface: 0xFFFFFF, chromeOpaque: 0xFFFCF6)
+                       accentText: accent.lightText, surface: 0xFFFFFF, chromeOpaque: 0xFFFCF6,
+                       warningText: 0x8A5C00, navBlue: SaryPalette.navBlueDay, onNavBlue: 0xFFFFFF)
         )
     }
 
@@ -288,13 +311,17 @@ struct SaryPalette: Equatable {
             liveText: Color(rgb: 0x3BAA74),
             warning: Color(rgb: 0xC99A2A),
             warningText: Color(rgb: 0xC99A2A),
+            onWarning: Color(rgb: 0x0D0C0B),
+            navBlue: Color(rgb: SaryPalette.navBlueNight),
+            onNavBlue: Color(rgb: 0xF4EFE6),
             stale: Color(rgb: 0x6E675D),
             chromeOpaque: Color(rgb: 0x15130F),
             chromeTint: Color(rgb: 0x0D0C0B, opacity: 0.62),
             scrim: Color.black.opacity(0.65),
             shadow: Color.black.opacity(0.5),
             raw: .init(background: 0x0D0C0B, textPrimary: 0xDCD4C6, textSecondary: 0x9C9282,
-                       accentText: accent.fill, surface: 0x1A1714, chromeOpaque: 0x15130F)
+                       accentText: accent.fill, surface: 0x1A1714, chromeOpaque: 0x15130F,
+                       warningText: 0xC99A2A, navBlue: SaryPalette.navBlueNight, onNavBlue: 0xF4EFE6)
         )
     }
 

@@ -75,7 +75,7 @@ struct SaryMapControlFace: View {
                     .frame(minWidth: 18, minHeight: 18)
                     .background(Capsule().fill(theme.palette.accent))
                     .overlay(Capsule().stroke(theme.palette.background, lineWidth: 1.5))
-                    .offset(x: 4, y: -4)
+                    .saryBadgeOutset(trailing: 4, top: 4)
                     .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             }
         }

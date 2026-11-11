@@ -99,10 +99,8 @@ enum PTTChannels {
 
     static func isPublic(_ id: String) -> Bool { publicIds.contains(id) }
 
-    private static let digits: [Character] = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"]
-    static func arabicDigits(_ s: String) -> String {
-        String(s.map { c in c.wholeNumberValue.map { digits[$0] } ?? c })
-    }
+    /// Channel ids / counts in Arabic-Indic digits (`SaryFormat`; a "." stays a dot).
+    static func arabicDigits(_ s: String) -> String { SaryFormat.digits(s, decimalSeparator: false) }
 
     /// «تردد ٣»
     static func publicName(_ id: String) -> String { "تردد \(arabicDigits(id))" }

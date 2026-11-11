@@ -63,7 +63,8 @@ final class NavMapDrawer {
     static let offSource = "sary-nav-offroad"
     static let layerIds = ["sary-nav-alt-casing", "sary-nav-alt", "sary-nav-main-casing", "sary-nav-main",
                            "sary-nav-grid-snap-casing", "sary-nav-grid-snap", "sary-nav-off-casing", "sary-nav-off"]
-    static let routeBlue = "#2B7BF0"
+    /// `SaryPalette.navBlueDay` as a style colour ("#2B7BF0").
+    static let routeBlue = String(format: "#%06X", SaryPalette.navBlueDay)
     /// Traffic bands on the chosen route: free (blue), slow (orange), heavy (red), standstill (dark red).
     static let trafficColors = ["#F08A24", "#E0362C", "#8E1B1B"]
 
@@ -267,17 +268,17 @@ struct NavTargetPin: View {
                     .foregroundStyle(p.textPrimary)
                     .lineLimit(1)
                 if let note {
-                    Text(note).saryText(.micro, weight: .bold).foregroundStyle(p.warning).lineLimit(1)
+                    Text(note).saryText(.micro, weight: .bold).foregroundStyle(p.warningText).lineLimit(1)
                         .accessibilityIdentifier("map.navTarget.stale")
                 }
             }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Capsule().fill(p.chromeOpaque))
-                .overlay(Capsule().stroke(Color(rgb: 0x2B7BF0), lineWidth: 2))
+                .overlay(Capsule().stroke(p.navBlue, lineWidth: 2))
             Image(systemName: "flag.circle.fill")
                 .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(Color.white, Color(rgb: 0x2B7BF0))
+                .foregroundStyle(p.onNavBlue, p.navBlue)
                 .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
         }
         .frame(maxWidth: 180)
@@ -299,12 +300,12 @@ struct NavRouteLabel: View {
         Button(action: tap) {
             Text(text)
                 .saryNumber(.footnote, weight: .bold)
-                .foregroundStyle(selected ? Color.white : p.textPrimary)
+                .foregroundStyle(selected ? p.onNavBlue : p.textPrimary)
                 .lineLimit(1)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(selected ? Color(rgb: 0x2B7BF0) : p.chromeOpaque))
-                .overlay(Capsule().stroke(selected ? Color.white : Color(rgb: 0x9DB8E6), lineWidth: 2))
+                .background(Capsule().fill(selected ? p.navBlue : p.chromeOpaque))
+                .overlay(Capsule().stroke(selected ? p.onNavBlue : Color(rgb: 0x9DB8E6), lineWidth: 2))
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
         }
         .buttonStyle(.plain)

@@ -69,8 +69,7 @@ struct ChatEntryRow: View {
                 }
                 Spacer(minLength: 0)
                 if n > 0 { ChatBadge(count: n) }
-                Image(systemName: "chevron.backward").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
-                    .flipsForRightToLeftLayoutDirection(true)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())

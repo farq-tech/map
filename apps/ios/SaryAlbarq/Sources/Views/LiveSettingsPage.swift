@@ -188,7 +188,7 @@ struct LiveSettingsPage: View {
 
     private func row(_ title: String, id: String, last: Bool = false, action: @escaping () -> Void) -> some View {
         SettingsRow(title: title, last: last) {
-            Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.textSecondary)
+            Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.palette.textSecondary)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: action)

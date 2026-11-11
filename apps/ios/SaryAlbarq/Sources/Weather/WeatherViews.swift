@@ -74,7 +74,7 @@ struct WeatherCardView: View {
             Text(ui.title).saryText(.caption, weight: .bold).foregroundStyle(theme.palette.textSecondary).lineLimit(1)
             Spacer(minLength: 4)
             if tap != nil {
-                Image(systemName: "chevron.backward").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
             }
         }
     }

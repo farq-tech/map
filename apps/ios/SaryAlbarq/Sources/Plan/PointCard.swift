@@ -287,7 +287,7 @@ struct CoordinateSearchSheet: View {
                                     Text(CoordinateShare.displayDMS(parsed.point)).saryNumber(.footnote).foregroundStyle(p.textSecondary)
                                 }
                                 Spacer()
-                                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+                                Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
                             }
                             .frame(minHeight: theme.minTarget)
                             .contentShape(Rectangle())

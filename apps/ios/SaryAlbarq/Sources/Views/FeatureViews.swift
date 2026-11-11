@@ -53,7 +53,7 @@ struct WaypointsSection: View {
                     HStack {
                         Text("نقاط من طلعات سابقة").saryText(.subhead, weight: .bold).foregroundStyle(p.accentText)
                         Spacer()
-                        Image(systemName: "chevron.forward").font(.system(size: 12, weight: .bold)).foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).font(.system(size: 12, weight: .bold)).foregroundStyle(p.textTertiary)
                     }
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())

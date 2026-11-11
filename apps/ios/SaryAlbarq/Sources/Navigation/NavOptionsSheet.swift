@@ -13,23 +13,18 @@ struct NavOptionsSheet: View {
         let p = theme.palette
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             HStack(spacing: theme.space(.m)) {
-                SaryRowIcon(systemImage: icon, color: Color(rgb: 0x2B7BF0))
+                SaryRowIcon(systemImage: icon, color: p.navBlue)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("الملاحة إلى").saryText(.caption, weight: .bold).foregroundStyle(p.textSecondary)
                     Text(nav.target?.name ?? "").saryText(.title2).foregroundStyle(p.textPrimary).lineLimit(2)
                         .accessibilityIdentifier("nav.options.target")
                     if let note = nav.target?.staleNote() {
-                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warning)
+                        Label(note, systemImage: "clock.badge.exclamationmark").saryText(.footnote, weight: .bold).foregroundStyle(p.warningText)
                             .accessibilityIdentifier("nav.options.stale")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(action: cancel) {
-                    Image(systemName: SaryIcon.close).font(.system(size: 15, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
-                }
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("nav.options.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "nav.options.close", visual: 36, action: cancel)
             }
 
             ScrollView {
@@ -123,7 +118,7 @@ struct NavOptionsSheet: View {
             HStack(spacing: theme.space(.m)) {
                 Image(systemName: on ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(on ? Color(rgb: 0x2B7BF0) : p.textTertiary)
+                    .foregroundStyle(on ? p.navBlue : p.textTertiary)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(NavText.remaining(seconds: r.durationS)).saryNumber(.headline, weight: .heavy).foregroundStyle(p.textPrimary)
@@ -143,8 +138,8 @@ struct NavOptionsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(theme.space(.m))
-            .sarySurface(radius: SaryRadius.m, fill: on ? Color(rgb: 0x2B7BF0).opacity(0.12) : p.surface)
-            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(on ? Color(rgb: 0x2B7BF0) : .clear, lineWidth: 2))
+            .sarySurface(radius: SaryRadius.m, fill: on ? p.navBlue.opacity(0.12) : p.surface)
+            .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(on ? p.navBlue : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(on ? "nav.route.selected" : "nav.route")
@@ -161,10 +156,10 @@ struct NavOptionsSheet: View {
         return HStack(alignment: .top, spacing: theme.space(.m)) {
             Image(systemName: "arrow.up")
                 .font(.system(size: 18, weight: .black))
-                .foregroundStyle(Color(rgb: 0x16110B))
+                .foregroundStyle(p.onWarning)
                 .rotationEffect(.degrees(leg.bearing))
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(Color(rgb: 0xF5B83D)))
+                .background(Circle().fill(p.warning))
                 .environment(\.layoutDirection, .leftToRight)
             VStack(alignment: .leading, spacing: 2) {
                 Text(whole ? "اتجاه مباشر: \(SaryFormat.distance(meters: leg.distanceM)) باتجاه \(NavText.compassDefinite(leg.bearing))" : NavOffRoad.summary(leg))
@@ -175,7 +170,7 @@ struct NavOptionsSheet: View {
             }
         }
         .padding(theme.space(.m))
-        .sarySurface(radius: SaryRadius.m, fill: Color(rgb: 0xF5B83D).opacity(0.14))
+        .sarySurface(radius: SaryRadius.m, fill: p.warning.opacity(0.14))
     }
 }
 
@@ -230,7 +225,7 @@ struct NavTargetPicker: View {
                                 if case .failure = r.result {
                                     Image(systemName: "clock.badge.exclamationmark").foregroundStyle(p.warningText)
                                 } else {
-                                    Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary)
+                                    Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
                                 }
                             }
                             .padding(theme.space(.m))

@@ -42,7 +42,7 @@ struct StoryComposerView: View {
                         Text(photos.isEmpty ? "أضف صورًا" : "غيّر الصور (\(SaryFormat.number(photos.count)))")
                             .saryText(.body, weight: .medium).foregroundStyle(p.textPrimary)
                         Spacer()
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .semibold)).foregroundStyle(p.textTertiary)
                     }
                     .frame(minHeight: theme.minTarget)
                     .contentShape(Rectangle())

@@ -191,13 +191,7 @@ struct LiveActionSheet: View {
                     Text("المزيد").font(.sary(18, .bold)).foregroundStyle(p.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     Spacer()
-                    Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textPrimary)
-                            .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text("إغلاق"))
-                    .accessibilityIdentifier("outing-actions-close")
+                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "outing-actions-close", visual: 36, action: close)
                 }
                 ForEach(groups) { g in
                     VStack(alignment: .leading, spacing: 4) {

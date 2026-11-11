@@ -286,7 +286,7 @@ struct SOSCountdownView: View {
                         .font(.sary(22, .heavy))
                         .foregroundStyle(p.emergency)
                         .frame(maxWidth: .infinity, minHeight: 64)
-                        .background(Capsule().fill(Color.white))
+                        .background(Capsule().fill(p.onEmergency))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityIdentifier("sos-countdown-cancel")
@@ -356,7 +356,7 @@ struct SaryMySOSStrip: View {
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
                     .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(p.onEmergency))
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityIdentifier("outing-sos-ok")
@@ -367,7 +367,7 @@ struct SaryMySOSStrip: View {
                         .foregroundStyle(p.emergency)
                         .padding(.horizontal, theme.space(.m))
                         .frame(minHeight: theme.minTarget)
-                        .background(Capsule().fill(Color.white.opacity(0.85)))
+                        .background(Capsule().fill(p.onEmergency.opacity(0.85)))
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("اطلب إنجاد (واتساب)"))
@@ -429,7 +429,7 @@ struct SaryFriendSOSStrip: View {
                     .foregroundStyle(p.emergency)
                     .padding(.horizontal, theme.space(.l))
                     .frame(minHeight: theme.minTarget)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(p.onEmergency))
             }
             .buttonStyle(SaryPressStyle())
         }
@@ -465,11 +465,11 @@ struct SaryFriendSOSAlert: View {
             VStack(spacing: theme.space(.xl)) {
                 Spacer(minLength: 0)
                 ZStack {
-                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 2)
+                    Circle().stroke(p.onEmergency.opacity(0.25), lineWidth: 2)
                         .frame(width: 190, height: 190)
                         .scaleEffect(pulse ? 1.12 : 0.92)
                         .opacity(pulse ? 0 : 1)
-                    Circle().fill(Color.white.opacity(0.1)).frame(width: 150, height: 150)
+                    Circle().fill(p.onEmergency.opacity(0.1)).frame(width: 150, height: 150)
                     SaryAvatar(name: alert.name, color: alert.color, size: 104)
                 }
                 .accessibilityHidden(true)
@@ -477,7 +477,7 @@ struct SaryFriendSOSAlert: View {
                     Label("طوارئ", systemImage: SaryIcon.sos)
                         .saryText(.headline)
                         .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(Capsule().fill(Color.white.opacity(0.18)))
+                        .background(Capsule().fill(p.onEmergency.opacity(0.18)))
                     Text(alert.name)
                         .saryText(.display)
                         .multilineTextAlignment(.center)
@@ -492,7 +492,7 @@ struct SaryFriendSOSAlert: View {
                 if alert.distanceMeters != nil || alert.bearingDegrees != nil {
                     HStack(spacing: theme.space(.m)) {
                         if let b = alert.bearingDegrees {
-                            SaryBearingArrow(degrees: b, color: .white, size: 34)
+                            SaryBearingArrow(degrees: b, color: p.onEmergency, size: 34)
                         }
                         if let d = alert.distanceMeters {
                             Text(SaryFormat.distance(meters: d)).saryNumber(.title)
@@ -513,7 +513,7 @@ struct SaryFriendSOSAlert: View {
                             .saryText(.headline)
                             .foregroundStyle(p.emergency)
                             .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
-                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.white))
+                            .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(p.onEmergency))
                     }
                     .buttonStyle(SaryPressStyle())
                     .accessibilityIdentifier("sos-alert-show")
@@ -521,17 +521,17 @@ struct SaryFriendSOSAlert: View {
                         Button(action: call) {
                             Label("اتصل به", systemImage: SaryIcon.phone)
                                 .saryText(.headline)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(p.onEmergency)
                                 .frame(maxWidth: .infinity, minHeight: max(theme.buttonHeight, 58))
                                 .background(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).fill(Color.black.opacity(0.22)))
-                                .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(Color.white.opacity(0.5), lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: SaryRadius.m, style: .continuous).stroke(p.onEmergency.opacity(0.5), lineWidth: 1))
                         }
                         .buttonStyle(SaryPressStyle())
                         .accessibilityIdentifier("sos-alert-call")
                     }
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(p.onEmergency)
             .padding(.horizontal, theme.space(.xxl))
             .padding(.vertical, theme.space(.xl))
         }

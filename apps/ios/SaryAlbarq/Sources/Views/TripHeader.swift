@@ -199,7 +199,7 @@ struct TripHeader: View {
                             .padding(.horizontal, 4)
                             .frame(minWidth: 16, minHeight: 16)
                             .background(Capsule().fill(p.accent))
-                            .offset(x: 2, y: 4)
+                            .saryBadgeOutset(trailing: 2, top: -4)
                     }
                 }
                 .contentShape(Rectangle())

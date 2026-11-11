@@ -22,7 +22,7 @@ extension LiveOutingController {
         func away(_ p: LngLat) -> String? { my.map { SaryFormat.distance(meters: Vehicle.distanceMeters($0, p)) } }
         if case let .success(t) = NavTargets.destination(navDestination()) {
             rows.append(.init(id: "destination", title: "الوجهة", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),
-                              icon: "flag.checkered", color: Color(rgb: 0x2B7BF0), result: .success(t)))
+                              icon: "flag.checkered", color: Color(rgb: SaryPalette.navBlueDay), result: .success(t)))
         }
         if case let .success(t) = NavTargets.rally(rallyPoint) {
             rows.append(.init(id: "rally", title: "نقطة التجمع", subtitle: [t.name, away(t.position)].compactMap { $0 }.joined(separator: " · "),

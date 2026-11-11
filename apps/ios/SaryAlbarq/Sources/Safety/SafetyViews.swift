@@ -200,7 +200,7 @@ struct MyStuckStrip: View {
             if let enjad {
                 Button(action: enjad) {
                     Text("إنجاد").saryText(.callout, weight: .heavy)
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(p.onEmergency)
                         .padding(.horizontal, theme.space(.m))
                         .frame(minHeight: theme.minTarget)
                         .background(Capsule().fill(p.emergency))

@@ -20,7 +20,7 @@ struct GroupAudioEntryCard: View {
                         .accessibilityIdentifier("radio.entry.subtitle")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
             }
             .padding(theme.space(.m))
             .contentShape(Rectangle())
@@ -125,7 +125,7 @@ struct GroupAudioPromoCard: View {
                         Text("للكل، والشاشة مقفلة، وعلى سماعات السيارة").saryText(.footnote).foregroundStyle(p.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                    Image(systemName: SaryIcon.disclosure).font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
                 }
                 .contentShape(Rectangle())
             }
@@ -156,12 +156,7 @@ struct GroupAudioSheet: View {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("radio.sheet")
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
-                        .frame(width: theme.minTarget, height: theme.minTarget)
-                }
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("radio.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "radio.close", visual: 36) { dismiss() }
             }
             ScrollView {
                 VStack(spacing: theme.space(.m)) {

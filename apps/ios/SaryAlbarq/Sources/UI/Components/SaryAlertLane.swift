@@ -285,6 +285,9 @@ struct SaryVoiceBanner: View {
                         Circle().stroke(p.textTertiary, lineWidth: 1)
                     }
                 }
+                /* Small circle, full touch target (like `SaryDismissButton`). */
+                .frame(width: theme.minTarget, height: theme.minTarget)
+                .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
             .accessibilityLabel(Text(playing ? "إيقاف الرسالة الصوتية" : "تشغيل رسالة \(clip.senderName) الصوتية"))

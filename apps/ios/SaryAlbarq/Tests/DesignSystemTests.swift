@@ -11,6 +11,10 @@ final class SaryFormatTests: XCTestCase {
         XCTAssertEqual(SaryFormat.digits("6.1"), "٦٫١")
         XCTAssertEqual(SaryFormat.digits("abc 12:05"), "abc ١٢:٠٥")
         XCTAssertEqual(SaryFormat.number(3), "٣")
+        // Names / ids: digits only, the dot stays (NavText, PTT channels share this one converter).
+        XCTAssertEqual(SaryFormat.digits("St. 40", decimalSeparator: false), "St. ٤٠")
+        XCTAssertEqual(NavText.arabicDigitsOnly("مخرج 5.2"), "مخرج ٥.٢")
+        XCTAssertEqual(PTTChannels.arabicDigits("12"), "١٢")
         // No Western digit survives formatting.
         for s in [SaryFormat.distance(meters: 1234), SaryFormat.clock(seconds: 75), SaryFormat.percent(82)] {
             XCTAssertNil(s.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789")), s)
@@ -217,6 +221,16 @@ final class SaryThemeTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(p.raw.textSecondary, p.raw.background), 4.5, name)
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(p.raw.textSecondary, p.raw.surface), 4.5, name)
         }
+        for (name, p) in [("dark", SaryPalette.dark()), ("light", SaryPalette.light()), ("night", SaryPalette.night())] {
+            // Warning as text (nav hazards, offline hints) reads at a glance.
+            XCTAssertGreaterThanOrEqual(SaryContrast.ratio(p.raw.warningText, p.raw.background), 4.5, name)
+            XCTAssertGreaterThanOrEqual(SaryContrast.ratio(p.raw.warningText, p.raw.chromeOpaque), 4.5, name)
+            // Glyphs on the nav-blue fill (maneuver arrow, selected route).
+            XCTAssertGreaterThanOrEqual(SaryContrast.ratio(p.raw.onNavBlue, p.raw.navBlue), 3, name)
+        }
+        XCTAssertEqual(SaryPalette.dark().raw.navBlue, 0x2B7BF0)
+        XCTAssertEqual(SaryPalette.night().raw.navBlue, SaryPalette.navBlueNight)
+        XCTAssertEqual(NavMapDrawer.routeBlue, "#2B7BF0", "the map route line uses the same blue")
         for a in SaryAccent.allCases {
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(a.lightText, SaryPalette.light().raw.background), 4.5, a.rawValue)
             XCTAssertGreaterThanOrEqual(SaryContrast.ratio(a.fill, 0x1A1612), 4.5, a.rawValue)

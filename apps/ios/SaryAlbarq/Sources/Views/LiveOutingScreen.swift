@@ -701,17 +701,19 @@ struct BackTrackPanel: View {
         let arrived = ui.phase == .arrived
         let arrowSize: CGFloat = theme.drive ? 92 : 68
         let tone: Color = off ? p.emergency : (arrived ? p.live : p.accent)
+        /* Dark ink on the accent fill; light ink on red / green. */
+        let ink: Color = (off || arrived) ? p.onEmergency : p.onAccent
         HStack(spacing: theme.space(.m)) {
             ZStack {
                 Circle().fill(tone)
                 if arrived {
-                    Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(Color.white)
+                    Image(systemName: "flag.checkered").font(.system(size: arrowSize * 0.42, weight: .heavy)).foregroundStyle(ink)
                 } else if ui.phase == .waitingFix {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(ink)
                 } else {
                     Image(systemName: "arrow.up")
                         .font(.system(size: arrowSize * 0.5, weight: .black))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(ink)
                         .rotationEffect(.degrees(ui.arrowDegrees))
                         .animation(theme.animation(.smooth), value: ui.arrowDegrees)
                 }
@@ -824,6 +826,8 @@ struct EndedTripBanner: View {
                             .foregroundStyle(p.textPrimary)
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(p.sunken))
+                            .frame(width: theme.minTarget, height: theme.minTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(SaryPressStyle())
                     .accessibilityLabel(Text("المزيد: استكشاف، بحث، طقس"))

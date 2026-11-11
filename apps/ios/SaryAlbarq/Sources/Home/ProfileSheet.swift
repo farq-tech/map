@@ -19,13 +19,7 @@ struct ProfileSheet: View {
             VStack(alignment: .leading, spacing: theme.space(.l)) {
                 HStack {
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textPrimary)
-                            .frame(width: 34, height: 34).background(Circle().fill(p.sunken))
-                    }
-                    .buttonStyle(SaryPressStyle())
-                    .accessibilityLabel(Text("إغلاق"))
-                    .accessibilityIdentifier("profile.sheet.close")
+                    SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "profile.sheet.close", visual: 34) { dismiss() }
                 }
                 Button { open(.profile) } label: {
                     HStack(spacing: theme.space(.m)) {
@@ -35,7 +29,7 @@ struct ProfileSheet: View {
                             Text(me?.phone.map { SaryFormat.digits($0) } ?? "عدّل اسمك وصورتك ورقمك").saryNumber(.footnote).foregroundStyle(p.textSecondary)
                         }
                         Spacer()
-                        Image(systemName: "chevron.left").foregroundStyle(p.textTertiary)
+                        Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
                     }
                     .contentShape(Rectangle())
                 }

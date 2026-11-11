@@ -142,26 +142,62 @@ struct SaryButtonLabel: View {
 
 // MARK: - Icon button (round, for sheets and cards)
 
+/// The standard round icon button, and THE close control of every sheet and
+/// card (`SaryIcon.close`). The touch area is always at least `theme.minTarget`
+/// (44 pt, 64 pt in drive); `visual` draws a smaller circle inside it without
+/// shrinking what the finger can hit. The glyph scales with Dynamic Type.
 struct SaryIconButton: View {
+    enum Surface {
+        /// A `sunken` circle (sheets, cards).
+        case sunken
+        /// A floating glass circle (over the map / imagery).
+        case glass
+    }
+
     var systemImage: String
     var label: String
     var id: String?
     var tinted = false
+    /// Visible circle diameter; nil = the whole touch target.
+    var visual: CGFloat? = nil
+    var surface: Surface = .sunken
+    /// Glyph colour override (e.g. over always-dark imagery).
+    var ink: Color? = nil
     var action: () -> Void
     @Environment(\.sary) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var glyph: CGFloat = 15
 
     var body: some View {
+        let p = theme.palette
+        let target = theme.minTarget
+        /* At accessibility text sizes the circle grows to the full target. */
+        let d: CGFloat = typeSize.isAccessibilitySize ? target : min(visual ?? target, target)
+        let fg: Color = ink ?? (tinted ? p.onAccent : (surface == .glass ? p.textPrimary : p.textSecondary))
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: theme.drive ? 20 : 15, weight: .bold))
-                .foregroundStyle(tinted ? theme.palette.onAccent : theme.palette.textSecondary)
-                .frame(width: theme.minTarget, height: theme.minTarget)
-                .background(Circle().fill(tinted ? theme.palette.accent : theme.palette.sunken))
-                .contentShape(Circle())
+                .font(.system(size: min(glyph * (theme.drive ? 4.0 / 3.0 : 1), d * 0.55), weight: .bold))
+                .foregroundStyle(fg)
+                .frame(width: d, height: d)
+                .modifier(SaryIconButtonSurface(surface: surface, fill: tinted ? p.accent : p.sunken))
+                .frame(width: target, height: target)
+                .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text(label))
         .modifier(OptionalIdentifier(id: id))
+    }
+}
+
+private struct SaryIconButtonSurface: ViewModifier {
+    var surface: SaryIconButton.Surface
+    var fill: Color
+
+    func body(content: Content) -> some View {
+        switch surface {
+        case .sunken: content.background(Circle().fill(fill))
+        case .glass: content.saryGlass(Circle(), role: .control, interactive: true)
+        }
     }
 }
 

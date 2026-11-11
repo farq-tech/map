@@ -126,7 +126,6 @@ struct MapHomeScreen: View {
                 ForEach(HomeCategory.all) { c in chip(c) }
             }
             .padding(.horizontal, theme.space(.l))
-            .padding(.vertical, 2)
         }
         .accessibilityIdentifier("home.categories")
     }
@@ -144,6 +143,9 @@ struct MapHomeScreen: View {
             .frame(height: 36)
             .background(Capsule().fill(on ? p.accent : p.elevated))
             .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            /* The chip stays 36 tall; the touch area is 44. */
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityIdentifier("home.category.\(c.id)")
@@ -274,13 +276,16 @@ struct MapHomeScreen: View {
                         .frame(width: 34, height: 34)
                         .background(Circle().fill(voice.isListening ? p.accent : Color.clear))
                         .symbolEffect(.variableColor, isActive: voice.isListening && !theme.reduceMotion)
+                        /* 34 pt circle, 44 pt touch area (the capsule is 50 tall). */
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text(voice.isListening ? "أوقف الاستماع" : "ابحث بصوتك"))
                 .accessibilityIdentifier("home.mic")
             }
             .padding(.leading, theme.space(.m))
-            .padding(.trailing, 6)
+            .padding(.trailing, 1)
             .frame(height: 50)
             .background(Capsule().fill(p.sunken))
             Button { profileOpen = true } label: {
@@ -573,15 +578,7 @@ struct MapHomeScreen: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Button { closePlace() } label: {
-                    Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textPrimary)
-                        .frame(width: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34,
-                               height: dynamicTypeSize.isAccessibilitySize ? theme.minTarget : 34)
-                        .background(Circle().fill(p.sunken))
-                }
-                .buttonStyle(SaryPressStyle())
-                .accessibilityLabel(Text("إغلاق"))
-                .accessibilityIdentifier("home.place.close")
+                SaryIconButton(systemImage: SaryIcon.close, label: "إغلاق", id: "home.place.close", visual: 34) { closePlace() }
             }
             if let a = assigning {
                 Button {

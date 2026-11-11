@@ -56,7 +56,7 @@ struct ExploreHeader: View {
                                     .padding(.horizontal, 4)
                                     .frame(minWidth: 17, minHeight: 17)
                                     .background(Capsule().fill(p.accent))
-                                    .offset(x: 6, y: -4)
+                                    .saryBadgeOutset(trailing: 6, top: 4)
                             }
                         }
                         .frame(width: 44, height: barHeight)
@@ -662,7 +662,9 @@ struct ExploreTopBar: View {
                 .accessibilityIdentifier("explore.layerName")
                 round("square.3.layers.3d", label: "الطبقات", id: "explore-layers", active: controller.terrain3D, action: layers)
             }
-            .padding(5)
+            /* The round buttons are 44 pt touch areas around 36 pt circles, so the
+             * bar's inset is 1 pt (the circles still sit 5 pt from its edge). */
+            .padding(1)
             .frame(height: 46)
             .saryGlass(RoundedRectangle(cornerRadius: 24, style: .continuous), role: .chrome)
             ExploreCoordinateBar(model: controller.exploreReading, format: controller.coordFormat,
@@ -680,6 +682,8 @@ struct ExploreTopBar: View {
                 .foregroundStyle(active ? theme.palette.onAccent : theme.palette.textPrimary)
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(active ? theme.palette.accent : theme.palette.sunken.opacity(0.7)))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())
         .accessibilityLabel(Text(label))
@@ -739,7 +743,7 @@ struct ExploreCoordinateBar: View {
     private func icon(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(theme.palette.textPrimary)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SaryPressStyle())

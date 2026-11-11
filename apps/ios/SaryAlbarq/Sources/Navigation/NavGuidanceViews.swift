@@ -16,10 +16,15 @@ private extension View {
 struct NavManeuverGlyph: View {
     var maneuver: NavManeuver
     var size: CGFloat
-    var tint = Color(rgb: 0x2B7BF0)
-    var ink = Color.white
+    /// Tile colour; nil = the palette's `navBlue`. `.clear` = no tile.
+    var tint: Color? = nil
+    /// Arrow colour; nil = the palette's `onNavBlue`.
+    var ink: Color? = nil
+    @Environment(\.sary) private var theme
 
     var body: some View {
+        let tint = self.tint ?? theme.palette.navBlue
+        let ink = self.ink ?? theme.palette.onNavBlue
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.43, style: .continuous).fill(tint)
             /* `tint: .clear` (the v2 banner): a plain, bigger arrow with no tile. */
@@ -116,7 +121,7 @@ struct NavManeuverBanner: View {
                 HStack(alignment: .center, spacing: theme.space(.m)) {
                     /* The arrow and the distance: the two things read at a glance. */
                     VStack(spacing: 0) {
-                        NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: .clear, ink: p.accent)
+                        NavManeuverGlyph(maneuver: step.maneuver, size: glyph, tint: .clear, ink: p.accentText)
                         HStack(alignment: .firstTextBaseline, spacing: 3) {
                             Text(parts.value).font(.sary(theme.drive ? 30 : 26, .heavy)).foregroundStyle(p.textPrimary)
                             Text(parts.unit).font(.sary(theme.drive ? 16 : 14, .bold)).foregroundStyle(p.textSecondary)
@@ -131,8 +136,11 @@ struct NavManeuverBanner: View {
                     Text(NavHUD.title(step, targetName: nav.target?.name))
                         .font(.sary(theme.drive ? 30 : 26, .bold))
                         .foregroundStyle(p.textPrimary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                        /* Two lines, barely shrinking (26 pt never drops to 13): a long road
+                         * name wraps instead of turning unreadable at a glance. */
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         /* VoiceOver hears the whole instruction («بعد ٣٫٣ كم انعطف يسارًا إلى …»). */
                         .accessibilityLabel(Text(NavText.banner(step, distanceM: d, targetName: nav.target?.name)))
@@ -158,13 +166,16 @@ struct NavManeuverBanner: View {
                     .foregroundStyle(p.textPrimary)
                     .frame(width: 40, height: 40)
                     .background(Circle().fill(p.sunken.opacity(0.85)))
+                    /* 40 pt circle, 44 pt touch area (same circle position as before). */
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(SaryPressStyle())
             .disabled(!pip.supported)
             .accessibilityLabel(Text("نافذة الملاحة العائمة"))
             .accessibilityValue(Text(pip.active ? "مفتوحة" : "مغلقة"))
             .accessibilityIdentifier("nav.pip")
-            .padding(8)
+            .padding(6)
         }
         .background(alignment: .bottomTrailing) {
             NavPiPLayerHost(displayLayer: pip.displayLayer)
@@ -200,7 +211,9 @@ struct NavManeuverBanner: View {
             Text(NavHUD.title(next, targetName: nav.target?.name))
                 .saryText(.callout, weight: .bold)
                 .foregroundStyle(p.textPrimary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -267,10 +280,10 @@ struct NavLanesView: View {
             ForEach(Array(lanes.enumerated()), id: \.offset) { _, l in
                 Image(systemName: NavGlyph.lane(l))
                     .font(.system(size: theme.drive ? 22 : 18, weight: .heavy))
-                    .foregroundStyle(l.valid ? Color.white : p.textTertiary)
+                    .foregroundStyle(l.valid ? p.onNavBlue : p.textTertiary)
                     .frame(width: theme.drive ? 38 : 32, height: theme.drive ? 38 : 32)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(l.valid ? Color(rgb: 0x2B7BF0) : p.sunken))
-                    .overlay { if l.preferred { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.white, lineWidth: 2) } }
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(l.valid ? p.navBlue : p.sunken))
+                    .overlay { if l.preferred { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(p.onNavBlue, lineWidth: 2) } }
             }
         }
         .frame(maxWidth: .infinity)
@@ -415,7 +428,7 @@ struct NavBottomBar: View {
                     if let s = nav.remainingSeconds {
                         Text(NavText.remaining(seconds: s))
                             .font(.sary(theme.drive ? 34 : 30, .heavy))
-                            .foregroundStyle(p.accent)
+                            .foregroundStyle(p.accentText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                             .accessibilityIdentifier("nav.remainingTime")
@@ -427,7 +440,7 @@ struct NavBottomBar: View {
                         .minimumScaleFactor(0.7)
                         .accessibilityIdentifier("nav.eta")
                     if let note = nav.target?.staleNote() {
-                        Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warning).lineLimit(1)
+                        Text(note).saryText(.caption, weight: .bold).foregroundStyle(p.warningText).lineLimit(1)
                             .accessibilityIdentifier("nav.target.stale")
                     }
                 }
@@ -439,7 +452,7 @@ struct NavBottomBar: View {
                     /* The trip's guidance pauses on this phone only («استأنف» brings it back). */
                     Text(nav.auto ? "أوقف التوجيه" : "إنهاء")
                         .font(.sary(theme.drive ? 20 : 18, .heavy))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(p.onEmergency)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .padding(.horizontal, theme.drive ? 30 : 26)
@@ -540,19 +553,19 @@ struct NavSpeedCluster: View {
             VStack(spacing: -2) {
                 Text(kmh.map { SaryFormat.number($0) } ?? "—")
                     .font(.sary(d * 0.36, .heavy))
-                    .foregroundStyle(over ? Color.white : p.textPrimary)
+                    .foregroundStyle(over ? p.onEmergency : p.textPrimary)
                     .contentTransition(.numericText())
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                Text("كم/س").font(.sary(11, .bold)).foregroundStyle(over ? Color.white.opacity(0.9) : p.textSecondary)
+                Text("كم/س").font(.sary(11, .bold)).foregroundStyle(over ? p.onEmergency.opacity(0.9) : p.textSecondary)
             }
             .frame(width: d, height: d)
             .background(Circle().fill(over ? p.emergency : p.chromeOpaque.opacity(0.92)))
-            .overlay(Circle().stroke(over ? Color.white : p.separator, lineWidth: over ? 3 : 1))
+            .overlay(Circle().stroke(over ? p.onEmergency : p.separator, lineWidth: over ? 3 : 1))
             .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(kmh.map { "السرعة \(SaryFormat.number($0)) كم/س" + (over ? "، فوق الحد" : "") } ?? "السرعة غير معروفة"))
-            .accessibilityValue(Text(over ? "over" : "ok"))
+            .accessibilityValue(Text(over ? "فوق الحد" : "ضمن الحد"))
             .accessibilityIdentifier("speedometer")
             if let limit {
                 NavSpeedLimitSign(kmh: limit, size: d * 0.72)
@@ -582,7 +595,7 @@ struct NavStepsSheet: View {
                 }
                 ForEach(Array(steps.enumerated()).filter { $0.offset >= from }, id: \.offset) { i, s in
                     HStack(spacing: theme.space(.m)) {
-                        NavManeuverGlyph(maneuver: s.maneuver, size: 40, tint: i == from ? Color(rgb: 0x2B7BF0) : p.textSecondary)
+                        NavManeuverGlyph(maneuver: s.maneuver, size: 40, tint: i == from ? p.navBlue : p.textSecondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(NavText.instruction(s, targetName: nav.target?.name)).saryText(.callout, weight: .bold).foregroundStyle(p.textPrimary)
                             let d = i == from ? (nav.progress?.distanceToManeuverM ?? 0) : steps[i - 1].distanceM
@@ -617,8 +630,8 @@ struct NavStartChoiceSheet: View {
         VStack(alignment: .leading, spacing: theme.space(.m)) {
             HStack(spacing: theme.space(.m)) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(rgb: 0x2B7BF0))
-                    Image(systemName: "location.north.line.fill").font(.system(size: 24, weight: .heavy)).foregroundStyle(Color.white)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(p.navBlue)
+                    Image(systemName: "location.north.line.fill").font(.system(size: 24, weight: .heavy)).foregroundStyle(p.onNavBlue)
                 }
                 .frame(width: 52, height: 52)
                 .accessibilityHidden(true)
@@ -667,9 +680,9 @@ struct GuidancePromptRow: View {
         case .leaderStarted:
             Button(action: start) {
                 HStack(spacing: theme.space(.s)) {
-                    Image(systemName: "location.north.line.fill").font(.system(size: 16, weight: .heavy)).foregroundStyle(Color.white)
+                    Image(systemName: "location.north.line.fill").font(.system(size: 16, weight: .heavy)).foregroundStyle(theme.palette.onNavBlue)
                         .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color(rgb: 0x2B7BF0)))
+                        .background(Circle().fill(theme.palette.navBlue))
                     Text("\(leaderName) بدأ التوجيه").saryText(.callout, weight: .bold).foregroundStyle(theme.palette.textPrimary)
                         .lineLimit(1).minimumScaleFactor(0.8)
                     Spacer(minLength: 0)

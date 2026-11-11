@@ -267,7 +267,7 @@ private struct DestinationStep: View {
                 }
                 Spacer()
                 if let trailing { Text(trailing).saryNumber(.footnote).foregroundStyle(p.textTertiary) }
-                Image(systemName: SaryIcon.back).foregroundStyle(p.textTertiary).rotationEffect(.degrees(180))
+                Image(systemName: SaryIcon.disclosure).foregroundStyle(p.textTertiary)
             }
             .frame(minHeight: theme.minTarget)
             .contentShape(Rectangle())

@@ -229,6 +229,16 @@ private struct AssessmentView: View {
         .background(RoundedRectangle(cornerRadius: SaryRadius.s, style: .continuous).fill(p.sunken))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("brief.assessment")
-        .accessibilityValue(Text(String(describing: a.level)))
+        .accessibilityValue(Text(levelLabel))
+    }
+
+    /// VoiceOver value in Arabic (was the enum's English case name).
+    private var levelLabel: String {
+        switch a.level {
+        case .good: return "مناسب"
+        case .caution: return "انتبه"
+        case .poor: return "غير مناسب"
+        case .unknown: return "غير معروف"
+        }
     }
 }

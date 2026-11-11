@@ -90,14 +90,14 @@ enum SilenceText {
     /// «انقطع منذ ١٠ د» — the badge on the chip / row.
     static func badge(since: Date, now: Date) -> String {
         let m = minutes(since: since, now: now)
-        if m >= 60 { return "انقطع منذ \(ArabicFormat.number(Double(m / 60))) س" }
-        return "انقطع منذ \(ArabicFormat.number(Double(m))) د"
+        if m >= 60 { return "انقطع منذ \(SaryFormat.number(m / 60)) س" }
+        return "انقطع منذ \(SaryFormat.number(m)) د"
     }
 
     /// «انقطع إرسال فهد منذ ١٠ د»
     static func title(name: String, since: Date, now: Date) -> String {
         let m = minutes(since: since, now: now)
-        let span = m >= 60 ? "\(ArabicFormat.number(Double(m / 60))) س" : "\(ArabicFormat.number(Double(m))) د"
+        let span = m >= 60 ? "\(SaryFormat.number(m / 60)) س" : "\(SaryFormat.number(m)) د"
         return "انقطع إرسال \(name) منذ \(span)"
     }
 
@@ -105,15 +105,15 @@ enum SilenceText {
     static func lastFix(_ at: Date?, now: Date) -> String {
         guard let at else { return "لا يوجد موقع معروف" }
         let m = minutes(since: at, now: now)
-        if m >= 60 { return "آخر موقع قبل \(ArabicFormat.number(Double(m / 60))) س" }
-        return "آخر موقع قبل \(ArabicFormat.number(Double(m))) د"
+        if m >= 60 { return "آخر موقع قبل \(SaryFormat.number(m / 60)) س" }
+        return "آخر موقع قبل \(SaryFormat.number(m)) د"
     }
 
     /// «قبل ١٤ د» / «قبل ٢ س» (same rounding as the card).
     static func ago(_ at: Date, now: Date) -> String {
         let m = minutes(since: at, now: now)
-        if m >= 60 { return "قبل \(ArabicFormat.number(Double(m / 60))) س" }
-        return "قبل \(ArabicFormat.number(Double(m))) د"
+        if m >= 60 { return "قبل \(SaryFormat.number(m / 60)) س" }
+        return "قبل \(SaryFormat.number(m)) د"
     }
 
     /// «رجع إرسال فهد»

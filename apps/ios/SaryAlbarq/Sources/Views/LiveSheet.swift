@@ -334,10 +334,10 @@ struct LiveQuickRow: View {
                     .background(Circle().fill(accent ? p.accent : active ? p.accent.opacity(0.85) : p.sunken))
                     .overlay(alignment: .topTrailing) {
                         if badge > 0 {
-                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(.white)
+                            Text(SaryFormat.number(badge)).font(.sary(10, .bold)).foregroundStyle(p.onEmergency)
                                 .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
                                 .background(Capsule().fill(p.emergency))
-                                .offset(x: 4, y: -2)
+                                .saryBadgeOutset(trailing: 4, top: 2)
                         }
                     }
                 Text(title).font(.sary(11, .medium)).foregroundStyle(p.textPrimary)
@@ -483,7 +483,7 @@ private struct TripStatusCallout: View {
                         ShareBackgroundHintRow(hint: hint, openSettings: controller.openAppSettings)
                         Button { hintDismissed = true } label: {
                             Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(theme.palette.textTertiary)
-                                .frame(width: 36, height: 36).contentShape(Rectangle())
+                                .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(Text("أخفِ"))
@@ -524,8 +524,9 @@ struct LivePanelView: View {
                 Text(panel.title).font(.sary(18, .bold)).foregroundStyle(p.textPrimary).accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundStyle(p.textPrimary)
+                    Image(systemName: SaryIcon.close).font(.system(size: 14, weight: .bold)).foregroundStyle(p.textSecondary)
                         .frame(width: 36, height: 36).background(Circle().fill(p.sunken))
+                        .frame(width: theme.minTarget, height: theme.minTarget).contentShape(Rectangle())
                 }
                 .buttonStyle(SaryPressStyle())
                 .accessibilityLabel(Text("إغلاق"))
@@ -771,7 +772,7 @@ struct ShareBackgroundHintRow: View {
             Text(hint.text).saryText(.footnote).foregroundStyle(theme.palette.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            if link { Image(systemName: "chevron.left").font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
+            if link { Image(systemName: SaryIcon.disclosure).font(.footnote.weight(.bold)).foregroundStyle(theme.palette.textTertiary) }
         }
         .padding(.horizontal, theme.space(.m))
         .padding(.vertical, theme.space(.s))
