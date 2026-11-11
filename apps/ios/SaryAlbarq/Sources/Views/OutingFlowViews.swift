@@ -4,7 +4,7 @@ import SwiftUI
 /// outing's state — «ابدأ الطلعة» → «وين رايحين؟» → «ابدأ المشوار» → «وصلنا». ONE at a time.
 /// Stopped, it is the big one (the walkie-talkie shrinks to a round button beside it); driving,
 /// it is `compact` and the walkie-talkie is the big one. Members waiting for the leader see a
-/// calm, non-tappable «بانتظار أمير الرحلة يبدأ».
+/// calm, non-tappable «انضمّيت للطلعة، ننتظر أمير الرحلة يبدأها».
 struct OutingPrimaryCTA: View {
     var ui: OutingFlowUI
     var compact = false
