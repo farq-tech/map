@@ -87,3 +87,23 @@ enum IntroPolicy {
         return args.contains { $0 == "-resetState" || $0 == "-demo" || ($0.hasPrefix("-Sary") && !$0.hasPrefix("-SaryIntro")) }
     }
 }
+
+/// The handoff from the intro into the app: the night scene opens up a touch as it fades, so the
+/// app seems to come forward through it (a plain cross-fade under Reduce Motion). The natural
+/// end eases out; a skip or an interruption stays quick. Pure (`IntroPolicyTests`).
+enum IntroHandoff {
+    /// How much the intro grows while it fades away.
+    static func removalScale(reduceMotion: Bool) -> Double { reduceMotion ? 1 : 1.05 }
+
+    /// The fade, by why the intro leaves (the natural end, a tap, a launch for something).
+    enum Reason: Equatable { case finished, skipped, interrupted, launchOnly }
+
+    static func fade(_ r: Reason) -> Double {
+        switch r {
+        case .finished: return 0.6
+        case .skipped: return 0.35
+        case .interrupted: return 0.2
+        case .launchOnly: return 0.4
+        }
+    }
+}

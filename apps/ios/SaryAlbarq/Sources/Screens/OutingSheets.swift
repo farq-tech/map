@@ -525,6 +525,7 @@ struct NotifyExplainerSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.sary) private var theme
     @State private var busy = false
+    @State private var ring = 0
 
     var body: some View {
         let p = theme.palette
@@ -532,6 +533,12 @@ struct NotifyExplainerSheet: View {
         SaryFitColumn {
             VStack(spacing: theme.space(.l)) {
                 Image(systemName: "bell.badge.fill").font(.system(size: 52, weight: .semibold)).foregroundStyle(p.accentText)
+                    /* The bell rings once as the sheet settles (bounded; nothing under Reduce Motion). */
+                    .symbolEffect(.bounce, value: ring)
+                    .onAppear {
+                        guard OnboardingMotion.plays(reduceMotion: theme.reduceMotion) else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + SaryMotion.enter.duration) { ring &+= 1 }
+                    }
                     .padding(.top, theme.space(.xl))
                 Text("نبّهك إذا احتاجك أحد؟").saryText(.title, weight: .bold).foregroundStyle(p.textPrimary)
                     .multilineTextAlignment(.center)

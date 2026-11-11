@@ -73,8 +73,8 @@ final class IntroController: ObservableObject {
         case .none: visible = false
         case .still:
             /* At most ~1 s of the night frame, less if the app is ready sooner. */
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismiss(fade: 0.4) }
-            if appReady { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.dismiss(fade: 0.4) } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismiss(.launchOnly) }
+            if appReady { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.dismiss(.launchOnly) } }
         case .full:
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.grace) { [weak self] in self?.start() }
         }
@@ -101,12 +101,12 @@ final class IntroController: ObservableObject {
     /// The app behind is ready (the boot splash is done).
     func ready() {
         appReady = true
-        if mode == .still, visible { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.dismiss(fade: 0.4) } }
+        if mode == .still, visible { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.dismiss(.launchOnly) } }
     }
 
     /// Natural end: crossfade into the app; the music's tail rings out on its own.
     private func finish() {
-        dismiss(fade: 0.6)
+        dismiss(.finished)
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.audio.fadeOut(0.4) }
     }
 
@@ -114,7 +114,7 @@ final class IntroController: ObservableObject {
     func userSkip() {
         guard visible else { return }
         audio.fadeOut(0.5)
-        dismiss(fade: 0.35)
+        dismiss(.skipped)
     }
 
     /// The launch was for something (link, notification, PushToTalk, an outing opening): leave now.
@@ -122,13 +122,15 @@ final class IntroController: ObservableObject {
         Self.earlySignal = true
         guard visible else { return }
         audio.fadeOut(0.25)
-        dismiss(fade: 0.2)
+        dismiss(.interrupted)
     }
 
-    private func dismiss(fade: Double) {
+    private func dismiss(_ reason: IntroHandoff.Reason) {
         guard visible, !dismissing else { return }
         dismissing = true
-        withAnimation(.easeInOut(duration: fade)) { visible = false }
+        /* The natural end settles out (no snap at the tail); a skip / interruption stays even. */
+        let fade = IntroHandoff.fade(reason)
+        withAnimation(reason == .finished ? .easeOut(duration: fade) : .easeInOut(duration: fade)) { visible = false }
     }
 }
 
@@ -150,7 +152,9 @@ private struct CinematicIntroModifier: ViewModifier {
             .overlay {
                 if intro.visible {
                     IntroOverlay(intro: intro)
-                        .transition(.opacity)
+                        /* Leaving, the night opens up a touch as it fades: the app comes forward through it. */
+                        .transition(.asymmetric(insertion: .opacity,
+                                                removal: .opacity.combined(with: .scale(scale: IntroHandoff.removalScale(reduceMotion: intro.reduceMotion)))))
                         .onAppear { intro.begin() }
                 }
             }

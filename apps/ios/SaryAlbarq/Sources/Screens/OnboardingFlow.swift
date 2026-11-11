@@ -120,10 +120,10 @@ struct OnboardingFlow: View {
             switch step {
             case .intro:
                 IntroStep(start: { go(.profile) }, restore: { restoring = true })
-                    .transition(.asymmetric(insertion: .opacity, removal: .move(edge: .leading).combined(with: .opacity)))
+                    .transition(stepTransition)
             case .profile:
                 ProfileStep(back: { go(.intro) }, done: { go(.locationExplainer) })
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(stepTransition)
             case .locationExplainer:
                 LocationStep(allow: {
                     Task {
@@ -131,7 +131,7 @@ struct OnboardingFlow: View {
                         finish()
                     }
                 }, skip: finish)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .transition(stepTransition)
             }
         }
         .animation(theme.animation(.smooth), value: step)
@@ -141,8 +141,47 @@ struct OnboardingFlow: View {
         }
     }
 
-    private func go(_ s: OnboardingStepUI) { step = s }
+    /// Set together with `step`, so the transition of that change slides the right way.
+    @State private var forward = true
+
+    private func go(_ s: OnboardingStepUI) {
+        forward = OnboardingMotion.rank(s) >= OnboardingMotion.rank(step)
+        step = s
+    }
     private func finish() { OnboardingProgress.done = true; model.objectWillChange.send() }
+
+    /// Same language as the create wizard (`CreateStepMotion`): on → in from the reading end
+    /// (the left in Arabic), back → from the start; a cross-fade under Reduce Motion.
+    private var stepTransition: AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: false, peripheral: false) else { return .opacity }
+        let enter: Edge = CreateStepMotion.insertionEdge(forward: forward) == .trailing ? .trailing : .leading
+        let leave: Edge = enter == .trailing ? .leading : .trailing
+        return .asymmetric(insertion: .move(edge: enter).combined(with: .opacity),
+                           removal: .move(edge: leave).combined(with: .opacity))
+    }
+}
+
+/// Onboarding's order, for the step slide direction (pure, `IntroPolicyTests`).
+enum OnboardingMotion {
+    static func rank(_ s: OnboardingStepUI) -> Int {
+        switch s {
+        case .intro: return 0
+        case .profile: return 1
+        case .locationExplainer: return 2
+        }
+    }
+
+    /// The explainer illustration's one-time gesture when the page appears: lift, point, settle.
+    /// Runs once (a phase cycle per trigger), never under Reduce Motion.
+    enum Gesture: CaseIterable, Equatable {
+        case rest, lift, point
+
+        var scale: CGFloat { self == .lift ? 1.08 : 1 }
+        var lift: CGFloat { self == .rest ? 0 : -6 }
+        var tilt: Double { self == .point ? -10 : 0 }
+    }
+
+    static func plays(reduceMotion: Bool) -> Bool { !reduceMotion }
 }
 
 private struct IntroStep: View {
@@ -318,6 +357,7 @@ private struct LocationStep: View {
     var allow: () -> Void
     var skip: () -> Void
     @Environment(\.sary) private var theme
+    @State private var gesture = 0
 
     var body: some View {
         let p = theme.palette
@@ -327,6 +367,16 @@ private struct LocationStep: View {
                 Image(systemName: "location.circle.fill")
                     .font(.system(size: 64, weight: .semibold))
                     .foregroundStyle(p.accentText)
+                    /* One light gesture once the page has slid in (visual only, no layout). */
+                    .phaseAnimator(OnboardingMotion.Gesture.allCases, trigger: gesture) { icon, g in
+                        icon.scaleEffect(g.scale).offset(y: g.lift).rotationEffect(.degrees(g.tilt))
+                    } animation: { g in
+                        g == .rest ? theme.animation(.smooth) : theme.animation(.emphasis)
+                    }
+                    .onAppear {
+                        guard OnboardingMotion.plays(reduceMotion: theme.reduceMotion) else { return }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + SaryMotion.smooth.duration) { gesture &+= 1 }
+                    }
                     .accessibilityHidden(true)
                 Text("موقعك للطلعة بس")
                     .saryText(.title, weight: .bold)

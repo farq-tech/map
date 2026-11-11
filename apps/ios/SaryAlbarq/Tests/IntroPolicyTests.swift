@@ -146,3 +146,30 @@ final class IntroPolicyTests: XCTestCase {
         XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 0), 120, accuracy: 0.001)
     }
 }
+
+/// The handoff into the app and the onboarding step slide.
+final class IntroHandoffTests: XCTestCase {
+    func testTheIntroOpensUpAsItFadesExceptUnderReduceMotion() {
+        XCTAssertGreaterThan(IntroHandoff.removalScale(reduceMotion: false), 1)
+        XCTAssertLessThanOrEqual(IntroHandoff.removalScale(reduceMotion: false), 1.08, "a touch, not a zoom")
+        XCTAssertEqual(IntroHandoff.removalScale(reduceMotion: true), 1)
+    }
+
+    func testFadesKeepTheirLengths() {
+        XCTAssertEqual(IntroHandoff.fade(.finished), 0.6)
+        XCTAssertEqual(IntroHandoff.fade(.skipped), 0.35)
+        XCTAssertEqual(IntroHandoff.fade(.interrupted), 0.2)
+        XCTAssertEqual(IntroHandoff.fade(.launchOnly), 0.4)
+        XCTAssertLessThan(IntroHandoff.fade(.interrupted), IntroHandoff.fade(.skipped), "a launch for something leaves fastest")
+    }
+
+    func testOnboardingStepsSlideOnAndBack() {
+        XCTAssertLessThan(OnboardingMotion.rank(.intro), OnboardingMotion.rank(.profile))
+        XCTAssertLessThan(OnboardingMotion.rank(.profile), OnboardingMotion.rank(.locationExplainer))
+        XCTAssertEqual(OnboardingMotion.Gesture.allCases.first, .rest, "the explainer gesture starts and ends at rest")
+        XCTAssertEqual(OnboardingMotion.Gesture.rest.scale, 1)
+        XCTAssertEqual(OnboardingMotion.Gesture.rest.lift, 0)
+        XCTAssertFalse(OnboardingMotion.plays(reduceMotion: true))
+        XCTAssertTrue(OnboardingMotion.plays(reduceMotion: false))
+    }
+}
