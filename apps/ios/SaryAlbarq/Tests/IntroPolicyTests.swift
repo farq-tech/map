@@ -108,4 +108,39 @@ final class IntroPolicyTests: XCTestCase {
         let size = try XCTUnwrap(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int)
         XCTAssertLessThan(size, 300_000)
     }
+
+    // MARK: screen fit (IntroScene.visibleRect / titleMaxWidth)
+
+    func testIntroIsCroppedEvenlyNeverScaled() {
+        let pm = IntroScene.visibleRect(screen: CGSize(width: 440, height: 956))
+        XCTAssertEqual(pm, CGRect(origin: .zero, size: IntroScene.size))
+        let se = IntroScene.visibleRect(screen: CGSize(width: 375, height: 667))
+        XCTAssertEqual(se.width, 375, accuracy: 0.001)
+        XCTAssertEqual(se.height, 667, accuracy: 0.001)
+        XCTAssertEqual(se.minX, 32.5, accuracy: 0.001)
+        XCTAssertEqual(se.minY, 144.5, accuracy: 0.001)
+    }
+
+    func testLogoAndNameStayInsideTheSafeAreaOnEveryPhone() {
+        // (screen, top inset, bottom inset): SE, mini, 15, Pro Max.
+        let phones: [(CGSize, CGFloat, CGFloat)] = [
+            (CGSize(width: 375, height: 667), 20, 0), (CGSize(width: 375, height: 812), 50, 34),
+            (CGSize(width: 393, height: 852), 59, 34), (CGSize(width: 440, height: 956), 62, 34),
+        ]
+        for (screen, top, bottom) in phones {
+            let v = IntroScene.visibleRect(screen: screen)
+            let safeTop = v.minY + top, safeBottom = v.maxY - bottom
+            // The logo's glow top (r 30 + margin) and the name block (≈ 62 + 110 pt tall).
+            XCTAssertGreaterThan(IntroScene.logoRest.y - 60, safeTop, "\(screen)")
+            XCTAssertLessThan(IntroScene.logoRest.y + 62 + 110, safeBottom, "\(screen)")
+            XCTAssertGreaterThanOrEqual(IntroScene.logoRest.x - 40, v.minX)
+        }
+    }
+
+    func testTitleWidthFitsTheVisibleScreen() {
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 375), 327, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 393), 345, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 600), 392, accuracy: 0.001)
+        XCTAssertEqual(IntroScene.titleMaxWidth(screenWidth: 0), 120, accuracy: 0.001)
+    }
 }
