@@ -317,6 +317,12 @@ final class BackgroundSessionTests: XCTestCase {
         for _ in 0..<20 { await Task.yield() }
     }
 
+    /// Settles, then keeps yielding until `done` holds or ~2 s pass (a busy machine is slower than 50 ms).
+    private func settle(until done: () -> Bool) async {
+        await settle()
+        for _ in 0..<40 where !done() { try? await Task.sleep(nanoseconds: 50_000_000) }
+    }
+
     /// Consent + «شارك موقعي» on screen, then the screen locks.
     private func sharingInBackground(always: Bool = true, bgSession: Bool = false) async -> OutingSession {
         ShareMemory.recordConsent(user: "u1", outing: "o1", defaults: defaults)
@@ -391,14 +397,14 @@ final class BackgroundSessionTests: XCTestCase {
 
     /// No network off screen: every fix that cannot go out is queued (thinned) and uploaded in
     /// ONE batch as soon as a send goes through; acked, the queue is empty and persisted so.
-    func testOfflineFixesAreQueuedAndBackfilledInOneBatch() async {
+    func testOfflineFixesAreQueuedAndBackfilledInOneBatch() async throws {
         let s = await sharingInBackground()
         postError = OutingAPIError(code: "network", status: 0)
         for i in 0..<6 {
             s.handleFix(fix(i))
             clockOffset += 30_000
             sched.advance(30_000)
-            await settle()
+            await settle(until: { s.offlineQueue.count >= i })
         }
         XCTAssertTrue(posted.isEmpty)
         XCTAssertGreaterThanOrEqual(s.offlineQueue.count, 4, "kept on the phone, not dropped")
@@ -410,11 +416,12 @@ final class BackgroundSessionTests: XCTestCase {
         await settle()
         /* …and the next fresh fix goes out live, then the queue follows in one batch. */
         s.handleFix(fix(11))
-        await settle()
+        await settle(until: { !self.backfills.isEmpty && s.offlineQueue.isEmpty })
         XCTAssertFalse(posted.isEmpty, "live again")
         XCTAssertEqual(backfills.count, 1, "one batch")
-        XCTAssertGreaterThanOrEqual(backfills[0].count, 4)
-        XCTAssertTrue(zip(backfills[0], backfills[0].dropFirst()).allSatisfy { $0.age_ms >= $1.age_ms }, "oldest first, true ages")
+        let batch = try XCTUnwrap(backfills.first, "no batch: fail, never crash the test run")
+        XCTAssertGreaterThanOrEqual(batch.count, 4)
+        XCTAssertTrue(zip(batch, batch.dropFirst()).allSatisfy { $0.age_ms >= $1.age_ms }, "oldest first, true ages")
         XCTAssertTrue(s.offlineQueue.isEmpty)
         XCTAssertTrue(OfflineFixQueue.load(user: "u1", outing: "o1", defaults: defaults).isEmpty)
     }
