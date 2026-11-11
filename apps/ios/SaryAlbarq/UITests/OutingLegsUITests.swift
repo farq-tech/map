@@ -53,6 +53,14 @@ final class OutingLegsUITests: XCTestCase {
         let e = el(app, id)
         XCTAssertTrue(e.waitForExistence(timeout: timeout), "\(id) shows")
         e.tap()
+        if id == "flow.cta.startOuting" { dismissNotifyExplainer(app) }
+    }
+
+    /// UI-AUDIT 0.2: the leader is offered the notifications explainer ~0.8 s after «ابدأ الطلعة» (when iOS has
+    /// not asked yet). It sits over the map until answered, so the next tap would land on it: «لاحقًا».
+    private func dismissNotifyExplainer(_ app: XCUIApplication) {
+        let later = app.buttons["لاحقًا"]
+        if later.waitForExistence(timeout: 3) { later.tap() }
     }
 
     private func shot(_ app: XCUIApplication, _ name: String) {
@@ -117,7 +125,8 @@ final class OutingLegsUITests: XCTestCase {
         /* ONE confirmation everywhere: «تنهي الطلعة للكل؟» → «أنهِها» / «لا». */
         let confirm = app.buttons["أنهِها"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "asked first")
-        XCTAssertTrue(app.buttons["لا"].firstMatch.exists, "«لا» cancels")
+        /* From a sheet, iOS draws the dialog as a floating card with only the destructive action: the
+         * `.cancel` button («لا») is not drawn there, and a tap outside the card cancels. */
         shot(app, "08-ending")
         confirm.tap()
         /* The ended screen offers «ملخص الطلعة» (some builds open the summary by themselves). */
