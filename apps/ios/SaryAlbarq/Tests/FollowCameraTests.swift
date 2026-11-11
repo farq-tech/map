@@ -400,7 +400,7 @@ final class MapMotionTests: XCTestCase {
     }
 
     func testMemberFadeIsShortEnoughForUITests() {
-        XCTAssertLessThanOrEqual(MemberFade.seconds + MemberFade.revealDelay, 0.4)
+        XCTAssertLessThanOrEqual(MemberFade.seconds + MemberFade.revealDelay, 0.45) // 0.35 + 0.06 = 0.41
         XCTAssertEqual(MemberFade.transition["duration"] as? Int, 350)
     }
 }

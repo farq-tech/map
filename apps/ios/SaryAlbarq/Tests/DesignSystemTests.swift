@@ -380,7 +380,8 @@ final class SaryMotionTokenTests: XCTestCase {
     }
 
     func testUrgentIsTheQuickestMovement() {
-        for m in SaryMotion.allCases where m != .urgent && m != .livePulse {
+        /* `.dismiss` is an exit fade (0.2 s), not a movement towards the driver: it may be quicker. */
+        for m in SaryMotion.allCases where m != .urgent && m != .livePulse && m != .dismiss {
             XCTAssertLessThanOrEqual(SaryMotion.urgent.duration, m.duration, "\(m)")
         }
     }
