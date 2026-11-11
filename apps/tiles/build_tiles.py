@@ -247,7 +247,7 @@ def prepare_layer(db, table: str) -> None:
         from {table}""")
 
 
-def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
+def layer_tiles_sql(table: str, z: int, max_zoom: int, tile_bounds=None) -> str:
     """One (x, y, blob) row per tile of this layer at zoom z."""
     # roads carry the OSM way id as the feature id, so a road cut at a tile edge is one road to the apps
     names = LAYER_ATTRS[table] + (['fid'] if table == 'roads' else [])
@@ -260,14 +260,21 @@ def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
     cap = PLACE_CAP.get(z) if table == 'places' and z < max_zoom else None
     order = 'rank desc, fid' if table == 'places' else ('rank desc' if table == 'roads' else 'fid')
     ranked = f"""select *, row_number() over (partition by x, y order by {order}) n from t""" if cap else 'select * from t'
+    bounds_filter = ''
+    x0, y0, x1, y1 = tile_bounds or (0, 0, 1 << z, 1 << z)
+    if tile_bounds:
+        bounds_filter = f"""and tile_x(x0, {z}) < {x1} and tile_x(x1, {z}) >= {x0}
+                          and tile_y(y1, {z}) < {y1} and tile_y(y0, {z}) >= {y0}"""
     return f"""
         with f as (
-            select *, {geom} gz from {table}_m where minzoom <= {z}
+            select *, {geom} gz from {table}_m where minzoom <= {z} {bounds_filter}
         ), t as (
             select tx.x, ty.y, f.*
             from f,
-                 lateral (select unnest(range(tile_x(f.x0, {z}), tile_x(f.x1, {z}) + 1)) x) tx,
-                 lateral (select unnest(range(tile_y(f.y1, {z}), tile_y(f.y0, {z}) + 1)) y) ty
+                 lateral (select unnest(range(greatest(tile_x(f.x0, {z}), {x0}),
+                                                     least(tile_x(f.x1, {z}), {x1 - 1}) + 1)) x) tx,
+                 lateral (select unnest(range(greatest(tile_y(f.y1, {z}), {y0}),
+                                                     least(tile_y(f.y0, {z}), {y1 - 1}) + 1)) y) ty
         ), r as ({ranked}), c as (
             select x, y, {attrs},
                    ST_AsMVTGeom(gz, ST_Extent(ST_TileEnvelope({z}, x::integer, y::integer)), {EXTENT}, {BUFFER}, true) geom
@@ -278,7 +285,41 @@ def layer_tiles_sql(table: str, z: int, max_zoom: int) -> str:
         group by x, y"""
 
 
-def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds, log=print) -> dict:
+def hilbert_index(x: int, y: int, z: int) -> int:
+    """PMTiles Hilbert order for a tile coordinate."""
+    d = 0
+    s = 1 << (z - 1)
+    while s:
+        rx = 1 if x & s else 0
+        ry = 1 if y & s else 0
+        d += s * s * ((3 * rx) ^ ry)
+        if ry == 0:
+            if rx == 1:
+                x = (1 << z) - 1 - x
+                y = (1 << z) - 1 - y
+            x, y = y, x
+        s >>= 1
+    return d
+
+
+def tile_batches(db, bounds, z: int, batch_size: int = 512):
+    """Return aligned spatial cells in PMTiles Hilbert order."""
+    lon0, lat0, lon1, lat1 = bounds
+    x0, x1 = db.execute(f'select tile_x({lon0}, {z}), tile_x({lon1}, {z}) + 1').fetchone()
+    y0, y1 = db.execute(f'select tile_y({lat1}, {z}), tile_y({lat0}, {z}) + 1').fetchone()
+    world = 1 << z
+    start_x = (x0 // batch_size) * batch_size
+    start_y = (y0 // batch_size) * batch_size
+    batches = []
+    for by in range(start_y, y1, batch_size):
+        for bx in range(start_x, x1, batch_size):
+            cell = (bx, by, min(bx + batch_size, world), min(by + batch_size, world))
+            batches.append((hilbert_index(bx, by, z), cell))
+    yield from (cell for _, cell in sorted(batches))
+
+
+def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds, log=print,
+          batch_size: int = 512) -> dict:
     for t in layers:
         prepare_layer(db, t)
     tmp = out + '.partial'
@@ -287,13 +328,17 @@ def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds,
     with open(tmp, 'wb') as fh:
         writer = Writer(fh)
         for z in range(min_zoom, max_zoom + 1):
-            parts = [layer_tiles_sql(t, z, max_zoom) for t in layers
-                     if db.execute(f'select count(*) from {t}_m where minzoom <= {z}').fetchone()[0]]
-            if not parts:
+            available = [t for t in layers
+                         if db.execute(f'select count(*) from {t}_m where minzoom <= {z}').fetchone()[0]]
+            if not available:
                 continue
-            # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
-            union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
-            cursor = db.execute(f"""with recursive tiles as (
+            cells = list(tile_batches(db, bounds, z, batch_size)) if z >= 14 else [None]
+            zoom_tiles = 0
+            for cell_index, cell in enumerate(cells, 1):
+                parts = [layer_tiles_sql(t, z, max_zoom, cell) for t in available]
+                # one MVT per tile: layers are concatenated (protobuf repeated field), roads first so places draw on top
+                union = ' union all '.join(f'select {i} li, * from ({p})' for i, p in enumerate(parts))
+                cursor = db.execute(f"""with recursive tiles as (
                                      select x, y from ({union}) group by x, y
                                  ), hilbert as (
                                      select x tile_x, y tile_y, {z - 1}::integer a, x::bigint hx, y::bigint hy,
@@ -318,13 +363,14 @@ def build(db, layers: list[str], out: str, min_zoom: int, max_zoom: int, bounds,
                                  join ordered on ordered.tile_x = tile_blobs.x and ordered.tile_y = tile_blobs.y
                                  group by ordered.tile_x, ordered.tile_y, ordered.acc
                                  order by ordered.acc""")
-            zoom_tiles = 0
-            while rows := cursor.fetchmany(256):
-                for x, y, blobs in rows:
-                    data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
-                    writer.write_tile(zxy_to_tileid(z, x, y), data)
-                    stats['bytes'] += len(data)
-                    zoom_tiles += 1
+                while rows := cursor.fetchmany(256):
+                    for x, y, blobs in rows:
+                        data = gzip.compress(b''.join(bytes(b) for b in blobs), mtime=0)
+                        writer.write_tile(zxy_to_tileid(z, x, y), data)
+                        stats['bytes'] += len(data)
+                        zoom_tiles += 1
+                if len(cells) > 1:
+                    log(f'  z{z}: batch {cell_index}/{len(cells)} ({zoom_tiles} tiles; {time.time() - started:.0f}s)')
             stats['tiles'] += zoom_tiles
             stats['per_zoom'][z] = zoom_tiles
             log(f'  z{z}: {zoom_tiles} tiles ({time.time() - started:.0f}s)')

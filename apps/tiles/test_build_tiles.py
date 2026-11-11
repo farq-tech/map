@@ -153,11 +153,13 @@ class BuildingTests(Fixture):
         self.assertEqual(bt.load_buildings(self.db, path), 300)
 
         out = os.path.join(self.dir, 'many-building-tiles.pmtiles')
-        stats = bt.build(self.db, ['buildings'], out, z, z, (46.6, 24.6, 46.9, 24.9), log=lambda *_: None)
+        stats = bt.build(self.db, ['buildings'], out, z, z, (46.5, 24.5, 47.3, 24.9),
+                         log=lambda *_: None, batch_size=8)
         self.assertEqual(stats['tiles'], 300)
         with open(out, 'rb') as fh:
             reader = Reader(MmapSource(fh))
-            self.assertTrue(all(reader.get(z, x, y) for x, y in positions), 'each batch is written in PMTiles tile-id order')
+            self.assertTrue(all(reader.get(z, x, y) for x, y in positions),
+                            'spatial batches preserve PMTiles tile-id order across cell boundaries')
 
     def test_invalid_footprints_are_repaired_before_high_zoom_tiling(self):
         path = os.path.join(self.dir, 'invalid-building.parquet')

@@ -20,7 +20,7 @@ Rules encoded in `build_tiles.py`:
 - **Building heights:** `Elevation` is read as metres when its median is ≥ 8, else as storeys × 3.2 m (the same test as `build_building_population.decide_elevation_mode` in Farq Atlas). Unknown heights stay unknown.
 - **Invalid building outlines:** a footprint is checked before tiling. Invalid geometry is repaired with `ST_MakeValid`, and only polygonal parts are kept. A repair with no polygon area is omitted, so one bad outline cannot abort the national archive build.
 - **Missing columns:** an older Atlas release without some enrichment columns still builds; the missing values are empty.
-- **Tile output memory:** each zoom is ordered by PMTiles tile id in DuckDB and fetched in batches of 256 instead of loading every tile blob into Python at once. DuckDB spills temporary sort data beside the output archive and removes it after the build.
+- **Tile output memory:** zooms 14–15 are split into aligned 512×512 tile cells, visited in PMTiles Hilbert-prefix order, and each cell is queried and fetched in batches of 256. This bounds DuckDB's sort/spill working set instead of sorting the entire high-zoom layer at once. Lower zooms retain one query per zoom. Temporary sort data stays beside the output archive and is removed after the build.
 
 Measured on the real Saudi extract (2026-11-05): 0.8 M roads → 500,684 tiles, 192 MB. It built in 67 s on 4 cores, and the largest tile is 174 KB gzipped.
 
