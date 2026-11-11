@@ -775,4 +775,21 @@ final class BackgroundSessionTests: XCTestCase {
         XCTAssertFalse(location.isSharing)
         XCTAssertFalse(s.wantsToShare)
     }
+
+    /// Issue #163: after the outing closed, returning to the app must not re-arm the GPS
+    /// (nothing is left to stop it: the status-bar location arrow stayed on).
+    func testClosedSessionDoesNotRearmTheGPSOnReturn() async {
+        let s = session()
+        ready(sockets[0])
+        s.foreground(true)
+        XCTAssertTrue(location.watching, "on screen: the foreground watch is armed")
+        s.close()
+        XCTAssertFalse(location.watching, "closing releases the watch")
+        foreground = false
+        s.foreground(false)
+        s.foreground(true)
+        XCTAssertFalse(location.watching, "a closed session never re-arms the GPS")
+        XCTAssertFalse(location.isSharing)
+        XCTAssertNil(location.plan, "no consumer left: the manager is stopped")
+    }
 }

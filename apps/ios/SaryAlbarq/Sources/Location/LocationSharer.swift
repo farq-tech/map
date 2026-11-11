@@ -84,7 +84,7 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
     private let manager = CLLocationManager()
     private var chosenMode: ShareMode = .balanced
     private var filter = FixFilter()
-    private var watching = false
+    private(set) var watching = false
     private var whenInUseContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
     private var whenInUseActivationObserver: NSObjectProtocol?
     private var alwaysContinuation: CheckedContinuation<Bool, Never>?
@@ -410,6 +410,8 @@ final class LocationSharer: NSObject, ObservableObject, CLLocationManagerDelegat
 
     func stopWatchingForeground() {
         watching = false
+        /* `plan` follows the need: a stale one would make every later `plan == nil` check skip the stop. */
+        applySettings()
         if !isSharing && !backgroundTrail && !trailActive { manager.stopUpdatingLocation() }
     }
 

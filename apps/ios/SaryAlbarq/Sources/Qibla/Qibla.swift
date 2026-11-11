@@ -163,6 +163,9 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
     @Published private(set) var locationState: QiblaLocationState = .locating
 
     private let manager = CLLocationManager()
+    /// Between `start()` and `stop()` (the screen is up). iOS also reports authorization changes after
+    /// the screen closed (the permission prompt answered late): those must not restart the GPS.
+    private(set) var isRunning = false
     private var locationTimeout: Task<Void, Never>?
     #if DEBUG
     private var simulatedLocationState: QiblaLocationState?
@@ -195,6 +198,7 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func start() {
+        isRunning = true
         #if DEBUG
         if simulatedLocationState != nil {
             if CLLocationManager.headingAvailable() { manager.startUpdatingHeading() }
@@ -231,6 +235,7 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     private func beginLocationRequest() {
+        guard isRunning else { return }
         locationState = .locating
         manager.startUpdatingLocation()
         scheduleLocationTimeout()
@@ -246,6 +251,7 @@ final class QiblaCompass: NSObject, ObservableObject, CLLocationManagerDelegate 
     }
 
     func stop() {
+        isRunning = false
         locationTimeout?.cancel()
         locationTimeout = nil
         manager.stopUpdatingLocation()
