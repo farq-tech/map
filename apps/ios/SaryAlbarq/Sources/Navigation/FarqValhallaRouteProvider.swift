@@ -221,6 +221,10 @@ final class SwitchingRouteProvider: NavRoutingProvider {
             return p
         } catch let e as FarqRoutingError {
             return try await viaMapbox(r, reason: e)
+        } catch NavRoutingError.offline {
+            /* Valhalla is a server, so no network ends it — but Mapbox Navigation routes on the
+             * phone from downloaded routing tiles (hybrid router), so it must still be asked. */
+            return try await viaMapbox(r, reason: nil)
         }
     }
 
@@ -230,7 +234,8 @@ final class SwitchingRouteProvider: NavRoutingProvider {
         do {
             mb = try await mapbox.routes(r)
         } catch {
-            /* Offline: Valhalla is a server too. */
+            /* Offline: Mapbox already tried its on-device router (hybrid) and had no tiles here;
+             * Valhalla is a server, so there is nothing left to ask. */
             if (error as? NavRoutingError) == .offline { throw error }
             guard await farq.enabled(), let p = try? await farq.routes(r), !p.routes.isEmpty else { throw error }
             lastUsed = farq.name
