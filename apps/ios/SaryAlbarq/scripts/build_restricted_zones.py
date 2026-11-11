@@ -107,7 +107,10 @@ def main():
     if "--zones-only" in sys.argv:  # interim file when Overpass is slow: no public-road carve-outs
         boxes = []
     roads = chunked('way["highway"~"^(motorway|trunk|primary|secondary|tertiary)(_link)?$"]', "roads")
-    pubs = chunked('way["aeroway"="terminal"];way["amenity"="parking"]["access"!~"private|no|military"];', "public")
+    # Passenger terminals (one cheap area query). Public car parks inside aerodromes are NOT fetched:
+    # that per-aerodrome query is the one Overpass keeps timing out on, so they stay restricted.
+    tq = '[out:json][timeout:90];area["ISO3166-1"="SA"]->.sa;(way(area.sa)["aeroway"="terminal"];relation(area.sa)["aeroway"="terminal"];);out geom tags;'
+    pubs = overpass(tq, c("terminals.json"))["elements"]
     roads = list({e['id']: e for e in roads}.values()); pubs = list({e['id']: e for e in pubs}.values())
     open_lines = [{"line": simp([(p["lon"], p["lat"]) for p in el["geometry"]], 0.00006)} for el in roads if "geometry" in el
                   and el.get("tags", {}).get("access") not in ("private", "no", "military")]

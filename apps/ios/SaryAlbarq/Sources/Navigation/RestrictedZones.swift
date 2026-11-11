@@ -138,7 +138,10 @@ struct RestrictedZoneSet {
     /// True when `p` is on a public part of an aerodrome: near a classified road or in a terminal/parking.
     func isPublic(_ p: LngLat) -> Bool {
         let pad = 0.0005 // ~55 m
-        for r in openRings where r.box.contains(p) && Self.contains(r.pts, p) { return true }
+        for r in openRings where r.box.grown(byMeters: Self.openRoadToleranceM).contains(p) {
+            // A terminal building plus its forecourt/kerb (the pick-up point is outside the footprint).
+            if Self.contains(r.pts, p) || Self.distanceToLineM(r.pts, p) <= Self.openRoadToleranceM { return true }
+        }
         for l in openLines {
             guard p.lat >= l.box.minLat - pad, p.lat <= l.box.maxLat + pad, p.lng >= l.box.minLng - pad, p.lng <= l.box.maxLng + pad else { continue }
             if Self.distanceToLineM(l.pts, p) <= Self.openRoadToleranceM { return true }
