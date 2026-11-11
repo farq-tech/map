@@ -419,3 +419,21 @@ final class ChatModerationTests: XCTestCase {
         XCTAssertEqual(ChatReportReason.allCases.map(\.rawValue), ["abuse", "harassment", "spam", "sexual", "violence", "other"])
     }
 }
+
+/// New bubbles slide in from their own side, RTL aware, only once the thread has settled.
+final class ChatMotionTests: XCTestCase {
+    func testBubblesComeFromTheirOwnSide() {
+        XCTAssertLessThan(ChatMotion.entryOffsetX(mine: true, rightToLeft: true), 0, "Arabic: mine sit on the left, come from the left")
+        XCTAssertGreaterThan(ChatMotion.entryOffsetX(mine: false, rightToLeft: true), 0, "Arabic: theirs from the right")
+        XCTAssertGreaterThan(ChatMotion.entryOffsetX(mine: true, rightToLeft: false), 0)
+        XCTAssertLessThan(ChatMotion.entryOffsetX(mine: false, rightToLeft: false), 0)
+        XCTAssertLessThanOrEqual(abs(ChatMotion.entryOffsetX(mine: true, rightToLeft: true)), 40, "a short slide, not a fly-in")
+    }
+
+    func testOnlyArrivalsAfterTheFirstPageAnimate() {
+        XCTAssertFalse(ChatMotion.animatesArrivals(loaded: false, settled: true))
+        XCTAssertFalse(ChatMotion.animatesArrivals(loaded: true, settled: false))
+        XCTAssertTrue(ChatMotion.animatesArrivals(loaded: true, settled: true))
+        XCTAssertLessThanOrEqual(ChatMotion.settleDelay, 0.4)
+    }
+}

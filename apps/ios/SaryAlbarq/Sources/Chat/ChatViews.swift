@@ -224,9 +224,25 @@ struct ChatThreadView: View {
     @State private var draft = ""
     @FocusState private var focused: Bool
     @Environment(\.sary) private var theme
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(AppearanceSettings.self) private var appearance
+    /// The thread has settled on screen: from here new messages animate in (`ChatMotion`).
+    @State private var settled = false
 
     private var thread: ChatThreadState { chat.threads[with] ?? ChatThreadState() }
+    private var liveThread: Bool { ChatMotion.animatesArrivals(loaded: thread.loaded, settled: settled) }
+
+    private func settleSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + ChatMotion.settleDelay) { settled = true }
+    }
+
+    /// A short slide from the bubble's own side plus a fade; a fade only where travel is not allowed.
+    private func bubbleTransition(mine: Bool) -> AnyTransition {
+        guard SaryMotionPolicy.travels(reduceMotion: theme.reduceMotion, drive: theme.drive, peripheral: false) else { return .opacity }
+        let x = ChatMotion.entryOffsetX(mine: mine, rightToLeft: layoutDirection == .rightToLeft)
+        return .asymmetric(insertion: .offset(x: x).combined(with: .opacity).combined(with: .scale(scale: 0.96)),
+                           removal: .opacity)
+    }
     private var writable: Bool { chat.writable && thread.writable && !context.ended }
     private var others: Int {
         with.isGroup ? max(0, context.members.filter { $0.user_id != context.me }.count) : 1
@@ -256,16 +272,32 @@ struct ChatThreadView: View {
                         }
                         ForEach(thread.messages, id: \.key) { m in
                             bubble(m).id(m.key)
+                                /* A new message arrives from its own side: mine from the trailing
+                                   edge (the left in Arabic), theirs from the leading edge. */
+                                .transition(bubbleTransition(mine: m.sender_id == context.me))
                         }
                         if let t = chat.typing[with] {
-                            Text("\(context.name(t)) يكتب…").saryText(.footnote).foregroundStyle(p.textTertiary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityIdentifier("chat.typing")
+                            HStack(spacing: 4) {
+                                Text("\(context.name(t)) يكتب").saryText(.footnote).foregroundStyle(p.textTertiary)
+                                /* Breathes only while someone types (the sanctioned loop: off under
+                                   Reduce Motion, in drive mode and off screen). */
+                                Image(systemName: "ellipsis").font(.system(size: 13, weight: .bold)).foregroundStyle(p.textTertiary)
+                                    .saryPulse(.live, style: .dim)
+                                    .accessibilityHidden(true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(SaryTransition.appear(theme))
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(Text("\(context.name(t)) يكتب…"))
+                            .accessibilityIdentifier("chat.typing")
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }
                     .padding(.horizontal, theme.space(.l))
                     .padding(.vertical, theme.space(.s))
+                    /* Only a message at the end animates (not the first load, not older pages). */
+                    .animation(liveThread ? theme.animation(.appear) : nil, value: thread.messages.last?.key)
+                    .animation(theme.animation(.appear), value: chat.typing[with] != nil)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .defaultScrollAnchor(.bottom)
@@ -281,8 +313,16 @@ struct ChatThreadView: View {
         }
         .background(p.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { chat.open(with) }
-        .onDisappear { chat.close(with) }
+        .onAppear {
+            chat.open(with)
+            /* The first page lands without animation; arrivals after it slide in. */
+            if thread.loaded { settleSoon() }
+        }
+        .onChange(of: thread.loaded) { _, loaded in if loaded { settleSoon() } }
+        .onDisappear {
+            chat.close(with)
+            settled = false
+        }
         .onChange(of: context.moving) { _, moving in if moving { focused = false } }
         .accessibilityIdentifier("chat.thread")
     }
