@@ -97,6 +97,27 @@ enum SaryFormat {
         return digits(String(format: "%d:%02d", s / 60, s % 60))
     }
 
+    /// Time of day, 12-hour: «٤:٣٠ م», «١٢:٠٥ ص» (Gregorian hours in `timeZone`).
+    /// The one clock for chat times, sunset, the return timer and the weather.
+    static func timeOfDay(_ d: Date, timeZone: TimeZone = .current) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let c = cal.dateComponents([.hour, .minute], from: d)
+        let h = c.hour ?? 0, m = c.minute ?? 0
+        let h12 = h % 12 == 0 ? 12 : h % 12
+        return "\(digits(String(format: "%d:%02d", h12, m))) \(h < 12 ? "ص" : "م")"
+    }
+
+    /// A calendar day: «١٢ نوفمبر ٢٠٢٦» (Gregorian, Arabic month names, Arabic-Indic digits).
+    static func day(_ d: Date, timeZone: TimeZone = .current) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "ar")
+        f.timeZone = timeZone
+        f.dateFormat = "d MMMM y"
+        return digits(f.string(from: d))
+    }
+
     /// Trip durations: "٤٥ د", "٢ س ١٥ د", "٣ س".
     static func duration(seconds: Int) -> String {
         let totalMin = max(0, seconds) / 60

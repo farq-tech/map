@@ -530,4 +530,23 @@ final class SaryLegibilityTests: XCTestCase {
         XCTAssertEqual(SaryGlyph.size(base: 0, scaled: 12), 0)
         XCTAssertLessThan(SaryGlyph.tightGrowth, SaryGlyph.maxGrowth)
     }
+
+    func testTimeOfDayAndDay() {
+        let riyadh = TimeZone(identifier: "Asia/Riyadh")!
+        // 2026-11-04T16:30:00Z is 19:30 in Riyadh.
+        let evening = ISODate.parse("2026-11-04T16:30:00Z")!
+        XCTAssertEqual(SaryFormat.timeOfDay(evening, timeZone: riyadh), "٧:٣٠ م")
+        XCTAssertEqual(SaryFormat.timeOfDay(ISODate.parse("2026-11-04T21:05:00Z")!, timeZone: riyadh), "١٢:٠٥ ص")
+        XCTAssertEqual(SaryFormat.timeOfDay(ISODate.parse("2026-11-04T09:00:00Z")!, timeZone: riyadh), "١٢:٠٠ م")
+        // The weather and safety clocks are the same formatter.
+        XCTAssertEqual(WeatherFormat.clock(evening, timeZone: riyadh), SaryFormat.timeOfDay(evening, timeZone: riyadh))
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = riyadh
+        XCTAssertEqual(SafetyFormat.clock(evening, calendar: cal), SaryFormat.timeOfDay(evening, timeZone: riyadh))
+
+        let day = SaryFormat.day(evening, timeZone: riyadh)
+        XCTAssertTrue(day.contains("٤"), day)
+        XCTAssertTrue(day.contains("٢٠٢٦"), day)
+        XCTAssertNil(day.rangeOfCharacter(from: CharacterSet(charactersIn: "0123456789")), day)
+    }
 }

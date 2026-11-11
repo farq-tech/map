@@ -176,10 +176,7 @@ struct ChatHomeView: View {
 
     private var retentionText: String {
         if let d = ISODate.parse(chat.purgeAt) {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "ar")
-            f.dateStyle = .medium
-            return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا في \(f.string(from: d))."
+            return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا في \(SaryFormat.day(d))."
         }
         return "انتهت الطلعة — المحادثات للقراءة فقط، وتُحذف تلقائيًا بعد ٣٠ يومًا من نهايتها."
     }
@@ -483,10 +480,7 @@ struct ChatThreadView: View {
 
     private func time(_ iso: String) -> String {
         guard let d = ISODate.parse(iso) else { return "" }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ar")
-        f.dateFormat = "h:mm a"
-        return f.string(from: d)
+        return SaryFormat.timeOfDay(d)
     }
 
     // MARK: composer

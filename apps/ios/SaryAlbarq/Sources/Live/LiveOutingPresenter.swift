@@ -114,7 +114,7 @@ enum LiveOutingPresenter {
     static func nearbyLabel(_ n: Int) -> String? {
         guard n > 0 else { return nil }
         if n == 1 { return "متصل مباشرة بسيارة واحدة" }
-        return "متصل مباشرة بـ \(ArabicFormat.number(Double(n))) سيارات"
+        return "متصل مباشرة بـ \(SaryFormat.number(n)) سيارات"
     }
 
     static func connection(_ l: LiveChannel.State, closed: LiveCloseReason?) -> ConnectionStateUI {

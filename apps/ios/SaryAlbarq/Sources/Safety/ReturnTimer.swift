@@ -131,10 +131,7 @@ enum ReturnTimerLogic {
 enum SafetyFormat {
     /// «٧:٣٠ م» in the phone's time zone.
     static func clock(_ d: Date, calendar: Calendar = .current) -> String {
-        let c = calendar.dateComponents([.hour, .minute], from: d)
-        let h24 = c.hour ?? 0, m = c.minute ?? 0
-        let h12 = h24 % 12 == 0 ? 12 : h24 % 12
-        return SaryFormat.digits(String(format: "%d:%02d", h12, m)) + (h24 < 12 ? " ص" : " م")
+        SaryFormat.timeOfDay(d, timeZone: calendar.timeZone)
     }
 
     /// «اليوم ٧:٣٠ م» / «بكرة ١:١٥ ص».
