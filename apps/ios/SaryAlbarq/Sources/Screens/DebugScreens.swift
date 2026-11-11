@@ -41,6 +41,7 @@ struct DebugScreen: View {
         case "offline-flow": NavigationStack { OfflineMapsView(back: {}, suggested: .init(west: 46.666, south: 24.704, east: 46.684, north: 24.719), outingName: "طلعة الثمامة") }
         case "offline-picker": OfflineAreaPicker(initial: .init(west: 46.655, south: 24.70, east: 46.695, north: 24.725), outingName: "طلعة الثمامة", close: {})
         case "create": CreateOutingWizard()
+        case "create-quick": CreateOutingWizard(quick: OutingDestination(name: "نقطة على الخريطة", lat: 24.7590, lng: 46.7491))
         case "create-coordinate": CreateOutingWizard(initialText: "24.7590, 46.7491")
         case "create-search": CreateOutingWizard(initialText: "24°45'32\"N 46°44'57\"E")
         case "join": JoinByLinkSheet()
