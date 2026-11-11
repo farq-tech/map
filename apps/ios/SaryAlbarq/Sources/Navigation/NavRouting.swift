@@ -248,6 +248,33 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         return points
     }
 
+    /// The desert options between two grid cells, kept for the last few asks. A reroute on a
+    /// hybrid trip asks again from the same road end (the same join cell) to the same target, and
+    /// each ask is three A* searches over up to ~2 M cells. `DesertRouter.options` depends on the
+    /// grid, the two cells (not the exact points: its paths run between cell centres) and the rain
+    /// flag, so the cached answer is the one a new search would return.
+    private let optionsLock = NSLock()
+    private var optionsCache: [(key: String, options: [DesertRouter.Option])] = []
+    static let optionsCacheSize = 8
+
+    private func desertOptions(_ grid: DesertGrid, area: String, from a: LngLat, to b: LngLat) -> [DesertRouter.Option] {
+        let rain = rainMayBePresent()
+        /* Outside the grid `options` answers [] (cheap): never cached, and `index` would clamp. */
+        guard Self.contains(grid, a), Self.contains(grid, b) else { return DesertRouter.options(grid, from: a, to: b, rain: rain) }
+        let key = "\(area)|\(grid.rows)x\(grid.cols)|\(grid.header.south)|\(grid.header.west)|\(grid.index(a))|\(grid.index(b))|\(rain)"
+        optionsLock.lock()
+        let hit = optionsCache.first { $0.key == key }?.options
+        optionsLock.unlock()
+        if let hit { return hit }
+        let options = DesertRouter.options(grid, from: a, to: b, rain: rain)
+        optionsLock.lock()
+        optionsCache.removeAll { $0.key == key }
+        optionsCache.append((key, options))
+        if optionsCache.count > Self.optionsCacheSize { optionsCache.removeFirst(optionsCache.count - Self.optionsCacheSize) }
+        optionsLock.unlock()
+        return options
+    }
+
     static func regionName(containing point: LngLat) -> String? {
         DesertGrid.bboxes.first { $0.value.contains(point) }?.key
     }
@@ -265,7 +292,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
     private func gridRoutes(from a: LngLat, to b: LngLat, area: DesertArea?) -> [NavRoute]? {
         guard let grid = area?.grid else { return nil }
         guard Self.contains(grid, a), Self.contains(grid, b) else { return nil }
-        let options = DesertRouter.options(grid, from: a, to: b, rain: rainMayBePresent())
+        let options = desertOptions(grid, area: area?.key ?? "", from: a, to: b)
         guard !options.isEmpty else { return nil }
         return options.map { makeRoute($0, prefix: [], start: a, target: b, idPrefix: "desert", road: nil, grid: grid) }
     }
@@ -274,7 +301,7 @@ final class DesertAwareRouteProvider: NavRoutingProvider {
         guard let joinIndex = road.coordinates.indices.reversed().first(where: { Self.contains(grid, road.coordinates[$0]) }) else { return nil }
         let prefix = Array(road.coordinates[...joinIndex])
         guard let join = prefix.last else { return nil }
-        let options = DesertRouter.options(grid, from: join, to: target, rain: rainMayBePresent())
+        let options = desertOptions(grid, area: region, from: join, to: target)
         guard !options.isEmpty else { return nil }
         // The grid has finite resolution. If the road endpoint is too far from the first
         // supported cell, keep the road route and let the UI show a bearing from that endpoint.
