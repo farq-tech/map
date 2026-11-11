@@ -24,6 +24,7 @@ const DT_MIN = 60;
 const MAX_SPEED_KMH = 80;
 const MIN_CONFIDENCE = 0.45;
 const MIN_RAINY_PX = 12;
+const CHECK_MIN_CONFIDENCE = 0.3;
 const HALF_HOUR = 30 * 60_000;
 
 const tiles = new Lru(48);
@@ -98,8 +99,16 @@ function analyse({ f0, f1, f2 }, lat) {
   let cons = null;
   if (f2) {
     const chk = motion.estimateMotion(f2, f1, DT_MIN, pxKm, opts);
-    cons = motion.consistency(est, chk);
-    conf = Math.min(conf, 0.15 + 0.85 * cons);
+    if (chk.ok && chk.confidence >= CHECK_MIN_CONFIDENCE) {
+      /* The earlier hour is itself readable: the two must agree, or the picture is changing faster than it moves. */
+      cons = motion.consistency(est, chk);
+      conf = Math.min(conf, 0.15 + 0.85 * cons);
+    } else {
+      /* Rain that has just appeared (or an unreadable earlier hour) cannot confirm or deny: a small penalty, not a veto. */
+      conf *= 0.85;
+    }
+  } else {
+    conf *= 0.85;
   }
   const e = { ...est, confidence: conf };
   if (conf < MIN_CONFIDENCE) return { state: 'uncertain', pxKm, confidence: conf, est: e, cross_check: cons };

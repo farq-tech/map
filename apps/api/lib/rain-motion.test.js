@@ -72,6 +72,16 @@ test('analyse: the two hourly pairs disagree → confidence drops below the floo
   assert.ok(a.confidence < rm.MIN_CONFIDENCE);
 });
 
+test('analyse: an unreadable earlier hour (rain just appeared) is a small penalty, not a veto', () => {
+  const clear = field(0, 0, () => 0);
+  const withCheck = rm.analyse({ f2: field(-6, 0), f1: field(-3, 0), f0: field(0, 0) }, LAT);
+  const noCheck = rm.analyse({ f2: clear, f1: field(-3, 0), f0: field(0, 0) }, LAT);
+  assert.equal(noCheck.state, 'moving');
+  assert.equal(noCheck.cross_check, null, 'no verdict claimed from a check that could not be read');
+  assert.ok(noCheck.confidence < withCheck.confidence, 'but less sure than when confirmed');
+  assert.ok(motion.angleDiff(noCheck.est.bearingDeg, 90) <= 15);
+});
+
 test('analyse: a fixed pattern is stationary, not a direction', () => {
   const a = rm.analyse({ f2: field(0, 0), f1: field(0, 0), f0: field(0, 0) }, LAT);
   assert.equal(a.state, 'stationary');
