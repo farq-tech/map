@@ -43,14 +43,16 @@ struct SaryPage<Content: View, Trailing: View>: View {
             .padding(.horizontal, theme.space(.l))
             .padding(.top, theme.space(.m))
             .padding(.bottom, theme.space(.s))
+            /* Same column as the content below: on iPad the title and close button no longer sit at
+               opposite window edges. Every iPhone is narrower than 640, so nothing changes there. */
+            .saryReadableWidth()
             if scrolls {
                 ScrollView {
                     VStack(alignment: .leading, spacing: theme.space(.xl)) { content }
                         .padding(.horizontal, theme.space(.l))
                         .padding(.top, theme.space(.s))
                         .padding(.bottom, theme.space(.xxl))
-                        .frame(maxWidth: 640)
-                        .frame(maxWidth: .infinity)
+                        .saryReadableWidth()
                 }
                 .scrollDismissesKeyboard(.interactively)
             } else {
